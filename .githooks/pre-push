@@ -1,0 +1,27 @@
+#!/bin/bash
+# Pre-push hook: runs before pushing to remote
+# Ensures full verification passes before code leaves local machine
+set -e
+
+echo "Running pre-push checks..."
+
+# Run full verification (lint + format-check + typecheck + tests)
+make verify
+
+# Ensure test output was captured (proves tests ran correctly)
+if [ ! -f test_results.txt ]; then
+    echo ""
+    echo "ERROR: test_results.txt not found. Run 'make test' before pushing."
+    exit 1
+fi
+
+# Check that tests actually passed (look for failure indicators)
+if grep -q "FAILED\|ERROR" test_results.txt; then
+    echo ""
+    echo "ERROR: Tests are failing. Fix before pushing."
+    echo "See test_results.txt for details."
+    exit 1
+fi
+
+echo ""
+echo "Pre-push checks passed."
