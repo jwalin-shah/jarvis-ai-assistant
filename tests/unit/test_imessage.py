@@ -2,14 +2,16 @@
 
 import sqlite3
 from datetime import UTC
+from datetime import datetime as dt
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from contracts.imessage import Conversation, Message
+from contracts.imessage import Attachment, Conversation, Message, Reaction
 from integrations.imessage import CHAT_DB_PATH, ChatDBReader
 from integrations.imessage.parser import (
+    _get_reaction_type,
     datetime_to_apple_timestamp,
     extract_text_from_row,
     normalize_phone_number,
@@ -69,11 +71,9 @@ class TestDatetimeToAppleTimestamp:
 
     def test_known_date(self):
         """Convert a known date to Apple timestamp."""
-        from datetime import datetime
-
         # 2024-01-12 12:00:00 UTC should be 726753600 seconds from Apple epoch
-        dt = datetime(2024, 1, 12, 12, 0, 0, tzinfo=UTC)
-        result = datetime_to_apple_timestamp(dt)
+        test_dt = dt(2024, 1, 12, 12, 0, 0, tzinfo=UTC)
+        result = datetime_to_apple_timestamp(test_dt)
         expected = 726753600 * 1_000_000_000
         assert result == expected
 
@@ -242,31 +242,201 @@ class TestParseAttributedBody:
 
 
 class TestParseAttachments:
-    """Tests for attachment parsing (v1 stub)."""
+    """Tests for attachment parsing."""
 
-    def test_returns_empty_list(self):
-        """V1 always returns empty list."""
+    def test_returns_empty_list_for_none(self):
+        """Return empty list for None input."""
         result = parse_attachments(None)
         assert result == []
 
-    def test_with_data_returns_empty(self):
-        """V1 ignores data and returns empty list."""
-        result = parse_attachments("some data")
+    def test_returns_empty_list_for_empty(self):
+        """Return empty list for empty input."""
+        result = parse_attachments([])
         assert result == []
+
+    def test_parses_single_attachment(self):
+        """Parse a single attachment row."""
+        rows = [
+            {
+                "filename": "~/Library/Messages/Attachments/ab/cd/photo.jpg",
+                "mime_type": "image/jpeg",
+                "file_size": 12345,
+                "transfer_name": "photo.jpg",
+            }
+        ]
+        result = parse_attachments(rows)
+
+        assert len(result) == 1
+        assert isinstance(result[0], Attachment)
+        assert result[0].filename == "photo.jpg"
+        assert result[0].mime_type == "image/jpeg"
+        assert result[0].file_size == 12345
+        assert "photo.jpg" in result[0].file_path
+
+    def test_parses_multiple_attachments(self):
+        """Parse multiple attachment rows."""
+        rows = [
+            {"filename": "/path/to/image.png", "mime_type": "image/png", "file_size": 1000},
+            {"filename": "/path/to/doc.pdf", "mime_type": "application/pdf", "file_size": 2000},
+        ]
+        result = parse_attachments(rows)
+
+        assert len(result) == 2
+        assert result[0].filename == "image.png"
+        assert result[1].filename == "doc.pdf"
+
+    def test_handles_missing_fields(self):
+        """Handle rows with missing optional fields."""
+        rows = [{"filename": "/path/to/file.txt"}]
+        result = parse_attachments(rows)
+
+        assert len(result) == 1
+        assert result[0].filename == "file.txt"
+        assert result[0].mime_type is None
+        assert result[0].file_size is None
+
+    def test_uses_transfer_name_as_fallback(self):
+        """Use transfer_name when filename is missing."""
+        rows = [{"transfer_name": "backup.zip", "mime_type": "application/zip"}]
+        result = parse_attachments(rows)
+
+        assert len(result) == 1
+        assert result[0].filename == "backup.zip"
+
+    def test_handles_empty_filename(self):
+        """Handle rows with empty filename."""
+        rows = [{"filename": "", "transfer_name": ""}]
+        result = parse_attachments(rows)
+
+        assert len(result) == 1
+        assert result[0].filename == "unknown"
 
 
 class TestParseReactions:
-    """Tests for reaction parsing (v1 stub)."""
+    """Tests for reaction parsing."""
 
-    def test_returns_empty_list(self):
-        """V1 always returns empty list."""
+    def test_returns_empty_list_for_none(self):
+        """Return empty list for None input."""
         result = parse_reactions(None)
         assert result == []
 
-    def test_with_data_returns_empty(self):
-        """V1 ignores data and returns empty list."""
-        result = parse_reactions([{"type": "like"}])
+    def test_returns_empty_list_for_empty(self):
+        """Return empty list for empty input."""
+        result = parse_reactions([])
         assert result == []
+
+    def test_parses_love_reaction(self):
+        """Parse a love reaction (type 2000)."""
+        rows = [
+            {
+                "associated_message_type": 2000,
+                "date": 726753600000000000,  # 2024-01-12 12:00:00 UTC
+                "is_from_me": False,
+                "sender": "+15551234567",
+            }
+        ]
+        result = parse_reactions(rows)
+
+        assert len(result) == 1
+        assert isinstance(result[0], Reaction)
+        assert result[0].type == "love"
+        assert result[0].sender == "+15551234567"
+        assert result[0].date.year == 2024
+
+    def test_parses_all_reaction_types(self):
+        """Parse all standard tapback types."""
+        reaction_types = [
+            (2000, "love"),
+            (2001, "like"),
+            (2002, "dislike"),
+            (2003, "laugh"),
+            (2004, "emphasize"),
+            (2005, "question"),
+        ]
+
+        for type_code, expected_name in reaction_types:
+            rows = [{"associated_message_type": type_code, "date": 0, "is_from_me": True}]
+            result = parse_reactions(rows)
+            assert len(result) == 1
+            assert result[0].type == expected_name, f"Expected {expected_name} for {type_code}"
+
+    def test_parses_removed_reactions(self):
+        """Parse removed reaction types (3000 series)."""
+        removed_types = [
+            (3000, "removed_love"),
+            (3001, "removed_like"),
+            (3002, "removed_dislike"),
+            (3003, "removed_laugh"),
+            (3004, "removed_emphasize"),
+            (3005, "removed_question"),
+        ]
+
+        for type_code, expected_name in removed_types:
+            rows = [{"associated_message_type": type_code, "date": 0, "is_from_me": False}]
+            result = parse_reactions(rows)
+            assert len(result) == 1
+            assert result[0].type == expected_name
+
+    def test_handles_is_from_me(self):
+        """Handle reactions from self."""
+        rows = [{"associated_message_type": 2001, "date": 0, "is_from_me": True}]
+        result = parse_reactions(rows)
+
+        assert len(result) == 1
+        assert result[0].sender == "me"
+
+    def test_ignores_invalid_reaction_types(self):
+        """Ignore rows with invalid reaction types."""
+        rows = [
+            {"associated_message_type": 0, "date": 0, "is_from_me": True},  # Not a reaction
+            {"associated_message_type": 9999, "date": 0, "is_from_me": True},  # Unknown type
+        ]
+        result = parse_reactions(rows)
+
+        assert len(result) == 0
+
+    def test_parses_multiple_reactions(self):
+        """Parse multiple reactions for a message."""
+        rows = [
+            {"associated_message_type": 2000, "date": 1, "is_from_me": False, "sender": "+1111"},
+            {"associated_message_type": 2001, "date": 2, "is_from_me": False, "sender": "+2222"},
+            {"associated_message_type": 2003, "date": 3, "is_from_me": True},
+        ]
+        result = parse_reactions(rows)
+
+        assert len(result) == 3
+        assert result[0].type == "love"
+        assert result[1].type == "like"
+        assert result[2].type == "laugh"
+
+
+class TestGetReactionType:
+    """Tests for _get_reaction_type helper function."""
+
+    def test_valid_tapback_types(self):
+        """Map valid tapback types to strings."""
+        assert _get_reaction_type(2000) == "love"
+        assert _get_reaction_type(2001) == "like"
+        assert _get_reaction_type(2002) == "dislike"
+        assert _get_reaction_type(2003) == "laugh"
+        assert _get_reaction_type(2004) == "emphasize"
+        assert _get_reaction_type(2005) == "question"
+
+    def test_removed_tapback_types(self):
+        """Map removed tapback types to strings."""
+        assert _get_reaction_type(3000) == "removed_love"
+        assert _get_reaction_type(3001) == "removed_like"
+        assert _get_reaction_type(3002) == "removed_dislike"
+        assert _get_reaction_type(3003) == "removed_laugh"
+        assert _get_reaction_type(3004) == "removed_emphasize"
+        assert _get_reaction_type(3005) == "removed_question"
+
+    def test_invalid_type_returns_none(self):
+        """Return None for invalid type codes."""
+        assert _get_reaction_type(0) is None
+        assert _get_reaction_type(1000) is None
+        assert _get_reaction_type(4000) is None
+        assert _get_reaction_type(-1) is None
 
 
 class TestExtractTextFromRow:
@@ -451,6 +621,24 @@ class TestGetQuery:
         """Raise KeyError for invalid query name."""
         with pytest.raises(KeyError):
             get_query("invalid_query", "v14")
+
+    def test_attachments_query_exists(self):
+        """Attachments query is available."""
+        result = get_query("attachments", "v14")
+        assert "attachment" in result.lower()
+        assert "message_attachment_join" in result
+
+    def test_reactions_query_exists(self):
+        """Reactions query is available."""
+        result = get_query("reactions", "v14")
+        assert "associated_message_guid" in result
+        assert "associated_message_type" in result
+
+    def test_message_by_guid_query_exists(self):
+        """Message by GUID query is available."""
+        result = get_query("message_by_guid", "v14")
+        assert "guid" in result.lower()
+        assert "ROWID" in result or "id" in result.lower()
 
 
 # =============================================================================
@@ -878,8 +1066,6 @@ class TestChatDBReaderFilters:
 
     def test_get_conversations_with_since_filter(self, tmp_path):
         """Test get_conversations with since filter."""
-        from datetime import UTC, datetime
-
         db_path = tmp_path / "chat.db"
         conn = sqlite3.connect(db_path)
         conn.execute(
@@ -907,7 +1093,7 @@ class TestChatDBReaderFilters:
 
         reader = ChatDBReader(db_path=db_path)
         # Filter for messages after a certain date
-        since = datetime(2025, 1, 1, tzinfo=UTC)
+        since = dt(2025, 1, 1, tzinfo=UTC)
         result = reader.get_conversations(limit=10, since=since)
         # The implementation should filter based on last_message_date
         assert isinstance(result, list)
@@ -915,8 +1101,6 @@ class TestChatDBReaderFilters:
 
     def test_get_messages_with_before_filter(self, tmp_path):
         """Test get_messages with before filter."""
-        from datetime import UTC, datetime
-
         db_path = tmp_path / "chat.db"
         conn = sqlite3.connect(db_path)
         conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
@@ -942,7 +1126,7 @@ class TestChatDBReaderFilters:
         conn.close()
 
         reader = ChatDBReader(db_path=db_path)
-        before = datetime(2020, 1, 1, tzinfo=UTC)
+        before = dt(2020, 1, 1, tzinfo=UTC)
         result = reader.get_messages("chat;test", limit=10, before=before)
         assert isinstance(result, list)
         reader.close()
@@ -1025,3 +1209,427 @@ class TestProtocolCompliance:
                 assert isinstance(messages[0], Message)
 
         reader.close()
+
+
+# =============================================================================
+# Attachment and Reaction Integration Tests
+# =============================================================================
+
+
+class TestChatDBReaderAttachments:
+    """Tests for attachment retrieval in ChatDBReader."""
+
+    def test_get_attachments_for_message(self, tmp_path):
+        """Retrieve attachments for a specific message."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        # Create schema
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER,
+                guid TEXT,
+                date INTEGER,
+                text TEXT,
+                attributedBody BLOB,
+                is_from_me INTEGER,
+                handle_id INTEGER,
+                thread_originator_guid TEXT
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+        conn.execute("""
+            CREATE TABLE attachment (
+                ROWID INTEGER,
+                filename TEXT,
+                mime_type TEXT,
+                total_bytes INTEGER,
+                transfer_name TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE message_attachment_join (
+                message_id INTEGER,
+                attachment_id INTEGER
+            )
+        """)
+
+        # Insert test data
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;+1234567890')")
+        conn.execute(
+            "INSERT INTO message VALUES (1, 'msg-guid-1', 726753600000000000, "
+            "'Photo attached', NULL, 0, 1, NULL)"
+        )
+        conn.execute("INSERT INTO handle VALUES (1, '+1234567890')")
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
+        conn.execute(
+            "INSERT INTO attachment VALUES "
+            "(1, '/path/to/photo.jpg', 'image/jpeg', 12345, 'photo.jpg')"
+        )
+        conn.execute("INSERT INTO message_attachment_join VALUES (1, 1)")
+        conn.commit()
+        conn.close()
+
+        reader = ChatDBReader(db_path=db_path)
+        messages = reader.get_messages("chat;+1234567890", limit=10)
+
+        assert len(messages) == 1
+        assert len(messages[0].attachments) == 1
+        assert messages[0].attachments[0].filename == "photo.jpg"
+        assert messages[0].attachments[0].mime_type == "image/jpeg"
+        assert messages[0].attachments[0].file_size == 12345
+        reader.close()
+
+    def test_message_with_multiple_attachments(self, tmp_path):
+        """Retrieve multiple attachments for a single message."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER, guid TEXT, date INTEGER, text TEXT,
+                attributedBody BLOB, is_from_me INTEGER, handle_id INTEGER,
+                thread_originator_guid TEXT
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+        conn.execute("""
+            CREATE TABLE attachment (
+                ROWID INTEGER, filename TEXT, mime_type TEXT,
+                total_bytes INTEGER, transfer_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER)"
+        )
+
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;test')")
+        conn.execute(
+            "INSERT INTO message VALUES (1, 'msg-1', 1, 'Multiple files', NULL, 0, NULL, NULL)"
+        )
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
+        conn.execute("INSERT INTO attachment VALUES (1, '/a/img.png', 'image/png', 100, 'img.png')")
+        conn.execute(
+            "INSERT INTO attachment VALUES (2, '/a/doc.pdf', 'application/pdf', 200, 'doc.pdf')"
+        )
+        conn.execute("INSERT INTO message_attachment_join VALUES (1, 1)")
+        conn.execute("INSERT INTO message_attachment_join VALUES (1, 2)")
+        conn.commit()
+        conn.close()
+
+        with ChatDBReader(db_path=db_path) as reader:
+            messages = reader.get_messages("chat;test", limit=10)
+
+            assert len(messages) == 1
+            assert len(messages[0].attachments) == 2
+
+    def test_message_with_no_attachments(self, tmp_path):
+        """Messages without attachments have empty attachment list."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER, guid TEXT, date INTEGER, text TEXT,
+                attributedBody BLOB, is_from_me INTEGER, handle_id INTEGER,
+                thread_originator_guid TEXT
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+        conn.execute("""
+            CREATE TABLE attachment (
+                ROWID INTEGER, filename TEXT, mime_type TEXT,
+                total_bytes INTEGER, transfer_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER)"
+        )
+
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;test')")
+        conn.execute(
+            "INSERT INTO message VALUES (1, 'msg-1', 1, 'No attachments', NULL, 0, NULL, NULL)"
+        )
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
+        conn.commit()
+        conn.close()
+
+        with ChatDBReader(db_path=db_path) as reader:
+            messages = reader.get_messages("chat;test", limit=10)
+
+            assert len(messages) == 1
+            assert len(messages[0].attachments) == 0
+
+
+class TestChatDBReaderReactions:
+    """Tests for reaction retrieval in ChatDBReader."""
+
+    def test_get_reactions_for_message(self, tmp_path):
+        """Retrieve reactions for a specific message."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER,
+                guid TEXT,
+                date INTEGER,
+                text TEXT,
+                attributedBody BLOB,
+                is_from_me INTEGER,
+                handle_id INTEGER,
+                thread_originator_guid TEXT,
+                associated_message_guid TEXT,
+                associated_message_type INTEGER
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+        conn.execute("""
+            CREATE TABLE attachment (
+                ROWID INTEGER, filename TEXT, mime_type TEXT,
+                total_bytes INTEGER, transfer_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER)"
+        )
+
+        # Insert original message
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;+1234567890')")
+        conn.execute(
+            "INSERT INTO message VALUES (1, 'msg-guid-1', 726753600000000000, "
+            "'Hello', NULL, 0, 1, NULL, NULL, 0)"
+        )
+        conn.execute("INSERT INTO handle VALUES (1, '+1234567890')")
+        conn.execute("INSERT INTO handle VALUES (2, '+1987654321')")
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
+
+        # Insert reaction (love from another user)
+        conn.execute(
+            "INSERT INTO message VALUES (2, 'react-guid-1', 726753700000000000, "
+            "NULL, NULL, 0, 2, NULL, 'msg-guid-1', 2000)"
+        )
+        conn.commit()
+        conn.close()
+
+        reader = ChatDBReader(db_path=db_path)
+        messages = reader.get_messages("chat;+1234567890", limit=10)
+
+        assert len(messages) == 1
+        assert len(messages[0].reactions) == 1
+        assert messages[0].reactions[0].type == "love"
+        assert messages[0].reactions[0].sender == "+1987654321"
+        reader.close()
+
+    def test_message_with_multiple_reactions(self, tmp_path):
+        """Retrieve multiple reactions for a single message."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER, guid TEXT, date INTEGER, text TEXT,
+                attributedBody BLOB, is_from_me INTEGER, handle_id INTEGER,
+                thread_originator_guid TEXT, associated_message_guid TEXT,
+                associated_message_type INTEGER
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+        conn.execute("""
+            CREATE TABLE attachment (
+                ROWID INTEGER, filename TEXT, mime_type TEXT,
+                total_bytes INTEGER, transfer_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER)"
+        )
+
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;test')")
+        conn.execute("INSERT INTO handle VALUES (1, '+1111')")
+        conn.execute("INSERT INTO handle VALUES (2, '+2222')")
+
+        # Original message
+        conn.execute(
+            "INSERT INTO message VALUES (1, 'msg-1', 1, 'Test', NULL, 0, 1, NULL, NULL, 0)"
+        )
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
+
+        # Multiple reactions
+        conn.execute(
+            "INSERT INTO message VALUES (2, 'react-1', 2, NULL, NULL, 0, 2, NULL, 'msg-1', 2000)"
+        )  # love
+        conn.execute(
+            "INSERT INTO message VALUES (3, 'react-2', 3, NULL, NULL, 1, NULL, NULL, 'msg-1', 2003)"
+        )  # laugh from me
+        conn.commit()
+        conn.close()
+
+        with ChatDBReader(db_path=db_path) as reader:
+            messages = reader.get_messages("chat;test", limit=10)
+
+            assert len(messages) == 1
+            assert len(messages[0].reactions) == 2
+            reaction_types = {r.type for r in messages[0].reactions}
+            assert "love" in reaction_types
+            assert "laugh" in reaction_types
+
+
+class TestChatDBReaderReplyTo:
+    """Tests for reply-to ID mapping in ChatDBReader."""
+
+    def test_reply_to_id_resolved(self, tmp_path):
+        """Reply-to GUID is resolved to message ROWID."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER, guid TEXT, date INTEGER, text TEXT,
+                attributedBody BLOB, is_from_me INTEGER, handle_id INTEGER,
+                thread_originator_guid TEXT, associated_message_guid TEXT,
+                associated_message_type INTEGER
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+        conn.execute("""
+            CREATE TABLE attachment (
+                ROWID INTEGER, filename TEXT, mime_type TEXT,
+                total_bytes INTEGER, transfer_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER)"
+        )
+
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;test')")
+        conn.execute("INSERT INTO handle VALUES (1, '+1111')")
+
+        # Original message
+        conn.execute(
+            "INSERT INTO message VALUES (100, 'original-guid', 1, 'Original', "
+            "NULL, 0, 1, NULL, NULL, 0)"
+        )
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 100)")
+
+        # Reply message
+        conn.execute(
+            "INSERT INTO message VALUES (200, 'reply-guid', 2, 'Reply', "
+            "NULL, 0, 1, 'original-guid', NULL, 0)"
+        )
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 200)")
+        conn.commit()
+        conn.close()
+
+        with ChatDBReader(db_path=db_path) as reader:
+            messages = reader.get_messages("chat;test", limit=10)
+
+            # Find the reply message
+            reply_msg = next((m for m in messages if m.text == "Reply"), None)
+            assert reply_msg is not None
+            assert reply_msg.reply_to_id == 100
+
+    def test_reply_to_id_none_when_no_reply(self, tmp_path):
+        """Reply-to ID is None for messages without thread_originator_guid."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER, guid TEXT, date INTEGER, text TEXT,
+                attributedBody BLOB, is_from_me INTEGER, handle_id INTEGER,
+                thread_originator_guid TEXT, associated_message_guid TEXT,
+                associated_message_type INTEGER
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+        conn.execute("""
+            CREATE TABLE attachment (
+                ROWID INTEGER, filename TEXT, mime_type TEXT,
+                total_bytes INTEGER, transfer_name TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER)"
+        )
+
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;test')")
+        conn.execute(
+            "INSERT INTO message VALUES (1, 'msg-1', 1, 'No reply', NULL, 0, NULL, NULL, NULL, 0)"
+        )
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
+        conn.commit()
+        conn.close()
+
+        with ChatDBReader(db_path=db_path) as reader:
+            messages = reader.get_messages("chat;test", limit=10)
+
+            assert len(messages) == 1
+            assert messages[0].reply_to_id is None
+
+
+class TestChatDBReaderContactResolution:
+    """Tests for contact name resolution in ChatDBReader."""
+
+    def test_resolve_contact_name_returns_none_for_me(self):
+        """Return None for 'me' identifier."""
+        reader = ChatDBReader()
+        reader._contacts_cache = {"test": "Test User"}
+
+        result = reader._resolve_contact_name("me")
+        assert result is None
+
+    def test_resolve_contact_name_returns_none_for_empty(self):
+        """Return None for empty identifier."""
+        reader = ChatDBReader()
+        reader._contacts_cache = {}
+
+        result = reader._resolve_contact_name("")
+        assert result is None
+
+    def test_resolve_contact_name_normalizes_phone(self):
+        """Normalize phone number before lookup."""
+        reader = ChatDBReader()
+        reader._contacts_cache = {"+15551234567": "John Doe"}
+
+        # Different formats should all resolve
+        assert reader._resolve_contact_name("5551234567") == "John Doe"
+        assert reader._resolve_contact_name("+15551234567") == "John Doe"
+        assert reader._resolve_contact_name("(555) 123-4567") == "John Doe"
+
+    def test_format_name_with_both_names(self):
+        """Format full name from first and last."""
+        result = ChatDBReader._format_name("John", "Doe")
+        assert result == "John Doe"
+
+    def test_format_name_with_first_only(self):
+        """Format name with only first name."""
+        result = ChatDBReader._format_name("John", None)
+        assert result == "John"
+
+    def test_format_name_with_last_only(self):
+        """Format name with only last name."""
+        result = ChatDBReader._format_name(None, "Doe")
+        assert result == "Doe"
+
+    def test_format_name_with_neither(self):
+        """Return None when both names are empty."""
+        result = ChatDBReader._format_name(None, None)
+        assert result is None
+
+        result = ChatDBReader._format_name("", "")
+        assert result is None

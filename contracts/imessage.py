@@ -3,9 +3,31 @@
 Workstream 10 implements against these contracts.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
+
+
+@dataclass
+class Attachment:
+    """iMessage attachment metadata."""
+
+    filename: str
+    file_path: str | None  # Full path to attachment file
+    mime_type: str | None
+    file_size: int | None  # Size in bytes
+
+
+@dataclass
+class Reaction:
+    """iMessage tapback reaction."""
+
+    # Tapback types: love, like, dislike, laugh, emphasize, question
+    # Also supports "removed_" prefix for removed reactions
+    type: str
+    sender: str  # Phone number or email
+    sender_name: str | None  # Resolved from contacts if available
+    date: datetime
 
 
 @dataclass
@@ -19,9 +41,9 @@ class Message:
     text: str
     date: datetime
     is_from_me: bool
-    attachments: list[str]
-    reply_to_id: int | None
-    reactions: list[str]  # Tapback reactions
+    attachments: list[Attachment] = field(default_factory=list)
+    reply_to_id: int | None = None
+    reactions: list[Reaction] = field(default_factory=list)
 
 
 @dataclass
