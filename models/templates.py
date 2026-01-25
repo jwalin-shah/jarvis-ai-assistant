@@ -4,23 +4,29 @@ Bypasses model generation for common request patterns using
 semantic similarity with sentence embeddings.
 """
 
+from __future__ import annotations
+
 import gc
 import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded sentence transformer
-_sentence_model = None
+_sentence_model: SentenceTransformer | None = None
 
 
 class SentenceModelError(Exception):
     """Raised when sentence transformer model cannot be loaded."""
 
 
-def _get_sentence_model():
+def _get_sentence_model() -> Any:
     """Lazy-load the sentence transformer model.
 
     Returns:
@@ -279,12 +285,17 @@ class TemplateMatcher:
         try:
             self._ensure_embeddings()
 
+            # Type guard: _ensure_embeddings guarantees this is not None
+            pattern_embeddings = self._pattern_embeddings
+            if pattern_embeddings is None:
+                return None
+
             model = _get_sentence_model()
             query_embedding = model.encode([query], convert_to_numpy=True)[0]
 
             # Compute cosine similarities
-            similarities = np.dot(self._pattern_embeddings, query_embedding) / (
-                np.linalg.norm(self._pattern_embeddings, axis=1) * np.linalg.norm(query_embedding)
+            similarities = np.dot(pattern_embeddings, query_embedding) / (
+                np.linalg.norm(pattern_embeddings, axis=1) * np.linalg.norm(query_embedding)
             )
 
             best_idx = int(np.argmax(similarities))

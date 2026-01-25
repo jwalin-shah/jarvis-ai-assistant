@@ -4,11 +4,14 @@ Handles model loading/unloading with thread-safety, memory tracking,
 and double-check locking patterns for lazy initialization.
 """
 
+from __future__ import annotations
+
 import gc
 import logging
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any
 
 import mlx.core as mx
 import psutil
@@ -55,8 +58,8 @@ class MLXModelLoader:
             config: Model configuration. Uses defaults if not provided.
         """
         self.config = config or ModelConfig()
-        self._model = None
-        self._tokenizer = None
+        self._model: Any = None
+        self._tokenizer: Any = None
         self._adapter_path: str | None = None
         self._load_lock = threading.Lock()
         self._loaded_at: float | None = None
@@ -108,7 +111,10 @@ class MLXModelLoader:
                 logger.info("Loading model: %s", self.config.model_path)
                 start_time = time.perf_counter()
 
-                self._model, self._tokenizer = load(self.config.model_path)
+                # mlx_lm.load returns (model, tokenizer) tuple
+                result = load(self.config.model_path)
+                self._model = result[0]
+                self._tokenizer = result[1]
                 self._loaded_at = time.perf_counter()
 
                 load_time = (self._loaded_at - start_time) * 1000
