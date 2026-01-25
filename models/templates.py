@@ -4,6 +4,7 @@ Bypasses model generation for common request patterns using
 semantic similarity with sentence embeddings.
 """
 
+import gc
 import logging
 from dataclasses import dataclass
 
@@ -40,6 +41,28 @@ def _get_sentence_model():
             msg = f"Failed to load sentence transformer: {e}"
             raise SentenceModelError(msg) from e
     return _sentence_model
+
+
+def unload_sentence_model() -> None:
+    """Unload the sentence transformer model to free memory.
+
+    Call this when template matching is no longer needed and you want
+    to reclaim memory for other operations (e.g., loading the MLX model).
+    """
+    global _sentence_model
+    if _sentence_model is not None:
+        logger.info("Unloading sentence transformer model")
+        _sentence_model = None
+        gc.collect()
+
+
+def is_sentence_model_loaded() -> bool:
+    """Check if the sentence transformer model is currently loaded.
+
+    Returns:
+        True if model is loaded, False otherwise
+    """
+    return _sentence_model is not None
 
 
 @dataclass
@@ -292,3 +315,13 @@ class TemplateMatcher:
             # Fall back to model generation if sentence model unavailable
             logger.warning("Template matching unavailable, falling back to model generation")
             return None
+
+    def clear_cache(self) -> None:
+        """Clear cached embeddings.
+
+        Call this after unload_sentence_model() to ensure embeddings
+        are recomputed when the model is reloaded.
+        """
+        self._pattern_embeddings = None
+        self._pattern_to_template = []
+        logger.debug("Template matcher cache cleared")

@@ -14,6 +14,8 @@ from models.templates import (
     SentenceModelError,
     TemplateMatch,
     TemplateMatcher,
+    is_sentence_model_loaded,
+    unload_sentence_model,
 )
 
 __all__ = [
@@ -26,6 +28,9 @@ __all__ = [
     "TemplateMatcher",
     "TemplateMatch",
     "get_generator",
+    "reset_generator",
+    "is_sentence_model_loaded",
+    "unload_sentence_model",
 ]
 
 # Singleton generator instance with thread-safe initialization
@@ -48,3 +53,22 @@ def get_generator() -> MLXGenerator:
             if _generator is None:
                 _generator = MLXGenerator()
     return _generator
+
+
+def reset_generator() -> None:
+    """Reset the singleton generator instance.
+
+    Use this to:
+    - Clear state between tests
+    - Switch to a different model configuration
+    - Force reinitialization of the generator
+
+    Note: This does NOT unload any loaded models. Call generator.unload()
+    first if you want to free memory.
+    """
+    global _generator
+    with _generator_lock:
+        if _generator is not None:
+            # Unload model if loaded to prevent memory leaks
+            _generator.unload()
+        _generator = None

@@ -239,8 +239,12 @@ class MLXModelLoader:
 
             response = response.strip()
 
-            # Estimate tokens (rough approximation)
-            tokens_generated = len(response.split())
+            # Count tokens using tokenizer for accuracy
+            try:
+                tokens_generated = len(self._tokenizer.encode(response))
+            except Exception:
+                # Fallback to word count if tokenizer fails
+                tokens_generated = len(response.split())
 
             return GenerationResult(
                 text=response,

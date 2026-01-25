@@ -98,6 +98,51 @@ CLOSING_TEMPLATES = [
     "Have a great day",
 ]
 
+# Category 11: Updates/Status (5 templates)
+UPDATE_TEMPLATES = [
+    "Here's the latest update on the project",
+    "Just wanted to share some progress",
+    "Quick status update for you",
+    "Things are moving along well",
+    "We've made good progress this week",
+]
+
+# Category 12: Apologies (5 templates)
+APOLOGY_TEMPLATES = [
+    "Sorry for the delayed response",
+    "My apologies for the confusion",
+    "Sorry I missed your message earlier",
+    "Apologies for any inconvenience",
+    "I apologize for the oversight",
+]
+
+# Category 13: Delegation (5 templates)
+DELEGATION_TEMPLATES = [
+    "I'm looping in someone who can help",
+    "Let me connect you with the right person",
+    "I've forwarded this to the team",
+    "Someone from our team will follow up",
+    "I'm adding the relevant stakeholder",
+]
+
+# Category 14: Urgency (5 templates)
+URGENCY_TEMPLATES = [
+    "This needs immediate attention",
+    "Can you prioritize this today?",
+    "We need to address this ASAP",
+    "This is time-sensitive",
+    "Please review as soon as possible",
+]
+
+# Category 15: Collaboration (5 templates)
+COLLABORATION_TEMPLATES = [
+    "Let's work on this together",
+    "I'd like to collaborate on this",
+    "Can we pair up on this task?",
+    "Let's sync up and discuss",
+    "I'd value your input on this",
+]
+
 # Master list of all templates (exported)
 TEMPLATES: list[str] = [
     *ACKNOWLEDGMENT_TEMPLATES,
@@ -110,6 +155,11 @@ TEMPLATES: list[str] = [
     *CONFIRMATION_TEMPLATES,
     *QUESTION_TEMPLATES,
     *CLOSING_TEMPLATES,
+    *UPDATE_TEMPLATES,
+    *APOLOGY_TEMPLATES,
+    *DELEGATION_TEMPLATES,
+    *URGENCY_TEMPLATES,
+    *COLLABORATION_TEMPLATES,
 ]
 
 # For WS8 integration - export as DEFAULT_TEMPLATES
@@ -133,4 +183,9 @@ def get_templates_by_category() -> dict[str, list[str]]:
         "confirmation": CONFIRMATION_TEMPLATES,
         "question": QUESTION_TEMPLATES,
         "closing": CLOSING_TEMPLATES,
+        "update": UPDATE_TEMPLATES,
+        "apology": APOLOGY_TEMPLATES,
+        "delegation": DELEGATION_TEMPLATES,
+        "urgency": URGENCY_TEMPLATES,
+        "collaboration": COLLABORATION_TEMPLATES,
     }

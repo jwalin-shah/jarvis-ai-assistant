@@ -69,7 +69,7 @@ def main() -> int:
     print(f"Results saved to: {args.output}")
 
     if args.verbose:
-        print(f"\nUnmatched examples (sample):")
+        print("\nUnmatched examples (sample):")
         for example in result.unmatched_examples[:5]:
             print(f"  - {example[:60]}...")
 

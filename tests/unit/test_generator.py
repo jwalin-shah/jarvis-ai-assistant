@@ -284,3 +284,116 @@ class TestGeneratorProtocolCompliance:
         )
         response = generator.generate(request)
         assert isinstance(response, GenerationResponse)
+
+
+class TestSentenceModelLifecycle:
+    """Tests for sentence model loading/unloading."""
+
+    def test_is_sentence_model_loaded_initial_false(self):
+        """Verify sentence model is not loaded initially."""
+        from models.templates import is_sentence_model_loaded, unload_sentence_model
+
+        # Ensure clean state
+        unload_sentence_model()
+        assert is_sentence_model_loaded() is False
+
+    def test_sentence_model_loads_on_use(self):
+        """Verify sentence model loads when used."""
+        from models.templates import is_sentence_model_loaded, unload_sentence_model
+
+        # Ensure clean state
+        unload_sentence_model()
+        assert is_sentence_model_loaded() is False
+
+        # Use template matcher which loads the model
+        matcher = TemplateMatcher(templates=_get_minimal_fallback_templates())
+        matcher.match("test query")
+
+        assert is_sentence_model_loaded() is True
+
+        # Clean up
+        unload_sentence_model()
+
+    def test_unload_sentence_model(self):
+        """Verify sentence model can be unloaded."""
+        from models.templates import is_sentence_model_loaded, unload_sentence_model
+
+        # Load model
+        matcher = TemplateMatcher(templates=_get_minimal_fallback_templates())
+        matcher.match("test query")
+        assert is_sentence_model_loaded() is True
+
+        # Unload
+        unload_sentence_model()
+        assert is_sentence_model_loaded() is False
+
+    def test_unload_when_not_loaded_is_safe(self):
+        """Verify unloading when not loaded doesn't raise."""
+        from models.templates import is_sentence_model_loaded, unload_sentence_model
+
+        unload_sentence_model()  # Ensure not loaded
+        unload_sentence_model()  # Should not raise
+        assert is_sentence_model_loaded() is False
+
+
+class TestTemplateMatcherCache:
+    """Tests for TemplateMatcher cache management."""
+
+    def test_clear_cache(self):
+        """Verify clear_cache resets cached embeddings."""
+        matcher = TemplateMatcher(templates=_get_minimal_fallback_templates())
+
+        # Use matcher to compute embeddings
+        matcher.match("test query")
+        assert matcher._pattern_embeddings is not None
+        assert len(matcher._pattern_to_template) > 0
+
+        # Clear cache
+        matcher.clear_cache()
+        assert matcher._pattern_embeddings is None
+        assert len(matcher._pattern_to_template) == 0
+
+    def test_cache_recomputes_after_clear(self):
+        """Verify embeddings recompute after cache clear."""
+        matcher = TemplateMatcher(templates=_get_minimal_fallback_templates())
+
+        # First use
+        result1 = matcher.match("Thanks for the report")
+        assert result1 is not None
+
+        # Clear and use again
+        matcher.clear_cache()
+        result2 = matcher.match("Thanks for the report")
+        assert result2 is not None
+        assert result1.similarity == pytest.approx(result2.similarity, rel=0.01)
+
+
+class TestGeneratorSingleton:
+    """Tests for generator singleton management."""
+
+    def test_get_generator_returns_same_instance(self):
+        """Verify get_generator returns singleton."""
+        from models import get_generator, reset_generator
+
+        reset_generator()  # Clean state
+        gen1 = get_generator()
+        gen2 = get_generator()
+        assert gen1 is gen2
+        reset_generator()  # Clean up
+
+    def test_reset_generator_clears_singleton(self):
+        """Verify reset_generator clears the singleton."""
+        from models import get_generator, reset_generator
+
+        gen1 = get_generator()
+        reset_generator()
+        gen2 = get_generator()
+        assert gen1 is not gen2
+        reset_generator()  # Clean up
+
+    def test_reset_generator_when_none_is_safe(self):
+        """Verify reset when no generator exists doesn't raise."""
+        from models import reset_generator
+
+        reset_generator()  # Should not raise
+        reset_generator()  # Should not raise

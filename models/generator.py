@@ -102,36 +102,49 @@ class MLXGenerator:
             GenerationResponse with generated text
 
         Raises:
-            RuntimeError: If model cannot be loaded
+            RuntimeError: If model cannot be loaded or generation fails
         """
-        # Ensure model is loaded
-        if not self._loader.is_loaded():
-            if not self._loader.load():
-                msg = "Failed to load model"
-                raise RuntimeError(msg)
+        # Track if we loaded the model for this call (for cleanup on error)
+        loaded_for_this_call = False
 
-        # Build formatted prompt
-        formatted_prompt = self._prompt_builder.build(request)
+        try:
+            # Ensure model is loaded
+            if not self._loader.is_loaded():
+                if not self._loader.load():
+                    msg = "Failed to load model"
+                    raise RuntimeError(msg)
+                loaded_for_this_call = True
 
-        # Generate with model
-        result = self._loader.generate_sync(
-            prompt=formatted_prompt,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            stop_sequences=request.stop_sequences,
-        )
+            # Build formatted prompt
+            formatted_prompt = self._prompt_builder.build(request)
 
-        total_time = (time.perf_counter() - start_time) * 1000
+            # Generate with model
+            result = self._loader.generate_sync(
+                prompt=formatted_prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                stop_sequences=request.stop_sequences,
+            )
 
-        return GenerationResponse(
-            text=result.text,
-            tokens_used=result.tokens_generated,
-            generation_time_ms=total_time,
-            model_name=self.config.model_path,
-            used_template=False,
-            template_name=None,
-            finish_reason="stop",
-        )
+            total_time = (time.perf_counter() - start_time) * 1000
+
+            return GenerationResponse(
+                text=result.text,
+                tokens_used=result.tokens_generated,
+                generation_time_ms=total_time,
+                model_name=self.config.model_path,
+                used_template=False,
+                template_name=None,
+                finish_reason="stop",
+            )
+
+        except Exception:
+            # If we loaded the model for this call and generation failed,
+            # unload to free memory and prevent inconsistent state
+            if loaded_for_this_call:
+                logger.warning("Generation failed, unloading model loaded for this request")
+                self._loader.unload()
+            raise
 
     def is_loaded(self) -> bool:
         """Check if model is loaded in memory."""

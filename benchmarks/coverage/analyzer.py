@@ -7,7 +7,7 @@ using semantic similarity with sentence embeddings.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -138,7 +138,7 @@ class TemplateCoverageAnalyzer:
                 coverage_at_90=0.0,
                 unmatched_examples=[],
                 template_usage={},
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             )
 
         model = self._ensure_model()
@@ -192,7 +192,7 @@ class TemplateCoverageAnalyzer:
             coverage_at_90=coverage_90,
             unmatched_examples=unmatched_examples,
             template_usage=template_usage,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
     def get_templates(self) -> list[str]:
