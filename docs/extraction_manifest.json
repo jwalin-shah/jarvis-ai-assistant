@@ -1,0 +1,190 @@
+{
+  "manifest_version": "1.0",
+  "created": "2026-01-25",
+  "description": "Code extraction manifest for JARVIS v1 - documents code audited from existing projects",
+  "source_repositories": {
+    "jarvisv0": {
+      "path": "/Users/jwalinshah/coding/jarvisv0",
+      "description": "Original JARVIS prototype with MLX integration"
+    },
+    "summaryv2": {
+      "path": "/Users/jwalinshah/coding/summarization-v2",
+      "description": "Summarization experiments with iMessage integration"
+    }
+  },
+  "audited_code": {
+    "from_jarvisv0": [
+      {
+        "component": "MLX Client",
+        "source": "backend/clients/mlx_client.py",
+        "target": "models/loader.py",
+        "workstream": "WS8",
+        "priority": "HIGH",
+        "status": "REFERENCE_ONLY",
+        "notes": "Heavily coupled to LoRA fine-tuning infrastructure. Better to write fresh Generator implementation against contracts."
+      },
+      {
+        "component": "MLX Prompts",
+        "source": "backend/clients/mlx_prompts.py",
+        "target": "models/templates.py",
+        "workstream": "WS8",
+        "priority": "HIGH",
+        "status": "REFERENCE_ONLY",
+        "notes": "Two-pass prompt engineering pattern (extraction -> composition) worth referencing but not copying."
+      },
+      {
+        "component": "Config Service",
+        "source": "backend/services/infrastructure/config_service.py",
+        "target": "core/config/settings.py",
+        "workstream": "Core",
+        "priority": "HIGH",
+        "status": "REFERENCE_ONLY",
+        "notes": "Type-safe config with Pydantic. Pattern can be adapted for new config structure."
+      },
+      {
+        "component": "AppConfig Models",
+        "source": "backend/models/config.py",
+        "target": "core/config/models.py",
+        "workstream": "Core",
+        "priority": "HIGH",
+        "status": "REFERENCE_ONLY",
+        "notes": "Pydantic models for configuration."
+      },
+      {
+        "component": "Performance Monitor",
+        "source": "backend/utils/performance_monitor.py",
+        "target": "benchmarks/latency/timer.py",
+        "workstream": "WS4",
+        "priority": "MEDIUM",
+        "status": "REFERENCE_ONLY",
+        "notes": "P95 tracking, decorators. Useful pattern for latency benchmarking."
+      },
+      {
+        "component": "Generic Cache",
+        "source": "backend/utils/cache_base.py",
+        "target": "core/cache/base.py",
+        "workstream": "Core",
+        "priority": "MEDIUM",
+        "status": "NOT_PORTING",
+        "notes": "Redis-backed, TTL support. Not porting - local-first architecture doesn't need Redis."
+      },
+      {
+        "component": "LoRA Config",
+        "source": "backend/training/lora_config.py",
+        "target": "models/lora_config.py",
+        "workstream": "WS8",
+        "priority": "LOW",
+        "status": "NOT_PORTING",
+        "notes": "LoRA fine-tuning not needed for v1."
+      }
+    ],
+    "from_summaryv2": [
+      {
+        "component": "ConversationDB",
+        "source": "summarization/database.py",
+        "source_lines": "94-248",
+        "target": "integrations/imessage/reader.py",
+        "workstream": "WS10",
+        "priority": "HIGH",
+        "status": "REFERENCE_ONLY",
+        "notes": "Clean SQLite patterns with connection pooling. Will adapt to iMessageReader contract with chat.db path."
+      },
+      {
+        "component": "Message/Conversation Dataclasses",
+        "source": "summarization/database.py",
+        "source_lines": "33-92",
+        "target": "integrations/imessage/parser.py",
+        "workstream": "WS10",
+        "priority": "HIGH",
+        "status": "REFERENCE_ONLY",
+        "notes": "Clean dataclasses with token-aware truncation. Contracts define different Message dataclass."
+      },
+      {
+        "component": "ModelRegistry",
+        "source": "summarization/model_registry.py",
+        "target": "core/memory/controller.py",
+        "workstream": "WS5",
+        "priority": "HIGH",
+        "status": "REFERENCE_ONLY",
+        "notes": "Singleton pattern, thread-safe, gc.collect() cleanup. Pattern useful for memory management."
+      },
+      {
+        "component": "MetricsCollector",
+        "source": "summarization/observability/metrics.py",
+        "source_lines": "98-217",
+        "target": "benchmarks/common/metrics.py",
+        "workstream": "WS1-4",
+        "priority": "MEDIUM",
+        "status": "REFERENCE_ONLY",
+        "notes": "Stage timing with context manager, success tracking. Useful pattern for benchmarks."
+      },
+      {
+        "component": "BenchmarkRunner",
+        "source": "benchmarks/benchmark_pipeline.py",
+        "target": "benchmarks/common/runner.py",
+        "workstream": "WS1-4",
+        "priority": "MEDIUM",
+        "status": "REFERENCE_ONLY",
+        "notes": "Pipeline benchmark execution pattern."
+      },
+      {
+        "component": "Test Fixtures",
+        "source": "tests/conftest.py",
+        "target": "tests/fixtures/",
+        "workstream": "Tests",
+        "priority": "MEDIUM",
+        "status": "REFERENCE_ONLY",
+        "notes": "Sample messages, session-scoped model fixtures. Patterns useful for test setup."
+      },
+      {
+        "component": "Schema Patterns",
+        "source": "summarization/graph/schema.py",
+        "target": "core/health/schema.py",
+        "workstream": "WS7",
+        "priority": "MEDIUM",
+        "status": "REFERENCE_ONLY",
+        "notes": "NodeType/RelationType enums, dataclass patterns."
+      }
+    ]
+  },
+  "code_not_to_port": [
+    {
+      "component": "Ollama Integration",
+      "reason": "Switching to pure MLX for local-first architecture"
+    },
+    {
+      "component": "Redis Dependencies",
+      "reason": "Local-first architecture - no external services"
+    },
+    {
+      "component": "Full Knowledge Graph System",
+      "reason": "Over-engineered for v1 requirements"
+    },
+    {
+      "component": "Database Migration Code",
+      "reason": "Fresh start - no legacy data to migrate"
+    }
+  ],
+  "patterns_to_reference": [
+    {
+      "pattern": "Two-pass prompt engineering",
+      "source": "jarvisv0/backend/clients/mlx_prompts.py",
+      "description": "Extraction pass followed by composition pass for better results"
+    },
+    {
+      "pattern": "Generic cache with TTL",
+      "source": "jarvisv0/backend/utils/cache_base.py",
+      "description": "Useful pattern but remove Redis dependency for local-first"
+    },
+    {
+      "pattern": "Performance decorator",
+      "source": "jarvisv0/backend/utils/performance_monitor.py",
+      "description": "Decorator for automatic timing and P95 tracking"
+    },
+    {
+      "pattern": "Connection pooling",
+      "source": "summaryv2/summarization/database.py",
+      "description": "SQLite connection reuse for performance"
+    }
+  ]
+}
