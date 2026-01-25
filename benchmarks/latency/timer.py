@@ -109,9 +109,7 @@ def timed_operation() -> Generator[HighPrecisionTimer, None, None]:
         timer.stop()
 
 
-def measure_operation(
-    func: Callable[..., T], *args: Any, **kwargs: Any
-) -> tuple[T, TimingResult]:
+def measure_operation(func: Callable[..., T], *args: Any, **kwargs: Any) -> tuple[T, TimingResult]:
     """Measure the execution time of a function.
 
     Args:

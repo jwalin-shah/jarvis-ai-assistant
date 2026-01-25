@@ -618,8 +618,7 @@ class TestChatDBReaderGetConversations:
         conn = sqlite3.connect(db_path)
         # Create schema
         conn.execute(
-            "CREATE TABLE chat "
-            "(ROWID INTEGER, guid TEXT, display_name TEXT, chat_identifier TEXT)"
+            "CREATE TABLE chat (ROWID INTEGER, guid TEXT, display_name TEXT, chat_identifier TEXT)"
         )
         conn.execute("CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER)")
         conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
@@ -884,8 +883,7 @@ class TestChatDBReaderFilters:
         db_path = tmp_path / "chat.db"
         conn = sqlite3.connect(db_path)
         conn.execute(
-            "CREATE TABLE chat "
-            "(ROWID INTEGER, guid TEXT, display_name TEXT, chat_identifier TEXT)"
+            "CREATE TABLE chat (ROWID INTEGER, guid TEXT, display_name TEXT, chat_identifier TEXT)"
         )
         conn.execute("CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER)")
         conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
