@@ -240,9 +240,7 @@ def generate_report(results_dir: Path) -> str:
 
 def main() -> int:
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Generate BENCHMARKS.md from benchmark results"
-    )
+    parser = argparse.ArgumentParser(description="Generate BENCHMARKS.md from benchmark results")
     parser.add_argument(
         "--results-dir",
         type=Path,
