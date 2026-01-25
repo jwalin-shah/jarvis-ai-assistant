@@ -18,9 +18,9 @@ This audit compared the actual codebase against the design documentation and dev
 | Benchmark Workstreams (WS1-4) | 100% implemented |
 | Core Infrastructure (WS5-7) | 66% implemented (WS5, WS6 complete; WS7 pending) |
 | Model Layer (WS8) | 100% implemented |
-| Integrations (WS9-10) | 50% implemented (WS10 only; WS9 pending) |
+| Integrations (WS10) | 100% implemented (iMessage only) |
 | Test Coverage | 97% for implemented code (403 tests) |
-| Documentation Accuracy | 90% (updated to match reality) |
+| Documentation Accuracy | 95% (updated to match reality) |
 
 ---
 
@@ -44,7 +44,6 @@ This audit compared the actual codebase against the design documentation and dev
 | Workstream | Component | Files | Status |
 |------------|-----------|-------|--------|
 | WS7 | Permission Monitor | `core/health/` | Contract only - needs TCC permission checking |
-| WS9 | Gmail Integration | `integrations/gmail/` | Contract only - needs Gmail API client |
 
 ---
 
@@ -56,7 +55,6 @@ This audit compared the actual codebase against the design documentation and dev
 |------------|---------|
 | `scripts/overnight_eval.sh` | Does not exist |
 | Permission Monitor implementation | Contract only |
-| Gmail API integration | Contract only |
 
 ### In Code But NOT Documented
 
@@ -103,7 +101,6 @@ This audit compared the actual codebase against the design documentation and dev
 2. **Missing implementations vs. contracts**:
    - `PermissionMonitor` protocol defined but no implementation
    - `SchemaDetector` protocol defined but no implementation
-   - `GmailClient` protocol defined but no implementation
 
 3. **Missing scripts**: `scripts/overnight_eval.sh` does not exist
 
@@ -148,8 +145,6 @@ The only working CLI is:
 | `mlx` | >=0.5.0 | Apple Silicon ML framework | Required for model inference |
 | `mlx-lm` | >=0.5.0 | MLX language model utilities | Required for model loading |
 | `sentence-transformers` | >=2.2.0 | Semantic similarity | Required for template matching |
-| `google-api-python-client` | >=2.100.0 | Gmail API | Listed but WS9 not implemented |
-| `google-auth-oauthlib` | >=1.1.0 | OAuth for Gmail | Listed but WS9 not implemented |
 | `psutil` | >=5.9.0 | Memory monitoring | Used in loader |
 | `pydantic` | >=2.5.0 | Data validation | Used in config (minor) |
 | `rich` | >=13.7.0 | Terminal formatting | Listed but not used in code |
@@ -198,20 +193,14 @@ The only working CLI is:
 1. Implement WS7 (Permission Monitor) - enables proper macOS TCC permission checking
 2. Implement WS7 (Schema Detector) - enables better chat.db compatibility
 
-### Priority 2: Gmail Integration
-
-1. Implement WS9 (Gmail Client) - last remaining integration
-2. Add OAuth authentication flow
-3. Implement email search and thread retrieval
-
-### Priority 3: Complete iMessage TODOs
+### Priority 2: Complete iMessage TODOs
 
 1. Implement attachment parsing (query attachment table via message_attachment_join)
 2. Implement tapback/reaction parsing (query by associated_message_guid)
 3. Add Contacts integration for sender names
 4. Fix reply-to message ID mapping
 
-### Priority 4: Scripts and Automation
+### Priority 3: Scripts and Automation
 
 1. Create `scripts/overnight_eval.sh` - orchestrate all benchmarks
 2. Add main application entry point (CLI or API)
@@ -238,15 +227,13 @@ The only working CLI is:
 ### Missing Tests
 
 - No tests for WS7 (Permission Monitor not implemented)
-- No tests for WS9 (Gmail not implemented)
 
 ---
 
 ## 10. Conclusion
 
-The JARVIS project has made significant progress with 80% of workstreams now implemented. The remaining work includes:
+The JARVIS project has made significant progress with most workstreams now implemented. The remaining work includes:
 - WS7 (Permission Monitor/Schema Detector) - macOS permission checking
-- WS9 (Gmail Integration) - email access
 - iMessage attachment/reaction parsing
 - Application entry point
 

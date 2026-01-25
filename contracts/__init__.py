@@ -9,11 +9,6 @@ from contracts.coverage import (
     CoverageResult,
     TemplateMatch,
 )
-from contracts.gmail import (
-    Email,
-    EmailSearchResult,
-    GmailClient,
-)
 from contracts.hallucination import (
     HallucinationEvaluator,
     HHEMBenchmarkResult,
@@ -86,10 +81,6 @@ __all__ = [
     "GenerationRequest",
     "GenerationResponse",
     "Generator",
-    # Gmail (WS9)
-    "Email",
-    "EmailSearchResult",
-    "GmailClient",
     # iMessage (WS10)
     "Message",
     "Conversation",
