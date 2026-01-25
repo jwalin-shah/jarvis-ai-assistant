@@ -4,14 +4,17 @@ Handles:
 - attributedBody NSKeyedArchive parsing
 - Apple Core Data timestamp conversion
 - Phone number normalization
-- Attachment and reaction parsing (stubs for v1)
+- Attachment and reaction parsing
 """
 
 import logging
 import plistlib
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+
+from contracts.imessage import Attachment, Reaction
 
 logger = logging.getLogger(__name__)
 
@@ -117,40 +120,130 @@ def parse_apple_timestamp(timestamp: int | float | None) -> datetime:
         return APPLE_EPOCH
 
 
-def parse_attachments(attachment_data: str | None) -> list[str]:
-    """Parse attachment filenames from message.
+def parse_attachments(attachment_rows: list[dict[str, Any]] | None) -> list[Attachment]:
+    """Parse attachment metadata from database rows.
 
     Args:
-        attachment_data: Raw attachment data from database
+        attachment_rows: List of attachment rows from database query.
+            Each row should have: filename, mime_type, file_size, transfer_name
 
     Returns:
-        List of attachment filenames (empty list for v1)
-
-    Note:
-        This is a stub for v1. Full implementation in WS10.1 will query
-        the attachment table via message_attachment_join.
+        List of Attachment objects with metadata
     """
-    # TODO: Implement attachment parsing (WS10.1)
-    # Requires JOIN with attachment table
-    return []
+    if not attachment_rows:
+        return []
+
+    attachments = []
+    for row in attachment_rows:
+        # filename is the full path (e.g., ~/Library/Messages/Attachments/...)
+        filename_raw = row.get("filename") or row.get("transfer_name") or ""
+
+        # Extract just the filename for display
+        if filename_raw:
+            # Handle ~ in path
+            if filename_raw.startswith("~"):
+                full_path = str(Path(filename_raw).expanduser())
+            else:
+                full_path = filename_raw
+            display_name = Path(filename_raw).name
+        else:
+            full_path = None
+            display_name = "unknown"
+
+        attachment = Attachment(
+            filename=display_name,
+            file_path=full_path,
+            mime_type=row.get("mime_type"),
+            file_size=row.get("file_size"),
+        )
+        attachments.append(attachment)
+
+    return attachments
 
 
-def parse_reactions(associated_messages: list[dict[str, Any]] | None) -> list[str]:
-    """Extract tapback reactions from associated messages.
+def parse_reactions(reaction_rows: list[dict[str, Any]] | None) -> list[Reaction]:
+    """Extract tapback reactions from associated message rows.
+
+    iMessage stores reactions as messages with associated_message_type:
+    - 2000: Love
+    - 2001: Like (thumbs up)
+    - 2002: Dislike (thumbs down)
+    - 2003: Laugh
+    - 2004: Emphasize (exclamation marks)
+    - 2005: Question
+    - 3000-3005: Removed versions of the above reactions
 
     Args:
-        associated_messages: List of associated message dicts
+        reaction_rows: List of reaction message rows from database.
+            Each row should have: associated_message_type, date, is_from_me, sender
 
     Returns:
-        List of reaction strings (empty list for v1)
-
-    Note:
-        This is a stub for v1. Full implementation in WS10.1 will query
-        messages with associated_message_guid pointing to the target.
+        List of Reaction objects
     """
-    # TODO: Implement tapback parsing (WS10.1)
-    # Requires querying messages by associated_message_guid
-    return []
+    if not reaction_rows:
+        return []
+
+    reactions = []
+    for row in reaction_rows:
+        reaction_type = _get_reaction_type(row.get("associated_message_type", 0))
+        if reaction_type is None:
+            continue
+
+        # Parse the timestamp
+        date = parse_apple_timestamp(row.get("date"))
+
+        # Determine sender
+        if row.get("is_from_me"):
+            sender = "me"
+        else:
+            sender = normalize_phone_number(row.get("sender"))
+
+        reaction = Reaction(
+            type=reaction_type,
+            sender=sender,
+            sender_name=None,  # Will be resolved by reader if contacts available
+            date=date,
+        )
+        reactions.append(reaction)
+
+    return reactions
+
+
+def _get_reaction_type(associated_message_type: int) -> str | None:
+    """Convert associated_message_type to reaction type string.
+
+    Args:
+        associated_message_type: The numeric type from the message table
+
+    Returns:
+        Reaction type string, or None if not a valid reaction type
+    """
+    # Standard tapback types (added reactions)
+    tapback_types = {
+        2000: "love",
+        2001: "like",
+        2002: "dislike",
+        2003: "laugh",
+        2004: "emphasize",
+        2005: "question",
+    }
+
+    # Removed tapback types (3000 series = removed reactions)
+    removed_tapback_types = {
+        3000: "removed_love",
+        3001: "removed_like",
+        3002: "removed_dislike",
+        3003: "removed_laugh",
+        3004: "removed_emphasize",
+        3005: "removed_question",
+    }
+
+    if associated_message_type in tapback_types:
+        return tapback_types[associated_message_type]
+    elif associated_message_type in removed_tapback_types:
+        return removed_tapback_types[associated_message_type]
+    else:
+        return None
 
 
 def normalize_phone_number(phone: str | None) -> str:

@@ -132,6 +132,35 @@ _BASE_QUERIES = {
         ORDER BY ABS(message.ROWID - ?)
         LIMIT ?
     """,
+    "attachments": """
+        SELECT
+            attachment.ROWID as attachment_id,
+            attachment.filename,
+            attachment.mime_type,
+            attachment.total_bytes as file_size,
+            attachment.transfer_name
+        FROM attachment
+        JOIN message_attachment_join ON attachment.ROWID = message_attachment_join.attachment_id
+        WHERE message_attachment_join.message_id = ?
+    """,
+    "reactions": """
+        SELECT
+            message.ROWID as id,
+            message.associated_message_type,
+            message.date,
+            message.is_from_me,
+            COALESCE(handle.id, 'me') as sender
+        FROM message
+        LEFT JOIN handle ON message.handle_id = handle.ROWID
+        WHERE message.associated_message_guid = ?
+          AND message.associated_message_type != 0
+    """,
+    "message_by_guid": """
+        SELECT message.ROWID as id
+        FROM message
+        WHERE message.guid = ?
+        LIMIT 1
+    """,
 }
 
 # Version-specific queries (currently identical, will diverge as needed)
