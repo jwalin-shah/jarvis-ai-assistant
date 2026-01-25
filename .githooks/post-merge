@@ -1,0 +1,13 @@
+#!/bin/bash
+# Post-merge hook: runs after git merge/pull
+# Reminds to sync dependencies if lockfile changed
+
+changed_files=$(git diff-tree -r --name-only --no-commit-id HEAD@{1} HEAD 2>/dev/null || echo "")
+
+if echo "$changed_files" | grep -q "uv.lock\|pyproject.toml"; then
+    echo ""
+    echo "================================================"
+    echo "  Dependencies changed. Run 'make install' to sync."
+    echo "================================================"
+    echo ""
+fi
