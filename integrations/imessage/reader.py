@@ -5,9 +5,10 @@ Implements the iMessageReader protocol from contracts/imessage.py.
 
 import logging
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from contracts.imessage import Conversation, Message
 
@@ -32,12 +33,27 @@ class ChatDBReader:
 
     Implements iMessageReader protocol from contracts/imessage.py.
 
+    Thread Safety:
+        This class is NOT thread-safe. Each thread should create its own
+        ChatDBReader instance. The check_same_thread=False setting only
+        allows the connection to be used from async contexts on the same
+        thread, but does not provide synchronization for concurrent access.
+
     Example:
+        # Preferred: use as context manager for automatic cleanup
+        with ChatDBReader() as reader:
+            if reader.check_access():
+                conversations = reader.get_conversations(limit=10)
+                for conv in conversations:
+                    messages = reader.get_messages(conv.chat_id, limit=50)
+
+        # Alternative: manual lifecycle management
         reader = ChatDBReader()
-        if reader.check_access():
-            conversations = reader.get_conversations(limit=10)
-            for conv in conversations:
-                messages = reader.get_messages(conv.chat_id, limit=50)
+        try:
+            if reader.check_access():
+                conversations = reader.get_conversations(limit=10)
+        finally:
+            reader.close()
     """
 
     def __init__(self, db_path: Path | None = None):
@@ -86,12 +102,24 @@ class ChatDBReader:
         Connection will be recreated on next use if needed.
         """
         if self._connection is not None:
-            self._connection.close()
+            try:
+                self._connection.close()
+            except Exception:
+                pass  # Suppress errors during cleanup
             self._connection = None
             self._schema_version = None
 
-    def __del__(self) -> None:
-        """Ensure connection is closed on garbage collection."""
+    def __enter__(self) -> Self:
+        """Enter context manager."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        """Exit context manager and close connection."""
         self.close()
 
     def check_access(self) -> bool:
@@ -150,27 +178,23 @@ class ChatDBReader:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        # Build since filter if needed
-        since_filter = ""
+        # Build params list based on filters
         params: list[Any] = []
         if since is not None:
-            # Convert to Apple timestamp format
-            since_filter = "AND last_message_date > ?"
             params.append(datetime_to_apple_timestamp(since))
-
         params.append(limit)
 
         query = get_query(
             "conversations",
             self._schema_version or "v14",
-            since_filter=since_filter,
+            with_since_filter=since is not None,
         )
 
         try:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         except sqlite3.OperationalError as e:
-            logger.error(f"Query error in get_conversations: {e}")
+            logger.warning(f"Query error in get_conversations: {e}")
             return []
 
         conversations = []
@@ -221,26 +245,23 @@ class ChatDBReader:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        # Build before filter if needed
-        before_filter = ""
+        # Build params list based on filters
         params: list[Any] = [chat_id]
         if before is not None:
-            before_filter = "AND message.date < ?"
             params.append(datetime_to_apple_timestamp(before))
-
         params.append(limit)
 
         query = get_query(
             "messages",
             self._schema_version or "v14",
-            before_filter=before_filter,
+            with_before_filter=before is not None,
         )
 
         try:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         except sqlite3.OperationalError as e:
-            logger.error(f"Query error in get_messages: {e}")
+            logger.warning(f"Query error in get_messages: {e}")
             return []
 
         return self._rows_to_messages(rows, chat_id)
@@ -258,8 +279,8 @@ class ChatDBReader:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        # Escape and prepare LIKE pattern
-        escaped_query = query.replace("%", "\\%").replace("_", "\\_")
+        # Escape LIKE wildcards (query uses ESCAPE '\\' clause)
+        escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         like_pattern = f"%{escaped_query}%"
 
         sql = get_query("search", self._schema_version or "v14")
@@ -268,7 +289,7 @@ class ChatDBReader:
             cursor.execute(sql, (like_pattern, limit))
             rows = cursor.fetchall()
         except sqlite3.OperationalError as e:
-            logger.error(f"Query error in search: {e}")
+            logger.warning(f"Query error in search: {e}")
             return []
 
         messages = []
@@ -307,7 +328,7 @@ class ChatDBReader:
             cursor.execute(query, (chat_id, around_message_id, total_limit))
             rows = cursor.fetchall()
         except sqlite3.OperationalError as e:
-            logger.error(f"Query error in get_conversation_context: {e}")
+            logger.warning(f"Query error in get_conversation_context: {e}")
             return []
 
         messages = self._rows_to_messages(rows, chat_id)
@@ -317,11 +338,13 @@ class ChatDBReader:
 
         return messages
 
-    def _rows_to_messages(self, rows: list[sqlite3.Row], chat_id: str) -> list[Message]:
+    def _rows_to_messages(
+        self, rows: Sequence[sqlite3.Row], chat_id: str
+    ) -> list[Message]:
         """Convert database rows to Message objects.
 
         Args:
-            rows: List of sqlite3.Row objects
+            rows: Sequence of sqlite3.Row objects
             chat_id: The conversation ID
 
         Returns:

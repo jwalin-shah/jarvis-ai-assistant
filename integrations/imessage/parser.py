@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Apple's Core Data epoch: 2001-01-01 00:00:00 UTC
 # Timestamps are in nanoseconds since this epoch
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=UTC)
-APPLE_EPOCH_UNIX = 978307200  # Unix timestamp for 2001-01-01 00:00:00 UTC
+APPLE_EPOCH_UNIX = int(APPLE_EPOCH.timestamp())  # 978307200
 NANOSECONDS_PER_SECOND = 1_000_000_000
 
 
@@ -167,20 +167,32 @@ def normalize_phone_number(phone: str | None) -> str:
     if phone is None:
         return ""
 
+    phone = phone.strip()
+
     # If it's an email, return as-is
     if "@" in phone:
-        return phone.strip()
+        return phone
 
-    # Remove common formatting characters
+    # Check if number already has + prefix before stripping
+    has_plus = phone.startswith("+")
+
+    # Remove common formatting characters (but not +)
     cleaned = re.sub(r"[\s\-\(\)\.]", "", phone)
 
-    # Ensure + prefix for international numbers
-    if cleaned.startswith("1") and len(cleaned) == 11:
-        cleaned = "+" + cleaned
-    elif len(cleaned) == 10:
-        # Assume US number
-        cleaned = "+1" + cleaned
+    # If already has + prefix, return cleaned number
+    if has_plus or cleaned.startswith("+"):
+        return cleaned
 
+    # Add appropriate prefix for numbers without +
+    if cleaned.startswith("1") and len(cleaned) == 11:
+        # US number with country code
+        return "+" + cleaned
+    elif len(cleaned) == 10:
+        # Assume US number without country code
+        return "+1" + cleaned
+
+    # For other formats (international without +), return as-is
+    # since we can't reliably determine the country code
     return cleaned
 
 
