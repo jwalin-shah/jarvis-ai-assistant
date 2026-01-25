@@ -86,7 +86,8 @@ class TemplateCoverageAnalyzer:
         template_norms = template_embeddings / np.linalg.norm(
             template_embeddings, axis=1, keepdims=True
         )
-        return np.dot(template_norms, query_norm)
+        result: np.ndarray = np.dot(template_norms, query_norm)
+        return result
 
     def match_query(self, query: str, threshold: float = 0.7) -> TemplateMatch:
         """Find best matching template for a query.
