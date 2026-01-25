@@ -26,6 +26,9 @@ ENV/
 env/
 .venv/
 
+# uv package manager
+uv.lock
+
 # IDE
 .idea/
 .vscode/

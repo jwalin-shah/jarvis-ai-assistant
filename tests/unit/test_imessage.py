@@ -101,16 +101,33 @@ class TestNormalizePhoneNumber:
         result = normalize_phone_number("user@example.com")
         assert result == "user@example.com"
 
+    def test_email_with_whitespace(self):
+        """Strip whitespace from email addresses."""
+        result = normalize_phone_number("  user@example.com  ")
+        assert result == "user@example.com"
+
     def test_none_returns_empty(self):
         """Return empty string for None input."""
         result = normalize_phone_number(None)
         assert result == ""
 
     def test_international_format_preserved(self):
-        """Numbers with + are handled."""
+        """Numbers with + prefix are preserved."""
         result = normalize_phone_number("+44 20 7946 0958")
-        # Formatting stripped but otherwise preserved
+        # Formatting stripped but + and digits preserved
         assert result == "+442079460958"
+
+    def test_plus_prefix_not_duplicated(self):
+        """Don't add extra + to numbers that already have it."""
+        result = normalize_phone_number("+15551234567")
+        assert result == "+15551234567"
+        assert not result.startswith("++")
+
+    def test_international_short_number(self):
+        """International numbers without + are returned as-is."""
+        # 8-digit number that doesn't match US patterns
+        result = normalize_phone_number("12345678")
+        assert result == "12345678"
 
 
 class TestParseAttributedBody:
@@ -232,14 +249,30 @@ class TestGetQuery:
         result = get_query("messages", "unknown")
         assert "SELECT" in result
 
-    def test_query_with_filters(self):
-        """Apply filter parameters to query."""
-        result = get_query(
-            "conversations",
-            "v14",
-            since_filter="AND last_message_date > ?",
-        )
+    def test_query_with_since_filter(self):
+        """Apply since filter when flag is True."""
+        result = get_query("conversations", "v14", with_since_filter=True)
         assert "AND last_message_date > ?" in result
+
+    def test_query_without_since_filter(self):
+        """No since filter when flag is False."""
+        result = get_query("conversations", "v14", with_since_filter=False)
+        assert "AND last_message_date > ?" not in result
+
+    def test_query_with_before_filter(self):
+        """Apply before filter when flag is True."""
+        result = get_query("messages", "v14", with_before_filter=True)
+        assert "AND message.date < ?" in result
+
+    def test_query_without_before_filter(self):
+        """No before filter when flag is False."""
+        result = get_query("messages", "v14", with_before_filter=False)
+        assert "AND message.date < ?" not in result
+
+    def test_search_query_has_escape_clause(self):
+        """Search query includes ESCAPE clause for LIKE."""
+        result = get_query("search", "v14")
+        assert "ESCAPE" in result
 
     def test_invalid_query_raises(self):
         """Raise KeyError for invalid query name."""
@@ -271,6 +304,41 @@ class TestChatDBReaderInit:
         reader = ChatDBReader()
         assert reader._connection is None
         assert reader._schema_version is None
+
+    def test_context_manager(self, tmp_path):
+        """Context manager closes connection on exit."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid TEXT)")
+        conn.execute("INSERT INTO chat VALUES (1, 'test')")
+        conn.execute("CREATE TABLE message (ROWID INTEGER PRIMARY KEY, thread_originator_guid TEXT)")
+        conn.close()
+
+        with ChatDBReader(db_path=db_path) as reader:
+            assert reader.check_access() is True
+            assert reader._connection is not None
+
+        # Connection should be closed after exiting context
+        assert reader._connection is None
+
+    def test_context_manager_on_exception(self, tmp_path):
+        """Context manager closes connection even on exception."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid TEXT)")
+        conn.execute("INSERT INTO chat VALUES (1, 'test')")
+        conn.execute("CREATE TABLE message (ROWID INTEGER PRIMARY KEY, thread_originator_guid TEXT)")
+        conn.close()
+
+        try:
+            with ChatDBReader(db_path=db_path) as reader:
+                reader.check_access()
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
+
+        # Connection should still be closed
+        assert reader._connection is None
 
 
 class TestChatDBReaderCheckAccess:
@@ -492,6 +560,41 @@ class TestChatDBReaderSearch:
 
         assert result == []
         reader.close()
+
+    def test_search_escapes_wildcards(self, tmp_path):
+        """Search properly escapes LIKE wildcards."""
+        db_path = tmp_path / "chat.db"
+        conn = sqlite3.connect(db_path)
+
+        conn.execute("CREATE TABLE chat (ROWID INTEGER, guid TEXT)")
+        conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
+        conn.execute("""
+            CREATE TABLE message (
+                ROWID INTEGER,
+                date INTEGER,
+                text TEXT,
+                attributedBody BLOB,
+                is_from_me INTEGER,
+                handle_id INTEGER,
+                thread_originator_guid TEXT
+            )
+        """)
+        conn.execute("CREATE TABLE handle (ROWID INTEGER, id TEXT)")
+
+        conn.execute("INSERT INTO chat VALUES (1, 'chat;test')")
+        conn.execute("INSERT INTO message VALUES (1, 1, '100% complete', NULL, 0, NULL, NULL)")
+        conn.execute("INSERT INTO message VALUES (2, 2, '100 complete', NULL, 0, NULL, NULL)")
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
+        conn.execute("INSERT INTO chat_message_join VALUES (1, 2)")
+        conn.commit()
+        conn.close()
+
+        with ChatDBReader(db_path=db_path) as reader:
+            # Search for literal "%" - should only match the message with %
+            result = reader.search("100%", limit=10)
+
+            assert len(result) == 1
+            assert result[0].text == "100% complete"
 
 
 class TestChatDBReaderContext:
