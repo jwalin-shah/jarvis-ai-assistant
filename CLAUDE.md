@@ -20,6 +20,7 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent email a
 | Memory Controller (WS5) | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
 | Degradation Controller (WS6) | COMPLETE | Circuit breaker pattern |
 | Gmail Integration (WS9) | NOT STARTED | Contract only, stub implementation |
+| Setup Wizard | COMPLETE | Environment validation, config init, health report |
 
 **Default Model**: Qwen2.5-0.5B-Instruct-4bit (configured in `models/loader.py`)
 
@@ -33,6 +34,10 @@ make test     # Run tests (ALWAYS use this, never raw pytest)
 make verify   # Full verification before PR
 make health   # Check project status
 make help     # List all commands
+
+# JARVIS Setup Wizard
+python -m jarvis.setup          # Run full setup (validates environment, creates config)
+python -m jarvis.setup --check  # Just check status, don't modify
 ```
 
 ## Build and Development Commands
@@ -229,7 +234,7 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 | `contracts/hallucination.py` | HallucinationEvaluator | IMPLEMENTED in `benchmarks/hallucination/` |
 | `contracts/coverage.py` | CoverageAnalyzer | IMPLEMENTED in `benchmarks/coverage/` |
 | `contracts/latency.py` | LatencyBenchmarker | IMPLEMENTED in `benchmarks/latency/` |
-| `contracts/health.py` | DegradationController, PermissionMonitor, SchemaDetector | IMPLEMENTED (DegradationController only) in `core/health/` |
+| `contracts/health.py` | DegradationController, PermissionMonitor, SchemaDetector | IMPLEMENTED in `core/health/` and `jarvis/setup.py` |
 | `contracts/models.py` | Generator | IMPLEMENTED in `models/` |
 | `contracts/gmail.py` | GmailClient | CONTRACTS ONLY |
 | `contracts/imessage.py` | iMessageReader | IMPLEMENTED in `integrations/imessage/` |
@@ -248,6 +253,7 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 | `models/` | MLX model inference (WS8) | COMPLETE |
 | `integrations/imessage/` | iMessage reader (WS10) | MOSTLY COMPLETE |
 | `integrations/gmail/` | Gmail API (WS9) | STUB ONLY |
+| `jarvis/` | Main package with setup wizard | COMPLETE |
 
 ### Key Patterns (Implemented)
 
@@ -264,6 +270,8 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 **Memory Controller**: `DefaultMemoryController` in `core/memory/controller.py` provides three-tier memory modes (FULL/LITE/MINIMAL) based on available system memory. Use `get_memory_controller()` for singleton access.
 
 **HHEM Quality Validation**: `HHEMEvaluator` in `benchmarks/hallucination/hhem.py` uses Vectara's HHEM model for hallucination scoring. Scores range from 0 (hallucinated) to 1 (grounded).
+
+**Setup Wizard**: `SetupWizard` in `jarvis/setup.py` validates the environment and guides first-time setup. Checks: platform, Full Disk Access permission, iMessage database schema, system memory, and model availability. Creates `~/.jarvis/config.json` with default settings.
 
 ### Data Flow for Text Generation (Current)
 
