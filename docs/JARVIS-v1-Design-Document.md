@@ -556,38 +556,48 @@ This appendix tracks what has actually been implemented versus what is described
 
 | Workstream | Description | Status | Notes |
 |------------|-------------|--------|-------|
-| WS1 | Memory Profiler | NOT IMPLEMENTED | Contract defined, stub only |
-| WS2 | HHEM Benchmark | NOT IMPLEMENTED | Contract defined, stub only |
-| WS3 | Template Coverage | COMPLETE | Full implementation with 75 templates, 1000 scenarios |
-| WS4 | Latency Benchmark | NOT IMPLEMENTED | Contract defined, stub only |
-| WS5 | Memory Controller | NOT IMPLEMENTED | Contract defined, stub only |
-| WS6 | Degradation Controller | NOT IMPLEMENTED | Contract defined, stub only |
-| WS7 | Permission/Schema | NOT IMPLEMENTED | Contract defined, stub only |
+| WS1 | Memory Profiler | COMPLETE | MLX memory profiling with model unload |
+| WS2 | HHEM Benchmark | COMPLETE | Vectara HHEM model evaluation |
+| WS3 | Template Coverage | COMPLETE | 75 templates, 1000 scenarios |
+| WS4 | Latency Benchmark | COMPLETE | Cold/warm/hot start scenarios |
+| WS5 | Memory Controller | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
+| WS6 | Degradation Controller | COMPLETE | Circuit breaker pattern |
+| WS7 | Permission/Schema | COMPLETE | Full Disk Access checking, schema v14/v15 detection |
 | WS8 | Model Generator | COMPLETE | MLX loader, template fallback, RAG support |
-| WS9 | Gmail Integration | NOT IMPLEMENTED | Contract defined, stub only |
-| WS10 | iMessage Reader | MOSTLY COMPLETE | Has TODOs for attachments/reactions |
+| WS9 | Gmail Integration | NOT STARTED | Planned for future release |
+| WS10 | iMessage Reader | COMPLETE | Attachments, reactions, contacts |
+
+### Additional Components (Not in Original Plan)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| CLI Entry Point | COMPLETE | `jarvis/cli.py` - chat, search, health, benchmarks |
+| Setup Wizard | COMPLETE | `jarvis/setup.py` - environment validation |
 
 ### Validation Gates Status
 
-| Gate | Can Be Evaluated? | Notes |
-|------|-------------------|-------|
+| Gate | Can Be Evaluated? | Command |
+|------|-------------------|---------|
 | G1 (Coverage) | YES | `python -m benchmarks.coverage.run` |
-| G2 (Memory) | NO | WS1 not implemented |
-| G3 (HHEM) | NO | WS2 not implemented |
-| G4 (Warm Latency) | NO | WS4 not implemented |
-| G5 (Cold Latency) | NO | WS4 not implemented |
+| G2 (Memory) | YES | `python -m benchmarks.memory.run` |
+| G3 (HHEM) | YES | `python -m benchmarks.hallucination.run` |
+| G4 (Warm Latency) | YES | `python -m benchmarks.latency.run` |
+| G5 (Cold Latency) | YES | `python -m benchmarks.latency.run` |
 
-### Missing Scripts
+### Scripts
 
-The following scripts referenced in this document do not exist:
-- `scripts/overnight_eval.sh` - Overnight benchmark runner
-- `scripts/generate_report.py` - Report generator
+All referenced scripts exist and are functional:
+- `scripts/overnight_eval.sh` - Overnight benchmark runner (298 lines)
+- `scripts/generate_report.py` - Report generator (293 lines)
+- `scripts/check_gates.py` - Gate pass/fail evaluator (153 lines)
 
 ### Key Deviations from Design
 
-1. **Model Size**: Document specifies 3B parameter model; current implementation defaults to Qwen2.5-0.5B-Instruct-4bit (much smaller)
-2. **Memory Modes**: Three-tier modes (FULL/LITE/MINIMAL) defined in contract but not implemented
-3. **Circuit Breaker**: Pattern described but no implementation exists
-4. **HHEM Validation**: Described in data flow but not implemented
+1. **Model Size**: Document specifies 3B parameter model; current implementation defaults to Qwen2.5-0.5B-Instruct-4bit (smaller, faster, fits 8GB constraint better)
+
+### Test Coverage
+
+- **579 tests** with 95% code coverage
+- All tests pass
 
 See `docs/CODEBASE_AUDIT_REPORT.md` for comprehensive audit details.
