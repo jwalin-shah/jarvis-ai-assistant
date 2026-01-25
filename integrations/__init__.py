@@ -1,1 +1,1 @@
-"""External integrations (Workstreams 9-10)."""
+"""External integrations (iMessage - Workstream 10)."""

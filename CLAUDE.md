@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JARVIS is a local-first AI assistant for macOS that provides intelligent email and iMessage management using MLX-based language models. It runs entirely on Apple Silicon with no cloud data transmission.
+JARVIS is a local-first AI assistant for macOS that provides intelligent iMessage management using MLX-based language models. It runs entirely on Apple Silicon with no cloud data transmission.
 
 ### Current Implementation Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Contracts/Interfaces | COMPLETE | All 9 protocol definitions in `contracts/` |
+| Contracts/Interfaces | COMPLETE | All 8 protocol definitions in `contracts/` |
 | Template Coverage (WS3) | COMPLETE | 75 templates, 1000 test scenarios |
 | Model Generator (WS8) | COMPLETE | MLX loader, template fallback, RAG support |
 | iMessage Reader (WS10) | MOSTLY COMPLETE | Has TODOs for attachments/reactions |
@@ -19,7 +19,6 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent email a
 | Latency Benchmark (WS4) | COMPLETE | Cold/warm/hot start scenarios |
 | Memory Controller (WS5) | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
 | Degradation Controller (WS6) | COMPLETE | Circuit breaker pattern |
-| Gmail Integration (WS9) | NOT STARTED | Contract only, stub implementation |
 | Setup Wizard | COMPLETE | Environment validation, config init, health report |
 
 **Default Model**: Qwen2.5-0.5B-Instruct-4bit (configured in `models/loader.py`)
@@ -226,7 +225,7 @@ git worktree list
 
 ### Contract-Based Design
 
-The project uses Python Protocols in `contracts/` to enable parallel development across 10 workstreams. All implementations code against these interfaces:
+The project uses Python Protocols in `contracts/` to enable parallel development. All implementations code against these interfaces:
 
 | Contract | Protocol(s) | Implementation Status |
 |----------|-------------|----------------------|
@@ -236,7 +235,6 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 | `contracts/latency.py` | LatencyBenchmarker | IMPLEMENTED in `benchmarks/latency/` |
 | `contracts/health.py` | DegradationController, PermissionMonitor, SchemaDetector | IMPLEMENTED in `core/health/` and `jarvis/setup.py` |
 | `contracts/models.py` | Generator | IMPLEMENTED in `models/` |
-| `contracts/gmail.py` | GmailClient | CONTRACTS ONLY |
 | `contracts/imessage.py` | iMessageReader | IMPLEMENTED in `integrations/imessage/` |
 
 ### Module Structure
@@ -252,7 +250,6 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 | `core/config/` | Configuration | STUB ONLY |
 | `models/` | MLX model inference (WS8) | COMPLETE |
 | `integrations/imessage/` | iMessage reader (WS10) | MOSTLY COMPLETE |
-| `integrations/gmail/` | Gmail API (WS9) | STUB ONLY |
 | `jarvis/` | Main package with setup wizard | COMPLETE |
 
 ### Key Patterns (Implemented)
