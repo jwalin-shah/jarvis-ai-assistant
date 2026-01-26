@@ -21,6 +21,7 @@ from jarvis.errors import (
     iMessageQueryError,
 )
 
+from .avatar import ContactAvatarData, get_contact_avatar
 from .parser import (
     datetime_to_apple_timestamp,
     extract_text_from_row,
@@ -1024,3 +1025,17 @@ class ChatDBReader:
         except sqlite3.OperationalError as e:
             logger.debug(f"Error fetching GUID for message {message_id}: {e}")
             return []
+
+    def get_contact_avatar(self, identifier: str) -> ContactAvatarData | None:
+        """Get contact avatar data for a phone number or email.
+
+        Queries the macOS AddressBook database for the contact's thumbnail
+        image and name information.
+
+        Args:
+            identifier: Phone number (e.g., "+15551234567") or email address
+
+        Returns:
+            ContactAvatarData with image bytes and name info, or None if not found
+        """
+        return get_contact_avatar(identifier)
