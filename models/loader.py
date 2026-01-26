@@ -32,6 +32,13 @@ import psutil
 from mlx_lm import generate, load
 from mlx_lm.sample_utils import make_sampler
 
+from jarvis.errors import (
+    ErrorCode,
+    ModelGenerationError,
+    ModelLoadError,
+    model_not_found,
+    model_out_of_memory,
+)
 from models.registry import DEFAULT_MODEL_ID, ModelSpec, get_model_spec
 
 logger = logging.getLogger(__name__)
@@ -133,39 +140,49 @@ class MLXModelLoader:
         """Check if model is currently loaded in memory."""
         return self._model is not None and self._tokenizer is not None
 
-    def _can_load_model(self) -> bool:
+    def _can_load_model(self) -> tuple[bool, int, int]:
         """Check if sufficient memory is available for loading.
 
         Requires available memory to exceed estimated model size
         multiplied by buffer factor to avoid memory pressure.
+
+        Returns:
+            Tuple of (can_load, available_mb, required_mb).
         """
         mem = psutil.virtual_memory()
-        available_mb = mem.available / BYTES_PER_MB
-        required_mb = self.config.estimated_memory_mb * self.config.memory_buffer_multiplier
+        available_mb = int(mem.available / BYTES_PER_MB)
+        required_mb = int(self.config.estimated_memory_mb * self.config.memory_buffer_multiplier)
 
         if available_mb < required_mb:
             logger.warning(
-                "Insufficient memory for model load: %.0fMB available, %.0fMB required",
+                "Insufficient memory for model load: %dMB available, %dMB required",
                 available_mb,
                 required_mb,
             )
-            return False
-        return True
+            return False, available_mb, required_mb
+        return True, available_mb, required_mb
 
     def load(self) -> bool:
         """Load model into memory with thread-safe double-check locking.
 
         Returns:
-            True if model loaded successfully or was already loaded,
-            False if loading failed or insufficient memory.
+            True if model loaded successfully or was already loaded.
+
+        Raises:
+            ModelLoadError: If loading fails due to memory, missing files, or other issues.
         """
         # Fast path: already loaded
         if self.is_loaded():
             return True
 
         # Check memory before acquiring lock
-        if not self._can_load_model():
-            return False
+        can_load, available_mb, required_mb = self._can_load_model()
+        if not can_load:
+            raise model_out_of_memory(
+                self.config.display_name,
+                available_mb=available_mb,
+                required_mb=required_mb,
+            )
 
         with self._load_lock:
             # Double-check after acquiring lock
@@ -190,27 +207,37 @@ class MLXModelLoader:
                 logger.info("Model loaded in %.0fms", load_time)
                 return True
 
-            except FileNotFoundError:
+            except FileNotFoundError as e:
                 logger.error(
                     "Model not found: %s. Run `huggingface-cli download %s` first.",
                     self.config.model_path,
                     self.config.model_path,
                 )
                 self.unload()
-                return False
-            except MemoryError:
+                raise model_not_found(self.config.model_path) from e
+            except MemoryError as e:
                 logger.error("Out of memory loading model. Free up memory or use a smaller model.")
                 self.unload()
-                return False
+                raise model_out_of_memory(self.config.display_name) from e
             except OSError as e:
                 # Covers network errors, disk errors, permission issues
                 logger.error("OS error loading model: %s", e)
                 self.unload()
-                return False
-            except Exception:
+                raise ModelLoadError(
+                    f"OS error loading model: {e}",
+                    model_name=self.config.display_name,
+                    model_path=self.config.model_path,
+                    cause=e,
+                ) from e
+            except Exception as e:
                 logger.exception("Failed to load model")
                 self.unload()
-                return False
+                raise ModelLoadError(
+                    f"Failed to load model: {e}",
+                    model_name=self.config.display_name,
+                    model_path=self.config.model_path,
+                    cause=e,
+                ) from e
 
     def unload(self) -> None:
         """Unload model and free all memory including GPU cache.
@@ -264,16 +291,21 @@ class MLXModelLoader:
             GenerationResult with text, token count, and timing
 
         Raises:
-            RuntimeError: If model is not loaded or generation fails
-            ValueError: If prompt is empty
+            ModelGenerationError: If model is not loaded, prompt is invalid, or generation fails.
         """
         if not prompt or not prompt.strip():
-            msg = "Prompt cannot be empty"
-            raise ValueError(msg)
+            raise ModelGenerationError(
+                "Prompt cannot be empty",
+                model_name=self.config.display_name,
+                code=ErrorCode.MDL_INVALID_REQUEST,
+            )
 
         if not self.is_loaded():
-            msg = "Model not loaded. Call load() first."
-            raise RuntimeError(msg)
+            raise ModelGenerationError(
+                "Model not loaded. Call load() first.",
+                model_name=self.config.display_name,
+                code=ErrorCode.MDL_LOAD_FAILED,
+            )
 
         max_tokens = max_tokens or self.config.default_max_tokens
         temperature = temperature if temperature is not None else self.config.default_temperature
@@ -325,10 +357,17 @@ class MLXModelLoader:
                 generation_time_ms=generation_time,
             )
 
+        except ModelGenerationError:
+            # Re-raise JARVIS errors as-is
+            raise
         except Exception as e:
             logger.exception("Generation failed")
-            msg = f"Generation failed: {e}"
-            raise RuntimeError(msg) from e
+            raise ModelGenerationError(
+                f"Generation failed: {e}",
+                prompt=prompt,
+                model_name=self.config.display_name,
+                cause=e,
+            ) from e
 
     def switch_model(self, model_id: str) -> bool:
         """Switch to a different model.
