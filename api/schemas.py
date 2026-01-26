@@ -95,11 +95,69 @@ class HealthResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Error response model."""
+    """Standardized error response model.
 
-    error: str
-    detail: str
-    code: str | None = None
+    All API errors return this format for consistent client handling.
+
+    Attributes:
+        error: The exception class name (e.g., "ValidationError", "ModelLoadError").
+        code: Machine-readable error code (e.g., "VAL_INVALID_INPUT", "MDL_LOAD_FAILED").
+        detail: Human-readable error message describing what went wrong.
+        details: Optional additional context about the error (field names, paths, etc.).
+
+    Example Response (400 Bad Request):
+        {
+            "error": "ValidationError",
+            "code": "VAL_MISSING_REQUIRED",
+            "detail": "Missing required field: email",
+            "details": {"field": "email"}
+        }
+
+    Example Response (403 Forbidden):
+        {
+            "error": "iMessageAccessError",
+            "code": "MSG_ACCESS_DENIED",
+            "detail": "Full Disk Access is required to read iMessages",
+            "details": {
+                "requires_permission": true,
+                "permission_instructions": [
+                    "Open System Settings",
+                    "Go to Privacy & Security > Full Disk Access",
+                    "Add and enable your terminal application",
+                    "Restart JARVIS"
+                ]
+            }
+        }
+
+    Example Response (503 Service Unavailable):
+        {
+            "error": "ModelLoadError",
+            "code": "RES_MEMORY_EXHAUSTED",
+            "detail": "Insufficient memory to load model: qwen-3b",
+            "details": {"available_mb": 1024, "required_mb": 2048}
+        }
+    """
+
+    error: str = Field(
+        ...,
+        description="Exception class name (e.g., 'ValidationError')",
+        examples=["ValidationError", "ModelLoadError", "iMessageAccessError"],
+    )
+    code: str = Field(
+        ...,
+        description="Machine-readable error code for programmatic handling",
+        examples=["VAL_INVALID_INPUT", "MDL_LOAD_FAILED", "MSG_ACCESS_DENIED"],
+    )
+    detail: str = Field(
+        ...,
+        description="Human-readable error message",
+        examples=["Missing required field: email", "Failed to load model"],
+    )
+    details: dict[str, str | int | float | bool | list[str]] | None = Field(
+        default=None,
+        description="Additional context about the error (optional)",
+        examples=[{"field": "email"}, {"available_mb": 1024, "required_mb": 2048}],
+    )
 
 
 class SendMessageRequest(BaseModel):
