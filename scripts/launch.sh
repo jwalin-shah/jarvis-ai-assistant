@@ -1,0 +1,171 @@
+#!/bin/bash
+# JARVIS Launcher Script
+# Starts the FastAPI backend and Tauri desktop app together.
+# Ensures proper cleanup when the app closes.
+
+set -e
+
+# Configuration
+API_PORT=8742
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DESKTOP_DIR="$PROJECT_ROOT/desktop"
+API_PID=""
+TAURI_PID=""
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Cleanup function - called on exit
+cleanup() {
+    log_info "Shutting down JARVIS..."
+
+    # Kill the API server if running
+    if [ -n "$API_PID" ] && kill -0 "$API_PID" 2>/dev/null; then
+        log_info "Stopping API server (PID: $API_PID)..."
+        kill "$API_PID" 2>/dev/null || true
+        wait "$API_PID" 2>/dev/null || true
+    fi
+
+    # Kill any remaining processes on the API port
+    kill_port_process "$API_PORT"
+
+    # Clean up Python/MLX memory by triggering garbage collection
+    # This runs a small Python script to clear any cached models
+    if command -v python &> /dev/null; then
+        python -c "
+import gc
+try:
+    import mlx.core as mx
+    mx.metal.clear_cache()
+except ImportError:
+    pass
+gc.collect()
+" 2>/dev/null || true
+    fi
+
+    log_success "Cleanup complete"
+}
+
+# Kill any process using a specific port
+kill_port_process() {
+    local port=$1
+    local pids=$(lsof -ti:$port 2>/dev/null || true)
+
+    if [ -n "$pids" ]; then
+        log_warn "Found existing process(es) on port $port: $pids"
+        for pid in $pids; do
+            log_info "Killing process $pid..."
+            kill -9 "$pid" 2>/dev/null || true
+        done
+        sleep 1
+    fi
+}
+
+# Check if port is available
+check_port() {
+    local port=$1
+    if lsof -ti:$port >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}
+
+# Wait for API server to be ready
+wait_for_api() {
+    local max_attempts=30
+    local attempt=0
+
+    log_info "Waiting for API server to be ready..."
+
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -s "http://localhost:$API_PORT/health" >/dev/null 2>&1; then
+            log_success "API server is ready"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+
+    log_error "API server failed to start within ${max_attempts}s"
+    return 1
+}
+
+# Main function
+main() {
+    log_info "Starting JARVIS..."
+    log_info "Project root: $PROJECT_ROOT"
+
+    # Set up signal handlers for cleanup
+    trap cleanup EXIT INT TERM
+
+    # Step 1: Clean up any existing processes on the API port
+    log_info "Checking port $API_PORT..."
+    if ! check_port "$API_PORT"; then
+        log_warn "Port $API_PORT is in use, cleaning up..."
+        kill_port_process "$API_PORT"
+    fi
+    log_success "Port $API_PORT is available"
+
+    # Step 2: Activate virtual environment if it exists
+    if [ -f "$PROJECT_ROOT/.venv/bin/activate" ]; then
+        log_info "Activating virtual environment..."
+        source "$PROJECT_ROOT/.venv/bin/activate"
+        log_success "Virtual environment activated"
+    else
+        log_warn "No virtual environment found at $PROJECT_ROOT/.venv"
+    fi
+
+    # Step 3: Start the FastAPI backend
+    log_info "Starting FastAPI backend on port $API_PORT..."
+    cd "$PROJECT_ROOT"
+    uvicorn api.main:app --port "$API_PORT" --host 127.0.0.1 &
+    API_PID=$!
+    log_info "API server started (PID: $API_PID)"
+
+    # Wait for API to be ready
+    if ! wait_for_api; then
+        log_error "Failed to start API server"
+        exit 1
+    fi
+
+    # Step 4: Start the Tauri desktop app
+    log_info "Starting JARVIS desktop app..."
+    cd "$DESKTOP_DIR"
+
+    # Check if node_modules exists
+    if [ ! -d "node_modules" ]; then
+        log_info "Installing desktop dependencies..."
+        npm install
+    fi
+
+    # Run Tauri in dev mode and wait for it to exit
+    npm run tauri dev
+    TAURI_EXIT_CODE=$?
+
+    log_info "Desktop app closed (exit code: $TAURI_EXIT_CODE)"
+
+    # Cleanup happens automatically via trap
+}
+
+# Run main function
+main "$@"
