@@ -4,9 +4,13 @@
 
 import type {
   ActivateResponse,
+  Calendar,
+  CalendarEvent,
   Conversation,
   ConversationInsights,
   ConversationStats,
+  CreateEventResponse,
+  DetectedEvent,
   DownloadStatus,
   DraftReplyResponse,
   FrequencyTrends,
@@ -617,6 +621,70 @@ class ApiClient {
     });
   }
 
+  // Calendar endpoints
+  async getCalendars(): Promise<Calendar[]> {
+    return this.request<Calendar[]>("/calendars");
+  }
+
+  async getCalendarEvents(
+    calendarId?: string,
+    days: number = 30,
+    limit: number = 50
+  ): Promise<CalendarEvent[]> {
+    const params = new URLSearchParams({
+      days: days.toString(),
+      limit: limit.toString(),
+    });
+    if (calendarId) {
+      params.set("calendar_id", calendarId);
+    }
+    return this.request<CalendarEvent[]>(`/calendars/events?${params.toString()}`);
+  }
+
+  async searchCalendarEvents(
+    query: string,
+    calendarId?: string,
+    limit: number = 50
+  ): Promise<CalendarEvent[]> {
+    const params = new URLSearchParams({
+      query,
+      limit: limit.toString(),
+    });
+    if (calendarId) {
+      params.set("calendar_id", calendarId);
+    }
+    return this.request<CalendarEvent[]>(`/calendars/events/search?${params.toString()}`);
+  }
+
+  async detectEventsInText(
+    text: string,
+    messageId?: number
+  ): Promise<DetectedEvent[]> {
+    return this.request<DetectedEvent[]>("/calendars/detect", {
+      method: "POST",
+      body: JSON.stringify({
+        text,
+        message_id: messageId || null,
+      }),
+    });
+  }
+
+  async detectEventsInMessages(
+    chatId: string,
+    limit: number = 50
+  ): Promise<DetectedEvent[]> {
+    return this.request<DetectedEvent[]>("/calendars/detect/messages", {
+      method: "POST",
+      body: JSON.stringify({
+        chat_id: chatId,
+        limit,
+      }),
+    });
+  }
+      }),
+    });
+  }
+
   async unmarkMessageHandled(
     chatId: string,
     messageId: number
@@ -626,6 +694,33 @@ class ApiClient {
       body: JSON.stringify({
         chat_id: chatId,
         message_id: messageId,
+      }),
+    });
+  }
+
+  async createCalendarEvent(
+    calendarId: string,
+    title: string,
+    start: string,
+    end: string,
+    options: {
+      all_day?: boolean;
+      location?: string;
+      notes?: string;
+      url?: string;
+    } = {}
+  ): Promise<CreateEventResponse> {
+    return this.request<CreateEventResponse>("/calendars/events", {
+      method: "POST",
+      body: JSON.stringify({
+        calendar_id: calendarId,
+        title,
+        start,
+        end,
+        ...options,
+      }),
+    });
+  }
       }),
     });
   }
@@ -655,6 +750,19 @@ class ApiClient {
       "/priority/clear-handled",
       { method: "POST" }
     );
+  }
+
+  async createEventFromDetected(
+    calendarId: string,
+    detectedEvent: DetectedEvent
+  ): Promise<CreateEventResponse> {
+    return this.request<CreateEventResponse>("/calendars/events/from-detected", {
+      method: "POST",
+      body: JSON.stringify({
+        calendar_id: calendarId,
+        detected_event: detectedEvent,
+      }),
+    });
   }
   }
 }

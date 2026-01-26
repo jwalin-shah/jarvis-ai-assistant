@@ -359,7 +359,8 @@ class TestAsyncMetricsEndpoint:
 class TestTimeoutHandling:
     """Tests for timeout handling in async endpoints."""
 
-    def test_timeout_error_handler(self):
+    @pytest.mark.anyio
+    async def test_timeout_error_handler(self):
         """timeout_error_handler returns proper 408 response."""
         from api.errors import timeout_error_handler
 
@@ -367,10 +368,8 @@ class TestTimeoutHandling:
         mock_request.method = "GET"
         mock_request.url.path = "/test"
 
-        # Use asyncio.run to test async function
-        response = asyncio.get_event_loop().run_until_complete(
-            timeout_error_handler(mock_request, TimeoutError("Timed out"))
-        )
+        # Use await for async function
+        response = await timeout_error_handler(mock_request, TimeoutError("Timed out"))
 
         assert response.status_code == 408
         data = response.body.decode()
@@ -413,14 +412,14 @@ class TestConfigMigration:
     """Tests for config migration with rate_limit section."""
 
     def test_config_version_4_adds_rate_limit(self):
-        """Config migration to v4 adds rate_limit section."""
+        """Config migration to v5 adds rate_limit section (v4 was rate_limit)."""
         from jarvis.config import _migrate_config
 
         data = {"config_version": 3, "model_path": "test"}
         migrated = _migrate_config(data)
 
         assert "rate_limit" in migrated
-        assert migrated["config_version"] == 4
+        assert migrated["config_version"] == 5
 
     def test_rate_limit_in_jarvis_config(self):
         """JarvisConfig includes rate_limit field."""

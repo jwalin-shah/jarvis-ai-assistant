@@ -4,6 +4,15 @@ This module exports all Protocol interfaces that enable parallel workstream deve
 All implementations should code against these contracts, not concrete implementations.
 """
 
+from contracts.calendar import (
+    Calendar,
+    CalendarEvent,
+    CalendarReader,
+    CalendarWriter,
+    CreateEventResult,
+    DetectedEvent,
+    EventDetector,
+)
 from contracts.hallucination import (
     HallucinationEvaluator,
     HHEMBenchmarkResult,
@@ -76,4 +85,12 @@ __all__ = [
     "Message",
     "Conversation",
     "iMessageReader",
+    # Calendar
+    "Calendar",
+    "CalendarEvent",
+    "CalendarReader",
+    "CalendarWriter",
+    "CreateEventResult",
+    "DetectedEvent",
+    "EventDetector",
 ]

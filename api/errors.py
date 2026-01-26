@@ -27,9 +27,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from jarvis.errors import (
+    CalendarAccessError,
+    CalendarCreateError,
+    CalendarError,
     ConfigurationError,
     DiskResourceError,
     ErrorCode,
+    EventParseError,
     JarvisError,
     MemoryResourceError,
     ModelError,
@@ -60,6 +64,11 @@ ERROR_STATUS_CODES: dict[type[JarvisError], int] = {
     iMessageError: 500,
     iMessageAccessError: 403,  # Forbidden - permission denied
     iMessageQueryError: 500,  # Internal Server Error - query failed
+    # Calendar errors
+    CalendarError: 500,
+    CalendarAccessError: 403,  # Forbidden - permission denied
+    CalendarCreateError: 500,  # Internal Server Error - create failed
+    EventParseError: 400,  # Bad Request - invalid input
     # Validation errors -> 400 (client error)
     ValidationError: 400,
     # Resource errors
@@ -77,8 +86,10 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     ErrorCode.VAL_MISSING_REQUIRED: 400,
     ErrorCode.VAL_TYPE_ERROR: 400,
     ErrorCode.MDL_INVALID_REQUEST: 400,
+    ErrorCode.CAL_PARSE_FAILED: 400,
     # 403 Forbidden
     ErrorCode.MSG_ACCESS_DENIED: 403,
+    ErrorCode.CAL_ACCESS_DENIED: 403,
     # 404 Not Found
     ErrorCode.MDL_NOT_FOUND: 404,
     ErrorCode.MSG_DB_NOT_FOUND: 404,
@@ -92,6 +103,9 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     ErrorCode.MSG_QUERY_FAILED: 500,
     ErrorCode.MSG_SCHEMA_UNSUPPORTED: 500,
     ErrorCode.MSG_SEND_FAILED: 500,
+    # 500 Internal Server Error (Calendar)
+    ErrorCode.CAL_CREATE_FAILED: 500,
+    ErrorCode.CAL_NOT_AVAILABLE: 500,
     # 503 Service Unavailable
     ErrorCode.MDL_LOAD_FAILED: 503,
     ErrorCode.RES_MEMORY_LOW: 503,
