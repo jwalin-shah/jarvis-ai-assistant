@@ -55,20 +55,35 @@ class ContextFetcher:
             print(context.formatted_context)
     """
 
-    def __init__(self, reader: iMessageReader) -> None:
+    def __init__(
+        self, reader: iMessageReader, max_cached_conversations: int = 500
+    ) -> None:
         """Initialize the context fetcher.
 
         Args:
             reader: An iMessageReader implementation (e.g., ChatDBReader)
+            max_cached_conversations: Maximum number of conversations to cache
+                for name resolution (default 500)
         """
         self._reader = reader
+        self._max_cached_conversations = max_cached_conversations
         # Cache conversations for name resolution
         self._conversations_cache: list[Conversation] | None = None
+
+    def clear_cache(self) -> None:
+        """Clear the conversation cache.
+
+        Call this method if you need to refresh conversation data,
+        for example after new messages arrive or conversations change.
+        """
+        self._conversations_cache = None
 
     def _get_conversations(self) -> list[Conversation]:
         """Get cached conversations, loading if necessary."""
         if self._conversations_cache is None:
-            self._conversations_cache = self._reader.get_conversations(limit=500)
+            self._conversations_cache = self._reader.get_conversations(
+                limit=self._max_cached_conversations
+            )
         return self._conversations_cache
 
     def _get_participant_names(self, chat_id: str) -> list[str]:
