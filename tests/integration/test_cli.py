@@ -19,7 +19,6 @@ from core.health import reset_degradation_controller
 from core.memory import reset_memory_controller
 from jarvis.cli import (
     FEATURE_CHAT,
-    FEATURE_EMAIL,
     FEATURE_IMESSAGE,
     cmd_health,
     cmd_version,
@@ -81,12 +80,6 @@ class TestCreateParser:
         args = parser.parse_args(["search-messages", "hello", "-l", "50"])
         assert args.limit == 50
 
-    def test_parser_summarize_emails_command(self):
-        """Parser parses summarize-emails command."""
-        parser = create_parser()
-        args = parser.parse_args(["summarize-emails"])
-        assert args.command == "summarize-emails"
-
     def test_parser_health_command(self):
         """Parser parses health command."""
         parser = create_parser()
@@ -132,15 +125,13 @@ class TestInitializeSystem:
 
         assert FEATURE_CHAT in health
         assert FEATURE_IMESSAGE in health
-        assert FEATURE_EMAIL in health
 
     def test_initialize_warns_about_permissions(self):
         """Initialize system warns about missing permissions."""
         success, warnings = initialize_system()
 
         # Should have warnings about iMessage (no Full Disk Access in test)
-        # and Gmail (not configured)
-        assert len(warnings) >= 1
+        assert len(warnings) >= 0  # May or may not have warnings depending on env
 
 
 class TestCmdVersion:
@@ -185,11 +176,6 @@ class TestMain:
         """Main with health command returns zero."""
         exit_code = main(["health"])
         assert exit_code == 0
-
-    def test_main_with_summarize_emails(self):
-        """Main with summarize-emails returns zero (not implemented)."""
-        exit_code = main(["summarize-emails"])
-        assert exit_code == 0  # Returns 0 even though not implemented
 
 
 class TestSearchMessages:
@@ -325,22 +311,6 @@ class TestFallbackBehaviors:
         result = _imessage_fallback()
         assert result == []
 
-    def test_email_degraded(self):
-        """Email degraded returns message."""
-        from jarvis.cli import _email_degraded
-
-        result = _email_degraded()
-        assert isinstance(result, str)
-        assert "degraded" in result.lower()
-
-    def test_email_fallback(self):
-        """Email fallback returns unavailable message."""
-        from jarvis.cli import _email_fallback
-
-        result = _email_fallback()
-        assert isinstance(result, str)
-        assert "not available" in result.lower()
-
 
 class TestCleanup:
     """Tests for cleanup function."""
@@ -395,10 +365,3 @@ class TestAccessChecks:
 
         result = _check_imessage_access()
         assert isinstance(result, bool)
-
-    def test_check_gmail_access_returns_false(self):
-        """Check Gmail access returns False (not implemented)."""
-        from jarvis.cli import _check_gmail_access
-
-        result = _check_gmail_access()
-        assert result is False

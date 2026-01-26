@@ -6,7 +6,7 @@
 **Purpose**: Operational guide for multi-agent parallel development with quality gates
 
 > **Note**: This document was the original development plan. Implementation is now complete.
-> All workstreams (WS1-WS8, WS10) are implemented. Gmail integration (WS9) is planned for future.
+> All workstreams (WS1-WS8, WS10) are implemented. WS9 was removed from scope.
 > The actual model used is Qwen2.5-0.5B-Instruct-4bit (smaller than the 3B originally planned).
 > See `CODEBASE_AUDIT_REPORT.md` for current implementation status.
 
@@ -105,7 +105,6 @@ jarvis-ai-assistant/
 │   ├── latency.py               # LatencyResult, benchmark_latency interfaces
 │   ├── health.py                # PermissionStatus, DegradationPolicy interfaces
 │   ├── models.py                # Generator, GenerationRequest interfaces
-│   ├── gmail.py                 # Email, GmailClient interfaces
 │   └── imessage.py              # Message, iMessageReader interfaces
 │
 ├── benchmarks/                  # WORKSTREAMS 1-4
@@ -150,13 +149,8 @@ jarvis-ai-assistant/
 │   ├── generator.py             # RAG + few-shot generation
 │   └── templates.py             # Template matching
 │
-├── integrations/                # WORKSTREAMS 9-10
+├── integrations/                # WORKSTREAM 10
 │   ├── __init__.py
-│   ├── gmail/
-│   │   ├── __init__.py
-│   │   ├── client.py            # Gmail API wrapper
-│   │   ├── auth.py              # OAuth handling
-│   │   └── parser.py            # Email parsing
 │   └── imessage/
 │       ├── __init__.py
 │       ├── reader.py            # chat.db reader
@@ -603,80 +597,6 @@ class Generator(Protocol):
         ...
 ```
 
-### contracts/gmail.py
-
-```python
-"""Gmail integration interfaces.
-
-Workstream 9 implements against these contracts.
-"""
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol
-
-
-@dataclass
-class Email:
-    """Normalized email representation."""
-    id: str
-    thread_id: str
-    subject: str
-    sender: str
-    sender_name: str | None
-    recipients: list[str]
-    body_text: str
-    body_html: str | None
-    date: datetime
-    labels: list[str]
-    attachments: list[str]
-    snippet: str            # Short preview
-
-
-@dataclass
-class EmailSearchResult:
-    """Result of email search."""
-    emails: list[Email]
-    total_count: int
-    next_page_token: str | None
-
-
-class GmailClient(Protocol):
-    """Interface for Gmail integration (Workstream 9)."""
-    
-    def authenticate(self) -> bool:
-        """Authenticate with Gmail API. Returns success."""
-        ...
-    
-    def is_authenticated(self) -> bool:
-        """Check if currently authenticated."""
-        ...
-    
-    def search(
-        self, 
-        query: str, 
-        max_results: int = 10,
-        page_token: str | None = None
-    ) -> EmailSearchResult:
-        """Search emails using Gmail query syntax."""
-        ...
-    
-    def get_email(self, email_id: str) -> Email:
-        """Get full email by ID."""
-        ...
-    
-    def get_recent(
-        self, 
-        days: int = 7, 
-        max_results: int = 50
-    ) -> list[Email]:
-        """Get recent emails."""
-        ...
-    
-    def get_thread(self, thread_id: str) -> list[Email]:
-        """Get all emails in a thread."""
-        ...
-```
-
 ### contracts/imessage.py
 
 ```python
@@ -784,7 +704,6 @@ Each workstream is fully independent once contracts are defined. They can run si
         │                      │  WS 9-10  │
         │                      │Integration│
         │                      │           │
-        │                      │  Gmail    │
         │                      │ iMessage  │
         │                      └───────────┘
         │                            │
@@ -1353,63 +1272,6 @@ SELF-CRITIQUE REQUIREMENTS:
 [paste Part 5 self-critique section]
 ```
 
-### Workstream 9: Gmail Integration
-
-**Implements**: `contracts.gmail.GmailClient`
-
-**Purpose**: Read and search Gmail via API.
-
-**Creates**:
-```
-integrations/gmail/
-├── __init__.py
-├── client.py        # Gmail API wrapper
-├── auth.py          # OAuth handling
-└── parser.py        # Email parsing/normalization
-```
-
-**Key Requirements**:
-- OAuth 2.0 authentication flow
-- Search using Gmail query syntax
-- Parse multipart email bodies
-- Handle rate limits and pagination
-
-**Agent Prompt**:
-```
-You are implementing Workstream 9: Gmail Integration for JARVIS.
-
-CONTRACTS TO IMPLEMENT:
-[paste contracts/gmail.py]
-
-FILES TO CREATE:
-- integrations/gmail/client.py (implements GmailClient)
-- integrations/gmail/auth.py (OAuth handling)
-- integrations/gmail/parser.py (email parsing)
-- tests/unit/test_gmail.py
-
-TECHNICAL REQUIREMENTS:
-1. Use google-api-python-client
-2. OAuth scopes: gmail.readonly (read-only access)
-3. Store credentials in ~/.jarvis/gmail_credentials.json
-4. Handle token refresh automatically
-5. Parse email bodies: prefer text/plain, fall back to text/html
-6. Extract clean text from HTML (use beautifulsoup or similar)
-
-AUTHENTICATION FLOW:
-1. Check for existing credentials file
-2. If valid, use them
-3. If expired, refresh
-4. If missing, open browser for OAuth consent
-
-ERROR HANDLING:
-- Rate limits: implement exponential backoff
-- Network errors: raise with clear message
-- Auth errors: clear credentials and re-auth
-
-SELF-CRITIQUE REQUIREMENTS:
-[paste Part 5 self-critique section]
-```
-
 ### Workstream 10: iMessage Integration
 
 **Implements**: `contracts.imessage.iMessageReader`
@@ -1689,7 +1551,6 @@ if __name__ == "__main__":
 JARVIS is a local-first AI assistant that helps you manage email and messages without sending your data to the cloud. It runs a 3B parameter language model directly on your Mac's Apple Silicon chip.
 
 **Key Features:**
-- 📧 Smart email replies via Gmail integration
 - 💬 iMessage conversation context
 - 🧠 Runs 100% locally on Apple Silicon
 - 🔒 Your data never leaves your device
@@ -1829,7 +1690,6 @@ The benchmark suite is open source: [link]
 
 ```
 □ Spawn WS8 agent (Model Loader & Generator)
-□ Spawn WS9 agent (Gmail Integration)
 □ Spawn WS10 agent (iMessage Integration)
 □ Review and merge each workstream
 □ Integration test: end-to-end flow works
@@ -1858,7 +1718,7 @@ The benchmark suite is open source: [link]
 [project]
 name = "jarvis-ai-assistant"
 version = "1.0.0"
-description = "Local-first AI assistant for macOS with email and iMessage integration"
+description = "Local-first AI assistant for macOS with iMessage integration"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
