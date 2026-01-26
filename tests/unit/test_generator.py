@@ -245,18 +245,22 @@ class TestMLXGenerator:
 class TestErrorHandling:
     """Tests for error handling and edge cases."""
 
-    def test_empty_prompt_raises_value_error(self):
-        """Test that empty prompt raises ValueError."""
+    def test_empty_prompt_raises_model_generation_error(self):
+        """Test that empty prompt raises ModelGenerationError."""
+        from jarvis.errors import ModelGenerationError
+
         # Input validation happens before model load check
         loader = MLXModelLoader()
-        with pytest.raises(ValueError, match="Prompt cannot be empty"):
+        with pytest.raises(ModelGenerationError, match="Prompt cannot be empty"):
             loader.generate_sync("")
 
-    def test_whitespace_prompt_raises_value_error(self):
-        """Test that whitespace-only prompt raises ValueError."""
+    def test_whitespace_prompt_raises_model_generation_error(self):
+        """Test that whitespace-only prompt raises ModelGenerationError."""
+        from jarvis.errors import ModelGenerationError
+
         # Input validation happens before model load check
         loader = MLXModelLoader()
-        with pytest.raises(ValueError, match="Prompt cannot be empty"):
+        with pytest.raises(ModelGenerationError, match="Prompt cannot be empty"):
             loader.generate_sync("   ")
 
 
@@ -465,6 +469,7 @@ class TestMLXModelLoaderWithMocking:
         # Mock psutil to return low memory
         from unittest.mock import MagicMock
 
+        from jarvis.errors import ModelLoadError
         from models.loader import MLXModelLoader, ModelConfig
 
         mock_virtual_memory = MagicMock()
@@ -480,13 +485,15 @@ class TestMLXModelLoaderWithMocking:
                 model_path="test-model", estimated_memory_mb=8000, memory_buffer_multiplier=2.0
             )
         )
-        result = loader.load()
 
-        assert result is False
+        with pytest.raises(ModelLoadError, match="Insufficient memory"):
+            loader.load()
+
         assert loader.is_loaded() is False
 
     def test_load_file_not_found(self, monkeypatch):
         """Test loading handles FileNotFoundError."""
+        from jarvis.errors import ModelLoadError
         from models.loader import MLXModelLoader, ModelConfig
 
         def mock_load(path, tokenizer_config=None):
@@ -507,12 +514,13 @@ class TestMLXModelLoaderWithMocking:
         monkeypatch.setattr(psutil, "virtual_memory", lambda: mock_vm)
 
         loader = MLXModelLoader(ModelConfig(model_path="nonexistent"))
-        result = loader.load()
 
-        assert result is False
+        with pytest.raises(ModelLoadError, match="Model not found"):
+            loader.load()
 
     def test_load_memory_error(self, monkeypatch):
         """Test loading handles MemoryError."""
+        from jarvis.errors import ModelLoadError
         from models.loader import MLXModelLoader, ModelConfig
 
         def mock_load(path, tokenizer_config=None):
@@ -532,12 +540,13 @@ class TestMLXModelLoaderWithMocking:
         monkeypatch.setattr(psutil, "virtual_memory", lambda: mock_vm)
 
         loader = MLXModelLoader(ModelConfig(model_path="test"))
-        result = loader.load()
 
-        assert result is False
+        with pytest.raises(ModelLoadError, match="Insufficient memory"):
+            loader.load()
 
     def test_load_os_error(self, monkeypatch):
         """Test loading handles OSError."""
+        from jarvis.errors import ModelLoadError
         from models.loader import MLXModelLoader, ModelConfig
 
         def mock_load(path, tokenizer_config=None):
@@ -557,12 +566,13 @@ class TestMLXModelLoaderWithMocking:
         monkeypatch.setattr(psutil, "virtual_memory", lambda: mock_vm)
 
         loader = MLXModelLoader(ModelConfig(model_path="test"))
-        result = loader.load()
 
-        assert result is False
+        with pytest.raises(ModelLoadError, match="OS error loading model"):
+            loader.load()
 
     def test_load_generic_exception(self, monkeypatch):
         """Test loading handles generic exceptions."""
+        from jarvis.errors import ModelLoadError
         from models.loader import MLXModelLoader, ModelConfig
 
         def mock_load(path, tokenizer_config=None):
@@ -582,9 +592,9 @@ class TestMLXModelLoaderWithMocking:
         monkeypatch.setattr(psutil, "virtual_memory", lambda: mock_vm)
 
         loader = MLXModelLoader(ModelConfig(model_path="test"))
-        result = loader.load()
 
-        assert result is False
+        with pytest.raises(ModelLoadError, match="Failed to load model"):
+            loader.load()
 
     def test_load_already_loaded(self, monkeypatch):
         """Test load is idempotent when already loaded."""
@@ -702,17 +712,19 @@ class TestMLXModelLoaderGeneration:
 
     def test_generate_sync_not_loaded(self):
         """Test generation fails when model not loaded."""
+        from jarvis.errors import ModelGenerationError
         from models.loader import MLXModelLoader, ModelConfig
 
         loader = MLXModelLoader(ModelConfig(model_path="test"))
 
-        with pytest.raises(RuntimeError, match="Model not loaded"):
+        with pytest.raises(ModelGenerationError, match="Model not loaded"):
             loader.generate_sync("Hello")
 
     def test_generate_sync_empty_prompt(self, monkeypatch):
         """Test generation fails with empty prompt."""
         from unittest.mock import MagicMock
 
+        from jarvis.errors import ModelGenerationError
         from models.loader import MLXModelLoader, ModelConfig
 
         mock_model = MagicMock()
@@ -735,7 +747,7 @@ class TestMLXModelLoaderGeneration:
         loader = MLXModelLoader(ModelConfig(model_path="test"))
         loader.load()
 
-        with pytest.raises(ValueError, match="Prompt cannot be empty"):
+        with pytest.raises(ModelGenerationError, match="Prompt cannot be empty"):
             loader.generate_sync("")
 
     def test_generate_sync_with_stop_sequences(self, monkeypatch):
@@ -780,6 +792,7 @@ class TestMLXModelLoaderGeneration:
         """Test generation handles errors."""
         from unittest.mock import MagicMock
 
+        from jarvis.errors import ModelGenerationError
         from models.loader import MLXModelLoader, ModelConfig
 
         mock_model = MagicMock()
@@ -809,7 +822,7 @@ class TestMLXModelLoaderGeneration:
         loader = MLXModelLoader(ModelConfig(model_path="test"))
         loader.load()
 
-        with pytest.raises(RuntimeError, match="Generation failed"):
+        with pytest.raises(ModelGenerationError, match="Generation failed"):
             loader.generate_sync("Hello")
 
     def test_generate_sync_token_count_fallback(self, monkeypatch):
