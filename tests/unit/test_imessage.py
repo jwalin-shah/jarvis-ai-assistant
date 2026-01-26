@@ -813,14 +813,15 @@ class TestChatDBReaderGetConversations:
         conn.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER)")
         conn.execute(
             "CREATE TABLE message "
-            "(ROWID INTEGER, date INTEGER, text TEXT, thread_originator_guid TEXT)"
+            "(ROWID INTEGER, date INTEGER, text TEXT, attributedBody BLOB, "
+            "thread_originator_guid TEXT)"
         )
 
         # Insert test data
         conn.execute("INSERT INTO chat VALUES (1, 'chat;+1234567890', NULL, '+1234567890')")
         conn.execute("INSERT INTO handle VALUES (1, '+1234567890')")
         conn.execute("INSERT INTO chat_handle_join VALUES (1, 1)")
-        conn.execute("INSERT INTO message VALUES (1, 726753600000000000, 'Hello', NULL)")
+        conn.execute("INSERT INTO message VALUES (1, 726753600000000000, 'Hello', NULL, NULL)")
         conn.execute("INSERT INTO chat_message_join VALUES (1, 1)")
         conn.commit()
         conn.close()

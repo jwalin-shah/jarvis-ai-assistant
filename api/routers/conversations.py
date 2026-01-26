@@ -138,7 +138,7 @@ def list_conversations(
     cache = get_conversation_cache()
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     conversations = reader.get_conversations(limit=limit, since=since, before=before)
     result = [ConversationResponse.model_validate(c) for c in conversations]

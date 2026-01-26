@@ -361,7 +361,7 @@ class TopicDetector:
             if self._topic_centroids is not None:
                 return
 
-            model = self._get_sentence_model()
+            model = self._get_sentence_model()  # type: ignore[no-untyped-call]
             topic_centroids: dict[TopicType, np.ndarray] = {}
 
             for topic_type, examples in TOPIC_EXAMPLES.items():
@@ -395,7 +395,7 @@ class TopicDetector:
             return []
 
         try:
-            model = self._get_sentence_model()
+            model = self._get_sentence_model()  # type: ignore[no-untyped-call]
 
             # Combine messages into chunks for more efficient processing
             # Use last N messages for recency bias
