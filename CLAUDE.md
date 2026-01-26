@@ -10,7 +10,7 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Contracts/Interfaces | COMPLETE | 8 protocol definitions in `contracts/` |
+| Contracts/Interfaces | COMPLETE | 9 protocol definitions in `contracts/` |
 | Model Generator (WS8) | COMPLETE | MLX loader, template fallback, RAG support |
 | iMessage Reader (WS10) | COMPLETE | Schema detection, attachments, reactions |
 | Memory Profiler (WS1) | COMPLETE | MLX memory profiling with model unload |
@@ -20,7 +20,9 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 | Memory Controller (WS5) | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
 | Degradation Controller (WS6) | COMPLETE | Circuit breaker pattern |
 | Setup Wizard | COMPLETE | Environment validation, config init, health report |
-| CLI Entry Point | COMPLETE | `jarvis/cli.py` with chat, search, health commands |
+| CLI Entry Point | COMPLETE | `jarvis/cli.py` with chat, search (with filters), health commands |
+| FastAPI Layer | COMPLETE | `api/` module for Tauri frontend integration |
+| Config System | COMPLETE | `jarvis/config.py` with nested sections and migration |
 
 **Default Model**: Qwen2.5-0.5B-Instruct-4bit (configured in `models/loader.py`)
 
@@ -250,6 +252,7 @@ jarvis chat
 # Search iMessage conversations
 jarvis search-messages "meeting tomorrow"
 jarvis search-messages "dinner" --limit 50
+jarvis search-messages "project" --sender "John" --after 2024-01-01
 
 # Show system health status
 jarvis health
@@ -294,18 +297,22 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 | `contracts/models.py` | Generator | IMPLEMENTED in `models/` |
 | `contracts/imessage.py` | iMessageReader | IMPLEMENTED in `integrations/imessage/` |
 
+**Total**: 9 protocols across 6 contract files
+
 ### Module Structure
 
 | Directory | Purpose | Status |
 |-----------|---------|--------|
-| `jarvis/` | CLI entry point and main application | COMPLETE |
+| `jarvis/` | CLI entry point, config, and main application | COMPLETE |
+| `api/` | FastAPI REST layer for Tauri frontend | COMPLETE |
 | `benchmarks/memory/` | Memory profiling (WS1) | COMPLETE |
 | `benchmarks/hallucination/` | HHEM benchmark (WS2) | COMPLETE |
 | `benchmarks/latency/` | Latency benchmark (WS4) | COMPLETE |
 | `core/memory/` | Memory controller (WS5) | COMPLETE |
 | `core/health/` | Health monitoring (WS6) | COMPLETE (circuit breaker + degradation) |
-| `models/` | MLX model inference + templates (WS8) | COMPLETE |
-| `integrations/imessage/` | iMessage reader (WS10) | COMPLETE |
+| `models/` | MLX model inference + 25 templates (WS8) | COMPLETE |
+| `integrations/imessage/` | iMessage reader with filters (WS10) | COMPLETE |
+| `desktop/` | Tauri desktop app (Svelte frontend) | COMPLETE |
 
 ### Key Patterns (Implemented)
 

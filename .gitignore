@@ -39,6 +39,9 @@ uv.lock
 .pydevproject
 .settings/
 
+# Claude Code local settings
+.claude/
+
 # Testing
 .pytest_cache/
 .coverage
@@ -71,7 +74,6 @@ credentials.json
 token.json
 .env
 .env.*
-~/.jarvis/
 
 # macOS
 .DS_Store
