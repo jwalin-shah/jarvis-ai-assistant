@@ -2,14 +2,18 @@
   import { onMount } from "svelte";
   import {
     conversations,
-    conversationsLoading,
-    conversationsError,
+    selectedConversation,
+    loadingConversations,
     fetchConversations,
     selectConversation,
-    selectedChatId,
   } from "../stores/conversations";
+  import LoadingSpinner from "./LoadingSpinner.svelte";
 
   let searchQuery = "";
+
+  onMount(() => {
+    fetchConversations();
+  });
 
   $: filteredConversations = searchQuery
     ? $conversations.filter((c) => {
@@ -18,68 +22,47 @@
       })
     : $conversations;
 
-  function formatLastMessageDate(dateStr: string): string {
-    const date = new Date(dateStr);
+  function formatDate(dateString: string): string {
+    const date = new Date(dateString);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
     if (days === 0) {
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
+      return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     } else if (days === 1) {
       return "Yesterday";
     } else if (days < 7) {
-      return date.toLocaleDateString("en-US", { weekday: "short" });
+      return date.toLocaleDateString([], { weekday: "short" });
     } else {
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
+      return date.toLocaleDateString([], { month: "short", day: "numeric" });
     }
   }
 
-  function getDisplayName(conv: (typeof $conversations)[0]): string {
+  function getDisplayName(conv: typeof $conversations[0]): string {
     return conv.display_name || conv.participants.join(", ");
   }
-
-  function truncateText(text: string | null, maxLength: number): string {
-    if (!text) return "";
-    if (text.length <= maxLength) return text;
-    return text.slice(0, maxLength) + "...";
-  }
-
-  onMount(() => {
-    fetchConversations();
-  });
 </script>
 
 <div class="conversation-list">
-  <div class="search-container">
+  <div class="header">
+    <h2>Messages</h2>
     <input
-      type="text"
-      class="search-input"
+      type="search"
       placeholder="Search conversations..."
       bind:value={searchQuery}
+      class="search-input"
     />
   </div>
 
   <div class="list-container">
-    {#if $conversationsLoading && $conversations.length === 0}
-      <div class="loading-state">
-        <div class="loading-spinner"></div>
-        <p>Loading conversations...</p>
-      </div>
-    {:else if $conversationsError}
-      <div class="error-state">
-        <p>{$conversationsError}</p>
-        <button on:click={() => fetchConversations()}>Retry</button>
+    {#if $loadingConversations}
+      <div class="loading">
+        <LoadingSpinner size="medium" />
+        <span>Loading conversations...</span>
       </div>
     {:else if filteredConversations.length === 0}
-      <div class="empty-state">
+      <div class="empty">
         {#if searchQuery}
           <p>No conversations match "{searchQuery}"</p>
         {:else}
@@ -87,31 +70,30 @@
         {/if}
       </div>
     {:else}
-      {#each filteredConversations as conv (conv.chat_id)}
+      {#each filteredConversations as conversation (conversation.chat_id)}
         <button
           class="conversation-item"
-          class:selected={$selectedChatId === conv.chat_id}
-          on:click={() => selectConversation(conv.chat_id)}
+          class:selected={$selectedConversation === conversation.chat_id}
+          class:is-group={conversation.is_group}
+          on:click={() => selectConversation(conversation.chat_id)}
         >
-          <div class="avatar" class:group={conv.is_group}>
-            {#if conv.is_group}
-              👥
+          <div class="avatar" class:group={conversation.is_group}>
+            {#if conversation.is_group}
+              <span class="avatar-icon">👥</span>
             {:else}
-              {getDisplayName(conv).charAt(0).toUpperCase()}
+              <span class="avatar-letter">
+                {getDisplayName(conversation).charAt(0).toUpperCase()}
+              </span>
             {/if}
           </div>
 
-          <div class="conversation-info">
-            <div class="conversation-header">
-              <span class="conversation-name">
-                {getDisplayName(conv)}
-              </span>
-              <span class="conversation-time">
-                {formatLastMessageDate(conv.last_message_date)}
-              </span>
+          <div class="content">
+            <div class="top-row">
+              <span class="name">{getDisplayName(conversation)}</span>
+              <span class="date">{formatDate(conversation.last_message_date)}</span>
             </div>
-            <div class="conversation-preview">
-              {truncateText(conv.last_message_text, 50)}
+            <div class="preview">
+              {conversation.last_message_text || "No messages"}
             </div>
           </div>
         </button>
@@ -123,21 +105,29 @@
 <style>
   .conversation-list {
     width: 300px;
-    background: var(--bg-secondary);
-    border-right: 1px solid var(--border-color);
+    min-width: 300px;
+    background: var(--bg-primary);
     display: flex;
     flex-direction: column;
+    border-right: 1px solid var(--border-color);
   }
 
-  .search-container {
-    padding: 12px;
+  .header {
+    padding: 16px;
     border-bottom: 1px solid var(--border-color);
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
   }
 
   .search-input {
     width: 100%;
     padding: 8px 12px;
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
@@ -158,55 +148,28 @@
     overflow-y: auto;
   }
 
-  .loading-state,
-  .error-state,
-  .empty-state {
+  .loading,
+  .empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 200px;
     gap: 12px;
+    padding: 32px;
     color: var(--text-secondary);
-    padding: 20px;
-    text-align: center;
-  }
-
-  .loading-spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--border-color);
-    border-top-color: var(--accent-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  .error-state button {
-    background: var(--bg-hover);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
   }
 
   .conversation-item {
     display: flex;
+    align-items: center;
     gap: 12px;
+    width: 100%;
     padding: 12px 16px;
     background: transparent;
     border: none;
-    width: 100%;
-    text-align: left;
     cursor: pointer;
-    transition: background-color 0.15s;
+    text-align: left;
+    transition: background 0.15s ease;
   }
 
   .conversation-item:hover {
@@ -221,37 +184,40 @@
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: var(--accent-color);
-    color: white;
+    background: var(--bg-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    font-weight: 600;
     flex-shrink: 0;
   }
 
   .avatar.group {
     background: var(--group-color);
+  }
+
+  .avatar-letter {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .avatar-icon {
     font-size: 20px;
   }
 
-  .conversation-info {
+  .content {
     flex: 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
   }
 
-  .conversation-header {
+  .top-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
   }
 
-  .conversation-name {
+  .name {
     font-size: 15px;
     font-weight: 500;
     color: var(--text-primary);
@@ -260,17 +226,18 @@
     text-overflow: ellipsis;
   }
 
-  .conversation-time {
+  .date {
     font-size: 12px;
     color: var(--text-secondary);
     flex-shrink: 0;
   }
 
-  .conversation-preview {
+  .preview {
     font-size: 13px;
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    margin-top: 2px;
   }
 </style>

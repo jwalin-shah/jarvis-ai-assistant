@@ -1,141 +1,185 @@
 <script lang="ts">
-  import { isApiConnected } from "../stores/health";
+  import { apiConnected, healthStatus } from "../stores/health";
+  import { modelStatus } from "../stores/health";
 
   export let currentView: "messages" | "dashboard" | "health" = "messages";
 
-  const navItems = [
-    { id: "messages" as const, icon: "💬", label: "Messages" },
-    { id: "dashboard" as const, icon: "📊", label: "Dashboard" },
-    { id: "health" as const, icon: "❤️", label: "Health" },
-  ];
+  function setView(view: "messages" | "dashboard" | "health") {
+    currentView = view;
+  }
 </script>
 
 <nav class="sidebar">
   <div class="logo">
-    <span class="logo-icon">🤖</span>
+    <span class="logo-icon">J</span>
     <span class="logo-text">JARVIS</span>
   </div>
 
   <div class="nav-items">
-    {#each navItems as item}
-      <button
-        class="nav-item"
-        class:active={currentView === item.id}
-        on:click={() => (currentView = item.id)}
-      >
-        <span class="nav-icon">{item.icon}</span>
-        <span class="nav-label">{item.label}</span>
-      </button>
-    {/each}
+    <button
+      class="nav-item"
+      class:active={currentView === "messages"}
+      on:click={() => setView("messages")}
+    >
+      <span class="icon">💬</span>
+      <span class="label">Messages</span>
+    </button>
+
+    <button
+      class="nav-item"
+      class:active={currentView === "dashboard"}
+      on:click={() => setView("dashboard")}
+    >
+      <span class="icon">📊</span>
+      <span class="label">Dashboard</span>
+    </button>
+
+    <button
+      class="nav-item"
+      class:active={currentView === "health"}
+      on:click={() => setView("health")}
+    >
+      <span class="icon">🔧</span>
+      <span class="label">Health</span>
+    </button>
   </div>
 
-  <div class="sidebar-footer">
-    <div class="connection-status" class:connected={$isApiConnected}>
+  <div class="status-section">
+    <div class="status-item" class:connected={$apiConnected} class:disconnected={!$apiConnected}>
+      <span class="status-dot"></span>
+      <span class="status-text">{$apiConnected ? "API Connected" : "API Disconnected"}</span>
+    </div>
+
+    <div class="status-item" class:loaded={$modelStatus.state === "loaded"}>
       <span class="status-dot"></span>
       <span class="status-text">
-        {$isApiConnected ? "Connected" : "Disconnected"}
+        {#if $modelStatus.state === "loaded"}
+          Model Ready
+        {:else if $modelStatus.state === "loading"}
+          Loading {$modelStatus.progress ? Math.round($modelStatus.progress * 100) : 0}%
+        {:else if $modelStatus.state === "error"}
+          Model Error
+        {:else}
+          Model Unloaded
+        {/if}
       </span>
     </div>
+
+    {#if $healthStatus}
+      <div class="status-item memory">
+        <span class="status-text">{$healthStatus.memory_mode} Mode</span>
+      </div>
+    {/if}
   </div>
 </nav>
 
 <style>
   .sidebar {
-    width: 72px;
+    width: 200px;
+    min-width: 200px;
     background: var(--bg-secondary);
-    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    padding: 16px 0;
+    border-right: 1px solid var(--border-color);
   }
 
   .logo {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 24px;
+    gap: 8px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .logo-icon {
-    font-size: 28px;
+    width: 32px;
+    height: 32px;
+    background: var(--accent-color);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 18px;
   }
 
   .logo-text {
-    font-size: 10px;
     font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: 0.5px;
+    font-size: 16px;
+    color: var(--text-primary);
   }
 
   .nav-items {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
     flex: 1;
+    padding: 8px;
   }
 
   .nav-item {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 10px 8px;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
     background: transparent;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.15s;
-    width: 56px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    text-align: left;
+    transition: all 0.15s ease;
   }
 
   .nav-item:hover {
     background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .nav-item.active {
     background: var(--bg-active);
-  }
-
-  .nav-icon {
-    font-size: 22px;
-  }
-
-  .nav-label {
-    font-size: 10px;
-    color: var(--text-secondary);
-  }
-
-  .nav-item.active .nav-label {
     color: var(--text-primary);
   }
 
-  .sidebar-footer {
-    margin-top: auto;
-    padding-top: 16px;
+  .icon {
+    font-size: 16px;
   }
 
-  .connection-status {
+  .status-section {
+    padding: 12px;
+    border-top: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    gap: 8px;
+  }
+
+  .status-item {
+    display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
   }
 
   .status-dot {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
+    background: var(--text-secondary);
+  }
+
+  .status-item.connected .status-dot {
+    background: #34c759;
+  }
+
+  .status-item.disconnected .status-dot {
     background: var(--error-color);
   }
 
-  .connection-status.connected .status-dot {
-    background: #30d158;
+  .status-item.loaded .status-dot {
+    background: #34c759;
   }
 
-  .status-text {
-    font-size: 9px;
-    color: var(--text-secondary);
+  .memory {
+    padding-left: 12px;
   }
 </style>

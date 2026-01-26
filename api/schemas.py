@@ -111,59 +111,20 @@ class SendMessageResponse(BaseModel):
     error: str | None = None
 
 
-# Draft Reply Schemas
+class ModelStatusResponse(BaseModel):
+    """Model loading status for progress feedback."""
+
+    state: str  # "unloaded", "loading", "loaded", "error"
+    progress: float | None = None  # 0.0 to 1.0 during loading
+    message: str | None = None
+    memory_usage_mb: float | None = None
+    load_time_seconds: float | None = None
+    error: str | None = None
 
 
-class DraftReplyRequest(BaseModel):
-    """Request for AI-powered draft reply generation."""
+class PreloadResponse(BaseModel):
+    """Response from model preload request."""
 
-    chat_id: str = Field(..., description="The conversation ID")
-    num_suggestions: int = Field(default=3, ge=1, le=5, description="Number of suggestions")
-    context_messages: int = Field(default=20, ge=1, le=100, description="Messages for context")
-    instruction: str | None = Field(
-        default=None, description="Optional instruction for reply tone/content"
-    )
-
-
-class DraftSuggestion(BaseModel):
-    """A single draft reply suggestion."""
-
-    text: str
-    confidence: float = Field(ge=0.0, le=1.0)
-
-
-class ContextInfo(BaseModel):
-    """Information about the context used for generation."""
-
-    num_messages: int
-    participants: list[str]
-    last_message: str | None
-
-
-class DraftReplyResponse(BaseModel):
-    """Response containing AI-generated draft replies."""
-
-    suggestions: list[DraftSuggestion]
-    context_used: ContextInfo
-
-
-class DraftSummaryRequest(BaseModel):
-    """Request for conversation summary."""
-
-    chat_id: str = Field(..., description="The conversation ID")
-    num_messages: int = Field(default=50, ge=1, le=500, description="Messages to summarize")
-
-
-class DateRange(BaseModel):
-    """Date range for summarized messages."""
-
-    start: str  # ISO date string
-    end: str  # ISO date string
-
-
-class DraftSummaryResponse(BaseModel):
-    """Response containing conversation summary."""
-
-    summary: str
-    key_points: list[str]
-    date_range: DateRange
+    success: bool
+    message: str
+    state: str  # Current model state after operation

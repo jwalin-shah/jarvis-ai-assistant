@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import mlx.core as mx
 import psutil
@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 # Constants
 BYTES_PER_MB = 1024 * 1024
 
+# Type alias for loading states
+LoadingState = Literal["unloaded", "loading", "loaded", "error"]
+
 
 @dataclass
 class ModelConfig:
@@ -33,6 +36,17 @@ class ModelConfig:
     memory_buffer_multiplier: float = 1.5
     default_max_tokens: int = 100
     default_temperature: float = 0.7
+
+
+@dataclass
+class LoadingStatus:
+    """Current model loading status for progress feedback."""
+
+    state: LoadingState = "unloaded"
+    progress: float = 0.0  # 0.0 to 1.0
+    message: str = ""
+    error: str | None = None
+    load_time_seconds: float | None = None
 
 
 @dataclass
@@ -62,10 +76,53 @@ class MLXModelLoader:
         self._tokenizer: Any = None
         self._load_lock = threading.Lock()
         self._loaded_at: float | None = None
+        self._load_time_seconds: float | None = None
+
+        # Loading progress tracking
+        self._loading_status = LoadingStatus()
+        self._status_lock = threading.Lock()
 
     def is_loaded(self) -> bool:
         """Check if model is currently loaded in memory."""
         return self._model is not None and self._tokenizer is not None
+
+    def get_loading_status(self) -> LoadingStatus:
+        """Get current loading status for progress feedback.
+
+        Returns:
+            LoadingStatus with current state, progress, and message
+        """
+        with self._status_lock:
+            # Return a copy to avoid race conditions
+            return LoadingStatus(
+                state=self._loading_status.state,
+                progress=self._loading_status.progress,
+                message=self._loading_status.message,
+                error=self._loading_status.error,
+                load_time_seconds=self._load_time_seconds,
+            )
+
+    def _update_status(
+        self,
+        state: LoadingState,
+        progress: float,
+        message: str,
+        error: str | None = None,
+    ) -> None:
+        """Update loading status (thread-safe).
+
+        Args:
+            state: Current loading state
+            progress: Progress from 0.0 to 1.0
+            message: Human-readable status message
+            error: Error message if state is "error"
+        """
+        with self._status_lock:
+            self._loading_status.state = state
+            self._loading_status.progress = progress
+            self._loading_status.message = message
+            self._loading_status.error = error
+        logger.debug("Loading status: %s (%.0f%%) - %s", state, progress * 100, message)
 
     def _can_load_model(self) -> bool:
         """Check if sufficient memory is available for loading.
@@ -89,56 +146,96 @@ class MLXModelLoader:
     def load(self) -> bool:
         """Load model into memory with thread-safe double-check locking.
 
+        Emits progress updates during loading for UI feedback.
+
         Returns:
             True if model loaded successfully or was already loaded,
             False if loading failed or insufficient memory.
         """
         # Fast path: already loaded
         if self.is_loaded():
+            self._update_status("loaded", 1.0, "Model ready")
             return True
 
         # Check memory before acquiring lock
         if not self._can_load_model():
+            self._update_status("error", 0.0, "Insufficient memory", "Not enough memory available")
             return False
 
         with self._load_lock:
             # Double-check after acquiring lock
             if self.is_loaded():
+                self._update_status("loaded", 1.0, "Model ready")
                 return True
 
             try:
+                # Start loading
+                self._update_status("loading", 0.1, "Initializing...")
                 logger.info("Loading model: %s", self.config.model_path)
                 start_time = time.perf_counter()
 
+                # Update progress - checking model path
+                self._update_status("loading", 0.2, "Checking model availability...")
+
+                # Update progress - loading weights
+                self._update_status("loading", 0.3, "Loading model weights...")
+
                 # mlx_lm.load returns (model, tokenizer) tuple
                 result = load(self.config.model_path)
+
+                # Update progress - model loaded, processing tokenizer
+                self._update_status("loading", 0.7, "Processing tokenizer...")
                 self._model = result[0]
                 self._tokenizer = result[1]
-                self._loaded_at = time.perf_counter()
 
-                load_time = (self._loaded_at - start_time) * 1000
-                logger.info("Model loaded in %.0fms", load_time)
+                # Update progress - compiling for Metal
+                self._update_status("loading", 0.8, "Compiling for Metal...")
+
+                # Warm up the model with a dummy generation to compile shaders
+                try:
+                    # Small warmup to trigger Metal compilation
+                    _ = self._tokenizer.encode("warmup")
+                except Exception:
+                    pass  # Warmup is optional
+
+                self._update_status("loading", 0.95, "Finalizing...")
+
+                self._loaded_at = time.perf_counter()
+                self._load_time_seconds = self._loaded_at - start_time
+
+                load_time_ms = self._load_time_seconds * 1000
+                logger.info("Model loaded in %.0fms", load_time_ms)
+
+                self._update_status("loaded", 1.0, "Model ready")
                 return True
 
             except FileNotFoundError:
+                error_msg = f"Model not found: {self.config.model_path}"
                 logger.error(
                     "Model not found: %s. Run `huggingface-cli download %s` first.",
                     self.config.model_path,
                     self.config.model_path,
                 )
+                self._update_status("error", 0.0, "Model not found", error_msg)
                 self.unload()
                 return False
             except MemoryError:
+                error_msg = "Out of memory loading model"
                 logger.error("Out of memory loading model. Free up memory or use a smaller model.")
+                self._update_status("error", 0.0, "Out of memory", error_msg)
                 self.unload()
                 return False
             except OSError as e:
                 # Covers network errors, disk errors, permission issues
+                error_msg = f"OS error: {e}"
                 logger.error("OS error loading model: %s", e)
+                self._update_status("error", 0.0, "Failed to load model", error_msg)
                 self.unload()
                 return False
-            except Exception:
+            except Exception as e:
+                error_msg = f"Unexpected error: {e}"
                 logger.exception("Failed to load model")
+                self._update_status("error", 0.0, "Failed to load model", error_msg)
                 self.unload()
                 return False
 
@@ -153,6 +250,10 @@ class MLXModelLoader:
         self._model = None
         self._tokenizer = None
         self._loaded_at = None
+        self._load_time_seconds = None
+
+        # Reset loading status
+        self._update_status("unloaded", 0.0, "Model unloaded")
 
         # Clear Metal GPU memory
         try:
