@@ -1072,6 +1072,73 @@ def cmd_serve(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_mcp_serve(args: argparse.Namespace) -> int:
+    """Start the MCP (Model Context Protocol) server.
+
+    Args:
+        args: Parsed arguments with transport, host, and port options.
+
+    Returns:
+        Exit code.
+    """
+    import asyncio
+
+    from mcp_server.server import MCPServer, StdioTransport, run_http_server
+
+    transport = args.transport
+    verbose = getattr(args, "verbose", False)
+
+    if transport == "stdio":
+        console.print(
+            "[bold green]Starting JARVIS MCP Server (stdio mode)[/bold green]",
+            file=sys.stderr,
+        )
+        console.print(
+            "[dim]Communication via stdin/stdout - ready for Claude Code[/dim]",
+            file=sys.stderr,
+        )
+
+        # Configure logging to stderr
+        logging.basicConfig(
+            level=logging.DEBUG if verbose else logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            stream=sys.stderr,
+        )
+
+        server = MCPServer()
+        stdio_transport = StdioTransport(server)
+        try:
+            stdio_transport.run()
+            return 0
+        except Exception as e:
+            console.print(f"[red]Error running MCP server: {e}[/red]", file=sys.stderr)
+            return 1
+    else:
+        # HTTP transport
+        host = args.host
+        port = args.port
+
+        console.print(
+            Panel(
+                f"[bold green]Starting JARVIS MCP Server (HTTP mode)[/bold green]\n"
+                f"Host: {host}\n"
+                f"Port: {port}\n"
+                f"Endpoint: http://{host}:{port}/mcp",
+                title="MCP Server",
+            )
+        )
+
+        try:
+            asyncio.run(run_http_server(host, port))
+            return 0
+        except KeyboardInterrupt:
+            console.print("\n[dim]MCP server stopped.[/dim]")
+            return 0
+        except Exception as e:
+            console.print(f"[red]Error starting MCP server: {e}[/red]")
+            return 1
+
+
 def cmd_examples(args: argparse.Namespace) -> int:
     """Display detailed usage examples.
 
@@ -1530,6 +1597,71 @@ API Endpoints (when running):
         help="enable auto-reload for development",
     )
     serve_parser.set_defaults(func=cmd_serve)
+
+    # MCP Serve command
+    mcp_serve_parser = subparsers.add_parser(
+        "mcp-serve",
+        help="start the MCP (Model Context Protocol) server",
+        description=(
+            "Start the MCP server for Claude Code integration.\n\n"
+            "The MCP server exposes JARVIS functionality as tools that can be\n"
+            "used by Claude Code or other MCP-compatible clients.\n\n"
+            "Transport modes:\n"
+            "  stdio  - Communicate via stdin/stdout (default, for Claude Code)\n"
+            "  http   - Communicate via HTTP endpoint (for network access)\n\n"
+            "Available tools:\n"
+            "  - search_messages: Search iMessage conversations\n"
+            "  - get_summary: Get AI-generated conversation summary\n"
+            "  - generate_reply: Generate reply suggestions\n"
+            "  - get_contact_info: Retrieve contact information\n"
+            "  - list_conversations: List recent conversations\n"
+            "  - get_conversation_messages: Get messages from a conversation"
+        ),
+        formatter_class=HelpFormatter,
+        epilog="""
+Examples:
+  jarvis mcp-serve                   Start MCP server (stdio mode for Claude Code)
+  jarvis mcp-serve --transport http  Start MCP server on HTTP
+  jarvis mcp-serve --transport http --port 9000
+                                     Use custom port for HTTP mode
+
+Claude Code Integration:
+  Add to your Claude Code settings (~/.claude/claude_desktop_config.json):
+
+  {
+    "mcpServers": {
+      "jarvis": {
+        "command": "jarvis",
+        "args": ["mcp-serve"]
+      }
+    }
+  }
+
+For detailed documentation, see: docs/MCP_INTEGRATION.md
+        """,
+    )
+    mcp_serve_parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        metavar="<mode>",
+        help="transport mode: stdio (default) or http",
+    )
+    mcp_serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        metavar="<addr>",
+        help="host address for HTTP transport (default: 127.0.0.1)",
+    )
+    mcp_serve_parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        default=8765,
+        metavar="<port>",
+        help="port number for HTTP transport (default: 8765)",
+    )
+    mcp_serve_parser.set_defaults(func=cmd_mcp_serve)
 
     return parser
 
