@@ -40,7 +40,7 @@
   <Sidebar bind:currentView />
 
   {#if currentView === "dashboard"}
-    <Dashboard />
+    <Dashboard on:navigate={(e) => currentView = e.detail} />
   {:else if currentView === "health"}
     <HealthStatus />
   {:else}

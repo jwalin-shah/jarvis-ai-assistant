@@ -44,6 +44,9 @@ class Message:
     attachments: list[Attachment] = field(default_factory=list)
     reply_to_id: int | None = None
     reactions: list[Reaction] = field(default_factory=list)
+    # Read receipt info (only for messages you sent)
+    date_delivered: datetime | None = None
+    date_read: datetime | None = None
 
 
 @dataclass
@@ -56,6 +59,7 @@ class Conversation:
     last_message_date: datetime
     message_count: int
     is_group: bool
+    last_message_text: str | None = None  # Preview of the last message
 
 
 class iMessageReader(Protocol):  # noqa: N801 - iMessage is a proper noun
