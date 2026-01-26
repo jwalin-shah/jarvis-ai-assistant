@@ -84,7 +84,7 @@ def _get_model_info() -> ModelInfo | None:
     cache = get_model_info_cache()
     found, cached = cache.get("model_info")
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     try:
         from models import get_generator
@@ -200,7 +200,7 @@ def get_health() -> HealthResponse:
     cache = get_health_cache()
     found, cached = cache.get("health_status")
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     # System memory stats
     memory = psutil.virtual_memory()

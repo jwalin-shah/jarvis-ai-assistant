@@ -498,7 +498,7 @@ def get_conversation_stats(
     # Check cache
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     # Get time range start for filtering
     time_range_start = _get_time_range_start(time_range)

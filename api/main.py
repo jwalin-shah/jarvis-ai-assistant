@@ -13,6 +13,7 @@ Documentation:
 """
 
 import time
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -142,7 +143,7 @@ API_LICENSE = {
 }
 
 
-def custom_openapi() -> dict:
+def custom_openapi() -> dict[str, Any]:
     """Generate custom OpenAPI schema with enhanced documentation."""
     if app.openapi_schema:
         return app.openapi_schema
