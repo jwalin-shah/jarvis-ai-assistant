@@ -21,6 +21,7 @@ from fastapi.openapi.utils import get_openapi
 
 from api.errors import register_exception_handlers
 from api.routers import (
+    calendar_router,
     contacts_router,
     conversations_router,
     drafts_router,
@@ -129,6 +130,11 @@ API_TAGS_METADATA = [
         "name": "template-analytics",
         "description": "Template matching analytics and optimization. "
         "Monitor template hit rates, view top templates, and identify optimization opportunities.",
+    },
+    {
+        "name": "calendars",
+        "description": "Calendar integration. "
+        "Detect events in messages and create calendar entries via macOS Calendar.",
     },
 ]
 
@@ -244,6 +250,7 @@ async def metrics_middleware(request: Request, call_next):  # type: ignore[no-un
 
 # Include routers
 app.include_router(health_router)
+app.include_router(calendar_router)
 app.include_router(contacts_router)
 app.include_router(conversations_router)
 app.include_router(drafts_router)
