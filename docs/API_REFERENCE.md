@@ -18,12 +18,28 @@ Complete REST API documentation for the JARVIS iMessage Assistant backend.
 - [Error Responses](#error-responses)
 - [Endpoints](#endpoints)
   - [Health](#health)
-  - [Conversations](#conversations)
-  - [Drafts (AI Generation)](#drafts-ai-generation)
-  - [Suggestions (Quick Replies)](#suggestions-quick-replies)
-  - [Export](#export)
-  - [Metrics](#metrics)
-  - [Settings](#settings)
+  - [iMessage Data](#imessage-data)
+    - [Conversations](#conversations)
+    - [Contacts](#contacts)
+    - [Topics](#topics)
+    - [Statistics](#statistics)
+    - [Insights](#insights)
+    - [Priority Inbox](#priority-inbox)
+    - [Calendars](#calendars)
+  - [AI Generation & Search](#ai-generation--search)
+    - [Drafts](#drafts-ai-generation)
+    - [Suggestions](#suggestions-quick-replies)
+    - [Semantic Search](#semantic-search)
+  - [System Operations](#system-operations)
+    - [Export](#export)
+    - [PDF Export](#pdf-export)
+    - [Batch Operations](#batch-operations)
+    - [Task Queue](#task-queue)
+  - [Management](#management)
+    - [Metrics](#metrics)
+    - [Template Analytics](#template-analytics)
+    - [Settings](#settings)
+    - [WebSocket](#websocket)
 
 ---
 
@@ -33,7 +49,13 @@ This API is designed for local use by the JARVIS desktop application. **No authe
 
 ## Rate Limiting
 
-No rate limiting is applied. The API is designed for single-user local access.
+Rate limiting is applied to protect system resources and ensure stability during heavy AI generation tasks.
+
+- **Read endpoints** (GET): 60 requests per minute
+- **Write endpoints** (POST, PUT, DELETE): 30 requests per minute
+- **Generation endpoints** (AI-powered): 10 requests per minute
+
+Exceeding these limits returns HTTP 429 with a `Retry-After` header.
 
 ## Error Responses
 
@@ -52,10 +74,12 @@ All errors return a JSON response with the following structure:
 | HTTP Status | Code | Description |
 |-------------|------|-------------|
 | 400 | `VALIDATION_ERROR` | Invalid request parameters |
-| 403 | `PERMISSION_DENIED` | Full Disk Access not granted |
+| 403 | `PERMISSION_DENIED` | Full Disk Access or Calendar permission not granted |
 | 404 | `NOT_FOUND` | Resource not found |
+| 408 | `REQUEST_TIMEOUT` | Generation task took too long |
+| 429 | `RATE_LIMIT_EXCEEDED` | Too many requests |
 | 500 | `INTERNAL_ERROR` | Server error |
-| 503 | `SERVICE_UNAVAILABLE` | Model not loaded |
+| 503 | `SERVICE_UNAVAILABLE` | Model not loaded or system resource issues |
 
 ---
 
@@ -77,11 +101,6 @@ Root endpoint - simple health ping.
     "status": "ok",
     "service": "jarvis-api"
 }
-```
-
-**curl:**
-```bash
-curl http://localhost:8742/
 ```
 
 ---
@@ -114,26 +133,11 @@ Get comprehensive system health status.
 }
 ```
 
-**Health Status Values:**
-- `healthy`: All systems operational
-- `degraded`: Running with reduced capability (low memory)
-- `unhealthy`: Critical issue (no iMessage access)
-
-**Memory Modes:**
-- `FULL`: >= 4GB available
-- `LITE`: 2-4GB available
-- `MINIMAL`: < 2GB available
-
-**curl:**
-```bash
-curl http://localhost:8742/health
-```
-
 ---
 
-### Conversations
+### iMessage Data
 
-iMessage conversation and message management.
+#### Conversations
 
 ---
 
@@ -142,39 +146,15 @@ iMessage conversation and message management.
 List recent conversations sorted by last message date.
 
 **Query Parameters:**
+- `limit` (int): Max conversations (1-500, default 50)
+- `since` (datetime): Only convos with messages after this date
+- `before` (datetime): Pagination cursor
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | int | 50 | Max conversations (1-500) |
-| `since` | datetime | - | Only convos with messages after this date |
-| `before` | datetime | - | Pagination cursor |
+---
 
-**Response:**
-```json
-[
-    {
-        "chat_id": "chat123456789",
-        "participants": ["+15551234567"],
-        "display_name": "John Doe",
-        "last_message_date": "2024-01-15T10:30:00Z",
-        "message_count": 150,
-        "is_group": false,
-        "last_message_text": "See you later!"
-    }
-]
-```
+#### GET /conversations/{chat_id}
 
-**curl:**
-```bash
-# List 50 most recent conversations
-curl http://localhost:8742/conversations
-
-# With pagination
-curl "http://localhost:8742/conversations?limit=20&before=2024-01-10T08:00:00Z"
-
-# Only conversations since a date
-curl "http://localhost:8742/conversations?since=2024-01-01T00:00:00Z"
-```
+Get detailed metadata for a single conversation.
 
 ---
 
@@ -182,100 +162,15 @@ curl "http://localhost:8742/conversations?since=2024-01-01T00:00:00Z"
 
 Get messages for a specific conversation.
 
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `chat_id` | string | Unique conversation identifier |
-
 **Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | int | 100 | Max messages (1-1000) |
-| `before` | datetime | - | Only messages before this date |
-
-**Response:**
-```json
-[
-    {
-        "id": 12345,
-        "chat_id": "chat123456789",
-        "sender": "+15551234567",
-        "sender_name": "John Doe",
-        "text": "Hey, are you free for lunch?",
-        "date": "2024-01-15T10:30:00Z",
-        "is_from_me": false,
-        "attachments": [],
-        "reply_to_id": null,
-        "reactions": [
-            {
-                "type": "love",
-                "sender": "+15559876543",
-                "sender_name": "Jane",
-                "date": "2024-01-15T10:31:00Z"
-            }
-        ],
-        "is_system_message": false
-    }
-]
-```
-
-**curl:**
-```bash
-# Get latest 100 messages
-curl http://localhost:8742/conversations/chat123456789/messages
-
-# Get older messages (pagination)
-curl "http://localhost:8742/conversations/chat123456789/messages?limit=50&before=2024-01-10T00:00:00Z"
-```
+- `limit` (int): Max messages (1-1000, default 100)
+- `before` (datetime): Only messages before this date
 
 ---
 
 #### GET /conversations/search
 
-Search messages across all conversations.
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `q` | string | Yes | Search query (min 1 char) |
-| `limit` | int | No | Max results (1-500, default 50) |
-| `sender` | string | No | Filter by sender phone/email |
-| `after` | datetime | No | Messages after this date |
-| `before` | datetime | No | Messages before this date |
-| `chat_id` | string | No | Filter to specific conversation |
-| `has_attachments` | bool | No | Filter by attachment presence |
-
-**Response:**
-```json
-[
-    {
-        "id": 12345,
-        "chat_id": "chat123456789",
-        "sender": "+15551234567",
-        "sender_name": "John Doe",
-        "text": "Let's meet for dinner tomorrow at 7pm",
-        "date": "2024-01-15T10:30:00Z",
-        "is_from_me": false,
-        "attachments": [],
-        "reactions": []
-    }
-]
-```
-
-**curl:**
-```bash
-# Basic search
-curl "http://localhost:8742/conversations/search?q=dinner"
-
-# Search with filters
-curl "http://localhost:8742/conversations/search?q=meeting&sender=+15551234567&after=2024-01-01T00:00:00Z"
-
-# Search for messages with attachments
-curl "http://localhost:8742/conversations/search?q=photo&has_attachments=true"
-```
+Keyword search messages across all conversations.
 
 ---
 
@@ -283,132 +178,135 @@ curl "http://localhost:8742/conversations/search?q=photo&has_attachments=true"
 
 Send a text message to a conversation.
 
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `chat_id` | string | Conversation identifier |
-
-**Request Body:**
-```json
-{
-    "text": "Hey, are you free for lunch?",
-    "recipient": "+15551234567",
-    "is_group": false
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `text` | string | Yes | Message text (1-10000 chars) |
-| `recipient` | string | For individual | Recipient phone/email |
-| `is_group` | bool | No | True for group chats |
-
-**Response:**
-```json
-{
-    "success": true,
-    "error": null
-}
-```
-
-**curl:**
-```bash
-# Send to individual
-curl -X POST http://localhost:8742/conversations/chat123/send \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Hello!", "recipient": "+15551234567"}'
-
-# Send to group
-curl -X POST http://localhost:8742/conversations/chat123/send \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Hey everyone!", "is_group": true}'
-```
-
 ---
 
 #### POST /conversations/{chat_id}/send-attachment
 
 Send a file attachment to a conversation.
 
-**Request Body:**
-```json
-{
-    "file_path": "/Users/john/Documents/photo.jpg",
-    "recipient": "+15551234567",
-    "is_group": false
-}
-```
+---
 
-**curl:**
-```bash
-curl -X POST http://localhost:8742/conversations/chat123/send-attachment \
-  -H "Content-Type: application/json" \
-  -d '{"file_path": "/Users/john/photo.jpg", "recipient": "+15551234567"}'
-```
+#### Contacts
 
 ---
 
-### Drafts (AI Generation)
+#### GET /contacts
 
-AI-powered draft generation using the local MLX language model.
+List all iMessage contacts.
+
+---
+
+#### GET /contacts/{identifier}
+
+Get details for a specific contact.
+
+---
+
+#### Topics
+
+---
+
+#### POST /conversations/{chat_id}/topics
+
+Detect and retrieve topics for a conversation.
+
+---
+
+#### Statistics
+
+---
+
+#### GET /stats/{chat_id}
+
+Get messaging patterns and activity statistics for a conversation.
+
+**Query Parameters:**
+- `time_range` (string): `week`, `month`, `three_months`, `all_time` (default `month`)
+- `limit` (int): Max messages to analyze (default 500)
+
+---
+
+#### Insights
+
+Advanced sentiment and relationship analytics.
+
+---
+
+#### GET /insights/{chat_id}
+
+Get comprehensive relationship insights.
+
+---
+
+#### GET /insights/{chat_id}/sentiment
+
+Get sentiment trends over time.
+
+---
+
+#### GET /insights/{chat_id}/health
+
+Get relationship health scores.
+
+---
+
+#### Priority Inbox
+
+---
+
+#### GET /priority
+
+Get messages prioritized by urgency and importance.
+
+**Query Parameters:**
+- `limit` (int): Max messages (default 50)
+- `min_level` (string): `critical`, `high`, `medium`, `low`
+
+---
+
+#### POST /priority/handled
+
+Mark a prioritized message as handled.
+
+---
+
+#### Calendars
+
+---
+
+#### GET /calendars
+
+List available macOS calendars.
+
+---
+
+#### GET /calendars/events
+
+List upcoming calendar events.
+
+---
+
+#### POST /calendars/detect
+
+Detect potential events in arbitrary text.
+
+---
+
+#### POST /calendars/events
+
+Create a new calendar event.
+
+---
+
+### AI Generation & Search
+
+#### Drafts (AI Generation)
 
 ---
 
 #### POST /drafts/reply
 
-Generate AI-powered reply suggestions for a conversation.
-
-**Request Body:**
-```json
-{
-    "chat_id": "chat123456789",
-    "instruction": "accept enthusiastically",
-    "num_suggestions": 3,
-    "context_messages": 20
-}
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `chat_id` | string | Required | Conversation to generate replies for |
-| `instruction` | string | null | Tone/content guidance |
-| `num_suggestions` | int | 3 | Number of suggestions (1-5) |
-| `context_messages` | int | 20 | Messages for context (5-50) |
-
-**Instruction Examples:**
-- `"accept enthusiastically"` - Positive, excited response
-- `"politely decline"` - Courteous refusal
-- `"ask for more details"` - Clarifying questions
-- `"be brief"` - Short, concise reply
-- `"be formal"` - Professional tone
-
-**Response:**
-```json
-{
-    "suggestions": [
-        {"text": "Yes, I'd love to! What time works for you?", "confidence": 0.9},
-        {"text": "Absolutely! Count me in!", "confidence": 0.8},
-        {"text": "Sure thing! Looking forward to it!", "confidence": 0.7}
-    ],
-    "context_used": {
-        "num_messages": 20,
-        "participants": ["John Doe"],
-        "last_message": "Are you free for dinner tonight?"
-    }
-}
-```
-
-**curl:**
-```bash
-curl -X POST http://localhost:8742/drafts/reply \
-  -H "Content-Type: application/json" \
-  -d '{
-    "chat_id": "chat123456789",
-    "instruction": "accept enthusiastically",
-    "num_suggestions": 3
-  }'
-```
+Generate AI-powered reply suggestions.
 
 ---
 
@@ -416,757 +314,148 @@ curl -X POST http://localhost:8742/drafts/reply \
 
 Summarize a conversation using AI.
 
-**Request Body:**
-```json
-{
-    "chat_id": "chat123456789",
-    "num_messages": 50
-}
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `chat_id` | string | Required | Conversation to summarize |
-| `num_messages` | int | 50 | Messages to include (10-200) |
-
-**Response:**
-```json
-{
-    "summary": "Discussion about planning a weekend trip to the beach.",
-    "key_points": [
-        "Decided on Saturday departure at 9am",
-        "Meeting at John's place",
-        "Everyone bringing snacks and sunscreen",
-        "Return planned for Sunday evening"
-    ],
-    "date_range": {
-        "start": "2024-01-10",
-        "end": "2024-01-15"
-    }
-}
-```
-
-**curl:**
-```bash
-curl -X POST http://localhost:8742/drafts/summarize \
-  -H "Content-Type: application/json" \
-  -d '{"chat_id": "chat123456789", "num_messages": 100}'
-```
-
 ---
 
-### Suggestions (Quick Replies)
-
-Fast pattern-based reply suggestions (no model required). Uses pre-defined response patterns for common scenarios, making it extremely fast (typically < 1ms).
+#### Suggestions (Quick Replies)
 
 ---
 
 #### POST /suggestions
 
-Get smart reply suggestions based on the last message.
+Fast pattern-based reply suggestions (no AI model required).
+
+---
+
+#### Semantic Search
+
+AI-powered search based on meaning rather than keywords.
+
+---
+
+#### POST /search/semantic
+
+Perform a semantic search.
 
 **Request Body:**
 ```json
 {
-    "last_message": "Want to grab dinner tonight?",
-    "num_suggestions": 3
+    "query": "when did we talk about the project?",
+    "limit": 20,
+    "threshold": 0.3
 }
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `last_message` | string | Required | Last received message (min 1 char) |
-| `num_suggestions` | int | 3 | Number of suggestions (1-5) |
-
-**Response:**
-```json
-{
-    "suggestions": [
-        {"text": "I'm in! Where were you thinking?", "score": 0.85},
-        {"text": "Sounds good!", "score": 0.3},
-        {"text": "Got it!", "score": 0.25}
-    ]
-}
-```
-
-**Score Interpretation:**
-- 0.9-1.0: Strong keyword match (e.g., "thanks" → "You're welcome!")
-- 0.7-0.9: Partial word match
-- 0.3 or below: Generic fallback suggestions
-
-**When to Use This vs /drafts/reply:**
-- Use `/suggestions` for quick, common responses (fast, no model load)
-- Use `/drafts/reply` for contextual, AI-generated replies (slower, better quality)
-
-**Supported Patterns:**
-- Time/scheduling: "what time", "are you free", "when", "can we meet"
-- Affirmative: "sounds good", "yes", "okay", "sure"
-- Gratitude: "thanks", "thank you", "appreciate"
-- Social: "dinner", "lunch", "coffee", "drinks"
-- Running late: "omw", "on my way", "running late"
-- Location: "where", "location", "address"
-- Goodbyes: "see you", "bye", "ttyl"
-
-**curl:**
-```bash
-curl -X POST http://localhost:8742/suggestions \
-  -H "Content-Type: application/json" \
-  -d '{"last_message": "Thanks for your help!", "num_suggestions": 3}'
 ```
 
 ---
 
-### Export
+### System Operations
 
-Export conversations, search results, and create backups. All endpoints require Full Disk Access permission.
+#### Export
 
 ---
 
 #### POST /export/conversation/{chat_id}
 
-Export a single conversation in various formats.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `chat_id` | string | Unique conversation identifier |
-
-**Request Body:**
-```json
-{
-    "format": "json",
-    "date_range": {
-        "start": "2024-01-01T00:00:00Z",
-        "end": "2024-01-31T23:59:59Z"
-    },
-    "include_attachments": false,
-    "limit": 1000
-}
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `format` | string | `json` | Export format: `json`, `csv`, or `txt` |
-| `date_range` | object | null | Optional date range filter |
-| `date_range.start` | datetime | null | Start date (inclusive) |
-| `date_range.end` | datetime | null | End date (inclusive) |
-| `include_attachments` | bool | false | Include attachment info (CSV only) |
-| `limit` | int | 1000 | Maximum messages to export (1-10000) |
-
-**Response:**
-```json
-{
-    "success": true,
-    "format": "json",
-    "filename": "conversation_chat123_20240115.json",
-    "data": "[{\"id\": 12345, ...}]",
-    "message_count": 150,
-    "export_type": "conversation"
-}
-```
-
-**curl:**
-```bash
-# Export as JSON (default)
-curl -X POST http://localhost:8742/export/conversation/chat123456789 \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Export as CSV with date filter
-curl -X POST http://localhost:8742/export/conversation/chat123456789 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "format": "csv",
-    "date_range": {"start": "2024-01-01T00:00:00Z"},
-    "include_attachments": true
-  }'
-```
+Export a single conversation (JSON, CSV, TXT).
 
 ---
 
-#### POST /export/search
-
-Export search results in various formats.
-
-**Request Body:**
-```json
-{
-    "query": "dinner plans",
-    "format": "json",
-    "limit": 500,
-    "sender": "+15551234567",
-    "date_range": {
-        "start": "2024-01-01T00:00:00Z",
-        "end": "2024-01-31T23:59:59Z"
-    }
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `query` | string | Yes | Search query (min 1 char) |
-| `format` | string | No | Export format: `json`, `csv`, or `txt` (default: `json`) |
-| `limit` | int | No | Maximum results (1-5000, default 500) |
-| `sender` | string | No | Filter by sender phone/email |
-| `date_range` | object | No | Optional date range filter |
-
-**Response:**
-```json
-{
-    "success": true,
-    "format": "json",
-    "filename": "search_results_20240115.json",
-    "data": "[{\"id\": 12345, ...}]",
-    "message_count": 42,
-    "export_type": "search"
-}
-```
-
-**curl:**
-```bash
-curl -X POST http://localhost:8742/export/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "meeting tomorrow", "format": "csv", "limit": 100}'
-```
+#### PDF Export
 
 ---
 
-#### POST /export/backup
+#### POST /pdf_export/pdf/{chat_id}
 
-Create a full backup of multiple conversations. Only JSON format is supported.
-
-**Request Body:**
-```json
-{
-    "conversation_limit": 50,
-    "messages_per_conversation": 500,
-    "date_range": {
-        "start": "2024-01-01T00:00:00Z",
-        "end": "2024-01-31T23:59:59Z"
-    }
-}
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `conversation_limit` | int | 50 | Max conversations to include (1-500) |
-| `messages_per_conversation` | int | 500 | Max messages per conversation (1-5000) |
-| `date_range` | object | null | Optional date range filter |
-
-**Response:**
-```json
-{
-    "success": true,
-    "format": "json",
-    "filename": "backup_20240115.json",
-    "data": "{\"conversations\": [...], \"metadata\": {...}}",
-    "message_count": 5000,
-    "export_type": "backup"
-}
-```
-
-**curl:**
-```bash
-# Full backup with defaults
-curl -X POST http://localhost:8742/export/backup \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Backup with limits
-curl -X POST http://localhost:8742/export/backup \
-  -H "Content-Type: application/json" \
-  -d '{"conversation_limit": 20, "messages_per_conversation": 100}'
-```
+Generate a PDF document of a conversation.
 
 ---
 
-### Metrics
+#### Batch Operations
 
-Performance monitoring and observability endpoints. Provides Prometheus-compatible metrics and detailed breakdowns.
+Bulk processing for multiple conversations.
+
+---
+
+#### POST /batch/summarize
+
+Summarize multiple conversations at once.
+
+---
+
+#### Task Queue
+
+Background task management.
+
+---
+
+#### GET /tasks
+
+List active and completed background tasks.
+
+---
+
+#### GET /tasks/{task_id}
+
+Get status of a specific task.
+
+---
+
+### Management
+
+#### Metrics
 
 ---
 
 #### GET /metrics
 
-Get all metrics in Prometheus text format. Compatible with Prometheus scraping.
-
-**Response (text/plain):**
-```
-# HELP jarvis_memory_rss_bytes Resident Set Size in bytes
-# TYPE jarvis_memory_rss_bytes gauge
-jarvis_memory_rss_bytes 268435456
-
-# HELP jarvis_memory_vms_bytes Virtual Memory Size in bytes
-# TYPE jarvis_memory_vms_bytes gauge
-jarvis_memory_vms_bytes 1073741824
-
-# HELP jarvis_memory_available_bytes System available memory in bytes
-# TYPE jarvis_memory_available_bytes gauge
-jarvis_memory_available_bytes 8589934592
-
-# HELP jarvis_requests_total Total number of requests by endpoint
-# TYPE jarvis_requests_total counter
-jarvis_requests_total{endpoint="/health",method="GET"} 42
-
-# HELP jarvis_request_duration_seconds Request duration in seconds
-# TYPE jarvis_request_duration_seconds histogram
-jarvis_request_duration_seconds_bucket{operation="health",le="0.1"} 40
-jarvis_request_duration_seconds_bucket{operation="health",le="+Inf"} 42
-jarvis_request_duration_seconds_sum{operation="health"} 1.234
-jarvis_request_duration_seconds_count{operation="health"} 42
-
-# HELP jarvis_uptime_seconds Time since metrics collection started
-# TYPE jarvis_uptime_seconds gauge
-jarvis_uptime_seconds 3600.5
-```
-
-**curl:**
-```bash
-curl http://localhost:8742/metrics
-```
+Prometheus-compatible performance metrics.
 
 ---
 
 #### GET /metrics/memory
 
-Get detailed memory breakdown including process, system, and GPU memory.
-
-**Response:**
-```json
-{
-    "process": {
-        "rss_mb": 256.5,
-        "vms_mb": 1024.0,
-        "percent": 1.6
-    },
-    "system": {
-        "total_gb": 16.0,
-        "available_gb": 8.5,
-        "used_gb": 7.5,
-        "percent": 46.9
-    },
-    "metal_gpu_mb": 450.5,
-    "sampling": {
-        "sample_count": 120,
-        "min_rss_mb": 240.0,
-        "max_rss_mb": 280.0,
-        "avg_rss_mb": 255.3
-    },
-    "trend": [
-        {"timestamp": "2024-01-15T10:30:00Z", "rss_mb": 256.5},
-        {"timestamp": "2024-01-15T10:31:00Z", "rss_mb": 257.2}
-    ]
-}
-```
-
-**curl:**
-```bash
-curl http://localhost:8742/metrics/memory
-```
+Detailed RAM and GPU usage.
 
 ---
 
-#### GET /metrics/latency
-
-Get request latency percentiles by operation.
-
-**Response:**
-```json
-{
-    "operations": {
-        "health": {
-            "count": 100,
-            "mean_ms": 12.5,
-            "p50_ms": 10.2,
-            "p90_ms": 18.5,
-            "p95_ms": 22.1,
-            "p99_ms": 45.3
-        },
-        "conversations": {
-            "count": 50,
-            "mean_ms": 45.2,
-            "p50_ms": 42.0,
-            "p90_ms": 65.5,
-            "p95_ms": 78.2,
-            "p99_ms": 120.5
-        }
-    },
-    "summary": {
-        "total_requests": 150,
-        "requests_per_second": 2.5,
-        "uptime_seconds": 60.0,
-        "endpoint_count": 2
-    }
-}
-```
-
-**curl:**
-```bash
-curl http://localhost:8742/metrics/latency
-```
+#### Template Analytics
 
 ---
 
-#### GET /metrics/requests
+#### GET /metrics/templates/dashboard
 
-Get request count metrics grouped by endpoint and method.
-
-**Response:**
-```json
-{
-    "endpoints": {
-        "/health": {"GET": 100},
-        "/conversations": {"GET": 50},
-        "/drafts/reply": {"POST": 25}
-    },
-    "stats": {
-        "total_requests": 175,
-        "requests_per_second": 2.9,
-        "uptime_seconds": 60.0,
-        "endpoints": 3
-    }
-}
-```
-
-**curl:**
-```bash
-curl http://localhost:8742/metrics/requests
-```
+Get performance analytics for prompt templates.
 
 ---
 
-#### POST /metrics/gc
-
-Trigger garbage collection and return memory delta.
-
-**Response:**
-```json
-{
-    "before_mb": 300.5,
-    "after_mb": 280.2,
-    "freed_mb": 20.3,
-    "objects_collected": 1250
-}
-```
-
-**curl:**
-```bash
-curl -X POST http://localhost:8742/metrics/gc
-```
-
----
-
-#### POST /metrics/sample
-
-Take an immediate memory sample.
-
-**Response:**
-```json
-{
-    "timestamp": "2024-01-15T10:30:00Z",
-    "rss_mb": 256.5,
-    "vms_mb": 1024.0,
-    "percent": 1.6,
-    "available_gb": 8.5
-}
-```
-
-**curl:**
-```bash
-curl -X POST http://localhost:8742/metrics/sample
-```
-
----
-
-#### POST /metrics/reset
-
-Reset all metrics counters (does not reset memory sampler).
-
-**Response:**
-```json
-{
-    "status": "ok",
-    "message": "Metrics counters reset"
-}
-```
-
-**curl:**
-```bash
-curl -X POST http://localhost:8742/metrics/reset
-```
-
----
-
-### Settings
-
-Application configuration management.
+#### Settings
 
 ---
 
 #### GET /settings
 
-Get current settings including model, generation, behavior, and system info.
-
-**Response:**
-```json
-{
-    "model_id": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-    "generation": {
-        "temperature": 0.7,
-        "max_tokens_reply": 150,
-        "max_tokens_summary": 500
-    },
-    "behavior": {
-        "auto_suggest_replies": true,
-        "suggestion_count": 3,
-        "context_messages_reply": 20,
-        "context_messages_summary": 50
-    },
-    "system": {
-        "system_ram_gb": 16.0,
-        "current_memory_usage_gb": 8.5,
-        "model_loaded": true,
-        "model_memory_usage_gb": 0.5,
-        "imessage_access": true
-    }
-}
-```
-
-**curl:**
-```bash
-curl http://localhost:8742/settings
-```
+Get current application configuration.
 
 ---
 
 #### PUT /settings
 
-Update settings (partial update - only provided fields change).
-
-**Request Body:**
-```json
-{
-    "model_id": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-    "generation": {
-        "temperature": 0.8,
-        "max_tokens_reply": 200
-    },
-    "behavior": {
-        "auto_suggest_replies": false
-    }
-}
-```
-
-All fields are optional. Only provided fields are updated.
-
-**curl:**
-```bash
-# Update just temperature
-curl -X PUT http://localhost:8742/settings \
-  -H "Content-Type: application/json" \
-  -d '{"generation": {"temperature": 0.8}}'
-
-# Update multiple settings
-curl -X PUT http://localhost:8742/settings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_id": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-    "behavior": {"suggestion_count": 5}
-  }'
-```
+Update application configuration.
 
 ---
 
 #### GET /settings/models
 
-List available models with their status.
-
-**Response:**
-```json
-[
-    {
-        "model_id": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-        "name": "Qwen 0.5B (Fast)",
-        "size_gb": 0.4,
-        "quality_tier": "basic",
-        "ram_requirement_gb": 4.0,
-        "is_downloaded": true,
-        "is_loaded": true,
-        "is_recommended": false,
-        "description": "Fastest responses, good for simple tasks"
-    },
-    {
-        "model_id": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-        "name": "Qwen 1.5B (Balanced)",
-        "size_gb": 1.0,
-        "quality_tier": "good",
-        "ram_requirement_gb": 8.0,
-        "is_downloaded": true,
-        "is_loaded": false,
-        "is_recommended": true,
-        "description": "Balanced speed and quality"
-    }
-]
-```
-
-**Quality Tiers:**
-- `basic`: Fastest responses (0.5B parameters)
-- `good`: Balanced speed/quality (1.5B parameters)
-- `best`: Highest quality (3B parameters)
-
-**curl:**
-```bash
-curl http://localhost:8742/settings/models
-```
+List available language models.
 
 ---
 
-#### POST /settings/models/{model_id}/download
-
-Download a model from HuggingFace Hub.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `model_id` | string | Model ID (e.g., `mlx-community/Qwen2.5-1.5B-Instruct-4bit`) |
-
-**Response:**
-```json
-{
-    "model_id": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-    "status": "completed",
-    "progress": 100.0
-}
-```
-
-**Status Values:**
-- `downloading`: In progress
-- `completed`: Successfully downloaded
-- `failed`: Download failed (check `error` field)
-
-**curl:**
-```bash
-curl -X POST "http://localhost:8742/settings/models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/download"
-```
+#### WebSocket
 
 ---
 
-#### POST /settings/models/{model_id}/activate
+#### GET /ws
 
-Switch to a different model.
-
-**Response:**
-```json
-{
-    "success": true,
-    "model_id": "mlx-community/Qwen2.5-1.5B-Instruct-4bit"
-}
-```
-
-**Error Response (not downloaded):**
-```json
-{
-    "success": false,
-    "model_id": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-    "error": "Model not downloaded. Please download first."
-}
-```
-
-**curl:**
-```bash
-curl -X POST "http://localhost:8742/settings/models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/activate"
-```
-
----
-
-## Quick Start Examples
-
-### Check System Status
-
-```bash
-# Verify API is running
-curl http://localhost:8742/
-
-# Get detailed health status
-curl http://localhost:8742/health
-```
-
-### Browse Conversations
-
-```bash
-# List recent conversations
-curl http://localhost:8742/conversations
-
-# Get messages from a conversation
-curl http://localhost:8742/conversations/chat123456789/messages
-
-# Search for messages
-curl "http://localhost:8742/conversations/search?q=dinner&limit=10"
-```
-
-### Generate AI Replies
-
-```bash
-# Generate reply suggestions
-curl -X POST http://localhost:8742/drafts/reply \
-  -H "Content-Type: application/json" \
-  -d '{"chat_id": "chat123456789", "num_suggestions": 3}'
-
-# Get quick suggestions (no AI)
-curl -X POST http://localhost:8742/suggestions \
-  -H "Content-Type: application/json" \
-  -d '{"last_message": "Thanks!"}'
-```
-
-### Export Data
-
-```bash
-# Export a conversation as JSON
-curl -X POST http://localhost:8742/export/conversation/chat123456789 \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Export search results as CSV
-curl -X POST http://localhost:8742/export/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "meeting", "format": "csv"}'
-
-# Create a full backup
-curl -X POST http://localhost:8742/export/backup \
-  -H "Content-Type: application/json" \
-  -d '{"conversation_limit": 50}'
-```
-
-### Monitor Performance
-
-```bash
-# Get Prometheus metrics
-curl http://localhost:8742/metrics
-
-# Get memory details
-curl http://localhost:8742/metrics/memory
-
-# Get latency percentiles
-curl http://localhost:8742/metrics/latency
-
-# Trigger garbage collection
-curl -X POST http://localhost:8742/metrics/gc
-```
-
-### Manage Models
-
-```bash
-# List available models
-curl http://localhost:8742/settings/models
-
-# Download a model
-curl -X POST "http://localhost:8742/settings/models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/download"
-
-# Activate a model
-curl -X POST "http://localhost:8742/settings/models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/activate"
-```
+WebSocket endpoint for real-time streaming generation and status updates.
 
 ---
 

@@ -1,1 +1,1 @@
-"""External integrations (iMessage - Workstream 10)."""
+"""External integrations (iMessage - Workstream 10, Calendar)."""
