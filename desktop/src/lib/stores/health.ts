@@ -1,98 +1,67 @@
 /**
- * Health store for tracking API connection and system health.
+ * Health store for tracking API connection and system status
  */
 
-import { apiClient } from "../api/client";
-import type { HealthStatus } from "../api/types";
+import { writable } from "svelte/store";
+import type { HealthResponse } from "../api/types";
+import { api } from "../api/client";
 
-// State
-let connected = $state(false);
-let health = $state<HealthStatus | null>(null);
-let loading = $state(false);
-let error = $state<string | null>(null);
+export interface HealthState {
+  connected: boolean;
+  loading: boolean;
+  error: string | null;
+  data: HealthResponse | null;
+}
 
-/**
- * Check API connection status.
- */
+const initialState: HealthState = {
+  connected: false,
+  loading: false,
+  error: null,
+  data: null,
+};
+
+export const healthStore = writable<HealthState>(initialState);
+
 export async function checkApiConnection(): Promise<boolean> {
-  loading = true;
-  error = null;
+  healthStore.update((state) => ({ ...state, loading: true, error: null }));
 
   try {
-    await apiClient.ping();
-    connected = true;
+    await api.ping();
+    healthStore.update((state) => ({
+      ...state,
+      connected: true,
+      loading: false,
+    }));
     return true;
-  } catch (e) {
-    connected = false;
-    error = e instanceof Error ? e.message : "Connection failed";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Connection failed";
+    healthStore.update((state) => ({
+      ...state,
+      connected: false,
+      loading: false,
+      error: message,
+    }));
     return false;
-  } finally {
-    loading = false;
   }
 }
 
-/**
- * Fetch full health status from the API.
- */
-export async function fetchHealth(): Promise<HealthStatus | null> {
-  loading = true;
-  error = null;
+export async function fetchHealth(): Promise<void> {
+  healthStore.update((state) => ({ ...state, loading: true, error: null }));
 
   try {
-    health = await apiClient.getHealth();
-    connected = true;
-    return health;
-  } catch (e) {
-    connected = false;
-    error = e instanceof Error ? e.message : "Failed to fetch health";
-    return null;
-  } finally {
-    loading = false;
+    const data = await api.getHealth();
+    healthStore.update((state) => ({
+      ...state,
+      data,
+      connected: true,
+      loading: false,
+    }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to fetch health";
+    healthStore.update((state) => ({
+      ...state,
+      loading: false,
+      error: message,
+    }));
   }
-}
-
-/**
- * Get current connection status.
- */
-export function isConnected(): boolean {
-  return connected;
-}
-
-/**
- * Get current health status.
- */
-export function getHealth(): HealthStatus | null {
-  return health;
-}
-
-/**
- * Get loading state.
- */
-export function isLoading(): boolean {
-  return loading;
-}
-
-/**
- * Get error message if any.
- */
-export function getError(): string | null {
-  return error;
-}
-
-// Export reactive getters for Svelte components
-export function getHealthStore() {
-  return {
-    get connected() {
-      return connected;
-    },
-    get health() {
-      return health;
-    },
-    get loading() {
-      return loading;
-    },
-    get error() {
-      return error;
-    },
-  };
 }

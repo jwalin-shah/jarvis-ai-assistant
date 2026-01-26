@@ -1,8 +1,8 @@
 /**
- * API type definitions for the JARVIS desktop client.
+ * API type definitions for JARVIS frontend
  */
 
-// Attachment metadata
+// Message types
 export interface Attachment {
   filename: string;
   file_path: string | null;
@@ -10,7 +10,6 @@ export interface Attachment {
   file_size: number | null;
 }
 
-// Tapback reaction
 export interface Reaction {
   type: string;
   sender: string;
@@ -18,7 +17,6 @@ export interface Reaction {
   date: string;
 }
 
-// Message response
 export interface Message {
   id: number;
   chat_id: string;
@@ -35,7 +33,7 @@ export interface Message {
   is_system_message: boolean;
 }
 
-// Conversation summary
+// Conversation types
 export interface Conversation {
   chat_id: string;
   participants: string[];
@@ -46,8 +44,8 @@ export interface Conversation {
   last_message_text: string | null;
 }
 
-// Health status
-export interface HealthStatus {
+// Health types
+export interface HealthResponse {
   status: "healthy" | "degraded" | "unhealthy";
   imessage_access: boolean;
   memory_available_gb: number;
@@ -60,63 +58,69 @@ export interface HealthStatus {
   jarvis_vms_mb: number;
 }
 
-// Quick reply suggestion
-export interface Suggestion {
-  text: string;
-  score: number;
+// Settings types
+export interface ModelInfo {
+  model_id: string;
+  name: string;
+  size_gb: number;
+  quality_tier: "basic" | "good" | "best";
+  ram_requirement_gb: number;
+  is_downloaded: boolean;
+  is_loaded: boolean;
+  is_recommended: boolean;
+  description: string | null;
 }
 
-// Suggestion response
-export interface SuggestionResponse {
-  suggestions: Suggestion[];
+export interface GenerationSettings {
+  temperature: number;
+  max_tokens_reply: number;
+  max_tokens_summary: number;
 }
 
-// Send message request
-export interface SendMessageRequest {
-  text: string;
-  recipient?: string;
-  is_group?: boolean;
+export interface BehaviorSettings {
+  auto_suggest_replies: boolean;
+  suggestion_count: number;
+  context_messages_reply: number;
+  context_messages_summary: number;
 }
 
-// Send attachment request
-export interface SendAttachmentRequest {
-  file_path: string;
-  recipient?: string;
-  is_group?: boolean;
+export interface SystemInfo {
+  system_ram_gb: number;
+  current_memory_usage_gb: number;
+  model_loaded: boolean;
+  model_memory_usage_gb: number;
+  imessage_access: boolean;
 }
 
-// Send message response
-export interface SendMessageResponse {
-  success: boolean;
+export interface SettingsResponse {
+  model_id: string;
+  generation: GenerationSettings;
+  behavior: BehaviorSettings;
+  system: SystemInfo;
+}
+
+export interface SettingsUpdateRequest {
+  model_id?: string;
+  generation?: Partial<GenerationSettings>;
+  behavior?: Partial<BehaviorSettings>;
+}
+
+export interface DownloadStatus {
+  model_id: string;
+  status: "downloading" | "completed" | "failed";
+  progress: number;
   error: string | null;
 }
 
-// Error response
-export interface ErrorResponse {
+export interface ActivateResponse {
+  success: boolean;
+  model_id: string;
+  error: string | null;
+}
+
+// Error types
+export interface ApiError {
   error: string;
   detail: string;
-  code?: string;
-}
-
-// AI Draft reply response
-export interface DraftReplyResponse {
-  suggestions: Array<{
-    text: string;
-    confidence: number;
-  }>;
-  context_used: {
-    num_messages: number;
-    participants: string[];
-    last_message: string;
-  };
-}
-
-// Conversation summary response
-export interface SummaryResponse {
-  summary: string;
-  key_points: string[];
-  date_range: {
-    start: string;
-    end: string;
-  };
+  code: string | null;
 }
