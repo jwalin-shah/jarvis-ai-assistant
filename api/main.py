@@ -41,6 +41,7 @@ from api.routers import (
     suggestions_router,
     tasks_router,
     template_analytics_router,
+    threads_router,
     topics_router,
     websocket_router,
 )
@@ -187,6 +188,11 @@ API_TAGS_METADATA = [
         "description": "Calendar integration. "
         "Detect events in messages and create calendar entries via macOS Calendar.",
     },
+    {
+        "name": "threads",
+        "description": "Conversation threading for organizing messages into logical groups. "
+        "Detect threads based on time gaps, topic shifts, and explicit reply references.",
+    },
 ]
 
 API_CONTACT = {
@@ -319,6 +325,7 @@ app.include_router(stats_router)
 app.include_router(insights_router)
 app.include_router(metrics_router)
 app.include_router(template_analytics_router)
+app.include_router(threads_router)
 app.include_router(topics_router)
 app.include_router(websocket_router)
 app.include_router(tasks_router)
