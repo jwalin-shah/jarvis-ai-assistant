@@ -109,3 +109,22 @@ class SendMessageResponse(BaseModel):
 
     success: bool
     error: str | None = None
+
+
+class ModelStatusResponse(BaseModel):
+    """Model loading status for progress feedback."""
+
+    state: str  # "unloaded", "loading", "loaded", "error"
+    progress: float | None = None  # 0.0 to 1.0 during loading
+    message: str | None = None
+    memory_usage_mb: float | None = None
+    load_time_seconds: float | None = None
+    error: str | None = None
+
+
+class PreloadResponse(BaseModel):
+    """Response from model preload request."""
+
+    success: bool
+    message: str
+    state: str  # Current model state after operation
