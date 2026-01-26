@@ -11,10 +11,15 @@ import type {
   DraftReplyResponse,
   FrequencyTrends,
   HealthResponse,
+  ImportantContactResponse,
+  MarkHandledResponse,
   Message,
   ModelInfo,
   PDFExportRequest,
   PDFExportResponse,
+  PriorityInboxResponse,
+  PriorityLevel,
+  PriorityStats,
   RelationshipHealth,
   ResponsePatterns,
   SearchFilters,
@@ -559,6 +564,98 @@ class ApiClient {
       `/insights/${encodeURIComponent(chatId)}/cache`,
       { method: "DELETE" }
     );
+  }
+
+  // Priority Inbox endpoints
+  async getPriorityInbox(
+    limit: number = 50,
+    includeHandled: boolean = false,
+    minLevel?: PriorityLevel,
+    signal?: AbortSignal
+  ): Promise<PriorityInboxResponse> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      include_handled: includeHandled.toString(),
+    });
+    if (minLevel) {
+      params.set("min_level", minLevel);
+    }
+
+    const response = await fetch(
+      `${this.baseUrl}/priority?${params.toString()}`,
+      {
+        headers: { "Content-Type": "application/json" },
+        signal,
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        error: "Request failed",
+        detail: response.statusText,
+      }));
+      throw new APIError(
+        error.error || "Request failed",
+        response.status,
+        error.detail || null
+      );
+    }
+
+    return response.json();
+  }
+
+  async markMessageHandled(
+    chatId: string,
+    messageId: number
+  ): Promise<MarkHandledResponse> {
+    return this.request<MarkHandledResponse>("/priority/handled", {
+      method: "POST",
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+      }),
+    });
+  }
+
+  async unmarkMessageHandled(
+    chatId: string,
+    messageId: number
+  ): Promise<MarkHandledResponse> {
+    return this.request<MarkHandledResponse>("/priority/handled", {
+      method: "DELETE",
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+      }),
+    });
+  }
+
+  async markContactImportant(
+    identifier: string,
+    important: boolean = true
+  ): Promise<ImportantContactResponse> {
+    return this.request<ImportantContactResponse>(
+      "/priority/contacts/important",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          identifier,
+          important,
+        }),
+      }
+    );
+  }
+
+  async getPriorityStats(): Promise<PriorityStats> {
+    return this.request<PriorityStats>("/priority/stats");
+  }
+
+  async clearHandledItems(): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      "/priority/clear-handled",
+      { method: "POST" }
+    );
+  }
   }
 }
 

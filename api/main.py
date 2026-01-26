@@ -32,6 +32,7 @@ from api.routers import (
     insights_router,
     metrics_router,
     pdf_export_router,
+    priority_router,
     search_router,
     settings_router,
     stats_router,
@@ -168,6 +169,11 @@ API_TAGS_METADATA = [
         "description": "Batch operations for bulk processing. "
         "Export, summarize, and generate replies for multiple conversations at once.",
     },
+    {
+        "name": "priority",
+        "description": "Smart priority inbox for message importance scoring. "
+        "Get messages sorted by urgency and detect questions and action items.",
+    },
 ]
 
 API_CONTACT = {
@@ -302,6 +308,7 @@ app.include_router(topics_router)
 app.include_router(websocket_router)
 app.include_router(tasks_router)
 app.include_router(batch_router)
+app.include_router(priority_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)
