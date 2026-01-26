@@ -442,12 +442,14 @@ class ChatDBReader:
         self,
         limit: int = 50,
         since: datetime | None = None,
+        before: datetime | None = None,
     ) -> list[Conversation]:
         """Get recent conversations.
 
         Args:
             limit: Maximum number of conversations to return
             since: Only return conversations with messages after this date
+            before: Only return conversations with last message before this date (for pagination)
 
         Returns:
             List of Conversation objects, sorted by last message date (newest first)
@@ -459,12 +461,15 @@ class ChatDBReader:
         params: list[Any] = []
         if since is not None:
             params.append(datetime_to_apple_timestamp(since))
+        if before is not None:
+            params.append(datetime_to_apple_timestamp(before))
         params.append(limit)
 
         query = get_query(
             "conversations",
             self._schema_version or "v14",
             with_since_filter=since is not None,
+            with_conversations_before_filter=before is not None,
         )
 
         try:
@@ -490,14 +495,27 @@ class ChatDBReader:
             # Parse last message date
             last_message_date = parse_apple_timestamp(row["last_message_date"])
 
+            # Resolve display name from database or contacts
+            display_name = row["display_name"] or None
+
+            # For individual chats without a display name, try to resolve from contacts
+            if not display_name and not is_group and len(participants) == 1:
+                display_name = self._resolve_contact_name(participants[0])
+
+            # Get last message text (may be None if no text messages)
+            last_message_text = (
+                row["last_message_text"] if "last_message_text" in row.keys() else None
+            )
+
             conversations.append(
                 Conversation(
                     chat_id=row["chat_id"],
                     participants=participants,
-                    display_name=row["display_name"] or None,
+                    display_name=display_name,
                     last_message_date=last_message_date,
                     message_count=row["message_count"],
                     is_group=is_group,
+                    last_message_text=last_message_text,
                 )
             )
 
@@ -538,8 +556,21 @@ class ChatDBReader:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         except sqlite3.OperationalError as e:
-            logger.warning(f"Query error in get_messages: {e}")
-            return []
+            # If query fails (e.g., missing date_delivered column), try simpler query
+            if "date_delivered" in str(e) or "date_read" in str(e):
+                logger.debug("Read receipt columns not available, using fallback query")
+                fallback_query = query.replace("message.date_delivered,", "").replace(
+                    "message.date_read", "NULL as date_read"
+                )
+                try:
+                    cursor.execute(fallback_query, params)
+                    rows = cursor.fetchall()
+                except sqlite3.OperationalError as e2:
+                    logger.warning(f"Query error in get_messages: {e2}")
+                    return []
+            else:
+                logger.warning(f"Query error in get_messages: {e}")
+                return []
 
         return self._rows_to_messages(rows, chat_id)
 
@@ -720,6 +751,16 @@ class ChatDBReader:
         # We need to query the actual GUID from the database for this message
         reactions = self._get_reactions_for_message_id(message_id)
 
+        # Parse delivery/read receipts (only meaningful for messages you sent)
+        # These columns may not exist in all databases/test fixtures
+        date_delivered = None
+        date_read = None
+        if row["is_from_me"]:
+            if row_dict.get("date_delivered"):
+                date_delivered = parse_apple_timestamp(row_dict["date_delivered"])
+            if row_dict.get("date_read"):
+                date_read = parse_apple_timestamp(row_dict["date_read"])
+
         return Message(
             id=message_id,
             chat_id=chat_id,
@@ -731,6 +772,8 @@ class ChatDBReader:
             attachments=attachments,
             reply_to_id=reply_to_id,
             reactions=reactions,
+            date_delivered=date_delivered,
+            date_read=date_read,
         )
 
     def _get_reactions_for_message_id(self, message_id: int) -> list[Reaction]:

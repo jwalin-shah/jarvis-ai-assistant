@@ -5,7 +5,7 @@ Converts dataclasses from contracts/ to Pydantic models for FastAPI serializatio
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AttachmentResponse(BaseModel):
@@ -45,6 +45,8 @@ class MessageResponse(BaseModel):
     attachments: list[AttachmentResponse]
     reply_to_id: int | None
     reactions: list[ReactionResponse]
+    date_delivered: datetime | None = None
+    date_read: datetime | None = None
 
 
 class ConversationResponse(BaseModel):
@@ -58,6 +60,7 @@ class ConversationResponse(BaseModel):
     last_message_date: datetime
     message_count: int
     is_group: bool
+    last_message_text: str | None = None  # Preview of the last message
 
 
 class HealthResponse(BaseModel):
@@ -71,6 +74,9 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     permissions_ok: bool
     details: dict[str, str] | None = None
+    # JARVIS process-specific memory
+    jarvis_rss_mb: float = 0.0  # Resident Set Size (actual RAM used by JARVIS)
+    jarvis_vms_mb: float = 0.0  # Virtual Memory Size (JARVIS allocation)
 
 
 class ErrorResponse(BaseModel):
@@ -79,3 +85,26 @@ class ErrorResponse(BaseModel):
     error: str
     detail: str
     code: str | None = None
+
+
+class SendMessageRequest(BaseModel):
+    """Request to send an iMessage."""
+
+    text: str = Field(..., min_length=1, max_length=10000, description="Message text")
+    recipient: str | None = Field(default=None, description="Recipient phone/email (individual)")
+    is_group: bool = Field(default=False, description="Whether this is a group chat")
+
+
+class SendAttachmentRequest(BaseModel):
+    """Request to send a file attachment."""
+
+    file_path: str = Field(..., description="Absolute path to file to send")
+    recipient: str | None = Field(default=None, description="Recipient phone/email (individual)")
+    is_group: bool = Field(default=False, description="Whether this is a group chat")
+
+
+class SendMessageResponse(BaseModel):
+    """Response after sending a message."""
+
+    success: bool
+    error: str | None = None

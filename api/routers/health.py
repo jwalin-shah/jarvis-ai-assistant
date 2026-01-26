@@ -3,6 +3,8 @@
 Provides system health status including memory, model, and permission state.
 """
 
+import os
+
 import psutil
 from fastapi import APIRouter
 
@@ -10,6 +12,25 @@ from api.schemas import HealthResponse
 from integrations.imessage import ChatDBReader
 
 router = APIRouter(tags=["health"])
+
+# Constants
+BYTES_PER_MB = 1024 * 1024
+
+
+def _get_process_memory() -> tuple[float, float]:
+    """Get JARVIS process memory usage.
+
+    Returns:
+        Tuple of (rss_mb, vms_mb) - actual RAM usage and virtual memory allocation
+    """
+    try:
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info()
+        rss_mb = mem_info.rss / BYTES_PER_MB
+        vms_mb = mem_info.vms / BYTES_PER_MB
+        return rss_mb, vms_mb
+    except Exception:
+        return 0.0, 0.0
 
 
 def _check_imessage_access() -> bool:
@@ -51,15 +72,19 @@ def get_health() -> HealthResponse:
 
     Returns information about:
     - iMessage database access
-    - System memory usage
+    - System memory usage (total system)
+    - JARVIS process memory usage (what this app is using)
     - Memory controller mode
     - Model loading state
     - Overall system health
     """
-    # Memory stats
+    # System memory stats
     memory = psutil.virtual_memory()
     available_gb = memory.available / (1024**3)
     used_gb = memory.used / (1024**3)
+
+    # JARVIS process memory
+    jarvis_rss_mb, jarvis_vms_mb = _get_process_memory()
 
     # Check various components
     imessage_access = _check_imessage_access()
@@ -92,6 +117,8 @@ def get_health() -> HealthResponse:
         model_loaded=model_loaded,
         permissions_ok=imessage_access,
         details=details if details else None,
+        jarvis_rss_mb=round(jarvis_rss_mb, 1),
+        jarvis_vms_mb=round(jarvis_vms_mb, 1),
     )
 
 

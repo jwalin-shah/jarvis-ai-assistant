@@ -5,11 +5,17 @@ Provides endpoints for listing conversations and retrieving messages.
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_imessage_reader
-from api.schemas import ConversationResponse, MessageResponse
-from integrations.imessage import ChatDBReader
+from api.schemas import (
+    ConversationResponse,
+    MessageResponse,
+    SendAttachmentRequest,
+    SendMessageRequest,
+    SendMessageResponse,
+)
+from integrations.imessage import ChatDBReader, IMessageSender
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -18,13 +24,15 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 def list_conversations(
     limit: int = Query(default=50, ge=1, le=500, description="Max conversations to return"),
     since: datetime | None = Query(default=None, description="Only convos with messages after"),
+    before: datetime | None = Query(default=None, description="Pagination cursor"),
     reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> list[ConversationResponse]:
     """List recent conversations.
 
     Returns conversations sorted by last message date (newest first).
+    Use 'before' parameter with the last conversation's last_message_date for pagination.
     """
-    conversations = reader.get_conversations(limit=limit, since=since)
+    conversations = reader.get_conversations(limit=limit, since=since, before=before)
     return [ConversationResponse.model_validate(c) for c in conversations]
 
 
@@ -65,3 +73,78 @@ def search_messages(
         has_attachments=has_attachments,
     )
     return [MessageResponse.model_validate(m) for m in messages]
+
+
+@router.post("/{chat_id}/send", response_model=SendMessageResponse)
+def send_message(
+    chat_id: str,
+    request: SendMessageRequest,
+) -> SendMessageResponse:
+    """Send a message to a conversation.
+
+    Requires Automation permission for Messages app (prompted on first use).
+
+    For individual chats: provide recipient (phone/email).
+    For group chats: set is_group=True (uses chat_id to target group).
+
+    Args:
+        chat_id: The conversation ID
+        request: Message text, recipient (for individual), and is_group flag
+    """
+    sender = IMessageSender()
+
+    if request.is_group:
+        # For group chats, send to the chat ID directly
+        result = sender.send_message(
+            text=request.text,
+            chat_id=chat_id,
+            is_group=True,
+        )
+    else:
+        # For individual chats, send to the recipient
+        if not request.recipient:
+            raise HTTPException(
+                status_code=400,
+                detail="Recipient is required for individual chats",
+            )
+        result = sender.send_message(
+            text=request.text,
+            recipient=request.recipient,
+        )
+
+    return SendMessageResponse(success=result.success, error=result.error)
+
+
+@router.post("/{chat_id}/send-attachment", response_model=SendMessageResponse)
+def send_attachment(
+    chat_id: str,
+    request: SendAttachmentRequest,
+) -> SendMessageResponse:
+    """Send a file attachment to a conversation.
+
+    Requires Automation permission for Messages app (prompted on first use).
+
+    Args:
+        chat_id: The conversation ID
+        request: File path, recipient (for individual), and is_group flag
+    """
+    sender = IMessageSender()
+
+    if request.is_group:
+        result = sender.send_attachment(
+            file_path=request.file_path,
+            chat_id=chat_id,
+            is_group=True,
+        )
+    else:
+        if not request.recipient:
+            raise HTTPException(
+                status_code=400,
+                detail="Recipient is required for individual chats",
+            )
+        result = sender.send_attachment(
+            file_path=request.file_path,
+            recipient=request.recipient,
+        )
+
+    return SendMessageResponse(success=result.success, error=result.error)

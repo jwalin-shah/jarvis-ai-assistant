@@ -69,10 +69,21 @@ _BASE_QUERIES = {
                 FROM chat_message_join
                 JOIN message ON chat_message_join.message_id = message.ROWID
                 WHERE chat_message_join.chat_id = chat.ROWID
-            ) as last_message_date
+            ) as last_message_date,
+            (
+                SELECT message.text
+                FROM chat_message_join
+                JOIN message ON chat_message_join.message_id = message.ROWID
+                WHERE chat_message_join.chat_id = chat.ROWID
+                  AND message.text IS NOT NULL
+                  AND message.text != ''
+                ORDER BY message.date DESC
+                LIMIT 1
+            ) as last_message_text
         FROM chat
         WHERE message_count > 0
         {since_filter}
+        {before_filter}
         ORDER BY last_message_date DESC
         LIMIT ?
     """,
@@ -89,7 +100,9 @@ _BASE_QUERIES = {
             message.attributedBody,
             message.date as date,
             message.is_from_me,
-            message.thread_originator_guid as reply_to_guid
+            message.thread_originator_guid as reply_to_guid,
+            message.date_delivered,
+            message.date_read
         FROM message
         JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
         JOIN chat ON chat_message_join.chat_id = chat.ROWID
@@ -185,6 +198,7 @@ def get_query(
     *,
     with_since_filter: bool = False,
     with_before_filter: bool = False,
+    with_conversations_before_filter: bool = False,
     with_sender_filter: bool = False,
     with_after_filter: bool = False,
     with_search_before_filter: bool = False,
@@ -198,6 +212,7 @@ def get_query(
         version: Schema version (v14, v15)
         with_since_filter: If True, include AND last_message_date > ? clause (conversations)
         with_before_filter: If True, include AND message.date < ? clause (messages)
+        with_conversations_before_filter: If True, include AND last_message_date < ? (conversations)
         with_sender_filter: If True, include sender filter clause (search)
         with_after_filter: If True, include AND message.date > ? clause (search)
         with_search_before_filter: If True, include AND message.date < ? clause (search)
@@ -223,11 +238,17 @@ def get_query(
 
     # Build filter clauses from boolean flags (never from user input)
     since_filter = "AND last_message_date > ?" if with_since_filter else ""
+    conversations_before_filter = (
+        "AND last_message_date < ?" if with_conversations_before_filter else ""
+    )
 
     # For messages query, use with_before_filter
     # For search query, use with_search_before_filter
+    # For conversations query, use with_conversations_before_filter
     if name == "search":
         before_filter = "AND message.date < ?" if with_search_before_filter else ""
+    elif name == "conversations":
+        before_filter = conversations_before_filter
     else:
         before_filter = "AND message.date < ?" if with_before_filter else ""
 
