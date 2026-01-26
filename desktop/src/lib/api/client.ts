@@ -20,6 +20,9 @@ import type {
   SummaryResponse,
   TemplateAnalyticsDashboard,
   TemplateAnalyticsSummary,
+  ThreadedViewResponse,
+  ThreadingConfigRequest,
+  ThreadResponse,
   TimeRange,
   TopicsResponse,
 } from "./types";
@@ -419,6 +422,54 @@ class ApiClient {
 
     const blob = await response.blob();
     return { blob, filename };
+  }
+
+  // Threading endpoints
+  async getThreadedView(
+    chatId: string,
+    limit: number = 200,
+    before?: string,
+    timeGapMinutes: number = 30,
+    useSemantic: boolean = true,
+    refresh: boolean = false
+  ): Promise<ThreadedViewResponse> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      time_gap_minutes: timeGapMinutes.toString(),
+      use_semantic: useSemantic.toString(),
+      refresh: refresh.toString(),
+    });
+    if (before) {
+      params.set("before", before);
+    }
+    return this.request<ThreadedViewResponse>(
+      `/conversations/${encodeURIComponent(chatId)}/threads?${params.toString()}`
+    );
+  }
+
+  async getThreadMessages(
+    chatId: string,
+    threadId: string,
+    limit: number = 200
+  ): Promise<Message[]> {
+    return this.request<Message[]>(
+      `/conversations/${encodeURIComponent(chatId)}/threads/${encodeURIComponent(threadId)}?limit=${limit}`
+    );
+  }
+
+  async analyzeThreads(
+    chatId: string,
+    config?: ThreadingConfigRequest,
+    limit: number = 200
+  ): Promise<ThreadResponse[]> {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    return this.request<ThreadResponse[]>(
+      `/conversations/${encodeURIComponent(chatId)}/threads/analyze?${params.toString()}`,
+      {
+        method: "POST",
+        body: config ? JSON.stringify(config) : undefined,
+      }
+    );
   }
 }
 
