@@ -721,14 +721,19 @@ class ChatDBReader:
             chat_id: The conversation ID
 
         Returns:
-            Message object, or None if text extraction fails
+            Message object, or None if message has no text and no attachments
         """
-        # Extract text (tries text column, falls back to attributedBody)
-        text = extract_text_from_row(dict(row))
-        if not text:
-            return None
-
         message_id = row["id"]
+
+        # Extract text (tries text column, falls back to attributedBody)
+        text = extract_text_from_row(dict(row)) or ""
+
+        # Fetch attachments for this message
+        attachments = self._get_attachments_for_message(message_id)
+
+        # Skip messages with no text AND no attachments
+        if not text and not attachments:
+            return None
 
         # Get sender and resolve name from contacts
         sender = normalize_phone_number(row["sender"]) or row["sender"]
@@ -742,9 +747,6 @@ class ChatDBReader:
         reply_to_guid = row_dict.get("reply_to_guid")
         if reply_to_guid:
             reply_to_id = self._get_message_rowid_by_guid(reply_to_guid)
-
-        # Fetch attachments for this message
-        attachments = self._get_attachments_for_message(message_id)
 
         # Fetch reactions for this message
         # Build the message GUID for reaction lookup (format: p:N/GUID or similar)
