@@ -147,6 +147,16 @@ export interface SummaryResponse {
   message_count?: number;
 }
 
+// Smart Reply Suggestion types
+export interface SmartReplySuggestion {
+  text: string;
+  score: number;
+}
+
+export interface SmartReplySuggestionsResponse {
+  suggestions: SmartReplySuggestion[];
+}
+
 // Error types
 export interface ApiError {
   error: string;
