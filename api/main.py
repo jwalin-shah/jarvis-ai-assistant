@@ -23,6 +23,7 @@ from slowapi.errors import RateLimitExceeded
 from api.errors import register_exception_handlers
 from api.ratelimit import limiter, rate_limit_exceeded_handler
 from api.routers import (
+    batch_router,
     contacts_router,
     conversations_router,
     drafts_router,
@@ -34,6 +35,7 @@ from api.routers import (
     settings_router,
     stats_router,
     suggestions_router,
+    tasks_router,
     template_analytics_router,
     topics_router,
     websocket_router,
@@ -148,6 +150,16 @@ API_TAGS_METADATA = [
         "name": "websocket",
         "description": "Real-time WebSocket communication. "
         "Stream model generation responses, receive health updates, and manage live connections.",
+    },
+    {
+        "name": "tasks",
+        "description": "Background task management. "
+        "Create, monitor, and manage background tasks for batch operations.",
+    },
+    {
+        "name": "batch",
+        "description": "Batch operations for bulk processing. "
+        "Export, summarize, and generate replies for multiple conversations at once.",
     },
 ]
 
@@ -280,6 +292,8 @@ app.include_router(metrics_router)
 app.include_router(template_analytics_router)
 app.include_router(topics_router)
 app.include_router(websocket_router)
+app.include_router(tasks_router)
+app.include_router(batch_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)
