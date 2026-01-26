@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 # =============================================================================
 # Prompt Metadata & Versioning
@@ -646,6 +646,243 @@ def build_search_answer_prompt(
     )
 
     return prompt
+
+
+# =============================================================================
+# RAG-Enhanced Prompt Builder
+# =============================================================================
+
+RAG_REPLY_TEMPLATE = PromptTemplate(
+    name="rag_reply_generation",
+    system_message="You are helping draft a personalized text message reply based on the user's "
+    "communication history. Match their typical tone and style with this person.",
+    template="""### Communication Style with {contact_name}:
+{relationship_context}
+
+### Similar Past Exchanges:
+{similar_exchanges}
+
+### Current Conversation:
+{context}
+
+### Instructions:
+Generate a natural reply to the last message that:
+- Matches how you typically communicate with {contact_name} ({tone})
+- Is consistent with your past response patterns
+- Sounds authentic to your voice
+{custom_instruction}
+
+### Last message to reply to:
+{last_message}
+
+### Your reply:""",
+    max_output_tokens=75,
+)
+
+
+def _format_similar_exchanges(exchanges: list[tuple[str, str]]) -> str:
+    """Format similar past exchanges for RAG prompt.
+
+    Args:
+        exchanges: List of (context, response) tuples from past conversations
+
+    Returns:
+        Formatted string with examples
+    """
+    if not exchanges:
+        return "(No similar past exchanges found)"
+
+    formatted = []
+    for i, (ctx, response) in enumerate(exchanges[:3], 1):
+        # Truncate long contexts
+        ctx_preview = ctx[:200] + "..." if len(ctx) > 200 else ctx
+        formatted.append(f"Example {i}:\nContext: {ctx_preview}\nYour reply: {response}")
+    return "\n\n".join(formatted)
+
+
+def _format_relationship_context(
+    tone: str,
+    avg_length: float,
+    response_patterns: dict[str, float | int] | None = None,
+) -> str:
+    """Format relationship context for RAG prompt.
+
+    Args:
+        tone: Typical communication tone
+        avg_length: Average message length
+        response_patterns: Optional response pattern statistics
+
+    Returns:
+        Formatted relationship context string
+    """
+    lines = []
+
+    # Tone description
+    tone_descriptions = {
+        "casual": "You typically use casual, friendly language with this person",
+        "professional": "You typically use professional, formal language with this person",
+        "mixed": "You use a mix of casual and professional language with this person",
+    }
+    lines.append(f"- {tone_descriptions.get(tone, tone_descriptions['casual'])}")
+
+    # Message length guidance
+    if avg_length < 30:
+        lines.append("- You usually keep messages short and concise")
+    elif avg_length < 100:
+        lines.append("- You usually write moderate-length messages")
+    else:
+        lines.append("- You tend to write longer, detailed messages")
+
+    # Response pattern insights
+    if response_patterns:
+        avg_response = response_patterns.get("avg_response_time_seconds")
+        if avg_response:
+            if avg_response < 300:
+                lines.append("- You usually respond quickly to this person")
+            elif avg_response > 3600:
+                lines.append("- You often take time before responding to this person")
+
+    return "\n".join(lines)
+
+
+def build_rag_reply_prompt(
+    context: str,
+    last_message: str,
+    contact_name: str,
+    similar_exchanges: list[tuple[str, str]] | None = None,
+    relationship_profile: dict[str, Any] | None = None,
+    instruction: str | None = None,
+) -> str:
+    """Build a RAG-enhanced prompt for generating personalized iMessage replies.
+
+    Uses retrieved similar past exchanges and relationship profile to generate
+    responses that match the user's typical communication style with the contact.
+
+    Args:
+        context: The current conversation history
+        last_message: The most recent message to reply to
+        contact_name: Name of the contact being messaged
+        similar_exchanges: List of (context, response) tuples from similar past conversations
+        relationship_profile: Dict with tone, avg_message_length, response_patterns, etc.
+        instruction: Optional custom instruction for the reply
+
+    Returns:
+        Formatted prompt string ready for model input
+
+    Example:
+        >>> from jarvis.embeddings import find_similar_messages, get_relationship_profile
+        >>> # Get similar exchanges from history
+        >>> similar = find_similar_messages(last_message, contact_id="chat123", limit=3)
+        >>> exchanges = [(m.text, "...response...") for m in similar]
+        >>> # Get relationship profile
+        >>> profile = get_relationship_profile("chat123")
+        >>> prompt = build_rag_reply_prompt(
+        ...     context=context,
+        ...     last_message=last_message,
+        ...     contact_name="John",
+        ...     similar_exchanges=exchanges,
+        ...     relationship_profile={"tone": profile.typical_tone, ...},
+        ... )
+    """
+    # Extract profile info
+    profile = relationship_profile or {}
+    tone = str(profile.get("tone", "casual"))
+    avg_length = float(profile.get("avg_message_length", 50))
+    response_patterns = profile.get("response_patterns")
+
+    # Format relationship context
+    relationship_context = _format_relationship_context(
+        tone=tone,
+        avg_length=avg_length,
+        response_patterns=response_patterns if isinstance(response_patterns, dict) else None,
+    )
+
+    # Format similar exchanges
+    exchanges = similar_exchanges or []
+    similar_context = _format_similar_exchanges(exchanges)
+
+    # Format custom instruction
+    custom_instruction = ""
+    if instruction:
+        custom_instruction = f"- Additional guidance: {instruction}"
+
+    # Truncate context if needed
+    truncated_context = _truncate_context(context)
+
+    # Build the prompt
+    prompt = RAG_REPLY_TEMPLATE.template.format(
+        contact_name=contact_name,
+        relationship_context=relationship_context,
+        similar_exchanges=similar_context,
+        context=truncated_context,
+        tone=tone,
+        custom_instruction=custom_instruction,
+        last_message=last_message,
+    )
+
+    return prompt
+
+
+def build_rag_reply_prompt_from_embeddings(
+    context: str,
+    last_message: str,
+    contact_id: str,
+    contact_name: str | None = None,
+    instruction: str | None = None,
+) -> str:
+    """Build a RAG-enhanced prompt using the embedding store directly.
+
+    Convenience function that fetches similar exchanges and relationship
+    profile automatically from the embedding store.
+
+    Args:
+        context: The current conversation history
+        last_message: The most recent message to reply to
+        contact_id: Chat ID for the contact
+        contact_name: Optional display name (fetched from profile if not provided)
+        instruction: Optional custom instruction for the reply
+
+    Returns:
+        Formatted prompt string ready for model input
+    """
+    # Import here to avoid circular imports
+    from jarvis.embeddings import find_similar_messages, get_relationship_profile
+
+    # Get relationship profile
+    profile = get_relationship_profile(contact_id)
+    name = contact_name or profile.display_name or "this person"
+
+    # Find similar past messages
+    similar_messages = find_similar_messages(
+        query=last_message,
+        contact_id=contact_id,
+        limit=5,
+        min_similarity=0.4,
+    )
+
+    # Build exchanges: for each similar incoming message, try to find your response
+    # This is a simplified approach - we include the similar message as context
+    # In practice, you'd want to fetch the actual response that followed
+    exchanges: list[tuple[str, str]] = []
+    for msg in similar_messages:
+        if not msg.is_from_me:
+            # This was a message to you - include it as context
+            # The response would need to be fetched from subsequent messages
+            exchanges.append((msg.text, "(your typical response style)"))
+
+    # Build the prompt
+    return build_rag_reply_prompt(
+        context=context,
+        last_message=last_message,
+        contact_name=name,
+        similar_exchanges=exchanges,
+        relationship_profile={
+            "tone": profile.typical_tone,
+            "avg_message_length": profile.avg_message_length,
+            "response_patterns": profile.response_patterns,
+        },
+        instruction=instruction,
+    )
 
 
 # =============================================================================
