@@ -12,6 +12,7 @@ import type {
   ModelInfo,
   SettingsResponse,
   SettingsUpdateRequest,
+  SmartReplySuggestionsResponse,
   SummaryResponse,
 } from "./types";
 
@@ -169,6 +170,20 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // Smart reply suggestions endpoint
+  async getSmartReplySuggestions(
+    lastMessage: string,
+    numSuggestions: number = 3
+  ): Promise<SmartReplySuggestionsResponse> {
+    return this.request<SmartReplySuggestionsResponse>("/suggestions", {
+      method: "POST",
+      body: JSON.stringify({
+        last_message: lastMessage,
+        num_suggestions: numSuggestions,
+      }),
+    });
   }
 
   // Summary endpoints
