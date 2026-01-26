@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     conversationsStore,
-    fetchConversations,
     selectConversation,
+    initializePolling,
+    connectionStatus,
   } from "../stores/conversations";
   import { api } from "../api/client";
   import type { Topic } from "../api/types";
@@ -13,8 +14,16 @@
   let allTopicsMap: Map<string, Topic[]> = new Map();
   let loadingTopics: Set<string> = new Set();
 
+  let cleanup: (() => void) | null = null;
+
   onMount(() => {
-    fetchConversations();
+    cleanup = initializePolling();
+  });
+
+  onDestroy(() => {
+    if (cleanup) {
+      cleanup();
+    }
   });
 
   // Fetch topics when conversations are loaded
@@ -95,6 +104,21 @@
     if (allTopics.length <= 2) return "";
     return allTopics.map(t => `${t.display_name} (${Math.round(t.confidence * 100)}%)`).join("\n");
   }
+
+  function hasNewMessages(chatId: string): boolean {
+    return $conversationsStore.conversationsWithNewMessages.has(chatId);
+  }
+
+  function getConnectionStatusText(status: typeof $connectionStatus): string {
+    switch (status) {
+      case "connected":
+        return "Connected";
+      case "connecting":
+        return "Connecting...";
+      case "disconnected":
+        return "Disconnected";
+    }
+  }
 </script>
 
 <div class="conversation-list">
@@ -119,21 +143,31 @@
           class="conversation"
           class:active={$conversationsStore.selectedChatId === conv.chat_id}
           class:group={conv.is_group}
+          class:has-new={hasNewMessages(conv.chat_id)}
           on:click={() => selectConversation(conv.chat_id)}
         >
-          <div class="avatar" class:group={conv.is_group}>
-            {#if conv.is_group}
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6zm10-8c1.93 0 3.5-1.57 3.5-3.5S17.93 5 16 5c-.54 0-1.04.13-1.5.35.63.89 1 1.98 1 3.15s-.37 2.26-1 3.15c.46.22.96.35 1.5.35z"/>
-              </svg>
-            {:else}
-              {getDisplayName(conv).charAt(0).toUpperCase()}
+          <div class="avatar-container">
+            <div class="avatar" class:group={conv.is_group}>
+              {#if conv.is_group}
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6zm10-8c1.93 0 3.5-1.57 3.5-3.5S17.93 5 16 5c-.54 0-1.04.13-1.5.35.63.89 1 1.98 1 3.15s-.37 2.26-1 3.15c.46.22.96.35 1.5.35z"/>
+                </svg>
+              {:else}
+                {getDisplayName(conv).charAt(0).toUpperCase()}
+              {/if}
+            </div>
+            {#if hasNewMessages(conv.chat_id)}
+              <span class="new-indicator" aria-label="New messages"></span>
             {/if}
           </div>
           <div class="info">
             <div class="name-row">
-              <span class="name">{getDisplayName(conv)}</span>
-              <span class="date">{formatDate(conv.last_message_date)}</span>
+              <span class="name" class:has-new={hasNewMessages(conv.chat_id)}>
+                {getDisplayName(conv)}
+              </span>
+              <span class="date" class:has-new={hasNewMessages(conv.chat_id)}>
+                {formatDate(conv.last_message_date)}
+              </span>
             </div>
             <div class="topics-row">
               {#if topicsMap.has(conv.chat_id)}
@@ -155,7 +189,7 @@
                 {/if}
               {/if}
             </div>
-            <div class="preview">
+            <div class="preview" class:has-new={hasNewMessages(conv.chat_id)}>
               {conv.last_message_text || "No messages"}
             </div>
           </div>
@@ -163,6 +197,11 @@
       {/each}
     </div>
   {/if}
+
+  <div class="status-footer">
+    <span class="status-indicator" class:connected={$connectionStatus === "connected"} class:connecting={$connectionStatus === "connecting"} class:disconnected={$connectionStatus === "disconnected"}></span>
+    <span class="status-text">{getConnectionStatusText($connectionStatus)}</span>
+  </div>
 </div>
 
 <style>
@@ -230,6 +269,11 @@
     background: var(--bg-active);
   }
 
+  .avatar-container {
+    position: relative;
+    flex-shrink: 0;
+  }
+
   .avatar {
     width: 44px;
     height: 44px;
@@ -241,7 +285,6 @@
     font-weight: 600;
     font-size: 18px;
     color: white;
-    flex-shrink: 0;
   }
 
   .avatar.group {
@@ -251,6 +294,29 @@
   .avatar svg {
     width: 24px;
     height: 24px;
+  }
+
+  .new-indicator {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    background: #007aff;
+    border-radius: 50%;
+    border: 2px solid var(--bg-secondary);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.1);
+    }
   }
 
   .info {
@@ -273,11 +339,20 @@
     text-overflow: ellipsis;
   }
 
+  .name.has-new {
+    font-weight: 700;
+  }
+
   .date {
     font-size: 12px;
     color: var(--text-secondary);
     flex-shrink: 0;
     margin-left: 8px;
+  }
+
+  .date.has-new {
+    color: #007aff;
+    font-weight: 600;
   }
 
   .preview {
@@ -363,6 +438,11 @@
     color: #be123c;
   }
 
+  .preview.has-new {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
   .loading,
   .error,
   .empty {
@@ -373,5 +453,50 @@
 
   .error {
     color: var(--error-color);
+  }
+
+  .status-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+  }
+
+  .status-indicator.connected {
+    background: #34c759;
+  }
+
+  .status-indicator.connecting {
+    background: #ff9500;
+    animation: blink 1s ease-in-out infinite;
+  }
+
+  .status-indicator.disconnected {
+    background: #ff3b30;
+  }
+
+  @keyframes blink {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+
+  .status-text {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 </style>

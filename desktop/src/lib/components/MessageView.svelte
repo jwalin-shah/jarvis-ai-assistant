@@ -4,6 +4,8 @@
     conversationsStore,
     selectedConversation,
     loadMoreMessages,
+    pollMessages,
+    stopMessagePolling,
   } from "../stores/conversations";
   import AIDraftPanel from "./AIDraftPanel.svelte";
   import SummaryModal from "./SummaryModal.svelte";
@@ -33,19 +35,24 @@
   // Scroll container reference
   let messagesContainer: HTMLDivElement | null = $state(null);
 
-  // Track previous message count and scroll height for position restoration
+  // Track previous message count and scroll height for position restoration (infinite scroll)
   let previousMessageCount = $state(0);
   let previousScrollHeight = $state(0);
 
   // Threshold for triggering load (200px from top)
   const SCROLL_THRESHOLD = 200;
 
-  // Handle scroll event for infinite scroll
+  // Scroll tracking state for new messages
+  let isAtBottom = $state(true);
+  let hasNewMessagesBelow = $state(false);
+  let newMessageIds = $state<Set<number>>(new Set());
+
+  // Handle scroll event for infinite scroll and bottom detection
   async function handleScroll(event: Event) {
     const container = event.target as HTMLDivElement;
     if (!container) return;
 
-    // Check if user scrolled near the top
+    // Check if user scrolled near the top (for loading older messages)
     if (
       container.scrollTop < SCROLL_THRESHOLD &&
       $conversationsStore.hasMore &&
@@ -54,9 +61,28 @@
     ) {
       // Save current scroll position info before loading
       previousScrollHeight = container.scrollHeight;
-      previousMessageCount = $conversationsStore.messages.length;
+      const prevCount = $conversationsStore.messages.length;
 
       await loadMoreMessages();
+
+      // Restore scroll position after messages are prepended
+      tick().then(() => {
+        if (messagesContainer && $conversationsStore.messages.length > prevCount) {
+          const newScrollHeight = messagesContainer.scrollHeight;
+          const scrollDelta = newScrollHeight - previousScrollHeight;
+          messagesContainer.scrollTop += scrollDelta;
+        }
+      });
+    }
+
+    // Check if user is at bottom (for new message indicators)
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const threshold = 50; // pixels from bottom to consider "at bottom"
+    isAtBottom = scrollHeight - scrollTop - clientHeight < threshold;
+
+    // Clear "new messages below" if user scrolls to bottom
+    if (isAtBottom) {
+      hasNewMessagesBelow = false;
     }
   }
 
@@ -69,25 +95,60 @@
     await loadMoreMessages();
   }
 
-  // Restore scroll position after messages are prepended
+  // Track message count to detect new messages (from polling)
   $effect(() => {
-    const currentMessageCount = $conversationsStore.messages.length;
-    if (
-      messagesContainer &&
-      currentMessageCount > previousMessageCount &&
-      previousMessageCount > 0
-    ) {
-      // Messages were prepended, restore scroll position
-      tick().then(() => {
-        if (messagesContainer) {
-          const newScrollHeight = messagesContainer.scrollHeight;
-          const scrollDelta = newScrollHeight - previousScrollHeight;
-          messagesContainer.scrollTop += scrollDelta;
-        }
-      });
+    const currentCount = $conversationsStore.messages.length;
+    if (currentCount > previousMessageCount && previousMessageCount > 0) {
+      // New messages arrived
+      const newMessages = $conversationsStore.messages.slice(previousMessageCount);
+      const newIds = new Set(newMessageIds);
+      newMessages.forEach((m) => newIds.add(m.id));
+      newMessageIds = newIds;
+
+      if (isAtBottom) {
+        // Auto-scroll to bottom if user was already at bottom
+        scrollToBottom();
+      } else {
+        // Show "new messages below" indicator
+        hasNewMessagesBelow = true;
+      }
+
+      // Clear new message highlight after animation
+      setTimeout(() => {
+        newMessageIds = new Set();
+      }, 2000);
     }
-    previousMessageCount = currentMessageCount;
+    previousMessageCount = currentCount;
   });
+
+  // Reset state when conversation changes
+  $effect(() => {
+    if ($selectedConversation) {
+      previousMessageCount = 0;
+      newMessageIds = new Set();
+      hasNewMessagesBelow = false;
+      isAtBottom = true;
+      // Scroll to bottom when loading new conversation
+      tick().then(() => scrollToBottom());
+    }
+  });
+
+  // Scroll to bottom of messages
+  async function scrollToBottom() {
+    await tick();
+    if (messagesContainer) {
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: "smooth",
+      });
+      hasNewMessagesBelow = false;
+    }
+  }
+
+  // Handle "new messages below" button click
+  function handleNewMessagesClick() {
+    scrollToBottom();
+  }
 
   // Handle keyboard shortcuts
   function handleKeydown(event: KeyboardEvent) {
@@ -122,6 +183,7 @@
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown);
+    stopMessagePolling();
   });
 
   function formatTime(dateStr: string): string {
@@ -158,6 +220,10 @@
     const curr = new Date(messages[index].date).toDateString();
     const prev = new Date(messages[index - 1].date).toDateString();
     return curr !== prev;
+  }
+
+  function isNewMessage(messageId: number): boolean {
+    return newMessageIds.has(messageId);
   }
 </script>
 
@@ -269,7 +335,11 @@
               {message.text}
             </div>
           {:else}
-            <div class="message" class:from-me={message.is_from_me}>
+            <div
+              class="message"
+              class:from-me={message.is_from_me}
+              class:new-message={isNewMessage(message.id)}
+            >
               <div class="bubble" class:from-me={message.is_from_me}>
                 {#if !message.is_from_me && $selectedConversation.is_group}
                   <span class="sender">{message.sender_name || message.sender}</span>
@@ -311,6 +381,15 @@
         isFocused={messageViewFocused}
       />
     {/if}
+
+    {#if hasNewMessagesBelow}
+      <button class="new-messages-button" onclick={handleNewMessagesClick}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+        New messages below
+      </button>
+    {/if}
   {/if}
 </div>
 
@@ -337,6 +416,7 @@
     display: flex;
     flex-direction: column;
     background: var(--bg-primary);
+    position: relative;
   }
 
   .empty-state {
@@ -480,6 +560,31 @@
     display: flex;
     flex-direction: column;
     max-width: 70%;
+    animation: none;
+  }
+
+  .message.new-message {
+    animation: slideIn 0.3s ease-out, highlight 2s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes highlight {
+    0% {
+      background: rgba(0, 122, 255, 0.2);
+    }
+    100% {
+      background: transparent;
+    }
   }
 
   .message.from-me {
@@ -631,5 +736,51 @@
     background: var(--bg-secondary);
     padding: 4px 12px;
     border-radius: 12px;
+  }
+
+  .new-messages-button {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+    animation: bounceIn 0.3s ease-out;
+    z-index: 10;
+  }
+
+  .new-messages-button:hover {
+    background: #0a82e0;
+    transform: translateX(-50%) scale(1.05);
+  }
+
+  .new-messages-button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  @keyframes bounceIn {
+    0% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px);
+    }
+    60% {
+      transform: translateX(-50%) translateY(-5px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
   }
 </style>
