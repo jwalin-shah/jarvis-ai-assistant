@@ -7,20 +7,9 @@ import psutil
 from fastapi import APIRouter
 
 from api.schemas import HealthResponse
-from integrations.imessage import ChatDBReader
+from jarvis.system import _check_imessage_access
 
 router = APIRouter(tags=["health"])
-
-
-def _check_imessage_access() -> bool:
-    """Check if iMessage database is accessible."""
-    try:
-        reader = ChatDBReader()
-        result = reader.check_access()
-        reader.close()
-        return result
-    except Exception:
-        return False
 
 
 def _get_memory_mode(available_gb: float) -> str:

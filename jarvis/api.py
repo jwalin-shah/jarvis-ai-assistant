@@ -14,9 +14,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from contracts.health import DegradationPolicy, FeatureState
 from contracts.imessage import Attachment, Conversation, Message, Reaction
@@ -202,11 +202,46 @@ app = FastAPI(
 # Add CORS middleware for Tauri frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["tauri://localhost", "http://localhost", "http://localhost:*"],
+    allow_origins=[
+        "tauri://localhost",
+        "http://localhost",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(PermissionError)
+async def permission_error_handler(request: Request, exc: PermissionError) -> JSONResponse:
+    """Handle permission errors with consistent ErrorResponse format."""
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": "permission_denied",
+            "message": str(exc),
+            "details": "Grant Full Disk Access in System Settings.",
+        },
+    )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    """Handle validation errors with consistent ErrorResponse format."""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "invalid_request",
+            "message": str(exc),
+            "details": None,
+        },
+    )
 
 
 # --- Helper Functions ---

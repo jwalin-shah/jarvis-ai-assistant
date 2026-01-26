@@ -236,17 +236,16 @@ class TestErrorHandling:
 
     def test_empty_prompt_raises_value_error(self):
         """Test that empty prompt raises ValueError."""
-        # We can't test generate_sync directly without a loaded model,
-        # but we can verify the error handling exists in the code
+        # Input validation happens before model load check
         loader = MLXModelLoader()
-        # Verify unloaded loader raises RuntimeError
-        with pytest.raises(RuntimeError, match="Model not loaded"):
+        with pytest.raises(ValueError, match="Prompt cannot be empty"):
             loader.generate_sync("")
 
     def test_whitespace_prompt_raises_value_error(self):
         """Test that whitespace-only prompt raises ValueError."""
+        # Input validation happens before model load check
         loader = MLXModelLoader()
-        with pytest.raises(RuntimeError, match="Model not loaded"):
+        with pytest.raises(ValueError, match="Prompt cannot be empty"):
             loader.generate_sync("   ")
 
 
@@ -1621,51 +1620,29 @@ class TestUnloadSentenceModel:
         assert len(gc_calls) >= 1  # gc.collect was called
 
 
-class TestLoadTemplatesFromWS3Success:
-    """Tests for successful WS3 template loading."""
+class TestLoadTemplates:
+    """Tests for template loading."""
 
-    def test_load_templates_from_ws3_success(self, monkeypatch):
-        """Test _load_templates successfully loads from WS3."""
-        from models.templates import ResponseTemplate, _load_templates
-
-        # Create mock templates
-        mock_category_templates = {
-            "greeting": ["Hello!", "Hi there!", "Welcome!"],
-            "farewell": ["Goodbye!", "See you later!"],
-        }
-
-        # Create a mock module
-        mock_coverage_templates = type(
-            "MockModule", (), {"get_templates_by_category": lambda: mock_category_templates}
+    def test_load_templates_returns_fallback_templates(self):
+        """Test _load_templates returns the built-in fallback templates."""
+        from models.templates import (
+            ResponseTemplate,
+            _get_minimal_fallback_templates,
+            _load_templates,
         )
 
-        # Patch the import
-        import builtins
-
-        original_import = builtins.__import__
-
-        def patched_import(name, *args, **kwargs):
-            if "benchmarks.coverage.templates" in name:
-                return mock_coverage_templates
-            return original_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", patched_import)
-
         templates = _load_templates()
+        fallback_templates = _get_minimal_fallback_templates()
 
-        # Verify we got templates from WS3
-        assert len(templates) == 2
+        # Verify we get the fallback templates
+        assert len(templates) == len(fallback_templates)
         assert all(isinstance(t, ResponseTemplate) for t in templates)
 
-        # Check template names
+        # Verify some expected template names exist
         names = [t.name for t in templates]
         assert "greeting" in names
-        assert "farewell" in names
-
-        # Check patterns and responses
-        greeting_template = next(t for t in templates if t.name == "greeting")
-        assert greeting_template.patterns == ["Hello!", "Hi there!", "Welcome!"]
-        assert greeting_template.response == "Hello!"  # First response is default
+        assert "thank_you_acknowledgment" in names
+        assert "meeting_confirmation" in names
 
 
 class TestTemplateMatcherEmbeddings:
