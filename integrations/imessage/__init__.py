@@ -17,7 +17,16 @@ Example:
     result = sender.send_message("+1234567890", "Hello!")
 """
 
+from .avatar import ContactAvatarData, get_contact_avatar
 from .reader import CHAT_DB_PATH, ChatDBReader
 from .sender import IMessageSender, SendResult, TapbackType
 
-__all__ = ["ChatDBReader", "CHAT_DB_PATH", "IMessageSender", "SendResult", "TapbackType"]
+__all__ = [
+    "ChatDBReader",
+    "CHAT_DB_PATH",
+    "ContactAvatarData",
+    "get_contact_avatar",
+    "IMessageSender",
+    "SendResult",
+    "TapbackType",
+]
