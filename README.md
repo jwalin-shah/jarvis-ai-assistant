@@ -6,7 +6,7 @@ Local-first AI assistant for macOS with intelligent iMessage management using ML
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Contracts/Interfaces | Complete | All 7 protocol definitions |
+| Contracts/Interfaces | Complete | All 9 protocol definitions |
 | Model Generator (WS8) | Complete | MLX loader, template fallback, RAG support |
 | iMessage Reader (WS10) | Complete | Schema detection, attachments, reactions |
 | Memory Profiler (WS1) | Complete | MLX memory profiling with model unload |
@@ -16,6 +16,8 @@ Local-first AI assistant for macOS with intelligent iMessage management using ML
 | Degradation Controller (WS6) | Complete | Circuit breaker pattern |
 | Setup Wizard | Complete | Environment validation, config init |
 | CLI Entry Point | Complete | Chat, search, health, benchmark commands |
+| FastAPI Layer | Complete | REST API for Tauri frontend integration |
+| Config System | Complete | Nested sections with migration support |
 
 **Default Model**: Qwen2.5-0.5B-Instruct-4bit
 
@@ -25,12 +27,14 @@ Local-first AI assistant for macOS with intelligent iMessage management using ML
 
 - **iMessage Integration** - Read-only local database access with schema auto-detection (v14/v15)
 - **MLX Model Generation** - Local inference on Apple Silicon with memory-aware loading
-- **Template-First Generation** - Semantic matching against templates (0.7 threshold)
+- **Template-First Generation** - Semantic matching against 25 iMessage scenario templates (0.7 threshold)
 - **Memory Controller** - Three-tier modes based on available RAM (FULL/LITE/MINIMAL)
 - **Graceful Degradation** - Circuit breaker pattern for feature failures
 - **HHEM Validation** - Post-generation hallucination scoring via Vectara model
 - **Setup Wizard** - Guided first-time setup with permission and environment validation
-- **CLI Interface** - Interactive chat, message search, health monitoring, benchmarks
+- **CLI Interface** - Interactive chat, message search with filters, health monitoring, benchmarks
+- **FastAPI Layer** - REST API for Tauri desktop frontend integration
+- **Config System** - Nested configuration with automatic migration between versions
 
 ## Requirements
 
@@ -64,6 +68,7 @@ jarvis chat
 # Search iMessage conversations
 jarvis search-messages "meeting tomorrow"
 jarvis search-messages "dinner" --limit 50
+jarvis search-messages "project" --sender "John" --after 2024-01-01
 
 # Show system health status
 jarvis health
@@ -121,20 +126,22 @@ python scripts/check_gates.py results/latest/
 
 ```
 jarvis-ai-assistant/
-├── jarvis/          # CLI entry point and setup wizard
+├── jarvis/          # CLI entry point, setup wizard, and config
+├── api/             # FastAPI REST layer for Tauri frontend
 ├── benchmarks/      # Validation gate implementations
 │   ├── memory/      # MLX memory profiler
 │   ├── hallucination/  # HHEM benchmark
 │   └── latency/     # Latency benchmark
-├── contracts/       # Python Protocol interfaces (7 protocols)
+├── contracts/       # Python Protocol interfaces (9 protocols)
 ├── core/            # Infrastructure
 │   ├── health/      # Circuit breaker, degradation, permissions
 │   └── memory/      # Memory controller and monitoring
 ├── integrations/
 │   └── imessage/    # iMessage reader
 ├── models/          # MLX model loading and inference
-├── tests/           # Test suite
+├── tests/           # Test suite (854 tests)
 ├── scripts/         # Benchmark and reporting utilities
+├── desktop/         # Tauri desktop app (Svelte frontend)
 └── docs/            # Design docs and audit report
 ```
 

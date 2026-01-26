@@ -17,3 +17,9 @@ src-tauri/target/
 
 # Tauri cache
 src-tauri/.cargo
+
+# Vite cache
+.vite/
+
+# Tauri generated code
+src-tauri/gen/
