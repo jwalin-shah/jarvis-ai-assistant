@@ -16,14 +16,53 @@
 
   let cleanup: (() => void) | null = null;
 
+  // API base URL for avatar endpoint
+  const API_BASE = "http://localhost:8742";
+
+  // Track loaded avatars and their states
+  let avatarStates: Map<string, "loading" | "loaded" | "error"> = new Map();
+  let avatarUrls: Map<string, string> = new Map();
+
+  // Intersection Observer for lazy loading
+  let observer: IntersectionObserver | null = null;
+  let observedElements: Map<string, HTMLElement> = new Map();
+
   onMount(() => {
     cleanup = initializePolling();
+
+    // Create intersection observer for lazy loading avatars
+    observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const identifier = entry.target.getAttribute("data-identifier");
+            if (identifier && !avatarStates.has(identifier)) {
+              loadAvatar(identifier);
+            }
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: "50px", // Load slightly before visible
+        threshold: 0.1,
+      }
+    );
   });
 
   onDestroy(() => {
     if (cleanup) {
       cleanup();
     }
+    if (observer) {
+      observer.disconnect();
+    }
+    // Revoke any object URLs to prevent memory leaks
+    avatarUrls.forEach((url) => {
+      if (url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+      }
+    });
   });
 
   // Fetch topics when conversations are loaded
@@ -56,6 +95,54 @@
     } finally {
       loadingTopics.delete(chatId);
       loadingTopics = loadingTopics;
+    }
+  }
+
+  // Register an element for observation
+  function observeAvatar(node: HTMLElement, identifier: string) {
+    if (observer && identifier) {
+      node.setAttribute("data-identifier", identifier);
+      observer.observe(node);
+      observedElements.set(identifier, node);
+    }
+
+    return {
+      destroy() {
+        if (observer && node) {
+          observer.unobserve(node);
+        }
+        observedElements.delete(identifier);
+      },
+    };
+  }
+
+  // Load avatar for a given identifier
+  async function loadAvatar(identifier: string) {
+    if (avatarStates.get(identifier) === "loading") return;
+
+    avatarStates.set(identifier, "loading");
+    avatarStates = avatarStates; // Trigger reactivity
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/contacts/${encodeURIComponent(identifier)}/avatar?size=88&format=png`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      avatarUrls.set(identifier, url);
+      avatarStates.set(identifier, "loaded");
+      avatarUrls = avatarUrls; // Trigger reactivity
+      avatarStates = avatarStates;
+    } catch (error) {
+      console.error(`Failed to load avatar for ${identifier}:`, error);
+      avatarStates.set(identifier, "error");
+      avatarStates = avatarStates;
     }
   }
 
@@ -119,6 +206,23 @@
         return "Disconnected";
     }
   }
+
+  // Get the primary identifier for a conversation (for avatar lookup)
+  function getPrimaryIdentifier(conv: typeof $conversationsStore.conversations[0]): string | null {
+    // For group chats, return null (use group icon)
+    if (conv.is_group) return null;
+    // For individual chats, use the first participant
+    return conv.participants[0] || null;
+  }
+
+  // Get initials for fallback avatar
+  function getInitials(name: string): string {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return parts[0]?.[0]?.toUpperCase() || "?";
+  }
 </script>
 
 <div class="conversation-list">
@@ -146,14 +250,26 @@
           class:has-new={hasNewMessages(conv.chat_id)}
           on:click={() => selectConversation(conv.chat_id)}
         >
+          {@const identifier = getPrimaryIdentifier(conv)}
+          {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
+          {@const avatarState = identifier ? avatarStates.get(identifier) : null}
           <div class="avatar-container">
-            <div class="avatar" class:group={conv.is_group}>
+            <div
+              class="avatar"
+              class:group={conv.is_group}
+              class:has-image={avatarState === "loaded" && avatarUrl}
+              use:observeAvatar={identifier || ""}
+            >
               {#if conv.is_group}
                 <svg viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6zm10-8c1.93 0 3.5-1.57 3.5-3.5S17.93 5 16 5c-.54 0-1.04.13-1.5.35.63.89 1 1.98 1 3.15s-.37 2.26-1 3.15c.46.22.96.35 1.5.35z"/>
                 </svg>
+              {:else if avatarState === "loaded" && avatarUrl}
+                <img src={avatarUrl} alt="" class="avatar-image" />
+              {:else if avatarState === "loading"}
+                <span class="avatar-loading">{getInitials(getDisplayName(conv))}</span>
               {:else}
-                {getDisplayName(conv).charAt(0).toUpperCase()}
+                {getInitials(getDisplayName(conv))}
               {/if}
             </div>
             {#if hasNewMessages(conv.chat_id)}
@@ -285,15 +401,42 @@
     font-weight: 600;
     font-size: 18px;
     color: white;
+    overflow: hidden;
+    position: relative;
   }
 
   .avatar.group {
     background: var(--group-color);
   }
 
+  .avatar.has-image {
+    background: transparent;
+  }
+
   .avatar svg {
     width: 24px;
     height: 24px;
+  }
+
+  .avatar-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+
+  .avatar-loading {
+    opacity: 0.7;
+    animation: avatarPulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes avatarPulse {
+    0%, 100% {
+      opacity: 0.7;
+    }
+    50% {
+      opacity: 0.4;
+    }
   }
 
   .new-indicator {
@@ -305,10 +448,10 @@
     background: #007aff;
     border-radius: 50%;
     border: 2px solid var(--bg-secondary);
-    animation: pulse 2s ease-in-out infinite;
+    animation: newPulse 2s ease-in-out infinite;
   }
 
-  @keyframes pulse {
+  @keyframes newPulse {
     0%, 100% {
       opacity: 1;
       transform: scale(1);
