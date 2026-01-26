@@ -7,7 +7,7 @@
         lint format format-check typecheck check \
         verify review health \
         clean clean-all \
-        api-dev desktop-setup desktop-dev desktop-build frontend-dev
+        launch api-dev desktop-setup desktop-dev desktop-build frontend-dev
 
 # ============================================================================
 # HELP
@@ -45,6 +45,7 @@ help:
 	@echo "  make clean-all     Clean + remove .venv"
 	@echo ""
 	@echo "Desktop App (Tauri + Svelte):"
+	@echo "  make launch        Launch full app (API + desktop) with auto-cleanup"
 	@echo "  make api-dev       Start API server on port 8742"
 	@echo "  make desktop-setup Install desktop app npm dependencies"
 	@echo "  make desktop-dev   Instructions for dev mode"
@@ -196,6 +197,9 @@ clean-all: clean
 # ============================================================================
 # DESKTOP APP (Tauri + Svelte)
 # ============================================================================
+
+launch:
+	@./scripts/launch.sh
 
 api-dev:
 	uv run uvicorn api.main:app --reload --port 8742
