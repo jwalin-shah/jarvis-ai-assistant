@@ -1,137 +1,88 @@
 /**
- * Conversations store for managing conversation list and selection.
+ * Conversations store for managing chat state
  */
 
-import { apiClient } from "../api/client";
+import { writable, derived } from "svelte/store";
 import type { Conversation, Message } from "../api/types";
+import { api } from "../api/client";
 
-// State
-let conversations = $state<Conversation[]>([]);
-let selectedChatId = $state<string | null>(null);
-let messages = $state<Message[]>([]);
-let loadingConversations = $state(false);
-let loadingMessages = $state(false);
-let error = $state<string | null>(null);
+export interface ConversationsState {
+  conversations: Conversation[];
+  selectedChatId: string | null;
+  messages: Message[];
+  loading: boolean;
+  loadingMessages: boolean;
+  error: string | null;
+}
 
-/**
- * Fetch conversations from the API.
- */
-export async function fetchConversations(options?: {
-  limit?: number;
-  since?: string;
-  before?: string;
-}): Promise<Conversation[]> {
-  loadingConversations = true;
-  error = null;
+const initialState: ConversationsState = {
+  conversations: [],
+  selectedChatId: null,
+  messages: [],
+  loading: false,
+  loadingMessages: false,
+  error: null,
+};
+
+export const conversationsStore = writable<ConversationsState>(initialState);
+
+// Derived store for selected conversation
+export const selectedConversation = derived(
+  conversationsStore,
+  ($state) =>
+    $state.conversations.find((c) => c.chat_id === $state.selectedChatId) || null
+);
+
+export async function fetchConversations(): Promise<void> {
+  conversationsStore.update((state) => ({ ...state, loading: true, error: null }));
 
   try {
-    conversations = await apiClient.getConversations(options);
-    return conversations;
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to fetch conversations";
-    return [];
-  } finally {
-    loadingConversations = false;
+    const conversations = await api.getConversations();
+    conversationsStore.update((state) => ({
+      ...state,
+      conversations,
+      loading: false,
+    }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to fetch conversations";
+    conversationsStore.update((state) => ({
+      ...state,
+      loading: false,
+      error: message,
+    }));
   }
 }
 
-/**
- * Select a conversation and load its messages.
- */
 export async function selectConversation(chatId: string): Promise<void> {
-  selectedChatId = chatId;
-  await fetchMessages(chatId);
-}
-
-/**
- * Clear the current selection.
- */
-export function clearSelection(): void {
-  selectedChatId = null;
-  messages = [];
-}
-
-/**
- * Fetch messages for a conversation.
- */
-export async function fetchMessages(
-  chatId: string,
-  options?: { limit?: number; before?: string }
-): Promise<Message[]> {
-  loadingMessages = true;
-  error = null;
+  conversationsStore.update((state) => ({
+    ...state,
+    selectedChatId: chatId,
+    messages: [],
+    loadingMessages: true,
+    error: null,
+  }));
 
   try {
-    messages = await apiClient.getMessages(chatId, options);
-    return messages;
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to fetch messages";
-    return [];
-  } finally {
-    loadingMessages = false;
+    const messages = await api.getMessages(chatId);
+    conversationsStore.update((state) => ({
+      ...state,
+      messages,
+      loadingMessages: false,
+    }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to fetch messages";
+    conversationsStore.update((state) => ({
+      ...state,
+      loadingMessages: false,
+      error: message,
+    }));
   }
 }
 
-/**
- * Refresh messages for the currently selected conversation.
- */
-export async function refreshMessages(): Promise<Message[]> {
-  if (!selectedChatId) return [];
-  return fetchMessages(selectedChatId);
-}
-
-/**
- * Get current conversations list.
- */
-export function getConversations(): Conversation[] {
-  return conversations;
-}
-
-/**
- * Get currently selected chat ID.
- */
-export function getSelectedChatId(): string | null {
-  return selectedChatId;
-}
-
-/**
- * Get current messages.
- */
-export function getMessages(): Message[] {
-  return messages;
-}
-
-/**
- * Get the currently selected conversation.
- */
-export function getSelectedConversation(): Conversation | null {
-  if (!selectedChatId) return null;
-  return conversations.find((c) => c.chat_id === selectedChatId) || null;
-}
-
-// Export reactive getters for Svelte components
-export function getConversationsStore() {
-  return {
-    get conversations() {
-      return conversations;
-    },
-    get selectedChatId() {
-      return selectedChatId;
-    },
-    get messages() {
-      return messages;
-    },
-    get loadingConversations() {
-      return loadingConversations;
-    },
-    get loadingMessages() {
-      return loadingMessages;
-    },
-    get error() {
-      return error;
-    },
-    get selectedConversation() {
-      return conversations.find((c) => c.chat_id === selectedChatId) || null;
-    },
-  };
+export function clearSelection(): void {
+  conversationsStore.update((state) => ({
+    ...state,
+    selectedChatId: null,
+    messages: [],
+  }));
 }
