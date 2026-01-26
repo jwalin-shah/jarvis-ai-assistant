@@ -11,6 +11,7 @@ Complete reference guide for the JARVIS command-line interface.
   - [search-messages](#search-messages---search-imessage-conversations)
   - [reply](#reply---generate-reply-suggestions)
   - [summarize](#summarize---conversation-summarization)
+  - [export](#export---export-conversations)
   - [health](#health---system-health-status)
   - [benchmark](#benchmark---run-performance-benchmarks)
   - [serve](#serve---start-api-server)
@@ -85,6 +86,7 @@ These options apply to all commands:
 |--------|-------------|
 | `-v, --verbose` | Enable debug logging for troubleshooting |
 | `--version` | Show version information and exit |
+| `--examples` | Show detailed usage examples for all commands |
 | `-h, --help` | Show help message and exit |
 
 ### `chat` - Interactive Chat Mode
@@ -298,6 +300,80 @@ Generating summary...
 │ • He recommended a new restaurant downtown                │
 │ • You both agreed to review the proposal together         │
 ╰────────────── 50 messages | Jan 10 - Jan 15 ──────────────╯
+```
+
+### `export` - Export Conversations
+
+Export a conversation to a file in various formats (JSON, CSV, or plain text).
+
+**Usage:**
+```bash
+jarvis export --chat-id <id> [options]
+```
+
+**Required Options:**
+| Option | Description |
+|--------|-------------|
+| `--chat-id <id>` | Conversation ID to export (required) |
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-f, --format <fmt>` | Export format: `json`, `csv`, or `txt` | `json` |
+| `-o, --output <file>` | Output file path | Auto-generated |
+| `-l, --limit <n>` | Maximum messages to export | 1000 |
+| `--include-attachments` | Include attachment info in export (CSV only) | Disabled |
+
+**Examples:**
+```bash
+# Export to JSON (default format)
+jarvis export --chat-id chat123456
+
+# Export to CSV format
+jarvis export --chat-id chat123456 -f csv
+
+# Export to plain text
+jarvis export --chat-id chat123456 --format txt
+
+# Export with custom output path
+jarvis export --chat-id chat123456 -o ~/Desktop/conversation.json
+
+# Export limited messages
+jarvis export --chat-id chat123456 --limit 500
+
+# Export CSV with attachment information
+jarvis export --chat-id chat123456 -f csv --include-attachments
+
+# Full example with all options
+jarvis export --chat-id chat123456 -f csv -o export.csv -l 200 --include-attachments
+```
+
+**Finding Chat IDs:**
+
+To find the chat ID for a conversation, you can list available conversations when an invalid ID is provided:
+
+```bash
+# This will show available conversations if the ID doesn't exist
+jarvis export --chat-id unknown
+```
+
+**Output Formats:**
+
+| Format | Description | Best For |
+|--------|-------------|----------|
+| `json` | Structured JSON with full metadata | Programmatic access, backups |
+| `csv` | Comma-separated values | Spreadsheet analysis, Excel |
+| `txt` | Plain text, human-readable | Reading, printing, sharing |
+
+**Output:**
+```
+Exporting conversation: chat123456
+
+Exporting 150 messages...
+
+Successfully exported to: conversation_chat123456_20240115.json
+Format: JSON
+Messages: 150
 ```
 
 ### `health` - System Health Status

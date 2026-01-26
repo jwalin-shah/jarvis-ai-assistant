@@ -2,39 +2,42 @@
 
 Local-first AI assistant for macOS with intelligent iMessage management using MLX-based language models. Runs entirely on Apple Silicon with no cloud data transmission.
 
-## Project Status
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Contracts/Interfaces | Complete | All 9 protocol definitions |
-| Model Generator (WS8) | Complete | MLX loader, template fallback, RAG support |
-| iMessage Reader (WS10) | Complete | Schema detection, attachments, reactions |
-| Memory Profiler (WS1) | Complete | MLX memory profiling with model unload |
-| HHEM Benchmark (WS2) | Complete | Vectara HHEM model evaluation |
-| Latency Benchmark (WS4) | Complete | Cold/warm/hot start scenarios |
-| Memory Controller (WS5) | Complete | Three-tier modes (FULL/LITE/MINIMAL) |
-| Degradation Controller (WS6) | Complete | Circuit breaker pattern |
-| Setup Wizard | Complete | Environment validation, config init |
-| CLI Entry Point | Complete | Chat, search, health, benchmark commands |
-| FastAPI Layer | Complete | REST API for Tauri frontend integration |
-| Config System | Complete | Nested sections with migration support |
-
-**Default Model**: Qwen2.5-0.5B-Instruct-4bit
-
 ## Features
 
-### Implemented
+### Core Capabilities
 
 - **iMessage Integration** - Read-only local database access with schema auto-detection (v14/v15)
 - **MLX Model Generation** - Local inference on Apple Silicon with memory-aware loading
 - **Template-First Generation** - Semantic matching against 25 iMessage scenario templates (0.7 threshold)
+- **Intent Classification** - Natural language understanding for reply, summarize, and search intents
+
+### AI-Powered Features
+
+- **AI Reply Suggestions** - Context-aware reply generation using conversation history (RAG)
+- **Conversation Summaries** - Generate summaries with key points from message history
+- **Smart Quick Replies** - Pattern-based suggestions without model invocation
+
+### Export and Data Management
+
+- **Conversation Export** - Export messages to JSON, CSV, or TXT formats
+- **Search with Filters** - Full-text search with date range, sender, and attachment filters
+- **Backup Support** - Full conversation backup in JSON format
+
+### Performance and Monitoring
+
+- **Prometheus-Compatible Metrics** - Memory, latency, and request metrics at `/metrics`
 - **Memory Controller** - Three-tier modes based on available RAM (FULL/LITE/MINIMAL)
 - **Graceful Degradation** - Circuit breaker pattern for feature failures
 - **HHEM Validation** - Post-generation hallucination scoring via Vectara model
-- **Setup Wizard** - Guided first-time setup with permission and environment validation
-- **CLI Interface** - Interactive chat, message search with filters, health monitoring, benchmarks
-- **FastAPI Layer** - REST API for Tauri desktop frontend integration
-- **Config System** - Nested configuration with automatic migration between versions
+
+### Desktop Application
+
+- **Tauri Desktop App** - Native macOS app built with Svelte
+- **Menu Bar Integration** - Quick access from system menu bar
+- **AI Draft Panel** - Generate reply suggestions with keyboard shortcut (Cmd+D)
+- **Conversation Summary Modal** - One-click summaries with key points (Cmd+S)
+
+**Default Model**: Qwen2.5-0.5B-Instruct-4bit
 
 ## Requirements
 
@@ -57,20 +60,40 @@ python -m jarvis.setup
 
 # Verify everything works
 make verify
+
+# Start using JARVIS
+jarvis chat                      # Interactive chat
+jarvis search-messages "dinner"  # Search messages
+jarvis reply John                # Generate reply suggestions
+jarvis summarize Mom             # Summarize a conversation
+jarvis health                    # Check system status
 ```
 
 ## CLI Usage
 
 ```bash
-# Interactive chat mode
+# Interactive chat with intent-aware routing
 jarvis chat
 
-# Search iMessage conversations
+# Search iMessage conversations with filters
 jarvis search-messages "meeting tomorrow"
-jarvis search-messages "dinner" --limit 50
-jarvis search-messages "project" --sender "John" --after 2024-01-01
+jarvis search-messages "dinner" --limit 50 --sender "John"
+jarvis search-messages "project" --start-date 2024-01-01 --has-attachment
 
-# Show system health status
+# AI-powered reply suggestions
+jarvis reply John                          # Generate suggestions
+jarvis reply Sarah -i "accept politely"    # With tone instruction
+
+# Conversation summaries
+jarvis summarize Mom                       # Last 50 messages
+jarvis summarize Boss -n 100               # Last 100 messages
+
+# Export conversations
+jarvis export --chat-id <id>               # Export to JSON
+jarvis export --chat-id <id> -f csv        # Export to CSV
+jarvis export --chat-id <id> -f txt        # Export to TXT
+
+# System health and monitoring
 jarvis health
 
 # Run benchmarks
@@ -78,9 +101,36 @@ jarvis benchmark memory
 jarvis benchmark latency
 jarvis benchmark hhem
 
-# Version information
+# Start API server (for desktop app)
+jarvis serve                               # Default: localhost:8000
+jarvis serve --port 8742 --reload          # Development mode
+
+# Version and help
 jarvis --version
+jarvis --examples                          # Detailed usage examples
 ```
+
+## Desktop Application
+
+JARVIS includes a native macOS desktop app built with Tauri and Svelte.
+
+```bash
+# Start the Python API backend
+make api-dev
+
+# In another terminal, start the desktop app
+make desktop-setup    # First time only
+cd desktop && npm run tauri dev
+```
+
+**Features:**
+- Menu bar icon with quick access
+- Conversation browser with real-time updates
+- AI Draft panel (Cmd+D) for reply suggestions
+- Summary modal (Cmd+S) for conversation summaries
+- Full keyboard navigation
+
+See [desktop/README.md](desktop/README.md) for detailed setup and E2E testing.
 
 ## Development Commands
 
@@ -126,23 +176,29 @@ python scripts/check_gates.py results/latest/
 
 ```
 jarvis-ai-assistant/
-├── jarvis/          # CLI entry point, setup wizard, and config
-├── api/             # FastAPI REST layer for Tauri frontend
-├── benchmarks/      # Validation gate implementations
-│   ├── memory/      # MLX memory profiler
+├── jarvis/             # CLI, config, metrics, export, intent classification
+│   ├── cli.py          # CLI entry point with all commands
+│   ├── config.py       # Nested configuration with migration
+│   ├── export.py       # JSON/CSV/TXT export functionality
+│   ├── metrics.py      # Memory sampling, latency histograms, caching
+│   └── intent.py       # Intent classification for routing
+├── api/                # FastAPI REST layer
+│   └── routers/        # Conversations, drafts, metrics, settings
+├── benchmarks/         # Validation gate implementations
+│   ├── memory/         # MLX memory profiler
 │   ├── hallucination/  # HHEM benchmark
-│   └── latency/     # Latency benchmark
-├── contracts/       # Python Protocol interfaces (9 protocols)
-├── core/            # Infrastructure
-│   ├── health/      # Circuit breaker, degradation, permissions
-│   └── memory/      # Memory controller and monitoring
+│   └── latency/        # Latency benchmark
+├── contracts/          # Python Protocol interfaces (9 protocols)
+├── core/               # Infrastructure
+│   ├── health/         # Circuit breaker, degradation, permissions
+│   └── memory/         # Memory controller and monitoring
 ├── integrations/
-│   └── imessage/    # iMessage reader
-├── models/          # MLX model loading and inference
-├── tests/           # Test suite (854 tests)
-├── scripts/         # Benchmark and reporting utilities
-├── desktop/         # Tauri desktop app (Svelte frontend)
-└── docs/            # Design docs and audit report
+│   └── imessage/       # iMessage reader with schema detection
+├── models/             # MLX model loading and inference
+├── tests/              # Test suite
+├── scripts/            # Benchmark and reporting utilities
+├── desktop/            # Tauri desktop app (Svelte frontend)
+└── docs/               # Documentation
 ```
 
 ## Workflow
@@ -156,10 +212,12 @@ For parallel work, use git worktrees - see [CLAUDE.md](CLAUDE.md) for details.
 
 ## Documentation
 
+- [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) - Complete CLI reference with examples
+- [docs/API_REFERENCE.md](docs/API_REFERENCE.md) - REST API documentation
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md) - Performance tuning and metrics guide
+- [desktop/README.md](desktop/README.md) - Desktop app setup and E2E testing
 - [CLAUDE.md](CLAUDE.md) - Development workflow, architecture, and coding guidelines
 - [docs/CODEBASE_AUDIT_REPORT.md](docs/CODEBASE_AUDIT_REPORT.md) - Full codebase audit
-- [docs/JARVIS-v1-Design-Document.md](docs/JARVIS-v1-Design-Document.md) - Architecture design
-- [docs/JARVIS-v1-Development-Guide.md](docs/JARVIS-v1-Development-Guide.md) - Development guide
 
 ## License
 

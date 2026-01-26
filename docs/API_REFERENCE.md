@@ -21,6 +21,8 @@ Complete REST API documentation for the JARVIS iMessage Assistant backend.
   - [Conversations](#conversations)
   - [Drafts (AI Generation)](#drafts-ai-generation)
   - [Suggestions (Quick Replies)](#suggestions-quick-replies)
+  - [Export](#export)
+  - [Metrics](#metrics)
   - [Settings](#settings)
 
 ---
@@ -455,7 +457,7 @@ curl -X POST http://localhost:8742/drafts/summarize \
 
 ### Suggestions (Quick Replies)
 
-Fast pattern-based reply suggestions (no model required).
+Fast pattern-based reply suggestions (no model required). Uses pre-defined response patterns for common scenarios, making it extremely fast (typically < 1ms).
 
 ---
 
@@ -473,7 +475,7 @@ Get smart reply suggestions based on the last message.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `last_message` | string | Required | Last received message |
+| `last_message` | string | Required | Last received message (min 1 char) |
 | `num_suggestions` | int | 3 | Number of suggestions (1-5) |
 
 **Response:**
@@ -488,22 +490,410 @@ Get smart reply suggestions based on the last message.
 ```
 
 **Score Interpretation:**
-- 0.9-1.0: Strong keyword match
+- 0.9-1.0: Strong keyword match (e.g., "thanks" → "You're welcome!")
 - 0.7-0.9: Partial word match
-- 0.3 or below: Generic fallback
+- 0.3 or below: Generic fallback suggestions
+
+**When to Use This vs /drafts/reply:**
+- Use `/suggestions` for quick, common responses (fast, no model load)
+- Use `/drafts/reply` for contextual, AI-generated replies (slower, better quality)
 
 **Supported Patterns:**
-- Time/scheduling: "what time", "are you free", "when"
-- Affirmative: "sounds good", "yes", "okay"
-- Gratitude: "thanks", "thank you"
-- Social: "dinner", "lunch", "coffee"
-- Running late: "omw", "on my way"
+- Time/scheduling: "what time", "are you free", "when", "can we meet"
+- Affirmative: "sounds good", "yes", "okay", "sure"
+- Gratitude: "thanks", "thank you", "appreciate"
+- Social: "dinner", "lunch", "coffee", "drinks"
+- Running late: "omw", "on my way", "running late"
+- Location: "where", "location", "address"
+- Goodbyes: "see you", "bye", "ttyl"
 
 **curl:**
 ```bash
 curl -X POST http://localhost:8742/suggestions \
   -H "Content-Type: application/json" \
   -d '{"last_message": "Thanks for your help!", "num_suggestions": 3}'
+```
+
+---
+
+### Export
+
+Export conversations, search results, and create backups. All endpoints require Full Disk Access permission.
+
+---
+
+#### POST /export/conversation/{chat_id}
+
+Export a single conversation in various formats.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `chat_id` | string | Unique conversation identifier |
+
+**Request Body:**
+```json
+{
+    "format": "json",
+    "date_range": {
+        "start": "2024-01-01T00:00:00Z",
+        "end": "2024-01-31T23:59:59Z"
+    },
+    "include_attachments": false,
+    "limit": 1000
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `format` | string | `json` | Export format: `json`, `csv`, or `txt` |
+| `date_range` | object | null | Optional date range filter |
+| `date_range.start` | datetime | null | Start date (inclusive) |
+| `date_range.end` | datetime | null | End date (inclusive) |
+| `include_attachments` | bool | false | Include attachment info (CSV only) |
+| `limit` | int | 1000 | Maximum messages to export (1-10000) |
+
+**Response:**
+```json
+{
+    "success": true,
+    "format": "json",
+    "filename": "conversation_chat123_20240115.json",
+    "data": "[{\"id\": 12345, ...}]",
+    "message_count": 150,
+    "export_type": "conversation"
+}
+```
+
+**curl:**
+```bash
+# Export as JSON (default)
+curl -X POST http://localhost:8742/export/conversation/chat123456789 \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Export as CSV with date filter
+curl -X POST http://localhost:8742/export/conversation/chat123456789 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "format": "csv",
+    "date_range": {"start": "2024-01-01T00:00:00Z"},
+    "include_attachments": true
+  }'
+```
+
+---
+
+#### POST /export/search
+
+Export search results in various formats.
+
+**Request Body:**
+```json
+{
+    "query": "dinner plans",
+    "format": "json",
+    "limit": 500,
+    "sender": "+15551234567",
+    "date_range": {
+        "start": "2024-01-01T00:00:00Z",
+        "end": "2024-01-31T23:59:59Z"
+    }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `query` | string | Yes | Search query (min 1 char) |
+| `format` | string | No | Export format: `json`, `csv`, or `txt` (default: `json`) |
+| `limit` | int | No | Maximum results (1-5000, default 500) |
+| `sender` | string | No | Filter by sender phone/email |
+| `date_range` | object | No | Optional date range filter |
+
+**Response:**
+```json
+{
+    "success": true,
+    "format": "json",
+    "filename": "search_results_20240115.json",
+    "data": "[{\"id\": 12345, ...}]",
+    "message_count": 42,
+    "export_type": "search"
+}
+```
+
+**curl:**
+```bash
+curl -X POST http://localhost:8742/export/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "meeting tomorrow", "format": "csv", "limit": 100}'
+```
+
+---
+
+#### POST /export/backup
+
+Create a full backup of multiple conversations. Only JSON format is supported.
+
+**Request Body:**
+```json
+{
+    "conversation_limit": 50,
+    "messages_per_conversation": 500,
+    "date_range": {
+        "start": "2024-01-01T00:00:00Z",
+        "end": "2024-01-31T23:59:59Z"
+    }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `conversation_limit` | int | 50 | Max conversations to include (1-500) |
+| `messages_per_conversation` | int | 500 | Max messages per conversation (1-5000) |
+| `date_range` | object | null | Optional date range filter |
+
+**Response:**
+```json
+{
+    "success": true,
+    "format": "json",
+    "filename": "backup_20240115.json",
+    "data": "{\"conversations\": [...], \"metadata\": {...}}",
+    "message_count": 5000,
+    "export_type": "backup"
+}
+```
+
+**curl:**
+```bash
+# Full backup with defaults
+curl -X POST http://localhost:8742/export/backup \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Backup with limits
+curl -X POST http://localhost:8742/export/backup \
+  -H "Content-Type: application/json" \
+  -d '{"conversation_limit": 20, "messages_per_conversation": 100}'
+```
+
+---
+
+### Metrics
+
+Performance monitoring and observability endpoints. Provides Prometheus-compatible metrics and detailed breakdowns.
+
+---
+
+#### GET /metrics
+
+Get all metrics in Prometheus text format. Compatible with Prometheus scraping.
+
+**Response (text/plain):**
+```
+# HELP jarvis_memory_rss_bytes Resident Set Size in bytes
+# TYPE jarvis_memory_rss_bytes gauge
+jarvis_memory_rss_bytes 268435456
+
+# HELP jarvis_memory_vms_bytes Virtual Memory Size in bytes
+# TYPE jarvis_memory_vms_bytes gauge
+jarvis_memory_vms_bytes 1073741824
+
+# HELP jarvis_memory_available_bytes System available memory in bytes
+# TYPE jarvis_memory_available_bytes gauge
+jarvis_memory_available_bytes 8589934592
+
+# HELP jarvis_requests_total Total number of requests by endpoint
+# TYPE jarvis_requests_total counter
+jarvis_requests_total{endpoint="/health",method="GET"} 42
+
+# HELP jarvis_request_duration_seconds Request duration in seconds
+# TYPE jarvis_request_duration_seconds histogram
+jarvis_request_duration_seconds_bucket{operation="health",le="0.1"} 40
+jarvis_request_duration_seconds_bucket{operation="health",le="+Inf"} 42
+jarvis_request_duration_seconds_sum{operation="health"} 1.234
+jarvis_request_duration_seconds_count{operation="health"} 42
+
+# HELP jarvis_uptime_seconds Time since metrics collection started
+# TYPE jarvis_uptime_seconds gauge
+jarvis_uptime_seconds 3600.5
+```
+
+**curl:**
+```bash
+curl http://localhost:8742/metrics
+```
+
+---
+
+#### GET /metrics/memory
+
+Get detailed memory breakdown including process, system, and GPU memory.
+
+**Response:**
+```json
+{
+    "process": {
+        "rss_mb": 256.5,
+        "vms_mb": 1024.0,
+        "percent": 1.6
+    },
+    "system": {
+        "total_gb": 16.0,
+        "available_gb": 8.5,
+        "used_gb": 7.5,
+        "percent": 46.9
+    },
+    "metal_gpu_mb": 450.5,
+    "sampling": {
+        "sample_count": 120,
+        "min_rss_mb": 240.0,
+        "max_rss_mb": 280.0,
+        "avg_rss_mb": 255.3
+    },
+    "trend": [
+        {"timestamp": "2024-01-15T10:30:00Z", "rss_mb": 256.5},
+        {"timestamp": "2024-01-15T10:31:00Z", "rss_mb": 257.2}
+    ]
+}
+```
+
+**curl:**
+```bash
+curl http://localhost:8742/metrics/memory
+```
+
+---
+
+#### GET /metrics/latency
+
+Get request latency percentiles by operation.
+
+**Response:**
+```json
+{
+    "operations": {
+        "health": {
+            "count": 100,
+            "mean_ms": 12.5,
+            "p50_ms": 10.2,
+            "p90_ms": 18.5,
+            "p95_ms": 22.1,
+            "p99_ms": 45.3
+        },
+        "conversations": {
+            "count": 50,
+            "mean_ms": 45.2,
+            "p50_ms": 42.0,
+            "p90_ms": 65.5,
+            "p95_ms": 78.2,
+            "p99_ms": 120.5
+        }
+    },
+    "summary": {
+        "total_requests": 150,
+        "requests_per_second": 2.5,
+        "uptime_seconds": 60.0,
+        "endpoint_count": 2
+    }
+}
+```
+
+**curl:**
+```bash
+curl http://localhost:8742/metrics/latency
+```
+
+---
+
+#### GET /metrics/requests
+
+Get request count metrics grouped by endpoint and method.
+
+**Response:**
+```json
+{
+    "endpoints": {
+        "/health": {"GET": 100},
+        "/conversations": {"GET": 50},
+        "/drafts/reply": {"POST": 25}
+    },
+    "stats": {
+        "total_requests": 175,
+        "requests_per_second": 2.9,
+        "uptime_seconds": 60.0,
+        "endpoints": 3
+    }
+}
+```
+
+**curl:**
+```bash
+curl http://localhost:8742/metrics/requests
+```
+
+---
+
+#### POST /metrics/gc
+
+Trigger garbage collection and return memory delta.
+
+**Response:**
+```json
+{
+    "before_mb": 300.5,
+    "after_mb": 280.2,
+    "freed_mb": 20.3,
+    "objects_collected": 1250
+}
+```
+
+**curl:**
+```bash
+curl -X POST http://localhost:8742/metrics/gc
+```
+
+---
+
+#### POST /metrics/sample
+
+Take an immediate memory sample.
+
+**Response:**
+```json
+{
+    "timestamp": "2024-01-15T10:30:00Z",
+    "rss_mb": 256.5,
+    "vms_mb": 1024.0,
+    "percent": 1.6,
+    "available_gb": 8.5
+}
+```
+
+**curl:**
+```bash
+curl -X POST http://localhost:8742/metrics/sample
+```
+
+---
+
+#### POST /metrics/reset
+
+Reset all metrics counters (does not reset memory sampler).
+
+**Response:**
+```json
+{
+    "status": "ok",
+    "message": "Metrics counters reset"
+}
+```
+
+**curl:**
+```bash
+curl -X POST http://localhost:8742/metrics/reset
 ```
 
 ---
@@ -728,6 +1118,41 @@ curl -X POST http://localhost:8742/drafts/reply \
 curl -X POST http://localhost:8742/suggestions \
   -H "Content-Type: application/json" \
   -d '{"last_message": "Thanks!"}'
+```
+
+### Export Data
+
+```bash
+# Export a conversation as JSON
+curl -X POST http://localhost:8742/export/conversation/chat123456789 \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Export search results as CSV
+curl -X POST http://localhost:8742/export/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "meeting", "format": "csv"}'
+
+# Create a full backup
+curl -X POST http://localhost:8742/export/backup \
+  -H "Content-Type: application/json" \
+  -d '{"conversation_limit": 50}'
+```
+
+### Monitor Performance
+
+```bash
+# Get Prometheus metrics
+curl http://localhost:8742/metrics
+
+# Get memory details
+curl http://localhost:8742/metrics/memory
+
+# Get latency percentiles
+curl http://localhost:8742/metrics/latency
+
+# Trigger garbage collection
+curl -X POST http://localhost:8742/metrics/gc
 ```
 
 ### Manage Models
