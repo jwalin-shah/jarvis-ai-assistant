@@ -231,7 +231,7 @@ git worktree list
 
 ## CLI Usage
 
-JARVIS provides a command-line interface for interacting with the assistant.
+JARVIS provides a command-line interface for interacting with the assistant. For comprehensive documentation, see [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md).
 
 ### Running JARVIS
 
@@ -241,18 +241,30 @@ jarvis --help
 
 # Via module (development)
 python -m jarvis --help
+
+# Show detailed examples
+jarvis --examples
 ```
 
 ### Available Commands
 
 ```bash
-# Interactive chat mode
+# Interactive chat mode (with intent-aware routing)
 jarvis chat
 
 # Search iMessage conversations
 jarvis search-messages "meeting tomorrow"
 jarvis search-messages "dinner" --limit 50
-jarvis search-messages "project" --sender "John" --after 2024-01-01
+jarvis search-messages "project" --sender "John" --start-date 2024-01-01
+jarvis search-messages "photo" --has-attachment
+
+# Generate reply suggestions (advanced)
+jarvis reply John
+jarvis reply Sarah -i "say yes but ask about timing"
+
+# Summarize conversations (advanced)
+jarvis summarize Mom
+jarvis summarize Dad -n 100
 
 # Show system health status
 jarvis health
@@ -263,22 +275,43 @@ jarvis benchmark latency
 jarvis benchmark hhem
 jarvis benchmark memory --output results.json
 
+# Start API server (for Tauri desktop app)
+jarvis serve
+jarvis serve --host 0.0.0.0 --port 8080
+
 # Version information
 jarvis version
 jarvis --version
 ```
 
-### Options
+### Global Options
 
 ```bash
 jarvis -v, --verbose    # Enable debug logging
 jarvis --version        # Show version and exit
+jarvis --examples       # Show detailed usage examples
 ```
 
 ### Permissions Required
 
 - **iMessage**: Requires Full Disk Access
   - Grant in System Settings > Privacy & Security > Full Disk Access
+
+### Shell Completion
+
+JARVIS supports shell completion via argcomplete:
+
+```bash
+# Bash (add to ~/.bashrc)
+eval "$(register-python-argcomplete jarvis)"
+
+# Zsh (add to ~/.zshrc)
+autoload -U bashcompinit && bashcompinit
+eval "$(register-python-argcomplete jarvis)"
+
+# Fish (create ~/.config/fish/completions/jarvis.fish)
+register-python-argcomplete --shell fish jarvis | source
+```
 
 ---
 
@@ -303,8 +336,8 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 
 | Directory | Purpose | Status |
 |-----------|---------|--------|
-| `jarvis/` | CLI entry point, config, and main application | COMPLETE |
-| `api/` | FastAPI REST layer for Tauri frontend | COMPLETE |
+| `jarvis/` | CLI entry point, config, main application, and `jarvis/api.py` (CLI API with `/chat` endpoint) | COMPLETE |
+| `api/` | FastAPI REST layer for Tauri frontend (drafts, suggestions, settings) | COMPLETE |
 | `benchmarks/memory/` | Memory profiling (WS1) | COMPLETE |
 | `benchmarks/hallucination/` | HHEM benchmark (WS2) | COMPLETE |
 | `benchmarks/latency/` | Latency benchmark (WS4) | COMPLETE |
@@ -322,7 +355,7 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 
 **Singleton Generator**: Use `get_generator()` to get the shared instance, `reset_generator()` to reinitialize.
 
-**iMessage Schema Detection**: ChatDBReader detects macOS schema versions (v14/v15) and uses version-specific SQL queries. Database is opened read-only with timeout handling for SQLITE_BUSY.
+**iMessage Schema Detection**: Schema detection is consolidated in `integrations/imessage/queries.py` (`detect_schema_version()`). Both `ChatDBReader` and `ChatDBSchemaDetector` in `core/health/schema.py` delegate to this single source of truth. Supports macOS v14 (Sonoma) and v15 (Sequoia) schema versions. Database is opened read-only with timeout handling for SQLITE_BUSY.
 
 **Circuit Breaker Degradation**: `GracefulDegradationController` in `core/health/degradation.py` implements the circuit breaker pattern with states CLOSED → OPEN → HALF_OPEN. Use `get_degradation_controller()` for singleton access.
 
@@ -405,3 +438,4 @@ Four gates determine project viability. All benchmarks are implemented.
 - **Read-Only Database Access**: iMessage chat.db must use `file:...?mode=ro` URI
 - **No Fine-Tuning**: Research shows it increases hallucinations - use RAG + few-shot instead
 - **Model Unloading**: Always unload models between profiles/benchmarks (`gc.collect()`, `mx.metal.clear_cache()`)
+- **iMessage Sender Limitations**: `IMessageSender` in `integrations/imessage/sender.py` is deprecated. Apple's AppleScript automation has significant restrictions: requires Automation permission, may be blocked by SIP, requires Messages.app running, and may break in future macOS versions. Consider this experimental and unreliable for production use.
