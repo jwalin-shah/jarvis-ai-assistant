@@ -723,3 +723,33 @@ class TestConversationsCache:
 
         # Should only fetch conversations once
         mock_reader.get_conversations.assert_called_once()
+
+    def test_clear_cache_forces_refetch(
+        self, mock_reader: MagicMock, sample_conversations: list[Conversation]
+    ):
+        """clear_cache() forces conversations to be refetched."""
+        mock_reader.get_conversations.return_value = sample_conversations
+        mock_reader.get_messages.return_value = []
+
+        fetcher = ContextFetcher(mock_reader)
+
+        # First call populates cache
+        fetcher.get_reply_context("chat1")
+        assert mock_reader.get_conversations.call_count == 1
+
+        # Clear the cache
+        fetcher.clear_cache()
+
+        # Next call should refetch
+        fetcher.get_reply_context("chat2")
+        assert mock_reader.get_conversations.call_count == 2
+
+    def test_custom_max_cached_conversations(self, mock_reader: MagicMock):
+        """Custom max_cached_conversations is passed to reader."""
+        mock_reader.get_conversations.return_value = []
+        mock_reader.get_messages.return_value = []
+
+        fetcher = ContextFetcher(mock_reader, max_cached_conversations=100)
+        fetcher.get_reply_context("chat1")
+
+        mock_reader.get_conversations.assert_called_once_with(limit=100)
