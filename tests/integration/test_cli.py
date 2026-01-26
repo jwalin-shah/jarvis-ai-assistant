@@ -383,9 +383,7 @@ class TestChatCommandMocked:
     @patch("jarvis.cli.get_degradation_controller")
     @patch("jarvis.cli.get_memory_controller")
     @patch("jarvis.cli.console")
-    def test_chat_generates_and_displays_response(
-        self, mock_console, mock_mem_ctrl, mock_deg_ctrl
-    ):
+    def test_chat_generates_and_displays_response(self, mock_console, mock_mem_ctrl, mock_deg_ctrl):
         """Chat generates response and displays it."""
         # Setup mocks
         mock_state = MagicMock()
@@ -704,9 +702,7 @@ class TestHealthExtended:
         mock_gen.is_loaded.return_value = True
         mock_gen.get_memory_usage_mb.return_value = 512.5
 
-        with patch.dict(
-            "sys.modules", {"models": MagicMock(get_generator=lambda: mock_gen)}
-        ):
+        with patch.dict("sys.modules", {"models": MagicMock(get_generator=lambda: mock_gen)}):
             parser = create_parser()
             args = parser.parse_args(["health"])
             exit_code = cmd_health(args)
@@ -721,9 +717,7 @@ class TestHealthExtended:
         mock_gen = MagicMock()
         mock_gen.is_loaded.return_value = False
 
-        with patch.dict(
-            "sys.modules", {"models": MagicMock(get_generator=lambda: mock_gen)}
-        ):
+        with patch.dict("sys.modules", {"models": MagicMock(get_generator=lambda: mock_gen)}):
             parser = create_parser()
             args = parser.parse_args(["health"])
             exit_code = cmd_health(args)
@@ -753,7 +747,6 @@ class TestHealthExtended:
     @patch("jarvis.cli.console")
     def test_health_shows_degraded_features(self, mock_console, mock_imessage_check):
         """Health shows degraded feature status."""
-        from contracts.health import FeatureState
         from core.health import get_degradation_controller
 
         mock_imessage_check.return_value = False
@@ -790,7 +783,6 @@ class TestBenchmarkExtended:
 
         initialize_system()
 
-        parser = create_parser()
         # Create args manually since parser won't accept invalid type
         args = MagicMock()
         args.type = "unknown_benchmark"
