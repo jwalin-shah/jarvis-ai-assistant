@@ -6,10 +6,28 @@
   } from "../stores/conversations";
   import AIDraftPanel from "./AIDraftPanel.svelte";
   import SummaryModal from "./SummaryModal.svelte";
+  import SmartReplyChips from "./SmartReplyChips.svelte";
 
   // Panel visibility state
   let showDraftPanel = $state(false);
   let showSummaryModal = $state(false);
+  let messageViewFocused = $state(true);
+
+  // Compute the last received message (for smart reply chips)
+  // Only show chips when the last message is NOT from the user
+  function getLastReceivedMessage(): string {
+    const messages = $conversationsStore.messages;
+    if (messages.length === 0) return "";
+
+    // Messages are in chronological order (oldest first), so last message is at the end
+    const lastMessage = messages[messages.length - 1];
+
+    // Only return if the last message is NOT from the current user
+    if (!lastMessage.is_from_me && lastMessage.text) {
+      return lastMessage.text;
+    }
+    return "";
+  }
 
   // Handle keyboard shortcuts
   function handleKeydown(event: KeyboardEvent) {
@@ -83,7 +101,12 @@
   }
 </script>
 
-<div class="message-view">
+<div
+  class="message-view"
+  tabindex="-1"
+  onfocus={() => messageViewFocused = true}
+  onblur={() => messageViewFocused = false}
+>
   {#if !$selectedConversation}
     <div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -190,6 +213,14 @@
         {/each}
       {/if}
     </div>
+
+    <!-- Smart Reply Chips -->
+    {#if getLastReceivedMessage()}
+      <SmartReplyChips
+        lastMessage={getLastReceivedMessage()}
+        isFocused={messageViewFocused}
+      />
+    {/if}
   {/if}
 </div>
 
