@@ -6,19 +6,34 @@
   import MessageView from "./lib/components/MessageView.svelte";
   import Dashboard from "./lib/components/Dashboard.svelte";
   import HealthStatus from "./lib/components/HealthStatus.svelte";
-  import { checkApiConnection } from "./lib/stores/health";
+  import ModelLoadingOverlay from "./lib/components/ModelLoadingOverlay.svelte";
+  import { checkApiConnection, modelStatus, preloadModel, fetchModelStatus } from "./lib/stores/health";
   import { clearSelection } from "./lib/stores/conversations";
 
   let currentView: "messages" | "dashboard" | "health" = "messages";
+  let showModelLoading = false;
+  let preloadOnStart = false; // Could be loaded from settings
 
-  onMount(() => {
+  // Check if we should show loading overlay (only during active loading)
+  $: isModelLoading = $modelStatus.state === "loading";
+
+  onMount(async () => {
     // Check API connection on start
-    checkApiConnection();
+    const connected = await checkApiConnection();
+
+    if (connected) {
+      // Fetch initial model status
+      await fetchModelStatus();
+
+      // Optionally preload model on start (based on settings)
+      if (preloadOnStart && $modelStatus.state === "unloaded") {
+        showModelLoading = true;
+        await preloadModel();
+      }
+    }
 
     // Listen for navigation events from tray menu
-    let unlisten: (() => void) | undefined;
-
-    listen<string>("navigate", (event) => {
+    const unlisten = await listen<string>("navigate", (event) => {
       if (
         event.payload === "health" ||
         event.payload === "dashboard" ||
@@ -29,22 +44,29 @@
           clearSelection();
         }
       }
-    }).then((fn) => {
-      unlisten = fn;
     });
 
     // Cleanup on unmount
     return () => {
-      if (unlisten) unlisten();
+      unlisten();
     };
   });
+
+  function handleModelLoaded() {
+    showModelLoading = false;
+  }
+
+  function handleModelError(error: string) {
+    showModelLoading = false;
+    console.error("Model loading error:", error);
+  }
 </script>
 
 <main class="app">
   <Sidebar bind:currentView />
 
   {#if currentView === "dashboard"}
-    <Dashboard on:navigate={(e) => currentView = e.detail as typeof currentView} />
+    <Dashboard on:navigate={(e) => currentView = e.detail} />
   {:else if currentView === "health"}
     <HealthStatus />
   {:else}
@@ -52,6 +74,13 @@
     <MessageView />
   {/if}
 </main>
+
+{#if showModelLoading && isModelLoading}
+  <ModelLoadingOverlay
+    onLoaded={handleModelLoaded}
+    onError={handleModelError}
+  />
+{/if}
 
 <style>
   :global(*) {

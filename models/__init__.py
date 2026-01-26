@@ -7,7 +7,7 @@ RAG context injection, and few-shot prompt formatting.
 import threading
 
 from models.generator import MLXGenerator
-from models.loader import MLXModelLoader, ModelConfig
+from models.loader import LoadingStatus, MLXModelLoader, ModelConfig
 from models.prompt_builder import PromptBuilder
 from models.templates import (
     ResponseTemplate,
@@ -19,6 +19,7 @@ from models.templates import (
 )
 
 __all__ = [
+    "LoadingStatus",
     "MLXGenerator",
     "MLXModelLoader",
     "ModelConfig",
