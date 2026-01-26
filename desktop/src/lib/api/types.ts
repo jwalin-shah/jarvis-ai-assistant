@@ -287,6 +287,72 @@ export interface TemplateAnalyticsDashboard {
   pie_chart_data: PieChartData;
 }
 
+// Priority Inbox types
+export type PriorityLevel = "critical" | "high" | "medium" | "low";
+
+export type PriorityReason =
+  | "contains_question"
+  | "action_requested"
+  | "time_sensitive"
+  | "important_contact"
+  | "frequent_contact"
+  | "awaiting_response"
+  | "multiple_messages"
+  | "contains_urgency"
+  | "normal";
+
+export interface PriorityMessage {
+  message_id: number;
+  chat_id: string;
+  sender: string;
+  sender_name: string | null;
+  text: string;
+  date: string;
+  priority_score: number;
+  priority_level: PriorityLevel;
+  reasons: PriorityReason[];
+  needs_response: boolean;
+  handled: boolean;
+  conversation_name: string | null;
+}
+
+export interface PriorityInboxResponse {
+  messages: PriorityMessage[];
+  total_count: number;
+  unhandled_count: number;
+  needs_response_count: number;
+  critical_count: number;
+  high_count: number;
+}
+
+export interface MarkHandledRequest {
+  chat_id: string;
+  message_id: number;
+}
+
+export interface MarkHandledResponse {
+  success: boolean;
+  chat_id: string;
+  message_id: number;
+  handled: boolean;
+}
+
+export interface ImportantContactRequest {
+  identifier: string;
+  important: boolean;
+}
+
+export interface ImportantContactResponse {
+  success: boolean;
+  identifier: string;
+  important: boolean;
+}
+
+export interface PriorityStats {
+  handled_count: number;
+  important_contacts_count: number;
+}
+
 // PDF Export types
 export interface PDFExportDateRange {
   start?: string;
