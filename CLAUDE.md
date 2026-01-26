@@ -20,11 +20,17 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 | Memory Controller (WS5) | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
 | Degradation Controller (WS6) | COMPLETE | Circuit breaker pattern |
 | Setup Wizard | COMPLETE | Environment validation, config init, health report |
-| CLI Entry Point | COMPLETE | `jarvis/cli.py` with chat, search (with filters), health commands |
+| CLI Entry Point | COMPLETE | `jarvis/cli.py` with chat, search, reply, summarize, export, serve commands |
 | FastAPI Layer | COMPLETE | `api/` module for Tauri frontend integration |
 | Config System | COMPLETE | `jarvis/config.py` with nested sections and migration |
+| Model Registry | COMPLETE | `models/registry.py` with multi-model support (0.5B/1.5B/3B tiers) |
+| Intent Classification | COMPLETE | `jarvis/intent.py` with semantic similarity routing |
+| Metrics System | COMPLETE | `jarvis/metrics.py` and `api/routers/metrics.py` for performance monitoring |
+| Export System | COMPLETE | `jarvis/export.py` and `api/routers/export.py` for JSON/CSV/TXT export |
+| Error Handling | COMPLETE | `jarvis/errors.py` and `api/errors.py` unified exception hierarchy |
+| Prompts Registry | COMPLETE | `jarvis/prompts.py` centralized prompt templates and examples |
 
-**Default Model**: Qwen2.5-0.5B-Instruct-4bit (configured in `models/loader.py`)
+**Default Model**: Qwen2.5-1.5B-Instruct-4bit (configured in `models/registry.py`)
 
 See [docs/CODEBASE_AUDIT_REPORT.md](docs/CODEBASE_AUDIT_REPORT.md) for full audit details.
 
@@ -258,13 +264,20 @@ jarvis search-messages "dinner" --limit 50
 jarvis search-messages "project" --sender "John" --start-date 2024-01-01
 jarvis search-messages "photo" --has-attachment
 
-# Generate reply suggestions (advanced)
+# Generate reply suggestions
 jarvis reply John
 jarvis reply Sarah -i "say yes but ask about timing"
 
-# Summarize conversations (advanced)
+# Summarize conversations
 jarvis summarize Mom
 jarvis summarize Dad -n 100
+
+# Export conversations
+jarvis export --chat-id <id>                    # Export to JSON (default)
+jarvis export --chat-id <id> -f csv             # Export to CSV format
+jarvis export --chat-id <id> -f txt -o out.txt  # Export to TXT with custom filename
+jarvis export --chat-id <id> -l 500             # Limit to 500 messages
+jarvis export --chat-id <id> --include-attachments  # Include attachment info (CSV)
 
 # Show system health status
 jarvis health
@@ -278,6 +291,7 @@ jarvis benchmark memory --output results.json
 # Start API server (for Tauri desktop app)
 jarvis serve
 jarvis serve --host 0.0.0.0 --port 8080
+jarvis serve --reload                           # Enable auto-reload for development
 
 # Version information
 jarvis version
@@ -336,16 +350,17 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 
 | Directory | Purpose | Status |
 |-----------|---------|--------|
-| `jarvis/` | CLI entry point, config, main application, and `jarvis/api.py` (CLI API with `/chat` endpoint) | COMPLETE |
-| `api/` | FastAPI REST layer for Tauri frontend (drafts, suggestions, settings) | COMPLETE |
+| `jarvis/` | CLI entry point, config, errors, metrics, export, prompts, intent classification | COMPLETE |
+| `api/` | FastAPI REST layer for Tauri frontend (drafts, suggestions, settings, export, metrics, health) | COMPLETE |
 | `benchmarks/memory/` | Memory profiling (WS1) | COMPLETE |
 | `benchmarks/hallucination/` | HHEM benchmark (WS2) | COMPLETE |
 | `benchmarks/latency/` | Latency benchmark (WS4) | COMPLETE |
 | `core/memory/` | Memory controller (WS5) | COMPLETE |
 | `core/health/` | Health monitoring (WS6) | COMPLETE (circuit breaker + degradation) |
-| `models/` | MLX model inference + 25 templates (WS8) | COMPLETE |
+| `models/` | MLX model inference, registry, templates, prompt builder | COMPLETE |
 | `integrations/imessage/` | iMessage reader with filters (WS10) | COMPLETE |
 | `desktop/` | Tauri desktop app (Svelte frontend) | COMPLETE |
+| `tests/` | Unit and integration tests | COMPLETE |
 
 ### Key Patterns (Implemented)
 
@@ -355,9 +370,19 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 
 **Singleton Generator**: Use `get_generator()` to get the shared instance, `reset_generator()` to reinitialize.
 
+**Model Registry**: `models/registry.py` provides multi-model support with `MODEL_REGISTRY` containing specs for 0.5B/1.5B/3B Qwen models. Use `get_recommended_model(available_ram_gb)` to select the best model for the user's system.
+
+**Intent Classification**: `IntentClassifier` in `jarvis/intent.py` routes user queries using semantic similarity. Supports REPLY, SUMMARIZE, SEARCH, QUICK_REPLY, and GENERAL intents with extracted parameters (person_name, search_query, etc.).
+
+**Centralized Prompts**: `jarvis/prompts.py` is the single source of truth for all prompts. Includes `PromptRegistry` for dynamic prompt management, few-shot examples for different tones (casual/professional), and prompt templates for replies, summaries, and search answers.
+
+**Unified Error Handling**: `jarvis/errors.py` provides a hierarchical exception system (JarvisError base class with subclasses for Configuration, Model, iMessage, Validation, and Resource errors). `api/errors.py` maps these to appropriate HTTP status codes.
+
+**Metrics System**: `jarvis/metrics.py` provides thread-safe `MemorySampler`, `RequestCounter`, `LatencyHistogram`, and `TTLCache` classes. Use `get_memory_sampler()`, `get_request_counter()`, `get_latency_histogram()` for singleton access. API exposes Prometheus-compatible metrics at `/metrics`.
+
 **iMessage Schema Detection**: Schema detection is consolidated in `integrations/imessage/queries.py` (`detect_schema_version()`). Both `ChatDBReader` and `ChatDBSchemaDetector` in `core/health/schema.py` delegate to this single source of truth. Supports macOS v14 (Sonoma) and v15 (Sequoia) schema versions. Database is opened read-only with timeout handling for SQLITE_BUSY.
 
-**Circuit Breaker Degradation**: `GracefulDegradationController` in `core/health/degradation.py` implements the circuit breaker pattern with states CLOSED → OPEN → HALF_OPEN. Use `get_degradation_controller()` for singleton access.
+**Circuit Breaker Degradation**: `GracefulDegradationController` in `core/health/degradation.py` implements the circuit breaker pattern with states CLOSED -> OPEN -> HALF_OPEN. Use `get_degradation_controller()` for singleton access.
 
 **Memory Controller**: `DefaultMemoryController` in `core/memory/controller.py` provides three-tier memory modes (FULL/LITE/MINIMAL) based on available system memory. Use `get_memory_controller()` for singleton access.
 
@@ -365,14 +390,17 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 
 **Setup Wizard**: `SetupWizard` in `jarvis/setup.py` validates the environment and guides first-time setup. Checks: platform, Full Disk Access permission, iMessage database schema, system memory, and model availability. Creates `~/.jarvis/config.json` with default settings.
 
+**Export System**: `jarvis/export.py` provides conversation export in JSON (full data with metadata), CSV (flattened for spreadsheets), and TXT (human-readable) formats. Use `export_messages()`, `export_search_results()`, or `export_backup()` functions.
+
 ### Data Flow for Text Generation (Current)
 
-1. Template matching (fast path, no model load) - if match >= 0.7, return immediately
-2. Memory check via MemoryController - determine operating mode (FULL/LITE/MINIMAL)
-3. RAG context injection via PromptBuilder
-4. Few-shot prompt formatting via PromptBuilder
-5. MLX model generation with temperature control
-6. (Optional) HHEM quality validation post-generation
+1. Intent classification via `IntentClassifier` - route to appropriate handler
+2. Template matching (fast path, no model load) - if match >= 0.7, return immediately
+3. Memory check via MemoryController - determine operating mode (FULL/LITE/MINIMAL)
+4. Context fetching via `ContextFetcher` for iMessage-related intents
+5. Prompt building via `jarvis/prompts.py` with tone detection and few-shot examples
+6. MLX model generation with temperature control
+7. (Optional) HHEM quality validation post-generation
 
 ---
 
@@ -438,4 +466,7 @@ Four gates determine project viability. All benchmarks are implemented.
 - **Read-Only Database Access**: iMessage chat.db must use `file:...?mode=ro` URI
 - **No Fine-Tuning**: Research shows it increases hallucinations - use RAG + few-shot instead
 - **Model Unloading**: Always unload models between profiles/benchmarks (`gc.collect()`, `mx.metal.clear_cache()`)
+- **Multi-Model Support**: Model registry supports 0.5B/1.5B/3B tiers with automatic selection based on available RAM
+- **Error Handling**: All JARVIS-specific errors inherit from `JarvisError` in `jarvis/errors.py`; API errors are mapped to appropriate HTTP status codes via `api/errors.py`
+- **Prompts Centralization**: All prompts must be defined in `jarvis/prompts.py` - do not create prompts in other modules
 - **iMessage Sender Limitations**: `IMessageSender` in `integrations/imessage/sender.py` is deprecated. Apple's AppleScript automation has significant restrictions: requires Automation permission, may be blocked by SIP, requires Messages.app running, and may break in future macOS versions. Consider this experimental and unreliable for production use.

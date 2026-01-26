@@ -1,6 +1,6 @@
 # JARVIS Desktop App
 
-A Tauri + Svelte desktop application for JARVIS, providing a menu bar + window hybrid interface for viewing iMessage conversations.
+A native macOS desktop application built with Tauri + Svelte, providing a menu bar + window hybrid interface for viewing iMessage conversations with AI-powered features.
 
 ## Prerequisites
 
@@ -74,37 +74,68 @@ Desktop App (Tauri)     →  Python API (FastAPI)  →  JARVIS Backend
 
 ## Features
 
+### Core Features
 - **Menu Bar Icon**: Left-click toggles window, right-click shows menu
 - **Dashboard**: Overview of conversations and system stats
-- **Messages**: Browse conversations and view messages
-- **Health**: System status, memory usage, permissions
-- **AI Draft Replies**: Generate contextual reply suggestions using AI
-- **Conversation Summary**: AI-powered conversation summarization with key points
+- **Messages**: Browse conversations and view messages with reactions and attachments
+- **Search**: Full-text search across all conversations with filters
+- **Health Monitor**: System status, memory usage, model info, permissions
+
+### AI Features
+- **AI Draft Replies**: Generate contextual reply suggestions using local MLX model
+- **Conversation Summary**: AI-powered summarization with key points extraction
+- **Smart Suggestions**: Pattern-based quick replies (no model required)
+
+### Settings
+- **Model Selection**: Choose between Qwen 0.5B, 1.5B, or 3B models
+- **Generation Controls**: Adjust temperature, max tokens, and suggestion count
+- **Behavior Settings**: Configure auto-suggestions and context window sizes
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd+D` (Mac) / `Ctrl+D` (Win/Linux) | Open AI Draft panel |
-| `Cmd+S` (Mac) / `Ctrl+S` (Win/Linux) | Open Summary modal |
+| `Cmd+D` (Mac) / `Ctrl+D` (Win/Linux) | Open AI Draft panel for reply suggestions |
+| `Cmd+S` (Mac) / `Ctrl+S` (Win/Linux) | Open Summary modal for conversation summary |
+| `Cmd+F` (Mac) / `Ctrl+F` (Win/Linux) | Focus search input |
 | `Escape` | Close any open modal/panel |
+| `Enter` (in search) | Execute search |
+| `Up/Down` | Navigate conversation list |
 
 ## AI Features
 
 ### AI Draft Replies
+
 Generate AI-powered reply suggestions based on conversation context:
-- Multiple suggestions ranked by confidence
-- Copy individual suggestions to clipboard
-- Regenerate for different options
-- Shows participants and message count used for context
+
+- **Multiple suggestions** ranked by confidence (0.0-1.0)
+- **Instruction support** - Guide the tone: "accept enthusiastically", "politely decline", etc.
+- **Copy to clipboard** - One-click copy for any suggestion
+- **Regenerate** - Get different options without changing settings
+- **Context display** - Shows participants and message count used for context
+
+**How to use:**
+1. Select a conversation from the list
+2. Press `Cmd+D` or click the Draft button
+3. Optionally enter an instruction (e.g., "be brief")
+4. Click Generate to get suggestions
+5. Click on a suggestion to copy it
 
 ### Conversation Summary
+
 Get an AI-generated summary of any conversation:
-- Brief summary of the conversation
-- Key points extracted as bullet list
-- Date range covered
-- Export summary as text file
-- Copy to clipboard
+
+- **Brief summary** - 1-2 sentence overview of the conversation
+- **Key points** - Extracted as a bullet list (2-4 points)
+- **Date range** - Shows the period covered by analyzed messages
+- **Export** - Save summary as a text file
+- **Copy to clipboard** - One-click copy of the entire summary
+
+**How to use:**
+1. Select a conversation from the list
+2. Press `Cmd+S` or click the Summary button
+3. Wait for the AI to analyze the conversation
+4. Use the Export or Copy buttons as needed
 
 ## Troubleshooting
 

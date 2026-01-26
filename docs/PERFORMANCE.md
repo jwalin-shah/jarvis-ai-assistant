@@ -6,12 +6,22 @@ This document covers performance monitoring, optimization techniques, and tuning
 
 - [Metrics and Monitoring](#metrics-and-monitoring)
 - [Performance Optimizations](#performance-optimizations)
+- [Metrics Collection Classes](#metrics-collection-classes)
 - [Caching Strategy](#caching-strategy)
 - [Memory Management](#memory-management)
 - [Profiling Tools](#profiling-tools)
 - [Best Practices](#best-practices)
+- [Validation Gates](#validation-gates)
 
 ## Metrics and Monitoring
+
+### Request Metrics Middleware
+
+All API requests (except `/metrics` endpoints) are automatically instrumented via middleware in `api/main.py`:
+
+- Request counts are tracked by endpoint path and HTTP method
+- Request latency is recorded using histograms with configurable buckets
+- Response headers include `X-Response-Time` with the request duration
 
 ### Prometheus-Compatible Metrics
 
@@ -24,15 +34,17 @@ curl http://localhost:8742/metrics
 
 Available metrics:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `jarvis_memory_rss_bytes` | gauge | Process RSS memory in bytes |
-| `jarvis_memory_vms_bytes` | gauge | Process virtual memory in bytes |
-| `jarvis_memory_available_bytes` | gauge | System available memory |
-| `jarvis_memory_total_bytes` | gauge | System total memory |
-| `jarvis_requests_total` | counter | Request count by endpoint/method |
-| `jarvis_request_duration_seconds` | histogram | Request latency distribution |
-| `jarvis_uptime_seconds` | gauge | Time since metrics collection started |
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `jarvis_memory_rss_bytes` | gauge | - | Process RSS memory in bytes |
+| `jarvis_memory_vms_bytes` | gauge | - | Process virtual memory in bytes |
+| `jarvis_memory_available_bytes` | gauge | - | System available memory |
+| `jarvis_memory_total_bytes` | gauge | - | System total memory |
+| `jarvis_requests_total` | counter | endpoint, method | Request count by endpoint/method |
+| `jarvis_request_duration_seconds` | histogram | operation | Request latency distribution |
+| `jarvis_uptime_seconds` | gauge | - | Time since metrics collection started |
+
+Default histogram buckets (in seconds): 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, +Inf
 
 ### Detailed Memory Breakdown
 
@@ -71,12 +83,15 @@ curl http://localhost:8742/metrics/requests
 ```bash
 # Take immediate memory sample
 curl -X POST http://localhost:8742/metrics/sample
+# Returns: {"timestamp": "...", "rss_mb": 123.45, "vms_mb": 456.78, "percent": 1.5, "available_gb": 12.3}
 
 # Trigger garbage collection
 curl -X POST http://localhost:8742/metrics/gc
+# Returns: {"collected_objects": 123, "rss_before_mb": 100, "rss_after_mb": 95, "rss_freed_mb": 5}
 
-# Reset metrics counters
+# Reset metrics counters (request counts and latency histograms, not memory sampler)
 curl -X POST http://localhost:8742/metrics/reset
+# Returns: {"status": "ok", "message": "Metrics counters reset"}
 ```
 
 ## Performance Optimizations
@@ -87,15 +102,22 @@ The template matcher uses several optimizations:
 
 1. **Pre-normalized Embeddings**: Pattern embeddings are normalized once at initialization, reducing cosine similarity computation from O(n*d) to O(n).
 
-2. **Query Embedding Cache**: An LRU cache (500 entries) stores query embeddings. Repeated queries skip the encoding step entirely.
+2. **Query Embedding Cache**: An LRU cache (500 entries, configurable via `QUERY_CACHE_SIZE`) stores query embeddings. Repeated queries skip the encoding step entirely.
 
-3. **Batch Encoding**: All pattern embeddings are computed in a single batch call during initialization.
+3. **Batch Encoding**: All pattern embeddings are computed in a single batch call during initialization using the `all-MiniLM-L6-v2` sentence transformer model.
+
+4. **Similarity Threshold**: Templates match when cosine similarity >= 0.7 (configurable via `SIMILARITY_THRESHOLD`).
 
 ```python
 # Cache statistics available via
+from models.templates import TemplateMatcher
+
 matcher = TemplateMatcher()
 stats = matcher.get_cache_stats()
-# Returns: {"size": 42, "hits": 100, "misses": 10, "hit_rate": 0.91}
+# Returns: {"size": 42, "maxsize": 500, "hits": 100, "misses": 10, "hit_rate": 0.91}
+
+# Clear caches when memory is needed
+matcher.clear_cache()
 ```
 
 ### Message Parsing (integrations/imessage/parser.py)
@@ -114,19 +136,101 @@ Optimizations for iMessage parsing:
 
 TTL caches reduce load on expensive operations:
 
-| Cache | TTL | Purpose |
-|-------|-----|---------|
-| Conversation list | 30s | Frequently refreshed conversation listing |
-| Health status | 5s | Fast health checks without full computation |
-| Model info | 60s | Model metadata rarely changes |
+| Cache | TTL | Max Size | Purpose |
+|-------|-----|----------|---------|
+| Conversation list | 30s | 50 | Frequently refreshed conversation listing |
+| Health status | 5s | 10 | Fast health checks without full computation |
+| Model info | 60s | 10 | Model metadata rarely changes |
 
 ```python
-from jarvis.metrics import get_conversation_cache, get_health_cache
+from jarvis.metrics import get_conversation_cache, get_health_cache, get_model_info_cache
 
 # Invalidate caches when data changes
 cache = get_conversation_cache()
 cache.invalidate()  # Clear all
 cache.invalidate("conversations:50:none:none")  # Clear specific key
+
+# Check cache statistics
+stats = cache.stats()
+# Returns: {"size": 5, "maxsize": 50, "ttl_seconds": 30.0, "hits": 100, "misses": 10, "hit_rate": 0.91}
+```
+
+## Metrics Collection Classes
+
+The `jarvis/metrics.py` module provides thread-safe classes for collecting performance metrics:
+
+### MemorySampler
+
+Background memory sampling with configurable interval:
+
+```python
+from jarvis.metrics import get_memory_sampler
+
+sampler = get_memory_sampler()
+sampler.start()  # Start background sampling (default: 1s interval)
+
+# Get statistics
+stats = sampler.get_stats()
+# Returns: {
+#     "sample_count": 100,
+#     "current_rss_mb": 150.5,
+#     "peak_rss_mb": 200.3,
+#     "avg_rss_mb": 175.2,
+#     "min_rss_mb": 120.1,
+#     "available_gb": 12.5,
+#     "memory_percent": 1.8
+# }
+
+sampler.stop()  # Stop background sampling
+```
+
+### RequestCounter
+
+Track API request counts by endpoint and method:
+
+```python
+from jarvis.metrics import get_request_counter
+
+counter = get_request_counter()
+counter.increment("/health", "GET")
+
+# Get all counts
+all_counts = counter.get_all()  # {"endpoint": {"GET": 10, "POST": 5}}
+
+# Get stats
+stats = counter.get_stats()
+# Returns: {
+#     "total_requests": 100,
+#     "endpoints": 10,
+#     "requests_per_second": 1.5,
+#     "uptime_seconds": 66.7
+# }
+```
+
+### LatencyHistogram
+
+Prometheus-compatible histogram for latency tracking:
+
+```python
+from jarvis.metrics import get_latency_histogram
+
+histogram = get_latency_histogram()
+
+# Record an observation
+histogram.observe("database_query", 0.05)
+
+# Use as context manager
+with histogram.time("model_inference"):
+    # ... operation being timed
+    pass
+
+# Get percentiles
+percentiles = histogram.get_percentiles("database_query")
+# Returns: {"p50": 0.045, "p90": 0.08, "p95": 0.1, "p99": 0.15}
+
+# Get detailed stats
+stats = histogram.get_stats("database_query")
+# Returns: {"count": 100, "mean_ms": 50.5, "min_ms": 10, "max_ms": 200, ...}
 ```
 
 ## Caching Strategy
@@ -219,9 +323,16 @@ from jarvis.metrics import force_gc
 result = force_gc()
 print(f"Freed: {result['rss_freed_mb']}MB")
 
-# Unload models when not needed
-from models.templates import unload_sentence_model
-unload_sentence_model()
+# Unload sentence transformer model when not needed
+from models.templates import unload_sentence_model, is_sentence_model_loaded
+
+if is_sentence_model_loaded():
+    unload_sentence_model()  # Frees ~100MB
+
+# Clear template matcher cache after unloading model
+from models.templates import TemplateMatcher
+matcher = TemplateMatcher()
+matcher.clear_cache()  # Clear embeddings and query cache
 ```
 
 ## Profiling Tools
@@ -231,13 +342,20 @@ unload_sentence_model()
 Run the interactive memory dashboard:
 
 ```bash
-python -m benchmarks.memory.dashboard --duration 60 --interval 1.0
+python -m benchmarks.memory.dashboard --duration 30 --interval 1.0
 ```
 
 Options:
-- `--duration`: Monitoring duration in seconds
-- `--interval`: Sampling interval in seconds
-- `--export`: Export data to file (JSON or CSV)
+- `--duration`: Monitoring duration in seconds (default: 30)
+- `--interval`: Sampling interval in seconds (default: 1.0)
+- `--export`: Export data to file (JSON or CSV based on file extension)
+
+The dashboard provides:
+- Real-time ASCII chart of memory usage
+- Process memory (RSS, VMS)
+- System memory (total, available, used)
+- Metal GPU memory (if MLX is loaded)
+- GC object count
 
 ### Benchmark Suite
 
@@ -257,12 +375,14 @@ python -m benchmarks.latency.run
 ### Using the Python API
 
 ```python
-from benchmarks.memory.dashboard import MemoryDashboard, take_snapshot
+from benchmarks.memory.dashboard import MemoryDashboard, take_snapshot, run_memory_watch
 
 # Take a snapshot
 snapshot = take_snapshot()
 print(f"RSS: {snapshot.process_rss_mb}MB")
+print(f"VMS: {snapshot.process_vms_mb}MB")
 print(f"GPU: {snapshot.metal_gpu_mb}MB")
+print(f"GC Objects: {snapshot.gc_objects}")
 
 # Run dashboard
 dashboard = MemoryDashboard()
@@ -271,11 +391,17 @@ dashboard.start_monitoring(interval=1.0)
 # Print ASCII chart
 print(dashboard.render_ascii_chart())
 
+# Print text summary
+print(dashboard.render_summary())
+
 # Export data
 dashboard.export_json("memory_data.json")
 dashboard.export_csv("memory_data.csv")
 
 dashboard.stop_monitoring()
+
+# Or use convenience function for timed monitoring
+stats = run_memory_watch(duration_seconds=60, interval=1.0)
 ```
 
 ## Best Practices
@@ -316,11 +442,50 @@ scrape_configs:
     scrape_interval: 15s
 ```
 
-Useful Grafana panels:
-- Memory usage over time
-- Request rate by endpoint
-- Latency percentiles (p50, p90, p99)
-- Error rate (from response codes)
+**Useful Grafana Panels:**
+
+1. **Memory Usage Over Time**
+   ```promql
+   jarvis_memory_rss_bytes / 1024 / 1024  # RSS in MB
+   ```
+
+2. **System Memory Pressure**
+   ```promql
+   1 - (jarvis_memory_available_bytes / jarvis_memory_total_bytes)
+   ```
+
+3. **Request Rate by Endpoint**
+   ```promql
+   rate(jarvis_requests_total[5m])
+   ```
+
+4. **Latency Percentiles (p99)**
+   ```promql
+   histogram_quantile(0.99, rate(jarvis_request_duration_seconds_bucket[5m]))
+   ```
+
+5. **Mean Request Duration**
+   ```promql
+   rate(jarvis_request_duration_seconds_sum[5m]) / rate(jarvis_request_duration_seconds_count[5m])
+   ```
+
+**Alert Examples:**
+
+```yaml
+# Alert when memory usage exceeds 80% of system memory
+- alert: JarvisHighMemory
+  expr: jarvis_memory_rss_bytes / jarvis_memory_total_bytes > 0.8
+  for: 5m
+  labels:
+    severity: warning
+
+# Alert when p99 latency exceeds 5 seconds
+- alert: JarvisHighLatency
+  expr: histogram_quantile(0.99, rate(jarvis_request_duration_seconds_bucket[5m])) > 5
+  for: 2m
+  labels:
+    severity: warning
+```
 
 ## Validation Gates
 

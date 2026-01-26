@@ -201,6 +201,32 @@ Output:
 
 ---
 
+## Export Conversations
+
+### Export to JSON
+```bash
+jarvis export --chat-id chat123456
+jarvis export --chat-id chat123456 -o backup.json
+```
+
+### Export to CSV
+```bash
+jarvis export --chat-id chat123456 -f csv
+jarvis export --chat-id chat123456 -f csv --include-attachments
+```
+
+### Export to Plain Text
+```bash
+jarvis export --chat-id chat123456 --format txt
+```
+
+### With Message Limit
+```bash
+jarvis export --chat-id chat123456 -l 500 -f json
+```
+
+---
+
 ## Benchmarks
 
 ### Memory Benchmark
