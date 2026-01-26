@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-JARVIS is a local-first AI assistant for macOS that provides intelligent email and message management without sending user data to the cloud. The system runs a 3B parameter language model directly on Apple Silicon, integrating with Gmail and iMessage to provide contextual assistance.
+JARVIS is a local-first AI assistant for macOS that provides intelligent message management without sending user data to the cloud. The system runs a language model directly on Apple Silicon, integrating with iMessage to provide contextual assistance.
 
 This document describes the architectural decisions, risk mitigations, and validation strategy for JARVIS v1. It supersedes the original v0 design, which was declared non-viable due to five critical blockers identified during adversarial review.
 
@@ -64,7 +64,7 @@ The system succeeds if it can provide useful assistance for common email and mes
 
 ### 3.1 System Context
 
-JARVIS operates as a local application on macOS, integrating with two data sources (Gmail API and iMessage chat.db) and providing responses through a menu bar interface.
+JARVIS operates as a local application on macOS, integrating with iMessage (chat.db) and providing responses through a command-line interface.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -72,7 +72,7 @@ JARVIS operates as a local application on macOS, integrating with two data sourc
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                      JARVIS                               │   │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │   │
-│  │  │   Gmail     │  │  iMessage   │  │   Model     │       │   │
+│  │  │             │  │  iMessage   │  │   Model     │       │   │
 │  │  │ Integration │  │ Integration │  │  Generator  │       │   │
 │  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘       │   │
 │  │         │                │                │               │   │
@@ -84,7 +84,7 @@ JARVIS operates as a local application on macOS, integrating with two data sourc
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │  Gmail API   │  │   chat.db    │  │  MLX Model   │          │
+│  │             │  │   chat.db    │  │  MLX Model   │          │
 │  │  (Network)   │  │  (Local DB)  │  │  (Local)     │          │
 │  └──────────────┘  └──────────────┘  └──────────────┘          │
 └─────────────────────────────────────────────────────────────────┘
@@ -98,7 +98,7 @@ First, the request is classified to determine if it matches a known template. Te
 
 Second, if no template matches with sufficient confidence, the system checks memory availability. If the model can be loaded (or is already loaded), generation proceeds with RAG context injection. If memory is constrained, the system falls back to a degraded response or cloud API.
 
-Third, for generation requests, relevant context is retrieved from Gmail or iMessage and injected into the prompt. Few-shot examples guide the model toward appropriate response style.
+Third, for generation requests, relevant context is retrieved from iMessage and injected into the prompt. Few-shot examples guide the model toward appropriate response style.
 
 Fourth, the response is validated. If HHEM scoring indicates hallucination risk above threshold, the response is rejected and either regenerated or replaced with a safer template response.
 
@@ -116,7 +116,6 @@ Fourth, the response is validated. If HHEM scoring indicates hallucination risk 
 
 **Model Generator**: Loads and runs the MLX model for text generation. Handles RAG context injection, few-shot prompting, and memory-aware loading/unloading.
 
-**Gmail Client**: OAuth-authenticated wrapper for Gmail API. Provides search, retrieval, and parsing of email content.
 
 **iMessage Reader**: Read-only SQLite access to chat.db. Handles schema variations, attributedBody parsing, and contact resolution.
 
@@ -214,13 +213,7 @@ The original design planned LoRA fine-tuning for style matching. Research by Gek
 
 **Decision**: No fine-tuning for knowledge injection. Use RAG for factual grounding and few-shot prompting for style matching. These approaches are cheaper, reversible, and don't risk increasing hallucination rates.
 
-### 5.5 Gmail Integration: API over Local Indexing
-
-The original design proposed full local indexing of Gmail. This creates significant complexity (sync logic, storage requirements, freshness issues) for marginal benefit.
-
-**Decision**: Use Gmail API directly with a working set approach. Fetch recent emails (30 days) on demand. Leverage Gmail's server-side search rather than building local search infrastructure. This trades some offline capability for dramatically reduced complexity.
-
-### 5.6 iMessage Integration: Read-Only with Guardrails
+### 5.5 iMessage Integration: Read-Only with Guardrails
 
 iMessage access requires Full Disk Access permission and direct SQLite queries against chat.db. This is fragile: Apple changes the schema between macOS versions, and the database is actively written by the Messages process.
 
@@ -334,7 +327,7 @@ If G2 fails (model stack exceeds 6.5GB), 8GB support is not viable. The project 
 
 ### 8.2 If Quality Gate Fails
 
-If G3 fails (HHEM below 0.4), summarization and drafting features are not viable. The project pivots to template-only quick replies, essentially becoming a smart reply button system similar to Gmail circa 2016. This is a significant reduction in ambition but may still provide value.
+If G3 fails (HHEM below 0.4), summarization and drafting features are not viable. The project pivots to template-only quick replies. This is a significant reduction in ambition but may still provide value.
 
 ### 8.3 If Coverage Gate Fails
 
@@ -378,9 +371,9 @@ Build the core services that other components depend on: memory management, heal
 
 ### Phase 3: Features
 
-Build the model loader, generator, and integrations with Gmail and iMessage.
+Build the model loader, generator, and iMessage integration.
 
-**Workstreams**: Model loader and generator, Gmail integration, iMessage integration. The integrations depend on core interfaces but not implementations, so they can run in parallel with core work using mock implementations.
+**Workstreams**: Model loader and generator, iMessage integration. The integrations depend on core interfaces but not implementations, so they can run in parallel with core work using mock implementations.
 
 **Deliverables**: Feature implementations, end-to-end tests, final regression benchmark.
 
@@ -428,15 +421,7 @@ Key decisions are documented as Architecture Decision Records (ADRs) for future 
 
 **Consequences**: Style matching is less precise but hallucination risk is not increased. Approach is cheaper and fully reversible.
 
-### ADR-005: Gmail API over Local Index
-
-**Context**: Local indexing provides offline search but adds significant complexity.
-
-**Decision**: Use Gmail API directly with working-set approach (30 days recent).
-
-**Consequences**: Requires network for email features. Dramatically simpler implementation. Leverages Gmail's search infrastructure.
-
-### ADR-006: Read-Only iMessage with Schema Detection
+### ADR-005: Read-Only iMessage with Schema Detection
 
 **Context**: chat.db access is fragile due to schema changes and concurrent writes.
 
@@ -444,7 +429,7 @@ Key decisions are documented as Architecture Decision Records (ADRs) for future 
 
 **Consequences**: Cannot write to iMessage (acceptable for v1). Resilient to Apple's schema changes. Safe from database corruption.
 
-### ADR-007: Self-Critique Checkpoints
+### ADR-006: Self-Critique Checkpoints
 
 **Context**: Agent execution without reflection leads to inefficient approaches and missed optimization opportunities.
 
@@ -564,7 +549,6 @@ This appendix tracks what has actually been implemented versus what is described
 | WS6 | Degradation Controller | COMPLETE | Circuit breaker pattern |
 | WS7 | Permission/Schema | COMPLETE | Full Disk Access checking, schema v14/v15 detection |
 | WS8 | Model Generator | COMPLETE | MLX loader, template fallback, RAG support |
-| WS9 | Gmail Integration | NOT STARTED | Planned for future release |
 | WS10 | iMessage Reader | COMPLETE | Attachments, reactions, contacts |
 
 ### Additional Components (Not in Original Plan)

@@ -1,7 +1,6 @@
 """JARVIS CLI - Command-line interface for the JARVIS AI assistant.
 
-Provides commands for chat, iMessage search, email summarization,
-health monitoring, and benchmarking.
+Provides commands for chat, iMessage search, health monitoring, and benchmarking.
 """
 
 import argparse
@@ -25,7 +24,6 @@ logger = logging.getLogger(__name__)
 # Feature names for degradation controller
 FEATURE_CHAT = "chat"
 FEATURE_IMESSAGE = "imessage"
-FEATURE_EMAIL = "email"
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -90,29 +88,11 @@ def initialize_system() -> tuple[bool, list[str]]:
         )
     )
 
-    # Register email feature
-    deg_controller.register_feature(
-        DegradationPolicy(
-            feature_name=FEATURE_EMAIL,
-            health_check=_check_gmail_access,
-            degraded_behavior=lambda: _email_degraded(),
-            fallback_behavior=lambda: _email_fallback(),
-            recovery_check=_check_gmail_access,
-            max_failures=3,
-        )
-    )
-
     # Check for permission issues
     if not _check_imessage_access():
         warnings.append(
             "iMessage access unavailable. Grant Full Disk Access in "
             "System Settings > Privacy & Security > Full Disk Access."
-        )
-
-    if not _check_gmail_access():
-        warnings.append(
-            "Gmail integration not configured. Run 'jarvis setup-email' "
-            "to configure Gmail API access."
         )
 
     return True, warnings
@@ -131,16 +111,6 @@ def _check_imessage_access() -> bool:
             return reader.check_access()
     except Exception:
         return False
-
-
-def _check_gmail_access() -> bool:
-    """Check if Gmail API is configured.
-
-    Returns:
-        True if configured, False otherwise.
-    """
-    # Gmail integration is not yet implemented
-    return False
 
 
 def _template_only_response(prompt: str) -> str:
@@ -196,24 +166,6 @@ def _imessage_fallback() -> list[Any]:
         Empty list.
     """
     return []
-
-
-def _email_degraded() -> str:
-    """Return degraded email summary.
-
-    Returns:
-        Degraded mode message.
-    """
-    return "Email summarization is running in degraded mode."
-
-
-def _email_fallback() -> str:
-    """Return fallback for email when unavailable.
-
-    Returns:
-        Unavailable message.
-    """
-    return "Email integration is not available."
 
 
 def cmd_chat(args: argparse.Namespace) -> int:
@@ -346,37 +298,6 @@ def cmd_search_messages(args: argparse.Namespace) -> int:
         return 1
 
 
-def cmd_summarize_emails(args: argparse.Namespace) -> int:
-    """Summarize recent emails.
-
-    Args:
-        args: Parsed arguments.
-
-    Returns:
-        Exit code.
-    """
-    deg_controller = get_degradation_controller()
-
-    def summarize() -> str:
-        # Gmail integration is not yet implemented
-        raise NotImplementedError("Gmail integration not yet implemented")
-
-    try:
-        result = deg_controller.execute(FEATURE_EMAIL, summarize)
-        console.print(f"[bold]Email Summary:[/bold]\n{result}")
-        return 0
-    except NotImplementedError:
-        console.print(
-            "[yellow]Email summarization is not yet implemented.[/yellow]\n"
-            "Gmail integration (WS9) is planned for a future release."
-        )
-        return 0
-    except Exception as e:
-        logger.exception("Email summarization error")
-        console.print(f"[red]Error: {e}[/red]")
-        return 1
-
-
 def cmd_health(args: argparse.Namespace) -> int:
     """Display system health status.
 
@@ -428,8 +349,6 @@ def cmd_health(args: argparse.Namespace) -> int:
         details = ""
         if feature_name == FEATURE_IMESSAGE:
             details = "Full Disk Access required" if not _check_imessage_access() else "OK"
-        elif feature_name == FEATURE_EMAIL:
-            details = "Not configured" if not _check_gmail_access() else "OK"
         elif feature_name == FEATURE_CHAT:
             details = "OK"
 
@@ -574,13 +493,6 @@ Examples:
         help="Maximum number of results (default: 20)",
     )
     search_parser.set_defaults(func=cmd_search_messages)
-
-    # Summarize emails command
-    email_parser = subparsers.add_parser(
-        "summarize-emails",
-        help="Summarize recent emails",
-    )
-    email_parser.set_defaults(func=cmd_summarize_emails)
 
     # Health command
     health_parser = subparsers.add_parser(

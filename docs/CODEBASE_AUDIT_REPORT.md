@@ -8,21 +8,20 @@
 
 ## 1. Executive Summary
 
-This audit compared the actual codebase against the design documentation. The project is substantially complete with all 10 planned workstreams implemented except Gmail integration (WS9).
+This audit compared the actual codebase against the design documentation. The project is substantially complete with all planned workstreams implemented.
 
 ### Key Findings
 
 | Category | Status |
 |----------|--------|
 | Contracts/Interfaces | 100% defined (8 protocols) |
-| Benchmark Workstreams (WS1-4) | 100% implemented |
+| Benchmark Workstreams (WS1, WS2, WS4) | 100% implemented |
 | Core Infrastructure (WS5-7) | 100% implemented |
 | Model Layer (WS8) | 100% implemented |
 | Integrations (WS10) | 100% implemented (iMessage) |
 | CLI Entry Point | 100% implemented |
 | Setup Wizard | 100% implemented |
-| Gmail Integration (WS9) | Not started (planned for future) |
-| Test Coverage | 95% (579 tests) |
+| Test Coverage | 95% (545 tests) |
 
 ---
 
@@ -34,7 +33,6 @@ This audit compared the actual codebase against the design documentation. The pr
 |------------|-----------|-------|--------|
 | WS1 | Memory Profiler | `benchmarks/memory/` | Complete - MLX memory profiling with auto-unload |
 | WS2 | HHEM Benchmark | `benchmarks/hallucination/` | Complete - Vectara HHEM evaluation |
-| WS3 | Template Coverage | `benchmarks/coverage/` | Complete - 75 templates, 1000 scenarios |
 | WS4 | Latency Benchmark | `benchmarks/latency/` | Complete - cold/warm/hot scenarios |
 | WS5 | Memory Controller | `core/memory/` | Complete - three-tier modes (FULL/LITE/MINIMAL) |
 | WS6 | Degradation Controller | `core/health/degradation.py` | Complete - circuit breaker pattern |
@@ -45,18 +43,11 @@ This audit compared the actual codebase against the design documentation. The pr
 | - | CLI Entry Point | `jarvis/cli.py` | Complete - chat, search, health, benchmarks |
 | - | Setup Wizard | `jarvis/setup.py` | Complete - environment validation |
 
-### Not Yet Implemented
+### Removed
 
-| Workstream | Component | Status |
-|------------|-----------|--------|
-| WS9 | Gmail Integration | Planned for future release |
-
-### Stub Modules (Low Priority)
-
-| Module | Purpose | Notes |
-|--------|---------|-------|
-| `core/config/` | Configuration management | Empty - may not be needed |
-| `core/cache/` | Caching utilities | Empty - may not be needed |
+| Workstream | Component | Notes |
+|------------|-----------|-------|
+| WS3 | Template Coverage Benchmark | Removed - functionality moved to `models/templates.py` |
 
 ---
 
@@ -77,7 +68,7 @@ All benchmark and reporting scripts exist and are functional:
 ### Positive Findings
 
 1. **Strong contract-based architecture**: All interfaces well-defined in `contracts/`
-2. **Comprehensive test coverage**: 95% coverage, 579 passing tests
+2. **Comprehensive test coverage**: 95% coverage, 545 passing tests
 3. **Thread-safe patterns**: Double-check locking in loader and singletons
 4. **Memory safety**: Model unloading with Metal cache clearing and GC
 5. **SQL injection prevention**: All queries use parameterized statements
@@ -95,7 +86,7 @@ All benchmark and reporting scripts exist and are functional:
 | Singleton with lock | `models/__init__.py`, controllers | Correct |
 | Context managers | `integrations/imessage/reader.py` | Correct |
 | Lazy initialization | Template embedding loading | Correct |
-| Batch encoding | Coverage analyzer, template matcher | Optimized |
+| Batch encoding | Template matcher | Optimized |
 | Circuit breaker | `core/health/circuit.py` | Correct |
 
 ---
@@ -104,7 +95,6 @@ All benchmark and reporting scripts exist and are functional:
 
 | Test File | Tests | Coverage | Focus |
 |-----------|-------|----------|-------|
-| `test_coverage.py` | 26 | 100% | WS3 template coverage |
 | `test_degradation.py` | 50 | 99% | WS6 circuit breaker |
 | `test_generator.py` | 56 | 99% | WS8 model generation |
 | `test_hhem.py` | 18 | 100% | WS2 HHEM benchmark |
@@ -117,7 +107,7 @@ All benchmark and reporting scripts exist and are functional:
 | `test_setup.py` | 48 | 99% | Setup wizard |
 | `test_cli.py` | 39 | 99% | CLI integration |
 
-**Total**: 579 tests
+**Total**: 545 tests
 **Coverage**: 95%
 **Status**: All tests pass
 
@@ -171,7 +161,6 @@ Areas with lower test coverage that may need attention:
 ### Recommendations
 
 1. Add input validation for user-provided search queries in iMessage reader
-2. Consider rate limiting for future Gmail integration
 
 ---
 
@@ -197,7 +186,7 @@ The following require actual macOS with Full Disk Access:
 
 4. **Benchmark Suite**
    - Run `./scripts/overnight_eval.sh --quick`
-   - Verify all 5 gates can be evaluated
+   - Verify all 4 gates can be evaluated
 
 ---
 
@@ -205,11 +194,10 @@ The following require actual macOS with Full Disk Access:
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Gmail Integration (WS9) | Future | OAuth2 integration planned |
+| Add iMessage search filters | Medium | Date, sender, attachment filtering |
 | Improve CLI coverage | Medium | Currently 74% |
 | Improve setup wizard coverage | Medium | Currently 80% |
-| Fill `core/config/` stub | Low | May not be needed |
-| Fill `core/cache/` stub | Low | May not be needed |
+| Expand template library | Low | Add more iMessage-specific patterns |
 
 ---
 
@@ -217,11 +205,9 @@ The following require actual macOS with Full Disk Access:
 
 The JARVIS project is substantially complete. All core functionality is implemented:
 - All 8 protocols have implementations
-- All 4 benchmarks are functional
+- All 3 benchmarks are functional (memory, HHEM, latency)
 - CLI and setup wizard are complete
-- 579 tests with 95% coverage
-
-The only major missing feature is Gmail integration (WS9), which is planned for a future release.
+- 545 tests with 95% coverage
 
 ---
 

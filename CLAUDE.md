@@ -10,11 +10,12 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Contracts/Interfaces | COMPLETE | All 7 protocol definitions in `contracts/` |
+| Contracts/Interfaces | COMPLETE | 8 protocol definitions in `contracts/` |
 | Model Generator (WS8) | COMPLETE | MLX loader, template fallback, RAG support |
 | iMessage Reader (WS10) | COMPLETE | Schema detection, attachments, reactions |
 | Memory Profiler (WS1) | COMPLETE | MLX memory profiling with model unload |
 | HHEM Benchmark (WS2) | COMPLETE | Vectara HHEM model evaluation |
+| Template Coverage (WS3) | REMOVED | Functionality moved to `models/templates.py` |
 | Latency Benchmark (WS4) | COMPLETE | Cold/warm/hot start scenarios |
 | Memory Controller (WS5) | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
 | Degradation Controller (WS6) | COMPLETE | Circuit breaker pattern |
@@ -253,14 +254,10 @@ jarvis search-messages "dinner" --limit 50
 # Show system health status
 jarvis health
 
-# Summarize emails (Gmail integration pending)
-jarvis summarize-emails
-
 # Run benchmarks
 jarvis benchmark memory
 jarvis benchmark latency
 jarvis benchmark hhem
-jarvis benchmark coverage
 jarvis benchmark memory --output results.json
 
 # Version information
@@ -279,7 +276,6 @@ jarvis --version        # Show version and exit
 
 - **iMessage**: Requires Full Disk Access
   - Grant in System Settings > Privacy & Security > Full Disk Access
-- **Gmail**: OAuth2 credentials required (not yet implemented)
 
 ---
 
@@ -293,7 +289,6 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 |----------|-------------|----------------------|
 | `contracts/memory.py` | MemoryProfiler, MemoryController | IMPLEMENTED in `benchmarks/memory/` and `core/memory/` |
 | `contracts/hallucination.py` | HallucinationEvaluator | IMPLEMENTED in `benchmarks/hallucination/` |
-| `contracts/coverage.py` | CoverageAnalyzer | IMPLEMENTED in `benchmarks/coverage/` |
 | `contracts/latency.py` | LatencyBenchmarker | IMPLEMENTED in `benchmarks/latency/` |
 | `contracts/health.py` | DegradationController, PermissionMonitor, SchemaDetector | IMPLEMENTED in `core/health/` and `jarvis/setup.py` |
 | `contracts/models.py` | Generator | IMPLEMENTED in `models/` |
@@ -304,16 +299,13 @@ The project uses Python Protocols in `contracts/` to enable parallel development
 | Directory | Purpose | Status |
 |-----------|---------|--------|
 | `jarvis/` | CLI entry point and main application | COMPLETE |
-| `benchmarks/coverage/` | Template matching analysis | COMPLETE |
 | `benchmarks/memory/` | Memory profiling (WS1) | COMPLETE |
 | `benchmarks/hallucination/` | HHEM benchmark (WS2) | COMPLETE |
 | `benchmarks/latency/` | Latency benchmark (WS4) | COMPLETE |
 | `core/memory/` | Memory controller (WS5) | COMPLETE |
 | `core/health/` | Health monitoring (WS6) | COMPLETE (circuit breaker + degradation) |
-| `core/config/` | Configuration | STUB ONLY |
-| `models/` | MLX model inference (WS8) | COMPLETE |
-| `integrations/imessage/` | iMessage reader (WS10) | MOSTLY COMPLETE |
-| `jarvis/` | Main package with setup wizard | COMPLETE |
+| `models/` | MLX model inference + templates (WS8) | COMPLETE |
+| `integrations/imessage/` | iMessage reader (WS10) | COMPLETE |
 
 ### Key Patterns (Implemented)
 
