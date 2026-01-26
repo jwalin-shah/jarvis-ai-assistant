@@ -69,6 +69,12 @@ class ErrorCode(str, Enum):
     RES_DISK_FULL = "RES_DISK_FULL"
     RES_DISK_ACCESS = "RES_DISK_ACCESS"
 
+    # Calendar errors (CAL_*)
+    CAL_ACCESS_DENIED = "CAL_ACCESS_DENIED"
+    CAL_NOT_AVAILABLE = "CAL_NOT_AVAILABLE"
+    CAL_CREATE_FAILED = "CAL_CREATE_FAILED"
+    CAL_PARSE_FAILED = "CAL_PARSE_FAILED"
+
     # Generic errors
     UNKNOWN = "UNKNOWN"
 
@@ -600,6 +606,139 @@ class DiskResourceError(ResourceError):
         )
 
 
+# Calendar Errors
+
+
+class CalendarError(JarvisError):
+    """Base class for calendar-related errors.
+
+    Raised when calendar operations fail.
+    """
+
+    default_message = "Calendar error"
+    default_code = ErrorCode.CAL_NOT_AVAILABLE
+
+
+class CalendarAccessError(CalendarError):
+    """Raised when calendar access is denied.
+
+    Examples:
+        - Calendar permission not granted
+        - Calendar app not available
+    """
+
+    default_message = "Cannot access Calendar"
+    default_code = ErrorCode.CAL_ACCESS_DENIED
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        requires_permission: bool = False,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize a calendar access error.
+
+        Args:
+            message: Human-readable error message.
+            requires_permission: Whether Calendar permission is needed.
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if requires_permission:
+            details["requires_permission"] = True
+            details["permission_instructions"] = [
+                "Open System Settings",
+                "Go to Privacy & Security > Calendars",
+                "Enable access for your terminal application",
+                "Restart JARVIS",
+            ]
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
+class CalendarCreateError(CalendarError):
+    """Raised when creating a calendar event fails.
+
+    Examples:
+        - Invalid event data
+        - Calendar is read-only
+        - AppleScript execution failed
+    """
+
+    default_message = "Failed to create calendar event"
+    default_code = ErrorCode.CAL_CREATE_FAILED
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        calendar_id: str | None = None,
+        event_title: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize a calendar create error.
+
+        Args:
+            message: Human-readable error message.
+            calendar_id: ID of the target calendar.
+            event_title: Title of the event that failed.
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if calendar_id:
+            details["calendar_id"] = calendar_id
+        if event_title:
+            details["event_title"] = event_title
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
+class EventParseError(CalendarError):
+    """Raised when parsing event data from text fails.
+
+    Examples:
+        - Ambiguous date/time
+        - Invalid date format
+        - Missing required information
+    """
+
+    default_message = "Failed to parse event from text"
+    default_code = ErrorCode.CAL_PARSE_FAILED
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        source_text: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize an event parse error.
+
+        Args:
+            message: Human-readable error message.
+            source_text: The text that failed to parse.
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if source_text is not None:
+            # Truncate long text
+            details["source_text"] = (
+                source_text[:200] + "..." if len(source_text) > 200 else source_text
+            )
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
 # Convenience functions for common error scenarios
 
 
@@ -714,6 +853,18 @@ def validation_type_error(field: str, value: Any, expected: str) -> ValidationEr
     )
 
 
+def calendar_permission_denied() -> CalendarAccessError:
+    """Create a CalendarAccessError for Calendar permission requirement.
+
+    Returns:
+        CalendarAccessError with permission instructions.
+    """
+    return CalendarAccessError(
+        "Calendar access is required to manage events",
+        requires_permission=True,
+    )
+
+
 # Export all public symbols
 __all__ = [
     # Error codes
@@ -736,6 +887,11 @@ __all__ = [
     "ResourceError",
     "MemoryResourceError",
     "DiskResourceError",
+    # Calendar errors
+    "CalendarError",
+    "CalendarAccessError",
+    "CalendarCreateError",
+    "EventParseError",
     # Convenience functions
     "model_not_found",
     "model_out_of_memory",
@@ -743,4 +899,5 @@ __all__ = [
     "imessage_db_not_found",
     "validation_required",
     "validation_type_error",
+    "calendar_permission_denied",
 ]

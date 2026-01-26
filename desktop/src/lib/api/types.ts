@@ -307,3 +307,44 @@ export interface PDFExportResponse {
   message_count: number;
   size_bytes: number;
 }
+
+// Calendar types
+export interface DetectedEvent {
+  title: string;
+  start: string;
+  end: string | null;
+  location: string | null;
+  description: string | null;
+  all_day: boolean;
+  confidence: number;
+  source_text: string;
+  message_id: number | null;
+}
+
+export interface Calendar {
+  id: string;
+  name: string;
+  color: string | null;
+  is_editable: boolean;
+}
+
+export interface CalendarEvent {
+  id: string;
+  calendar_id: string;
+  calendar_name: string;
+  title: string;
+  start: string;
+  end: string;
+  all_day: boolean;
+  location: string | null;
+  notes: string | null;
+  url: string | null;
+  attendees: string[];
+  status: "confirmed" | "tentative" | "cancelled";
+}
+
+export interface CreateEventResponse {
+  success: boolean;
+  event_id: string | null;
+  error: string | null;
+}
