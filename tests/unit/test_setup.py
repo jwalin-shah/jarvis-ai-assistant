@@ -28,48 +28,47 @@ from jarvis.setup import (
 )
 
 
-class TestJarvisConfig:
-    """Tests for JarvisConfig dataclass."""
+class TestJarvisConfigInSetup:
+    """Tests for JarvisConfig Pydantic model as used in setup.
+
+    Note: Full JarvisConfig tests are in test_config.py. These tests
+    verify basic functionality as used by the setup wizard.
+    """
 
     def test_default_values(self):
         """Test default configuration values."""
         config = JarvisConfig()
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.memory_mode == "auto"
-        assert config.template_threshold == DEFAULT_TEMPLATE_THRESHOLD
+        assert config.template_similarity_threshold == DEFAULT_TEMPLATE_THRESHOLD
 
-    def test_to_dict(self):
-        """Test conversion to dictionary."""
+    def test_model_dump(self):
+        """Test conversion to dictionary via model_dump."""
         config = JarvisConfig(
             model_path="custom/model",
-            memory_mode="lite",
-            template_threshold=0.8,
+            template_similarity_threshold=0.8,
         )
-        data = config.to_dict()
-        assert data == {
-            "model_path": "custom/model",
-            "memory_mode": "lite",
-            "template_threshold": 0.8,
-        }
+        data = config.model_dump()
+        assert data["model_path"] == "custom/model"
+        assert data["template_similarity_threshold"] == 0.8
+        assert "ui" in data  # Nested configs should be included
+        assert "search" in data
+        assert "chat" in data
 
-    def test_from_dict(self):
-        """Test creation from dictionary."""
+    def test_model_validate(self):
+        """Test creation from dictionary via model_validate."""
         data = {
             "model_path": "custom/model",
-            "memory_mode": "minimal",
-            "template_threshold": 0.6,
+            "template_similarity_threshold": 0.6,
         }
-        config = JarvisConfig.from_dict(data)
+        config = JarvisConfig.model_validate(data)
         assert config.model_path == "custom/model"
-        assert config.memory_mode == "minimal"
-        assert config.template_threshold == 0.6
+        assert config.template_similarity_threshold == 0.6
 
-    def test_from_dict_with_defaults(self):
+    def test_model_validate_with_defaults(self):
         """Test creation from partial dictionary uses defaults."""
-        config = JarvisConfig.from_dict({})
+        config = JarvisConfig.model_validate({})
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.memory_mode == "auto"
-        assert config.template_threshold == DEFAULT_TEMPLATE_THRESHOLD
+        assert config.template_similarity_threshold == DEFAULT_TEMPLATE_THRESHOLD
 
 
 class TestCheckResult:
@@ -398,25 +397,29 @@ class TestSetupWizard:
         assert result.config_created is True
         assert config_file.exists()
 
-        # Verify config contents
+        # Verify config contents (using new Pydantic schema)
         with config_file.open() as f:
             config = json.load(f)
         assert config["model_path"] == DEFAULT_MODEL_PATH
-        assert config["template_threshold"] == DEFAULT_TEMPLATE_THRESHOLD
+        assert config["template_similarity_threshold"] == DEFAULT_TEMPLATE_THRESHOLD
+        # New config should have nested sections
+        assert "ui" in config
+        assert "search" in config
+        assert "chat" in config
 
     def test_preserves_existing_config(
         self, tmp_path, mock_console, mock_permission_monitor, mock_schema_detector, monkeypatch
     ):
-        """Test that existing config is preserved."""
+        """Test that existing config is preserved and migrated."""
         config_dir = tmp_path / ".jarvis"
         config_file = config_dir / "config.json"
         config_dir.mkdir()
 
-        # Create existing config
+        # Create existing v1 config (old format without version)
         existing_config = {
             "model_path": "custom/model",
-            "memory_mode": "lite",
-            "template_threshold": 0.9,
+            "template_similarity_threshold": 0.9,
+            "imessage_default_limit": 100,
         }
         with config_file.open("w") as f:
             json.dump(existing_config, f)
@@ -440,14 +443,19 @@ class TestSetupWizard:
             )
             result = wizard.run(check_only=False)
 
-        # Config should not be recreated
+        # Config should not be recreated (just updated via migration)
         assert result.config_created is False
 
-        # Original config should be preserved
+        # Original values should be preserved, and migration applied
         with config_file.open() as f:
             config = json.load(f)
         assert config["model_path"] == "custom/model"
-        assert config["template_threshold"] == 0.9
+        assert config["template_similarity_threshold"] == 0.9
+        # Migration should have added new sections
+        assert "ui" in config
+        assert "search" in config
+        # imessage_default_limit should be migrated to search.default_limit
+        assert config["search"]["default_limit"] == 100
 
     def test_platform_check_macos(self, mock_console, monkeypatch):
         """Test platform check on macOS."""
