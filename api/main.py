@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
+from api.errors import register_exception_handlers
 from api.routers import (
     conversations_router,
     drafts_router,
@@ -191,3 +192,6 @@ app.include_router(conversations_router)
 app.include_router(drafts_router)
 app.include_router(suggestions_router)
 app.include_router(settings_router)
+
+# Register JARVIS exception handlers for standardized error responses
+register_exception_handlers(app)

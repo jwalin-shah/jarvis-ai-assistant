@@ -13,6 +13,13 @@ from pathlib import Path
 from typing import Any, Generic, Self, TypeVar
 
 from contracts.imessage import Attachment, Conversation, Message, Reaction
+from jarvis.errors import (
+    ErrorCode,
+    imessage_db_not_found,
+    imessage_permission_denied,
+    iMessageAccessError,
+    iMessageQueryError,
+)
 
 from .parser import (
     datetime_to_apple_timestamp,
@@ -146,22 +153,45 @@ class ChatDBReader:
             SQLite connection with Row factory
 
         Raises:
-            sqlite3.Error: If connection fails
+            iMessageAccessError: If connection fails due to permissions or missing file.
+            iMessageQueryError: If connection fails for other reasons.
         """
         if self._connection is None:
-            # Open in read-only mode using URI
-            uri = f"file:{self.db_path}?mode=ro"
-            self._connection = sqlite3.connect(
-                uri,
-                uri=True,
-                timeout=DB_TIMEOUT_SECONDS,
-                check_same_thread=False,  # Safe for async contexts
-            )
-            self._connection.row_factory = sqlite3.Row
+            db_path_str = str(self.db_path)
 
-            # Detect schema version
-            self._schema_version = detect_schema_version(self._connection)
-            logger.debug(f"Detected chat.db schema version: {self._schema_version}")
+            if not self.db_path.exists():
+                raise imessage_db_not_found(db_path_str)
+
+            try:
+                # Open in read-only mode using URI
+                uri = f"file:{self.db_path}?mode=ro"
+                self._connection = sqlite3.connect(
+                    uri,
+                    uri=True,
+                    timeout=DB_TIMEOUT_SECONDS,
+                    check_same_thread=False,  # Safe for async contexts
+                )
+                self._connection.row_factory = sqlite3.Row
+
+                # Detect schema version
+                self._schema_version = detect_schema_version(self._connection)
+                logger.debug(f"Detected chat.db schema version: {self._schema_version}")
+            except PermissionError as e:
+                raise imessage_permission_denied(db_path_str) from e
+            except sqlite3.OperationalError as e:
+                if "unable to open database" in str(e).lower():
+                    raise imessage_permission_denied(db_path_str) from e
+                raise iMessageQueryError(
+                    f"Failed to connect to database: {e}",
+                    db_path=db_path_str,
+                    cause=e,
+                ) from e
+            except Exception as e:
+                raise iMessageAccessError(
+                    f"Failed to connect to database: {e}",
+                    db_path=db_path_str,
+                    cause=e,
+                ) from e
 
         return self._connection
 
@@ -419,6 +449,10 @@ class ChatDBReader:
 
         Returns:
             True if access is granted, False otherwise
+
+        Note:
+            For error details, use require_access() which raises
+            iMessageAccessError with specific information.
         """
         if not self.db_path.exists():
             logger.warning(f"chat.db not found at {self.db_path}")
@@ -447,6 +481,46 @@ class ChatDBReader:
         except Exception as e:
             logger.warning(f"Unexpected error checking access: {e}")
             return False
+
+    def require_access(self) -> None:
+        """Verify access to chat.db, raising an exception if access is denied.
+
+        Use this method when you want detailed error information about
+        why access failed. For simple boolean checks, use check_access().
+
+        Raises:
+            iMessageAccessError: If database is not found or permission is denied.
+        """
+        db_path_str = str(self.db_path)
+
+        if not self.db_path.exists():
+            raise imessage_db_not_found(db_path_str)
+
+        try:
+            # Try to open the database
+            conn = self._get_connection()
+            # Execute a simple query to verify read access
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM chat LIMIT 1")
+            cursor.fetchone()
+        except PermissionError as e:
+            raise imessage_permission_denied(db_path_str) from e
+        except sqlite3.OperationalError as e:
+            if "unable to open database" in str(e).lower():
+                raise imessage_permission_denied(db_path_str) from e
+            else:
+                raise iMessageAccessError(
+                    f"Database error: {e}",
+                    db_path=db_path_str,
+                    code=ErrorCode.MSG_QUERY_FAILED,
+                    cause=e,
+                ) from e
+        except Exception as e:
+            raise iMessageAccessError(
+                f"Unexpected error checking access: {e}",
+                db_path=db_path_str,
+                cause=e,
+            ) from e
 
     def get_conversations(
         self,

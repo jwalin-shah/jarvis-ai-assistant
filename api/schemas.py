@@ -463,44 +463,79 @@ class HealthResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Error response model.
+    """Standardized error response model.
 
-    Standard error format returned for all API errors.
+    All API errors return this format for consistent client handling.
 
-    Example:
-        ```json
+    Attributes:
+        error: The exception class name (e.g., "ValidationError", "ModelLoadError").
+        code: Machine-readable error code (e.g., "VAL_INVALID_INPUT", "MDL_LOAD_FAILED").
+        detail: Human-readable error message describing what went wrong.
+        details: Optional additional context about the error (field names, paths, etc.).
+
+    Example Response (400 Bad Request):
         {
-            "error": "Permission denied",
-            "detail": "Full Disk Access is required to read iMessages",
-            "code": "PERMISSION_DENIED"
+            "error": "ValidationError",
+            "code": "VAL_MISSING_REQUIRED",
+            "detail": "Missing required field: email",
+            "details": {"field": "email"}
         }
-        ```
+
+    Example Response (403 Forbidden):
+        {
+            "error": "iMessageAccessError",
+            "code": "MSG_ACCESS_DENIED",
+            "detail": "Full Disk Access is required to read iMessages",
+            "details": {
+                "requires_permission": true,
+                "permission_instructions": [
+                    "Open System Settings",
+                    "Go to Privacy & Security > Full Disk Access",
+                    "Add and enable your terminal application",
+                    "Restart JARVIS"
+                ]
+            }
+        }
+
+    Example Response (503 Service Unavailable):
+        {
+            "error": "ModelLoadError",
+            "code": "RES_MEMORY_EXHAUSTED",
+            "detail": "Insufficient memory to load model: qwen-3b",
+            "details": {"available_mb": 1024, "required_mb": 2048}
+        }
     """
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "error": "Permission denied",
-                "detail": "Full Disk Access is required to read iMessages",
-                "code": "PERMISSION_DENIED",
+                "error": "ValidationError",
+                "code": "VAL_INVALID_INPUT",
+                "detail": "Missing required field: email",
+                "details": {"field": "email"},
             }
         }
     )
 
     error: str = Field(
         ...,
-        description="Brief error message",
-        examples=["Permission denied", "Not found", "Invalid request"],
+        description="Exception class name (e.g., 'ValidationError')",
+        examples=["ValidationError", "ModelLoadError", "iMessageAccessError"],
+    )
+    code: str = Field(
+        ...,
+        description="Machine-readable error code for programmatic handling",
+        examples=["VAL_INVALID_INPUT", "MDL_LOAD_FAILED", "MSG_ACCESS_DENIED"],
     )
     detail: str = Field(
         ...,
-        description="Detailed explanation of the error",
-        examples=["Full Disk Access is required to read iMessages"],
+        description="Human-readable error message",
+        examples=["Missing required field: email", "Failed to load model"],
     )
-    code: str | None = Field(
+    details: dict[str, str | int | float | bool | list[str]] | None = Field(
         default=None,
-        description="Machine-readable error code",
-        examples=["PERMISSION_DENIED", "NOT_FOUND", "VALIDATION_ERROR"],
+        description="Additional context about the error (optional)",
+        examples=[{"field": "email"}, {"available_mb": 1024, "required_mb": 2048}],
     )
 
 
