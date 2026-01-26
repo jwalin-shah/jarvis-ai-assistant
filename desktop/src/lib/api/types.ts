@@ -628,3 +628,34 @@ export interface CustomTemplateImportResponse {
   errors: number;
   total_templates: number;
 }
+
+// Threading types
+export interface ThreadResponse {
+  thread_id: string;
+  messages: number[];
+  topic_label: string;
+  start_time: string | null;
+  end_time: string | null;
+  participant_count: number;
+  message_count: number;
+}
+
+export interface ThreadedMessage extends Message {
+  thread_id: string;
+  thread_position: number;
+  is_thread_start: boolean;
+}
+
+export interface ThreadedViewResponse {
+  chat_id: string;
+  threads: ThreadResponse[];
+  messages: ThreadedMessage[];
+  total_threads: number;
+  total_messages: number;
+}
+
+export interface ThreadingConfigRequest {
+  time_gap_threshold_minutes?: number;
+  semantic_similarity_threshold?: number;
+  use_semantic_analysis?: boolean;
+}

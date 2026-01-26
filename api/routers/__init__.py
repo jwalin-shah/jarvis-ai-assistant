@@ -18,6 +18,7 @@ from .stats import router as stats_router
 from .suggestions import router as suggestions_router
 from .tasks import router as tasks_router
 from .template_analytics import router as template_analytics_router
+from .threads import router as threads_router
 from .topics import router as topics_router
 from .websocket import router as websocket_router
 
@@ -40,6 +41,7 @@ __all__ = [
     "suggestions_router",
     "tasks_router",
     "template_analytics_router",
+    "threads_router",
     "topics_router",
     "websocket_router",
 ]
