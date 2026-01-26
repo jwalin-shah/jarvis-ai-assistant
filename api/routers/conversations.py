@@ -3,6 +3,8 @@
 Provides endpoints for listing conversations, retrieving messages,
 searching across conversations, and sending messages.
 
+Uses TTL caching for frequently accessed data.
+
 All endpoints require Full Disk Access permission to read the iMessage database.
 """
 
@@ -20,6 +22,7 @@ from api.schemas import (
     SendMessageResponse,
 )
 from integrations.imessage import ChatDBReader, IMessageSender
+from jarvis.metrics import get_conversation_cache
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -77,6 +80,7 @@ def list_conversations(
 ) -> list[ConversationResponse]:
     """List recent iMessage conversations.
 
+    Uses TTL cache (30s) for repeated requests with same parameters.
     Returns conversations sorted by last message date (newest first).
     Supports pagination using the `before` parameter with the last conversation's
     `last_message_date` value.
@@ -125,8 +129,22 @@ def list_conversations(
     Raises:
         HTTPException 403: Full Disk Access permission not granted
     """
+    # Build cache key from parameters
+    since_str = since.isoformat() if since else "none"
+    before_str = before.isoformat() if before else "none"
+    cache_key = f"conversations:{limit}:{since_str}:{before_str}"
+
+    # Check cache
+    cache = get_conversation_cache()
+    found, cached = cache.get(cache_key)
+    if found:
+        return cached  # type: ignore[return-value]
+
     conversations = reader.get_conversations(limit=limit, since=since, before=before)
-    return [ConversationResponse.model_validate(c) for c in conversations]
+    result = [ConversationResponse.model_validate(c) for c in conversations]
+
+    cache.set(cache_key, result)
+    return result
 
 
 @router.get(

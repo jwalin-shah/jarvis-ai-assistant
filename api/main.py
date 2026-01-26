@@ -12,7 +12,9 @@ Documentation:
     - OpenAPI JSON: http://localhost:8742/openapi.json
 """
 
-from fastapi import FastAPI
+import time
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
@@ -22,9 +24,11 @@ from api.routers import (
     drafts_router,
     export_router,
     health_router,
+    metrics_router,
     settings_router,
     suggestions_router,
 )
+from jarvis.metrics import get_latency_histogram, get_request_counter
 
 # API metadata for OpenAPI documentation
 API_TITLE = "JARVIS API"
@@ -187,6 +191,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Request timing middleware
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Middleware to track request timing and counts."""
+    start_time = time.perf_counter()
+
+    # Process the request
+    response = await call_next(request)
+
+    # Record metrics
+    duration = time.perf_counter() - start_time
+    endpoint = request.url.path
+    method = request.method
+
+    # Skip metrics endpoints to avoid infinite recursion in monitoring
+    if not endpoint.startswith("/metrics"):
+        counter = get_request_counter()
+        histogram = get_latency_histogram()
+
+        counter.increment(endpoint, method)
+        histogram.observe(f"{method} {endpoint}", duration)
+
+    # Add timing header
+    response.headers["X-Response-Time"] = f"{duration:.4f}s"
+
+    return response
+
+
 # Include routers
 app.include_router(health_router)
 app.include_router(conversations_router)
@@ -194,6 +227,7 @@ app.include_router(drafts_router)
 app.include_router(export_router)
 app.include_router(suggestions_router)
 app.include_router(settings_router)
+app.include_router(metrics_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)
