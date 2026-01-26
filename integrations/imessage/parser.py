@@ -37,12 +37,92 @@ def datetime_to_apple_timestamp(dt: datetime) -> int:
     return int((dt.timestamp() - APPLE_EPOCH_UNIX) * NANOSECONDS_PER_SECOND)
 
 
-def parse_attributed_body(data: bytes | None) -> str | None:
-    """Extract plain text from NSKeyedArchive attributedBody.
+def _extract_from_typedstream(data: bytes) -> str | None:
+    """Extract text from typedstream (legacy NSArchiver) format.
 
-    The attributedBody column in chat.db contains an NSKeyedArchive-encoded
-    NSAttributedString. This function attempts to extract the plain text
-    content using plistlib.
+    Typedstream is Apple's older serialization format, used in some macOS versions
+    for attributedBody. The format starts with 'streamtyped' magic bytes.
+
+    Args:
+        data: Raw bytes in typedstream format
+
+    Returns:
+        Extracted text string, or None if extraction fails
+    """
+    try:
+        # Typedstream contains the text after NSString class marker
+        # Look for the pattern: NSString marker followed by length-prefixed string
+        nsstring_marker = b"NSString"
+        idx = data.find(nsstring_marker)
+        if idx == -1:
+            return None
+
+        # Skip past NSString and look for the actual string content
+        # The format is: NSString + some bytes + length byte + string data
+        search_start = idx + len(nsstring_marker)
+        remaining = data[search_start:]
+
+        # Skip metadata bytes until we find printable content
+        # Look for a length-prefixed string (common pattern: \x01\x94\x84\x01+\x04Text)
+        # The + character (0x2b) often precedes the length byte
+        plus_idx = remaining.find(b"+")
+        if plus_idx != -1 and plus_idx < 20:
+            # Length byte follows the +
+            length_pos = plus_idx + 1
+            if length_pos < len(remaining):
+                length = remaining[length_pos]
+                text_start = length_pos + 1
+                text_end = text_start + length
+                if text_end <= len(remaining):
+                    text_bytes = remaining[text_start:text_end]
+                    try:
+                        return text_bytes.decode("utf-8")
+                    except UnicodeDecodeError:
+                        pass
+
+        # Fallback: scan for readable UTF-8 sequences
+        # Find the longest printable sequence that isn't a class name
+        skip_strings = {
+            "streamtyped",
+            "NSAttributedString",
+            "NSObject",
+            "NSString",
+            "NSDictionary",
+            "NSNumber",
+            "NSValue",
+            "NSArray",
+            "NSMutableAttributedString",
+            "NSMutableString",
+            "__kIMMessagePartAttributeName",
+            "__kIMFileTransferGUIDAttributeName",
+            "__kIMDataDetectedAttributeName",
+        }
+
+        decoded = data.decode("utf-8", errors="ignore")
+        # Find sequences of printable characters (at least 1 char)
+        import re
+
+        matches = re.findall(r"[\x20-\x7e\u00a0-\uffff]+", decoded)
+        for match in matches:
+            clean = match.strip()
+            if clean and clean not in skip_strings and not clean.startswith("$"):
+                # Skip if it looks like a class name or metadata
+                if not any(skip in clean for skip in ["NS", "kIM", "Attribute"]):
+                    return clean
+
+        return None
+    except Exception as e:
+        logger.debug(f"Failed to parse typedstream: {e}")
+        return None
+
+
+def parse_attributed_body(data: bytes | None) -> str | None:
+    """Extract plain text from attributedBody column.
+
+    The attributedBody column in chat.db contains serialized NSAttributedString
+    in one of two formats:
+    1. NSKeyedArchive (binary plist) - newer format
+    2. Typedstream (legacy NSArchiver) - older format, starts with 'streamtyped'
 
     Args:
         data: Raw bytes from attributedBody column, or None
@@ -53,8 +133,14 @@ def parse_attributed_body(data: bytes | None) -> str | None:
     if data is None:
         return None
 
+    # Check for typedstream format (starts with \x04\x0bstreamtyped or similar)
+    if b"streamtyped" in data[:20]:
+        result = _extract_from_typedstream(data)
+        if result:
+            return result
+
     try:
-        # Try to load as binary plist
+        # Try to load as binary plist (NSKeyedArchive format)
         plist = plistlib.loads(data)
 
         # The structure varies, but text is usually under NS.string or NSString
@@ -87,8 +173,9 @@ def parse_attributed_body(data: bytes | None) -> str | None:
         return None
 
     except plistlib.InvalidFileException:
-        logger.debug("Failed to parse attributedBody as plist")
-        return None
+        # Plist parsing failed, try typedstream as fallback
+        logger.debug("Failed to parse attributedBody as plist, trying typedstream")
+        return _extract_from_typedstream(data)
     except Exception as e:
         logger.debug(f"Unexpected error parsing attributedBody: {e}")
         return None
