@@ -528,6 +528,8 @@ class ApiClient {
 
     const blob = await response.blob();
     return { blob, filename };
+  }
+
   // Insights endpoints
   async getConversationInsights(
     chatId: string,

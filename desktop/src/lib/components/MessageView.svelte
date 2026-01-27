@@ -156,7 +156,6 @@
   function handleNewMessagesClick() {
     scrollToBottom();
   }
-  let showStatsModal = $state(false);
 
   // Handle keyboard shortcuts
   function handleKeydown(event: KeyboardEvent) {
