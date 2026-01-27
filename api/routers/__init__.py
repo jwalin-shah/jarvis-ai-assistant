@@ -9,6 +9,7 @@ from .custom_templates import router as custom_templates_router
 from .digest import router as digest_router
 from .drafts import router as drafts_router
 from .embeddings import router as embeddings_router
+from .experiments import router as experiments_router
 from .export import router as export_router
 from .feedback import router as feedback_router
 from .health import router as health_router
@@ -35,6 +36,7 @@ __all__ = [
     "digest_router",
     "drafts_router",
     "embeddings_router",
+    "experiments_router",
     "export_router",
     "feedback_router",
     "health_router",
