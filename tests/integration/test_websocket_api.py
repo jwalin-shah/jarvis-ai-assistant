@@ -185,9 +185,7 @@ class TestWebSocketGeneration:
                 websocket.receive_json()
 
                 # Send generate_stream
-                websocket.send_json(
-                    {"type": "generate_stream", "data": {"prompt": "Hello"}}
-                )
+                websocket.send_json({"type": "generate_stream", "data": {"prompt": "Hello"}})
 
                 # Receive start message
                 data = websocket.receive_json()

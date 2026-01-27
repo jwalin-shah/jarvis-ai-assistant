@@ -128,16 +128,18 @@ def handle_search_messages(params: dict[str, Any]) -> ToolResult:
 
             results = []
             for msg in messages:
-                results.append({
-                    "id": msg.id,
-                    "chat_id": msg.chat_id,
-                    "sender": msg.sender,
-                    "sender_name": msg.sender_name,
-                    "text": msg.text,
-                    "date": msg.date.isoformat() if msg.date else None,
-                    "is_from_me": msg.is_from_me,
-                    "has_attachments": len(msg.attachments) > 0,
-                })
+                results.append(
+                    {
+                        "id": msg.id,
+                        "chat_id": msg.chat_id,
+                        "sender": msg.sender,
+                        "sender_name": msg.sender_name,
+                        "text": msg.text,
+                        "date": msg.date.isoformat() if msg.date else None,
+                        "is_from_me": msg.is_from_me,
+                        "has_attachments": len(msg.attachments) > 0,
+                    }
+                )
 
             return ToolResult(
                 success=True,
@@ -338,10 +340,12 @@ def handle_generate_reply(params: dict[str, Any]) -> ToolResult:
 
                 try:
                     response = generator.generate(request)
-                    suggestions.append({
-                        "text": response.text.strip(),
-                        "confidence": round(max(0.5, 0.9 - (i * 0.1)), 2),
-                    })
+                    suggestions.append(
+                        {
+                            "text": response.text.strip(),
+                            "confidence": round(max(0.5, 0.9 - (i * 0.1)), 2),
+                        }
+                    )
                 except Exception as e:
                     logger.warning("Failed to generate suggestion %d: %s", i + 1, e)
                     continue
@@ -471,19 +475,19 @@ def handle_list_conversations(params: dict[str, Any]) -> ToolResult:
 
             results = []
             for conv in conversations:
-                results.append({
-                    "chat_id": conv.chat_id,
-                    "display_name": conv.display_name,
-                    "participants": conv.participants,
-                    "last_message_date": (
-                        conv.last_message_date.isoformat()
-                        if conv.last_message_date
-                        else None
-                    ),
-                    "message_count": conv.message_count,
-                    "is_group": conv.is_group,
-                    "last_message_text": conv.last_message_text,
-                })
+                results.append(
+                    {
+                        "chat_id": conv.chat_id,
+                        "display_name": conv.display_name,
+                        "participants": conv.participants,
+                        "last_message_date": (
+                            conv.last_message_date.isoformat() if conv.last_message_date else None
+                        ),
+                        "message_count": conv.message_count,
+                        "is_group": conv.is_group,
+                        "last_message_text": conv.last_message_text,
+                    }
+                )
 
             return ToolResult(
                 success=True,
@@ -542,16 +546,18 @@ def handle_get_conversation_messages(params: dict[str, Any]) -> ToolResult:
 
             results = []
             for msg in messages:
-                results.append({
-                    "id": msg.id,
-                    "sender": msg.sender,
-                    "sender_name": msg.sender_name,
-                    "text": msg.text,
-                    "date": msg.date.isoformat() if msg.date else None,
-                    "is_from_me": msg.is_from_me,
-                    "has_attachments": len(msg.attachments) > 0,
-                    "reply_to_id": msg.reply_to_id,
-                })
+                results.append(
+                    {
+                        "id": msg.id,
+                        "sender": msg.sender,
+                        "sender_name": msg.sender_name,
+                        "text": msg.text,
+                        "date": msg.date.isoformat() if msg.date else None,
+                        "is_from_me": msg.is_from_me,
+                        "has_attachments": len(msg.attachments) > 0,
+                        "reply_to_id": msg.reply_to_id,
+                    }
+                )
 
             return ToolResult(
                 success=True,

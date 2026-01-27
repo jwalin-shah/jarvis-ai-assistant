@@ -175,9 +175,7 @@ class MLXGenerator:
         """Return current memory usage of the model."""
         return self._loader.get_memory_usage_mb()
 
-    async def generate_stream(
-        self, request: GenerationRequest
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def generate_stream(self, request: GenerationRequest) -> AsyncIterator[dict[str, Any]]:
         """Generate a response with streaming output (yields tokens).
 
         Yields tokens as they're generated for real-time display.
@@ -340,9 +338,7 @@ class ThreadAwareGenerator:
         response = self._generator.generate(request)
 
         # Post-process for thread type
-        processed_text = self._post_process_response(
-            response.text, thread_context, config
-        )
+        processed_text = self._post_process_response(response.text, thread_context, config)
 
         total_time = (time.perf_counter() - start_time) * 1000
 
@@ -383,9 +379,7 @@ class ThreadAwareGenerator:
 
         return temperature_map.get(topic, 0.6)
 
-    def _try_quick_template(
-        self, thread_context: ThreadContext
-    ) -> GenerationResponse | None:
+    def _try_quick_template(self, thread_context: ThreadContext) -> GenerationResponse | None:
         """Try to match quick exchange to a template.
 
         Args:
@@ -419,9 +413,7 @@ class ThreadAwareGenerator:
 
         return None
 
-    def _get_thread_examples(
-        self, topic: ThreadTopic
-    ) -> list[tuple[str, str]]:
+    def _get_thread_examples(self, topic: ThreadTopic) -> list[tuple[str, str]]:
         """Get few-shot examples for thread topic.
 
         Args:

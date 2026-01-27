@@ -5,16 +5,16 @@ All schemas include OpenAPI metadata for automatic documentation generation.
 """
 
 from __future__ import annotations
+
 from datetime import datetime
-from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field
 from enum import Enum
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 # =============================================================================
 # iMessage Data Models
 # =============================================================================
-
-
 
 
 class AttachmentResponse(BaseModel):
@@ -2632,9 +2632,7 @@ class CustomTemplateUsageStats(BaseModel):
                 "enabled_templates": 12,
                 "total_usage": 250,
                 "usage_by_category": {"work": 150, "personal": 100},
-                "top_templates": [
-                    {"id": "abc123", "name": "Greeting", "usage_count": 50}
-                ],
+                "top_templates": [{"id": "abc123", "name": "Greeting", "usage_count": 50}],
             }
         }
     )
@@ -3059,7 +3057,7 @@ class ResponsePatternsResponse(BaseModel):
                 "median_response_time_minutes": 8.0,
                 "fastest_response_minutes": 0.5,
                 "slowest_response_minutes": 480.0,
-                "response_times_by_hour": {9: 5.2, 14: 12.5, 20: 25.0},
+                "response_times_by_hour": {"9": 5.2, "14": 12.5, "20": 25.0},
                 "response_times_by_day": {"Monday": 10.5, "Saturday": 45.0},
                 "my_avg_response_time_minutes": 12.0,
                 "their_avg_response_time_minutes": 18.5,
@@ -3106,6 +3104,26 @@ class ResponsePatternsResponse(BaseModel):
         default=None,
         description="Their average response time in minutes",
         examples=[18.5, 15.0],
+    )
+    typical_response_length: Literal["short", "medium", "long"] = Field(
+        default="medium",
+        description="Typical response length category",
+        examples=["short", "medium", "long"],
+    )
+    greeting_style: list[str] = Field(
+        default_factory=list,
+        description="Common greeting phrases used",
+        examples=[["Hey", "Hi there", "Hello"]],
+    )
+    signoff_style: list[str] = Field(
+        default_factory=list,
+        description="Common signoff phrases used",
+        examples=[["Thanks", "Cheers", "Best"]],
+    )
+    common_phrases: list[str] = Field(
+        default_factory=list,
+        description="Commonly used phrases",
+        examples=[["sounds good", "let me know", "no problem"]],
     )
 
 

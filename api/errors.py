@@ -386,16 +386,17 @@ def register_exception_handlers(app: FastAPI) -> None:
         register_exception_handlers(app)
     """
     # Register specific handlers first (most specific to least specific)
-    app.add_exception_handler(ValidationError, validation_error_handler)
-    app.add_exception_handler(iMessageAccessError, imessage_access_error_handler)
-    app.add_exception_handler(ModelLoadError, model_load_error_handler)
-    app.add_exception_handler(ResourceError, resource_error_handler)
+    # Note: type: ignore is needed due to Starlette's overly strict typing
+    app.add_exception_handler(ValidationError, validation_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(iMessageAccessError, imessage_access_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(ModelLoadError, model_load_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(ResourceError, resource_error_handler)  # type: ignore[arg-type]
 
     # Register the base JarvisError handler (catches all JarvisError subclasses)
-    app.add_exception_handler(JarvisError, jarvis_error_handler)
+    app.add_exception_handler(JarvisError, jarvis_error_handler)  # type: ignore[arg-type]
 
     # Register timeout handler for asyncio.TimeoutError
-    app.add_exception_handler(TimeoutError, timeout_error_handler)
+    app.add_exception_handler(TimeoutError, timeout_error_handler)  # type: ignore[arg-type]
 
     # Optionally register a generic exception handler for unexpected errors
     # Uncomment the following line to catch all unhandled exceptions:

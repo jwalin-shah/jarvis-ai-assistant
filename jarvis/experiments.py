@@ -328,8 +328,7 @@ class ExperimentManager:
                     "description": exp.description,
                     "created_at": exp.created_at,
                     "variants": [
-                        {"id": v.id, "weight": v.weight, "config": v.config}
-                        for v in exp.variants
+                        {"id": v.id, "weight": v.weight, "config": v.config} for v in exp.variants
                     ],
                 }
                 experiments_data.append(exp_dict)
@@ -757,9 +756,7 @@ class ExperimentManager:
         """
         with self._lock:
             if experiment_name:
-                self._outcomes = [
-                    o for o in self._outcomes if o.experiment_name != experiment_name
-                ]
+                self._outcomes = [o for o in self._outcomes if o.experiment_name != experiment_name]
             else:
                 self._outcomes = []
             return self._save_outcomes()

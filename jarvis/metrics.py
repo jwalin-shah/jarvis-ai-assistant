@@ -698,6 +698,29 @@ class TemplateAnalytics:
             else:
                 self._cache_misses += 1
 
+    def record_hit(self, template_name: str, similarity: float) -> None:
+        """Simplified method to record a template hit.
+
+        Args:
+            template_name: Name of the matched template
+            similarity: Similarity score of the match
+        """
+        # Extract category from template name (e.g., "greeting_casual" -> "greeting")
+        category = template_name.split("_")[0] if "_" in template_name else "general"
+        self.record_template_hit(template_name, category, similarity)
+
+    def record_miss(self, query: str, best_similarity: float) -> None:
+        """Simplified method to record a template miss.
+
+        Args:
+            query: The query that missed
+            best_similarity: Best similarity score achieved
+        """
+        import hashlib
+
+        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+        self.record_model_fallback(query_hash, best_similarity, None)
+
     def get_hit_rate(self) -> float:
         """Get the template hit rate.
 

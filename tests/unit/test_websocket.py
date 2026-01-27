@@ -4,7 +4,6 @@ Tests WebSocket connection handling, message routing, streaming generation,
 and health subscriptions.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -49,9 +48,7 @@ class TestConnectionManager:
         assert client.websocket is mock_websocket
 
     @pytest.mark.anyio
-    async def test_connect_increments_connection_count(
-        self, connection_manager, mock_websocket
-    ):
+    async def test_connect_increments_connection_count(self, connection_manager, mock_websocket):
         """Connection count increases when client connects."""
         assert connection_manager.active_connections == 0
 
@@ -76,9 +73,7 @@ class TestConnectionManager:
         # Should not raise
 
     @pytest.mark.anyio
-    async def test_send_message_to_connected_client(
-        self, connection_manager, mock_websocket
-    ):
+    async def test_send_message_to_connected_client(self, connection_manager, mock_websocket):
         """Send message successfully to connected client."""
         client = await connection_manager.connect(mock_websocket)
 
@@ -93,9 +88,7 @@ class TestConnectionManager:
         assert call_args["data"]["timestamp"] == 123
 
     @pytest.mark.anyio
-    async def test_send_message_to_unknown_client_returns_false(
-        self, connection_manager
-    ):
+    async def test_send_message_to_unknown_client_returns_false(self, connection_manager):
         """Send message to unknown client returns False."""
         result = await connection_manager.send_message("unknown-id", MessageType.PONG, {})
 
@@ -136,9 +129,7 @@ class TestConnectionManager:
         assert updated_client.subscribed_to_health is False
 
     @pytest.mark.anyio
-    async def test_broadcast_health_update_only_to_subscribers(
-        self, connection_manager
-    ):
+    async def test_broadcast_health_update_only_to_subscribers(self, connection_manager):
         """Health updates only sent to subscribed clients."""
         ws1 = MagicMock()
         ws1.accept = AsyncMock()

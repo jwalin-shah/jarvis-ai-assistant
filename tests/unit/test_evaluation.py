@@ -29,6 +29,7 @@ def mock_sentence_model():
     mock_model = MagicMock()
     # Return mock embeddings (simple vectors)
     import numpy as np
+
     mock_model.encode.return_value = np.array([[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]])
 
     with patch("jarvis.evaluation.ResponseEvaluator._get_sentence_model", return_value=mock_model):

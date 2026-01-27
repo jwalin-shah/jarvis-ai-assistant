@@ -3,8 +3,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-import pytest
-
 from jarvis.threading import (
     Thread,
     ThreadAnalyzer,
@@ -133,12 +131,8 @@ class TestThreadAnalyzer:
         now = datetime.now()
         messages = [
             self._create_mock_message(id=1, text="Hi", date=now),
-            self._create_mock_message(
-                id=2, text="Hello", date=now + timedelta(minutes=5)
-            ),
-            self._create_mock_message(
-                id=3, text="How are you?", date=now + timedelta(minutes=10)
-            ),
+            self._create_mock_message(id=2, text="Hello", date=now + timedelta(minutes=5)),
+            self._create_mock_message(id=3, text="How are you?", date=now + timedelta(minutes=10)),
         ]
 
         threads = analyzer.analyze_threads(messages, "chat123")
@@ -156,13 +150,9 @@ class TestThreadAnalyzer:
         now = datetime.now()
         messages = [
             self._create_mock_message(id=1, text="Morning!", date=now),
-            self._create_mock_message(
-                id=2, text="Good morning", date=now + timedelta(minutes=5)
-            ),
+            self._create_mock_message(id=2, text="Good morning", date=now + timedelta(minutes=5)),
             # Gap of 2 hours - should create new thread
-            self._create_mock_message(
-                id=3, text="Afternoon!", date=now + timedelta(hours=2)
-            ),
+            self._create_mock_message(id=3, text="Afternoon!", date=now + timedelta(hours=2)),
         ]
 
         threads = analyzer.analyze_threads(messages, "chat123")
@@ -212,9 +202,7 @@ class TestThreadAnalyzer:
         now = datetime.now()
         messages = [
             self._create_mock_message(id=1, text="Hi", date=now),
-            self._create_mock_message(
-                id=2, text="Hello", date=now + timedelta(minutes=5)
-            ),
+            self._create_mock_message(id=2, text="Hello", date=now + timedelta(minutes=5)),
         ]
 
         threaded = analyzer.get_threaded_messages(messages, "chat123")

@@ -82,8 +82,7 @@ TOOLS: list[dict[str, Any]] = [
                 "chat_id": {
                     "type": "string",
                     "description": (
-                        "Specific conversation ID to summarize. "
-                        "Use this OR person_name, not both."
+                        "Specific conversation ID to summarize. Use this OR person_name, not both."
                     ),
                 },
                 "num_messages": {
@@ -139,9 +138,7 @@ TOOLS: list[dict[str, Any]] = [
                 },
                 "context_messages": {
                     "type": "integer",
-                    "description": (
-                        "Number of previous messages to use for context (default: 20)"
-                    ),
+                    "description": ("Number of previous messages to use for context (default: 20)"),
                     "default": 20,
                     "minimum": 5,
                     "maximum": 50,
@@ -192,8 +189,7 @@ TOOLS: list[dict[str, Any]] = [
                 "since": {
                     "type": "string",
                     "description": (
-                        "Only return conversations with messages after this date "
-                        "(ISO 8601 format)"
+                        "Only return conversations with messages after this date (ISO 8601 format)"
                     ),
                     "format": "date-time",
                 },
@@ -218,9 +214,7 @@ TOOLS: list[dict[str, Any]] = [
                 },
                 "chat_id": {
                     "type": "string",
-                    "description": (
-                        "Specific conversation ID. Use this OR person_name, not both."
-                    ),
+                    "description": ("Specific conversation ID. Use this OR person_name, not both."),
                 },
                 "limit": {
                     "type": "integer",

@@ -108,6 +108,7 @@ class ModelSettings(BaseModel):
         max_tokens_reply: Maximum tokens for reply generation.
         max_tokens_summary: Maximum tokens for summarization.
         temperature: Sampling temperature for generation (0.0-2.0).
+        generation_timeout_seconds: Timeout for model generation in seconds.
     """
 
     model_id: str = "qwen-1.5b"
@@ -115,6 +116,7 @@ class ModelSettings(BaseModel):
     max_tokens_reply: int = Field(default=150, ge=1, le=2048)
     max_tokens_summary: int = Field(default=500, ge=1, le=4096)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    generation_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0)
 
 
 class TaskQueueConfig(BaseModel):

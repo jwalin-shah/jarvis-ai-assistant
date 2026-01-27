@@ -183,12 +183,12 @@ class ToneAnalyzer:
         # Emoji regex pattern
         self._emoji_pattern = re.compile(
             "["
-            "\U0001F600-\U0001F64F"  # emoticons
-            "\U0001F300-\U0001F5FF"  # symbols & pictographs
-            "\U0001F680-\U0001F6FF"  # transport & map symbols
-            "\U0001F1E0-\U0001F1FF"  # flags
-            "\U00002702-\U000027B0"
-            "\U000024C2-\U0001F251"
+            "\U0001f600-\U0001f64f"  # emoticons
+            "\U0001f300-\U0001f5ff"  # symbols & pictographs
+            "\U0001f680-\U0001f6ff"  # transport & map symbols
+            "\U0001f1e0-\U0001f1ff"  # flags
+            "\U00002702-\U000027b0"
+            "\U000024c2-\U0001f251"
             "]+",
             flags=re.UNICODE,
         )
@@ -233,9 +233,7 @@ class ToneAnalyzer:
 
         # Calculate average sentence length
         words_per_sentence = [len(s.split()) for s in sentences]
-        avg_sentence_length = (
-            statistics.mean(words_per_sentence) if words_per_sentence else 0.0
-        )
+        avg_sentence_length = statistics.mean(words_per_sentence) if words_per_sentence else 0.0
 
         # Count casual abbreviations
         abbreviation_count = sum(
@@ -267,9 +265,7 @@ class ToneAnalyzer:
             abbreviation_count=abbreviation_count,
         )
 
-    def compute_tone_similarity(
-        self, tone1: ToneAnalysis, tone2: ToneAnalysis
-    ) -> float:
+    def compute_tone_similarity(self, tone1: ToneAnalysis, tone2: ToneAnalysis) -> float:
         """Compute similarity between two tone analyses.
 
         Args:
@@ -283,16 +279,11 @@ class ToneAnalyzer:
         formality_diff = abs(tone1.formality_score - tone2.formality_score)
         emoji_diff = abs(tone1.emoji_density - tone2.emoji_density) / 10  # Normalize
         exclamation_diff = abs(tone1.exclamation_rate - tone2.exclamation_rate)
-        length_diff = (
-            abs(tone1.avg_sentence_length - tone2.avg_sentence_length) / 30
-        )  # Normalize
+        length_diff = abs(tone1.avg_sentence_length - tone2.avg_sentence_length) / 30  # Normalize
 
         # Weighted average of differences
         total_diff = (
-            0.4 * formality_diff
-            + 0.2 * emoji_diff
-            + 0.2 * exclamation_diff
-            + 0.2 * length_diff
+            0.4 * formality_diff + 0.2 * emoji_diff + 0.2 * exclamation_diff + 0.2 * length_diff
         )
 
         return max(0.0, min(1.0, 1.0 - total_diff))
@@ -330,9 +321,7 @@ class ResponseEvaluator:
 
                         self._sentence_model = _get_sentence_model()
                     except ImportError:
-                        logger.warning(
-                            "Sentence model not available, relevance scoring disabled"
-                        )
+                        logger.warning("Sentence model not available, relevance scoring disabled")
         return self._sentence_model
 
     def evaluate(
@@ -378,9 +367,7 @@ class ResponseEvaluator:
             },
         )
 
-    def _compute_tone_score(
-        self, response: str, context_messages: list[str]
-    ) -> float:
+    def _compute_tone_score(self, response: str, context_messages: list[str]) -> float:
         """Compute tone consistency score.
 
         Args:
@@ -402,9 +389,7 @@ class ResponseEvaluator:
 
         return self._tone_analyzer.compute_tone_similarity(response_tone, context_tone)
 
-    def _compute_relevance_score(
-        self, response: str, context_messages: list[str]
-    ) -> float:
+    def _compute_relevance_score(self, response: str, context_messages: list[str]) -> float:
         """Compute semantic relevance score.
 
         Args:
@@ -426,9 +411,7 @@ class ResponseEvaluator:
             recent_context = " ".join(context_messages[-5:])
 
             # Compute embeddings
-            embeddings = model.encode(
-                [response, recent_context], convert_to_numpy=True
-            )
+            embeddings = model.encode([response, recent_context], convert_to_numpy=True)
 
             # Cosine similarity
             response_emb = embeddings[0]
@@ -478,9 +461,7 @@ class ResponseEvaluator:
             score -= 0.2
 
         # Check for consecutive repeated words (e.g., "the the")
-        consecutive_repeats = sum(
-            1 for i in range(1, len(words)) if words[i] == words[i - 1]
-        )
+        consecutive_repeats = sum(1 for i in range(1, len(words)) if words[i] == words[i - 1])
         if consecutive_repeats > 0:
             score -= min(0.3, consecutive_repeats * 0.1)
 
@@ -514,9 +495,7 @@ class ResponseEvaluator:
 
         return max(0.0, min(1.0, score))
 
-    def _compute_length_score(
-        self, response: str, user_messages: list[str]
-    ) -> float:
+    def _compute_length_score(self, response: str, user_messages: list[str]) -> float:
         """Compute length appropriateness score.
 
         Compares response length to user's typical message length.
@@ -722,9 +701,7 @@ class FeedbackStore:
 
         # Generate IDs
         suggestion_id = hashlib.sha256(suggestion_text.encode()).hexdigest()[:16]
-        context_hash = hashlib.sha256(
-            " ".join(context_messages[-5:]).encode()
-        ).hexdigest()[:16]
+        context_hash = hashlib.sha256(" ".join(context_messages[-5:]).encode()).hexdigest()[:16]
 
         entry = FeedbackEntry(
             timestamp=datetime.now(UTC),
@@ -815,18 +792,10 @@ class FeedbackStore:
             if eval_scores:
                 avg_scores = {
                     "tone_score": statistics.mean(e.tone_score for e in eval_scores),
-                    "relevance_score": statistics.mean(
-                        e.relevance_score for e in eval_scores
-                    ),
-                    "naturalness_score": statistics.mean(
-                        e.naturalness_score for e in eval_scores
-                    ),
-                    "length_score": statistics.mean(
-                        e.length_score for e in eval_scores
-                    ),
-                    "overall_score": statistics.mean(
-                        e.overall_score for e in eval_scores
-                    ),
+                    "relevance_score": statistics.mean(e.relevance_score for e in eval_scores),
+                    "naturalness_score": statistics.mean(e.naturalness_score for e in eval_scores),
+                    "length_score": statistics.mean(e.length_score for e in eval_scores),
+                    "overall_score": statistics.mean(e.overall_score for e in eval_scores),
                 }
 
             stats = {
@@ -863,9 +832,7 @@ class FeedbackStore:
         with self._lock:
             # Get edited entries with both original and edited text
             edited_entries = [
-                e
-                for e in self._entries
-                if e.action == FeedbackAction.EDITED and e.edited_text
+                e for e in self._entries if e.action == FeedbackAction.EDITED and e.edited_text
             ]
 
             if not edited_entries:
@@ -890,9 +857,7 @@ class FeedbackStore:
                 # Tone change analysis
                 original_tone = analyzer.analyze(original)
                 edited_tone = analyzer.analyze(edited)
-                tone_changes.append(
-                    (original_tone.formality_score, edited_tone.formality_score)
-                )
+                tone_changes.append((original_tone.formality_score, edited_tone.formality_score))
 
                 # Word-level changes
                 original_words = set(original.lower().split())
@@ -912,7 +877,8 @@ class FeedbackStore:
                         {
                             "type": "length",
                             "suggestion": "Generate shorter responses",
-                            "detail": f"Users typically shorten suggestions by {(1-avg_length_ratio)*100:.0f}%",
+                            "detail": f"Users typically shorten suggestions "
+                            f"by {(1 - avg_length_ratio) * 100:.0f}%",
                             "confidence": min(0.9, len(length_changes) / 20),
                         }
                     )
@@ -921,7 +887,8 @@ class FeedbackStore:
                         {
                             "type": "length",
                             "suggestion": "Generate longer, more detailed responses",
-                            "detail": f"Users typically expand suggestions by {(avg_length_ratio-1)*100:.0f}%",
+                            "detail": f"Users typically expand suggestions "
+                            f"by {(avg_length_ratio - 1) * 100:.0f}%",
                             "confidence": min(0.9, len(length_changes) / 20),
                         }
                     )
@@ -952,9 +919,7 @@ class FeedbackStore:
                     )
 
             # Common word changes
-            top_removals = sorted(
-                common_removals.items(), key=lambda x: x[1], reverse=True
-            )[:5]
+            top_removals = sorted(common_removals.items(), key=lambda x: x[1], reverse=True)[:5]
             if top_removals and top_removals[0][1] >= 3:
                 improvements.append(
                     {
@@ -965,9 +930,7 @@ class FeedbackStore:
                     }
                 )
 
-            top_additions = sorted(
-                common_additions.items(), key=lambda x: x[1], reverse=True
-            )[:5]
+            top_additions = sorted(common_additions.items(), key=lambda x: x[1], reverse=True)[:5]
             if top_additions and top_additions[0][1] >= 3:
                 improvements.append(
                     {

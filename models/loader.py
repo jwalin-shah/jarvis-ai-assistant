@@ -24,6 +24,8 @@ import gc
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,6 +38,7 @@ from jarvis.errors import (
     ErrorCode,
     ModelGenerationError,
     ModelLoadError,
+    model_generation_timeout,
     model_not_found,
     model_out_of_memory,
 )
@@ -45,6 +48,20 @@ logger = logging.getLogger(__name__)
 
 # Constants
 BYTES_PER_MB = 1024 * 1024
+
+
+def _get_default_generation_timeout() -> float:
+    """Get default generation timeout from config.
+
+    Returns:
+        Timeout in seconds from config, or 60.0 as fallback.
+    """
+    try:
+        from jarvis.config import get_config
+
+        return get_config().model.generation_timeout_seconds
+    except Exception:
+        return 60.0  # Fallback default
 
 
 @dataclass
@@ -62,6 +79,8 @@ class ModelConfig:
         memory_buffer_multiplier: Safety buffer for memory checks.
         default_max_tokens: Default max tokens for generation.
         default_temperature: Default sampling temperature.
+        generation_timeout_seconds: Timeout for generation in seconds (None = no timeout).
+            If not explicitly set, uses the value from config.model.generation_timeout_seconds.
     """
 
     model_id: str | None = None
@@ -70,6 +89,9 @@ class ModelConfig:
     memory_buffer_multiplier: float = 1.5
     default_max_tokens: int = 100
     default_temperature: float = 0.7
+    generation_timeout_seconds: float | None = field(
+        default_factory=_get_default_generation_timeout
+    )
     _resolved_spec: ModelSpec | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -287,6 +309,7 @@ class MLXModelLoader:
         max_tokens: int | None = None,
         temperature: float | None = None,
         stop_sequences: list[str] | None = None,
+        timeout_seconds: float | None = None,
     ) -> GenerationResult:
         """Generate text synchronously.
 
@@ -295,12 +318,14 @@ class MLXModelLoader:
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             stop_sequences: Strings that stop generation
+            timeout_seconds: Timeout for generation (overrides config if provided)
 
         Returns:
             GenerationResult with text, token count, and timing
 
         Raises:
-            ModelGenerationError: If model is not loaded, prompt is invalid, or generation fails.
+            ModelGenerationError: If model is not loaded, prompt is invalid,
+                generation fails, or timeout is exceeded.
         """
         if not prompt or not prompt.strip():
             raise ModelGenerationError(
@@ -318,6 +343,12 @@ class MLXModelLoader:
 
         max_tokens = max_tokens or self.config.default_max_tokens
         temperature = temperature if temperature is not None else self.config.default_temperature
+        # Use provided timeout, fall back to config, then None (no timeout)
+        effective_timeout: float | None
+        if timeout_seconds is not None:
+            effective_timeout = timeout_seconds
+        else:
+            effective_timeout = self.config.generation_timeout_seconds
 
         try:
             # Format prompt for Qwen2.5-Instruct chat template
@@ -329,16 +360,43 @@ class MLXModelLoader:
             # Create sampler with temperature
             sampler = make_sampler(temp=temperature)
 
-            # Generate
+            # Generate with timeout handling
             start_time = time.perf_counter()
-            response = generate(
-                model=self._model,
-                tokenizer=self._tokenizer,
-                prompt=formatted_prompt,
-                max_tokens=max_tokens,
-                sampler=sampler,
-                verbose=False,
-            )
+
+            def _do_generate() -> str:
+                """Inner function for generation to run in executor."""
+                return generate(
+                    model=self._model,
+                    tokenizer=self._tokenizer,
+                    prompt=formatted_prompt,
+                    max_tokens=max_tokens,
+                    sampler=sampler,
+                    verbose=False,
+                )
+
+            if effective_timeout is not None and effective_timeout > 0:
+                # Use ThreadPoolExecutor for timeout handling
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_do_generate)
+                    try:
+                        response = future.result(timeout=effective_timeout)
+                    except FuturesTimeoutError:
+                        # Cancel the future (best effort, may not stop MLX generation)
+                        future.cancel()
+                        logger.warning(
+                            "Generation timed out after %.1f seconds for model %s",
+                            effective_timeout,
+                            self.config.display_name,
+                        )
+                        raise model_generation_timeout(
+                            self.config.display_name,
+                            effective_timeout,
+                            prompt=prompt,
+                        )
+            else:
+                # No timeout - run directly
+                response = _do_generate()
+
             generation_time = (time.perf_counter() - start_time) * 1000
 
             # Strip the prompt from response
@@ -384,6 +442,7 @@ class MLXModelLoader:
         max_tokens: int | None = None,
         temperature: float | None = None,
         stop_sequences: list[str] | None = None,
+        timeout_seconds: float | None = None,
     ) -> Any:
         """Generate text with streaming output (yields tokens).
 
@@ -392,12 +451,14 @@ class MLXModelLoader:
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             stop_sequences: Strings that stop generation
+            timeout_seconds: Timeout for generation (overrides config if provided)
 
         Yields:
             StreamToken objects with individual tokens
 
         Raises:
-            ModelGenerationError: If model is not loaded, prompt is invalid, or generation fails.
+            ModelGenerationError: If model is not loaded, prompt is invalid,
+                generation fails, or timeout is exceeded.
         """
         if not prompt or not prompt.strip():
             raise ModelGenerationError(
@@ -415,6 +476,11 @@ class MLXModelLoader:
 
         max_tokens = max_tokens or self.config.default_max_tokens
         temperature = temperature if temperature is not None else self.config.default_temperature
+        effective_timeout: float | None
+        if timeout_seconds is not None:
+            effective_timeout = timeout_seconds
+        else:
+            effective_timeout = self.config.generation_timeout_seconds
 
         try:
             # Format prompt for Qwen2.5-Instruct chat template
@@ -431,25 +497,47 @@ class MLXModelLoader:
             # by generating incrementally
             token_index = 0
 
-            # Generate full response first (MLX limitation)
-            response = generate(
-                model=self._model,
-                tokenizer=self._tokenizer,
-                prompt=formatted_prompt,
-                max_tokens=max_tokens,
-                sampler=sampler,
-                verbose=False,
-            )
+            def _do_generate() -> str:
+                """Inner function for generation to run with timeout."""
+                return generate(
+                    model=self._model,
+                    tokenizer=self._tokenizer,
+                    prompt=formatted_prompt,
+                    max_tokens=max_tokens,
+                    sampler=sampler,
+                    verbose=False,
+                )
+
+            # Generate full response first (MLX limitation) with timeout
+            if effective_timeout is not None and effective_timeout > 0:
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_do_generate)
+                    try:
+                        response = future.result(timeout=effective_timeout)
+                    except FuturesTimeoutError:
+                        future.cancel()
+                        logger.warning(
+                            "Streaming generation timed out after %.1f seconds for model %s",
+                            effective_timeout,
+                            self.config.display_name,
+                        )
+                        raise model_generation_timeout(
+                            self.config.display_name,
+                            effective_timeout,
+                            prompt=prompt,
+                        )
+            else:
+                response = _do_generate()
 
             # Strip the prompt from response
             if response.startswith(formatted_prompt):
-                response = response[len(formatted_prompt):].strip()
+                response = response[len(formatted_prompt) :].strip()
 
             # Apply stop sequences
             if stop_sequences:
                 for stop_seq in stop_sequences:
                     if stop_seq in response:
-                        response = response[:response.index(stop_seq)]
+                        response = response[: response.index(stop_seq)]
 
             response = response.strip()
 
@@ -468,7 +556,7 @@ class MLXModelLoader:
                     continue
 
                 # Get the new part
-                new_text = current_decoded[len(decoded_so_far):]
+                new_text = current_decoded[len(decoded_so_far) :]
                 decoded_so_far = current_decoded
 
                 if new_text:

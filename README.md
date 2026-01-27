@@ -37,7 +37,7 @@ Local-first AI assistant for macOS with intelligent iMessage management using ML
 - **AI Draft Panel** - Generate reply suggestions with keyboard shortcut (Cmd+D)
 - **Conversation Summary Modal** - One-click summaries with key points (Cmd+S)
 
-**Default Model**: Qwen2.5-0.5B-Instruct-4bit
+**Default Model**: Qwen2.5-1.5B-Instruct-4bit
 
 ## Requirements
 
@@ -104,6 +104,10 @@ jarvis benchmark hhem
 # Start API server (for desktop app)
 jarvis serve                               # Default: localhost:8000
 jarvis serve --port 8742 --reload          # Development mode
+
+# Start MCP server (for Claude Code integration)
+jarvis mcp-serve                           # Default: stdio mode
+jarvis mcp-serve --transport http          # HTTP mode on port 8765
 
 # Version and help
 jarvis --version

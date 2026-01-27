@@ -264,7 +264,7 @@ def update_template(
         )
 
     # Build updates dict from provided fields
-    updates = {}
+    updates: dict[str, str | list[str] | int | bool | None] = {}
     if request.name is not None:
         updates["name"] = request.name
     if request.template_text is not None:
@@ -288,8 +288,11 @@ def update_template(
         updates["enabled"] = request.enabled
 
     # Validate group size constraints
-    min_size = updates.get("min_group_size", existing.min_group_size)
-    max_size = updates.get("max_group_size", existing.max_group_size)
+    min_size_val = updates.get("min_group_size", existing.min_group_size)
+    max_size_val = updates.get("max_group_size", existing.max_group_size)
+    # Cast to int for comparison (values are always int | None for these fields)
+    min_size = int(min_size_val) if isinstance(min_size_val, int) else None
+    max_size = int(max_size_val) if isinstance(max_size_val, int) else None
     if min_size is not None and max_size is not None and min_size > max_size:
         raise HTTPException(
             status_code=400,
@@ -316,9 +319,7 @@ def update_template(
         200: {
             "description": "Template deleted successfully",
             "content": {
-                "application/json": {
-                    "example": {"status": "deleted", "template_id": "abc123"}
-                }
+                "application/json": {"example": {"status": "deleted", "template_id": "abc123"}}
             },
         },
         404: {

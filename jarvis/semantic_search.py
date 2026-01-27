@@ -180,8 +180,7 @@ class EmbeddingCache:
             conn = self._get_connection()
             placeholders = ",".join("?" * len(message_ids))
             query = (
-                f"SELECT message_id, embedding FROM embeddings "
-                f"WHERE message_id IN ({placeholders})"
+                f"SELECT message_id, embedding FROM embeddings WHERE message_id IN ({placeholders})"
             )
             cursor = conn.execute(query, message_ids)
             return {
@@ -304,9 +303,7 @@ class EmbeddingCache:
             count: int = row["count"] if row else 0
 
             # Get approximate size in bytes
-            cursor = conn.execute(
-                "SELECT SUM(LENGTH(embedding)) as size FROM embeddings"
-            )
+            cursor = conn.execute("SELECT SUM(LENGTH(embedding)) as size FROM embeddings")
             row = cursor.fetchone()
             size: int = row["size"] if row and row["size"] else 0
 
@@ -554,9 +551,7 @@ class SemanticSearcher:
                 continue
 
             # Cosine similarity
-            similarity = float(
-                np.dot(query_embedding, msg_embedding) / (query_norm * msg_norm)
-            )
+            similarity = float(np.dot(query_embedding, msg_embedding) / (query_norm * msg_norm))
 
             if similarity >= self.similarity_threshold:
                 results.append(SemanticSearchResult(message=msg, similarity=similarity))

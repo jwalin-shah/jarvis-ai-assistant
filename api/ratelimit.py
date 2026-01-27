@@ -64,7 +64,7 @@ def _rate_limit_enabled() -> bool:
     """Check if rate limiting is enabled in config."""
     try:
         config = get_config()
-        return getattr(config, "rate_limit_enabled", True)
+        return config.rate_limit.enabled
     except Exception:
         return True
 
@@ -80,7 +80,7 @@ def _get_rate_limit(limit_type: str) -> str:
     """
     try:
         config = get_config()
-        requests_per_minute = getattr(config, "rate_limit_requests_per_minute", 60)
+        requests_per_minute = config.rate_limit.requests_per_minute
 
         if limit_type == "generation":
             # Generation endpoints get 1/6 of the read rate
@@ -224,9 +224,38 @@ def run_in_threadpool(func: Callable[..., Any]) -> Callable[..., Awaitable[Any]]
     return wrapper
 
 
-# Timeout constants for different operations
-TIMEOUT_GENERATION = 30.0  # 30 seconds for generation
-TIMEOUT_READ = 10.0  # 10 seconds for read operations
+def get_timeout_generation() -> float:
+    """Get generation timeout from config.
+
+    Returns:
+        Timeout in seconds for generation operations.
+    """
+    try:
+        config = get_config()
+        return config.rate_limit.generation_timeout_seconds
+    except Exception:
+        return 30.0  # Default fallback
+
+
+def get_timeout_read() -> float:
+    """Get read timeout from config.
+
+    Returns:
+        Timeout in seconds for read operations.
+    """
+    try:
+        config = get_config()
+        return config.rate_limit.read_timeout_seconds
+    except Exception:
+        return 10.0  # Default fallback
+
+
+# Timeout constants for different operations (for backward compatibility)
+# Prefer using get_timeout_generation() and get_timeout_read() functions
+# Note: These are dynamically computed from config at import time.
+# For runtime config changes, use get_timeout_generation() and get_timeout_read() instead.
+TIMEOUT_GENERATION = get_timeout_generation()
+TIMEOUT_READ = get_timeout_read()
 
 
 # Export all public symbols
@@ -236,6 +265,8 @@ __all__ = [
     "rate_limit_exceeded_handler",
     "with_timeout",
     "run_in_threadpool",
+    "get_timeout_generation",
+    "get_timeout_read",
     "RATE_LIMIT_GENERATION",
     "RATE_LIMIT_READ",
     "RATE_LIMIT_WRITE",

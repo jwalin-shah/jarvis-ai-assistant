@@ -218,8 +218,7 @@ EMOTIONAL_SUPPORT_THREAD_EXAMPLES: list[FewShotExample] = [
     ),
     FewShotExample(
         context=(
-            "[15:00] John: Just found out I didn't get the job\n"
-            "[15:02] John: Feeling pretty down"
+            "[15:00] John: Just found out I didn't get the job\n[15:02] John: Feeling pretty down"
         ),
         output=(
             "That's really disappointing, I know you were excited about it. "
@@ -253,8 +252,7 @@ PLANNING_THREAD_EXAMPLES: list[FewShotExample] = [
     ),
     FewShotExample(
         context=(
-            "[10:00] Sarah: We should plan a birthday surprise for Mike\n"
-            "[10:05] Sarah: Any ideas?"
+            "[10:00] Sarah: We should plan a birthday surprise for Mike\n[10:05] Sarah: Any ideas?"
         ),
         output=(
             "Definitely! We could do a small surprise at his favorite bar. "
@@ -264,8 +262,7 @@ PLANNING_THREAD_EXAMPLES: list[FewShotExample] = [
     ),
     FewShotExample(
         context=(
-            "[16:00] John: Thinking about a camping trip next month\n"
-            "[16:05] John: You interested?"
+            "[16:00] John: Thinking about a camping trip next month\n[16:05] John: You interested?"
         ),
         output=(
             "Count me in! I can bring the tent and cooler. "
@@ -912,9 +909,11 @@ def _format_thread_context(messages: list[object]) -> str:
         # Handle Message objects (duck typing)
         if hasattr(msg, "date") and hasattr(msg, "text"):
             timestamp = msg.date.strftime("%H:%M") if hasattr(msg.date, "strftime") else ""
-            sender = "Me" if getattr(msg, "is_from_me", False) else getattr(
-                msg, "sender_name", None
-            ) or getattr(msg, "sender", "Unknown")
+            sender = (
+                "Me"
+                if getattr(msg, "is_from_me", False)
+                else getattr(msg, "sender_name", None) or getattr(msg, "sender", "Unknown")
+            )
             text = msg.text or ""
             lines.append(f"[{timestamp}] {sender}: {text}")
         # Handle raw strings

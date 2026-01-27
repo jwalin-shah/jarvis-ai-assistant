@@ -161,9 +161,7 @@ class TestToolHandlers:
 
     def test_get_contact_info_invalid_phone(self) -> None:
         """Test get_contact_info with invalid phone number."""
-        with patch(
-            "integrations.imessage.parser.normalize_phone_number", return_value=None
-        ):
+        with patch("integrations.imessage.parser.normalize_phone_number", return_value=None):
             result = handle_get_contact_info({"identifier": "invalid"})
             assert result.success is False
             assert "Invalid phone number" in result.error
@@ -368,7 +366,7 @@ class TestStdioTransport:
     def test_run_handles_invalid_json(self) -> None:
         """Test run handles invalid JSON gracefully."""
         server = MCPServer()
-        input_data = 'not valid json\n'
+        input_data = "not valid json\n"
         input_stream = StringIO(input_data)
         output_stream = StringIO()
         transport = StdioTransport(server, input_stream, output_stream)
