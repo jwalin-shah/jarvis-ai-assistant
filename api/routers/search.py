@@ -379,8 +379,8 @@ def get_cache_stats() -> CacheStatsResponse:
     cache.close()
 
     return CacheStatsResponse(
-        embedding_count=stats["embedding_count"],
-        size_bytes=stats["size_bytes"],
+        embedding_count=int(stats["embedding_count"]),
+        size_bytes=int(stats["size_bytes"]),
         size_mb=stats["size_mb"],
     )
 

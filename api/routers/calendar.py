@@ -29,6 +29,8 @@ from integrations.calendar import (
     get_calendar_writer,
     get_event_detector,
 )
+from integrations.calendar.reader import CalendarReaderImpl
+from integrations.calendar.writer import CalendarWriterImpl
 from integrations.imessage import ChatDBReader
 
 if TYPE_CHECKING:
@@ -38,7 +40,7 @@ router = APIRouter(prefix="/calendars", tags=["calendars"])
 
 
 # Dependency for calendar reader
-def get_calendar_reader_dep():
+def get_calendar_reader_dep() -> CalendarReaderImpl:
     """Get calendar reader with access check."""
     reader = get_calendar_reader()
     if not reader.check_access():
@@ -59,7 +61,7 @@ def get_calendar_reader_dep():
 
 
 # Dependency for calendar writer
-def get_calendar_writer_dep():
+def get_calendar_writer_dep() -> CalendarWriterImpl:
     """Get calendar writer with access check."""
     writer = get_calendar_writer()
     if not writer.check_access():
@@ -89,7 +91,7 @@ def get_calendar_writer_dep():
     },
 )
 def list_calendars(
-    reader=Depends(get_calendar_reader_dep),
+    reader: CalendarReaderImpl = Depends(get_calendar_reader_dep),
 ) -> list[CalendarResponse]:
     """List all available calendars from macOS Calendar.
 
@@ -126,7 +128,7 @@ def get_events(
         le=500,
         description="Maximum number of events to return",
     ),
-    reader=Depends(get_calendar_reader_dep),
+    reader: CalendarReaderImpl = Depends(get_calendar_reader_dep),
 ) -> list[CalendarEventResponse]:
     """Get upcoming calendar events.
 
@@ -166,7 +168,7 @@ def search_events(
         le=200,
         description="Maximum number of results",
     ),
-    reader=Depends(get_calendar_reader_dep),
+    reader: CalendarReaderImpl = Depends(get_calendar_reader_dep),
 ) -> list[CalendarEventResponse]:
     """Search for calendar events by title, location, or notes.
 
@@ -193,7 +195,7 @@ def search_events(
 )
 def create_event(
     request: CreateEventRequest,
-    writer=Depends(get_calendar_writer_dep),
+    writer: CalendarWriterImpl = Depends(get_calendar_writer_dep),
 ) -> CreateEventResponse:
     """Create a new calendar event.
 
@@ -319,11 +321,12 @@ def detect_events_in_messages(
     seen: set[tuple[str, str]] = set()
     unique_events: list[DetectedEventResponse] = []
 
-    for evt in all_events:
+    for evt in all_events:  # type: ignore[assignment]
+        # evt is DetectedEventResponse from all_events list
         key = (evt.title.lower(), evt.start.isoformat()[:10])
         if key not in seen:
             seen.add(key)
-            unique_events.append(evt)
+            unique_events.append(evt)  # type: ignore[arg-type]
 
     return unique_events
 
@@ -340,7 +343,7 @@ def detect_events_in_messages(
 )
 def create_event_from_detected(
     request: CreateEventFromDetectedRequest,
-    writer=Depends(get_calendar_writer_dep),
+    writer: CalendarWriterImpl = Depends(get_calendar_writer_dep),
 ) -> CreateEventResponse:
     """Create a calendar event from a detected event.
 
