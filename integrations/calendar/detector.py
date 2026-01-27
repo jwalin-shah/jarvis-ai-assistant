@@ -223,9 +223,7 @@ class EventDetectorImpl:
         Returns:
             List of detected events for each input text.
         """
-        return [
-            self.detect_events(text, reference_date, message_id) for text, message_id in texts
-        ]
+        return [self.detect_events(text, reference_date, message_id) for text, message_id in texts]
 
     def _extract_datetimes(
         self,
@@ -313,9 +311,7 @@ class EventDetectorImpl:
                 is_all_day = parsed_dt.hour == 0 and parsed_dt.minute == 0
 
                 # Check if we didn't already match this date
-                already_matched = any(
-                    m.datetime_value.date() == parsed_dt.date() for m in matches
-                )
+                already_matched = any(m.datetime_value.date() == parsed_dt.date() for m in matches)
 
                 if not already_matched:
                     matches.append(

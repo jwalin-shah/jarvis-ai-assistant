@@ -109,12 +109,14 @@ class EmbeddingCache(Generic[K, V]):
     def stats(self) -> dict[str, Any]:
         """Return cache statistics."""
         with self._lock:
+            total = self._hits + self._misses
+            hit_rate = self._hits / total if total > 0 else 0.0
             return {
                 "size": len(self._cache),
                 "maxsize": self._maxsize,
                 "hits": self._hits,
                 "misses": self._misses,
-                "hit_rate": self.hit_rate,
+                "hit_rate": hit_rate,
             }
 
 
@@ -316,9 +318,7 @@ class CustomTemplateStore:
                     with self._storage_path.open() as f:
                         data = json.load(f)
                         templates = data.get("templates", [])
-                        self._templates = {
-                            t["id"]: CustomTemplate.from_dict(t) for t in templates
-                        }
+                        self._templates = {t["id"]: CustomTemplate.from_dict(t) for t in templates}
                     logger.info("Loaded %d custom templates", len(self._templates))
                 except (json.JSONDecodeError, OSError) as e:
                     logger.warning("Failed to load custom templates: %s", e)
@@ -482,9 +482,7 @@ class CustomTemplateStore:
                 ],
             }
 
-    def export_templates(
-        self, template_ids: list[str] | None = None
-    ) -> dict[str, Any]:
+    def export_templates(self, template_ids: list[str] | None = None) -> dict[str, Any]:
         """Export templates for sharing.
 
         Args:
@@ -496,9 +494,7 @@ class CustomTemplateStore:
         with self._lock:
             if template_ids:
                 templates = [
-                    self._templates[tid].to_dict()
-                    for tid in template_ids
-                    if tid in self._templates
+                    self._templates[tid].to_dict() for tid in template_ids if tid in self._templates
                 ]
             else:
                 templates = [t.to_dict() for t in self._templates.values()]
@@ -510,9 +506,7 @@ class CustomTemplateStore:
                 "templates": templates,
             }
 
-    def import_templates(
-        self, data: dict[str, Any], overwrite: bool = False
-    ) -> dict[str, Any]:
+    def import_templates(self, data: dict[str, Any], overwrite: bool = False) -> dict[str, Any]:
         """Import templates from exported data.
 
         Args:
@@ -2003,7 +1997,7 @@ class TemplateMatcher:
             # Compute similarities in batch (optimized dot product)
             # similarities.shape = (n_patterns,)
             similarities = np.dot(pattern_embeddings, query_embedding) / (
-                self._pattern_norms * query_norm
+                pattern_norms * query_norm
             )
 
             # Find best match
@@ -2043,16 +2037,22 @@ class TemplateMatcher:
             logger.warning("Template matching unavailable, falling back to model generation")
             return None
 
-    def _template_matches_group_size(self, template: ResponseTemplate, group_size: int) -> bool:
+    def _template_matches_group_size(
+        self, template: ResponseTemplate, group_size: int | None
+    ) -> bool:
         """Check if a template is appropriate for a given group size.
 
         Args:
             template: The template to check
-            group_size: Number of participants in the chat
+            group_size: Number of participants in the chat (None means unknown)
 
         Returns:
             True if template is appropriate, False otherwise
         """
+        # If group_size is None, only non-group templates are appropriate
+        if group_size is None:
+            return not template.is_group_template
+
         # If no constraints, it's appropriate
         if template.min_group_size is None and template.max_group_size is None:
             # If specifically marked as group template, needs group_size >= 3
@@ -2091,8 +2091,15 @@ class TemplateMatcher:
 
         try:
             self._ensure_embeddings()
-            if self._pattern_embeddings is None:
+            pattern_embeddings = self._pattern_embeddings
+            if pattern_embeddings is None:
                 return None
+
+            # Compute norms on-the-fly if not pre-computed
+            pattern_norms = self._pattern_norms
+            if pattern_norms is None:
+                pattern_norms = np.linalg.norm(pattern_embeddings, axis=1)
+                pattern_norms = np.where(pattern_norms == 0, 1, pattern_norms)
 
             # Get query embedding
             query_embedding = self._get_query_embedding(query)
@@ -2101,8 +2108,8 @@ class TemplateMatcher:
                 return None
 
             # Score ALL templates first
-            similarities = np.dot(self._pattern_embeddings, query_embedding) / (
-                self._pattern_norms * query_norm
+            similarities = np.dot(pattern_embeddings, query_embedding) / (
+                pattern_norms * query_norm
             )
 
             # Now find the best match that also satisfies group size constraints
@@ -2137,7 +2144,9 @@ class TemplateMatcher:
             if best_match is not None:
                 # Record hit in analytics
                 if track_analytics:
-                    get_template_analytics().record_hit(best_match.template.name, best_match.similarity)
+                    get_template_analytics().record_hit(
+                        best_match.template.name, best_match.similarity
+                    )
 
                 logger.debug(
                     "Template match with context: %s (similarity: %.3f, group_size: %s)",

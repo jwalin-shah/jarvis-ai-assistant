@@ -9,6 +9,7 @@ import io
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -46,7 +47,7 @@ DATE_HEADER_COLOR = colors.Color(0.5, 0.5, 0.5)  # Medium gray
 REACTION_BG_COLOR = colors.Color(0.9, 0.9, 0.9)
 
 
-def _create_styles() -> dict:
+def _create_styles() -> dict[str, ParagraphStyle]:
     """Create paragraph styles for the PDF."""
     styles = getSampleStyleSheet()
 
@@ -282,7 +283,9 @@ class PDFGenerator:
 
         return filtered
 
-    def _create_header(self, messages: list[Message], conversation: Conversation | None) -> list:
+    def _create_header(
+        self, messages: list[Message], conversation: Conversation | None
+    ) -> list[Any]:
         """Create the document header section."""
         elements = []
 
@@ -355,7 +358,7 @@ class PDFGenerator:
         messages: list[Message],
         conversation: Conversation | None,
         options: PDFExportOptions,
-    ) -> list:
+    ) -> list[Any]:
         """Create message bubbles for the PDF."""
         elements = []
         current_date = None
@@ -497,7 +500,7 @@ class PDFGenerator:
 
         return elements
 
-    def _create_footer_content(self, messages: list[Message]) -> list:
+    def _create_footer_content(self, messages: list[Message]) -> list[Any]:
         """Create footer content at the end of the document."""
         elements = []
         elements.append(Spacer(1, 20))

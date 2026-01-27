@@ -3,7 +3,6 @@
 Tests the async conversion, rate limiting, and timeout handling of the JARVIS API.
 """
 
-import asyncio
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -412,14 +411,14 @@ class TestConfigMigration:
     """Tests for config migration with rate_limit section."""
 
     def test_config_version_4_adds_rate_limit(self):
-        """Config migration to v5 adds rate_limit section (v4 was rate_limit)."""
-        from jarvis.config import _migrate_config
+        """Config migration to v6 adds rate_limit section."""
+        from jarvis.config import CONFIG_VERSION, _migrate_config
 
         data = {"config_version": 3, "model_path": "test"}
         migrated = _migrate_config(data)
 
         assert "rate_limit" in migrated
-        assert migrated["config_version"] == 5
+        assert migrated["config_version"] == CONFIG_VERSION
 
     def test_rate_limit_in_jarvis_config(self):
         """JarvisConfig includes rate_limit field."""

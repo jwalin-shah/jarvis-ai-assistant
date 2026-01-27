@@ -15,6 +15,7 @@ Complete reference guide for the JARVIS command-line interface.
   - [health](#health---system-health-status)
   - [benchmark](#benchmark---run-performance-benchmarks)
   - [serve](#serve---start-api-server)
+  - [mcp-serve](#mcp-serve---start-mcp-server)
   - [version](#version---show-version-information)
 - [Configuration](#configuration)
 - [Environment Variables](#environment-variables)
@@ -500,6 +501,73 @@ Once running, the API provides endpoints at `http://localhost:8000`:
 - `GET /messages/search` - Search messages
 - `GET /docs` - Interactive API documentation (Swagger UI)
 
+### `mcp-serve` - Start MCP Server
+
+Start the Model Context Protocol (MCP) server for integration with Claude Code or other MCP-compatible clients.
+
+**Usage:**
+```bash
+jarvis mcp-serve [options]
+```
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--transport <mode>` | Transport mode: `stdio` or `http` | `stdio` |
+| `--host <addr>` | Host address for HTTP transport | `127.0.0.1` |
+| `-p, --port <n>` | Port number for HTTP transport | `8765` |
+
+**Transport Modes:**
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `stdio` | Standard input/output communication | Claude Code integration, local CLI tools |
+| `http` | HTTP server with JSON-RPC | Web clients, remote access |
+
+**Examples:**
+```bash
+# Start MCP server in stdio mode (default, for Claude Code)
+jarvis mcp-serve
+
+# Start MCP server in HTTP mode
+jarvis mcp-serve --transport http
+
+# Start HTTP server on custom port
+jarvis mcp-serve --transport http --port 9000
+
+# Start HTTP server accessible from other machines
+jarvis mcp-serve --transport http --host 0.0.0.0 --port 8765
+```
+
+**Available MCP Tools:**
+
+The MCP server exposes the following tools:
+
+| Tool | Description |
+|------|-------------|
+| `search_messages` | Search iMessage conversations with filters |
+| `get_conversations` | List recent conversations |
+| `get_messages` | Get messages from a specific conversation |
+| `generate_reply` | Generate AI-powered reply suggestions |
+| `summarize_conversation` | Generate conversation summaries |
+
+**Claude Code Integration:**
+
+Add to your Claude Code settings (`~/.claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "jarvis": {
+      "command": "jarvis",
+      "args": ["mcp-serve"]
+    }
+  }
+}
+```
+
+For detailed documentation, see [docs/MCP_INTEGRATION.md](MCP_INTEGRATION.md).
+
 ### `version` - Show Version Information
 
 Display the current JARVIS version.
@@ -525,7 +593,7 @@ JARVIS stores configuration in `~/.jarvis/config.json`. The setup wizard creates
 ```json
 {
   "config_version": 3,
-  "model_path": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "model_path": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
   "template_similarity_threshold": 0.7,
   "memory_thresholds": {
     "full_mode_mb": 8000,

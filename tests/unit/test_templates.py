@@ -252,11 +252,13 @@ class TestEmbeddingCache:
         cache.set("key1", "value1")
         cache.get("key1")
         cache.clear()
+        # Verify cache is empty - get returns None (this causes a miss)
         assert cache.get("key1") is None
         stats = cache.stats()
         assert stats["size"] == 0
         assert stats["hits"] == 0
-        assert stats["misses"] == 0
+        # misses is 1 because the get("key1") after clear is a miss
+        assert stats["misses"] == 1
 
 
 class TestTemplateMatcherBasics:

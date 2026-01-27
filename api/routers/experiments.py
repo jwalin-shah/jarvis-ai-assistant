@@ -138,8 +138,7 @@ def _experiment_to_response(exp: Any) -> ExperimentResponse:
         description=exp.description,
         created_at=exp.created_at,
         variants=[
-            VariantConfigResponse(id=v.id, weight=v.weight, config=v.config)
-            for v in exp.variants
+            VariantConfigResponse(id=v.id, weight=v.weight, config=v.config) for v in exp.variants
         ],
     )
 

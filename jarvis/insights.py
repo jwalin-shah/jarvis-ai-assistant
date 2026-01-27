@@ -647,7 +647,7 @@ def calculate_relationship_health(
             # Frequency bonus
             freq_score = min(frequency_trends.messages_per_day_avg * 10, 100)
 
-            engagement = (balance_score * 0.6 + freq_score * 0.4)
+            engagement = balance_score * 0.6 + freq_score * 0.4
             scores["engagement"] = engagement
 
             if balance_ratio >= 0.7:

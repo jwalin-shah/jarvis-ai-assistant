@@ -387,9 +387,7 @@ def get_thread_messages(
 
     # Filter and return messages in thread order
     thread_messages = [
-        MessageResponse.model_validate(m)
-        for m in messages
-        if m.id in thread_message_ids
+        MessageResponse.model_validate(m) for m in messages if m.id in thread_message_ids
     ]
 
     return thread_messages
@@ -503,9 +501,7 @@ def analyze_threads(
     threading_config = ThreadingConfig()
     if config:
         threading_config.time_gap_threshold_minutes = config.time_gap_threshold_minutes
-        threading_config.semantic_similarity_threshold = (
-            config.semantic_similarity_threshold
-        )
+        threading_config.semantic_similarity_threshold = config.semantic_similarity_threshold
         threading_config.use_semantic_analysis = config.use_semantic_analysis
 
     analyzer = ThreadAnalyzer(threading_config)

@@ -487,9 +487,7 @@ def get_relationship_health(
     response_patterns = analyze_response_patterns(messages)
     frequency_trends = analyze_frequency_trends(messages)
 
-    health = calculate_relationship_health(
-        messages, sentiment, response_patterns, frequency_trends
-    )
+    health = calculate_relationship_health(messages, sentiment, response_patterns, frequency_trends)
 
     return RelationshipHealthResponse(
         overall_score=health.overall_score,

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # AppleScript to list calendars
-LIST_CALENDARS_SCRIPT = '''
+LIST_CALENDARS_SCRIPT = """
 tell application "Calendar"
     set calList to {}
     repeat with cal in calendars
@@ -30,11 +30,11 @@ tell application "Calendar"
     end repeat
     return calList
 end tell
-'''
+"""
 
 # AppleScript template to get events
 # Note: AppleScript line continuations use backslash character
-GET_EVENTS_SCRIPT_TEMPLATE = '''
+GET_EVENTS_SCRIPT_TEMPLATE = """
 tell application "Calendar"
     set eventList to {{}}
     set startDate to date "{start_date}"
@@ -59,7 +59,7 @@ tell application "Calendar"
     end repeat
     return eventList
 end tell
-'''
+"""
 
 # Calendar filter for all calendars
 ALL_CALENDARS_FILTER = "set targetCalendars to calendars"

@@ -188,9 +188,7 @@ class ConnectionManager:
             if client:
                 client.subscribed_to_health = subscribed
 
-    async def set_active_generation(
-        self, client_id: str, generation_id: str | None
-    ) -> None:
+    async def set_active_generation(self, client_id: str, generation_id: str | None) -> None:
         """Set the active generation ID for a client.
 
         Args:

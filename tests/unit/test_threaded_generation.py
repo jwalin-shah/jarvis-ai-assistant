@@ -450,9 +450,7 @@ class TestThreadedPromptBuilder:
             suggest_follow_up=True,
         )
 
-        prompt = build_threaded_reply_prompt(
-            context, config, instruction="be extra friendly"
-        )
+        prompt = build_threaded_reply_prompt(context, config, instruction="be extra friendly")
 
         assert "extra friendly" in prompt
 
@@ -633,9 +631,7 @@ class TestThreadAwareGenerator:
         assert temp_logistics < 0.5
 
         # Emotional support should have higher temperature (warm/varied)
-        temp_emotional = generator._get_temperature_for_topic(
-            ThreadTopic.EMOTIONAL_SUPPORT
-        )
+        temp_emotional = generator._get_temperature_for_topic(ThreadTopic.EMOTIONAL_SUPPORT)
         assert temp_emotional > 0.5
 
         # Quick exchange should have low temperature

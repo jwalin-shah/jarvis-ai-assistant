@@ -317,12 +317,8 @@ class TestCustomTemplateStore:
 
     def test_export_templates(self, temp_store):
         """Exports templates."""
-        temp_store.create(
-            CustomTemplate(name="T1", template_text="R1", trigger_phrases=["p1"])
-        )
-        temp_store.create(
-            CustomTemplate(name="T2", template_text="R2", trigger_phrases=["p2"])
-        )
+        temp_store.create(CustomTemplate(name="T1", template_text="R1", trigger_phrases=["p1"]))
+        temp_store.create(CustomTemplate(name="T2", template_text="R2", trigger_phrases=["p2"]))
 
         export_data = temp_store.export_templates()
         assert export_data["version"] == 1

@@ -19,7 +19,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -470,13 +470,15 @@ class ThreadAnalyzer:
         if self._topic_embeddings is not None:
             return True
 
+        # Get model BEFORE acquiring lock to avoid deadlock
+        # (_get_sentence_model also acquires self._lock)
+        model = self._get_sentence_model()
+        if model is None:
+            return False
+
         with self._lock:
             if self._topic_embeddings is not None:
                 return True
-
-            model = self._get_sentence_model()
-            if model is None:
-                return False
 
             topic_embeddings: dict[ThreadTopic, np.ndarray] = {}
             for topic, patterns in TOPIC_PATTERNS.items():
@@ -550,7 +552,11 @@ class ThreadAnalyzer:
                 current_msgs = [msg]
                 current_start = msg.date
             else:
-                should_start, _ = self._should_start_new_thread(msg, sorted_messages[i - 1], current_start)
+                # current_start is guaranteed to be set when current_msgs is non-empty
+                assert current_start is not None
+                should_start, _ = self._should_start_new_thread(
+                    msg, sorted_messages[i - 1], current_start
+                )
                 if should_start:
                     threads.append(self._create_thread(current_msgs, chat_id, reply_threads))
                     current_msgs = [msg]
@@ -563,7 +569,9 @@ class ThreadAnalyzer:
 
         return threads
 
-    def _should_start_new_thread(self, current: Message, previous: Message, thread_start: datetime) -> tuple[bool, ThreadingMethod]:
+    def _should_start_new_thread(
+        self, current: Message, previous: Message, thread_start: datetime
+    ) -> tuple[bool, ThreadingMethod]:
         if current.reply_to_id is not None:
             return False, ThreadingMethod.REPLY_REFERENCE
 
@@ -580,7 +588,9 @@ class ThreadAnalyzer:
 
         return False, ThreadingMethod.SEMANTIC_SIMILARITY
 
-    def _create_thread(self, msgs: list[Message], chat_id: str, reply_map: dict[int, str]) -> Thread:
+    def _create_thread(
+        self, msgs: list[Message], chat_id: str, reply_map: dict[int, str]
+    ) -> Thread:
         tid = self._generate_thread_id(chat_id, msgs[0].id)
         for m in msgs:
             reply_map[m.id] = tid
@@ -597,15 +607,103 @@ class ThreadAnalyzer:
         )
 
     def _detect_topic_label(self, msgs: list[Message]) -> str:
-        # Simplified topic labeling for grouping
-        if not msgs: return "General"
+        """Detect a human-readable topic label for a thread.
+
+        Looks for specific keywords in message text to provide more
+        descriptive labels like "Meeting Plans" or "Dinner Plans".
+        """
+        if not msgs:
+            return "General"
+
+        # Combine message text for keyword search
+        combined = " ".join((m.text or "").lower() for m in msgs)
+
+        # Check for specific plan types first
+        if "meeting" in combined or "schedule" in combined:
+            return "Meeting Plans"
+        if "dinner" in combined:
+            return "Dinner Plans"
+        if "lunch" in combined:
+            return "Lunch Plans"
+        if "breakfast" in combined:
+            return "Breakfast Plans"
+        if "coffee" in combined:
+            return "Coffee Plans"
+        if "party" in combined or "celebrate" in combined:
+            return "Party Plans"
+        if "trip" in combined or "travel" in combined:
+            return "Travel Plans"
+
+        # Fall back to topic-based label
         ctx = self.analyze(msgs)
         return ctx.topic.value.replace("_", " ").title()
+
+    def get_threaded_messages(self, messages: list[Message], chat_id: str) -> list[ThreadedMessage]:
+        """Get messages with thread information attached.
+
+        Analyzes messages and returns them wrapped with thread context
+        including thread_id, position within thread, and thread start markers.
+
+        Args:
+            messages: List of messages to analyze
+            chat_id: ID of the chat these messages belong to
+
+        Returns:
+            List of ThreadedMessage objects with thread info attached
+        """
+        if not messages:
+            return []
+
+        # First, analyze to get the threads
+        threads = self.analyze_threads(messages, chat_id)
+
+        # Build a map from message_id to thread info
+        message_to_thread: dict[int, tuple[str, int, bool, ThreadingMethod]] = {}
+        for thread in threads:
+            for position, msg_id in enumerate(thread.messages):
+                is_start = position == 0
+                message_to_thread[msg_id] = (
+                    thread.thread_id,
+                    position,
+                    is_start,
+                    ThreadingMethod.TIME_GAP if is_start else ThreadingMethod.SEMANTIC_SIMILARITY,
+                )
+
+        # Wrap each message with thread info
+        result = []
+        for msg in messages:
+            if msg.id in message_to_thread:
+                thread_id, position, is_start, reason = message_to_thread[msg.id]
+                result.append(
+                    ThreadedMessage(
+                        message=msg,
+                        thread_id=thread_id,
+                        thread_position=position,
+                        is_thread_start=is_start,
+                        threading_reason=reason,
+                    )
+                )
+            else:
+                # Message not in any thread - create standalone
+                tid = self._generate_thread_id(chat_id, msg.id)
+                result.append(
+                    ThreadedMessage(
+                        message=msg,
+                        thread_id=tid,
+                        thread_position=0,
+                        is_thread_start=True,
+                        threading_reason=ThreadingMethod.TIME_GAP,
+                    )
+                )
+
+        return result
 
     def analyze(self, messages: list[Message]) -> ThreadContext:
         """Analyze a specific thread context."""
         if not messages:
-            return ThreadContext([], ThreadTopic.UNKNOWN, ThreadState.CONCLUDED, UserRole.PARTICIPANT, 0.0)
+            return ThreadContext(
+                [], ThreadTopic.UNKNOWN, ThreadState.CONCLUDED, UserRole.PARTICIPANT, 0.0
+            )
 
         topic, conf = self._detect_topic(messages)
         state = self._detect_state(messages)
@@ -614,13 +712,17 @@ class ThreadAnalyzer:
         items = self._extract_action_items(messages)
         parts = {m.sender for m in messages if not m.is_from_me}
 
-        return ThreadContext(messages, topic, state, role, conf, relevant, items, max(1, len(parts)))
+        return ThreadContext(
+            messages, topic, state, role, conf, relevant, items, max(1, len(parts))
+        )
 
     def _detect_topic(self, messages: list[Message]) -> tuple[ThreadTopic, float]:
         recent = messages[-10:]
         combined = " ".join(m.text.lower() for m in recent if m.text)
-        
-        pattern_scores = {t: sum(1 for p in pats if p.lower() in combined) for t, pats in TOPIC_PATTERNS.items()}
+
+        pattern_scores = {
+            t: sum(1 for p in pats if p.lower() in combined) for t, pats in TOPIC_PATTERNS.items()
+        }
         best_p = max(pattern_scores, key=lambda k: pattern_scores[k])
         if pattern_scores[best_p] >= 2:
             return best_p, min(0.9, 0.5 + pattern_scores[best_p] * 0.1)
@@ -633,10 +735,13 @@ class ThreadAnalyzer:
                 if sims[best_t] >= self.TOPIC_CONFIDENCE_THRESHOLD:
                     return best_t, sims[best_t]
 
-        return (best_p, 0.3 + pattern_scores[best_p] * 0.1) if pattern_scores[best_p] >= 1 else (ThreadTopic.UNKNOWN, 0.0)
+        if pattern_scores[best_p] >= 1:
+            return (best_p, 0.3 + pattern_scores[best_p] * 0.1)
+        return (ThreadTopic.UNKNOWN, 0.0)
 
     def _detect_state(self, messages: list[Message]) -> ThreadState:
-        if not messages: return ThreadState.CONCLUDED
+        if not messages:
+            return ThreadState.CONCLUDED
         last = messages[-1]
         text = (last.text or "").lower()
         if any(re.search(p, text, re.I) for p in QUESTION_PATTERNS):
@@ -646,33 +751,59 @@ class ThreadAnalyzer:
         return ThreadState.IN_DISCUSSION
 
     def _detect_user_role(self, messages: list[Message]) -> UserRole:
-        if not messages: return UserRole.PARTICIPANT
-        if messages[0].is_from_me: return UserRole.INITIATOR
+        if not messages:
+            return UserRole.PARTICIPANT
+        if messages[0].is_from_me:
+            return UserRole.INITIATOR
         my_count = sum(1 for m in messages if m.is_from_me)
         ratio = my_count / len(messages)
-        if ratio > 0.6: return UserRole.INITIATOR
-        if ratio < 0.3: return UserRole.RESPONDER
+        if ratio > 0.6:
+            return UserRole.INITIATOR
+        if ratio < 0.3:
+            return UserRole.RESPONDER
         return UserRole.PARTICIPANT
 
     def _get_relevant_messages(self, messages: list[Message], topic: ThreadTopic) -> list[Message]:
-        if topic == ThreadTopic.QUICK_EXCHANGE: return messages[-3:]
+        if topic == ThreadTopic.QUICK_EXCHANGE:
+            return messages[-3:]
         if topic == ThreadTopic.LOGISTICS:
-            rel = [m for m in messages[-10:] if m.text and any(w in m.text.lower() for w in ["time", "where", "address", "meet", "late", "here"])]
+            logistics_words = ["time", "where", "address", "meet", "late", "here"]
+            rel = [
+                m
+                for m in messages[-10:]
+                if m.text and any(w in m.text.lower() for w in logistics_words)
+            ]
             return list(dict.fromkeys(rel + messages[-3:]))
-        if topic in (ThreadTopic.PLANNING, ThreadTopic.DECISION_MAKING): return messages[-7:]
+        if topic in (ThreadTopic.PLANNING, ThreadTopic.DECISION_MAKING):
+            return messages[-7:]
         return messages[-5:]
 
     def _extract_action_items(self, messages: list[Message]) -> list[str]:
-        pats = [r"(?:I'll|i'll|I will|i will)\s+(.+?)(?:\.|$)", r"(?:can you|could you)\s+(.+?)(?:\?|$)", r"(?:don't forget to|remember to)\s+(.+?)(?:\.|$)", r"(?:please|pls)\s+(.+?)(?:\.|$)", r"(?:need to|have to)\s+(.+?)(?:\.|$)" ]
+        pats = [
+            r"(?:I'll|i'll|I will|i will)\s+(.+?)(?:\.|$)",
+            r"(?:can you|could you)\s+(.+?)(?:\?|$)",
+            r"(?:don't forget to|remember to)\s+(.+?)(?:\.|$)",
+            r"(?:please|pls)\s+(.+?)(?:\.|$)",
+            r"(?:need to|have to)\s+(.+?)(?:\.|$)",
+        ]
         items = []
         for m in messages[-10:]:
-            if not m.text: continue
+            if not m.text:
+                continue
             for p in pats:
                 for match in re.findall(p, m.text, re.I):
                     s = match.strip()
-                    if 5 < len(s) < 100: items.append(s)
-        seen = set()
-        return [x for x in items if not (x.lower() in seen or seen.add(x.lower()))][:5]
+                    if 5 < len(s) < 100:
+                        items.append(s)
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        unique_items: list[str] = []
+        for x in items:
+            lower_x = x.lower()
+            if lower_x not in seen:
+                seen.add(lower_x)
+                unique_items.append(x)
+        return unique_items[:5]
 
     def get_response_config(self, context: ThreadContext) -> ThreadedReplyConfig:
         """Get recommended response configuration."""
@@ -689,6 +820,7 @@ class ThreadAnalyzer:
 _analyzer: ThreadAnalyzer | None = None
 _analyzer_lock = threading.Lock()
 
+
 def get_thread_analyzer(config: ThreadingConfig | None = None) -> ThreadAnalyzer:
     """Get singleton ThreadAnalyzer."""
     global _analyzer
@@ -698,10 +830,12 @@ def get_thread_analyzer(config: ThreadingConfig | None = None) -> ThreadAnalyzer
                 _analyzer = ThreadAnalyzer(config)
     return _analyzer
 
+
 def reset_thread_analyzer() -> None:
     """Reset singleton."""
     global _analyzer
     with _analyzer_lock:
-        if _analyzer: _analyzer.clear_cache()
+        if _analyzer:
+            _analyzer.clear_cache()
         _analyzer = None
     logger.debug("Thread analyzer singleton reset")

@@ -293,6 +293,11 @@ jarvis serve
 jarvis serve --host 0.0.0.0 --port 8080
 jarvis serve --reload                           # Enable auto-reload for development
 
+# Start MCP server (for Claude Code integration)
+jarvis mcp-serve                                # Default: stdio mode
+jarvis mcp-serve --transport http               # HTTP mode on port 8765
+jarvis mcp-serve --transport http --port 9000   # Custom port
+
 # Version information
 jarvis version
 jarvis --version

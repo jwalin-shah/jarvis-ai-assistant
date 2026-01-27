@@ -349,7 +349,8 @@ async def get_suggestions(
     ```
 
     Args:
-        suggestion_request: SuggestionRequest with last_message, num_suggestions, and optional group_size
+        suggestion_request: SuggestionRequest with last_message, num_suggestions,
+            and optional group_size
         request: FastAPI request object (for rate limiting)
 
     Returns:

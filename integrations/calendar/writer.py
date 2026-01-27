@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # AppleScript template to create an event
 # Note: Line length in AppleScript templates is unavoidable
-CREATE_EVENT_SCRIPT_TEMPLATE = '''
+CREATE_EVENT_SCRIPT_TEMPLATE = """
 tell application "Calendar"
     set targetCalendar to first calendar whose id is "{calendar_id}"
     set eventProps to {{summary:"{title}", start date:date "{start_date}", ¬
@@ -24,10 +24,10 @@ tell application "Calendar"
     set newEvent to make new event at end of events of targetCalendar with properties eventProps
     return uid of newEvent
 end tell
-'''
+"""
 
 # AppleScript template for all-day events
-CREATE_ALLDAY_EVENT_SCRIPT_TEMPLATE = '''
+CREATE_ALLDAY_EVENT_SCRIPT_TEMPLATE = """
 tell application "Calendar"
     set targetCalendar to first calendar whose id is "{calendar_id}"
     set eventProps to {{summary:"{title}", start date:date "{start_date}", ¬
@@ -35,7 +35,7 @@ tell application "Calendar"
     set newEvent to make new event at end of events of targetCalendar with properties eventProps
     return uid of newEvent
 end tell
-'''
+"""
 
 
 class CalendarWriterImpl:
@@ -138,9 +138,7 @@ class CalendarWriterImpl:
             extra_properties = ", " + ", ".join(extra_props)
 
         # Select template based on all-day flag
-        template = (
-            CREATE_ALLDAY_EVENT_SCRIPT_TEMPLATE if all_day else CREATE_EVENT_SCRIPT_TEMPLATE
-        )
+        template = CREATE_ALLDAY_EVENT_SCRIPT_TEMPLATE if all_day else CREATE_EVENT_SCRIPT_TEMPLATE
 
         # Build script
         script = template.format(

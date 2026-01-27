@@ -374,14 +374,10 @@ class TestAnalyzeFrequencyTrends:
         messages = []
         # Add 5 messages on Saturday
         for i in range(5):
-            messages.append(
-                create_message(f"sat{i}", date=saturday + timedelta(hours=i))
-            )
+            messages.append(create_message(f"sat{i}", date=saturday + timedelta(hours=i)))
         # Add 1 message on other days
         for i in range(1, 6):
-            messages.append(
-                create_message(f"other{i}", date=saturday + timedelta(days=i))
-            )
+            messages.append(create_message(f"other{i}", date=saturday + timedelta(days=i)))
         result = analyze_frequency_trends(messages)
         assert result.most_active_day == "Saturday"
 

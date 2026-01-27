@@ -33,6 +33,7 @@ __all__ = [
     "attachments_router",
     "batch_router",
     "calendar_router",
+    "contacts_router",
     "conversations_router",
     "custom_templates_router",
     "digest_router",

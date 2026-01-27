@@ -246,8 +246,33 @@ class MessagePriorityScorer:
 
             try:
                 model = self._get_sentence_model()
+            except ImportError:
+                # SentenceTransformer or related dependencies not installed
+                logger.warning("Sentence transformer not installed, using pattern matching only")
+                self._intent_embeddings = {}
+                return
+            except OSError as e:
+                # File system errors (model files inaccessible, disk issues)
+                logger.warning(
+                    "Sentence model unavailable (I/O error: %s), using pattern matching only", e
+                )
+                self._intent_embeddings = {}
+                return
+            except (RuntimeError, ValueError) as e:
+                # Model loading failures (corrupted model, invalid config)
+                logger.warning(
+                    "Sentence model unavailable (loading error: %s), using pattern matching only",
+                    e,
+                )
+                self._intent_embeddings = {}
+                return
             except Exception:
-                logger.warning("Sentence model unavailable, using pattern matching only")
+                # Last resort catch-all for truly unexpected errors during model loading
+                # (e.g., memory exhaustion, network timeouts). Fall back to pattern
+                # matching only mode to ensure the system remains functional.
+                logger.exception(
+                    "Sentence model unavailable (unexpected error), using pattern matching only"
+                )
                 self._intent_embeddings = {}
                 return
 
@@ -327,8 +352,18 @@ class MessagePriorityScorer:
                 similarity = float(np.dot(embedding, self._intent_embeddings["question"]))
                 if similarity > 0.6:
                     return True, similarity
+            except (ValueError, TypeError) as e:
+                # Invalid input or numeric operation errors
+                logger.debug("Question detection semantic matching failed: %s", e)
+            except (RuntimeError, OSError) as e:
+                # Model state errors or I/O issues during encoding
+                logger.debug("Question detection semantic matching failed (runtime/I/O): %s", e)
             except Exception:
-                pass
+                # Last resort catch-all for truly unexpected model/embedding errors.
+                # This is intentionally broad because the sentence transformer library
+                # can raise various exceptions during encoding. Fall back to pattern
+                # matching result to maintain functionality.
+                logger.debug("Question detection semantic matching unavailable", exc_info=True)
 
         return False, 0.0
 
@@ -358,8 +393,18 @@ class MessagePriorityScorer:
                 similarity = float(np.dot(embedding, self._intent_embeddings["action"]))
                 if similarity > 0.6:
                     return True, similarity
+            except (ValueError, TypeError) as e:
+                # Invalid input or numeric operation errors
+                logger.debug("Action detection semantic matching failed: %s", e)
+            except (RuntimeError, OSError) as e:
+                # Model state errors or I/O issues during encoding
+                logger.debug("Action detection semantic matching failed (runtime/I/O): %s", e)
             except Exception:
-                pass
+                # Last resort catch-all for truly unexpected model/embedding errors.
+                # This is intentionally broad because the sentence transformer library
+                # can raise various exceptions during encoding. Fall back to pattern
+                # matching result to maintain functionality.
+                logger.debug("Action detection semantic matching unavailable", exc_info=True)
 
         return False, 0.0
 
@@ -396,8 +441,22 @@ class MessagePriorityScorer:
                 similarity = float(np.dot(embedding, self._intent_embeddings["urgent"]))
                 if similarity > 0.65:
                     return True, similarity
+            except (ValueError, TypeError) as e:
+                # Invalid input or numeric operation errors
+                logger.debug("Time-sensitive detection semantic matching failed: %s", e)
+            except (RuntimeError, OSError) as e:
+                # Model state errors or I/O issues during encoding
+                logger.debug(
+                    "Time-sensitive detection semantic matching failed (runtime/I/O): %s", e
+                )
             except Exception:
-                pass
+                # Last resort catch-all for truly unexpected model/embedding errors.
+                # This is intentionally broad because the sentence transformer library
+                # can raise various exceptions during encoding. Fall back to pattern
+                # matching result to maintain functionality.
+                logger.debug(
+                    "Time-sensitive detection semantic matching unavailable", exc_info=True
+                )
 
         return False, 0.0
 
@@ -448,8 +507,18 @@ class MessagePriorityScorer:
         # Initialize embeddings if needed
         try:
             self._ensure_embeddings_computed()
+        except ImportError:
+            # SentenceTransformer not installed - continue with pattern matching only
+            pass
+        except (OSError, RuntimeError, ValueError):
+            # Model loading or embedding computation failed due to I/O, state, or config errors.
+            # Continue with pattern matching only, logging is done in _ensure_embeddings_computed.
+            pass
         except Exception:
-            pass  # Continue with pattern matching only
+            # Last resort catch-all for truly unexpected errors during embedding computation.
+            # This is intentionally broad to ensure score_message never fails, allowing
+            # pattern matching to still work. Logging is done in _ensure_embeddings_computed.
+            pass
 
         reasons: list[PriorityReason] = []
         component_scores: dict[str, float] = {}

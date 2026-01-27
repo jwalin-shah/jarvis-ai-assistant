@@ -242,9 +242,7 @@ class TestMessagePriorityScorerBasics:
 
     def test_detect_time_sensitive_deadline(self, scorer: MessagePriorityScorer) -> None:
         """Test time sensitivity detection with deadline."""
-        is_sensitive, confidence = scorer._detect_time_sensitive(
-            "The deadline is tomorrow at 5pm"
-        )
+        is_sensitive, confidence = scorer._detect_time_sensitive("The deadline is tomorrow at 5pm")
         assert is_sensitive is True
 
     def test_detect_time_sensitive_not_sensitive(self, scorer: MessagePriorityScorer) -> None:

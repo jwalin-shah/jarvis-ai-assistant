@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from jarvis.evaluation import EvaluationResult, FeedbackStore, ResponseEvaluator, reset_evaluation
+from jarvis.evaluation import FeedbackStore, ResponseEvaluator, reset_evaluation
 
 
 @pytest.fixture(autouse=True)

@@ -394,7 +394,7 @@ class iMessageAccessError(iMessageError):  # noqa: N801 - iMessage is a brand na
                 "Open System Settings",
                 "Go to Privacy & Security > Full Disk Access",
                 "Add and enable your terminal application",
-                "Restart JARVIS"
+                "Restart JARVIS",
             ]
         super().__init__(message, db_path=db_path, code=code, details=details, cause=cause)
 
@@ -1030,6 +1030,28 @@ def validation_type_error(field: str, value: Any, expected: str) -> ValidationEr
     )
 
 
+def model_generation_timeout(
+    model_name: str, timeout_seconds: float, prompt: str | None = None
+) -> ModelGenerationError:
+    """Create a ModelGenerationError for generation timeout.
+
+    Args:
+        model_name: Name of the model that timed out.
+        timeout_seconds: The timeout value that was exceeded.
+        prompt: The prompt that was being processed (optional).
+
+    Returns:
+        ModelGenerationError with timeout details.
+    """
+    return ModelGenerationError(
+        f"Model generation timed out after {timeout_seconds} seconds",
+        model_name=model_name,
+        timeout_seconds=timeout_seconds,
+        prompt=prompt,
+        code=ErrorCode.MDL_TIMEOUT,
+    )
+
+
 def calendar_permission_denied() -> CalendarAccessError:
     """Create a CalendarAccessError for Calendar permission requirement.
 
@@ -1080,6 +1102,7 @@ __all__ = [
     # Convenience functions
     "model_not_found",
     "model_out_of_memory",
+    "model_generation_timeout",
     "imessage_permission_denied",
     "imessage_db_not_found",
     "validation_required",

@@ -545,7 +545,8 @@ def record_feedback(request: RecordFeedbackRequest) -> RecordFeedbackResponse:
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid action: {request.action}. Must be one of: sent, edited, dismissed, copied",
+            detail=f"Invalid action: {request.action}. "
+            "Must be one of: sent, edited, dismissed, copied",
         )
 
     # Validate edited text for edit actions

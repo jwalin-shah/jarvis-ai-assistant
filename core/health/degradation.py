@@ -164,12 +164,30 @@ class GracefulDegradationController:
                 if new_state == CircuitState.OPEN:
                     return self._execute_fallback(policy, *args, **kwargs)
                 return self._execute_degraded(policy, *args, **kwargs)
-            except Exception as e:
+            except (RuntimeError, ValueError, OSError, AttributeError) as e:
+                # Common exceptions from user-provided callables (I/O, validation, state errors).
+                # Circuit breaker pattern: record failure and degrade rather than propagate.
                 circuit.record_failure()
                 logger.warning(
                     "Feature '%s' primary execution failed: %s",
                     feature_name,
-                    str(e),
+                    e,
+                )
+
+                # Check new state after failure
+                new_state = circuit.state
+                if new_state == CircuitState.OPEN:
+                    return self._execute_fallback(policy, *args, **kwargs)
+                return self._execute_degraded(policy, *args, **kwargs)
+            except Exception:
+                # Last resort catch-all for user-provided callables which may raise
+                # arbitrary exceptions not covered above. This is intentional in the
+                # circuit breaker pattern to handle all failures and trigger
+                # degraded/fallback behavior rather than propagating errors.
+                circuit.record_failure()
+                logger.exception(
+                    "Feature '%s' primary execution failed with unexpected error",
+                    feature_name,
                 )
 
                 # Check new state after failure
@@ -195,11 +213,22 @@ class GracefulDegradationController:
         """
         try:
             return policy.health_check()
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError, AttributeError) as e:
+            # Common exceptions from health check callables (I/O, validation, state errors).
+            # Health check failures should return False rather than propagating errors.
             logger.warning(
-                "Health check for '%s' raised exception: %s",
+                "Health check for '%s' failed: %s",
                 policy.feature_name,
-                str(e),
+                e,
+            )
+            return False
+        except Exception:
+            # Last resort catch-all for user-provided health check callables which
+            # may raise arbitrary exceptions not covered above. Health check failures
+            # should return False rather than propagating errors to the caller.
+            logger.exception(
+                "Health check for '%s' raised unexpected exception",
+                policy.feature_name,
             )
             return False
 
@@ -222,11 +251,22 @@ class GracefulDegradationController:
         logger.info("Executing degraded behavior for '%s'", policy.feature_name)
         try:
             return policy.degraded_behavior(*args, **kwargs)
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError, AttributeError) as e:
+            # Common exceptions from degraded behavior callables (I/O, validation, state errors).
+            # When degraded behavior fails, fall back to the final fallback behavior.
             logger.warning(
-                "Degraded behavior for '%s' failed: %s, falling back",
+                "Degraded behavior for '%s' failed (%s), falling back",
                 policy.feature_name,
-                str(e),
+                e,
+            )
+            return self._execute_fallback(policy, *args, **kwargs)
+        except Exception:
+            # Last resort catch-all for user-provided degraded behavior callables
+            # which may raise arbitrary exceptions not covered above. When degraded
+            # behavior fails, fall back to the final fallback behavior.
+            logger.exception(
+                "Degraded behavior for '%s' failed with unexpected error, falling back",
+                policy.feature_name,
             )
             return self._execute_fallback(policy, *args, **kwargs)
 

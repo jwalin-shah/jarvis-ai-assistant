@@ -188,7 +188,25 @@ class ChatDBReader:
                     db_path=db_path_str,
                     cause=e,
                 ) from e
+            except OSError as e:
+                # File system errors (e.g., file locked, disk I/O issues)
+                raise iMessageAccessError(
+                    f"Failed to connect to database (I/O error): {e}",
+                    db_path=db_path_str,
+                    cause=e,
+                ) from e
+            except (ValueError, TypeError) as e:
+                # Configuration or type errors during connection setup
+                raise iMessageAccessError(
+                    f"Failed to connect to database (configuration error): {e}",
+                    db_path=db_path_str,
+                    cause=e,
+                ) from e
             except Exception as e:
+                # Last resort catch-all for truly unexpected errors during connection
+                # (e.g., memory issues, threading problems). This ensures we always
+                # wrap errors in our error hierarchy for consistent handling.
+                logger.exception("Unexpected error connecting to database: %s", db_path_str)
                 raise iMessageAccessError(
                     f"Failed to connect to database: {e}",
                     db_path=db_path_str,
@@ -206,8 +224,19 @@ class ChatDBReader:
         if self._connection is not None:
             try:
                 self._connection.close()
+            except sqlite3.Error:
+                # SQLite errors during close (e.g., connection already closed)
+                # are expected and can be safely ignored during cleanup.
+                pass
+            except OSError:
+                # File system errors during close are recoverable and can be ignored.
+                logger.debug("I/O error closing database connection", exc_info=True)
             except Exception:
-                pass  # Suppress errors during cleanup
+                # Last resort catch-all for truly unexpected cleanup errors (e.g., threading).
+                # These are logged but not propagated to avoid masking the original error
+                # in context manager exit. This is intentionally broad because cleanup
+                # must not raise to avoid exception chaining issues.
+                logger.debug("Unexpected error closing database connection", exc_info=True)
             self._connection = None
             self._schema_version = None
             self._contacts_cache = None
@@ -342,8 +371,10 @@ class ChatDBReader:
                 if ab_db.exists():
                     self._load_contacts_from_db(ab_db)
                     return
-        except Exception as e:
-            logger.debug(f"Cannot access AddressBook: {e}")
+        except PermissionError:
+            logger.debug("Permission denied accessing AddressBook directory")
+        except OSError as e:
+            logger.debug("I/O error accessing AddressBook: %s", e)
 
     def _load_contacts_from_db(self, db_path: Path) -> None:
         """Load contacts from a specific AddressBook database.
@@ -480,8 +511,19 @@ class ChatDBReader:
             else:
                 logger.warning(f"Database error: {e}")
             return False
-        except Exception as e:
-            logger.warning(f"Unexpected error checking access: {e}")
+        except OSError as e:
+            # File system errors (e.g., file locked, disk I/O issues)
+            logger.warning("I/O error checking access: %s", e)
+            return False
+        except (ValueError, TypeError) as e:
+            # Configuration or type errors during access check
+            logger.warning("Configuration error checking access: %s", e)
+            return False
+        except Exception:
+            # Last resort catch-all for truly unexpected errors (e.g., memory issues,
+            # threading problems). Log with traceback for debugging, but return False
+            # to caller since this is a boolean check method.
+            logger.exception("Unexpected error checking access to %s", self.db_path)
             return False
 
     def require_access(self) -> None:
@@ -517,7 +559,26 @@ class ChatDBReader:
                     code=ErrorCode.MSG_QUERY_FAILED,
                     cause=e,
                 ) from e
+        except OSError as e:
+            # File system errors (e.g., file locked, disk I/O issues)
+            raise iMessageAccessError(
+                f"I/O error checking access: {e}",
+                db_path=db_path_str,
+                cause=e,
+            ) from e
+        except (ValueError, TypeError) as e:
+            # Configuration or type errors during access check
+            raise iMessageAccessError(
+                f"Configuration error checking access: {e}",
+                db_path=db_path_str,
+                cause=e,
+            ) from e
         except Exception as e:
+            # Last resort catch-all for truly unexpected errors (e.g., memory issues,
+            # threading problems). Wraps in our error hierarchy and logs traceback
+            # for debugging. This is intentionally broad to ensure all errors are
+            # wrapped in iMessageAccessError for consistent handling.
+            logger.exception("Unexpected error checking access to %s", db_path_str)
             raise iMessageAccessError(
                 f"Unexpected error checking access: {e}",
                 db_path=db_path_str,
@@ -1092,15 +1153,17 @@ class ChatDBReader:
                 sender_name = None
                 if not row_dict.get("is_from_me") and raw_sender:
                     sender_name = self._resolve_contact_name(raw_sender)
-                results.append({
-                    "attachment": attachment,
-                    "message_id": row_dict.get("message_id"),
-                    "message_date": parse_apple_timestamp(row_dict.get("message_date")),
-                    "chat_id": row_dict.get("chat_id"),
-                    "sender": sender,
-                    "sender_name": sender_name,
-                    "is_from_me": bool(row_dict.get("is_from_me")),
-                })
+                results.append(
+                    {
+                        "attachment": attachment,
+                        "message_id": row_dict.get("message_id"),
+                        "message_date": parse_apple_timestamp(row_dict.get("message_date")),
+                        "chat_id": row_dict.get("chat_id"),
+                        "sender": sender,
+                        "sender_name": sender_name,
+                        "is_from_me": bool(row_dict.get("is_from_me")),
+                    }
+                )
 
         return results
 
@@ -1181,12 +1244,14 @@ class ChatDBReader:
         results = []
         for row in rows:
             row_dict = dict(row)
-            results.append({
-                "chat_id": row_dict.get("chat_id"),
-                "display_name": row_dict.get("display_name"),
-                "attachment_count": row_dict.get("attachment_count", 0),
-                "total_size_bytes": row_dict.get("total_size", 0),
-            })
+            results.append(
+                {
+                    "chat_id": row_dict.get("chat_id"),
+                    "display_name": row_dict.get("display_name"),
+                    "attachment_count": row_dict.get("attachment_count", 0),
+                    "total_size_bytes": row_dict.get("total_size", 0),
+                }
+            )
 
         return results
 

@@ -291,9 +291,7 @@ class TestSearchFilters:
 class TestSemanticSearcher:
     """Tests for the SemanticSearcher class."""
 
-    def test_searcher_initialization(
-        self, mock_reader: MagicMock, temp_cache_path: Path
-    ) -> None:
+    def test_searcher_initialization(self, mock_reader: MagicMock, temp_cache_path: Path) -> None:
         """Test searcher initialization."""
         cache = EmbeddingCache(cache_path=temp_cache_path)
         searcher = SemanticSearcher(
@@ -306,9 +304,7 @@ class TestSemanticSearcher:
         assert searcher.similarity_threshold == 0.5
         searcher.close()
 
-    def test_search_empty_query(
-        self, mock_reader: MagicMock, temp_cache_path: Path
-    ) -> None:
+    def test_search_empty_query(self, mock_reader: MagicMock, temp_cache_path: Path) -> None:
         """Test that empty query returns empty results."""
         cache = EmbeddingCache(cache_path=temp_cache_path)
         searcher = SemanticSearcher(reader=mock_reader, cache=cache)
@@ -386,9 +382,7 @@ class TestSemanticSearcher:
 
         # All messages will have low similarity
         query_embedding = np.array([1.0, 0.0, 0.0], dtype=np.float32)
-        msg_embeddings = np.array(
-            [[0.1, 0.9, 0.0] for _ in sample_messages], dtype=np.float32
-        )
+        msg_embeddings = np.array([[0.1, 0.9, 0.0] for _ in sample_messages], dtype=np.float32)
 
         def encode_side_effect(texts, **kwargs):
             if len(texts) == 1:
@@ -423,9 +417,7 @@ class TestSemanticSearcher:
 
         # All messages will have high similarity
         query_embedding = np.array([1.0, 0.0, 0.0], dtype=np.float32)
-        msg_embeddings = np.array(
-            [[0.9, 0.1, 0.0] for _ in sample_messages], dtype=np.float32
-        )
+        msg_embeddings = np.array([[0.9, 0.1, 0.0] for _ in sample_messages], dtype=np.float32)
 
         def encode_side_effect(texts, **kwargs):
             if len(texts) == 1:
@@ -490,9 +482,7 @@ class TestSemanticSearcher:
         mock_model = MagicMock()
 
         query_embedding = np.array([0.5, 0.5, 0.0], dtype=np.float32)
-        msg_embeddings = np.array(
-            [[0.5, 0.5, 0.0] for _ in sample_messages], dtype=np.float32
-        )
+        msg_embeddings = np.array([[0.5, 0.5, 0.0] for _ in sample_messages], dtype=np.float32)
 
         def encode_side_effect(texts, **kwargs):
             if len(texts) == 1:
