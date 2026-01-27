@@ -32,6 +32,7 @@ from api.routers import (
     digest_router,
     drafts_router,
     export_router,
+    feedback_router,
     health_router,
     insights_router,
     metrics_router,
@@ -206,6 +207,11 @@ API_TAGS_METADATA = [
         "description": "iMessage attachment management. "
         "List, download, and analyze file attachments from conversations.",
     },
+    {
+        "name": "feedback",
+        "description": "User feedback tracking and response evaluation. "
+        "Record feedback on suggestions, track acceptance rates, and get improvement insights.",
+    },
 ]
 
 API_CONTACT = {
@@ -346,6 +352,7 @@ app.include_router(websocket_router)
 app.include_router(tasks_router)
 app.include_router(batch_router)
 app.include_router(priority_router)
+app.include_router(feedback_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)
