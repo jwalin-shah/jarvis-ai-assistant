@@ -305,10 +305,10 @@ app = FastAPI(
 
 # Configure rate limiting
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # Use custom OpenAPI schema
-app.openapi = custom_openapi
+app.openapi = custom_openapi  # type: ignore[method-assign]
 
 # Configure CORS for Tauri and development
 app.add_middleware(

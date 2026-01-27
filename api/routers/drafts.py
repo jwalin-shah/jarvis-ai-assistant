@@ -180,7 +180,8 @@ def _generate_single_suggestion(
     )
     try:
         response = generator.generate(gen_request)  # type: ignore[attr-defined]
-        return response.text.strip()
+        text: str = str(response.text) if response.text else ""
+        return text.strip()
     except Exception as e:
         logger.warning("Generation failed: %s", e)
         return None
@@ -418,7 +419,7 @@ def _generate_summary(generator: object, prompt: str) -> str:
         temperature=0.5,  # Lower temperature for more focused summary
     )
     response = generator.generate(gen_request)  # type: ignore[attr-defined]
-    return response.text
+    return str(response.text) if response.text else ""
 
 
 @router.post(

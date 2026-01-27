@@ -6,6 +6,7 @@ Supports creating, listing, cancelling, and monitoring tasks.
 
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -107,7 +108,7 @@ class TaskResultResponse(BaseModel):
     )
 
     success: bool = Field(..., description="Whether the task completed successfully")
-    data: dict | list | None = Field(default=None, description="Result data")
+    data: dict[str, Any] | list[Any] | None = Field(default=None, description="Result data")
     error: str | None = Field(default=None, description="Error message if failed")
     items_processed: int = Field(default=0, ge=0, description="Successfully processed items")
     items_failed: int = Field(default=0, ge=0, description="Failed items")
@@ -155,7 +156,7 @@ class TaskResponse(BaseModel):
     id: str = Field(..., description="Unique task identifier")
     task_type: TaskTypeEnum = Field(..., description="Type of task")
     status: TaskStatusEnum = Field(..., description="Current task status")
-    params: dict = Field(default_factory=dict, description="Task parameters")
+    params: dict[str, Any] = Field(default_factory=dict, description="Task parameters")
     progress: TaskProgressResponse = Field(..., description="Progress information")
     result: TaskResultResponse | None = Field(default=None, description="Task result")
     created_at: datetime = Field(..., description="Task creation time")
@@ -187,7 +188,7 @@ class TaskCreateRequest(BaseModel):
     )
 
     task_type: TaskTypeEnum = Field(..., description="Type of task to create")
-    params: dict = Field(default_factory=dict, description="Task parameters")
+    params: dict[str, Any] = Field(default_factory=dict, description="Task parameters")
 
 
 class TaskListResponse(BaseModel):
@@ -409,7 +410,7 @@ def get_task(task_id: str) -> TaskResponse:
 
 
 @router.delete("/{task_id}")
-def cancel_task(task_id: str) -> dict:
+def cancel_task(task_id: str) -> dict[str, Any]:
     """Cancel a pending task.
 
     Only pending tasks can be cancelled. Running tasks will complete.
@@ -480,7 +481,7 @@ def retry_task(task_id: str) -> TaskResponse:
 
 
 @router.post("/worker/start")
-def start_task_worker() -> dict:
+def start_task_worker() -> dict[str, Any]:
     """Start the background task worker.
 
     Returns:
@@ -495,7 +496,7 @@ def start_task_worker() -> dict:
 
 
 @router.post("/worker/stop")
-def stop_task_worker() -> dict:
+def stop_task_worker() -> dict[str, Any]:
     """Stop the background task worker.
 
     Returns:
@@ -512,7 +513,7 @@ def stop_task_worker() -> dict:
 
 
 @router.delete("/completed/clear")
-def clear_completed_tasks() -> dict:
+def clear_completed_tasks() -> dict[str, Any]:
     """Clear all completed tasks from the queue.
 
     Returns:

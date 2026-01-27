@@ -1958,7 +1958,9 @@ class TemplateMatcher:
 
         # Encode and cache
         model = _get_sentence_model()
-        embedding = model.encode([query], convert_to_numpy=True)[0]
+        embedding_result = model.encode([query], convert_to_numpy=True)[0]
+        # Cast to ndarray to satisfy mypy (encode returns Any)
+        embedding: np.ndarray = np.asarray(embedding_result)
         self._query_cache.set(cache_key, embedding)
         return embedding
 

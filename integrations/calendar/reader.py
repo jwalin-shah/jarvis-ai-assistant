@@ -9,7 +9,7 @@ import logging
 import re
 import subprocess
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 from contracts.calendar import Calendar, CalendarEvent
 from jarvis.errors import CalendarAccessError
@@ -257,8 +257,8 @@ class CalendarReaderImpl:
     def _parse_applescript_list(
         self,
         output: str,
-        parser: callable,  # type: ignore[type-arg]
-    ) -> list:  # type: ignore[type-arg]
+        parser: Callable[[str], Any],
+    ) -> list[Any]:
         """Parse AppleScript list output.
 
         AppleScript returns lists in a specific format that we need to parse.
@@ -305,11 +305,14 @@ class CalendarReaderImpl:
         """
         try:
             data = self._parse_record(record)
+            # Convert editable string to bool (AppleScript returns "true"/"false")
+            editable_str = data.get("editable", "true")
+            is_editable = editable_str.lower() == "true" if isinstance(editable_str, str) else bool(editable_str)
             return Calendar(
                 id=data.get("id", ""),
                 name=data.get("name", "Unknown"),
                 color=data.get("color") or None,
-                is_editable=data.get("editable", True),
+                is_editable=is_editable,
             )
         except Exception as e:
             logger.debug("Failed to parse calendar: %s", e)
