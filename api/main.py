@@ -31,6 +31,7 @@ from api.routers import (
     custom_templates_router,
     digest_router,
     drafts_router,
+    embeddings_router,
     export_router,
     feedback_router,
     health_router,
@@ -133,6 +134,11 @@ API_TAGS_METADATA = [
         "name": "drafts",
         "description": "AI-powered draft generation using the local MLX language model. "
         "Generate reply suggestions and conversation summaries.",
+    },
+    {
+        "name": "embeddings",
+        "description": "Semantic search and relationship profiling using message embeddings. "
+        "Index conversations, search by meaning, and analyze communication patterns.",
     },
     {
         "name": "suggestions",
@@ -337,6 +343,7 @@ app.include_router(conversations_router)
 app.include_router(custom_templates_router)
 app.include_router(digest_router)
 app.include_router(drafts_router)
+app.include_router(embeddings_router)
 app.include_router(export_router)
 app.include_router(pdf_export_router)
 app.include_router(search_router)
