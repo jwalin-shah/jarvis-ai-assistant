@@ -3,16 +3,22 @@
 Provides singleton instances of iMessage reader and other shared resources.
 """
 
+import threading
+
 from fastapi import HTTPException
 
 from integrations.imessage import ChatDBReader
 
 # Singleton iMessage reader instance
 _reader: ChatDBReader | None = None
+_reader_lock = threading.Lock()
 
 
 def get_imessage_reader() -> ChatDBReader:
     """Get or create the singleton iMessage reader.
+
+    Uses double-check locking pattern to prevent race conditions in
+    multi-threaded async environments.
 
     Returns:
         ChatDBReader instance
@@ -22,8 +28,13 @@ def get_imessage_reader() -> ChatDBReader:
     """
     global _reader
 
+    # First check without lock (fast path)
     if _reader is None:
-        _reader = ChatDBReader()
+        # Acquire lock for initialization
+        with _reader_lock:
+            # Double-check after acquiring lock
+            if _reader is None:
+                _reader = ChatDBReader()
 
     if not _reader.check_access():
         raise HTTPException(

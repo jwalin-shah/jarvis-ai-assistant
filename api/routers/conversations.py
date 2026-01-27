@@ -557,34 +557,38 @@ async def send_message(
     sender = IMessageSender()
 
     try:
-        async with asyncio.timeout(TIMEOUT_READ):
-            if message_request.is_group:
-                # For group chats, send to the chat ID directly
-                result = await run_in_threadpool(
-                    sender.send_message,
-                    text=message_request.text,
-                    chat_id=chat_id,
-                    is_group=True,
-                )
-            else:
-                # For individual chats, send to the recipient
-                if not message_request.recipient:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Recipient is required for individual chats",
+        try:
+            async with asyncio.timeout(TIMEOUT_READ):
+                if message_request.is_group:
+                    # For group chats, send to the chat ID directly
+                    result = await run_in_threadpool(
+                        sender.send_message,
+                        text=message_request.text,
+                        chat_id=chat_id,
+                        is_group=True,
                     )
-                result = await run_in_threadpool(
-                    sender.send_message,
-                    text=message_request.text,
-                    recipient=message_request.recipient,
-                )
-    except TimeoutError:
-        raise HTTPException(
-            status_code=408,
-            detail=f"Request timed out after {TIMEOUT_READ} seconds",
-        ) from None
+                else:
+                    # For individual chats, send to the recipient
+                    if not message_request.recipient:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Recipient is required for individual chats",
+                        )
+                    result = await run_in_threadpool(
+                        sender.send_message,
+                        text=message_request.text,
+                        recipient=message_request.recipient,
+                    )
+        except TimeoutError:
+            raise HTTPException(
+                status_code=408,
+                detail=f"Request timed out after {TIMEOUT_READ} seconds",
+            ) from None
 
-    return SendMessageResponse(success=result.success, error=result.error)
+        return SendMessageResponse(success=result.success, error=result.error)
+    finally:
+        # Allow garbage collection of sender resources
+        del sender
 
 
 @router.post(
@@ -674,29 +678,33 @@ async def send_attachment(
     sender = IMessageSender()
 
     try:
-        async with asyncio.timeout(TIMEOUT_READ):
-            if attachment_request.is_group:
-                result = await run_in_threadpool(
-                    sender.send_attachment,
-                    file_path=attachment_request.file_path,
-                    chat_id=chat_id,
-                    is_group=True,
-                )
-            else:
-                if not attachment_request.recipient:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Recipient is required for individual chats",
+        try:
+            async with asyncio.timeout(TIMEOUT_READ):
+                if attachment_request.is_group:
+                    result = await run_in_threadpool(
+                        sender.send_attachment,
+                        file_path=attachment_request.file_path,
+                        chat_id=chat_id,
+                        is_group=True,
                     )
-                result = await run_in_threadpool(
-                    sender.send_attachment,
-                    file_path=attachment_request.file_path,
-                    recipient=attachment_request.recipient,
-                )
-    except TimeoutError:
-        raise HTTPException(
-            status_code=408,
-            detail=f"Request timed out after {TIMEOUT_READ} seconds",
-        ) from None
+                else:
+                    if not attachment_request.recipient:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Recipient is required for individual chats",
+                        )
+                    result = await run_in_threadpool(
+                        sender.send_attachment,
+                        file_path=attachment_request.file_path,
+                        recipient=attachment_request.recipient,
+                    )
+        except TimeoutError:
+            raise HTTPException(
+                status_code=408,
+                detail=f"Request timed out after {TIMEOUT_READ} seconds",
+            ) from None
 
-    return SendMessageResponse(success=result.success, error=result.error)
+        return SendMessageResponse(success=result.success, error=result.error)
+    finally:
+        # Allow garbage collection of sender resources
+        del sender

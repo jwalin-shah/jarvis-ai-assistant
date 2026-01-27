@@ -284,10 +284,18 @@ class GracefulDegradationController:
             **kwargs: Keyword arguments
 
         Returns:
-            Result from fallback behavior
+            Result from fallback behavior, or None if fallback fails
+
+        Raises:
+            Exception: Re-raises if fallback fails and no graceful handling is possible
         """
         logger.info("Executing fallback behavior for '%s'", policy.feature_name)
-        return policy.fallback_behavior(*args, **kwargs)
+        try:
+            return policy.fallback_behavior(*args, **kwargs)
+        except Exception as e:
+            logger.error("Fallback failed for '%s': %s", policy.feature_name, e, exc_info=True)
+            # Re-raise to let caller handle critical fallback failures
+            raise
 
     def get_health(self) -> dict[str, FeatureState]:
         """Return health status of all registered features.

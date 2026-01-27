@@ -76,34 +76,36 @@ class TestFastAPIAppStartup:
         route_paths = {route.path for route in app.routes}
 
         # Expected route prefixes based on routers in api/main.py
-        # Note: threads router uses /conversations prefix, so no separate /threads needed
-        # Note: topics router uses /conversations prefix, so no separate /topics needed
+        # Note: threads router uses /conversations prefix
+        # Note: topics router uses /conversations prefix
+        # Note: websocket router uses /ws prefix
+        # Note: pdf_export router also uses /export prefix
+        # Note: template_analytics router uses /metrics/templates prefix
         expected_prefixes = [
             "/health",
-            "/conversations",
+            "/conversations",  # includes threads and topics
             "/drafts",
             "/suggestions",
             "/settings",
-            "/export",
-            "/metrics",
+            "/export",  # includes pdf-export
+            "/metrics",  # includes template-analytics at /metrics/templates
             "/search",
             "/stats",
             "/insights",
-            "/websocket",
+            "/ws",  # websocket
             "/tasks",
             "/batch",
             "/priority",
-            "/calendar",
+            "/calendars",  # not /calendar
             "/attachments",
             "/feedback",
             "/experiments",
-            "/custom-templates",
+            "/templates",  # custom-templates
             "/embeddings",
             "/digest",
             "/relationships",
             "/quality",
             "/contacts",
-            "/pdf-export",
         ]
 
         for prefix in expected_prefixes:

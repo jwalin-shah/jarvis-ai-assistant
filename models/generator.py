@@ -430,6 +430,10 @@ class ThreadAwareGenerator:
             "catching_up": "catching_up",
             "emotional_support": "emotional_support",
             "quick_exchange": "quick_exchange",
+            "information": "catching_up",
+            "decision_making": "planning",
+            "celebration": "catching_up",
+            "unknown": "catching_up",
         }
 
         key = topic_to_key.get(topic.value, "catching_up")

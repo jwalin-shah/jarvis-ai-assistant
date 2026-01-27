@@ -222,6 +222,19 @@ def get_connection_manager() -> ConnectionManager:
     return manager
 
 
+def _log_task_exception(task: asyncio.Task[None], client_id: str) -> None:
+    """Log exceptions from background tasks.
+
+    Args:
+        task: The completed task to check for exceptions
+        client_id: The client ID for logging context
+    """
+    if task.done() and not task.cancelled():
+        exc = task.exception()
+        if exc:
+            logger.error("Background task failed for client %s: %s", client_id, exc, exc_info=exc)
+
+
 async def _handle_generate(
     client: WebSocketClient, data: dict[str, Any], stream: bool = False
 ) -> None:
@@ -461,10 +474,12 @@ async def _handle_message(client: WebSocketClient, message: dict[str, Any]) -> N
 
     elif msg_type == MessageType.GENERATE.value:
         # Run generation in background to not block message handling
-        asyncio.create_task(_handle_generate(client, data, stream=False))
+        task = asyncio.create_task(_handle_generate(client, data, stream=False))
+        task.add_done_callback(lambda t: _log_task_exception(t, client.client_id))
 
     elif msg_type == MessageType.GENERATE_STREAM.value:
-        asyncio.create_task(_handle_generate(client, data, stream=True))
+        task = asyncio.create_task(_handle_generate(client, data, stream=True))
+        task.add_done_callback(lambda t: _log_task_exception(t, client.client_id))
 
     elif msg_type == MessageType.SUBSCRIBE_HEALTH.value:
         await manager.set_health_subscription(client.client_id, True)

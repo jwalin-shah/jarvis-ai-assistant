@@ -87,8 +87,11 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 addopts = "-v --cov=. --cov-report=term-missing"
+timeout = 30
+timeout_method = "thread"
 
 [dependency-groups]
 dev = [
     "jarvis-ai-assistant[dev]",
+    "pytest-timeout>=2.4.0",
 ]

@@ -329,6 +329,8 @@ class CustomTemplateStore:
     def _save(self) -> bool:
         """Save templates to storage file.
 
+        MUST be called while holding self._lock.
+
         Returns:
             True if save succeeded, False otherwise
         """

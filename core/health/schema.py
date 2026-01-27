@@ -67,101 +67,100 @@ class ChatDBSchemaDetector:
             SchemaInfo with version, tables, and compatibility information
         """
         with self._lock:
-            # Check cache
+            # Check cache first (fast path)
             if db_path in self._cache:
                 return self._cache[db_path]
 
-        # Validate path exists
-        path = Path(db_path)
-        if not path.exists():
-            return SchemaInfo(
-                version="unknown",
-                tables=[],
-                compatible=False,
-                migration_needed=False,
-                known_schema=False,
-            )
-
-        try:
-            # Open in read-only mode
-            uri = f"file:{db_path}?mode=ro"
-            conn = sqlite3.connect(uri, uri=True, timeout=5.0)
-            conn.row_factory = sqlite3.Row
+            # Validate path exists
+            path = Path(db_path)
+            if not path.exists():
+                return SchemaInfo(
+                    version="unknown",
+                    tables=[],
+                    compatible=False,
+                    migration_needed=False,
+                    known_schema=False,
+                )
 
             try:
-                # Get all tables
-                tables = self._get_tables(conn)
+                # Open in read-only mode
+                uri = f"file:{db_path}?mode=ro"
+                conn = sqlite3.connect(uri, uri=True, timeout=5.0)
+                conn.row_factory = sqlite3.Row
 
-                # Check for required tables
-                missing_tables = [t for t in REQUIRED_CORE_TABLES if t not in tables]
-                if missing_tables:
-                    logger.warning(
-                        "Database missing required tables: %s",
-                        missing_tables,
-                    )
-                    return SchemaInfo(
-                        version="unknown",
+                try:
+                    # Get all tables
+                    tables = self._get_tables(conn)
+
+                    # Check for required tables
+                    missing_tables = [t for t in REQUIRED_CORE_TABLES if t not in tables]
+                    if missing_tables:
+                        logger.warning(
+                            "Database missing required tables: %s",
+                            missing_tables,
+                        )
+                        return SchemaInfo(
+                            version="unknown",
+                            tables=tables,
+                            compatible=False,
+                            migration_needed=False,
+                            known_schema=False,
+                        )
+
+                    # Detect version
+                    version = self._detect_version(conn)
+                    known_schema = version in KNOWN_SCHEMAS
+
+                    schema_info = SchemaInfo(
+                        version=version,
                         tables=tables,
-                        compatible=False,
-                        migration_needed=False,
-                        known_schema=False,
+                        compatible=known_schema,
+                        migration_needed=False,  # We support both v14 and v15
+                        known_schema=known_schema,
                     )
 
-                # Detect version
-                version = self._detect_version(conn)
-                known_schema = version in KNOWN_SCHEMAS
-
-                schema_info = SchemaInfo(
-                    version=version,
-                    tables=tables,
-                    compatible=known_schema,
-                    migration_needed=False,  # We support both v14 and v15
-                    known_schema=known_schema,
-                )
-
-                # Cache the result
-                with self._lock:
+                    # Cache the result (still holding lock)
                     self._cache[db_path] = schema_info
 
-                logger.info(
-                    "Detected schema version %s for %s (compatible=%s)",
-                    version,
-                    db_path,
-                    known_schema,
+                    logger.info(
+                        "Detected schema version %s for %s (compatible=%s)",
+                        version,
+                        db_path,
+                        known_schema,
+                    )
+
+                    return schema_info
+
+                finally:
+                    conn.close()
+
+            except sqlite3.OperationalError as e:
+                logger.warning("Cannot open database %s: %s", db_path, e)
+                return SchemaInfo(
+                    version="unknown",
+                    tables=[],
+                    compatible=False,
+                    migration_needed=False,
+                    known_schema=False,
                 )
-
-                return schema_info
-
-            finally:
-                conn.close()
-
-        except sqlite3.OperationalError as e:
-            logger.warning("Cannot open database %s: %s", db_path, e)
-            return SchemaInfo(
-                version="unknown",
-                tables=[],
-                compatible=False,
-                migration_needed=False,
-                known_schema=False,
-            )
-        except sqlite3.DatabaseError as e:
-            logger.warning("Corrupted or invalid database %s: %s", db_path, e)
-            return SchemaInfo(
-                version="unknown",
-                tables=[],
-                compatible=False,
-                migration_needed=False,
-                known_schema=False,
-            )
-        except PermissionError:
-            logger.warning("Permission denied accessing %s", db_path)
-            return SchemaInfo(
-                version="unknown",
-                tables=[],
-                compatible=False,
-                migration_needed=False,
-                known_schema=False,
-            )
+            except sqlite3.DatabaseError as e:
+                logger.warning("Corrupted or invalid database %s: %s", db_path, e)
+                return SchemaInfo(
+                    version="unknown",
+                    tables=[],
+                    compatible=False,
+                    migration_needed=False,
+                    known_schema=False,
+                )
+            except PermissionError:
+                logger.warning("Permission denied accessing %s", db_path)
+                return SchemaInfo(
+                    version="unknown",
+                    tables=[],
+                    compatible=False,
+                    migration_needed=False,
+                    known_schema=False,
+                )
 
     def _get_tables(self, conn: sqlite3.Connection) -> list[str]:
         """Get list of all tables in the database.
