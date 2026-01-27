@@ -371,8 +371,9 @@ class EventDetectorImpl:
             Next occurrence of the target weekday.
         """
         days_ahead = target_weekday - reference.weekday()
-        if days_ahead <= 0:  # Target day already happened this week
+        if days_ahead < 0:  # Target day already happened this week
             days_ahead += 7
+        # If days_ahead == 0, it's today, so return today
         return reference + timedelta(days=days_ahead)
 
     def _get_next_weekend(self, reference: datetime, next_week: bool) -> datetime:

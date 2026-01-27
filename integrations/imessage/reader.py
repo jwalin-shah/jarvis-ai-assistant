@@ -712,46 +712,51 @@ class ChatDBReader:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         except sqlite3.OperationalError as e:
-            # If query fails due to missing columns, create a minimal fallback query
-            # that replaces all optional columns with NULL
-            logger.debug(f"Query failed ({e}), trying fallback with NULL for optional columns")
-            fallback_query = query
+            # If query fails due to missing columns, use minimal fallback query
+            error_str = str(e).lower()
+            if "no such column" in error_str:
+                logger.debug(f"Query failed with missing column ({e}), using minimal fallback")
+                try:
+                    # Use v14 schema and replace all optional columns with NULL
+                    # This handles test databases or older schemas with minimal columns
+                    fallback_query = get_query(
+                        "messages",
+                        "v14",
+                        with_before_filter=before is not None,
+                    )
 
-            # Replace all optional columns with NULL placeholders
-            # Group event columns
-            affected_handle_join = (
-                "LEFT JOIN handle AS affected_handle "
-                "ON message.other_handle = affected_handle.ROWID"
-            )
-            fallback_query = (
-                fallback_query.replace(
-                    "message.group_action_type,",
-                    "NULL as group_action_type,",
-                )
-                .replace(
-                    "affected_handle.id as affected_handle_id",
-                    "NULL as affected_handle_id",
-                )
-                .replace(
-                    affected_handle_join,
-                    "",
-                )
-            )
+                    # Replace all optional columns with NULL
+                    fallback_query = (
+                        fallback_query.replace(
+                            "message.date_delivered,",
+                            "NULL as date_delivered,",
+                        )
+                        .replace(
+                            "message.date_read,",
+                            "NULL as date_read,",
+                        )
+                        .replace(
+                            "message.group_action_type,",
+                            "NULL as group_action_type,",
+                        )
+                        .replace(
+                            "affected_handle.id as affected_handle_id",
+                            "NULL as affected_handle_id",
+                        )
+                        .replace(
+                            "LEFT JOIN handle AS affected_handle "
+                            "ON message.other_handle = affected_handle.ROWID",
+                            "",
+                        )
+                    )
 
-            # Read receipt columns
-            fallback_query = fallback_query.replace(
-                "message.date_delivered,",
-                "NULL as date_delivered,",
-            ).replace(
-                "message.date_read,",
-                "NULL as date_read,",
-            )
-
-            try:
-                cursor.execute(fallback_query, params)
-                rows = cursor.fetchall()
-            except sqlite3.OperationalError as e2:
-                logger.warning(f"Query error in get_messages: {e2}")
+                    cursor.execute(fallback_query, params)
+                    rows = cursor.fetchall()
+                except sqlite3.OperationalError as e2:
+                    logger.warning(f"Query error after column fallback: {e2}")
+                    return []
+            else:
+                logger.warning(f"Query error in get_messages: {e}")
                 return []
 
         return self._rows_to_messages(rows, chat_id)

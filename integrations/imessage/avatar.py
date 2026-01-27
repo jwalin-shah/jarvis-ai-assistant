@@ -136,37 +136,7 @@ def _query_by_phone(conn: sqlite3.Connection, phone: str) -> ContactAvatarData |
     cursor = conn.cursor()
 
     try:
-        # Query for phone number match with thumbnail image
-        cursor.execute(
-            """
-            SELECT
-                ZABCDRECORD.ZTHUMBNAILIMAGEDATA as image_data,
-                ZABCDRECORD.ZFIRSTNAME as first_name,
-                ZABCDRECORD.ZLASTNAME as last_name,
-                ZABCDRECORD.ZDISPLAYNAME as display_name
-            FROM ZABCDPHONENUMBER
-            JOIN ZABCDRECORD ON ZABCDPHONENUMBER.ZOWNER = ZABCDRECORD.Z_PK
-            WHERE ZABCDPHONENUMBER.ZFULLNUMBER IS NOT NULL
-            """,
-        )
-
-        for row in cursor.fetchall():
-            # Check phone numbers - we need to fetch full number separately
-            # and compare normalized versions
-            cursor2 = conn.cursor()
-            cursor2.execute(
-                """
-                SELECT ZFULLNUMBER FROM ZABCDPHONENUMBER
-                WHERE ZOWNER = (
-                    SELECT Z_PK FROM ZABCDRECORD
-                    WHERE ZFIRSTNAME = ? AND ZLASTNAME = ?
-                    LIMIT 1
-                )
-                """,
-                (row["first_name"], row["last_name"]),
-            )
-
-        # Alternative approach: query all phones and match
+        # Query all phone contacts and match normalized phone numbers
         cursor.execute(
             """
             SELECT
@@ -196,6 +166,8 @@ def _query_by_phone(conn: sqlite3.Connection, phone: str) -> ContactAvatarData |
     except sqlite3.OperationalError as e:
         logger.debug(f"Phone query error: {e}")
         return None
+    finally:
+        cursor.close()
 
 
 def _query_by_email(conn: sqlite3.Connection, email: str) -> ContactAvatarData | None:
@@ -239,3 +211,5 @@ def _query_by_email(conn: sqlite3.Connection, email: str) -> ContactAvatarData |
     except sqlite3.OperationalError as e:
         logger.debug(f"Email query error: {e}")
         return None
+    finally:
+        cursor.close()
