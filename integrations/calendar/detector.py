@@ -244,7 +244,9 @@ class EventDetectorImpl:
 
         # Check for relative dates
         for pattern, days_offset in RELATIVE_DATE_PATTERNS.items():
-            if re.search(pattern, text_lower):
+            match = re.search(pattern, text_lower)
+            if match:
+                original_text = match.group()
                 if days_offset is not None:
                     dt = reference + timedelta(days=days_offset)
                     # Try to find a time
@@ -261,7 +263,7 @@ class EventDetectorImpl:
                     matches.append(
                         DateTimeMatch(
                             datetime_value=dt,
-                            original_text=re.search(pattern, text_lower).group(),  # type: ignore[union-attr]
+                            original_text=original_text,
                             confidence=confidence,
                             is_all_day=is_all_day,
                         )
@@ -272,7 +274,7 @@ class EventDetectorImpl:
                     matches.append(
                         DateTimeMatch(
                             datetime_value=dt,
-                            original_text=re.search(pattern, text_lower).group(),  # type: ignore[union-attr]
+                            original_text=original_text,
                             confidence=0.6,
                             is_all_day=True,
                         )
@@ -280,7 +282,9 @@ class EventDetectorImpl:
 
         # Check for days of week
         for pattern, weekday in DAYS_OF_WEEK.items():
-            if re.search(pattern, text_lower):
+            match = re.search(pattern, text_lower)
+            if match:
+                original_text = match.group()
                 dt = self._get_next_weekday(reference, weekday)
                 # Try to find a time
                 time_match = TIME_PATTERN.search(text)
@@ -296,7 +300,7 @@ class EventDetectorImpl:
                 matches.append(
                     DateTimeMatch(
                         datetime_value=dt,
-                        original_text=re.search(pattern, text_lower).group(),  # type: ignore[union-attr]
+                        original_text=original_text,
                         confidence=confidence,
                         is_all_day=is_all_day,
                     )

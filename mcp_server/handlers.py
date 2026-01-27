@@ -189,8 +189,12 @@ def handle_get_summary(params: dict[str, Any]) -> ToolResult:
                     error=f"Could not find conversation with '{person_name}'",
                 )
 
-        # At this point chat_id is guaranteed to be a string
-        assert chat_id is not None
+        # Verify chat_id was successfully resolved
+        if chat_id is None:
+            return ToolResult(
+                success=False,
+                error="Failed to resolve chat_id",
+            )
 
         from contracts.models import GenerationRequest
         from integrations.imessage import ChatDBReader
@@ -299,8 +303,12 @@ def handle_generate_reply(params: dict[str, Any]) -> ToolResult:
                     error=f"Could not find conversation with '{person_name}'",
                 )
 
-        # At this point chat_id is guaranteed to be a string
-        assert chat_id is not None
+        # Verify chat_id was successfully resolved
+        if chat_id is None:
+            return ToolResult(
+                success=False,
+                error="Failed to resolve chat_id",
+            )
 
         from contracts.models import GenerationRequest
         from integrations.imessage import ChatDBReader
@@ -536,8 +544,12 @@ def handle_get_conversation_messages(params: dict[str, Any]) -> ToolResult:
                     error=f"Could not find conversation with '{person_name}'",
                 )
 
-        # At this point chat_id is guaranteed to be a string
-        assert chat_id is not None
+        # Verify chat_id was successfully resolved
+        if chat_id is None:
+            return ToolResult(
+                success=False,
+                error="Failed to resolve chat_id",
+            )
 
         from integrations.imessage import ChatDBReader
 

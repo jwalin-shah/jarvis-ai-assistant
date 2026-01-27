@@ -73,23 +73,23 @@ setup: install hooks
 # ============================================================================
 
 test:
-	uv run pytest tests/ --tb=long -v --junit-xml=test_results.xml 2>&1 | tee test_results.txt
+	uv run pytest tests/ --tb=long -v --junit-xml=test_results.xml --timeout=30 --timeout-method=thread 2>&1 | tee test_results.txt
 	@echo ""
 	@echo "Results saved to test_results.txt and test_results.xml"
 
 test-fast:
-	uv run pytest tests/ --tb=long -v --maxfail=1 --junit-xml=test_results.xml 2>&1 | tee test_results.txt
+	uv run pytest tests/ --tb=long -v --maxfail=1 --junit-xml=test_results.xml --timeout=30 --timeout-method=thread 2>&1 | tee test_results.txt
 	@echo ""
 	@echo "Results saved to test_results.txt and test_results.xml"
 
 test-verbose:
-	uv run pytest tests/ --tb=long -vvv --junit-xml=test_results.xml 2>&1 | tee test_results.txt
+	uv run pytest tests/ --tb=long -vvv --junit-xml=test_results.xml --timeout=30 --timeout-method=thread 2>&1 | tee test_results.txt
 	@echo ""
 	@echo "Results saved to test_results.txt and test_results.xml"
 
 test-coverage:
 	uv run pytest tests/ --tb=long -v --cov=core --cov=models --cov=integrations --cov=benchmarks \
-		--cov-report=html --cov-report=term --junit-xml=test_results.xml 2>&1 | tee test_results.txt
+		--cov-report=html --cov-report=term --junit-xml=test_results.xml --timeout=30 --timeout-method=thread 2>&1 | tee test_results.txt
 	@echo ""
 	@echo "Results saved to test_results.txt, test_results.xml, and htmlcov/"
 
@@ -97,7 +97,7 @@ test-file:
 ifndef FILE
 	$(error FILE is required. Usage: make test-file FILE=tests/unit/test_foo.py)
 endif
-	uv run pytest $(FILE) --tb=long -v --junit-xml=test_results.xml 2>&1 | tee test_results.txt
+	uv run pytest $(FILE) --tb=long -v --junit-xml=test_results.xml --timeout=30 --timeout-method=thread 2>&1 | tee test_results.txt
 	@echo ""
 	@echo "Results saved to test_results.txt and test_results.xml"
 

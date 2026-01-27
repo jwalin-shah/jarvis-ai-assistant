@@ -207,7 +207,18 @@ class MCPServer:
             elif method == "initialized":
                 self._handle_initialized(params)
                 return None  # Notification, no response
-            elif method == "tools/list":
+            elif method in ("tools/list", "tools/call"):
+                # Require initialization for tools methods
+                if not self._initialized:
+                    return JSONRPCResponse(
+                        error={
+                            "code": JSONRPCError.INVALID_REQUEST,
+                            "message": "Server not initialized. Call 'initialize' first.",
+                        },
+                        id=request.id,
+                    )
+
+            if method == "tools/list":
                 result = self._handle_tools_list(params)
             elif method == "tools/call":
                 result = self._handle_tools_call(params)

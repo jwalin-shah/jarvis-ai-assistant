@@ -254,10 +254,14 @@ async def chat(request: ChatRequest) -> ChatResponse | StreamingResponse:
         )
 
         # Handle case where degradation controller returns a simple string (fallback)
-        if isinstance(result, str):
+        # or a tuple (success). Safely unpack both cases.
+        if isinstance(result, tuple) and len(result) == 2:
+            text, metadata = result
+        elif isinstance(result, str):
             text, metadata = result, {}
         else:
-            text, metadata = result
+            # Fallback for unexpected return types
+            text, metadata = str(result) if result else "", {}
 
         # If metadata is empty (fallback mode), use default values
         if not metadata:
