@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path.home() / ".jarvis" / "config.json"
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 5
+CONFIG_VERSION = 6
 
 
 class MemoryThresholds(BaseModel):
@@ -133,6 +133,28 @@ class TaskQueueConfig(BaseModel):
     auto_start_worker: bool = True
 
 
+class DigestConfig(BaseModel):
+    """Digest generation preferences.
+
+    Attributes:
+        enabled: Whether digest generation is enabled.
+        schedule: Digest schedule ("daily" or "weekly").
+        preferred_time: Preferred time for digest generation (HH:MM format).
+        include_action_items: Include detected action items in digest.
+        include_stats: Include message statistics in digest.
+        max_conversations: Maximum conversations to analyze for digest.
+        export_format: Default export format ("markdown" or "html").
+    """
+
+    enabled: bool = True
+    schedule: Literal["daily", "weekly"] = "daily"
+    preferred_time: str = Field(default="08:00", pattern=r"^\d{2}:\d{2}$")
+    include_action_items: bool = True
+    include_stats: bool = True
+    max_conversations: int = Field(default=50, ge=10, le=200)
+    export_format: Literal["markdown", "html"] = "markdown"
+
+
 class JarvisConfig(BaseModel):
     """JARVIS configuration schema.
 
@@ -148,6 +170,7 @@ class JarvisConfig(BaseModel):
         model: Model configuration for text generation.
         rate_limit: Rate limiting configuration for the API.
         task_queue: Task queue configuration for background operations.
+        digest: Digest generation preferences.
     """
 
     config_version: int = CONFIG_VERSION
@@ -161,6 +184,7 @@ class JarvisConfig(BaseModel):
     model: ModelSettings = Field(default_factory=ModelSettings)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     task_queue: TaskQueueConfig = Field(default_factory=TaskQueueConfig)
+    digest: DigestConfig = Field(default_factory=DigestConfig)
 
 
 # Module-level singleton with thread safety
@@ -223,7 +247,7 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
 
         version = 3
 
-    if version < 5:
+    if version < 6:
         logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
 
         # Add rate_limit section if missing
@@ -234,7 +258,11 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
         if "task_queue" not in data:
             data["task_queue"] = {}
 
-        version = 5
+        # Add digest section if missing
+        if "digest" not in data:
+            data["digest"] = {}
+
+        version = 6
 
     # Update version
     data["config_version"] = CONFIG_VERSION
