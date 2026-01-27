@@ -486,6 +486,10 @@ def normalize_phone_number(phone: str | None) -> str | None:
 
     phone = phone.strip()
 
+    # Return None for empty strings
+    if not phone:
+        return None
+
     # If it's an email, return as-is
     if "@" in phone:
         return phone
