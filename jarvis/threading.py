@@ -1,24 +1,25 @@
-"""Conversation Threading System for JARVIS.
+"""Thread-aware conversation analysis for JARVIS.
+
+Provides thread detection, topic classification, state tracking,
+and user role identification for improved reply generation and navigation.
 
 Analyzes messages to group them into logical conversation threads using:
 - Semantic similarity between consecutive messages
 - Time gaps between messages
 - Topic shifts detected via embeddings
 - Explicit reply references (reply_to_id)
-
-Thread detection helps users understand conversation flow and navigate
-long conversations more effectively.
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -35,6 +36,38 @@ class ThreadingMethod(Enum):
     SEMANTIC_SIMILARITY = "semantic_similarity"  # Similar message content
     TIME_GAP = "time_gap"  # Long pause between messages
     TOPIC_SHIFT = "topic_shift"  # Detected topic change
+
+
+class ThreadTopic(Enum):
+    """Types of conversation thread topics."""
+
+    PLANNING = "planning"  # Making plans, scheduling
+    LOGISTICS = "logistics"  # Coordinating details, times, locations
+    CATCHING_UP = "catching_up"  # General conversation, catching up
+    EMOTIONAL_SUPPORT = "emotional_support"  # Support, sympathy, encouragement
+    QUICK_EXCHANGE = "quick_exchange"  # Brief back-and-forth, acknowledgments
+    INFORMATION = "information"  # Sharing/requesting information
+    DECISION_MAKING = "decision_making"  # Making choices together
+    CELEBRATION = "celebration"  # Congratulations, good news
+    UNKNOWN = "unknown"
+
+
+class ThreadState(Enum):
+    """Current state of a conversation thread."""
+
+    OPEN_QUESTION = "open_question"  # Waiting for an answer
+    AWAITING_RESPONSE = "awaiting_response"  # General expectation of reply
+    IN_DISCUSSION = "in_discussion"  # Active back-and-forth
+    CONCLUDED = "concluded"  # Conversation naturally ended
+    STALE = "stale"  # No recent activity
+
+
+class UserRole(Enum):
+    """User's role in the conversation thread."""
+
+    INITIATOR = "initiator"  # Started the thread/topic
+    RESPONDER = "responder"  # Responding to other's initiation
+    PARTICIPANT = "participant"  # Equal participant in ongoing exchange
 
 
 @dataclass
@@ -92,6 +125,48 @@ class ThreadedMessage:
 
 
 @dataclass
+class ThreadContext:
+    """Analyzed context for a conversation thread.
+
+    Attributes:
+        messages: The messages in the thread
+        topic: Detected thread topic
+        state: Current thread state
+        user_role: User's role in the thread
+        confidence: Confidence score for topic classification (0.0-1.0)
+        relevant_messages: Subset of messages most relevant to current context
+        action_items: Any detected action items or commitments
+        participants_count: Number of participants (1 = DM, >1 = group)
+    """
+
+    messages: list[Message]
+    topic: ThreadTopic
+    state: ThreadState
+    user_role: UserRole
+    confidence: float
+    relevant_messages: list[Message] = field(default_factory=list)
+    action_items: list[str] = field(default_factory=list)
+    participants_count: int = 1
+
+
+@dataclass
+class ThreadedReplyConfig:
+    """Configuration for thread-aware reply generation.
+
+    Attributes:
+        max_response_length: Suggested max response length based on thread type
+        response_style: Suggested response style (concise/detailed/empathetic)
+        include_action_items: Whether to include action items in response
+        suggest_follow_up: Whether to suggest follow-up questions
+    """
+
+    max_response_length: int
+    response_style: str
+    include_action_items: bool
+    suggest_follow_up: bool
+
+
+@dataclass
 class ThreadingConfig:
     """Configuration for thread detection.
 
@@ -110,20 +185,255 @@ class ThreadingConfig:
     use_semantic_analysis: bool = True
 
 
+# Topic classification patterns with example phrases
+TOPIC_PATTERNS: dict[ThreadTopic, list[str]] = {
+    ThreadTopic.PLANNING: [
+        "let's plan",
+        "when should we",
+        "what day works",
+        "are you free",
+        "want to meet",
+        "let's get together",
+        "should we do",
+        "thinking about",
+        "how about we",
+        "planning to",
+        "want to grab",
+        "let's do",
+        "wanna hang",
+        "wanna go",
+        "want to come",
+        "are you coming",
+        "can you make it",
+        "will you be there",
+        "planning",
+        "schedule",
+    ],
+    ThreadTopic.LOGISTICS: [
+        "what time",
+        "where should",
+        "what address",
+        "how do I get",
+        "meet at",
+        "pick you up",
+        "be there by",
+        "running late",
+        "on my way",
+        "almost there",
+        "just left",
+        "eta",
+        "where are you",
+        "directions",
+        "parking",
+        "which entrance",
+        "I'm here",
+        "just arrived",
+        "waiting",
+    ],
+    ThreadTopic.EMOTIONAL_SUPPORT: [
+        "I'm sorry",
+        "that's tough",
+        "I understand",
+        "here for you",
+        "feel better",
+        "thinking of you",
+        "so sorry to hear",
+        "hang in there",
+        "I'm here",
+        "let me know if you need",
+        "sending love",
+        "you've got this",
+        "proud of you",
+        "it'll be okay",
+        "don't worry",
+        "feeling down",
+        "bad day",
+        "stressed",
+        "anxious",
+        "worried about",
+        "upset",
+        "sad",
+        "frustrated",
+    ],
+    ThreadTopic.CATCHING_UP: [
+        "how are you",
+        "what's new",
+        "long time",
+        "miss you",
+        "how have you been",
+        "what's up",
+        "how's it going",
+        "catch up",
+        "tell me about",
+        "what have you been up to",
+        "how's life",
+        "how was your",
+        "what did you do",
+        "anything new",
+        "how's everything",
+        "good to hear from",
+    ],
+    ThreadTopic.QUICK_EXCHANGE: [
+        "ok",
+        "okay",
+        "sounds good",
+        "got it",
+        "thanks",
+        "thank you",
+        "cool",
+        "great",
+        "perfect",
+        "nice",
+        "lol",
+        "haha",
+        "yes",
+        "no",
+        "yep",
+        "nope",
+        "sure",
+        "np",
+        "kk",
+        "ttyl",
+        "bye",
+    ],
+    ThreadTopic.INFORMATION: [
+        "do you know",
+        "can you tell me",
+        "what is",
+        "where is",
+        "who is",
+        "how do",
+        "what's the",
+        "I need",
+        "looking for",
+        "have you heard",
+        "did you see",
+        "fyi",
+        "just so you know",
+        "heads up",
+        "reminder",
+        "don't forget",
+        "btw",
+        "wanted to let you know",
+    ],
+    ThreadTopic.DECISION_MAKING: [
+        "what do you think",
+        "should I",
+        "which one",
+        "your opinion",
+        "help me decide",
+        "can't decide",
+        "what would you",
+        "do you prefer",
+        "better option",
+        "pros and cons",
+        "advice",
+        "recommend",
+        "suggest",
+        "your thoughts",
+        "vote",
+        "choose",
+    ],
+    ThreadTopic.CELEBRATION: [
+        "congratulations",
+        "congrats",
+        "so happy for",
+        "amazing news",
+        "great news",
+        "celebrate",
+        "proud of you",
+        "you did it",
+        "well done",
+        "awesome",
+        "exciting",
+        "happy birthday",
+        "cheers",
+        "woohoo",
+        "yay",
+    ],
+}
+
+# Patterns indicating questions or expectation of response
+QUESTION_PATTERNS = [
+    r"\?$",  # Ends with question mark
+    r"^(what|where|when|who|why|how|which|can|could|would|will|do|does|did|is|are|was|were)\b",
+    r"\b(let me know|lmk|thoughts\??|wdyt|wyt)\b",
+]
+
+# Patterns indicating thread conclusion
+CONCLUSION_PATTERNS = [
+    r"\b(sounds good|perfect|great|thanks|bye|later|ttyl|see you|talk soon|cya)\b",
+    r"\b(got it|understood|will do|on it)\b",
+    r"^(ok|okay|k|kk)$",
+]
+
+# Response configuration based on thread topic
+TOPIC_RESPONSE_CONFIG: dict[ThreadTopic, ThreadedReplyConfig] = {
+    ThreadTopic.LOGISTICS: ThreadedReplyConfig(
+        max_response_length=50,
+        response_style="concise",
+        include_action_items=True,
+        suggest_follow_up=False,
+    ),
+    ThreadTopic.QUICK_EXCHANGE: ThreadedReplyConfig(
+        max_response_length=30,
+        response_style="brief",
+        include_action_items=False,
+        suggest_follow_up=False,
+    ),
+    ThreadTopic.EMOTIONAL_SUPPORT: ThreadedReplyConfig(
+        max_response_length=150,
+        response_style="empathetic",
+        include_action_items=False,
+        suggest_follow_up=True,
+    ),
+    ThreadTopic.PLANNING: ThreadedReplyConfig(
+        max_response_length=100,
+        response_style="detailed",
+        include_action_items=True,
+        suggest_follow_up=True,
+    ),
+    ThreadTopic.CATCHING_UP: ThreadedReplyConfig(
+        max_response_length=100,
+        response_style="warm",
+        include_action_items=False,
+        suggest_follow_up=True,
+    ),
+    ThreadTopic.INFORMATION: ThreadedReplyConfig(
+        max_response_length=100,
+        response_style="clear",
+        include_action_items=False,
+        suggest_follow_up=False,
+    ),
+    ThreadTopic.DECISION_MAKING: ThreadedReplyConfig(
+        max_response_length=120,
+        response_style="thoughtful",
+        include_action_items=True,
+        suggest_follow_up=True,
+    ),
+    ThreadTopic.CELEBRATION: ThreadedReplyConfig(
+        max_response_length=80,
+        response_style="enthusiastic",
+        include_action_items=False,
+        suggest_follow_up=False,
+    ),
+    ThreadTopic.UNKNOWN: ThreadedReplyConfig(
+        max_response_length=80,
+        response_style="natural",
+        include_action_items=False,
+        suggest_follow_up=False,
+    ),
+}
+
+
 class ThreadAnalyzer:
-    """Analyzes messages to group them into logical conversation threads.
+    """Analyzes conversation threads for logical grouping and context-aware reply generation.
 
-    Uses a combination of time-based heuristics, semantic similarity,
-    and explicit reply references to identify thread boundaries.
-
-    Thread-safe with lazy initialization of the sentence model.
-
-    Example:
-        >>> analyzer = ThreadAnalyzer()
-        >>> threads = analyzer.analyze_threads(messages)
-        >>> for thread in threads:
-        ...     print(f"Thread {thread.thread_id}: {thread.topic_label}")
+    Uses a combination of heuristics (time, references) and ML (embeddings) to group messages
+    and identify thread properties like topic and state.
     """
+
+    TOPIC_CONFIDENCE_THRESHOLD = 0.5
 
     def __init__(self, config: ThreadingConfig | None = None) -> None:
         """Initialize the thread analyzer.
@@ -133,20 +443,12 @@ class ThreadAnalyzer:
         """
         self.config = config or ThreadingConfig()
         self._sentence_model: Any | None = None
+        self._topic_embeddings: dict[ThreadTopic, np.ndarray] | None = None
         self._lock = threading.Lock()
         self._embeddings_cache: dict[str, np.ndarray] = {}
 
     def _get_sentence_model(self) -> Any:
-        """Get the sentence transformer model with lazy loading.
-
-        Reuses the model from models.templates to avoid loading it twice.
-
-        Returns:
-            The loaded SentenceTransformer model
-
-        Raises:
-            Exception: If model cannot be loaded
-        """
+        """Get the sentence transformer model with lazy loading."""
         if self._sentence_model is not None:
             return self._sentence_model
 
@@ -158,33 +460,48 @@ class ThreadAnalyzer:
                 from models.templates import _get_sentence_model
 
                 self._sentence_model = _get_sentence_model()
-                logger.info("Loaded sentence model for thread analysis")
                 return self._sentence_model
-            except Exception:
-                logger.warning("Failed to load sentence model for threading")
-                raise
+            except Exception as e:
+                logger.debug("Failed to load sentence model for threading: %s", e)
+                return None
+
+    def _ensure_embeddings_computed(self) -> bool:
+        """Compute and cache embeddings for topic patterns."""
+        if self._topic_embeddings is not None:
+            return True
+
+        with self._lock:
+            if self._topic_embeddings is not None:
+                return True
+
+            model = self._get_sentence_model()
+            if model is None:
+                return False
+
+            topic_embeddings: dict[ThreadTopic, np.ndarray] = {}
+            for topic, patterns in TOPIC_PATTERNS.items():
+                embeddings = model.encode(patterns, convert_to_numpy=True)
+                centroid = np.mean(embeddings, axis=0)
+                centroid = centroid / np.linalg.norm(centroid)
+                topic_embeddings[topic] = centroid
+
+            self._topic_embeddings = topic_embeddings
+            return True
 
     def _compute_embedding(self, text: str) -> np.ndarray | None:
-        """Compute embedding for a text string with caching.
-
-        Args:
-            text: Text to embed
-
-        Returns:
-            Embedding vector or None if failed
-        """
+        """Compute embedding for a text string with caching."""
         if not text or not text.strip():
             return None
 
-        # Check cache
         cache_key = hashlib.md5(text.encode()).hexdigest()
         if cache_key in self._embeddings_cache:
             return self._embeddings_cache[cache_key]
 
         try:
             model = self._get_sentence_model()
+            if not model:
+                return None
             embedding = model.encode([text], convert_to_numpy=True)[0]
-            # Normalize for cosine similarity
             embedding = embedding / np.linalg.norm(embedding)
             self._embeddings_cache[cache_key] = embedding
             return embedding
@@ -192,348 +509,188 @@ class ThreadAnalyzer:
             return None
 
     def _compute_similarity(self, text1: str, text2: str) -> float:
-        """Compute semantic similarity between two texts.
-
-        Args:
-            text1: First text
-            text2: Second text
-
-        Returns:
-            Cosine similarity score (0-1)
-        """
+        """Compute semantic similarity between two texts."""
         emb1 = self._compute_embedding(text1)
         emb2 = self._compute_embedding(text2)
 
         if emb1 is None or emb2 is None:
             return 0.0
 
-        # Cosine similarity with normalized vectors is just dot product
-        similarity = float(np.dot(emb1, emb2))
-        return max(0.0, min(1.0, similarity))
+        return max(0.0, min(1.0, float(np.dot(emb1, emb2))))
 
     def _generate_thread_id(self, chat_id: str, start_message_id: int) -> str:
-        """Generate a unique thread ID.
-
-        Args:
-            chat_id: The conversation ID
-            start_message_id: ID of the first message in thread
-
-        Returns:
-            Unique thread identifier
-        """
-        # Create a stable hash-based ID
+        """Generate a unique thread ID."""
         data = f"{chat_id}:{start_message_id}"
         return hashlib.sha256(data.encode()).hexdigest()[:16]
 
-    def _detect_topic_label(self, messages: list[Message]) -> str:
-        """Generate a topic label for a thread based on message content.
-
-        Uses keyword extraction to identify the main topic.
-
-        Args:
-            messages: Messages in the thread
-
-        Returns:
-            Topic label string
-        """
-        if not messages:
-            return "General"
-
-        # Combine message texts
-        texts = [m.text for m in messages if m.text and not m.is_system_message]
-        if not texts:
-            return "General"
-
-        combined = " ".join(texts[:10])  # Use first 10 messages
-
-        # Common topic patterns
-        topic_patterns = [
-            ("meeting", "Meeting Plans"),
-            ("dinner", "Dinner Plans"),
-            ("lunch", "Lunch Plans"),
-            ("call", "Phone Call"),
-            ("zoom", "Video Call"),
-            ("tomorrow", "Future Plans"),
-            ("tonight", "Tonight's Plans"),
-            ("weekend", "Weekend Plans"),
-            ("party", "Party/Event"),
-            ("birthday", "Birthday"),
-            ("work", "Work Discussion"),
-            ("project", "Project Discussion"),
-            ("question", "Q&A"),
-            ("help", "Help Request"),
-            ("thanks", "Gratitude"),
-            ("sorry", "Apology"),
-            ("photo", "Photos"),
-            ("video", "Videos"),
-            ("link", "Shared Links"),
-            ("address", "Location/Address"),
-            ("time", "Scheduling"),
-            ("money", "Financial"),
-            ("buy", "Shopping"),
-            ("order", "Orders"),
-            ("flight", "Travel"),
-            ("hotel", "Travel"),
-            ("trip", "Travel"),
-        ]
-
-        combined_lower = combined.lower()
-        for keyword, label in topic_patterns:
-            if keyword in combined_lower:
-                return label
-
-        # Default: use first few words of first message
-        first_text = texts[0][:50] if texts else "General"
-        if len(first_text) > 30:
-            first_text = first_text[:30] + "..."
-        return first_text
-
-    def _should_start_new_thread(
-        self,
-        current: Message,
-        previous: Message,
-        current_thread_start: datetime,
-    ) -> tuple[bool, ThreadingMethod]:
-        """Determine if current message should start a new thread.
-
-        Args:
-            current: Current message being processed
-            previous: Previous message
-            current_thread_start: When the current thread started
-
-        Returns:
-            Tuple of (should_start_new, reason)
-        """
-        # Check for explicit reply reference to a different thread
-        if current.reply_to_id is not None:
-            # This is part of an existing thread via reply
-            return False, ThreadingMethod.REPLY_REFERENCE
-
-        # Check time gap
-        time_diff = current.date - previous.date
-        gap_threshold = timedelta(minutes=self.config.time_gap_threshold_minutes)
-
-        if time_diff > gap_threshold:
-            logger.debug(
-                "New thread due to time gap: %s minutes",
-                time_diff.total_seconds() / 60,
-            )
-            return True, ThreadingMethod.TIME_GAP
-
-        # Check max thread duration
-        thread_duration = current.date - current_thread_start
-        max_duration = timedelta(hours=self.config.max_thread_duration_hours)
-
-        if thread_duration > max_duration:
-            logger.debug(
-                "New thread due to max duration: %s hours",
-                thread_duration.total_seconds() / 3600,
-            )
-            return True, ThreadingMethod.TIME_GAP
-
-        # Check semantic similarity if enabled
-        if self.config.use_semantic_analysis:
-            try:
-                similarity = self._compute_similarity(previous.text, current.text)
-                if similarity < self.config.semantic_similarity_threshold:
-                    logger.debug(
-                        "New thread due to topic shift: similarity %.3f",
-                        similarity,
-                    )
-                    return True, ThreadingMethod.TOPIC_SHIFT
-            except Exception:
-                # Fall back to time-based only if semantic analysis fails
-                pass
-
-        return False, ThreadingMethod.SEMANTIC_SIMILARITY
-
-    def analyze_threads(
-        self,
-        messages: list[Message],
-        chat_id: str = "",
-    ) -> list[Thread]:
-        """Analyze messages and group them into threads.
-
-        Args:
-            messages: List of messages sorted by date (oldest first)
-            chat_id: The conversation ID for thread ID generation
-
-        Returns:
-            List of Thread objects with message groupings
-        """
+    def analyze_threads(self, messages: list[Message], chat_id: str = "") -> list[Thread]:
+        """Group messages into logical threads."""
         if not messages:
             return []
 
-        # Sort messages by date to ensure correct ordering
         sorted_messages = sorted(messages, key=lambda m: m.date)
-
         threads: list[Thread] = []
-        current_thread_messages: list[Message] = []
-        current_thread_start: datetime | None = None
-        reply_threads: dict[int, str] = {}  # message_id -> thread_id mapping
+        current_msgs: list[Message] = []
+        current_start: datetime | None = None
+        reply_threads: dict[int, str] = {}
 
-        for i, message in enumerate(sorted_messages):
-            is_first = i == 0
-
-            # Check for reply reference
-            if message.reply_to_id is not None and message.reply_to_id in reply_threads:
-                # Find the thread this message replies to
-                target_thread_id = reply_threads[message.reply_to_id]
-
-                # Find the thread and add this message
-                for thread in threads:
-                    if thread.thread_id == target_thread_id:
-                        thread.messages.append(message.id)
-                        thread.message_count += 1
-                        thread.end_time = message.date
-                        reply_threads[message.id] = target_thread_id
+        for i, msg in enumerate(sorted_messages):
+            if msg.reply_to_id is not None and msg.reply_to_id in reply_threads:
+                tid = reply_threads[msg.reply_to_id]
+                for t in threads:
+                    if t.thread_id == tid:
+                        t.messages.append(msg.id)
+                        t.message_count += 1
+                        t.end_time = msg.date
+                        reply_threads[msg.id] = tid
                         break
                 continue
 
-            if is_first:
-                # Start first thread
-                current_thread_messages = [message]
-                current_thread_start = message.date
+            if not current_msgs:
+                current_msgs = [msg]
+                current_start = msg.date
             else:
-                should_start, reason = self._should_start_new_thread(
-                    message,
-                    sorted_messages[i - 1],
-                    current_thread_start or message.date,
-                )
-
+                should_start, _ = self._should_start_new_thread(msg, sorted_messages[i - 1], current_start)
                 if should_start:
-                    # Finalize current thread
-                    if current_thread_messages:
-                        thread = self._create_thread(
-                            current_thread_messages, chat_id, reply_threads
-                        )
-                        threads.append(thread)
-
-                    # Start new thread
-                    current_thread_messages = [message]
-                    current_thread_start = message.date
+                    threads.append(self._create_thread(current_msgs, chat_id, reply_threads))
+                    current_msgs = [msg]
+                    current_start = msg.date
                 else:
-                    # Add to current thread
-                    current_thread_messages.append(message)
+                    current_msgs.append(msg)
 
-            # Track message for reply threading
-            if current_thread_messages and len(current_thread_messages) == 1:
-                # Will be assigned thread_id when thread is finalized
-                pass
-
-        # Finalize last thread
-        if current_thread_messages:
-            thread = self._create_thread(current_thread_messages, chat_id, reply_threads)
-            threads.append(thread)
-
-        logger.info(
-            "Analyzed %d messages into %d threads",
-            len(messages),
-            len(threads),
-        )
+        if current_msgs:
+            threads.append(self._create_thread(current_msgs, chat_id, reply_threads))
 
         return threads
 
-    def _create_thread(
-        self,
-        messages: list[Message],
-        chat_id: str,
-        reply_threads: dict[int, str],
-    ) -> Thread:
-        """Create a Thread object from a list of messages.
+    def _should_start_new_thread(self, current: Message, previous: Message, thread_start: datetime) -> tuple[bool, ThreadingMethod]:
+        if current.reply_to_id is not None:
+            return False, ThreadingMethod.REPLY_REFERENCE
 
-        Args:
-            messages: Messages in the thread
-            chat_id: Conversation ID
-            reply_threads: Mapping to update with thread ID for replies
+        if current.date - previous.date > timedelta(minutes=self.config.time_gap_threshold_minutes):
+            return True, ThreadingMethod.TIME_GAP
 
-        Returns:
-            Thread object
-        """
-        thread_id = self._generate_thread_id(
-            chat_id, messages[0].id if messages else 0
-        )
+        if current.date - thread_start > timedelta(hours=self.config.max_thread_duration_hours):
+            return True, ThreadingMethod.TIME_GAP
 
-        # Track all message IDs for reply threading
-        for msg in messages:
-            reply_threads[msg.id] = thread_id
+        if self.config.use_semantic_analysis:
+            sim = self._compute_similarity(previous.text or "", current.text or "")
+            if sim < self.config.semantic_similarity_threshold:
+                return True, ThreadingMethod.TOPIC_SHIFT
 
-        # Get unique participants
-        participants = set()
-        for msg in messages:
-            participants.add(msg.sender)
+        return False, ThreadingMethod.SEMANTIC_SIMILARITY
 
-        thread = Thread(
-            thread_id=thread_id,
-            messages=[m.id for m in messages],
-            topic_label=self._detect_topic_label(messages),
-            start_time=messages[0].date if messages else None,
-            end_time=messages[-1].date if messages else None,
+    def _create_thread(self, msgs: list[Message], chat_id: str, reply_map: dict[int, str]) -> Thread:
+        tid = self._generate_thread_id(chat_id, msgs[0].id)
+        for m in msgs:
+            reply_map[m.id] = tid
+
+        participants = {m.sender for m in msgs}
+        return Thread(
+            thread_id=tid,
+            messages=[m.id for m in msgs],
+            topic_label=self._detect_topic_label(msgs),
+            start_time=msgs[0].date,
+            end_time=msgs[-1].date,
             participant_count=len(participants),
-            message_count=len(messages),
+            message_count=len(msgs),
         )
 
-        return thread
+    def _detect_topic_label(self, msgs: list[Message]) -> str:
+        # Simplified topic labeling for grouping
+        if not msgs: return "General"
+        ctx = self.analyze(msgs)
+        return ctx.topic.value.replace("_", " ").title()
 
-    def get_threaded_messages(
-        self,
-        messages: list[Message],
-        chat_id: str = "",
-    ) -> list[ThreadedMessage]:
-        """Get messages with thread information attached.
+    def analyze(self, messages: list[Message]) -> ThreadContext:
+        """Analyze a specific thread context."""
+        if not messages:
+            return ThreadContext([], ThreadTopic.UNKNOWN, ThreadState.CONCLUDED, UserRole.PARTICIPANT, 0.0)
 
-        Args:
-            messages: List of messages
-            chat_id: Conversation ID
+        topic, conf = self._detect_topic(messages)
+        state = self._detect_state(messages)
+        role = self._detect_user_role(messages)
+        relevant = self._get_relevant_messages(messages, topic)
+        items = self._extract_action_items(messages)
+        parts = {m.sender for m in messages if not m.is_from_me}
 
-        Returns:
-            List of ThreadedMessage objects
-        """
-        threads = self.analyze_threads(messages, chat_id)
+        return ThreadContext(messages, topic, state, role, conf, relevant, items, max(1, len(parts)))
 
-        # Build message ID to thread mapping
-        message_to_thread: dict[int, Thread] = {}
-        for thread in threads:
-            for msg_id in thread.messages:
-                message_to_thread[msg_id] = thread
+    def _detect_topic(self, messages: list[Message]) -> tuple[ThreadTopic, float]:
+        recent = messages[-10:]
+        combined = " ".join(m.text.lower() for m in recent if m.text)
+        
+        pattern_scores = {t: sum(1 for p in pats if p.lower() in combined) for t, pats in TOPIC_PATTERNS.items()}
+        best_p = max(pattern_scores, key=lambda k: pattern_scores[k])
+        if pattern_scores[best_p] >= 2:
+            return best_p, min(0.9, 0.5 + pattern_scores[best_p] * 0.1)
 
-        # Create ThreadedMessage objects
-        threaded_messages: list[ThreadedMessage] = []
-        for message in messages:
-            thread = message_to_thread.get(message.id)
-            if thread:
-                position = thread.messages.index(message.id)
-                threaded_msg = ThreadedMessage(
-                    message=message,
-                    thread_id=thread.thread_id,
-                    thread_position=position,
-                    is_thread_start=position == 0,
-                )
-                threaded_messages.append(threaded_msg)
+        if self._ensure_embeddings_computed() and self._topic_embeddings:
+            emb = self._compute_embedding(combined)
+            if emb is not None:
+                sims = {t: float(np.dot(emb, c)) for t, c in self._topic_embeddings.items()}
+                best_t = max(sims, key=lambda k: sims[k])
+                if sims[best_t] >= self.TOPIC_CONFIDENCE_THRESHOLD:
+                    return best_t, sims[best_t]
 
-        return threaded_messages
+        return (best_p, 0.3 + pattern_scores[best_p] * 0.1) if pattern_scores[best_p] >= 1 else (ThreadTopic.UNKNOWN, 0.0)
+
+    def _detect_state(self, messages: list[Message]) -> ThreadState:
+        if not messages: return ThreadState.CONCLUDED
+        last = messages[-1]
+        text = (last.text or "").lower()
+        if any(re.search(p, text, re.I) for p in QUESTION_PATTERNS):
+            return ThreadState.AWAITING_RESPONSE if last.is_from_me else ThreadState.OPEN_QUESTION
+        if any(re.search(p, text, re.I) for p in CONCLUSION_PATTERNS):
+            return ThreadState.CONCLUDED
+        return ThreadState.IN_DISCUSSION
+
+    def _detect_user_role(self, messages: list[Message]) -> UserRole:
+        if not messages: return UserRole.PARTICIPANT
+        if messages[0].is_from_me: return UserRole.INITIATOR
+        my_count = sum(1 for m in messages if m.is_from_me)
+        ratio = my_count / len(messages)
+        if ratio > 0.6: return UserRole.INITIATOR
+        if ratio < 0.3: return UserRole.RESPONDER
+        return UserRole.PARTICIPANT
+
+    def _get_relevant_messages(self, messages: list[Message], topic: ThreadTopic) -> list[Message]:
+        if topic == ThreadTopic.QUICK_EXCHANGE: return messages[-3:]
+        if topic == ThreadTopic.LOGISTICS:
+            rel = [m for m in messages[-10:] if m.text and any(w in m.text.lower() for w in ["time", "where", "address", "meet", "late", "here"])]
+            return list(dict.fromkeys(rel + messages[-3:]))
+        if topic in (ThreadTopic.PLANNING, ThreadTopic.DECISION_MAKING): return messages[-7:]
+        return messages[-5:]
+
+    def _extract_action_items(self, messages: list[Message]) -> list[str]:
+        pats = [r"(?:I'll|i'll|I will|i will)\s+(.+?)(?:\.|$)", r"(?:can you|could you)\s+(.+?)(?:\?|$)", r"(?:don't forget to|remember to)\s+(.+?)(?:\.|$)", r"(?:please|pls)\s+(.+?)(?:\.|$)", r"(?:need to|have to)\s+(.+?)(?:\.|$)" ]
+        items = []
+        for m in messages[-10:]:
+            if not m.text: continue
+            for p in pats:
+                for match in re.findall(p, m.text, re.I):
+                    s = match.strip()
+                    if 5 < len(s) < 100: items.append(s)
+        seen = set()
+        return [x for x in items if not (x.lower() in seen or seen.add(x.lower()))][:5]
+
+    def get_response_config(self, context: ThreadContext) -> ThreadedReplyConfig:
+        """Get recommended response configuration."""
+        return TOPIC_RESPONSE_CONFIG.get(context.topic, TOPIC_RESPONSE_CONFIG[ThreadTopic.UNKNOWN])
 
     def clear_cache(self) -> None:
-        """Clear the embeddings cache."""
+        """Clear cached data."""
         with self._lock:
             self._embeddings_cache.clear()
+            self._topic_embeddings = None
             logger.debug("Thread analyzer cache cleared")
 
 
-# Module-level singleton instance
 _analyzer: ThreadAnalyzer | None = None
 _analyzer_lock = threading.Lock()
 
-
 def get_thread_analyzer(config: ThreadingConfig | None = None) -> ThreadAnalyzer:
-    """Get the singleton ThreadAnalyzer instance.
-
-    Args:
-        config: Optional configuration (only used on first call)
-
-    Returns:
-        The shared ThreadAnalyzer instance
-    """
+    """Get singleton ThreadAnalyzer."""
     global _analyzer
     if _analyzer is None:
         with _analyzer_lock:
@@ -541,15 +698,10 @@ def get_thread_analyzer(config: ThreadingConfig | None = None) -> ThreadAnalyzer
                 _analyzer = ThreadAnalyzer(config)
     return _analyzer
 
-
 def reset_thread_analyzer() -> None:
-    """Reset the singleton ThreadAnalyzer instance.
-
-    Call this to create a fresh analyzer on next access.
-    """
+    """Reset singleton."""
     global _analyzer
     with _analyzer_lock:
-        if _analyzer is not None:
-            _analyzer.clear_cache()
+        if _analyzer: _analyzer.clear_cache()
         _analyzer = None
     logger.debug("Thread analyzer singleton reset")
