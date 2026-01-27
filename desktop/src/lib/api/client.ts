@@ -13,6 +13,7 @@ import type {
   ConversationInsights,
   ConversationStats,
   CreateEventResponse,
+  CreateExperimentRequest,
   CustomTemplate,
   CustomTemplateCreateRequest,
   CustomTemplateExportResponse,
@@ -33,6 +34,9 @@ import type {
   DigestResponse,
   DownloadStatus,
   DraftReplyResponse,
+  Experiment,
+  ExperimentListResponse,
+  ExperimentResults,
   FrequencyTrends,
   FeedbackAction,
   FeedbackStatsResponse,
@@ -48,6 +52,8 @@ import type {
   PriorityLevel,
   PriorityStats,
   RecordFeedbackResponse,
+  RecordOutcomeRequest,
+  RecordOutcomeResponse,
   RelationshipHealth,
   ResponsePatterns,
   SearchFilters,
@@ -67,6 +73,8 @@ import type {
   ThreadResponse,
   TimeRange,
   TopicsResponse,
+  UserAction,
+  VariantConfig,
 } from "./types";
 
 const API_BASE = "http://localhost:8742";
@@ -1106,6 +1114,81 @@ class ApiClient {
   async getFeedbackImprovements(limit: number = 10): Promise<ImprovementsResponse> {
     return this.request<ImprovementsResponse>(
       `/feedback/improvements?limit=${limit}`
+    );
+  }
+
+  // Experiment endpoints
+  async getExperiments(activeOnly: boolean = false): Promise<ExperimentListResponse> {
+    const params = activeOnly ? "?active_only=true" : "";
+    return this.request<ExperimentListResponse>(`/experiments${params}`);
+  }
+
+  async getExperiment(name: string): Promise<Experiment> {
+    return this.request<Experiment>(
+      `/experiments/${encodeURIComponent(name)}`
+    );
+  }
+
+  async getExperimentResults(name: string): Promise<ExperimentResults> {
+    return this.request<ExperimentResults>(
+      `/experiments/${encodeURIComponent(name)}/results`
+    );
+  }
+
+  async recordExperimentOutcome(
+    experimentName: string,
+    request: RecordOutcomeRequest
+  ): Promise<RecordOutcomeResponse> {
+    return this.request<RecordOutcomeResponse>(
+      `/experiments/${encodeURIComponent(experimentName)}/record`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      }
+    );
+  }
+
+  async createExperiment(request: CreateExperimentRequest): Promise<Experiment> {
+    return this.request<Experiment>("/experiments", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async updateExperiment(
+    name: string,
+    enabled: boolean
+  ): Promise<Experiment> {
+    return this.request<Experiment>(
+      `/experiments/${encodeURIComponent(name)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }
+    );
+  }
+
+  async deleteExperiment(name: string): Promise<{ status: string; experiment_name: string }> {
+    return this.request<{ status: string; experiment_name: string }>(
+      `/experiments/${encodeURIComponent(name)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  async clearExperimentOutcomes(name: string): Promise<{ status: string; experiment_name: string }> {
+    return this.request<{ status: string; experiment_name: string }>(
+      `/experiments/${encodeURIComponent(name)}/outcomes`,
+      { method: "DELETE" }
+    );
+  }
+
+  async getVariantForContact(
+    experimentName: string,
+    contactId: string
+  ): Promise<VariantConfig | null> {
+    const params = new URLSearchParams({ contact_id: contactId });
+    return this.request<VariantConfig | null>(
+      `/experiments/${encodeURIComponent(experimentName)}/variant?${params.toString()}`
     );
   }
 }

@@ -32,6 +32,7 @@ from api.routers import (
     digest_router,
     drafts_router,
     embeddings_router,
+    experiments_router,
     export_router,
     feedback_router,
     health_router,
@@ -218,6 +219,11 @@ API_TAGS_METADATA = [
         "description": "User feedback tracking and response evaluation. "
         "Record feedback on suggestions, track acceptance rates, and get improvement insights.",
     },
+    {
+        "name": "experiments",
+        "description": "A/B testing infrastructure for prompt experimentation. "
+        "Create experiments, assign variants to contacts, record outcomes, and analyze results.",
+    },
 ]
 
 API_CONTACT = {
@@ -360,6 +366,7 @@ app.include_router(tasks_router)
 app.include_router(batch_router)
 app.include_router(priority_router)
 app.include_router(feedback_router)
+app.include_router(experiments_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)

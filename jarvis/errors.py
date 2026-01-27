@@ -82,6 +82,12 @@ class ErrorCode(str, Enum):
     CAL_CREATE_FAILED = "CAL_CREATE_FAILED"
     CAL_PARSE_FAILED = "CAL_PARSE_FAILED"
 
+    # Experiment errors (EXP_*)
+    EXP_NOT_FOUND = "EXP_NOT_FOUND"
+    EXP_INVALID_CONFIG = "EXP_INVALID_CONFIG"
+    EXP_VARIANT_NOT_FOUND = "EXP_VARIANT_NOT_FOUND"
+    EXP_ALREADY_EXISTS = "EXP_ALREADY_EXISTS"
+
     # Generic errors
     UNKNOWN = "UNKNOWN"
 
@@ -388,7 +394,7 @@ class iMessageAccessError(iMessageError):  # noqa: N801 - iMessage is a brand na
                 "Open System Settings",
                 "Go to Privacy & Security > Full Disk Access",
                 "Add and enable your terminal application",
-                "Restart JARVIS",
+                "Restart JARVIS"
             ]
         super().__init__(message, db_path=db_path, code=code, details=details, cause=cause)
 
@@ -811,6 +817,71 @@ class EventParseError(CalendarError):
         super().__init__(message, code=code, details=details, cause=cause)
 
 
+# Experiment Errors
+
+
+class ExperimentError(JarvisError):
+    """Base class for experiment-related errors.
+
+    Raised when A/B testing experiment operations fail.
+    """
+
+    default_message = "Experiment error"
+    default_code = ErrorCode.EXP_NOT_FOUND
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        experiment_name: str | None = None,
+        variant_id: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize an experiment error.
+
+        Args:
+            message: Human-readable error message.
+            experiment_name: Name of the experiment that caused the error.
+            variant_id: ID of the variant (if applicable).
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if experiment_name:
+            details["experiment_name"] = experiment_name
+        if variant_id:
+            details["variant_id"] = variant_id
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
+class ExperimentNotFoundError(ExperimentError):
+    """Raised when an experiment is not found.
+
+    Examples:
+        - Experiment name doesn't exist
+        - Experiment was deleted
+    """
+
+    default_message = "Experiment not found"
+    default_code = ErrorCode.EXP_NOT_FOUND
+
+
+class ExperimentConfigError(ExperimentError):
+    """Raised when experiment configuration is invalid.
+
+    Examples:
+        - Invalid variant weights
+        - Missing required fields
+        - YAML parse errors
+    """
+
+    default_message = "Invalid experiment configuration"
+    default_code = ErrorCode.EXP_INVALID_CONFIG
+
+
 # Convenience functions for common error scenarios
 
 
@@ -1002,6 +1073,10 @@ __all__ = [
     "CalendarAccessError",
     "CalendarCreateError",
     "EventParseError",
+    # Experiment errors
+    "ExperimentError",
+    "ExperimentNotFoundError",
+    "ExperimentConfigError",
     # Convenience functions
     "model_not_found",
     "model_out_of_memory",
