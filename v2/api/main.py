@@ -31,15 +31,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for Tauri app
+# CORS for Tauri app - permissive for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "tauri://localhost",
-        "http://localhost",
-        "http://localhost:1420",  # Vite dev server
-        "http://127.0.0.1:1420",
-    ],
+    allow_origins=["*"],  # Allow all origins in development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
