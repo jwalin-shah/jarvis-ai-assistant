@@ -7,46 +7,149 @@ This is a one-time setup that indexes your message history so JARVIS can:
 3. Generate responses that match how YOU actually text
 
 Run with: python -m v2.scripts.index_messages
-
-Time estimates:
-- 10,000 messages: ~1-2 minutes
-- 50,000 messages: ~5-10 minutes
-- 100,000 messages: ~15-20 minutes
 """
 
 from __future__ import annotations
 
 import sys
+import time
 
 
 def main():
-    print()
-    print("=" * 60)
-    print("JARVIS v2 - Message Indexer")
-    print("=" * 60)
-    print()
-    print("This will index your iMessage history to learn your style.")
-    print("Your data stays local - nothing is sent to the cloud.")
-    print()
+    from rich.console import Console
+    from rich.progress import (
+        Progress,
+        SpinnerColumn,
+        TextColumn,
+        BarColumn,
+        TaskProgressColumn,
+        TimeElapsedColumn,
+        TimeRemainingColumn,
+    )
+    from rich.panel import Panel
+    from rich.table import Table
+
+    console = Console()
+
+    console.print()
+    console.print(Panel.fit(
+        "[bold blue]JARVIS v2 - Message Indexer[/bold blue]\n\n"
+        "This indexes your iMessage history to learn your texting style.\n"
+        "Your data stays 100% local - nothing is sent to the cloud.\n\n"
+        "[dim]Embedding model: all-MiniLM-L6-v2 (~90MB, 384 dimensions)[/dim]",
+        title="Style Learning",
+    ))
+    console.print()
 
     # Check for --yes flag to skip confirmation
     if "--yes" not in sys.argv and "-y" not in sys.argv:
-        response = input("Continue? [y/N] ").strip().lower()
-        if response != "y":
-            print("Cancelled.")
+        if not console.input("[yellow]Continue? [y/N][/yellow] ").strip().lower() == "y":
+            console.print("[dim]Cancelled.[/dim]")
             return
 
-    print()
+    console.print()
 
-    from v2.core.embeddings.indexer import run_indexing
+    # First, count messages to give accurate estimate
+    console.print("[dim]Scanning conversations...[/dim]")
 
-    stats = run_indexing(verbose=True)
+    from v2.core.imessage import MessageReader
+    from v2.core.embeddings import get_embedding_store, get_embedding_model
 
-    if stats.messages_indexed > 0:
-        print("Your message history is now indexed!")
-        print("JARVIS will use your past replies to match your texting style.")
-    else:
-        print("No new messages to index.")
+    reader = MessageReader()
+    conversations = reader.get_conversations(limit=500)
+
+    # Count total messages
+    total_messages = 0
+    conv_message_counts = []
+    for conv in conversations:
+        messages = reader.get_messages(conv.chat_id, limit=1000)
+        valid = [m for m in messages if m.text and len(m.text.strip()) >= 3]
+        conv_message_counts.append((conv, valid))
+        total_messages += len(valid)
+
+    # Estimate time (15ms per message in batches, plus model load)
+    est_seconds = 5 + (total_messages * 0.015)  # 5s model load + 15ms per msg
+    est_minutes = est_seconds / 60
+
+    console.print()
+    table = Table(show_header=False, box=None)
+    table.add_row("Conversations:", f"[cyan]{len(conversations)}[/cyan]")
+    table.add_row("Total messages:", f"[cyan]{total_messages:,}[/cyan]")
+    table.add_row("Estimated time:", f"[cyan]{est_minutes:.1f} minutes[/cyan]")
+    console.print(table)
+    console.print()
+
+    # Load model first (show spinner)
+    with console.status("[bold green]Loading embedding model...[/bold green]"):
+        model = get_embedding_model()
+        model._ensure_loaded()
+    console.print("[green]✓[/green] Model loaded")
+
+    # Index with progress bar
+    store = get_embedding_store()
+    indexed = 0
+    skipped = 0
+    duplicates = 0
+    start_time = time.time()
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task(
+            "[cyan]Indexing messages...",
+            total=total_messages,
+        )
+
+        for conv, messages in conv_message_counts:
+            if not messages:
+                continue
+
+            # Convert to dict format
+            msg_dicts = [
+                {
+                    "id": m.id,
+                    "text": m.text,
+                    "chat_id": m.chat_id,
+                    "sender": m.sender,
+                    "sender_name": m.sender_name,
+                    "timestamp": m.timestamp,
+                    "is_from_me": m.is_from_me,
+                }
+                for m in messages
+            ]
+
+            stats = store.index_messages(msg_dicts)
+            indexed += stats["indexed"]
+            skipped += stats["skipped"]
+            duplicates += stats["duplicates"]
+
+            progress.update(task, advance=len(messages))
+
+    elapsed = time.time() - start_time
+
+    # Results
+    console.print()
+    console.print(Panel.fit(
+        f"[green]✓ Indexing Complete![/green]\n\n"
+        f"Messages indexed: [cyan]{indexed:,}[/cyan]\n"
+        f"Already indexed: [dim]{duplicates:,}[/dim]\n"
+        f"Skipped (too short): [dim]{skipped:,}[/dim]\n"
+        f"Time: [cyan]{elapsed:.1f} seconds[/cyan]\n\n"
+        f"Database: [dim]~/.jarvis/embeddings.db[/dim]",
+        title="Results",
+    ))
+
+    if indexed > 0:
+        console.print()
+        console.print("[green]Your message history is now indexed![/green]")
+        console.print("JARVIS will use your past replies to match your texting style.")
+    console.print()
 
 
 if __name__ == "__main__":
