@@ -5,6 +5,7 @@
  */
 
 import type {
+  ContactProfile,
   Conversation,
   ConversationListResponse,
   GenerateRepliesResponse,
@@ -138,6 +139,13 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(settings),
     });
+  }
+
+  // Contact Profile
+  async getContactProfile(chatId: string): Promise<ContactProfile> {
+    return this.request<ContactProfile>(
+      `/conversations/${encodeURIComponent(chatId)}/profile`
+    );
   }
 }
 

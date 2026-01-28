@@ -236,14 +236,14 @@ class ContextAnalyzer:
         if any(t in text_lower for t in thanks):
             return MessageIntent.THANKS
 
-        # Emotional patterns
-        emotional_words = [
-            "stressed", "sad", "happy", "excited", "worried", "anxious",
-            "love", "hate", "ugh", "omg", "so tired", "exhausted",
-            "frustrated", "annoyed", "thrilled", "devastated",
+        # Sharing/giving patterns (check BEFORE emotional to avoid "ugh" in "brought")
+        sharing_patterns = [
+            "http", "check out", "look at", "brought you", "got you",
+            "for you", "made you", "found this", "sending you", "here's",
+            "got this for", "picked up", "brought the", "i brought",
         ]
-        if any(w in text_lower for w in emotional_words):
-            return MessageIntent.EMOTIONAL
+        if any(p in text_lower for p in sharing_patterns):
+            return MessageIntent.SHARING
 
         # Logistics patterns
         logistics_words = [
@@ -253,9 +253,18 @@ class ContextAnalyzer:
         if any(w in text_lower for w in logistics_words):
             return MessageIntent.LOGISTICS
 
-        # Sharing patterns
-        if "http" in text_lower or "check out" in text_lower or "look at" in text_lower:
-            return MessageIntent.SHARING
+        # Emotional patterns (avoid matching "ugh" inside words like "brought")
+        emotional_phrases = [
+            "stressed", "so sad", "so happy", "excited", "worried", "anxious",
+            "i love", "i hate", "omg", "so tired", "exhausted",
+            "frustrated", "annoyed", "thrilled", "devastated", "rough day",
+            "was rough", "feeling down", "feeling good",
+        ]
+        # Check if starts with "ugh" or has " ugh " as word
+        if text_lower.startswith("ugh") or " ugh " in text_lower or " ugh" in text_lower[-4:]:
+            return MessageIntent.EMOTIONAL
+        if any(w in text_lower for w in emotional_phrases):
+            return MessageIntent.EMOTIONAL
 
         return MessageIntent.STATEMENT
 

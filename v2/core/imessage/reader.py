@@ -419,11 +419,11 @@ class MessageReader:
     # Conversations
     # =========================================================================
 
-    def get_conversations(self, limit: int = 50) -> list[Conversation]:
+    def get_conversations(self, limit: int | None = 50) -> list[Conversation]:
         """Get recent conversations.
 
         Args:
-            limit: Maximum number of conversations to return
+            limit: Maximum number of conversations to return (None for all)
 
         Returns:
             List of conversations, newest first
@@ -431,7 +431,9 @@ class MessageReader:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        query = """
+        limit_clause = "LIMIT ?" if limit is not None else ""
+
+        query = f"""
             SELECT
                 chat.guid as chat_id,
                 chat.display_name,
@@ -479,11 +481,12 @@ class MessageReader:
             FROM chat
             WHERE message_count > 0
             ORDER BY last_message_date DESC
-            LIMIT ?
+            {limit_clause}
         """
 
         try:
-            cursor.execute(query, (limit,))
+            params = (limit,) if limit is not None else ()
+            cursor.execute(query, params)
             rows = cursor.fetchall()
         except sqlite3.Error as e:
             logger.error(f"Error fetching conversations: {e}")
@@ -532,14 +535,14 @@ class MessageReader:
     def get_messages(
         self,
         chat_id: str,
-        limit: int = 50,
+        limit: int | None = 50,
         before: datetime | None = None,
     ) -> list[Message]:
         """Get messages from a conversation.
 
         Args:
             chat_id: Conversation ID
-            limit: Maximum number of messages
+            limit: Maximum number of messages (None for all)
             before: Only return messages before this datetime (for pagination)
 
         Returns:
@@ -559,7 +562,10 @@ class MessageReader:
             before_clause = "AND message.date < ?"
             params.append(_datetime_to_apple_timestamp(before))
 
-        params.append(limit)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = "LIMIT ?"
+            params.append(limit)
 
         query = f"""
             SELECT
@@ -577,7 +583,7 @@ class MessageReader:
             WHERE chat.guid = ?
             {before_clause}
             ORDER BY message.date DESC
-            LIMIT ?
+            {limit_clause}
         """
 
         try:

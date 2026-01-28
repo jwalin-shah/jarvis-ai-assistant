@@ -5,12 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import (
+    ContactProfileResponse,
     ConversationListResponse,
     ConversationResponse,
     MessageListResponse,
     MessageResponse,
     SendMessageRequest,
     SendMessageResponse,
+    TopicClusterResponse,
 )
 
 router = APIRouter()
@@ -18,7 +20,7 @@ router = APIRouter()
 
 def _get_reader():
     """Get iMessage reader instance."""
-    from v2.core.imessage import MessageReader
+    from core.imessage import MessageReader
 
     reader = MessageReader()
     if not reader.check_access():
@@ -45,6 +47,7 @@ async def list_conversations(limit: int = 50) -> ConversationListResponse:
                     participants=c.participants,
                     last_message_date=c.last_message_date,
                     last_message_text=c.last_message_text,
+                    last_message_is_from_me=c.last_message_is_from_me,
                     message_count=c.message_count,
                     is_group=c.is_group,
                 )
@@ -113,7 +116,7 @@ async def send_message(request: SendMessageRequest) -> SendMessageResponse:
 
     Requires Automation permission for Messages.app.
     """
-    from v2.core.imessage.sender import send_message as do_send
+    from core.imessage.sender import send_message as do_send
 
     # Determine if group chat based on chat_id format
     # Group chats typically have "chat" in the ID, individual have the recipient
@@ -129,3 +132,52 @@ async def send_message(request: SendMessageRequest) -> SendMessageResponse:
         success=result.success,
         error=result.error,
     )
+
+
+@router.get("/{chat_id}/profile", response_model=ContactProfileResponse)
+async def get_contact_profile(chat_id: str) -> ContactProfileResponse:
+    """Get a rich profile of a contact based on message history.
+
+    Analyzes the conversation to determine:
+    - Relationship type (close friend, family, coworker, etc.)
+    - Communication tone (casual, playful, formal)
+    - Common topics discussed
+    - Communication patterns
+    """
+    from core.embeddings import get_contact_profile as build_profile
+
+    try:
+        profile = build_profile(chat_id)
+
+        return ContactProfileResponse(
+            chat_id=profile.chat_id,
+            display_name=profile.display_name,
+            relationship_type=profile.relationship_type,
+            relationship_confidence=profile.relationship_confidence,
+            total_messages=profile.total_messages,
+            you_sent=profile.you_sent,
+            they_sent=profile.they_sent,
+            avg_your_length=profile.avg_your_length,
+            avg_their_length=profile.avg_their_length,
+            tone=profile.tone,
+            uses_emoji=profile.uses_emoji,
+            uses_slang=profile.uses_slang,
+            is_playful=profile.is_playful,
+            topics=[
+                TopicClusterResponse(
+                    name=t.name,
+                    keywords=t.keywords,
+                    message_count=t.message_count,
+                    percentage=t.percentage,
+                )
+                for t in profile.topics
+            ],
+            most_active_hours=profile.most_active_hours,
+            first_message_date=profile.first_message_date,
+            last_message_date=profile.last_message_date,
+            their_common_phrases=profile.their_common_phrases,
+            your_common_phrases=profile.your_common_phrases,
+            summary=profile.summary,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to build profile: {e}")

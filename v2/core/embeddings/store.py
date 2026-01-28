@@ -1,6 +1,6 @@
 """Embedding store for JARVIS v2.
 
-SQLite-backed storage for message embeddings with similarity search.
+SQLite-backed storage for message embeddings with FAISS-indexed similarity search.
 Adapted from v1's jarvis/embeddings.py.
 """
 
@@ -10,6 +10,7 @@ import hashlib
 import logging
 import sqlite3
 import threading
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,9 +19,17 @@ from typing import Any
 
 import numpy as np
 
-from .model import get_embedding_model
+from .model import get_embedding_model, EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
+
+# Try to import FAISS for fast similarity search
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+    logger.info("FAISS not installed - using brute force search. Install with: pip install faiss-cpu")
 
 # Configuration
 DEFAULT_DB_PATH = Path.home() / ".jarvis" / "embeddings.db"
@@ -70,12 +79,16 @@ class StyleProfile:
 
 
 class EmbeddingStore:
-    """SQLite-backed storage for message embeddings."""
+    """SQLite-backed storage for message embeddings with FAISS indexing."""
 
     def __init__(self, db_path: Path | str | None = None):
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
+
+        # FAISS index cache per chat_id
+        self._faiss_indices: dict[str, tuple[Any, list[dict]]] = {}  # chat_id -> (index, metadata)
+        self._faiss_lock = threading.Lock()
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
@@ -189,6 +202,78 @@ class EmbeddingStore:
 
         return stats
 
+    def _get_or_build_faiss_index(
+        self, chat_id: str, only_from_me: bool | None = None
+    ) -> tuple[Any, list[dict]] | None:
+        """Get or build FAISS index for a chat.
+
+        Returns (faiss_index, metadata_list) or None if FAISS unavailable.
+        """
+        if not FAISS_AVAILABLE:
+            return None
+
+        # Cache key includes the filter
+        cache_key = f"{chat_id}:{only_from_me}"
+
+        with self._faiss_lock:
+            if cache_key in self._faiss_indices:
+                return self._faiss_indices[cache_key]
+
+        # Build index
+        start = time.time()
+        with self._get_connection() as conn:
+            sql = """
+                SELECT message_id, chat_id, embedding, text_preview,
+                       sender, sender_name, timestamp, is_from_me
+                FROM message_embeddings
+                WHERE chat_id = ?
+            """
+            params: list[Any] = [chat_id]
+
+            if only_from_me is not None:
+                sql += " AND is_from_me = ?"
+                params.append(1 if only_from_me else 0)
+
+            rows = conn.execute(sql, params).fetchall()
+
+        if not rows:
+            return None
+
+        # Build numpy array of embeddings
+        embeddings = np.array(
+            [np.frombuffer(row["embedding"], dtype=np.float32) for row in rows],
+            dtype=np.float32
+        )
+
+        # Normalize for cosine similarity (FAISS IndexFlatIP does inner product)
+        faiss.normalize_L2(embeddings)
+
+        # Create index
+        index = faiss.IndexFlatIP(EMBEDDING_DIM)
+        index.add(embeddings)
+
+        # Store metadata for lookup
+        metadata = [
+            {
+                "message_id": row["message_id"],
+                "chat_id": row["chat_id"],
+                "text": row["text_preview"] or "",
+                "sender": row["sender"],
+                "sender_name": row["sender_name"],
+                "timestamp": row["timestamp"],
+                "is_from_me": bool(row["is_from_me"]),
+            }
+            for row in rows
+        ]
+
+        elapsed = (time.time() - start) * 1000
+        logger.info(f"Built FAISS index for {chat_id} with {len(rows)} vectors in {elapsed:.0f}ms")
+
+        with self._faiss_lock:
+            self._faiss_indices[cache_key] = (index, metadata)
+
+        return index, metadata
+
     def find_similar(
         self,
         query: str,
@@ -196,8 +281,11 @@ class EmbeddingStore:
         limit: int = 10,
         min_similarity: float = 0.3,
         only_from_me: bool | None = None,
+        max_messages: int = 500,  # Only used for brute-force fallback
     ) -> list[SimilarMessage]:
         """Find messages similar to query.
+
+        Uses FAISS index for O(log n) search if available, falls back to brute force.
 
         Args:
             query: Text to find similar messages for
@@ -205,13 +293,56 @@ class EmbeddingStore:
             limit: Max results
             min_similarity: Minimum similarity (0-1)
             only_from_me: If True, only your messages. If False, only others. None = all.
+            max_messages: Max messages for brute-force fallback
 
         Returns:
             List of similar messages sorted by similarity
         """
         model = get_embedding_model()
-        query_embedding = model.embed(query)
+        query_embedding = model.embed(query).astype(np.float32)
 
+        # Try FAISS first (fast path)
+        if chat_id and FAISS_AVAILABLE:
+            search_start = time.time()
+            faiss_result = self._get_or_build_faiss_index(chat_id, only_from_me)
+            if faiss_result:
+                index, metadata = faiss_result
+
+                # Normalize query for cosine similarity
+                query_norm = query_embedding.reshape(1, -1).copy()
+                faiss.normalize_L2(query_norm)
+
+                # Search - get more than needed to filter by min_similarity
+                k = min(limit * 2, len(metadata))
+                similarities, indices = index.search(query_norm, k)
+
+                results = []
+                for sim, idx in zip(similarities[0], indices[0]):
+                    if idx < 0 or sim < min_similarity:
+                        continue
+                    meta = metadata[idx]
+                    results.append(
+                        SimilarMessage(
+                            message_id=meta["message_id"],
+                            chat_id=meta["chat_id"],
+                            text=meta["text"],
+                            sender=meta["sender"],
+                            sender_name=meta["sender_name"],
+                            timestamp=datetime.fromtimestamp(meta["timestamp"]),
+                            is_from_me=meta["is_from_me"],
+                            similarity=float(sim),
+                        )
+                    )
+                    if len(results) >= limit:
+                        break
+
+                search_time = (time.time() - search_start) * 1000
+                logger.info(f"FAISS search: {len(results)} results in {search_time:.1f}ms (index size: {len(metadata)})")
+                return results
+
+        # Brute force fallback (FAISS not available or no chat_id filter)
+        logger.info(f"Using brute-force search (FAISS={'available' if FAISS_AVAILABLE else 'not installed'}, chat_id={chat_id})")
+        brute_start = time.time()
         with self._get_connection() as conn:
             sql = """
                 SELECT message_id, chat_id, embedding, text_preview,
@@ -232,15 +363,24 @@ class EmbeddingStore:
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
 
+            sql += " ORDER BY timestamp DESC LIMIT ?"
+            params.append(max_messages)
+
             rows = conn.execute(sql, params).fetchall()
 
-        results = []
-        for row in rows:
-            embedding = np.frombuffer(row["embedding"], dtype=np.float32)
-            similarity = float(np.dot(query_embedding, embedding) /
-                             (np.linalg.norm(query_embedding) * np.linalg.norm(embedding) + 1e-8))
+        if not rows:
+            return []
 
-            if similarity >= min_similarity:
+        # Vectorized similarity calculation
+        embeddings = np.array([np.frombuffer(row["embedding"], dtype=np.float32) for row in rows])
+        query_norm = query_embedding / (np.linalg.norm(query_embedding) + 1e-8)
+        embeddings_norm = embeddings / (np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-8)
+        similarities = embeddings_norm @ query_norm
+
+        results = []
+        for i, sim in enumerate(similarities):
+            if sim >= min_similarity:
+                row = rows[i]
                 results.append(
                     SimilarMessage(
                         message_id=row["message_id"],
@@ -250,12 +390,37 @@ class EmbeddingStore:
                         sender_name=row["sender_name"],
                         timestamp=datetime.fromtimestamp(row["timestamp"]),
                         is_from_me=bool(row["is_from_me"]),
-                        similarity=similarity,
+                        similarity=float(sim),
                     )
                 )
 
         results.sort(key=lambda x: x.similarity, reverse=True)
+        brute_time = (time.time() - brute_start) * 1000
+        logger.info(f"Brute-force search: {len(results[:limit])} results in {brute_time:.1f}ms (searched {len(rows)} messages)")
         return results[:limit]
+
+    def is_index_ready(self, chat_id: str, only_from_me: bool | None = None) -> bool:
+        """Check if FAISS index is already built and cached for this chat."""
+        if not FAISS_AVAILABLE:
+            return False
+        cache_key = f"{chat_id}:{only_from_me}"
+        return cache_key in self._faiss_indices
+
+    def preload_index(self, chat_id: str) -> None:
+        """Pre-build FAISS index for a chat in the background.
+
+        Call this when a conversation is selected to avoid delay on first search.
+        """
+        import threading
+
+        def _build():
+            # Build index for "not from me" (needed for past_replies)
+            self._get_or_build_faiss_index(chat_id, only_from_me=False)
+
+        if not self.is_index_ready(chat_id, only_from_me=False):
+            thread = threading.Thread(target=_build, daemon=True)
+            thread.start()
+            logger.info(f"Started background FAISS index build for {chat_id}")
 
     def find_your_past_replies(
         self,
@@ -263,6 +428,7 @@ class EmbeddingStore:
         chat_id: str | None = None,
         limit: int = 5,
         min_similarity: float = 0.7,
+        skip_if_slow: bool = True,
     ) -> list[tuple[str, str, float]]:
         """Find YOUR past replies to similar incoming messages.
 
@@ -273,10 +439,16 @@ class EmbeddingStore:
             chat_id: Optional filter by conversation
             limit: Max results
             min_similarity: Minimum similarity threshold
+            skip_if_slow: If True, skip lookup if FAISS index isn't cached (avoids 5+ second delay)
 
         Returns:
             List of (their_message, your_reply, similarity) tuples
         """
+        # Skip if index isn't ready and we don't want to wait for it to build
+        if skip_if_slow and chat_id and not self.is_index_ready(chat_id, only_from_me=False):
+            logger.info(f"Skipping past_replies - FAISS index not cached for {chat_id}")
+            return []
+
         # Find similar messages that were NOT from you
         similar_incoming = self.find_similar(
             query=incoming_message,
@@ -450,6 +622,54 @@ class EmbeddingStore:
         ).fetchall()
 
         return [(r["their_msg"], r["your_reply"]) for r in rows if r["their_msg"] and r["your_reply"]]
+
+    def get_chat_embeddings(
+        self, chat_id: str
+    ) -> tuple[np.ndarray, list[SimilarMessage]]:
+        """Get all embeddings and messages for a chat.
+
+        Args:
+            chat_id: Conversation to get embeddings for
+
+        Returns:
+            Tuple of (embeddings array, list of messages)
+        """
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT message_id, chat_id, embedding, text_preview,
+                       sender, sender_name, timestamp, is_from_me
+                FROM message_embeddings
+                WHERE chat_id = ?
+                ORDER BY timestamp
+                """,
+                (chat_id,),
+            ).fetchall()
+
+        if not rows:
+            return np.array([]), []
+
+        embeddings = []
+        messages = []
+
+        for row in rows:
+            embedding = np.frombuffer(row["embedding"], dtype=np.float32)
+            embeddings.append(embedding)
+
+            messages.append(
+                SimilarMessage(
+                    message_id=row["message_id"],
+                    chat_id=row["chat_id"],
+                    text=row["text_preview"] or "",
+                    sender=row["sender"],
+                    sender_name=row["sender_name"],
+                    timestamp=datetime.fromtimestamp(row["timestamp"]),
+                    is_from_me=bool(row["is_from_me"]),
+                    similarity=0.0,
+                )
+            )
+
+        return np.array(embeddings), messages
 
     def get_stats(self) -> dict[str, Any]:
         """Get index statistics."""

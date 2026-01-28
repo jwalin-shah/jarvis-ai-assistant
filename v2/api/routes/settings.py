@@ -28,7 +28,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
     """Update settings."""
     if request.model_id is not None:
         # Validate model exists
-        from v2.core.models import MODELS
+        from core.models import MODELS
 
         if request.model_id not in MODELS:
             from fastapi import HTTPException
@@ -40,7 +40,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
         _settings["model_id"] = request.model_id
 
         # Switch model
-        from v2.core.models import get_model_loader
+        from core.models import get_model_loader
 
         loader = get_model_loader()
         loader.switch_model(request.model_id)
@@ -57,7 +57,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
 @router.get("/models")
 async def list_models():
     """List available models."""
-    from v2.core.models import MODELS
+    from core.models import MODELS
 
     return {
         "models": [

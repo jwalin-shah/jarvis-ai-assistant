@@ -21,52 +21,55 @@ class ModelSpec:
     description: str
 
 
-# Available models for testing
+# Available models
 MODELS: dict[str, ModelSpec] = {
-    "qwen-0.5b": ModelSpec(
-        id="qwen-0.5b",
-        path="mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-        display_name="Qwen 2.5 0.5B",
-        size_gb=0.8,
-        quality="basic",
-        description="Fastest, basic quality",
-    ),
-    "qwen-1.5b": ModelSpec(
-        id="qwen-1.5b",
-        path="mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-        display_name="Qwen 2.5 1.5B",
-        size_gb=1.5,
-        quality="good",
-        description="Balanced speed/quality",
-    ),
-    "qwen-3b": ModelSpec(
-        id="qwen-3b",
-        path="mlx-community/Qwen2.5-3B-Instruct-4bit",
-        display_name="Qwen 2.5 3B",
-        size_gb=2.5,
+    # LFM2.5 - Best for text replies (fast + natural)
+    "lfm2.5-1.2b": ModelSpec(
+        id="lfm2.5-1.2b",
+        path="LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit",  # Official source
+        display_name="LFM2.5 1.2B",
+        size_gb=0.5,
         quality="excellent",
-        description="Best quality for 4-bit",
+        description="Fastest + most natural replies",
     ),
-    "phi3-mini": ModelSpec(
-        id="phi3-mini",
-        path="mlx-community/Phi-3-mini-4k-instruct-4bit",
-        display_name="Phi-3 Mini",
-        size_gb=2.5,
-        quality="good",
-        description="Fast, good for conversations",
-    ),
-    "gemma3-4b": ModelSpec(
-        id="gemma3-4b",
-        path="mlx-community/gemma-3-4b-it-4bit",
-        display_name="Gemma 3 4B",
-        size_gb=2.8,
+    "lfm2.5-1.2b-8bit": ModelSpec(
+        id="lfm2.5-1.2b-8bit",
+        path="LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit",
+        display_name="LFM2.5 1.2B (8-bit)",
+        size_gb=0.7,
         quality="excellent",
-        description="High quality, slightly slower",
+        description="Slightly better quality than 4-bit",
+    ),
+    # Llama 3.2 - Fast alternative
+    "llama-3.2-1b": ModelSpec(
+        id="llama-3.2-1b",
+        path="mlx-community/Llama-3.2-1B-Instruct-4bit",
+        display_name="Llama 3.2 1B",
+        size_gb=0.7,
+        quality="good",
+        description="Very fast, simple replies",
+    ),
+    # Qwen3 - Good quality, slower
+    "qwen3-4b": ModelSpec(
+        id="qwen3-4b",
+        path="Qwen/Qwen3-4B-MLX-4bit",
+        display_name="Qwen3 4B",
+        size_gb=2.1,
+        quality="excellent",
+        description="Best quality, slower",
+    ),
+    "qwen3-1.7b": ModelSpec(
+        id="qwen3-1.7b",
+        path="mlx-community/Qwen3-1.7B-4bit",
+        display_name="Qwen3 1.7B",
+        size_gb=1.2,
+        quality="excellent",
+        description="Good balance of speed/quality",
     ),
 }
 
-# Default model
-DEFAULT_MODEL = "qwen-1.5b"
+# Default model - LFM2.5 for fast, natural text replies
+DEFAULT_MODEL = "lfm2.5-1.2b"
 
 
 def get_model_spec(model_id: str) -> ModelSpec:
@@ -106,7 +109,7 @@ def get_recommended_model(available_ram_gb: float = 8.0) -> ModelSpec:
 
     if not candidates:
         # Fall back to smallest model
-        return MODELS["qwen-0.5b"]
+        return MODELS["lfm2.5-1.2b"]
 
     # Sort by quality (excellent > good > basic), then by size (larger is better)
     quality_order = {"excellent": 3, "good": 2, "basic": 1}
