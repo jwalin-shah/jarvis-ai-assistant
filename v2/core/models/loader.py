@@ -148,19 +148,20 @@ class ModelLoader:
 
         try:
             from mlx_lm import generate
-            from mlx_lm.sample_utils import make_sampler
+            from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
-            # Create sampler
-            # LFM2.5 recommends: temp=0.1, top_p=0.1, top_k=50, min_p=0.15
-            # For text replies, use slightly higher temp for variety
+            # Create sampler - LFM2.5 recommended: temp=0.1, top_p=0.1, top_k=50
+            # For text replies, temperature may be higher for variety (passed in)
             sampler = make_sampler(
                 temp=temperature,
                 top_p=0.1,
                 top_k=50,
-                min_p=0.15,
             )
 
-            # Apply chat template for Qwen3 (non-thinking mode)
+            # LFM2.5 recommends repetition_penalty=1.05
+            logits_processors = make_logits_processors(repetition_penalty=1.05)
+
+            # Apply chat template (ChatML format for LFM2.5)
             final_prompt = prompt
             if use_chat_template and self._tokenizer.chat_template:
                 try:
@@ -169,7 +170,6 @@ class ModelLoader:
                         messages,
                         tokenize=False,
                         add_generation_prompt=True,
-                        enable_thinking=False,  # Non-thinking mode for fast replies
                     )
                 except Exception as e:
                     logger.debug(f"Chat template failed, using raw prompt: {e}")
@@ -183,6 +183,7 @@ class ModelLoader:
                 prompt=final_prompt,
                 max_tokens=max_tokens,
                 sampler=sampler,
+                logits_processors=logits_processors,
             )
 
             # Handle stop sequences manually if needed

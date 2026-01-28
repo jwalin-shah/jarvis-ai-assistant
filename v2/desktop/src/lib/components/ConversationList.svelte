@@ -1,10 +1,134 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
   import type { Conversation } from "../api/types";
+  import { api } from "../api/client";
 
   export let conversations: Conversation[] = [];
   export let selectedChatId: string | null = null;
   export let onSelect: (chatId: string) => void = () => {};
   export let unreadChats: Set<string> = new Set();
+
+  // Track visible conversations for index preloading
+  let visibleChatIds = new Set<string>();
+  let preloadedChatIds = new Set<string>();
+  let observer: IntersectionObserver | null = null;
+  let preloadTimeout: ReturnType<typeof setTimeout> | null = null;
+  let itemRefs = new Map<string, HTMLElement>();
+  let listContainer: HTMLElement;
+
+  // Debounced preload function
+  function schedulePreload() {
+    if (preloadTimeout) {
+      clearTimeout(preloadTimeout);
+    }
+
+    preloadTimeout = setTimeout(() => {
+      const toPreload = [...visibleChatIds].filter(
+        (id) => !preloadedChatIds.has(id)
+      );
+
+      if (toPreload.length > 0) {
+        // Mark as preloaded immediately to avoid duplicate requests
+        toPreload.forEach((id) => preloadedChatIds.add(id));
+
+        // Fire and forget - no need to await
+        api.preloadIndices(toPreload).catch((err) => {
+          console.warn("Index preload failed:", err);
+          // Remove from preloaded set so it can retry later
+          toPreload.forEach((id) => preloadedChatIds.delete(id));
+        });
+      }
+    }, 150); // Debounce 150ms while scrolling
+  }
+
+  function setupObserver() {
+    if (!listContainer) return;
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        let changed = false;
+
+        for (const entry of entries) {
+          const chatId = entry.target.getAttribute("data-chat-id");
+          if (!chatId) continue;
+
+          if (entry.isIntersecting) {
+            if (!visibleChatIds.has(chatId)) {
+              visibleChatIds.add(chatId);
+              changed = true;
+            }
+          } else {
+            visibleChatIds.delete(chatId);
+          }
+        }
+
+        if (changed) {
+          schedulePreload();
+        }
+      },
+      {
+        root: listContainer, // Use scrollable container as root
+        rootMargin: "100px", // Preload 100px before visible
+        threshold: 0,
+      }
+    );
+
+    // Observe all current items
+    for (const [_, element] of itemRefs) {
+      observer.observe(element);
+    }
+  }
+
+  function registerItem(chatId: string, element: HTMLElement) {
+    itemRefs.set(chatId, element);
+    if (observer) {
+      observer.observe(element);
+    }
+  }
+
+  function unregisterItem(chatId: string) {
+    const element = itemRefs.get(chatId);
+    if (element && observer) {
+      observer.unobserve(element);
+    }
+    itemRefs.delete(chatId);
+    visibleChatIds.delete(chatId);
+  }
+
+  onMount(() => {
+    setupObserver();
+  });
+
+  onDestroy(() => {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    if (preloadTimeout) {
+      clearTimeout(preloadTimeout);
+    }
+    itemRefs.clear();
+    visibleChatIds.clear();
+  });
+
+  // Svelte action for observing items
+  function observeItem(node: HTMLElement, chatId: string) {
+    registerItem(chatId, node);
+
+    return {
+      update(newChatId: string) {
+        // If chat_id changes (unlikely but handle it)
+        if (newChatId !== chatId) {
+          unregisterItem(chatId);
+          chatId = newChatId;
+          registerItem(chatId, node);
+        }
+      },
+      destroy() {
+        unregisterItem(chatId);
+      },
+    };
+  }
 
   function getInitials(conv: Conversation): string {
     const name = conv.display_name || conv.participants[0] || "?";
@@ -43,11 +167,13 @@
   }
 </script>
 
-<div class="conversation-list">
+<div class="conversation-list" bind:this={listContainer}>
   {#each conversations as conv (conv.chat_id)}
     <button
       class="conversation-item"
       class:selected={conv.chat_id === selectedChatId}
+      data-chat-id={conv.chat_id}
+      use:observeItem={conv.chat_id}
       on:click={() => onSelect(conv.chat_id)}
     >
       <div class="avatar">

@@ -4,7 +4,7 @@
   import { startPolling, stopPolling } from "$lib/stores/app";
 
   onMount(() => {
-    startPolling(30000);
+    startPolling();
   });
 
   onDestroy(() => {

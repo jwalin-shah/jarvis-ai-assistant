@@ -99,3 +99,7 @@ logs/
 tmp/
 temp/
 *.tmp
+
+# Training data (personal, large, regeneratable)
+training_pairs.jsonl
+response_templates.json

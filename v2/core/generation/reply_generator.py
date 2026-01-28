@@ -19,6 +19,16 @@ from .style_analyzer import StyleAnalyzer, UserStyle
 logger = logging.getLogger(__name__)
 
 
+def _get_template_matcher():
+    """Lazy import to avoid circular dependencies."""
+    try:
+        from core.templates import get_template_matcher
+        return get_template_matcher(preload=True)
+    except Exception as e:
+        logger.debug(f"Template matcher not available: {e}")
+        return None
+
+
 def _get_embedding_store():
     """Lazy import to avoid circular dependencies."""
     try:
@@ -79,11 +89,60 @@ class ReplyGenerator:
         self.style_analyzer = StyleAnalyzer()
         self.context_analyzer = ContextAnalyzer()
 
+        # Load response templates for instant matching
+        self._template_matcher = _get_template_matcher()
+
         # Cache styles per conversation
         self._style_cache: dict[str, UserStyle] = {}
 
         # Track recent generations per chat to avoid repetition
         self._recent_generations: dict[str, list[str]] = {}
+
+        # Track regeneration count per chat for temperature scaling
+        # Resets when conversation changes (new last message)
+        self._regen_count: dict[str, int] = {}
+        self._last_message_hash: dict[str, str] = {}
+
+    def _get_temperature(self, chat_id: str, last_message: str) -> float:
+        """Get temperature based on regeneration count.
+
+        First generation uses low temp (0.2) for consistency.
+        Subsequent regenerations increase temp for variety.
+
+        Args:
+            chat_id: Conversation ID
+            last_message: The message being replied to
+
+        Returns:
+            Temperature value (0.2 to 0.9)
+        """
+        import hashlib
+
+        # Use stable hash (MD5) of truncated message as identifier
+        # This avoids Python's hash() which can vary between runs and has collisions
+        msg_key = hashlib.md5(
+            last_message[:100].encode(), usedforsecurity=False
+        ).hexdigest()[:16]
+
+        # Check if this is a new message or regeneration
+        if chat_id not in self._last_message_hash or self._last_message_hash[chat_id] != msg_key:
+            # New message - reset regen count
+            self._last_message_hash[chat_id] = msg_key
+            self._regen_count[chat_id] = 0
+        else:
+            # Same message - increment regen count
+            self._regen_count[chat_id] = self._regen_count.get(chat_id, 0) + 1
+
+        regen = self._regen_count.get(chat_id, 0)
+
+        # Temperature scaling: 0.2 -> 0.4 -> 0.6 -> 0.8 -> 0.9 (max)
+        temps = [0.2, 0.4, 0.6, 0.8, 0.9]
+        temp = temps[min(regen, len(temps) - 1)]
+
+        if regen > 0:
+            logger.info(f"Regeneration #{regen}, using temperature {temp}")
+
+        return temp
 
     def _record_generation(self, chat_id: str, reply: str) -> None:
         """Record a generated reply for repetition tracking.
@@ -158,6 +217,48 @@ class ReplyGenerator:
         coherent_messages = self._get_coherent_messages(messages)
         timings["coherence_filter"] = (time.time() - t0) * 1000
 
+        # 0.5 FAST PATH: Check response templates FIRST (before any other processing)
+        # This skips all style analysis, context analysis, and LLM for common responses
+        t0 = time.time()
+        if coherent_messages and self._template_matcher:
+            last_msg = coherent_messages[-1]
+            if not last_msg.get("is_from_me") and last_msg.get("text"):
+                template_match = self._template_matcher.match(last_msg["text"])
+                if template_match:
+                    timings["template_match"] = (time.time() - t0) * 1000
+                    generation_time = (time.time() - start_time) * 1000
+                    logger.info(
+                        f"Template match! '{last_msg['text'][:30]}...' -> '{template_match.actual}' "
+                        f"(conf={template_match.confidence:.2f}) in {generation_time:.0f}ms"
+                    )
+
+                    # Quick style analysis just for the result object
+                    style = self._get_or_analyze_style(messages, chat_id)
+                    context = ConversationContext(
+                        last_message=last_msg["text"],
+                        last_sender=last_msg.get("sender_name") or last_msg.get("sender") or "them",
+                        intent=self.context_analyzer._detect_intent(last_msg["text"]),
+                        tone="casual",
+                        topic="",
+                        requires_response=True,
+                    )
+
+                    return ReplyGenerationResult(
+                        replies=[GeneratedReply(
+                            text=template_match.actual.strip(),
+                            reply_type="template",
+                            confidence=template_match.confidence,
+                        )],
+                        context=context,
+                        style=style,
+                        model_used="template",
+                        generation_time_ms=generation_time,
+                        prompt_used=f"[Template match: {template_match.trigger}]",
+                        style_instructions="[Template - no style needed]",
+                        past_replies=[],
+                    )
+        timings["template_check"] = (time.time() - t0) * 1000
+
         # 1. Analyze user's texting style (use all messages for style)
         t0 = time.time()
         style = self._get_or_analyze_style(messages, chat_id)
@@ -179,14 +280,23 @@ class ReplyGenerator:
         # - FAISS index is preloaded (to avoid 5+ second delay)
         t0 = time.time()
         past_replies = []
+        availability = self._extract_availability_signal(coherent_messages)
         if len(context.last_message) > 10 and chat_id:
-            past_replies = self._find_past_replies(context.last_message, chat_id)
+            past_replies = self._find_past_replies(
+                context.last_message,
+                chat_id,
+                recent_messages=coherent_messages,  # Pass context for availability detection
+            )
         timings["past_replies_lookup"] = (time.time() - t0) * 1000
+
+        # Log availability signal if detected
+        if availability != "unknown":
+            logger.info(f"Availability signal detected: {availability}")
 
         # 4b. Template matching - if past replies are very similar and consistent, skip LLM
         template_reply = self._try_template_match(past_replies)
         if template_reply:
-            logger.info(f"Template match found - skipping LLM")
+            logger.info("Template match found - skipping LLM")
             generation_time = (time.time() - start_time) * 1000
             return ReplyGenerationResult(
                 replies=[GeneratedReply(text=template_reply, reply_type="template", confidence=0.95)],
@@ -216,8 +326,26 @@ class ReplyGenerator:
         if profile and profile.topics:
             recent_topics = [t.name for t in profile.topics[:3]]
 
+        # 6.5 Context refresh - for long conversations, re-query based on current topic
+        # This prevents context drift when original prompt was about something different
+        t0 = time.time()
+        refreshed_context = []
+        if len(messages) > 10 and chat_id:
+            refreshed_context = self._refresh_context_for_topic(coherent_messages, chat_id)
+        timings["context_refresh"] = (time.time() - t0) * 1000
+
+        # Merge refreshed context into coherent messages (add as historical reference)
+        messages_for_prompt = coherent_messages.copy()
+        if refreshed_context:
+            # Add refreshed context as "earlier in conversation" markers
+            for ctx_msg in refreshed_context:
+                # Only add if not already in the coherent messages
+                if ctx_msg.get("text") not in [m.get("text") for m in messages_for_prompt]:
+                    ctx_msg["_context_note"] = "[Earlier relevant message]"
+                    messages_for_prompt.insert(0, ctx_msg)
+
         prompt = build_reply_prompt(
-            messages=coherent_messages,  # Use coherent segment, not all messages
+            messages=messages_for_prompt,  # Use coherent segment + refreshed context
             last_message=context.last_message,
             last_sender=context.last_sender,
             style_instructions=style_instructions,
@@ -228,16 +356,20 @@ class ReplyGenerator:
             past_replies=past_replies,
             user_name=self._user_name,
             recent_topics=recent_topics,
+            availability=availability if availability != "unknown" else None,
         )
 
         # 7. Generate with LLM
         t0 = time.time()
         formatted_prompt = ""  # Will store the actual ChatML prompt for debugging
         try:
+            # Get temperature based on regen count (0.2 first time, scales up on regenerate)
+            temperature = self._get_temperature(chat_id, context.last_message) if chat_id else 0.2
+
             result = self.model_loader.generate(
                 prompt=prompt,
                 max_tokens=30,  # Only need 1 short reply
-                temperature=0.2,  # LFM2.5 recommends 0.1, use 0.2 for slight variety
+                temperature=temperature,
                 stop=["\n", "2.", "2)", "##", "Note:", "---"],
             )
             raw_output = result.text
@@ -250,8 +382,8 @@ class ReplyGenerator:
 
         # 8. Parse replies - strip emojis if profile says no emojis
         t0 = time.time()
-        strip_emojis = profile and not profile.uses_emoji
-        replies = self._parse_replies(raw_output, strategy.reply_types, strip_emojis=strip_emojis)
+        should_strip_emojis = profile and not profile.uses_emoji
+        replies = self._parse_replies(raw_output, strategy.reply_types, strip_emojis_flag=should_strip_emojis)
         timings["parse_replies"] = (time.time() - t0) * 1000
 
         # 9. Filter out repetitive replies (recently used in this conversation)
@@ -276,10 +408,13 @@ class ReplyGenerator:
         # Log timing breakdown
         logger.info(
             f"Generation completed in {generation_time:.0f}ms - "
+            f"template:{timings.get('template_check', 0):.0f}ms, "
             f"coherence:{timings.get('coherence_filter', 0):.0f}ms, "
             f"style:{timings.get('style_analysis', 0):.0f}ms, "
             f"context:{timings.get('context_analysis', 0):.0f}ms, "
+            f"past_replies:{timings.get('past_replies_lookup', 0):.0f}ms, "
             f"profile:{timings.get('contact_profile', 0):.0f}ms, "
+            f"refresh:{timings.get('context_refresh', 0):.0f}ms, "
             f"LLM:{timings.get('llm_generation', 0):.0f}ms, "
             f"parse:{timings.get('parse_replies', 0):.0f}ms"
         )
@@ -313,10 +448,10 @@ class ReplyGenerator:
         return style
 
     def _parse_replies(
-        self, raw_output: str, reply_types: list[str], strip_emojis: bool = False
+        self, raw_output: str, reply_types: list[str], strip_emojis_flag: bool = False
     ) -> list[GeneratedReply]:
         """Parse LLM output into structured replies."""
-        import re
+        from core.utils.emoji import strip_emojis
 
         replies = []
         output = raw_output.strip()
@@ -325,7 +460,7 @@ class ReplyGenerator:
         text = output.split("\n")[0].strip()
 
         # Remove common prefixes/artifacts
-        for prefix in ["Reply:", "Response:", "Answer:", f"{self._user_name}:"]:
+        for prefix in ["Reply:", "Response:", "Answer:", f"{self._user_name}:", "Them:", "Me:"]:
             if text.lower().startswith(prefix.lower()):
                 text = text[len(prefix):].strip()
 
@@ -335,23 +470,8 @@ class ReplyGenerator:
             text = text[1:-1]
 
         # Strip emojis if style says no emojis (model often ignores this instruction)
-        if strip_emojis:
-            # Remove emoji characters
-            emoji_pattern = re.compile(
-                "["
-                "\U0001F600-\U0001F64F"  # emoticons
-                "\U0001F300-\U0001F5FF"  # symbols & pictographs
-                "\U0001F680-\U0001F6FF"  # transport & map
-                "\U0001F1E0-\U0001F1FF"  # flags
-                "\U00002702-\U000027B0"  # dingbats
-                "\U0001F900-\U0001F9FF"  # supplemental symbols
-                "\U0001FA00-\U0001FA6F"  # chess symbols
-                "\U0001FA70-\U0001FAFF"  # symbols extended
-                "\U00002600-\U000026FF"  # misc symbols
-                "]+",
-                flags=re.UNICODE
-            )
-            text = emoji_pattern.sub("", text)
+        if strip_emojis_flag:
+            text = strip_emojis(text)
 
         # Clean up
         text = text.strip()
@@ -579,34 +699,209 @@ class ReplyGenerator:
 
         return ", ".join(instructions)
 
+    def _extract_availability_signal(
+        self,
+        recent_messages: list[dict] | None,
+    ) -> str:
+        """Extract availability signal from recent messages.
+
+        Looks at YOUR recent messages to detect if you've indicated
+        being busy or free.
+
+        Args:
+            recent_messages: Recent messages in the conversation
+
+        Returns:
+            "busy", "free", or "unknown"
+        """
+        if not recent_messages:
+            return "unknown"
+
+        # Look at your last 5 messages
+        your_recent = [
+            m.get("text", "").lower()
+            for m in recent_messages
+            if m.get("is_from_me") and m.get("text")
+        ][-5:]
+
+        if not your_recent:
+            return "unknown"
+
+        combined = " ".join(your_recent)
+
+        # Busy signals
+        busy_patterns = [
+            "busy", "can't", "cant", "exhausted", "swamped", "packed",
+            "tired", "slammed", "hectic", "crazy week", "no time",
+            "working late", "have to work", "not free", "won't be able",
+        ]
+        busy_count = sum(1 for p in busy_patterns if p in combined)
+
+        # Free signals
+        free_patterns = [
+            "free", "down", "available", "let's do", "lets do",
+            "sounds good", "i'm in", "im in", "count me in",
+            "nothing going on", "not busy", "have time",
+        ]
+        free_count = sum(1 for p in free_patterns if p in combined)
+
+        if busy_count > free_count and busy_count >= 1:
+            return "busy"
+        elif free_count > busy_count and free_count >= 1:
+            return "free"
+
+        return "unknown"
+
     def _find_past_replies(
         self,
         incoming_message: str,
         chat_id: str | None,
+        recent_messages: list[dict] | None = None,
     ) -> list[tuple[str, str, float]]:
         """Find YOUR past replies to similar incoming messages.
+
+        Now context-aware: considers recency, time-of-day, and
+        availability signals from recent conversation.
 
         Args:
             incoming_message: The message to find similar responses for
             chat_id: Optional conversation filter
+            recent_messages: Recent messages for context/availability detection
 
         Returns:
-            List of (their_message, your_reply, similarity) tuples
+            List of (their_message, your_reply, score) tuples
         """
         store = _get_embedding_store()
         if not store:
             return []
 
         try:
-            # Get more examples for better context (was 3, now 5)
-            return store.find_your_past_replies(
+            # Get past replies with time-weighting
+            results = store.find_your_past_replies(
                 incoming_message=incoming_message,
                 chat_id=chat_id,
-                limit=5,
-                min_similarity=0.60,  # Slightly lower threshold to get more examples
+                limit=8,  # Get more to filter by availability
+                min_similarity=0.55,  # Slightly lower since time-weighting adds score
+                use_time_weighting=True,
             )
+
+            # Apply availability-based filtering if we have context
+            availability = self._extract_availability_signal(recent_messages)
+
+            if availability != "unknown" and results:
+                # Keywords that suggest accept vs decline responses
+                accept_keywords = {"yes", "yeah", "yea", "sure", "ok", "okay", "down", "in", "sounds good"}
+                decline_keywords = {"no", "nah", "can't", "cant", "sorry", "busy", "won't", "wont"}
+
+                def response_type(reply: str) -> str:
+                    reply_lower = reply.lower().strip()
+                    words = set(reply_lower.split())
+                    if words & accept_keywords or reply_lower.startswith(tuple(accept_keywords)):
+                        return "accept"
+                    if words & decline_keywords or reply_lower.startswith(tuple(decline_keywords)):
+                        return "decline"
+                    return "neutral"
+
+                # Boost or penalize based on availability
+                adjusted = []
+                for their_msg, your_reply, score in results:
+                    rtype = response_type(your_reply)
+                    if availability == "busy" and rtype == "decline":
+                        score += 0.1  # Boost decline responses when busy
+                    elif availability == "busy" and rtype == "accept":
+                        score -= 0.05  # Slight penalty for accept when busy
+                    elif availability == "free" and rtype == "accept":
+                        score += 0.1  # Boost accept responses when free
+                    adjusted.append((their_msg, your_reply, score))
+
+                # Re-sort and limit
+                adjusted.sort(key=lambda x: x[2], reverse=True)
+                results = adjusted[:5]
+
+                if availability != "unknown":
+                    logger.debug(f"Availability signal: {availability}, adjusted {len(results)} past replies")
+
+            return results[:5]
+
         except Exception as e:
             logger.debug(f"Failed to find past replies: {e}")
+            return []
+
+    def _refresh_context_for_topic(
+        self,
+        messages: list[dict],
+        chat_id: str | None,
+    ) -> list[dict]:
+        """Refresh context based on current conversation topic.
+
+        For long conversations, the original context may drift.
+        This re-queries embeddings based on the CURRENT topic.
+
+        Inspired by PreToolUse hook pattern - mid-stream context injection.
+
+        Args:
+            messages: Recent messages in conversation
+            chat_id: Conversation ID for filtering
+
+        Returns:
+            List of relevant historical messages
+        """
+        if not messages or len(messages) < 3:
+            return []
+
+        store = _get_embedding_store()
+        if not store:
+            return []
+
+        # Extract current topic from last 3 messages
+        recent_text = " ".join([
+            m.get("text", "")
+            for m in messages[-3:]
+            if m.get("text")
+        ])
+
+        if len(recent_text) < 20:
+            return []
+
+        try:
+            # Query for relevant historical context (hybrid search)
+            if hasattr(store, 'find_similar_hybrid'):
+                similar = store.find_similar_hybrid(
+                    query=recent_text,
+                    chat_id=chat_id,
+                    limit=3,
+                    min_similarity=0.4,
+                )
+            else:
+                similar = store.find_similar(
+                    query=recent_text,
+                    chat_id=chat_id,
+                    limit=3,
+                    min_similarity=0.4,
+                )
+
+            if not similar:
+                return []
+
+            # Convert to message format
+            refreshed_context = []
+            for msg in similar:
+                refreshed_context.append({
+                    "text": msg.text,
+                    "sender": msg.sender_name or msg.sender,
+                    "is_from_me": msg.is_from_me,
+                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                    "_source": "context_refresh",  # Mark as refreshed context
+                })
+
+            logger.debug(
+                f"Refreshed context: {len(refreshed_context)} relevant messages "
+                f"for topic '{recent_text[:50]}...'"
+            )
+            return refreshed_context
+
+        except Exception as e:
+            logger.debug(f"Context refresh failed: {e}")
             return []
 
     def _try_template_match(

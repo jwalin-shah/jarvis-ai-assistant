@@ -358,8 +358,12 @@ export async function sendMessage(text: string): Promise<boolean> {
 
   const chatId = state.selectedChatId;
 
+  // Get is_group from selected conversation
+  const conversation = state.conversations.find(c => c.chat_id === chatId);
+  const isGroup = conversation?.is_group ?? false;
+
   try {
-    const result = await api.sendMessage(chatId, text);
+    const result = await api.sendMessage(chatId, text, isGroup);
     if (result.success) {
       // Optimistically add the sent message
       const optimisticMessage: Message = {

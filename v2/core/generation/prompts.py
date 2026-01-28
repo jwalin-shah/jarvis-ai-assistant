@@ -6,11 +6,11 @@ Contains the main prompt template and few-shot examples.
 from __future__ import annotations
 
 # Main prompt template for reply generation
-# Minimal instructions - just continue naturally
-REPLY_PROMPT = '''Text message conversation. Reply briefly.
+# Minimal instructions - let the model continue naturally
+# Note: No trailing "user:" - ChatML handles turn structure via <|im_start|>assistant
+REPLY_PROMPT = '''Text message conversation. Reply briefly as {user_name}.
 
-{conversation}
-{user_name}:'''
+{conversation}'''
 
 
 # Few-shot examples organized by intent
@@ -367,10 +367,10 @@ def format_past_replies(past_replies: list[tuple[str, str, float]] | None) -> st
 
 
 # Prompt template with past replies section
-REPLY_PROMPT_WITH_HISTORY = '''Text message conversation. Reply briefly.
-{past_replies_section}
-{conversation}
-{user_name}:'''
+# Note: No trailing "user:" - ChatML handles turn structure via <|im_start|>assistant
+REPLY_PROMPT_WITH_HISTORY = '''Text message conversation. Reply briefly as {user_name}.
+{past_replies_section}{availability_hint}
+{conversation}'''
 
 
 def build_reply_prompt(
@@ -385,6 +385,7 @@ def build_reply_prompt(
     past_replies: list[tuple[str, str, float]] | None = None,
     user_name: str = "me",
     recent_topics: list[str] | None = None,
+    availability: str | None = None,
 ) -> str:
     """Build the complete reply generation prompt.
 
@@ -400,6 +401,7 @@ def build_reply_prompt(
         past_replies: User's past replies to similar messages
         user_name: User's name for personalization
         recent_topics: Recent conversation topics for context
+        availability: User's current availability ("busy", "free", or None)
 
     Returns:
         Complete prompt string (JSON format for Qwen3)
@@ -428,8 +430,16 @@ def build_reply_prompt(
     if past_replies_section:
         past_replies_section = "\n" + past_replies_section + "\n"
 
+    # Format availability hint
+    availability_hint = ""
+    if availability == "busy":
+        availability_hint = "\n[Context: You've been busy lately]\n"
+    elif availability == "free":
+        availability_hint = "\n[Context: You're free/available]\n"
+
     return REPLY_PROMPT_WITH_HISTORY.format(
         user_name=user_name,
         conversation=conversation,
         past_replies_section=past_replies_section,
+        availability_hint=availability_hint,
     )
