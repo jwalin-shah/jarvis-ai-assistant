@@ -17,6 +17,7 @@ export interface Conversation {
   participants: string[];
   last_message_date: string | null;
   last_message_text: string | null;
+  last_message_is_from_me: boolean;
   message_count: number;
   is_group: boolean;
 }

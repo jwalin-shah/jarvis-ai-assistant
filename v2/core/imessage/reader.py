@@ -60,6 +60,7 @@ class Conversation:
     participants: list[str] = field(default_factory=list)
     last_message_date: datetime | None = None
     last_message_text: str | None = None
+    last_message_is_from_me: bool = False
     message_count: int = 0
     is_group: bool = False
 
@@ -70,6 +71,7 @@ class Conversation:
             "participants": self.participants,
             "last_message_date": self.last_message_date.isoformat() if self.last_message_date else None,
             "last_message_text": self.last_message_text,
+            "last_message_is_from_me": self.last_message_is_from_me,
             "message_count": self.message_count,
             "is_group": self.is_group,
         }
@@ -465,7 +467,15 @@ class MessageReader:
                     WHERE chat_message_join.chat_id = chat.ROWID
                     ORDER BY message.date DESC
                     LIMIT 1
-                ) as last_message_attributed_body
+                ) as last_message_attributed_body,
+                (
+                    SELECT message.is_from_me
+                    FROM chat_message_join
+                    JOIN message ON chat_message_join.message_id = message.ROWID
+                    WHERE chat_message_join.chat_id = chat.ROWID
+                    ORDER BY message.date DESC
+                    LIMIT 1
+                ) as last_message_is_from_me
             FROM chat
             WHERE message_count > 0
             ORDER BY last_message_date DESC
@@ -508,6 +518,7 @@ class MessageReader:
                 participants=participants,
                 last_message_date=_parse_apple_timestamp(row["last_message_date"]),
                 last_message_text=last_message_text,
+                last_message_is_from_me=bool(row["last_message_is_from_me"]),
                 message_count=row["message_count"],
                 is_group=is_group,
             ))

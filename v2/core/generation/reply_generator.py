@@ -2,6 +2,8 @@
 
 Orchestrates style analysis, context analysis, and LLM generation
 to produce contextual reply suggestions.
+
+Now with style learning from your past messages!
 """
 
 from __future__ import annotations
@@ -15,6 +17,16 @@ from .prompts import build_reply_prompt
 from .style_analyzer import StyleAnalyzer, UserStyle
 
 logger = logging.getLogger(__name__)
+
+
+def _get_embedding_store():
+    """Lazy import to avoid circular dependencies."""
+    try:
+        from v2.core.embeddings import get_embedding_store
+        return get_embedding_store()
+    except Exception as e:
+        logger.debug(f"Embedding store not available: {e}")
+        return None
 
 
 @dataclass
@@ -82,8 +94,14 @@ class ReplyGenerator:
         # 3. Get reply strategy
         strategy = self.context_analyzer.get_reply_strategy(context)
 
-        # 4. Build prompt
+        # 4. Find YOUR past replies to similar messages (style learning!)
+        past_replies = self._find_past_replies(context.last_message, chat_id)
+        style_examples = self._format_style_examples(past_replies)
+
+        # 5. Build prompt with style examples
         style_instructions = self.style_analyzer.to_prompt_instructions(style)
+        if style_examples:
+            style_instructions += f"\n\nYour past replies to similar messages:\n{style_examples}"
 
         prompt = build_reply_prompt(
             messages=messages,
@@ -248,3 +266,53 @@ class ReplyGenerator:
             self._style_cache.pop(chat_id, None)
         else:
             self._style_cache.clear()
+
+    def _find_past_replies(
+        self,
+        incoming_message: str,
+        chat_id: str | None,
+    ) -> list[tuple[str, str, float]]:
+        """Find YOUR past replies to similar incoming messages.
+
+        Args:
+            incoming_message: The message to find similar responses for
+            chat_id: Optional conversation filter
+
+        Returns:
+            List of (their_message, your_reply, similarity) tuples
+        """
+        store = _get_embedding_store()
+        if not store:
+            return []
+
+        try:
+            return store.find_your_past_replies(
+                incoming_message=incoming_message,
+                chat_id=chat_id,
+                limit=3,
+                min_similarity=0.65,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to find past replies: {e}")
+            return []
+
+    def _format_style_examples(
+        self,
+        past_replies: list[tuple[str, str, float]],
+    ) -> str:
+        """Format past replies as style examples for the prompt.
+
+        Args:
+            past_replies: List of (their_message, your_reply, similarity)
+
+        Returns:
+            Formatted string for prompt
+        """
+        if not past_replies:
+            return ""
+
+        examples = []
+        for their_msg, your_reply, similarity in past_replies:
+            examples.append(f'- When they said "{their_msg}", you replied "{your_reply}"')
+
+        return "\n".join(examples)
