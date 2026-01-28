@@ -6,6 +6,7 @@
     appStore,
     selectedConversation,
     connectionStatus,
+    unreadChats,
     selectConversation,
     generateReplies,
     sendMessage,
@@ -52,6 +53,7 @@
       <ConversationList
         conversations={$appStore.conversations}
         selectedChatId={$appStore.selectedChatId}
+        unreadChats={$unreadChats}
         onSelect={handleSelectConversation}
       />
     {/if}

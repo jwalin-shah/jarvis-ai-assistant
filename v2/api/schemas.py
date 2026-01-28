@@ -15,6 +15,14 @@ class HealthResponse(BaseModel):
     imessage_accessible: bool = False
 
 
+class EmbeddingCacheStats(BaseModel):
+    total_entries: int = 0
+    hits: int = 0
+    misses: int = 0
+    hit_rate: float = 0.0
+    error: str | None = None
+
+
 # Conversations
 class ConversationResponse(BaseModel):
     chat_id: str
