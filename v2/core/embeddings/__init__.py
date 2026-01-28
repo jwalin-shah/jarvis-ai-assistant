@@ -1,6 +1,9 @@
-"""Embedding cache for JARVIS v2.
+"""Embedding system for JARVIS v2.
 
-Provides fast, cached embeddings for semantic search and template matching.
+Provides:
+- Message indexing and similarity search
+- Style learning from your past messages
+- Cached embeddings for performance
 """
 
 from .cache import EmbeddingCache, get_embedding_cache, content_hash
@@ -11,8 +14,22 @@ from .similarity import (
     semantic_match,
     batch_cosine_similarity,
 )
+from .store import (
+    EmbeddingStore,
+    get_embedding_store,
+    SimilarMessage,
+    ConversationContext,
+    StyleProfile,
+)
+from .indexer import MessageIndexer, run_indexing, IndexingStats
 
 __all__ = [
+    # Store (main interface)
+    "EmbeddingStore",
+    "get_embedding_store",
+    "SimilarMessage",
+    "ConversationContext",
+    "StyleProfile",
     # Cache
     "EmbeddingCache",
     "get_embedding_cache",

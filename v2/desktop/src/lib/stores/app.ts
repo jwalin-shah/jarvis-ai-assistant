@@ -53,12 +53,18 @@ export const connectionStatus = derived(appStore, ($state) => $state.connectionS
 export const unreadChats = derived(appStore, ($state) => {
   const unread = new Set<string>();
   for (const conv of $state.conversations) {
+    // If I sent the last message, it's not unread
+    if (conv.last_message_is_from_me) {
+      continue;
+    }
+
+    // Check if we've seen this conversation before
     const lastSeen = $state.lastSeenDate[conv.chat_id];
     if (!lastSeen && conv.last_message_date) {
-      // Never seen = unread
+      // Never opened this conversation and someone else sent a message
       unread.add(conv.chat_id);
     } else if (lastSeen && conv.last_message_date && conv.last_message_date > lastSeen) {
-      // New message since last seen
+      // New message since we last opened it
       unread.add(conv.chat_id);
     }
   }

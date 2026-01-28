@@ -30,6 +30,7 @@ class ConversationResponse(BaseModel):
     participants: list[str]
     last_message_date: datetime | None
     last_message_text: str | None
+    last_message_is_from_me: bool
     message_count: int
     is_group: bool
 
