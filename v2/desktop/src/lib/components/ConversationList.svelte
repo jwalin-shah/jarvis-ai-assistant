@@ -4,6 +4,7 @@
   export let conversations: Conversation[] = [];
   export let selectedChatId: string | null = null;
   export let onSelect: (chatId: string) => void = () => {};
+  export let unreadChats: Set<string> = new Set();
 
   function getInitials(conv: Conversation): string {
     const name = conv.display_name || conv.participants[0] || "?";
@@ -56,7 +57,12 @@
         <div class="conversation-name">{getDisplayName(conv)}</div>
         <div class="conversation-preview">{truncate(conv.last_message_text)}</div>
       </div>
-      <div class="conversation-time">{formatTime(conv.last_message_date)}</div>
+      <div class="conversation-meta">
+        <div class="conversation-time">{formatTime(conv.last_message_date)}</div>
+        {#if unreadChats.has(conv.chat_id)}
+          <div class="unread-dot"></div>
+        {/if}
+      </div>
     </button>
   {/each}
 </div>
@@ -125,10 +131,24 @@
     text-overflow: ellipsis;
   }
 
+  .conversation-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    margin-left: 8px;
+    flex-shrink: 0;
+  }
+
   .conversation-time {
     color: var(--text-secondary);
     font-size: 12px;
-    margin-left: 8px;
-    flex-shrink: 0;
+  }
+
+  .unread-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent-blue);
   }
 </style>

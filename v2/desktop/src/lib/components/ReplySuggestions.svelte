@@ -43,12 +43,31 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Cmd/Ctrl+Enter or just Enter to send
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
       e.preventDefault();
       sendInput();
     }
+    // Escape to clear
+    if (e.key === "Escape") {
+      inputText = "";
+    }
+  }
+
+  // Global keyboard shortcuts
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    // Cmd+1/2/3 to select suggestion
+    if (e.metaKey && ["1", "2", "3"].includes(e.key)) {
+      const index = parseInt(e.key) - 1;
+      if (replies[index]) {
+        e.preventDefault();
+        selectReply(replies[index]);
+      }
+    }
   }
 </script>
+
+<svelte:window on:keydown={handleGlobalKeydown} />
 
 <div class="reply-section">
   <!-- Text Input -->
@@ -86,10 +105,11 @@
     </div>
   {:else if replies.length > 0}
     <div class="reply-suggestions">
-      {#each replies as reply}
+      {#each replies as reply, i}
         <button
           class="reply-suggestion"
           on:click={() => selectReply(reply)}
+          title="⌘{i + 1} to use"
         >
           <div class="reply-content">
             <div class="reply-type">{formatType(reply.reply_type)}</div>

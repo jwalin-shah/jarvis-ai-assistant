@@ -22,6 +22,8 @@ export interface AppState {
   loadingReplies: boolean;
   error: string | null;
   connectionStatus: ConnectionStatus;
+  // Track last seen date per conversation for unread indicators
+  lastSeenDate: Record<string, string>;
 }
 
 const initialState: AppState = {
@@ -34,6 +36,7 @@ const initialState: AppState = {
   loadingReplies: false,
   error: null,
   connectionStatus: "disconnected",
+  lastSeenDate: {},
 };
 
 // Main store
@@ -45,6 +48,22 @@ export const selectedConversation = derived(appStore, ($state) =>
 );
 
 export const connectionStatus = derived(appStore, ($state) => $state.connectionStatus);
+
+// Get unread status for a conversation
+export const unreadChats = derived(appStore, ($state) => {
+  const unread = new Set<string>();
+  for (const conv of $state.conversations) {
+    const lastSeen = $state.lastSeenDate[conv.chat_id];
+    if (!lastSeen && conv.last_message_date) {
+      // Never seen = unread
+      unread.add(conv.chat_id);
+    } else if (lastSeen && conv.last_message_date && conv.last_message_date > lastSeen) {
+      // New message since last seen
+      unread.add(conv.chat_id);
+    }
+  }
+  return unread;
+});
 
 // Actions
 export async function fetchConversations(): Promise<void> {
@@ -84,10 +103,17 @@ export async function selectConversation(chatId: string): Promise<void> {
     // Reverse so oldest is first (API returns newest first)
     const chronological = [...messages].reverse();
 
+    // Mark as read - record the last message date
+    const lastMsgDate =
+      chronological.length > 0 ? chronological[chronological.length - 1].timestamp : null;
+
     appStore.update((s) => ({
       ...s,
       messages: chronological,
       loadingMessages: false,
+      lastSeenDate: lastMsgDate
+        ? { ...s.lastSeenDate, [chatId]: lastMsgDate }
+        : s.lastSeenDate,
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch messages";

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from ..schemas import HealthResponse
+from ..schemas import HealthResponse, EmbeddingCacheStats
 
 router = APIRouter()
 
@@ -37,3 +37,27 @@ async def health_check() -> HealthResponse:
         model_loaded=model_loaded,
         imessage_accessible=imessage_ok,
     )
+
+
+@router.get("/health/cache", response_model=EmbeddingCacheStats)
+async def cache_stats() -> EmbeddingCacheStats:
+    """Get embedding cache statistics."""
+    from v2.core.embeddings import get_embedding_cache
+
+    try:
+        cache = get_embedding_cache()
+        stats = cache.stats()
+        return EmbeddingCacheStats(
+            total_entries=stats.total_entries,
+            hits=stats.hits,
+            misses=stats.misses,
+            hit_rate=stats.hit_rate,
+        )
+    except Exception as e:
+        return EmbeddingCacheStats(
+            total_entries=0,
+            hits=0,
+            misses=0,
+            hit_rate=0.0,
+            error=str(e),
+        )
