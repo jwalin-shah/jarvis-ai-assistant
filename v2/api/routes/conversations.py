@@ -10,6 +10,8 @@ from ..schemas import (
     ConversationResponse,
     MessageListResponse,
     MessageResponse,
+    PreloadIndicesRequest,
+    PreloadIndicesResponse,
     SendMessageRequest,
     SendMessageResponse,
     TopicClusterResponse,
@@ -118,9 +120,9 @@ async def send_message(request: SendMessageRequest) -> SendMessageResponse:
     """
     from core.imessage.sender import send_message as do_send
 
-    # Determine if group chat based on chat_id format
-    # Group chats typically have "chat" in the ID, individual have the recipient
-    is_group = "chat" in request.chat_id.lower() and ";" not in request.chat_id
+    # Use is_group from request (frontend knows from conversation data)
+    # Fallback to heuristic if not provided (for backwards compatibility)
+    is_group = request.is_group
 
     result = do_send(
         text=request.text,
@@ -181,3 +183,43 @@ async def get_contact_profile(chat_id: str) -> ContactProfileResponse:
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to build profile: {e}")
+
+
+@router.post("/preload", response_model=PreloadIndicesResponse)
+async def preload_indices(request: PreloadIndicesRequest) -> PreloadIndicesResponse:
+    """Preload FAISS indices for conversations in background.
+
+    Call this for visible conversations to ensure instant search when selected.
+    Indices are built in background threads and cached to disk.
+    """
+    import threading
+
+    from core.embeddings import get_embedding_store
+
+    store = get_embedding_store()
+    already_cached = 0
+    to_preload = []
+
+    # Check which need preloading
+    for chat_id in request.chat_ids[:20]:  # Limit to 20
+        if store.is_index_ready(chat_id, only_from_me=False):
+            already_cached += 1
+        else:
+            to_preload.append(chat_id)
+
+    # Preload in background threads
+    def _preload_one(cid: str) -> None:
+        try:
+            store._get_or_build_faiss_index(cid, only_from_me=False)
+        except Exception:
+            pass  # Ignore errors, will retry on actual search
+
+    for chat_id in to_preload:
+        thread = threading.Thread(target=_preload_one, args=(chat_id,), daemon=True)
+        thread.start()
+
+    return PreloadIndicesResponse(
+        preloading=len(to_preload),
+        already_cached=already_cached,
+        message=f"Preloading {len(to_preload)} indices, {already_cached} already cached",
+    )

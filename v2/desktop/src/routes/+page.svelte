@@ -30,7 +30,16 @@
 
   function getConversationTitle(conv: typeof $selectedConversation): string {
     if (!conv) return "Select a conversation";
-    return conv.display_name || conv.participants[0] || "Unknown";
+    // Use display_name if available
+    if (conv.display_name) return conv.display_name;
+    // For groups without display_name, join participant names
+    if (conv.is_group && conv.participants.length > 1) {
+      // Show first 3 names, then "+N more"
+      const names = conv.participants.slice(0, 3);
+      const more = conv.participants.length > 3 ? ` +${conv.participants.length - 3}` : "";
+      return names.join(", ") + more;
+    }
+    return conv.participants[0] || "Unknown";
   }
 </script>
 

@@ -98,6 +98,7 @@ class GenerateRepliesResponse(BaseModel):
 class SendMessageRequest(BaseModel):
     chat_id: str
     text: str
+    is_group: bool = False  # Frontend should pass this from conversation data
 
 
 class SendMessageResponse(BaseModel):
@@ -161,3 +162,16 @@ class ContactProfileResponse(BaseModel):
 
     # Summary
     summary: str
+
+
+# Index Preloading
+class PreloadIndicesRequest(BaseModel):
+    """Request to preload FAISS indices for conversations."""
+    chat_ids: list[str] = Field(..., max_length=20, description="Chat IDs to preload (max 20)")
+
+
+class PreloadIndicesResponse(BaseModel):
+    """Response from preload request."""
+    preloading: int
+    already_cached: int
+    message: str

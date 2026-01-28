@@ -119,12 +119,13 @@ class ApiClient {
   }
 
   // Send Message
-  async sendMessage(chatId: string, text: string): Promise<SendMessageResponse> {
+  async sendMessage(chatId: string, text: string, isGroup: boolean = false): Promise<SendMessageResponse> {
     return this.request<SendMessageResponse>("/conversations/send", {
       method: "POST",
       body: JSON.stringify({
         chat_id: chatId,
         text: text,
+        is_group: isGroup,
       }),
     });
   }
@@ -145,6 +146,17 @@ class ApiClient {
   async getContactProfile(chatId: string): Promise<ContactProfile> {
     return this.request<ContactProfile>(
       `/conversations/${encodeURIComponent(chatId)}/profile`
+    );
+  }
+
+  // Index Preloading
+  async preloadIndices(chatIds: string[]): Promise<{ preloading: number; already_cached: number }> {
+    return this.request<{ preloading: number; already_cached: number; message: string }>(
+      "/conversations/preload",
+      {
+        method: "POST",
+        body: JSON.stringify({ chat_ids: chatIds }),
+      }
     );
   }
 }

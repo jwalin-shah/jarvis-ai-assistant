@@ -506,10 +506,22 @@ class MessageReader:
 
             is_group = len(participants) > 1
 
-            # Get display name - from DB or resolve from contacts
+            # Resolve participant names from contacts
+            resolved_participants = []
+            for p in participants:
+                name = self._resolve_contact_name(p)
+                resolved_participants.append(name if name else p)
+
+            # Get display name - from DB or build from resolved participants
             display_name = row["display_name"] or None
-            if not display_name and not is_group and len(participants) == 1:
-                display_name = self._resolve_contact_name(participants[0])
+            if not display_name:
+                if is_group and resolved_participants:
+                    # For groups, join first 3 names
+                    names = resolved_participants[:3]
+                    more = f" +{len(resolved_participants) - 3}" if len(resolved_participants) > 3 else ""
+                    display_name = ", ".join(names) + more
+                elif len(resolved_participants) == 1:
+                    display_name = resolved_participants[0]
 
             last_message_text = row["last_message_text"]
             if not last_message_text:
@@ -599,6 +611,26 @@ class MessageReader:
             if not text:
                 text = _parse_attributed_body(row["attributedBody"])
 
+            # Skip empty messages
+            if not text or not text.strip():
+                continue
+
+            # Skip reaction messages (Loved, Liked, Disliked, Laughed at, etc.)
+            # Handle both regular quotes (") and smart/curly quotes (" ")
+            text_lower = text.lower().strip()
+            reaction_prefixes = [
+                'loved "', 'liked "', 'disliked "', 'laughed at "',
+                'emphasized "', 'questioned "',
+                'loved \u201c', 'liked \u201c', 'disliked \u201c', 'laughed at \u201c',  # Smart quotes
+                'emphasized \u201c', 'questioned \u201c',
+            ]
+            if any(text_lower.startswith(prefix) for prefix in reaction_prefixes):
+                continue
+
+            # Skip the Unicode object replacement character (attachment placeholders)
+            if text.strip() == '\ufffc':
+                continue
+
             # Resolve sender name from contacts
             sender = row["sender"]
             sender_name = None
@@ -610,7 +642,7 @@ class MessageReader:
 
             messages.append(Message(
                 id=row["id"],
-                text=text or "",
+                text=text,
                 sender=sender,
                 sender_name=sender_name,
                 is_from_me=bool(row["is_from_me"]),

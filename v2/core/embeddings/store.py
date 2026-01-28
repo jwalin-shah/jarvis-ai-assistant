@@ -33,8 +33,17 @@ except ImportError:
 
 # Configuration
 DEFAULT_DB_PATH = Path.home() / ".jarvis" / "embeddings.db"
+FAISS_CACHE_DIR = Path.home() / ".jarvis" / "faiss_indices"
 BATCH_SIZE = 100
 MIN_TEXT_LENGTH = 3
+
+# HNSW parameters for 337K vectors
+HNSW_M = 32  # Number of neighbors (higher = better recall, more memory)
+HNSW_EF_CONSTRUCTION = 200  # Build quality
+HNSW_EF_SEARCH = 64  # Search quality
+
+# LRU cache settings for FAISS indices
+MAX_FAISS_CACHE_SIZE = 50  # Max number of cached indices
 
 
 @dataclass
@@ -86,9 +95,39 @@ class EmbeddingStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
-        # FAISS index cache per chat_id
-        self._faiss_indices: dict[str, tuple[Any, list[dict]]] = {}  # chat_id -> (index, metadata)
+        # FAISS index cache per chat_id with LRU eviction
+        self._faiss_indices: dict[str, tuple[Any, list[dict]]] = {}  # cache_key -> (index, metadata)
+        self._faiss_access_order: list[str] = []  # LRU tracking: oldest first
         self._faiss_lock = threading.Lock()
+
+    def _faiss_cache_get(self, cache_key: str) -> tuple[Any, list[dict]] | None:
+        """Get from FAISS cache and update LRU order."""
+        with self._faiss_lock:
+            if cache_key in self._faiss_indices:
+                # Move to end (most recently used)
+                if cache_key in self._faiss_access_order:
+                    self._faiss_access_order.remove(cache_key)
+                self._faiss_access_order.append(cache_key)
+                return self._faiss_indices[cache_key]
+        return None
+
+    def _faiss_cache_set(self, cache_key: str, value: tuple[Any, list[dict]]) -> None:
+        """Set in FAISS cache with LRU eviction."""
+        with self._faiss_lock:
+            # Evict oldest if at capacity
+            while len(self._faiss_indices) >= MAX_FAISS_CACHE_SIZE:
+                if self._faiss_access_order:
+                    oldest_key = self._faiss_access_order.pop(0)
+                    self._faiss_indices.pop(oldest_key, None)
+                    logger.debug(f"Evicted FAISS index for {oldest_key} (LRU)")
+                else:
+                    break
+
+            # Add new entry
+            self._faiss_indices[cache_key] = value
+            if cache_key in self._faiss_access_order:
+                self._faiss_access_order.remove(cache_key)
+            self._faiss_access_order.append(cache_key)
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
@@ -97,6 +136,9 @@ class EmbeddingStore:
 
     def _init_schema(self) -> None:
         with self._get_connection() as conn:
+            # Enable WAL mode for better concurrent read/write performance
+            conn.execute("PRAGMA journal_mode=WAL")
+
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS message_embeddings (
                     message_id INTEGER PRIMARY KEY,
@@ -115,8 +157,211 @@ class EmbeddingStore:
                 CREATE INDEX IF NOT EXISTS idx_timestamp ON message_embeddings(timestamp);
                 CREATE INDEX IF NOT EXISTS idx_is_from_me ON message_embeddings(is_from_me);
                 CREATE INDEX IF NOT EXISTS idx_text_hash ON message_embeddings(text_hash);
+
+                -- Composite index for find_your_past_replies queries
+                CREATE INDEX IF NOT EXISTS idx_chat_reply_lookup
+                ON message_embeddings(chat_id, is_from_me, timestamp);
+
+                -- FTS5 full-text search for hybrid BM25+vector search
+                CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                    message_id,
+                    chat_id,
+                    text_preview,
+                    content='message_embeddings',
+                    content_rowid='message_id'
+                );
+
+                -- Triggers to keep FTS in sync
+                CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON message_embeddings BEGIN
+                    INSERT INTO messages_fts(rowid, message_id, chat_id, text_preview)
+                    VALUES (new.message_id, new.message_id, new.chat_id, new.text_preview);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON message_embeddings BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, message_id, chat_id, text_preview)
+                    VALUES ('delete', old.message_id, old.message_id, old.chat_id, old.text_preview);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON message_embeddings BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, message_id, chat_id, text_preview)
+                    VALUES ('delete', old.message_id, old.message_id, old.chat_id, old.text_preview);
+                    INSERT INTO messages_fts(rowid, message_id, chat_id, text_preview)
+                    VALUES (new.message_id, new.message_id, new.chat_id, new.text_preview);
+                END;
             """)
             conn.commit()
+
+        # Rebuild FTS index if needed (one-time migration)
+        self._ensure_fts_populated()
+
+    def _ensure_fts_populated(self) -> None:
+        """Ensure FTS index is populated (one-time migration for existing data)."""
+        with self._get_connection() as conn:
+            # Check if FTS has data
+            fts_count = conn.execute("SELECT COUNT(*) FROM messages_fts").fetchone()[0]
+            main_count = conn.execute("SELECT COUNT(*) FROM message_embeddings").fetchone()[0]
+
+            if fts_count == 0 and main_count > 0:
+                logger.info(f"Populating FTS index with {main_count} messages...")
+                conn.execute("""
+                    INSERT INTO messages_fts(rowid, message_id, chat_id, text_preview)
+                    SELECT message_id, message_id, chat_id, text_preview
+                    FROM message_embeddings
+                """)
+                conn.commit()
+                logger.info("FTS index populated")
+
+    def search_bm25(
+        self,
+        query: str,
+        chat_id: str | None = None,
+        limit: int = 20,
+    ) -> list[tuple[int, float]]:
+        """Search using BM25 full-text search.
+
+        Args:
+            query: Search query
+            chat_id: Optional filter by conversation
+            limit: Max results
+
+        Returns:
+            List of (message_id, bm25_score) tuples
+        """
+        with self._get_connection() as conn:
+            # Escape query for FTS5
+            safe_query = query.replace('"', '""')
+
+            if chat_id:
+                rows = conn.execute(
+                    """
+                    SELECT message_id, bm25(messages_fts) as score
+                    FROM messages_fts
+                    WHERE messages_fts MATCH ? AND chat_id = ?
+                    ORDER BY score
+                    LIMIT ?
+                    """,
+                    (f'"{safe_query}"', chat_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT message_id, bm25(messages_fts) as score
+                    FROM messages_fts
+                    WHERE messages_fts MATCH ?
+                    ORDER BY score
+                    LIMIT ?
+                    """,
+                    (f'"{safe_query}"', limit),
+                ).fetchall()
+
+            return [(row[0], row[1]) for row in rows]
+
+    def find_similar_hybrid(
+        self,
+        query: str,
+        chat_id: str | None = None,
+        limit: int = 10,
+        min_similarity: float = 0.3,
+        vector_weight: float = 0.7,
+        bm25_weight: float = 0.3,
+    ) -> list[SimilarMessage]:
+        """Hybrid search combining vector similarity and BM25.
+
+        Uses Reciprocal Rank Fusion (RRF) to combine results.
+
+        Args:
+            query: Text to search for
+            chat_id: Optional filter by conversation
+            limit: Max results
+            min_similarity: Minimum similarity threshold
+            vector_weight: Weight for vector results in RRF
+            bm25_weight: Weight for BM25 results in RRF
+
+        Returns:
+            List of similar messages sorted by fused score
+        """
+        # Get vector results
+        vector_results = self.find_similar(
+            query=query,
+            chat_id=chat_id,
+            limit=limit * 2,  # Get more for fusion
+            min_similarity=min_similarity,
+        )
+
+        # Get BM25 results
+        bm25_results = self.search_bm25(
+            query=query,
+            chat_id=chat_id,
+            limit=limit * 2,
+        )
+
+        # RRF fusion
+        k = 60  # RRF constant
+        scores: dict[int, dict] = {}
+
+        # Add vector results
+        for rank, msg in enumerate(vector_results):
+            rrf_score = vector_weight / (k + rank + 1)
+            scores[msg.message_id] = {
+                "message": msg,
+                "score": rrf_score,
+                "best_rank": rank,
+            }
+
+        # Add BM25 results
+        for rank, (msg_id, _bm25_score) in enumerate(bm25_results):
+            rrf_score = bm25_weight / (k + rank + 1)
+            if msg_id in scores:
+                scores[msg_id]["score"] += rrf_score
+                scores[msg_id]["best_rank"] = min(scores[msg_id]["best_rank"], rank)
+            else:
+                # Need to look up message details
+                with self._get_connection() as conn:
+                    row = conn.execute(
+                        """
+                        SELECT message_id, chat_id, text_preview, sender,
+                               sender_name, timestamp, is_from_me
+                        FROM message_embeddings
+                        WHERE message_id = ?
+                        """,
+                        (msg_id,),
+                    ).fetchone()
+
+                if row:
+                    msg = SimilarMessage(
+                        message_id=row["message_id"],
+                        chat_id=row["chat_id"],
+                        text=row["text_preview"] or "",
+                        sender=row["sender"],
+                        sender_name=row["sender_name"],
+                        timestamp=datetime.fromtimestamp(row["timestamp"]),
+                        is_from_me=bool(row["is_from_me"]),
+                        similarity=0.0,  # Will be set from fused score
+                    )
+                    scores[msg_id] = {
+                        "message": msg,
+                        "score": rrf_score,
+                        "best_rank": rank,
+                    }
+
+        # Top-rank bonus (from QMD research)
+        for msg_id, data in scores.items():
+            if data["best_rank"] == 0:
+                data["score"] += 0.05
+            elif data["best_rank"] <= 2:
+                data["score"] += 0.02
+
+        # Sort by fused score
+        sorted_results = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
+
+        # Update similarity scores and return
+        results = []
+        for item in sorted_results[:limit]:
+            msg = item["message"]
+            msg.similarity = item["score"]
+            results.append(msg)
+
+        return results
 
     def index_messages(
         self,
@@ -202,10 +447,25 @@ class EmbeddingStore:
 
         return stats
 
+    def _get_index_cache_path(self, chat_id: str, only_from_me: bool | None) -> Path:
+        """Get path for cached FAISS index."""
+        FAISS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        suffix = f"_from_me_{only_from_me}" if only_from_me is not None else ""
+        # Sanitize chat_id for filename
+        safe_id = chat_id.replace("/", "_").replace(":", "_")
+        return FAISS_CACHE_DIR / f"{safe_id}{suffix}.faiss"
+
+    def _get_metadata_cache_path(self, chat_id: str, only_from_me: bool | None) -> Path:
+        """Get path for cached metadata."""
+        index_path = self._get_index_cache_path(chat_id, only_from_me)
+        return index_path.with_suffix(".meta.json")
+
     def _get_or_build_faiss_index(
         self, chat_id: str, only_from_me: bool | None = None
     ) -> tuple[Any, list[dict]] | None:
         """Get or build FAISS index for a chat.
+
+        Uses HNSW for O(log n) search and persists to disk.
 
         Returns (faiss_index, metadata_list) or None if FAISS unavailable.
         """
@@ -215,9 +475,43 @@ class EmbeddingStore:
         # Cache key includes the filter
         cache_key = f"{chat_id}:{only_from_me}"
 
-        with self._faiss_lock:
-            if cache_key in self._faiss_indices:
-                return self._faiss_indices[cache_key]
+        # Check memory cache first (with LRU tracking)
+        cached = self._faiss_cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Check disk cache
+        index_path = self._get_index_cache_path(chat_id, only_from_me)
+        meta_path = self._get_metadata_cache_path(chat_id, only_from_me)
+
+        if index_path.exists() and meta_path.exists():
+            try:
+                start = time.time()
+                index = faiss.read_index(str(index_path))
+
+                import json
+                with open(meta_path) as f:
+                    metadata = json.load(f)
+
+                # Verify count matches
+                with self._get_connection() as conn:
+                    sql = "SELECT COUNT(*) FROM message_embeddings WHERE chat_id = ?"
+                    params: list[Any] = [chat_id]
+                    if only_from_me is not None:
+                        sql += " AND is_from_me = ?"
+                        params.append(1 if only_from_me else 0)
+                    current_count = conn.execute(sql, params).fetchone()[0]
+
+                if current_count == len(metadata):
+                    elapsed = (time.time() - start) * 1000
+                    logger.info(f"Loaded FAISS index from cache for {chat_id} ({len(metadata)} vectors) in {elapsed:.0f}ms")
+
+                    self._faiss_cache_set(cache_key, (index, metadata))
+                    return index, metadata
+                else:
+                    logger.info(f"Index stale for {chat_id} (cached={len(metadata)}, current={current_count}), rebuilding")
+            except Exception as e:
+                logger.warning(f"Failed to load cached index: {e}, rebuilding")
 
         # Build index
         start = time.time()
@@ -228,7 +522,7 @@ class EmbeddingStore:
                 FROM message_embeddings
                 WHERE chat_id = ?
             """
-            params: list[Any] = [chat_id]
+            params = [chat_id]
 
             if only_from_me is not None:
                 sql += " AND is_from_me = ?"
@@ -245,11 +539,19 @@ class EmbeddingStore:
             dtype=np.float32
         )
 
-        # Normalize for cosine similarity (FAISS IndexFlatIP does inner product)
+        # Normalize for cosine similarity
         faiss.normalize_L2(embeddings)
 
-        # Create index
-        index = faiss.IndexFlatIP(EMBEDDING_DIM)
+        # Create HNSW index for O(log n) search
+        # For small chats (<1000), use Flat (faster to build)
+        # For large chats, use HNSW (faster to search)
+        if len(rows) < 1000:
+            index = faiss.IndexFlatIP(EMBEDDING_DIM)
+        else:
+            index = faiss.IndexHNSWFlat(EMBEDDING_DIM, HNSW_M)
+            index.hnsw.efConstruction = HNSW_EF_CONSTRUCTION
+            index.hnsw.efSearch = HNSW_EF_SEARCH
+
         index.add(embeddings)
 
         # Store metadata for lookup
@@ -266,11 +568,21 @@ class EmbeddingStore:
             for row in rows
         ]
 
-        elapsed = (time.time() - start) * 1000
-        logger.info(f"Built FAISS index for {chat_id} with {len(rows)} vectors in {elapsed:.0f}ms")
+        # Persist to disk
+        try:
+            import json
+            faiss.write_index(index, str(index_path))
+            with open(meta_path, "w") as f:
+                json.dump(metadata, f)
+            logger.debug(f"Cached FAISS index to {index_path}")
+        except Exception as e:
+            logger.warning(f"Failed to cache index: {e}")
 
-        with self._faiss_lock:
-            self._faiss_indices[cache_key] = (index, metadata)
+        elapsed = (time.time() - start) * 1000
+        index_type = "HNSW" if len(rows) >= 1000 else "Flat"
+        logger.info(f"Built FAISS {index_type} index for {chat_id} with {len(rows)} vectors in {elapsed:.0f}ms")
+
+        self._faiss_cache_set(cache_key, (index, metadata))
 
         return index, metadata
 
@@ -303,12 +615,12 @@ class EmbeddingStore:
 
         # Try FAISS first (fast path)
         if chat_id and FAISS_AVAILABLE:
-            search_start = time.time()
             faiss_result = self._get_or_build_faiss_index(chat_id, only_from_me)
             if faiss_result:
                 index, metadata = faiss_result
 
                 # Normalize query for cosine similarity
+                search_start = time.time()
                 query_norm = query_embedding.reshape(1, -1).copy()
                 faiss.normalize_L2(query_norm)
 
@@ -337,7 +649,7 @@ class EmbeddingStore:
                         break
 
                 search_time = (time.time() - search_start) * 1000
-                logger.info(f"FAISS search: {len(results)} results in {search_time:.1f}ms (index size: {len(metadata)})")
+                logger.info(f"FAISS search: {len(results)} results in {search_time:.1f}ms (index: {len(metadata)} vectors)")
                 return results
 
         # Brute force fallback (FAISS not available or no chat_id filter)
@@ -429,6 +741,12 @@ class EmbeddingStore:
         limit: int = 5,
         min_similarity: float = 0.7,
         skip_if_slow: bool = True,
+        # Time-weighting parameters
+        use_time_weighting: bool = True,
+        recency_weight: float = 0.15,
+        time_window_boost: float = 0.1,
+        day_type_boost: float = 0.05,
+        max_age_days: int = 365,
     ) -> list[tuple[str, str, float]]:
         """Find YOUR past replies to similar incoming messages.
 
@@ -440,9 +758,14 @@ class EmbeddingStore:
             limit: Max results
             min_similarity: Minimum similarity threshold
             skip_if_slow: If True, skip lookup if FAISS index isn't cached (avoids 5+ second delay)
+            use_time_weighting: If True, apply recency and time-of-day adjustments
+            recency_weight: Weight for recency vs similarity (0-1)
+            time_window_boost: Bonus for same time-of-day window
+            day_type_boost: Bonus for same day type (weekday/weekend)
+            max_age_days: Max age for recency calculation
 
         Returns:
-            List of (their_message, your_reply, similarity) tuples
+            List of (their_message, your_reply, score) tuples
         """
         # Skip if index isn't ready and we don't want to wait for it to build
         if skip_if_slow and chat_id and not self.is_index_ready(chat_id, only_from_me=False):
@@ -457,6 +780,40 @@ class EmbeddingStore:
             min_similarity=min_similarity,
             only_from_me=False,
         )
+
+        now = datetime.now()
+        current_hour = now.hour
+        current_dow = now.weekday()  # 0=Monday, 6=Sunday
+        is_weekend = current_dow >= 5
+
+        def compute_time_weighted_score(
+            semantic_sim: float, msg_timestamp: datetime
+        ) -> float:
+            """Apply time-based adjustments to similarity score."""
+            if not use_time_weighting:
+                return semantic_sim
+
+            # Recency factor (0-1, newer = higher)
+            age_days = (now - msg_timestamp).days
+            recency_factor = max(0, 1.0 - (age_days / max_age_days))
+
+            # Time-of-day boost (within 3-hour window)
+            msg_hour = msg_timestamp.hour
+            hour_diff = min(abs(current_hour - msg_hour), 24 - abs(current_hour - msg_hour))
+            time_boost = time_window_boost if hour_diff <= 3 else 0
+
+            # Weekend/weekday boost
+            msg_dow = msg_timestamp.weekday()
+            msg_is_weekend = msg_dow >= 5
+            day_boost = day_type_boost if is_weekend == msg_is_weekend else 0
+
+            # Combined score
+            return (
+                semantic_sim * (1 - recency_weight) +
+                recency_factor * recency_weight +
+                time_boost +
+                day_boost
+            )
 
         results = []
 
@@ -478,12 +835,12 @@ class EmbeddingStore:
                 ).fetchone()
 
                 if row and row["text_preview"]:
-                    results.append((msg.text, row["text_preview"], msg.similarity))
+                    score = compute_time_weighted_score(msg.similarity, msg.timestamp)
+                    results.append((msg.text, row["text_preview"], score))
 
-                if len(results) >= limit:
-                    break
-
-        return results
+        # Re-sort by time-weighted score and limit
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:limit]
 
     def get_style_profile(self, chat_id: str) -> StyleProfile:
         """Get your texting style profile for a conversation.
