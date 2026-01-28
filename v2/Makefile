@@ -1,12 +1,14 @@
-.PHONY: dev api tauri both stop test lint format clean help
+.PHONY: dev app api tauri both stop test lint format clean help install
 
 # Default target
 help:
 	@echo "JARVIS v2 Commands:"
 	@echo ""
-	@echo "  make dev       - Start both API and Tauri (recommended)"
+	@echo "  make install   - Install desktop app dependencies"
+	@echo "  make app       - Start API + Tauri desktop app (recommended)"
+	@echo "  make dev       - Start API + Tauri browser mode"
 	@echo "  make api       - Start v2 API server only (port 8000)"
-	@echo "  make tauri     - Start Tauri dev server only (port 1420)"
+	@echo "  make tauri     - Start Tauri browser only (port 1420)"
 	@echo "  make stop      - Stop all running servers"
 	@echo ""
 	@echo "  make test      - Run tests"
@@ -16,35 +18,49 @@ help:
 	@echo ""
 	@echo "  make clean     - Remove cache files"
 
+# Install desktop dependencies
+install:
+	@echo "Installing desktop dependencies..."
+	cd desktop && pnpm install
+
 # Start v2 API server
 api:
 	@echo "Starting v2 API on http://localhost:8000..."
 	cd .. && uv run uvicorn v2.api.main:app --port 8000 --reload
 
+# Start both API + Tauri desktop app (native window)
+app: stop
+	@echo "Starting JARVIS v2 Desktop App..."
+	@echo "- API: http://localhost:8000"
+	@echo ""
+	@cd .. && uv run uvicorn v2.api.main:app --port 8000 & echo $$! > /tmp/jarvis-api.pid
+	@sleep 2
+	@echo "API started (PID: $$(cat /tmp/jarvis-api.pid))"
+	@echo "Starting Tauri desktop app..."
+	cd desktop && pnpm exec tauri dev
+
 # Start Tauri dev server
 tauri:
 	@echo "Starting Tauri on http://localhost:1420..."
-	cd ../desktop && npm run dev
+	cd desktop && pnpm run dev
 
 # Start both servers (API in background, Tauri in foreground)
-dev:
+dev: stop
 	@echo "Starting JARVIS v2..."
 	@echo "- API: http://localhost:8000"
 	@echo "- Tauri: http://localhost:1420"
 	@echo ""
-	@make stop 2>/dev/null || true
 	@cd .. && uv run uvicorn v2.api.main:app --port 8000 & echo $$! > /tmp/jarvis-api.pid
 	@sleep 2
 	@echo "API started (PID: $$(cat /tmp/jarvis-api.pid))"
 	@echo "Starting Tauri... (Ctrl+C to stop both)"
-	@cd ../desktop && npm run dev || (make stop && exit 1)
+	cd desktop && pnpm run dev
 
 # Start both in background
-both:
+both: stop
 	@echo "Starting both servers in background..."
-	@make stop 2>/dev/null || true
 	@cd .. && uv run uvicorn v2.api.main:app --port 8000 & echo $$! > /tmp/jarvis-api.pid
-	@cd ../desktop && npm run dev & echo $$! > /tmp/jarvis-tauri.pid
+	@cd desktop && pnpm run dev & echo $$! > /tmp/jarvis-tauri.pid
 	@sleep 3
 	@echo ""
 	@echo "Servers running:"

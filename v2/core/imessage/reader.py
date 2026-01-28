@@ -1,11 +1,12 @@
 """Simplified iMessage reader for JARVIS v2.
 
-Read-only access to macOS iMessage chat.db database.
+Read-only access to macOS iMessage chat.db database with contact resolution.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -16,8 +17,14 @@ logger = logging.getLogger(__name__)
 # Default iMessage database path
 CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
 
+# Path to macOS AddressBook database for contact name resolution
+ADDRESSBOOK_PATH = Path.home() / "Library" / "Application Support" / "AddressBook" / "Sources"
+
 # Apple's timestamp epoch (2001-01-01)
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
+
+# Database connection timeout
+DB_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass
@@ -27,8 +34,9 @@ class Message:
     id: int
     text: str
     sender: str
+    sender_name: str | None  # Resolved contact name
     is_from_me: bool
-    timestamp: datetime
+    timestamp: datetime | None
     chat_id: str
 
     def to_dict(self) -> dict:
@@ -36,6 +44,7 @@ class Message:
             "id": self.id,
             "text": self.text,
             "sender": self.sender,
+            "sender_name": self.sender_name,
             "is_from_me": self.is_from_me,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "chat_id": self.chat_id,
@@ -75,31 +84,134 @@ def _parse_apple_timestamp(timestamp: int | None) -> datetime | None:
     return datetime.fromtimestamp(APPLE_EPOCH.timestamp() + seconds, tz=timezone.utc)
 
 
+def _datetime_to_apple_timestamp(dt: datetime) -> int:
+    """Convert datetime to Apple timestamp (nanoseconds since 2001-01-01)."""
+    seconds = dt.timestamp() - APPLE_EPOCH.timestamp()
+    return int(seconds * 1_000_000_000)
+
+
 def _parse_attributed_body(data: bytes | None) -> str | None:
-    """Extract plain text from attributedBody blob."""
+    """Extract plain text from attributedBody blob.
+
+    Handles two formats:
+    1. Typedstream (legacy) - starts with 'streamtyped'
+    2. NSKeyedArchive (binary plist) - newer format
+    """
     if not data:
         return None
+
+    # Strings to skip (metadata, not actual content)
+    skip_strings = {
+        "streamtyped", "NSAttributedString", "NSObject", "NSString",
+        "NSDictionary", "NSNumber", "NSValue", "NSArray",
+        "NSMutableAttributedString", "NSMutableString",
+        "__kIMMessagePartAttributeName", "__kIMFileTransferGUIDAttributeName",
+    }
+
     try:
-        # The text is usually between "NSString" markers
-        # This is a simplified parser - the full one uses plist
-        text = data.decode("utf-8", errors="ignore")
-        # Find text between common markers
-        if "NSString" in text:
-            # Try to extract readable text
-            import re
-            matches = re.findall(r'[\x20-\x7E]{2,}', text)
-            if matches:
-                # Filter out common metadata strings
-                filtered = [m for m in matches if not m.startswith("NS") and len(m) > 3]
-                if filtered:
-                    return filtered[0]
+        # Check for typedstream format
+        if b"streamtyped" in data[:20]:
+            return _extract_from_typedstream(data, skip_strings)
+
+        # Try NSKeyedArchive (binary plist) format
+        import plistlib
+        try:
+            plist = plistlib.loads(data)
+            if isinstance(plist, dict):
+                objects = plist.get("$objects", [])
+                for obj in objects:
+                    if isinstance(obj, str) and len(obj) > 0:
+                        if obj.startswith("$") or obj in skip_strings:
+                            continue
+                        return obj
+        except Exception:
+            pass
+
         return None
     except Exception:
         return None
 
 
+def _extract_from_typedstream(data: bytes, skip_strings: set) -> str | None:
+    """Extract text from typedstream (legacy NSArchiver) format."""
+    try:
+        # Look for NSString marker and extract the text that follows
+        nsstring_marker = b"NSString"
+        idx = data.find(nsstring_marker)
+        if idx == -1:
+            return None
+
+        # Skip past NSString and find the actual string content
+        search_start = idx + len(nsstring_marker)
+        remaining = data[search_start:]
+
+        # Look for length-prefixed string (pattern: + followed by length byte)
+        plus_idx = remaining.find(b"+")
+        if plus_idx != -1 and plus_idx < 20:
+            length_pos = plus_idx + 1
+            if length_pos < len(remaining):
+                length = remaining[length_pos]
+                text_start = length_pos + 1
+                text_end = text_start + length
+                if text_end <= len(remaining):
+                    text_bytes = remaining[text_start:text_end]
+                    try:
+                        return text_bytes.decode("utf-8")
+                    except UnicodeDecodeError:
+                        pass
+
+        # Fallback: find longest printable sequence that isn't metadata
+        decoded = data.decode("utf-8", errors="ignore")
+        matches = re.findall(r'[\x20-\x7e\u00a0-\uffff]+', decoded)
+
+        best_match = None
+        best_length = 0
+
+        for match in matches:
+            clean = match.strip()
+            if clean and clean not in skip_strings and not clean.startswith("$"):
+                if len(clean) > best_length:
+                    best_match = clean
+                    best_length = len(clean)
+
+        return best_match
+
+    except Exception:
+        return None
+
+
+def _normalize_phone_number(phone: str | None) -> str | None:
+    """Normalize a phone number to E.164-ish format for consistent lookups.
+
+    Args:
+        phone: Raw phone number string
+
+    Returns:
+        Normalized phone number or None if invalid
+    """
+    if not phone:
+        return None
+
+    # If it's an email, return lowercase
+    if "@" in phone:
+        return phone.lower().strip()
+
+    # Remove all non-digit characters except leading +
+    has_plus = phone.startswith("+")
+    digits = re.sub(r'\D', '', phone)
+
+    if not digits:
+        return None
+
+    # Add country code if missing (assume US +1)
+    if len(digits) == 10:
+        digits = "1" + digits
+
+    return f"+{digits}" if has_plus or len(digits) > 10 else digits
+
+
 class MessageReader:
-    """Read-only access to iMessage database."""
+    """Read-only access to iMessage database with contact resolution."""
 
     def __init__(self, db_path: Path | None = None):
         """Initialize reader.
@@ -110,6 +222,7 @@ class MessageReader:
         self.db_path = db_path or CHAT_DB_PATH
         self._conn: sqlite3.Connection | None = None
         self._schema_version: str = "v14"
+        self._contacts_cache: dict[str, str] | None = None
 
     def __enter__(self) -> MessageReader:
         return self
@@ -125,7 +238,7 @@ class MessageReader:
 
             try:
                 uri = f"file:{self.db_path}?mode=ro"
-                self._conn = sqlite3.connect(uri, uri=True, timeout=5.0)
+                self._conn = sqlite3.connect(uri, uri=True, timeout=DB_TIMEOUT_SECONDS)
                 self._conn.row_factory = sqlite3.Row
                 self._detect_schema()
             except sqlite3.OperationalError as e:
@@ -164,6 +277,7 @@ class MessageReader:
             except Exception:
                 pass
             self._conn = None
+            self._contacts_cache = None
 
     def check_access(self) -> bool:
         """Check if database is accessible."""
@@ -172,6 +286,136 @@ class MessageReader:
             return True
         except (FileNotFoundError, PermissionError, sqlite3.Error):
             return False
+
+    # =========================================================================
+    # Contact Resolution
+    # =========================================================================
+
+    def _resolve_contact_name(self, identifier: str) -> str | None:
+        """Resolve a phone number or email to a contact name.
+
+        Args:
+            identifier: Phone number or email address
+
+        Returns:
+            Contact name if found, None otherwise
+        """
+        if not identifier or identifier == "me":
+            return None
+
+        # Lazily load contacts cache
+        if self._contacts_cache is None:
+            self._load_contacts_cache()
+
+        # Normalize the identifier for lookup
+        normalized = _normalize_phone_number(identifier)
+        if normalized is None:
+            return None
+
+        return self._contacts_cache.get(normalized)
+
+    def _load_contacts_cache(self) -> None:
+        """Load contacts from ALL AddressBook databases into cache.
+
+        Reads from all source databases (iCloud, Google, On My Mac, etc.)
+        in ~/Library/Application Support/AddressBook/Sources/
+        """
+        self._contacts_cache = {}
+
+        if not ADDRESSBOOK_PATH.exists():
+            logger.debug("AddressBook path not found, contact resolution disabled")
+            return
+
+        try:
+            loaded_count = 0
+            for source_dir in ADDRESSBOOK_PATH.iterdir():
+                if not source_dir.is_dir():
+                    continue
+                ab_db = source_dir / "AddressBook-v22.abcddb"
+                if ab_db.exists():
+                    self._load_contacts_from_db(ab_db)
+                    loaded_count += 1
+
+            logger.debug(f"Loaded {len(self._contacts_cache)} contacts from {loaded_count} AddressBook sources")
+        except PermissionError:
+            logger.debug("Permission denied accessing AddressBook directory")
+        except OSError as e:
+            logger.debug(f"I/O error accessing AddressBook: {e}")
+
+    def _load_contacts_from_db(self, db_path: Path) -> None:
+        """Load contacts from a specific AddressBook database.
+
+        Args:
+            db_path: Path to the AddressBook database
+        """
+        if self._contacts_cache is None:
+            self._contacts_cache = {}
+
+        try:
+            uri = f"file:{db_path}?mode=ro"
+            conn = sqlite3.connect(uri, uri=True, timeout=DB_TIMEOUT_SECONDS)
+            try:
+                conn.row_factory = sqlite3.Row
+
+                cursor = conn.cursor()
+
+                # Load phone numbers with names
+                try:
+                    cursor.execute("""
+                        SELECT
+                            ZABCDPHONENUMBER.ZFULLNUMBER as identifier,
+                            ZABCDRECORD.ZFIRSTNAME as first_name,
+                            ZABCDRECORD.ZLASTNAME as last_name
+                        FROM ZABCDPHONENUMBER
+                        JOIN ZABCDRECORD ON ZABCDPHONENUMBER.ZOWNER = ZABCDRECORD.Z_PK
+                        WHERE ZABCDPHONENUMBER.ZFULLNUMBER IS NOT NULL
+                    """)
+                    for row in cursor.fetchall():
+                        identifier = _normalize_phone_number(row["identifier"])
+                        name = self._format_name(row["first_name"], row["last_name"])
+                        if identifier and name:
+                            self._contacts_cache[identifier] = name
+                except sqlite3.Error:
+                    pass  # Table structure may differ
+
+                # Load email addresses with names
+                try:
+                    cursor.execute("""
+                        SELECT
+                            ZABCDEMAILADDRESS.ZADDRESS as identifier,
+                            ZABCDRECORD.ZFIRSTNAME as first_name,
+                            ZABCDRECORD.ZLASTNAME as last_name
+                        FROM ZABCDEMAILADDRESS
+                        JOIN ZABCDRECORD ON ZABCDEMAILADDRESS.ZOWNER = ZABCDRECORD.Z_PK
+                        WHERE ZABCDEMAILADDRESS.ZADDRESS IS NOT NULL
+                    """)
+                    for row in cursor.fetchall():
+                        identifier = row["identifier"]
+                        name = self._format_name(row["first_name"], row["last_name"])
+                        if identifier and name:
+                            self._contacts_cache[identifier.lower()] = name
+                except sqlite3.Error:
+                    pass  # Table structure may differ
+
+            finally:
+                conn.close()
+
+        except (sqlite3.Error, OSError) as e:
+            logger.debug(f"Error loading contacts from {db_path}: {e}")
+
+    @staticmethod
+    def _format_name(first_name: str | None, last_name: str | None) -> str | None:
+        """Format first and last name into a display name."""
+        parts = []
+        if first_name:
+            parts.append(first_name)
+        if last_name:
+            parts.append(last_name)
+        return " ".join(parts) if parts else None
+
+    # =========================================================================
+    # Conversations
+    # =========================================================================
 
     def get_conversations(self, limit: int = 50) -> list[Conversation]:
         """Get recent conversations.
@@ -238,8 +482,21 @@ class MessageReader:
         conversations = []
         for row in rows:
             participants_str = row["participants"] or ""
-            participants = [p.strip() for p in participants_str.split(",") if p.strip()]
+            raw_participants = [p.strip() for p in participants_str.split(",") if p.strip()]
+
+            # Normalize participant identifiers
+            participants = []
+            for p in raw_participants:
+                normalized = _normalize_phone_number(p)
+                if normalized:
+                    participants.append(normalized)
+
             is_group = len(participants) > 1
+
+            # Get display name - from DB or resolve from contacts
+            display_name = row["display_name"] or None
+            if not display_name and not is_group and len(participants) == 1:
+                display_name = self._resolve_contact_name(participants[0])
 
             last_message_text = row["last_message_text"]
             if not last_message_text:
@@ -247,7 +504,7 @@ class MessageReader:
 
             conversations.append(Conversation(
                 chat_id=row["chat_id"],
-                display_name=row["display_name"],
+                display_name=display_name,
                 participants=participants,
                 last_message_date=_parse_apple_timestamp(row["last_message_date"]),
                 last_message_text=last_message_text,
@@ -257,12 +514,22 @@ class MessageReader:
 
         return conversations
 
-    def get_messages(self, chat_id: str, limit: int = 50) -> list[Message]:
+    # =========================================================================
+    # Messages
+    # =========================================================================
+
+    def get_messages(
+        self,
+        chat_id: str,
+        limit: int = 50,
+        before: datetime | None = None,
+    ) -> list[Message]:
         """Get messages from a conversation.
 
         Args:
             chat_id: Conversation ID
             limit: Maximum number of messages
+            before: Only return messages before this datetime (for pagination)
 
         Returns:
             List of messages, newest first
@@ -273,7 +540,17 @@ class MessageReader:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        query = """
+        # Build query with optional before filter
+        params: list = [chat_id]
+
+        before_clause = ""
+        if before is not None:
+            before_clause = "AND message.date < ?"
+            params.append(_datetime_to_apple_timestamp(before))
+
+        params.append(limit)
+
+        query = f"""
             SELECT
                 message.ROWID as id,
                 message.text,
@@ -287,12 +564,13 @@ class MessageReader:
             JOIN chat ON chat_message_join.chat_id = chat.ROWID
             LEFT JOIN handle ON message.handle_id = handle.ROWID
             WHERE chat.guid = ?
+            {before_clause}
             ORDER BY message.date DESC
             LIMIT ?
         """
 
         try:
-            cursor.execute(query, (chat_id, limit))
+            cursor.execute(query, params)
             rows = cursor.fetchall()
         except sqlite3.Error as e:
             logger.error(f"Error fetching messages: {e}")
@@ -304,10 +582,20 @@ class MessageReader:
             if not text:
                 text = _parse_attributed_body(row["attributedBody"])
 
+            # Resolve sender name from contacts
+            sender = row["sender"]
+            sender_name = None
+            if not row["is_from_me"] and sender and sender != "me":
+                normalized_sender = _normalize_phone_number(sender)
+                if normalized_sender:
+                    sender_name = self._resolve_contact_name(normalized_sender)
+                    sender = normalized_sender
+
             messages.append(Message(
                 id=row["id"],
                 text=text or "",
-                sender=row["sender"],
+                sender=sender,
+                sender_name=sender_name,
                 is_from_me=bool(row["is_from_me"]),
                 timestamp=_parse_apple_timestamp(row["timestamp"]),
                 chat_id=row["chat_id"],

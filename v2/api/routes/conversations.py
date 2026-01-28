@@ -9,6 +9,8 @@ from ..schemas import (
     ConversationResponse,
     MessageListResponse,
     MessageResponse,
+    SendMessageRequest,
+    SendMessageResponse,
 )
 
 router = APIRouter()
@@ -55,14 +57,34 @@ async def list_conversations(limit: int = 50) -> ConversationListResponse:
 
 
 @router.get("/{chat_id}/messages", response_model=MessageListResponse)
-async def get_messages(chat_id: str, limit: int = 50) -> MessageListResponse:
-    """Get messages for a conversation."""
+async def get_messages(
+    chat_id: str,
+    limit: int = 50,
+    before: str | None = None,
+) -> MessageListResponse:
+    """Get messages for a conversation.
+
+    Args:
+        chat_id: Conversation ID
+        limit: Maximum number of messages to return
+        before: ISO timestamp - only return messages before this time (for pagination)
+    """
+    from datetime import datetime
+
     reader = _get_reader()
 
     try:
-        messages = reader.get_messages(chat_id=chat_id, limit=limit)
+        # Parse before timestamp if provided
+        before_dt = None
+        if before:
+            try:
+                before_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid 'before' timestamp format")
 
-        if not messages:
+        messages = reader.get_messages(chat_id=chat_id, limit=limit, before=before_dt)
+
+        if not messages and before is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
         return MessageListResponse(
@@ -71,6 +93,7 @@ async def get_messages(chat_id: str, limit: int = 50) -> MessageListResponse:
                     id=m.id,
                     text=m.text,
                     sender=m.sender,
+                    sender_name=m.sender_name,
                     is_from_me=m.is_from_me,
                     timestamp=m.timestamp,
                     chat_id=m.chat_id,
@@ -82,3 +105,27 @@ async def get_messages(chat_id: str, limit: int = 50) -> MessageListResponse:
         )
     finally:
         reader.close()
+
+
+@router.post("/send", response_model=SendMessageResponse)
+async def send_message(request: SendMessageRequest) -> SendMessageResponse:
+    """Send a message to a conversation via AppleScript.
+
+    Requires Automation permission for Messages.app.
+    """
+    from v2.core.imessage.sender import send_message as do_send
+
+    # Determine if group chat based on chat_id format
+    # Group chats typically have "chat" in the ID, individual have the recipient
+    is_group = "chat" in request.chat_id.lower() and ";" not in request.chat_id
+
+    result = do_send(
+        text=request.text,
+        chat_id=request.chat_id,
+        is_group=is_group,
+    )
+
+    return SendMessageResponse(
+        success=result.success,
+        error=result.error,
+    )

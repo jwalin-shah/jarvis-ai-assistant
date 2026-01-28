@@ -36,6 +36,7 @@ class MessageResponse(BaseModel):
     id: int
     text: str
     sender: str
+    sender_name: str | None  # Resolved contact name
     is_from_me: bool
     timestamp: datetime | None
     chat_id: str
@@ -65,6 +66,17 @@ class GenerateRepliesResponse(BaseModel):
     model_used: str
     generation_time_ms: float
     context_summary: str
+
+
+# Send Message
+class SendMessageRequest(BaseModel):
+    chat_id: str
+    text: str
+
+
+class SendMessageResponse(BaseModel):
+    success: bool
+    error: str | None = None
 
 
 # Settings
