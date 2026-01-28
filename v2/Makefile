@@ -88,9 +88,9 @@ test-gen:
 # Quick generation test (no prompts)
 test-quick:
 	@cd .. && uv run python -c " \
-from v2.core.imessage import MessageReader; \
-from v2.core.models import get_model_loader; \
-from v2.core.generation import ReplyGenerator; \
+from core.imessage import MessageReader; \
+from core.models import get_model_loader; \
+from core.generation import ReplyGenerator; \
 reader = MessageReader(); \
 convs = reader.get_conversations(limit=1); \
 msgs = reader.get_messages(convs[0].chat_id, limit=10); \

@@ -1,12 +1,13 @@
 /**
  * JARVIS v2 App Store
  *
- * Centralized state management using Svelte stores.
+ * Centralized state management with WebSocket for real-time updates.
  */
 
 import { writable, derived, get } from "svelte/store";
-import type { Conversation, Message, GeneratedReply } from "../api/types";
+import type { ContactProfile, Conversation, Message, GeneratedReply, GenerationDebugInfo } from "../api/types";
 import { api } from "../api/client";
+import { jarvisWs, type ReplyEvent, type GenerationCompleteEvent, type NewMessageEvent } from "../api/websocket";
 
 // Connection status
 export type ConnectionStatus = "connected" | "disconnected" | "connecting";
@@ -17,13 +18,21 @@ export interface AppState {
   selectedChatId: string | null;
   messages: Message[];
   replies: GeneratedReply[];
+  generationDebug: GenerationDebugInfo | null;
+  generationTimeMs: number;
+  contactProfile: ContactProfile | null;
   loading: boolean;
   loadingMessages: boolean;
   loadingReplies: boolean;
+  loadingProfile: boolean;
   error: string | null;
   connectionStatus: ConnectionStatus;
+  wsConnected: boolean;
   // Track last seen date per conversation for unread indicators
   lastSeenDate: Record<string, string>;
+  // Streaming state
+  streamingReplies: GeneratedReply[];
+  isStreaming: boolean;
 }
 
 const initialState: AppState = {
@@ -31,12 +40,19 @@ const initialState: AppState = {
   selectedChatId: null,
   messages: [],
   replies: [],
+  generationDebug: null,
+  generationTimeMs: 0,
+  contactProfile: null,
   loading: false,
   loadingMessages: false,
   loadingReplies: false,
+  loadingProfile: false,
   error: null,
   connectionStatus: "disconnected",
+  wsConnected: false,
   lastSeenDate: {},
+  streamingReplies: [],
+  isStreaming: false,
 };
 
 // Main store
@@ -53,26 +69,142 @@ export const connectionStatus = derived(appStore, ($state) => $state.connectionS
 export const unreadChats = derived(appStore, ($state) => {
   const unread = new Set<string>();
   for (const conv of $state.conversations) {
-    // If I sent the last message, it's not unread
-    if (conv.last_message_is_from_me) {
-      continue;
-    }
+    if (conv.last_message_is_from_me) continue;
 
-    // Check if we've seen this conversation before
     const lastSeen = $state.lastSeenDate[conv.chat_id];
     if (!lastSeen && conv.last_message_date) {
-      // Never opened this conversation and someone else sent a message
       unread.add(conv.chat_id);
     } else if (lastSeen && conv.last_message_date && conv.last_message_date > lastSeen) {
-      // New message since we last opened it
       unread.add(conv.chat_id);
     }
   }
   return unread;
 });
 
+// WebSocket setup
+let previousChatId: string | null = null;
+
+function setupWebSocket(): void {
+  jarvisWs.setHandlers({
+    onConnect: () => {
+      console.log("WebSocket connected");
+      appStore.update((s) => ({ ...s, wsConnected: true }));
+      // Re-watch current chat if any
+      const state = get(appStore);
+      if (state.selectedChatId) {
+        jarvisWs.watchMessages(state.selectedChatId);
+      }
+    },
+
+    onDisconnect: () => {
+      console.log("WebSocket disconnected");
+      appStore.update((s) => ({ ...s, wsConnected: false }));
+    },
+
+    onStateChange: (state) => {
+      console.log("WebSocket state:", state);
+    },
+
+    onReply: (event: ReplyEvent) => {
+      // Streaming reply received
+      const reply: GeneratedReply = {
+        text: event.text,
+        reply_type: event.reply_type,
+        confidence: event.confidence,
+      };
+
+      appStore.update((s) => ({
+        ...s,
+        streamingReplies: [...s.streamingReplies, reply],
+        isStreaming: true,
+      }));
+    },
+
+    onGenerationStart: () => {
+      appStore.update((s) => ({
+        ...s,
+        streamingReplies: [],
+        replies: [],
+        isStreaming: true,
+        loadingReplies: true,
+      }));
+    },
+
+    onGenerationComplete: (event: GenerationCompleteEvent) => {
+      appStore.update((s) => ({
+        ...s,
+        replies: s.streamingReplies,
+        streamingReplies: [],
+        isStreaming: false,
+        loadingReplies: false,
+        generationTimeMs: event.generation_time_ms,
+        generationDebug: {
+          style_instructions: event.style_instructions,
+          intent_detected: event.intent_detected,
+          past_replies_found: event.past_replies.map((pr) => ({
+            their_message: pr.their_message,
+            your_reply: pr.your_reply,
+            similarity: pr.similarity,
+          })),
+          full_prompt: event.full_prompt,
+        },
+      }));
+    },
+
+    onGenerationError: (event) => {
+      console.error("Generation error:", event.error);
+      appStore.update((s) => ({
+        ...s,
+        isStreaming: false,
+        loadingReplies: false,
+        error: event.error,
+      }));
+    },
+
+    onNewMessage: (event: NewMessageEvent) => {
+      const state = get(appStore);
+      if (event.chat_id === state.selectedChatId) {
+        // Add new message to current conversation
+        const newMsg: Message = {
+          id: event.message.id,
+          text: event.message.text,
+          sender: event.message.sender,
+          sender_name: null,
+          is_from_me: event.message.is_from_me,
+          timestamp: event.message.timestamp,
+          chat_id: event.chat_id,
+        };
+
+        appStore.update((s) => ({
+          ...s,
+          messages: [...s.messages, newMsg],
+          lastSeenDate: { ...s.lastSeenDate, [event.chat_id]: event.message.timestamp },
+        }));
+
+        // Auto-generate replies if someone else sent the message
+        if (!event.message.is_from_me) {
+          generateRepliesViaWs();
+        }
+      }
+
+      // Refresh conversations to update last message
+      fetchConversations();
+    },
+
+    onError: (error) => {
+      console.error("WebSocket error:", error);
+      appStore.update((s) => ({ ...s, error }));
+    },
+  });
+
+  jarvisWs.connect();
+}
+
 // Actions
 export async function fetchConversations(): Promise<void> {
+  const state = get(appStore);
+  if (state.loading) return;
+
   appStore.update((s) => ({ ...s, loading: true, error: null, connectionStatus: "connecting" }));
 
   try {
@@ -95,39 +227,96 @@ export async function fetchConversations(): Promise<void> {
 }
 
 export async function selectConversation(chatId: string): Promise<void> {
+  // Unwatch previous chat
+  if (previousChatId && jarvisWs.isConnected) {
+    jarvisWs.unwatchMessages(previousChatId);
+  }
+  previousChatId = chatId;
+
+  // Watch new chat for real-time updates
+  if (jarvisWs.isConnected) {
+    jarvisWs.watchMessages(chatId);
+  }
+
   appStore.update((s) => ({
     ...s,
     selectedChatId: chatId,
-    messages: [],
     replies: [],
+    streamingReplies: [],
+    generationDebug: null,
+    generationTimeMs: 0,
+    contactProfile: null,
     loadingMessages: true,
+    loadingProfile: true,
+    loadingReplies: true,
+    isStreaming: false,
     error: null,
   }));
 
+  // Fetch messages and profile
   try {
-    const messages = await api.getMessages(chatId);
-    // Reverse so oldest is first (API returns newest first)
-    const chronological = [...messages].reverse();
+    const [messages, profile] = await Promise.all([
+      api.getMessages(chatId),
+      api.getContactProfile(chatId).catch(() => null),
+    ]);
 
-    // Mark as read - record the last message date
-    const lastMsgDate =
-      chronological.length > 0 ? chronological[chronological.length - 1].timestamp : null;
+    const chronological = [...messages].reverse();
+    const lastMsgDate = chronological.length > 0 ? chronological[chronological.length - 1].timestamp : null;
 
     appStore.update((s) => ({
       ...s,
       messages: chronological,
+      contactProfile: profile,
       loadingMessages: false,
-      lastSeenDate: lastMsgDate
-        ? { ...s.lastSeenDate, [chatId]: lastMsgDate }
-        : s.lastSeenDate,
+      loadingProfile: false,
+      lastSeenDate: lastMsgDate ? { ...s.lastSeenDate, [chatId]: lastMsgDate } : s.lastSeenDate,
     }));
+
+    // Generate replies via WebSocket for streaming, or fall back to HTTP
+    if (jarvisWs.isConnected) {
+      generateRepliesViaWs();
+    } else {
+      generateRepliesViaHttp(chatId);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch messages";
     appStore.update((s) => ({
       ...s,
       loadingMessages: false,
+      loadingProfile: false,
+      loadingReplies: false,
       error: message,
     }));
+  }
+}
+
+function generateRepliesViaWs(): void {
+  const state = get(appStore);
+  if (!state.selectedChatId) return;
+
+  appStore.update((s) => ({
+    ...s,
+    loadingReplies: true,
+    replies: [],
+    streamingReplies: [],
+    isStreaming: true,
+  }));
+
+  jarvisWs.generateReplies(state.selectedChatId);
+}
+
+async function generateRepliesViaHttp(chatId: string): Promise<void> {
+  try {
+    const response = await api.generateReplies(chatId);
+    appStore.update((s) => ({
+      ...s,
+      replies: response.replies,
+      generationDebug: response.debug ?? null,
+      generationTimeMs: response.generation_time_ms,
+      loadingReplies: false,
+    }));
+  } catch {
+    appStore.update((s) => ({ ...s, loadingReplies: false }));
   }
 }
 
@@ -135,31 +324,27 @@ export async function generateReplies(): Promise<void> {
   const state = get(appStore);
   if (!state.selectedChatId) return;
 
-  appStore.update((s) => ({ ...s, loadingReplies: true, replies: [] }));
-
-  try {
-    const response = await api.generateReplies(state.selectedChatId);
-    appStore.update((s) => ({
-      ...s,
-      replies: response.replies,
-      loadingReplies: false,
-    }));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to generate replies";
-    appStore.update((s) => ({
-      ...s,
-      loadingReplies: false,
-      error: message,
-    }));
+  if (jarvisWs.isConnected) {
+    generateRepliesViaWs();
+  } else {
+    appStore.update((s) => ({ ...s, loadingReplies: true, replies: [], generationDebug: null, generationTimeMs: 0 }));
+    await generateRepliesViaHttp(state.selectedChatId);
   }
 }
 
 export function clearSelection(): void {
+  const state = get(appStore);
+  if (state.selectedChatId && jarvisWs.isConnected) {
+    jarvisWs.unwatchMessages(state.selectedChatId);
+  }
+  previousChatId = null;
+
   appStore.update((s) => ({
     ...s,
     selectedChatId: null,
     messages: [],
     replies: [],
+    streamingReplies: [],
   }));
 }
 
@@ -171,22 +356,41 @@ export async function sendMessage(text: string): Promise<boolean> {
   const state = get(appStore);
   if (!state.selectedChatId || !text.trim()) return false;
 
+  const chatId = state.selectedChatId;
+
   try {
-    const result = await api.sendMessage(state.selectedChatId, text);
+    const result = await api.sendMessage(chatId, text);
     if (result.success) {
-      // Refresh messages to show the sent message
-      setTimeout(() => {
-        const currentState = get(appStore);
-        if (currentState.selectedChatId) {
-          selectConversation(currentState.selectedChatId);
-        }
-      }, 500);
-      return true;
-    } else {
+      // Optimistically add the sent message
+      const optimisticMessage: Message = {
+        id: Date.now(),
+        text: text,
+        sender: "Me",
+        sender_name: null,
+        is_from_me: true,
+        timestamp: new Date().toISOString(),
+        chat_id: chatId,
+      };
+
       appStore.update((s) => ({
         ...s,
-        error: result.error || "Failed to send message",
+        messages: [...s.messages, optimisticMessage],
+        replies: [],
+        streamingReplies: [],
+        generationDebug: null,
+        loadingReplies: true,
       }));
+
+      // Generate new replies
+      if (jarvisWs.isConnected) {
+        generateRepliesViaWs();
+      } else {
+        generateRepliesViaHttp(chatId);
+      }
+
+      return true;
+    } else {
+      appStore.update((s) => ({ ...s, error: result.error || "Failed to send message" }));
       return false;
     }
   } catch (error) {
@@ -196,20 +400,40 @@ export async function sendMessage(text: string): Promise<boolean> {
   }
 }
 
-// Polling
-let pollInterval: ReturnType<typeof setInterval> | null = null;
+// Polling for conversation list (WebSocket handles messages)
+let conversationPollInterval: ReturnType<typeof setInterval> | null = null;
 
-export function startPolling(intervalMs: number = 30000): void {
+export function startPolling(): void {
   stopPolling();
+
+  // Initialize WebSocket
+  setupWebSocket();
+
+  // Initial fetch
   fetchConversations();
-  pollInterval = setInterval(() => {
+
+  // Poll conversation list every 15 seconds (WebSocket handles message updates)
+  conversationPollInterval = setInterval(() => {
     fetchConversations();
-  }, intervalMs);
+  }, 15000);
+
+  // Refresh on window focus
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", handleWindowFocus);
+  }
 }
 
 export function stopPolling(): void {
-  if (pollInterval) {
-    clearInterval(pollInterval);
-    pollInterval = null;
+  if (conversationPollInterval) {
+    clearInterval(conversationPollInterval);
+    conversationPollInterval = null;
   }
+  if (typeof window !== "undefined") {
+    window.removeEventListener("focus", handleWindowFocus);
+  }
+  jarvisWs.disconnect();
+}
+
+function handleWindowFocus(): void {
+  fetchConversations();
 }

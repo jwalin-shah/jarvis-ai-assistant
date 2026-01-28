@@ -28,6 +28,7 @@ class GenerationResult:
     tokens_generated: int
     generation_time_ms: float
     model_id: str
+    formatted_prompt: str = ""  # The actual prompt sent to the model (with chat template)
 
 
 class ModelLoader:
@@ -79,6 +80,14 @@ class ModelLoader:
                 logger.error(f"Failed to load model: {e}")
                 raise RuntimeError(f"Failed to load model {self.model_id}: {e}") from e
 
+    def preload(self) -> None:
+        """Explicitly load the model (for eager initialization).
+
+        Call this at application startup to avoid cold-start latency
+        on the first generation request.
+        """
+        self._ensure_loaded()
+
     def unload(self) -> None:
         """Unload model to free memory."""
         with self._load_lock:
@@ -112,8 +121,9 @@ class ModelLoader:
         self,
         prompt: str,
         max_tokens: int = 150,
-        temperature: float = 0.7,
+        temperature: float = 0.1,
         stop: list[str] | None = None,
+        use_chat_template: bool = True,
     ) -> GenerationResult:
         """Generate text from prompt.
 
@@ -122,25 +132,55 @@ class ModelLoader:
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature (0.0-1.0)
             stop: Stop sequences
+            use_chat_template: If True, wrap prompt in chat template (for Qwen3)
 
         Returns:
             GenerationResult with generated text
         """
+        load_start = time.time()
+        was_loaded = self._model is not None
         self._ensure_loaded()
+        load_time = (time.time() - load_start) * 1000
+        if not was_loaded:
+            logger.info(f"Model loaded on-demand in {load_time:.0f}ms")
+
         start = time.time()
 
         try:
             from mlx_lm import generate
             from mlx_lm.sample_utils import make_sampler
 
-            # Create sampler with temperature
-            sampler = make_sampler(temp=temperature)
+            # Create sampler
+            # LFM2.5 recommends: temp=0.1, top_p=0.1, top_k=50, min_p=0.15
+            # For text replies, use slightly higher temp for variety
+            sampler = make_sampler(
+                temp=temperature,
+                top_p=0.1,
+                top_k=50,
+                min_p=0.15,
+            )
+
+            # Apply chat template for Qwen3 (non-thinking mode)
+            final_prompt = prompt
+            if use_chat_template and self._tokenizer.chat_template:
+                try:
+                    messages = [{"role": "user", "content": prompt}]
+                    final_prompt = self._tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                        enable_thinking=False,  # Non-thinking mode for fast replies
+                    )
+                except Exception as e:
+                    logger.debug(f"Chat template failed, using raw prompt: {e}")
+                    final_prompt = prompt
 
             # Generate
+            logger.debug(f"Starting generation with {max_tokens} max tokens, temp={temperature}")
             output = generate(
                 model=self._model,
                 tokenizer=self._tokenizer,
-                prompt=prompt,
+                prompt=final_prompt,
                 max_tokens=max_tokens,
                 sampler=sampler,
             )
@@ -155,12 +195,14 @@ class ModelLoader:
 
             # Estimate tokens (rough)
             tokens = len(output.split())
+            logger.info(f"LLM generated ~{tokens} tokens in {elapsed:.0f}ms ({tokens/(elapsed/1000):.1f} tok/s)")
 
             return GenerationResult(
                 text=output.strip(),
                 tokens_generated=tokens,
                 generation_time_ms=elapsed,
                 model_id=self.model_id,
+                formatted_prompt=final_prompt,
             )
 
         except Exception as e:

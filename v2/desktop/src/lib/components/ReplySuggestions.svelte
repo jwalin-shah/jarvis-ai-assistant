@@ -2,10 +2,15 @@
   import type { GeneratedReply } from "../api/types";
 
   export let replies: GeneratedReply[] = [];
+  export let streamingReplies: GeneratedReply[] = [];
   export let loading: boolean = false;
+  export let isStreaming: boolean = false;
   export let chatId: string | null = null;
   export let onGenerate: () => void = () => {};
   export let onSend: (text: string) => Promise<boolean> = async () => false;
+
+  // Show streaming replies while streaming, otherwise show final replies
+  $: displayReplies = isStreaming ? streamingReplies : replies;
 
   let inputText: string = "";
   let sending: boolean = false;
@@ -98,16 +103,17 @@
     </button>
   </div>
 
-  {#if loading}
+  {#if loading && displayReplies.length === 0}
     <div class="loading-replies">
       <div class="spinner"></div>
-      <span>Generating replies...</span>
+      <span>{isStreaming ? "Streaming replies..." : "Generating replies..."}</span>
     </div>
-  {:else if replies.length > 0}
+  {:else if displayReplies.length > 0}
     <div class="reply-suggestions">
-      {#each replies as reply, i}
+      {#each displayReplies as reply, i}
         <button
           class="reply-suggestion"
+          class:streaming={isStreaming && i === displayReplies.length - 1}
           on:click={() => selectReply(reply)}
           title="⌘{i + 1} to use"
         >
@@ -120,8 +126,16 @@
           </div>
         </button>
       {/each}
+      {#if isStreaming}
+        <div class="streaming-indicator">
+          <div class="spinner small"></div>
+          <span>More coming...</span>
+        </div>
+      {/if}
     </div>
-    <p class="hint">Click a suggestion to use it</p>
+    {#if !isStreaming}
+      <p class="hint">Click a suggestion to use it</p>
+    {/if}
   {:else}
     <div class="empty-replies">
       Click "Generate" to get AI-powered reply suggestions
@@ -324,5 +338,34 @@
     color: var(--text-secondary);
     font-size: 12px;
     padding: 8px 0;
+  }
+
+  .reply-suggestion.streaming {
+    border-color: var(--accent-green);
+    animation: pulse-border 1s infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% {
+      border-color: var(--accent-green);
+    }
+    50% {
+      border-color: transparent;
+    }
+  }
+
+  .streaming-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0;
+    color: var(--accent-green);
+    font-size: 11px;
+  }
+
+  .spinner.small {
+    width: 10px;
+    height: 10px;
+    border-width: 1.5px;
   }
 </style>

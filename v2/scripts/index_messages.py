@@ -52,23 +52,23 @@ def main():
     # First, count messages to give accurate estimate
     console.print("[dim]Scanning conversations...[/dim]")
 
-    from v2.core.imessage import MessageReader
-    from v2.core.embeddings import get_embedding_store, get_embedding_model
+    from core.imessage import MessageReader
+    from core.embeddings import get_embedding_store, get_embedding_model
 
     reader = MessageReader()
-    conversations = reader.get_conversations(limit=500)
+    conversations = reader.get_conversations(limit=None)  # All conversations
 
     # Count total messages
     total_messages = 0
     conv_message_counts = []
     for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=1000)
+        messages = reader.get_messages(conv.chat_id, limit=None)  # All messages
         valid = [m for m in messages if m.text and len(m.text.strip()) >= 3]
         conv_message_counts.append((conv, valid))
         total_messages += len(valid)
 
-    # Estimate time (15ms per message in batches, plus model load)
-    est_seconds = 5 + (total_messages * 0.015)  # 5s model load + 15ms per msg
+    # Estimate time (~1ms per message in batches, plus model load)
+    est_seconds = 5 + (total_messages * 0.001)  # 5s model load + ~1ms per msg
     est_minutes = est_seconds / 60
 
     console.print()

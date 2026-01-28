@@ -1,5 +1,7 @@
 <script lang="ts">
   import ConversationList from "$lib/components/ConversationList.svelte";
+  import ContactProfilePanel from "$lib/components/ContactProfilePanel.svelte";
+  import GenerationDebugPanel from "$lib/components/GenerationDebugPanel.svelte";
   import MessageList from "$lib/components/MessageList.svelte";
   import ReplySuggestions from "$lib/components/ReplySuggestions.svelte";
   import {
@@ -11,6 +13,8 @@
     generateReplies,
     sendMessage,
   } from "$lib/stores/app";
+
+  let profileExpanded = false;
 
   function handleSelectConversation(chatId: string) {
     selectConversation(chatId);
@@ -42,6 +46,9 @@
           class:connecting={$connectionStatus === "connecting"}
         ></span>
         <h1>Messages</h1>
+        {#if $appStore.wsConnected}
+          <span class="ws-badge" title="Real-time updates active">LIVE</span>
+        {/if}
       </div>
     </div>
 
@@ -66,14 +73,27 @@
     </div>
 
     {#if $appStore.selectedChatId}
+      <ContactProfilePanel
+        profile={$appStore.contactProfile}
+        loading={$appStore.loadingProfile}
+        bind:expanded={profileExpanded}
+      />
+
       <MessageList messages={$appStore.messages} loading={$appStore.loadingMessages} />
 
       <ReplySuggestions
         replies={$appStore.replies}
+        streamingReplies={$appStore.streamingReplies}
         loading={$appStore.loadingReplies}
+        isStreaming={$appStore.isStreaming}
         chatId={$appStore.selectedChatId}
         onGenerate={handleGenerateReplies}
         onSend={handleSendMessage}
+      />
+
+      <GenerationDebugPanel
+        debug={$appStore.generationDebug}
+        generationTimeMs={$appStore.generationTimeMs}
       />
     {:else}
       <div class="empty-state">
@@ -84,9 +104,9 @@
 </div>
 
 {#if $appStore.error}
-  <div class="error-toast" on:click={() => appStore.update((s) => ({ ...s, error: null }))}>
+  <button class="error-toast" on:click={() => appStore.update((s) => ({ ...s, error: null }))}>
     {$appStore.error}
-  </div>
+  </button>
 {/if}
 
 <style>
@@ -130,6 +150,17 @@
   .status {
     display: flex;
     align-items: center;
+    gap: 8px;
+  }
+
+  .ws-badge {
+    font-size: 9px;
+    font-weight: 700;
+    background: var(--accent-green);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    animation: pulse 2s infinite;
   }
 
   .status-dot {

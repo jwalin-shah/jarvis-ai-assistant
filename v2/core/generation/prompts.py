@@ -6,15 +6,11 @@ Contains the main prompt template and few-shot examples.
 from __future__ import annotations
 
 # Main prompt template for reply generation
-REPLY_PROMPT = '''Reply to this iMessage conversation. Write 3 different short replies.
+# Minimal instructions - just continue naturally
+REPLY_PROMPT = '''Text message conversation. Reply briefly.
 
-{conversation_history}
-Them: {last_message}
-
-{examples_section}
-
-Your 3 replies (casual, under {max_length} words each):
-1.'''
+{conversation}
+{user_name}:'''
 
 
 # Few-shot examples organized by intent
@@ -187,19 +183,35 @@ FEW_SHOT_EXAMPLES = {
     ],
     "sharing": [
         {
+            "message": "I got you something from the trip",
+            "replies": [
+                "omg you didn't have to! what is it??",
+                "aww thank you!! can't wait to see",
+                "you're the best! when can i see it?",
+            ],
+        },
+        {
+            "message": "I finally brought the painting for you",
+            "replies": [
+                "yay finally!! can't wait to see it",
+                "omg thank you! where should we hang it?",
+                "you're amazing, thank you!",
+            ],
+        },
+        {
             "message": "Check out this restaurant I found",
             "replies": [
                 "ooh looks good! where is it?",
                 "we should try it!",
-                "adding to my list 📝",
+                "adding to my list",
             ],
         },
         {
             "message": "Look at this meme lol",
             "replies": [
-                "hahaha 😂",
+                "hahaha",
                 "lmaooo so accurate",
-                "dead 💀",
+                "dead",
             ],
         },
     ],
@@ -280,6 +292,58 @@ def get_examples_for_intent(intent_value: str) -> str:
     return "\n".join(lines)
 
 
+def _get_display_name(msg: dict, fallback: str = "Them") -> str:
+    """Get display name for a message sender, preferring name over phone number."""
+    if msg.get("is_from_me"):
+        return None  # Will use user_name instead
+    # Prefer sender_name (contact name) over sender (phone number)
+    name = msg.get("sender_name") or msg.get("sender") or fallback
+    # If it looks like a phone number, use fallback
+    if name and name.startswith("+"):
+        return fallback
+    return name
+
+
+def _build_messages_array(messages: list[dict], max_messages: int = 6) -> tuple[list[str], str]:
+    """Build simple messages array for JSON prompt.
+
+    Uses ">" prefix for their messages, no prefix for yours.
+
+    Args:
+        messages: Recent messages
+        max_messages: Max messages to include
+
+    Returns:
+        Tuple of (messages list, reply_to string)
+    """
+    if not messages:
+        return [], ""
+
+    # Take last N messages for context
+    recent = messages[-max_messages:] if len(messages) > max_messages else messages
+
+    # Prefix their messages with ">", yours with no prefix
+    texts = []
+    for msg in recent:
+        text = msg.get("text", "")
+        if not text:
+            continue
+        # Skip attachment placeholders and very short messages
+        text = text.replace("\ufffc", "").strip()
+        if len(text) < 2:
+            continue
+        if msg.get("is_from_me"):
+            texts.append(text)
+        else:
+            texts.append(f">{text}")
+
+    # What we're replying to
+    last_msg = messages[-1]
+    reply_to = last_msg.get("text", "") if not last_msg.get("is_from_me") else ""
+
+    return texts, reply_to
+
+
 def build_reply_prompt(
     messages: list[dict],
     last_message: str,
@@ -289,6 +353,8 @@ def build_reply_prompt(
     tone: str,
     max_length: int,
     intent_value: str,
+    past_replies: list[tuple[str, str, float]] | None = None,
+    user_name: str = "me",
 ) -> str:
     """Build the complete reply generation prompt.
 
@@ -301,28 +367,26 @@ def build_reply_prompt(
         tone: Tone for replies
         max_length: Max words per reply
         intent_value: Detected intent
+        past_replies: User's past replies to similar messages
+        user_name: User's name for personalization
 
     Returns:
-        Complete prompt string
+        Complete prompt string (JSON format for Qwen3)
     """
-    # Format conversation history
-    history_lines = []
-    for msg in messages[-8:]:  # Last 8 messages
-        sender = "You" if msg.get("is_from_me") else "Them"
-        text = msg.get("text", "")[:80]  # Truncate long messages
-        if text:
-            history_lines.append(f"{sender}: {text}")
+    # Build simple conversation format
+    lines = []
+    for msg in messages[-6:]:  # Last 6 messages
+        text = msg.get("text", "").replace("\ufffc", "").strip()
+        if not text or len(text) < 2:
+            continue
+        if msg.get("is_from_me"):
+            lines.append(f"{user_name}: {text}")
+        else:
+            lines.append(f"Them: {text}")
 
-    conversation_history = "\n".join(history_lines) if history_lines else "(New conversation)"
-
-    # Get examples
-    examples_section = get_examples_for_intent(intent_value)
+    conversation = "\n".join(lines)
 
     return REPLY_PROMPT.format(
-        conversation_history=conversation_history,
-        last_message=last_message,
-        tone=tone,
-        max_length=max_length,
-        style_instructions=style_instructions,
-        examples_section=examples_section,
+        user_name=user_name,
+        conversation=conversation,
     )

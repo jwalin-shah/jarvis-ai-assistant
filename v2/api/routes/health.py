@@ -12,8 +12,8 @@ router = APIRouter()
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
     """Check API and system health."""
-    from v2.core.imessage import MessageReader
-    from v2.core.models import get_model_loader
+    from core.imessage import MessageReader
+    from core.models import get_model_loader
 
     # Check iMessage access
     imessage_ok = False
@@ -42,7 +42,7 @@ async def health_check() -> HealthResponse:
 @router.get("/health/cache", response_model=EmbeddingCacheStats)
 async def cache_stats() -> EmbeddingCacheStats:
     """Get embedding cache statistics."""
-    from v2.core.embeddings import get_embedding_cache
+    from core.embeddings import get_embedding_cache
 
     try:
         cache = get_embedding_cache()

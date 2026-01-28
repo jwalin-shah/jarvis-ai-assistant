@@ -22,6 +22,7 @@ from .store import (
     StyleProfile,
 )
 from .indexer import MessageIndexer, run_indexing, IndexingStats
+from .contact_profiler import ContactProfiler, ContactProfile, TopicCluster, get_contact_profile
 
 __all__ = [
     # Store (main interface)
@@ -30,6 +31,11 @@ __all__ = [
     "SimilarMessage",
     "ConversationContext",
     "StyleProfile",
+    # Contact profiles
+    "ContactProfiler",
+    "ContactProfile",
+    "TopicCluster",
+    "get_contact_profile",
     # Cache
     "EmbeddingCache",
     "get_embedding_cache",

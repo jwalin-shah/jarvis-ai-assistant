@@ -14,7 +14,7 @@ def main():
     print("JARVIS v2 Embedding Cache Test")
     print("=" * 60)
 
-    from v2.core.embeddings import (
+    from core.embeddings import (
         get_embedding_cache,
         find_most_similar,
         cosine_similarity,

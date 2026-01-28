@@ -47,7 +47,7 @@ class MessageIndexer:
         Returns:
             IndexingStats with counts and timing
         """
-        from v2.core.imessage import MessageReader
+        from core.imessage import MessageReader
 
         reader = MessageReader()
         start_time = time.time()
@@ -111,7 +111,7 @@ class MessageIndexer:
         Returns:
             Stats dict with indexed, skipped, duplicates
         """
-        from v2.core.imessage import MessageReader
+        from core.imessage import MessageReader
 
         reader = MessageReader()
         messages = reader.get_messages(chat_id, limit=max_messages)

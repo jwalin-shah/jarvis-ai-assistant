@@ -63,12 +63,15 @@ class EmbeddingModel:
             if self._model is not None:
                 return
 
+            import time
+            start = time.time()
             logger.info(f"Loading embedding model: {self.model_id}")
             try:
                 from sentence_transformers import SentenceTransformer
 
                 self._model = SentenceTransformer(self.model_id)
-                logger.info("Embedding model loaded")
+                elapsed = time.time() - start
+                logger.info(f"Embedding model loaded in {elapsed:.1f}s")
             except ImportError:
                 logger.warning(
                     "sentence-transformers not installed. "
@@ -78,6 +81,10 @@ class EmbeddingModel:
             except Exception as e:
                 logger.error(f"Failed to load embedding model: {e}")
                 raise
+
+    def preload(self) -> None:
+        """Explicitly load the model (for eager initialization)."""
+        self._ensure_loaded()
 
     def embed(self, text: str) -> np.ndarray:
         """Compute embedding for text.

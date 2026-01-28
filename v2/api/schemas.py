@@ -69,12 +69,29 @@ class GeneratedReplyResponse(BaseModel):
     confidence: float
 
 
+class PastReplyResponse(BaseModel):
+    """A past reply found via semantic similarity."""
+    their_message: str
+    your_reply: str
+    similarity: float
+
+
+class GenerationDebugInfo(BaseModel):
+    """Debug info about generation - helps understand what model sees."""
+    style_instructions: str
+    intent_detected: str
+    past_replies_found: list[PastReplyResponse]
+    full_prompt: str  # Our template prompt
+    formatted_prompt: str = ""  # Actual ChatML prompt sent to model
+
+
 class GenerateRepliesResponse(BaseModel):
     replies: list[GeneratedReplyResponse]
     chat_id: str
     model_used: str
     generation_time_ms: float
     context_summary: str
+    debug: GenerationDebugInfo | None = None
 
 
 # Send Message
@@ -99,3 +116,48 @@ class SettingsUpdateRequest(BaseModel):
     model_id: str | None = None
     auto_suggest: bool | None = None
     max_replies: int | None = None
+
+
+# Contact Profile
+class TopicClusterResponse(BaseModel):
+    name: str
+    keywords: list[str]
+    message_count: int
+    percentage: float
+
+
+class ContactProfileResponse(BaseModel):
+    chat_id: str
+    display_name: str | None
+
+    # Relationship
+    relationship_type: str
+    relationship_confidence: float
+
+    # Communication stats
+    total_messages: int
+    you_sent: int
+    they_sent: int
+    avg_your_length: float
+    avg_their_length: float
+
+    # Tone
+    tone: str
+    uses_emoji: bool
+    uses_slang: bool
+    is_playful: bool
+
+    # Topics
+    topics: list[TopicClusterResponse]
+
+    # Time
+    most_active_hours: list[int]
+    first_message_date: datetime | None
+    last_message_date: datetime | None
+
+    # Phrases
+    their_common_phrases: list[str]
+    your_common_phrases: list[str]
+
+    # Summary
+    summary: str

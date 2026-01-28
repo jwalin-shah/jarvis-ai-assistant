@@ -15,7 +15,7 @@ def test_imessage_reader():
     print("Testing iMessage Reader")
     print("=" * 60)
 
-    from v2.core.imessage import MessageReader
+    from core.imessage import MessageReader
 
     reader = MessageReader()
 
@@ -55,7 +55,7 @@ def test_style_analyzer():
     print("Testing Style Analyzer")
     print("=" * 60)
 
-    from v2.core.generation import StyleAnalyzer
+    from core.generation import StyleAnalyzer
 
     analyzer = StyleAnalyzer()
 
@@ -92,7 +92,7 @@ def test_context_analyzer():
     print("Testing Context Analyzer")
     print("=" * 60)
 
-    from v2.core.generation import ContextAnalyzer
+    from core.generation import ContextAnalyzer
 
     analyzer = ContextAnalyzer()
 
@@ -129,13 +129,13 @@ def test_full_generation():
 
     # Check if we can load model
     try:
-        from v2.core.models import get_model_loader
+        from core.models import get_model_loader
 
         print("Loading model (this may take a minute)...")
         loader = get_model_loader()
 
         # Get real conversation
-        from v2.core.imessage import MessageReader
+        from core.imessage import MessageReader
 
         reader = MessageReader()
         if not reader.check_access():
@@ -173,7 +173,7 @@ def test_full_generation():
             print(f"  {sender}: {text}")
 
         # Generate replies
-        from v2.core.generation import ReplyGenerator
+        from core.generation import ReplyGenerator
 
         generator = ReplyGenerator(loader)
 
