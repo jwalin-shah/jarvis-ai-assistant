@@ -10,14 +10,14 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 
-from .registry import DEFAULT_MODEL, MODELS, ModelSpec, get_model_spec
+from .registry import DEFAULT_MODEL, get_model_spec
 
 logger = logging.getLogger(__name__)
 
 # Singleton instance
 _model_loader: ModelLoader | None = None
-_loader_lock = threading.Lock()
 
 
 @dataclass
@@ -29,6 +29,10 @@ class GenerationResult:
     generation_time_ms: float
     model_id: str
     formatted_prompt: str = ""  # The actual prompt sent to the model (with chat template)
+    # Detailed timing breakdown
+    prefill_time_ms: float = 0.0  # Time to process input and generate first token
+    generation_only_ms: float = 0.0  # Time for token generation after first token
+    prompt_tokens: int = 0  # Number of tokens in the input prompt
 
 
 class ModelLoader:
@@ -100,7 +104,7 @@ class ModelLoader:
                 # Clear MLX cache if available
                 try:
                     import mlx.core as mx
-                    mx.metal.clear_cache()
+                    mx.clear_cache()
                 except Exception:
                     pass
 
@@ -147,7 +151,6 @@ class ModelLoader:
         start = time.time()
 
         try:
-            from mlx_lm import generate
             from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
             # Create sampler - LFM2.5 recommended: temp=0.1, top_p=0.1, top_k=50
@@ -175,28 +178,70 @@ class ModelLoader:
                     logger.debug(f"Chat template failed, using raw prompt: {e}")
                     final_prompt = prompt
 
-            # Generate
+            # Count prompt tokens for logging
+            prompt_tokens = len(self._tokenizer.encode(final_prompt))
+
+            # Generate using streaming to measure prefill vs generation time
             logger.debug(f"Starting generation with {max_tokens} max tokens, temp={temperature}")
-            output = generate(
+
+            from mlx_lm import stream_generate
+
+            output_tokens = []
+            prefill_time_ms = 0.0
+            first_token_time = None
+
+            for token_result in stream_generate(
                 model=self._model,
                 tokenizer=self._tokenizer,
                 prompt=final_prompt,
                 max_tokens=max_tokens,
                 sampler=sampler,
                 logits_processors=logits_processors,
-            )
+            ):
+                # First token marks end of prefill
+                if first_token_time is None:
+                    first_token_time = time.time()
+                    prefill_time_ms = (first_token_time - start) * 1000
 
-            # Handle stop sequences manually if needed
+                output_tokens.append(token_result.token)
+
+                # Check for stop sequences
+                current_text = self._tokenizer.decode(output_tokens)
+                if stop:
+                    should_stop = False
+                    for seq in stop:
+                        if seq in current_text:
+                            current_text = current_text.split(seq)[0]
+                            should_stop = True
+                            break
+                    if should_stop:
+                        break
+
+            end_time = time.time()
+            elapsed = (end_time - start) * 1000
+            generation_only_ms = (end_time - first_token_time) * 1000 if first_token_time else 0.0
+
+            # Decode final output
+            output = self._tokenizer.decode(output_tokens)
+
+            # Handle stop sequences in final output
             if stop:
                 for seq in stop:
                     if seq in output:
                         output = output.split(seq)[0]
 
-            elapsed = (time.time() - start) * 1000
+            tokens = len(output_tokens)
 
-            # Estimate tokens (rough)
-            tokens = len(output.split())
-            logger.info(f"LLM generated ~{tokens} tokens in {elapsed:.0f}ms ({tokens/(elapsed/1000):.1f} tok/s)")
+            # Calculate actual generation speed (excluding prefill)
+            gen_tok_per_sec = tokens / (generation_only_ms / 1000) if generation_only_ms > 0 else 0
+            prefill_tok_per_sec = prompt_tokens / (prefill_time_ms / 1000) if prefill_time_ms > 0 else 0
+
+            logger.info(
+                f"LLM: {prompt_tokens} prompt tokens, {tokens} output tokens | "
+                f"Prefill: {prefill_time_ms:.0f}ms ({prefill_tok_per_sec:.0f} tok/s) | "
+                f"Generate: {generation_only_ms:.0f}ms ({gen_tok_per_sec:.1f} tok/s) | "
+                f"Total: {elapsed:.0f}ms"
+            )
 
             return GenerationResult(
                 text=output.strip(),
@@ -204,11 +249,20 @@ class ModelLoader:
                 generation_time_ms=elapsed,
                 model_id=self.model_id,
                 formatted_prompt=final_prompt,
+                prefill_time_ms=prefill_time_ms,
+                generation_only_ms=generation_only_ms,
+                prompt_tokens=prompt_tokens,
             )
 
         except Exception as e:
             logger.error(f"Generation failed: {e}")
             raise RuntimeError(f"Generation failed: {e}") from e
+
+
+@lru_cache(maxsize=1)
+def _create_model_loader(model_id: str) -> ModelLoader:
+    """Create a model loader (thread-safe via lru_cache)."""
+    return ModelLoader(model_id)
 
 
 def get_model_loader(model_id: str | None = None) -> ModelLoader:
@@ -222,10 +276,11 @@ def get_model_loader(model_id: str | None = None) -> ModelLoader:
     """
     global _model_loader
 
+    target_model = model_id or DEFAULT_MODEL
+
+    # Get or create the loader
     if _model_loader is None:
-        with _loader_lock:
-            if _model_loader is None:
-                _model_loader = ModelLoader(model_id or DEFAULT_MODEL)
+        _model_loader = _create_model_loader(target_model)
     elif model_id and model_id != _model_loader.model_id:
         _model_loader.switch_model(model_id)
 
@@ -235,7 +290,7 @@ def get_model_loader(model_id: str | None = None) -> ModelLoader:
 def reset_model_loader() -> None:
     """Reset the model loader singleton."""
     global _model_loader
-    with _loader_lock:
-        if _model_loader is not None:
-            _model_loader.unload()
-            _model_loader = None
+    if _model_loader is not None:
+        _model_loader.unload()
+        _model_loader = None
+    _create_model_loader.cache_clear()

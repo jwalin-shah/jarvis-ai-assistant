@@ -112,70 +112,24 @@ Technical debt and refactoring opportunities identified via code review (2026-01
 | Duplicate emoji regex (3 places) | `reply_generator.py`, `style_analyzer.py`, `contact_profiler.py` | Created `core/utils/emoji.py` shared utility |
 | FAISS cache grows unbounded | `core/embeddings/store.py` | Added LRU eviction (max 50 indices) |
 | Fragile hash-based message tracking | `core/generation/reply_generator.py:120` | Replaced `hash()` with MD5 for stability |
+| Silent exception catching masks errors | `reply_generator.py:22-49` | Catch `ImportError` separately, log unexpected errors at warning level |
+| Dead code in `get_reply_strategy()` | `context_analyzer.py` | Removed unused function |
+| Thread-safe singleton race condition | `store.py`, `loader.py`, `contact_profiler.py` | All now use `@lru_cache(maxsize=1)` |
+| ReplyGenerator has 4 separate state caches | `reply_generator.py` | Consolidated into `ChatState` dataclass |
+| Duplicate style instruction builders | `reply_generator.py`, `StyleAnalyzer` | Removed wrapper, use `StyleAnalyzer.build_style_instructions()` directly |
+| Inefficient `get_user_messages` query | `core/imessage/reader.py` | Now uses `get_messages(..., is_from_me=True)` which filters in SQL |
+| Contact cache reloads from disk | `core/imessage/reader.py` | Cache is instance variable, persists for reader lifetime |
+| Stop words defined in 2 places | `store.py`, `contact_profiler.py` | Created `core/utils/text.py` with shared `STOP_WORDS` |
+| Magic numbers without constants | `reply_generator.py` | Added constants: `TEMPERATURE_SCALE`, `MAX_REPLY_TOKENS`, `TEMPLATE_CONFIDENCE`, `PAST_REPLY_CONFIDENCE` |
+| Inconsistent error handling in routes | `api/routes/settings.py` | Moved `HTTPException` import to top of file |
+| No type hints on `messages` param | `store.py:369` | Added `MessageDict` TypedDict in `core/utils/text.py` |
 
-### High Priority
+### Deferred / Won't Fix
 
-| Issue | File(s) | Impact | Suggested Fix |
-|-------|---------|--------|---------------|
-| Silent exception catching masks errors | `reply_generator.py:22-49` | Bugs hidden | Only catch `ImportError`, log unexpected errors at warning level |
-| Dead code in `get_reply_strategy()` | `context_analyzer.py:123-194` | Complexity | Remove unused `reply_types` strategy - values aren't used in generation |
-| Thread-safe singleton race condition | `store.py:1064-1073`, `loader.py`, `contact_profiler.py` | Concurrency bugs | Use `functools.lru_cache` or proper singleton decorator |
-
-### Medium Priority
-
-| Issue | File(s) | Impact | Suggested Fix |
-|-------|---------|--------|---------------|
-| ReplyGenerator has 4 separate state caches | `reply_generator.py:95-104` | Hard to maintain | Consolidate into single `ChatState` dataclass |
-| Unused ConversationContext fields | `context_analyzer.py:38-51` | Wasted CPU cycles | Remove `relationship`, `mood`, `summary` if not used in generation |
-| `_get_coherent_messages` is complex | `reply_generator.py:595-649` | Hard to test | Split into `_get_group_chat_context()` and `_get_1on1_context()` |
-| Duplicate style instruction builders | `reply_generator.py`, `StyleAnalyzer` | Code duplication | Unify into single `build_style_instructions()` |
-| Inefficient `get_user_messages` query | `core/imessage/reader.py:655-669` | Performance | Filter `is_from_me=1` in SQL instead of Python |
-| Contact cache reloads from disk | `core/imessage/reader.py:319-346` | Performance | Ensure cache persists for reader lifetime |
-
-### Low Priority
-
-| Issue | File(s) | Impact | Suggested Fix |
-|-------|---------|--------|---------------|
-| Stop words defined in 2 places | `store.py:851-856`, `contact_profiler.py` | Minor duplication | Move to shared `core/utils/text.py` |
-| Magic numbers without constants | `reply_generator.py:120,356`, `matcher.py:26` | Readability | Define as class constants with descriptive names |
-| Inconsistent error handling in routes | `api/routes/*.py` | Code inconsistency | Standardize on `with` context managers |
-| No type hints on `messages` param | `store.py:329` | Type safety | Add `TypedDict` for message structure |
-
-### Architectural Notes
-
-**Lazy Import Pattern** (`reply_generator.py:22-49`):
-```python
-def _get_template_matcher():
-    try:
-        from core.templates import get_template_matcher
-        return get_template_matcher(preload=True)
-    except Exception as e:  # Too broad!
-        logger.debug(f"Template matcher not available: {e}")
-        return None
-```
-This catches ALL exceptions silently. If there's a real bug (e.g., syntax error in templates module), it's hidden. Better:
-```python
-def _get_template_matcher():
-    try:
-        from core.templates import get_template_matcher
-        return get_template_matcher(preload=True)
-    except ImportError:
-        logger.debug("Template matcher not installed")
-        return None
-    except Exception as e:
-        logger.warning(f"Template matcher failed unexpectedly: {e}")
-        return None
-```
-
-**Singleton Pattern** (multiple files):
-Current double-check locking has race conditions. Better to use:
-```python
-from functools import lru_cache
-
-@lru_cache(maxsize=1)
-def get_embedding_store() -> EmbeddingStore:
-    return EmbeddingStore()
-```
+| Issue | File(s) | Decision |
+|-------|---------|----------|
+| ConversationContext fields (`relationship`, `mood`, `summary`) | `context_analyzer.py:38-51` | **Keeping** - may be used for future features |
+| `_get_coherent_messages` is complex | `reply_generator.py` | **Deferred** - may refactor or delete later |
 
 ---
 

@@ -12,13 +12,16 @@ import re
 import sqlite3
 import time
 from collections import Counter
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 
-from .store import get_embedding_store, SimilarMessage
+from core.utils import STOP_WORDS
+
+from .store import SimilarMessage, get_embedding_store
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +48,23 @@ class ProfileCache:
 
     def _init_schema(self) -> None:
         with self._get_connection() as conn:
+            # Check if old schema exists (without include_topics)
+            cursor = conn.execute("PRAGMA table_info(profile_cache)")
+            columns = [row[1] for row in cursor.fetchall()]
+
+            if columns and "include_topics" not in columns:
+                # Old schema - drop and recreate
+                logger.info("Migrating profile_cache to new schema")
+                conn.execute("DROP TABLE IF EXISTS profile_cache")
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS profile_cache (
-                    chat_id TEXT PRIMARY KEY,
+                    chat_id TEXT NOT NULL,
+                    include_topics INTEGER NOT NULL DEFAULT 0,
                     profile_json TEXT NOT NULL,
                     computed_at INTEGER NOT NULL,
-                    message_count INTEGER NOT NULL
+                    message_count INTEGER NOT NULL,
+                    PRIMARY KEY (chat_id, include_topics)
                 )
             """)
             conn.commit()
@@ -59,22 +73,29 @@ class ProfileCache:
         self,
         chat_id: str,
         current_message_count: int,
-        max_age_hours: int = 24,
-    ) -> "ContactProfile | None":
+        include_topics: bool = False,
+        max_age_hours: int | None = None,
+    ) -> ContactProfile | None:
         """Get cached profile if still valid.
 
         Args:
             chat_id: Conversation ID
             current_message_count: Current message count for this chat
-            max_age_hours: Max age before invalidation
+            include_topics: Whether to get full profile (with topics) or style-only
+            max_age_hours: Max age before invalidation (default: 24h for style, 6h for topics)
 
         Returns:
             Cached ContactProfile or None if cache miss/stale
         """
+        # Default TTL: shorter for full profiles since topics may change
+        if max_age_hours is None:
+            max_age_hours = 6 if include_topics else 24
+
         with self._get_connection() as conn:
             row = conn.execute(
-                "SELECT profile_json, computed_at, message_count FROM profile_cache WHERE chat_id = ?",
-                (chat_id,),
+                """SELECT profile_json, computed_at, message_count
+                FROM profile_cache WHERE chat_id = ? AND include_topics = ?""",
+                (chat_id, 1 if include_topics else 0),
             ).fetchone()
 
         if not row:
@@ -88,8 +109,10 @@ class ProfileCache:
 
         # Check message count changed
         if row["message_count"] != current_message_count:
+            old_count = row["message_count"]
             logger.debug(
-                f"Profile cache invalid for {chat_id} (count: {row['message_count']} -> {current_message_count})"
+                f"Profile cache invalid for {chat_id} "
+                f"(count: {old_count} -> {current_message_count})"
             )
             return None
 
@@ -97,19 +120,26 @@ class ProfileCache:
         try:
             data = json.loads(row["profile_json"])
             profile = _profile_from_dict(data)
-            logger.debug(f"Profile cache hit for {chat_id}")
+            logger.debug(f"Profile cache hit for {chat_id} (topics={include_topics})")
             return profile
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning(f"Failed to deserialize cached profile: {e}")
             return None
 
-    def set(self, chat_id: str, profile: "ContactProfile", message_count: int) -> None:
+    def set(
+        self,
+        chat_id: str,
+        profile: ContactProfile,
+        message_count: int,
+        include_topics: bool = False,
+    ) -> None:
         """Store profile in cache.
 
         Args:
             chat_id: Conversation ID
             profile: Profile to cache
             message_count: Current message count (for invalidation)
+            include_topics: Whether this is a full profile (with topics) or style-only
         """
         # Serialize profile (convert datetimes to timestamps)
         data = _profile_to_dict(profile)
@@ -117,14 +147,13 @@ class ProfileCache:
 
         with self._get_connection() as conn:
             conn.execute(
-                """
-                INSERT OR REPLACE INTO profile_cache (chat_id, profile_json, computed_at, message_count)
-                VALUES (?, ?, ?, ?)
-                """,
-                (chat_id, profile_json, int(time.time()), message_count),
+                """INSERT OR REPLACE INTO profile_cache
+                (chat_id, include_topics, profile_json, computed_at, message_count)
+                VALUES (?, ?, ?, ?, ?)""",
+                (chat_id, 1 if include_topics else 0, profile_json, int(time.time()), message_count),
             )
             conn.commit()
-        logger.debug(f"Cached profile for {chat_id} ({message_count} messages)")
+        logger.debug(f"Cached profile for {chat_id} ({message_count} messages, topics={include_topics})")
 
     def invalidate(self, chat_id: str) -> None:
         """Remove a profile from cache."""
@@ -139,7 +168,7 @@ class ProfileCache:
             conn.commit()
 
 
-def _profile_to_dict(profile: "ContactProfile") -> dict:
+def _profile_to_dict(profile: ContactProfile) -> dict:
     """Convert ContactProfile to JSON-serializable dict."""
     data = asdict(profile)
     # Convert datetime fields to timestamps
@@ -150,7 +179,7 @@ def _profile_to_dict(profile: "ContactProfile") -> dict:
     return data
 
 
-def _profile_from_dict(data: dict) -> "ContactProfile":
+def _profile_from_dict(data: dict) -> ContactProfile:
     """Reconstruct ContactProfile from dict."""
     # Convert timestamps back to datetimes
     if data.get("last_message_date"):
@@ -163,16 +192,11 @@ def _profile_from_dict(data: dict) -> "ContactProfile":
     return ContactProfile(**data)
 
 
-# Singleton cache instance
-_profile_cache: ProfileCache | None = None
-
-
+# Singleton cache instance using lru_cache for thread safety
+@lru_cache(maxsize=1)
 def get_profile_cache() -> ProfileCache:
-    """Get singleton profile cache."""
-    global _profile_cache
-    if _profile_cache is None:
-        _profile_cache = ProfileCache()
-    return _profile_cache
+    """Get singleton profile cache (thread-safe via lru_cache)."""
+    return ProfileCache()
 
 
 @dataclass
@@ -224,7 +248,13 @@ class ContactProfile:
     your_common_phrases: list[str] = field(default_factory=list)
 
     # Summary
-    summary: str = ""  # Human-readable summary
+    summary: str = ""  # Human-readable summary (auto-generated from profile data)
+
+    # LLM-generated relationship description
+    relationship_summary: str = ""  # Natural language description of this relationship
+    # Example: "You and Sarah have a playful, close friendship. You often tease each other
+    # and share memes. Your conversations are casual and brief, with lots of 'lol' and emojis.
+    # You frequently make plans to hang out and discuss work stress."
 
 
 class ContactProfiler:
@@ -276,10 +306,10 @@ class ContactProfiler:
         Returns:
             ContactProfile with analysis results
         """
-        # Get all messages for this conversation from embedding store
-        messages = self._get_conversation_messages(chat_id)
+        # Get basic stats via SQL (avoids loading all messages for counts/averages)
+        stats = self._get_basic_stats(chat_id)
 
-        if not messages:
+        if not stats:
             return ContactProfile(
                 chat_id=chat_id,
                 display_name=display_name,
@@ -296,21 +326,23 @@ class ContactProfiler:
                 is_playful=False,
             )
 
-        # Separate your messages and theirs
-        your_messages = [m for m in messages if m.is_from_me]
-        their_messages = [m for m in messages if not m.is_from_me]
+        # Get display name from stats if not provided
+        if not display_name:
+            display_name = stats["display_name"]
 
-        # Get display name from messages if not provided
-        if not display_name and their_messages:
-            display_name = their_messages[0].sender_name or their_messages[0].sender
+        # Now load messages for text analysis (pattern detection, phrases, topics)
+        messages = self._get_conversation_messages(chat_id)
 
-        # Analyze patterns
-        relationship_type, rel_confidence = self._infer_relationship(messages)
-        tone = self._analyze_tone(messages)
-        active_hours = self._get_active_hours(messages)
+        # Analyze all patterns in a single pass
+        analysis = self._analyze_all_patterns(messages)
+        relationship_type = analysis["relationship_type"]
+        rel_confidence = analysis["relationship_confidence"]
+        tone = analysis["tone"]
+        active_hours = analysis["active_hours"]
 
-        your_texts = [m.text for m in your_messages if m.text]
-        their_texts = [m.text for m in their_messages if m.text]
+        # Separate texts for phrase extraction
+        your_texts = [m.text for m in messages if m.is_from_me and m.text]
+        their_texts = [m.text for m in messages if not m.is_from_me and m.text]
 
         # Extract recent conversation topics (single LLM call, ~1s latency)
         # Skip for style-only profile to speed up reply generation
@@ -321,27 +353,74 @@ class ContactProfiler:
             display_name=display_name,
             relationship_type=relationship_type,
             relationship_confidence=rel_confidence,
-            total_messages=len(messages),
-            you_sent=len(your_messages),
-            they_sent=len(their_messages),
-            avg_your_length=np.mean([len(t) for t in your_texts]) if your_texts else 0.0,
-            avg_their_length=np.mean([len(t) for t in their_texts]) if their_texts else 0.0,
+            total_messages=stats["total"],
+            you_sent=stats["you_sent"],
+            they_sent=stats["they_sent"],
+            avg_your_length=stats["avg_your_length"],
+            avg_their_length=stats["avg_their_length"],
             tone=tone,
-            uses_emoji=self._check_emoji_usage(messages),
-            uses_slang=self._check_slang_usage(messages),
-            is_playful=self._check_playfulness(messages),
+            uses_emoji=analysis["uses_emoji"],
+            uses_slang=analysis["uses_slang"],
+            is_playful=analysis["is_playful"],
             topics=topics,
             most_active_hours=active_hours,
-            last_message_date=max(m.timestamp for m in messages) if messages else None,
-            first_message_date=min(m.timestamp for m in messages) if messages else None,
-            their_common_phrases=[],  # TODO: extract from clusters
-            your_common_phrases=[],   # TODO: extract from clusters
+            last_message_date=datetime.fromtimestamp(stats["last_timestamp"]) if stats["last_timestamp"] else None,
+            first_message_date=datetime.fromtimestamp(stats["first_timestamp"]) if stats["first_timestamp"] else None,
+            their_common_phrases=self._extract_common_phrases(their_texts),
+            your_common_phrases=self._extract_common_phrases(your_texts)
         )
 
-        # Generate summary
+        # Generate summary (auto-generated from profile data)
         profile.summary = self._generate_summary(profile)
 
+        # Generate LLM relationship summary (only if include_topics is True - same cost tier)
+        if include_topics and stats["total"] >= 20:
+            try:
+                profile.relationship_summary = self._generate_relationship_summary(
+                    messages, profile, display_name
+                )
+            except Exception as e:
+                logger.warning(f"Failed to generate relationship summary: {e}")
+
         return profile
+
+    def _get_basic_stats(self, chat_id: str) -> dict | None:
+        """Get basic profile stats via SQL aggregations (no message loading).
+
+        Returns dict with: total, you_sent, they_sent, avg_your_length, avg_their_length,
+        first_timestamp, last_timestamp, display_name
+        """
+        with self.store._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN is_from_me = 1 THEN 1 ELSE 0 END) as you_sent,
+                    SUM(CASE WHEN is_from_me = 0 THEN 1 ELSE 0 END) as they_sent,
+                    AVG(CASE WHEN is_from_me = 1 THEN LENGTH(text_preview) END) as avg_your_length,
+                    AVG(CASE WHEN is_from_me = 0 THEN LENGTH(text_preview) END) as avg_their_length,
+                    MIN(timestamp) as first_timestamp,
+                    MAX(timestamp) as last_timestamp,
+                    MIN(CASE WHEN is_from_me = 0 THEN COALESCE(sender_name, sender) END) as display_name
+                FROM message_embeddings
+                WHERE chat_id = ?
+                """,
+                (chat_id,),
+            ).fetchone()
+
+        if not row or row["total"] == 0:
+            return None
+
+        return {
+            "total": row["total"],
+            "you_sent": row["you_sent"] or 0,
+            "they_sent": row["they_sent"] or 0,
+            "avg_your_length": row["avg_your_length"] or 0.0,
+            "avg_their_length": row["avg_their_length"] or 0.0,
+            "first_timestamp": row["first_timestamp"],
+            "last_timestamp": row["last_timestamp"],
+            "display_name": row["display_name"],
+        }
 
     def _get_conversation_messages(self, chat_id: str) -> list[SimilarMessage]:
         """Get all messages for a conversation from the store."""
@@ -371,10 +450,148 @@ class ContactProfiler:
             for row in rows
         ]
 
+    def _analyze_all_patterns(self, messages: list[SimilarMessage]) -> dict:
+        """Analyze relationship, tone, and activity patterns in a single pass.
+
+        Combines _infer_relationship(), _analyze_tone(), and _get_active_hours()
+        to avoid iterating over messages 3+ times.
+
+        Returns:
+            Dict with keys: relationship_type, relationship_confidence, tone,
+            active_hours, uses_emoji, uses_slang, is_playful
+        """
+        # Counters for single-pass aggregation
+        relationship_scores = {
+            "close_friend": 0.0,
+            "family": 0.0,
+            "coworker": 0.0,
+            "acquaintance": 0.0,
+            "service": 0.0,
+        }
+        casual_count = 0
+        playful_count = 0
+        formal_count = 0
+        emoji_count = 0
+        slang_count = 0
+        total_length = 0
+        text_count = 0
+        hour_counts: Counter = Counter()
+
+        # Compile patterns once
+        emoji_pattern = re.compile(
+            "["
+            "\U0001F600-\U0001F64F"
+            "\U0001F300-\U0001F5FF"
+            "\U0001F680-\U0001F6FF"
+            "\U0001F1E0-\U0001F1FF"
+            "]+",
+            flags=re.UNICODE,
+        )
+        formal_pattern = re.compile(r'\b(please|thank you|regards|sincerely)\b')
+
+        # Single pass over all messages
+        for m in messages:
+            # Track active hours
+            hour_counts[m.timestamp.hour] += 1
+
+            if not m.text:
+                continue
+
+            text = m.text
+            text_lower = text.lower()
+            text_count += 1
+            total_length += len(text)
+
+            # Check emoji
+            if emoji_pattern.search(text):
+                emoji_count += 1
+
+            # Check relationship indicators (in combined text check)
+            for word in self.CLOSE_INDICATORS:
+                if word in text_lower:
+                    relationship_scores["close_friend"] += 2
+
+            for word in self.FAMILY_INDICATORS:
+                if word in text_lower:
+                    relationship_scores["family"] += 3
+
+            for word in self.WORK_INDICATORS:
+                if word in text_lower:
+                    relationship_scores["coworker"] += 1.5
+
+            # Check playful indicators
+            for p in self.PLAYFUL_INDICATORS:
+                if p in text_lower:
+                    playful_count += 1
+
+            # Check slang (need word boundaries)
+            words = text_lower.split()
+            for w in words:
+                if w in self.SLANG_WORDS:
+                    slang_count += 1
+                    casual_count += 1
+
+            # Check formal language
+            formal_count += len(formal_pattern.findall(text_lower))
+
+        total = len(messages)
+
+        # Compute relationship
+        if total < 20:
+            relationship_scores["acquaintance"] += 2
+            relationship_scores["service"] += 1
+        elif total > 500:
+            relationship_scores["close_friend"] += 3
+            relationship_scores["family"] += 2
+
+        # Playfulness suggests close relationship
+        is_playful = playful_count > total * 0.05
+        if is_playful:
+            relationship_scores["close_friend"] += 2
+
+        max_type = max(relationship_scores, key=relationship_scores.get)
+        max_score = relationship_scores[max_type]
+        total_score = sum(relationship_scores.values()) or 1
+        rel_confidence = min(max_score / total_score, 0.95)
+
+        if max_score < 2:
+            relationship_type = "acquaintance"
+            rel_confidence = 0.3
+        else:
+            relationship_type = max_type
+
+        # Compute tone
+        avg_length = total_length / text_count if text_count > 0 else 0
+
+        if playful_count > 5:
+            tone = "playful"
+        elif casual_count > 10 and avg_length < 50:
+            tone = "casual"
+        elif formal_count > 3 or avg_length > 100:
+            tone = "formal"
+        else:
+            tone = "casual"
+
+        # Get top 3 active hours
+        active_hours = [hour for hour, _ in hour_counts.most_common(3)]
+
+        return {
+            "relationship_type": relationship_type,
+            "relationship_confidence": rel_confidence,
+            "tone": tone,
+            "active_hours": active_hours,
+            "uses_emoji": emoji_count > total * 0.1,
+            "uses_slang": slang_count > total * 0.15,
+            "is_playful": is_playful,
+        }
+
     def _infer_relationship(
         self, messages: list[SimilarMessage]
     ) -> tuple[str, float]:
-        """Infer the type of relationship from message content."""
+        """Infer the type of relationship from message content.
+
+        Note: For bulk analysis, prefer _analyze_all_patterns() which does single pass.
+        """
         all_text = " ".join(m.text.lower() for m in messages if m.text)
 
         scores = {
@@ -385,7 +602,6 @@ class ContactProfiler:
             "service": 0.0,
         }
 
-        # Check for relationship indicators
         for word in self.CLOSE_INDICATORS:
             if word in all_text:
                 scores["close_friend"] += 2
@@ -398,7 +614,6 @@ class ContactProfiler:
             if word in all_text:
                 scores["coworker"] += 1.5
 
-        # Message frequency and length patterns
         total = len(messages)
         if total < 20:
             scores["acquaintance"] += 2
@@ -407,32 +622,30 @@ class ContactProfiler:
             scores["close_friend"] += 3
             scores["family"] += 2
 
-        # Playfulness suggests close relationship
         if self._check_playfulness(messages):
             scores["close_friend"] += 2
 
-        # Find highest score
         max_type = max(scores, key=scores.get)
         max_score = scores[max_type]
         total_score = sum(scores.values()) or 1
         confidence = min(max_score / total_score, 0.95)
 
-        # Default to acquaintance if no strong signals
         if max_score < 2:
             return "acquaintance", 0.3
 
         return max_type, confidence
 
     def _analyze_tone(self, messages: list[SimilarMessage]) -> str:
-        """Analyze the overall tone of the conversation."""
+        """Analyze the overall tone of the conversation.
+
+        Note: For bulk analysis, prefer _analyze_all_patterns() which does single pass.
+        """
         all_text = " ".join(m.text.lower() for m in messages if m.text)
 
-        # Count indicators
         casual_count = sum(1 for word in self.SLANG_WORDS if word in all_text.split())
         playful_count = sum(1 for word in self.PLAYFUL_INDICATORS if word in all_text)
         formal_count = len(re.findall(r'\b(please|thank you|regards|sincerely)\b', all_text))
 
-        # Calculate average message length
         avg_length = np.mean([len(m.text) for m in messages if m.text])
 
         if playful_count > 5:
@@ -442,37 +655,7 @@ class ContactProfiler:
         elif formal_count > 3 or avg_length > 100:
             return "formal"
         else:
-            return "casual"  # Default
-
-    # Comprehensive stop words to filter out
-    STOP_WORDS = {
-        # Common words
-        "that", "this", "with", "have", "will", "your", "from", "they",
-        "been", "were", "being", "their", "would", "could", "should",
-        "about", "which", "there", "what", "when", "make", "like",
-        "just", "know", "take", "come", "think", "good", "some",
-        "than", "then", "very", "after", "before", "going", "here",
-        "also", "want", "need", "said", "says", "okay", "really",
-        "thing", "things", "stuff", "right", "doing", "getting",
-        "want", "wanted", "wants", "liked", "like", "likes",
-        "gonna", "gotta", "wanna", "cant", "dont", "didnt", "doesnt",
-        "thats", "youre", "theyre", "were", "its", "heres", "theres",
-        "much", "many", "more", "most", "other", "another", "same",
-        "into", "over", "under", "through", "back", "down", "still",
-        "even", "well", "only", "because", "though", "actually",
-        "probably", "maybe", "yeah", "yea", "yes", "sure", "thanks",
-        "thank", "sorry", "please", "okay", "alright", "sounds",
-        "something", "anything", "everything", "nothing", "someone",
-        "anyone", "everyone", "people", "time", "today", "tomorrow",
-        "tonight", "morning", "night", "week", "month", "year",
-        # iMessage reaction artifacts - these show up as "Loved an image" etc.
-        "loved", "liked", "emphasized", "laughed", "questioned", "disliked",
-        "image", "message", "attachment",
-        # Common verbs/fillers
-        "think", "thought", "getting", "coming", "going", "looking",
-        "making", "doing", "having", "being", "saying", "trying",
-        "waiting", "working", "sending", "checking", "letting",
-    }
+            return "casual"
 
     def _extract_topics_via_clustering(self, chat_id: str) -> list[TopicCluster]:
         """Extract topics by clustering message embeddings.
@@ -498,7 +681,8 @@ class ContactProfiler:
             text = msg.text.lower() if msg.text else ""
             if len(text) < 10:
                 continue
-            if any(r in text for r in ["loved an", "liked an", "emphasized", "laughed at", "questioned"]):
+            reaction_prefixes = ["loved an", "liked an", "emphasized", "laughed at", "questioned"]
+            if any(r in text for r in reaction_prefixes):
                 continue
             valid_indices.append(i)
 
@@ -523,7 +707,7 @@ class ContactProfiler:
         # For each cluster, find representative messages and extract topic
         topics = []
         for cluster_id in range(n_clusters):
-            cluster_indices = [i for i, l in enumerate(labels) if l == cluster_id]
+            cluster_indices = [i for i, label in enumerate(labels) if label == cluster_id]
             if len(cluster_indices) < 5:
                 continue
 
@@ -583,12 +767,12 @@ class ContactProfiler:
             loader = get_model_loader()
             sample_str = "\n".join(f"- {t}" for t in sample_texts[:20])
 
-            prompt = f"""List 3 main topics from these recent messages. Give only topic names (2-4 words each), one per line.
-
-Messages:
-{sample_str}
-
-Topics (one per line, no numbers or bullets):"""
+            prompt = (
+                "List 3 main topics from these recent messages. "
+                "Give only topic names (2-4 words each), one per line.\n\n"
+                f"Messages:\n{sample_str}\n\n"
+                "Topics (one per line, no numbers or bullets):"
+            )
 
             result = loader.generate(prompt, max_tokens=50, temperature=0.1)
             lines = result.text.strip().split("\n")
@@ -634,12 +818,12 @@ Topics (one per line, no numbers or bullets):"""
             loader = get_model_loader()
             sample_str = "\n".join(f"- {t}" for t in sample_texts[:10])
 
-            prompt = f"""Given these messages from a conversation, provide a 2-4 word topic label describing what they're about.
-
-Messages:
-{sample_str}
-
-Topic label (2-4 words only, no quotes, no explanation):"""
+            prompt = (
+                "Given these messages from a conversation, "
+                "provide a 2-4 word topic label describing what they're about.\n\n"
+                f"Messages:\n{sample_str}\n\n"
+                "Topic label (2-4 words only, no quotes, no explanation):"
+            )
 
             result = loader.generate(prompt, max_tokens=20, temperature=0.1)
             topic = result.text.strip().strip('"').strip("'")
@@ -656,7 +840,7 @@ Topic label (2-4 words only, no quotes, no explanation):"""
         """Fallback topic extraction using word frequency if LLM fails."""
         all_text = " ".join(m.text.lower() for m in messages if m.text)
         words = re.findall(r'\b[a-zA-Z]{4,}\b', all_text)
-        filtered = [w for w in words if w not in self.STOP_WORDS]
+        filtered = [w for w in words if w not in STOP_WORDS]
 
         if not filtered:
             return None
@@ -670,13 +854,18 @@ Topic label (2-4 words only, no quotes, no explanation):"""
         return top_word.title()
 
     def _get_active_hours(self, messages: list[SimilarMessage]) -> list[int]:
-        """Get the most active hours for this conversation."""
+        """Get the most active hours for this conversation.
+
+        Note: For bulk analysis, prefer _analyze_all_patterns() which does single pass.
+        """
         hour_counts = Counter(m.timestamp.hour for m in messages)
-        # Return top 3 most active hours
         return [hour for hour, _ in hour_counts.most_common(3)]
 
     def _check_emoji_usage(self, messages: list[SimilarMessage]) -> bool:
-        """Check if emojis are commonly used."""
+        """Check if emojis are commonly used.
+
+        Note: For bulk analysis, prefer _analyze_all_patterns() which does single pass.
+        """
         emoji_pattern = re.compile(
             "["
             "\U0001F600-\U0001F64F"
@@ -690,7 +879,10 @@ Topic label (2-4 words only, no quotes, no explanation):"""
         return emoji_count > len(messages) * 0.1
 
     def _check_slang_usage(self, messages: list[SimilarMessage]) -> bool:
-        """Check if slang/casual language is commonly used."""
+        """Check if slang/casual language is commonly used.
+
+        Note: For bulk analysis, prefer _analyze_all_patterns() which does single pass.
+        """
         slang_count = 0
         for m in messages:
             if m.text:
@@ -699,7 +891,10 @@ Topic label (2-4 words only, no quotes, no explanation):"""
         return slang_count > len(messages) * 0.15
 
     def _check_playfulness(self, messages: list[SimilarMessage]) -> bool:
-        """Check if the conversation has playful/teasing tone."""
+        """Check if the conversation has playful/teasing tone.
+
+        Note: For bulk analysis, prefer _analyze_all_patterns() which does single pass.
+        """
         playful_count = 0
         for m in messages:
             if m.text:
@@ -716,32 +911,57 @@ Topic label (2-4 words only, no quotes, no explanation):"""
         "my", "your", "our", "his", "her", "its", "their",
     }
 
-    def _extract_phrases(self, texts: list[str], top_n: int = 5) -> list[str]:
-        """Extract commonly used meaningful phrases."""
-        # Look for 2-3 word phrases
-        phrases = []
+    def _extract_common_phrases(
+        self, texts: list[str], min_count: int = 3, top_n: int = 5
+    ) -> list[str]:
+        """Extract commonly used phrases (2-3 words) from messages.
+
+        Ported from v1 relationships.py:634-658.
+
+        Args:
+            texts: List of message texts to analyze
+            min_count: Minimum occurrences for a phrase to be included
+            top_n: Maximum number of phrases to return
+
+        Returns:
+            List of commonly used phrases, sorted by frequency
+        """
+        phrase_counter: Counter[str] = Counter()
+
         for text in texts:
-            if not text:
+            if not text or len(text) < 5:
                 continue
-            words = text.lower().split()
+            text_lower = text.lower()
+            # Match words including contractions (don't, that's, y'all)
+            words = re.findall(r"\b[\w']+\b", text_lower)
 
-            # Bigrams and trigrams
+            # Extract 2-word phrases
             for i in range(len(words) - 1):
-                phrase_words = words[i:i+2]
-
-                # Skip if first or last word is a stop word
-                if phrase_words[0] in self.STOP_PHRASE_WORDS:
+                # Skip if starts/ends with stop words
+                if words[i] in self.STOP_PHRASE_WORDS:
                     continue
-                if phrase_words[-1] in self.STOP_PHRASE_WORDS:
+                if words[i + 1] in self.STOP_PHRASE_WORDS:
                     continue
+                phrase = f"{words[i]} {words[i + 1]}"
+                if len(phrase) >= 5:
+                    phrase_counter[phrase] += 1
 
-                phrase = " ".join(phrase_words)
-                if len(phrase) > 8:  # Skip short phrases
-                    phrases.append(phrase)
+            # Extract 3-word phrases
+            for i in range(len(words) - 2):
+                if words[i] in self.STOP_PHRASE_WORDS:
+                    continue
+                if words[i + 2] in self.STOP_PHRASE_WORDS:
+                    continue
+                phrase = f"{words[i]} {words[i + 1]} {words[i + 2]}"
+                phrase_counter[phrase] += 1
 
-        # Get most common meaningful phrases
-        phrase_counts = Counter(phrases)
-        return [phrase for phrase, count in phrase_counts.most_common(top_n) if count >= 3]
+        # Filter by min_count and return top N
+        filtered = [(p, c) for p, c in phrase_counter.items() if c >= min_count]
+        return [p for p, _ in sorted(filtered, key=lambda x: x[1], reverse=True)[:top_n]]
+
+    def _extract_phrases(self, texts: list[str], top_n: int = 5) -> list[str]:
+        """Extract commonly used meaningful phrases (legacy wrapper)."""
+        return self._extract_common_phrases(texts, min_count=3, top_n=top_n)
 
     def _generate_summary(self, profile: ContactProfile) -> str:
         """Generate a human-readable summary of the contact."""
@@ -778,6 +998,98 @@ Topic label (2-4 words only, no quotes, no explanation):"""
             parts.append(f"topics: {', '.join(topic_names)}")
 
         return ", ".join(parts) + "."
+
+    def _generate_relationship_summary(
+        self,
+        messages: list[SimilarMessage],
+        profile: ContactProfile,
+        display_name: str | None,
+    ) -> str:
+        """Generate an LLM-based natural language description of this relationship.
+
+        This provides rich context about who this person is and how you interact,
+        which can be used in prompts for more personalized replies.
+
+        Args:
+            messages: All messages in this conversation
+            profile: The computed profile with metrics
+            display_name: Contact's name
+
+        Returns:
+            Natural language description of the relationship
+        """
+        if len(messages) < 20:
+            return ""
+
+        # Sample diverse messages for context
+        # Get recent messages (last 30) and some older ones for perspective
+        sorted_msgs = sorted(messages, key=lambda m: m.timestamp, reverse=True)
+        recent = sorted_msgs[:30]
+        older = sorted_msgs[-20:] if len(sorted_msgs) > 50 else []
+
+        # Sample messages for the prompt
+        sample_msgs = []
+        for m in recent[:20]:
+            if m.text and len(m.text) > 5:
+                prefix = "You: " if m.is_from_me else "Them: "
+                sample_msgs.append(f"{prefix}{m.text[:100]}")
+        for m in older[:10]:
+            if m.text and len(m.text) > 5:
+                prefix = "You: " if m.is_from_me else "Them: "
+                sample_msgs.append(f"{prefix}{m.text[:100]}")
+
+        if len(sample_msgs) < 10:
+            return ""
+
+        # Build context from profile data
+        name = display_name or "this person"
+        rel_type = profile.relationship_type
+        tone = profile.tone
+        topics_str = ", ".join(t.name.lower() for t in profile.topics[:3]) if profile.topics else "various topics"
+
+        # Compute interaction patterns
+        you_ratio = profile.you_sent / max(profile.total_messages, 1)
+        balance = "balanced" if 0.4 <= you_ratio <= 0.6 else ("you talk more" if you_ratio > 0.6 else "they talk more")
+
+        try:
+            from core.models.loader import get_model_loader
+
+            loader = get_model_loader()
+            sample_str = "\n".join(sample_msgs[:25])
+
+            prompt = f"""Analyze this text message conversation and describe the relationship in 2-3 sentences.
+
+Contact: {name}
+Relationship type: {rel_type}
+Tone: {tone}
+Total messages: {profile.total_messages}
+Message balance: {balance}
+Common topics: {topics_str}
+{'Playful/teasing dynamic' if profile.is_playful else ''}
+{'Uses emoji frequently' if profile.uses_emoji else ''}
+
+Sample messages:
+{sample_str}
+
+Write a natural 2-3 sentence description of this relationship. Include:
+- How close/formal the relationship seems
+- What you typically talk about
+- Any notable communication patterns (playful, brief, detailed, etc.)
+
+Description:"""
+
+            result = loader.generate(prompt, max_tokens=150, temperature=0.3)
+            summary = result.text.strip()
+
+            # Basic validation - should be reasonable length and not repeat the prompt
+            if summary and 20 < len(summary) < 500 and "Description:" not in summary:
+                return summary
+
+            return ""
+
+        except Exception as e:
+            logger.warning(f"Failed to generate relationship summary: {e}")
+            return ""
 
     def get_relationship_trajectory(self, chat_id: str) -> dict | None:
         """Track how communication style has changed over time.
@@ -846,7 +1158,9 @@ def get_contact_profile(
     """Get a contact profile for a conversation.
 
     Uses persistent cache to avoid re-computing profiles on every request.
-    Cache invalidates when message count changes or profile is > 24 hours old.
+    Cache invalidates when message count changes or profile age exceeds TTL.
+    - Style-only profiles (include_topics=False): 24h TTL
+    - Full profiles (include_topics=True): 6h TTL
 
     Args:
         chat_id: Conversation ID
@@ -865,19 +1179,19 @@ def get_contact_profile(
         ).fetchone()
         current_count = row["count"] if row else 0
 
-    # Try cache first (only for style-only profiles to avoid stale topics)
-    if use_cache and not include_topics:
+    # Try cache first (both style-only and full profiles are cached)
+    if use_cache:
         cache = get_profile_cache()
-        cached = cache.get(chat_id, current_count)
+        cached = cache.get(chat_id, current_count, include_topics=include_topics)
         if cached is not None:
             return cached
 
     # Build fresh profile
     profile = profiler.build_profile(chat_id, display_name, include_topics=include_topics)
 
-    # Cache the result (only style-only profiles - topics change frequently)
-    if use_cache and not include_topics and profile.total_messages > 0:
+    # Cache the result
+    if use_cache and profile.total_messages > 0:
         cache = get_profile_cache()
-        cache.set(chat_id, profile, current_count)
+        cache.set(chat_id, profile, current_count, include_topics=include_topics)
 
     return profile

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 
-from ..schemas import HealthResponse, EmbeddingCacheStats
+from ..schemas import EmbeddingCacheStats, HealthResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -20,16 +23,16 @@ async def health_check() -> HealthResponse:
     try:
         reader = MessageReader()
         imessage_ok = reader.check_access()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"iMessage health check failed: {e}")
 
     # Check model status
     model_loaded = False
     try:
         loader = get_model_loader()
         model_loaded = loader.is_loaded
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Model loader health check failed: {e}")
 
     return HealthResponse(
         status="ok",
@@ -54,10 +57,11 @@ async def cache_stats() -> EmbeddingCacheStats:
             hit_rate=stats.hit_rate,
         )
     except Exception as e:
+        logger.debug(f"Cache stats check failed: {e}")
         return EmbeddingCacheStats(
             total_entries=0,
             hits=0,
             misses=0,
             hit_rate=0.0,
-            error=str(e),
+            error="Cache unavailable",
         )

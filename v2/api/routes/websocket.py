@@ -218,8 +218,6 @@ async def _handle_generate_replies(
                     "confidence": reply.confidence,
                 },
             )
-            # Small delay between replies for visual effect
-            await asyncio.sleep(0.1)
 
         # Send completion with full debug info
         past_replies_data = [

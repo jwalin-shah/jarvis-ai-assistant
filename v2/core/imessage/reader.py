@@ -433,54 +433,47 @@ class MessageReader:
 
         limit_clause = "LIMIT ?" if limit is not None else ""
 
+        # Optimized query using CTEs to avoid N+1 correlated subqueries
+        # - chat_stats: single pass for message_count per chat
+        # - last_messages: single pass with ROW_NUMBER to get last message per chat
         query = f"""
+            WITH chat_stats AS (
+                SELECT
+                    chat_id,
+                    COUNT(*) as message_count
+                FROM chat_message_join
+                GROUP BY chat_id
+            ),
+            last_messages AS (
+                SELECT
+                    cmj.chat_id,
+                    m.text,
+                    m.attributedBody,
+                    m.is_from_me,
+                    m.date,
+                    ROW_NUMBER() OVER (PARTITION BY cmj.chat_id ORDER BY m.date DESC) as rn
+                FROM chat_message_join cmj
+                JOIN message m ON cmj.message_id = m.ROWID
+            )
             SELECT
-                chat.guid as chat_id,
-                chat.display_name,
+                c.guid as chat_id,
+                c.display_name,
                 (
-                    SELECT GROUP_CONCAT(handle.id, ', ')
-                    FROM chat_handle_join
-                    JOIN handle ON chat_handle_join.handle_id = handle.ROWID
-                    WHERE chat_handle_join.chat_id = chat.ROWID
+                    SELECT GROUP_CONCAT(h.id, ', ')
+                    FROM chat_handle_join chj
+                    JOIN handle h ON chj.handle_id = h.ROWID
+                    WHERE chj.chat_id = c.ROWID
                 ) as participants,
-                (
-                    SELECT COUNT(*)
-                    FROM chat_message_join
-                    WHERE chat_message_join.chat_id = chat.ROWID
-                ) as message_count,
-                (
-                    SELECT MAX(message.date)
-                    FROM chat_message_join
-                    JOIN message ON chat_message_join.message_id = message.ROWID
-                    WHERE chat_message_join.chat_id = chat.ROWID
-                ) as last_message_date,
-                (
-                    SELECT message.text
-                    FROM chat_message_join
-                    JOIN message ON chat_message_join.message_id = message.ROWID
-                    WHERE chat_message_join.chat_id = chat.ROWID
-                    ORDER BY message.date DESC
-                    LIMIT 1
-                ) as last_message_text,
-                (
-                    SELECT message.attributedBody
-                    FROM chat_message_join
-                    JOIN message ON chat_message_join.message_id = message.ROWID
-                    WHERE chat_message_join.chat_id = chat.ROWID
-                    ORDER BY message.date DESC
-                    LIMIT 1
-                ) as last_message_attributed_body,
-                (
-                    SELECT message.is_from_me
-                    FROM chat_message_join
-                    JOIN message ON chat_message_join.message_id = message.ROWID
-                    WHERE chat_message_join.chat_id = chat.ROWID
-                    ORDER BY message.date DESC
-                    LIMIT 1
-                ) as last_message_is_from_me
-            FROM chat
-            WHERE message_count > 0
-            ORDER BY last_message_date DESC
+                cs.message_count,
+                lm.date as last_message_date,
+                lm.text as last_message_text,
+                lm.attributedBody as last_message_attributed_body,
+                lm.is_from_me as last_message_is_from_me
+            FROM chat c
+            JOIN chat_stats cs ON cs.chat_id = c.ROWID
+            LEFT JOIN last_messages lm ON lm.chat_id = c.ROWID AND lm.rn = 1
+            WHERE cs.message_count > 0
+            ORDER BY lm.date DESC
             {limit_clause}
         """
 
@@ -492,25 +485,27 @@ class MessageReader:
             logger.error(f"Error fetching conversations: {e}")
             return []
 
+        # Ensure contacts cache is loaded once before processing
+        if self._contacts_cache is None:
+            self._load_contacts_cache()
+
         conversations = []
         for row in rows:
             participants_str = row["participants"] or ""
             raw_participants = [p.strip() for p in participants_str.split(",") if p.strip()]
 
-            # Normalize participant identifiers
+            # Single pass: normalize and resolve contact names together
             participants = []
+            resolved_participants = []
             for p in raw_participants:
                 normalized = _normalize_phone_number(p)
                 if normalized:
                     participants.append(normalized)
+                    # Direct cache lookup (skip re-normalizing in _resolve_contact_name)
+                    name = self._contacts_cache.get(normalized) if self._contacts_cache else None
+                    resolved_participants.append(name if name else normalized)
 
             is_group = len(participants) > 1
-
-            # Resolve participant names from contacts
-            resolved_participants = []
-            for p in participants:
-                name = self._resolve_contact_name(p)
-                resolved_participants.append(name if name else p)
 
             # Get display name - from DB or build from resolved participants
             display_name = row["display_name"] or None
@@ -549,6 +544,7 @@ class MessageReader:
         chat_id: str,
         limit: int | None = 50,
         before: datetime | None = None,
+        is_from_me: bool | None = None,
     ) -> list[Message]:
         """Get messages from a conversation.
 
@@ -556,6 +552,7 @@ class MessageReader:
             chat_id: Conversation ID
             limit: Maximum number of messages (None for all)
             before: Only return messages before this datetime (for pagination)
+            is_from_me: If True, only user's messages. If False, only others'. If None, all.
 
         Returns:
             List of messages, newest first
@@ -566,13 +563,18 @@ class MessageReader:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        # Build query with optional before filter
+        # Build query with optional filters
         params: list = [chat_id]
 
         before_clause = ""
         if before is not None:
             before_clause = "AND message.date < ?"
             params.append(_datetime_to_apple_timestamp(before))
+
+        from_me_clause = ""
+        if is_from_me is not None:
+            from_me_clause = "AND message.is_from_me = ?"
+            params.append(1 if is_from_me else 0)
 
         limit_clause = ""
         if limit is not None:
@@ -594,6 +596,7 @@ class MessageReader:
             LEFT JOIN handle ON message.handle_id = handle.ROWID
             WHERE chat.guid = ?
             {before_clause}
+            {from_me_clause}
             ORDER BY message.date DESC
             {limit_clause}
         """
@@ -664,6 +667,4 @@ class MessageReader:
         Returns:
             List of user's messages, newest first
         """
-        messages = self.get_messages(chat_id, limit=limit * 2)  # Fetch more to filter
-        user_messages = [m for m in messages if m.is_from_me]
-        return user_messages[:limit]
+        return self.get_messages(chat_id, limit=limit, is_from_me=True)

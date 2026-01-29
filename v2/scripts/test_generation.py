@@ -112,12 +112,6 @@ def test_context_analyzer():
     print(f"Mood: {context.mood}")
     print(f"Needs response: {context.needs_response}")
 
-    strategy = analyzer.get_reply_strategy(context)
-    print(f"\nReply strategy:")
-    print(f"  Types: {strategy.reply_types}")
-    print(f"  Tone: {strategy.tone}")
-    print(f"  Max length: {strategy.max_length}")
-
     return True
 
 
