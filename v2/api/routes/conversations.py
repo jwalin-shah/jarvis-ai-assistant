@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger(__name__)
+
+# Configuration
+MAX_PRELOAD_CHATS = 20  # Maximum number of chat indices to preload at once
 
 from ..schemas import (
     ContactProfileResponse,
@@ -181,8 +188,8 @@ async def get_contact_profile(chat_id: str) -> ContactProfileResponse:
             your_common_phrases=profile.your_common_phrases,
             summary=profile.summary,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to build profile: {e}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to build contact profile")
 
 
 @router.post("/preload", response_model=PreloadIndicesResponse)
@@ -201,7 +208,7 @@ async def preload_indices(request: PreloadIndicesRequest) -> PreloadIndicesRespo
     to_preload = []
 
     # Check which need preloading
-    for chat_id in request.chat_ids[:20]:  # Limit to 20
+    for chat_id in request.chat_ids[:MAX_PRELOAD_CHATS]:
         if store.is_index_ready(chat_id, only_from_me=False):
             already_cached += 1
         else:
@@ -211,8 +218,8 @@ async def preload_indices(request: PreloadIndicesRequest) -> PreloadIndicesRespo
     def _preload_one(cid: str) -> None:
         try:
             store._get_or_build_faiss_index(cid, only_from_me=False)
-        except Exception:
-            pass  # Ignore errors, will retry on actual search
+        except Exception as e:
+            logger.debug(f"Index preload failed for {cid}: {e}")
 
     for chat_id in to_preload:
         thread = threading.Thread(target=_preload_one, args=(chat_id,), daemon=True)

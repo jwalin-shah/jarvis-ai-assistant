@@ -111,12 +111,14 @@ class SettingsResponse(BaseModel):
     model_id: str
     auto_suggest: bool = True
     max_replies: int = 3
+    user_name: str = "User"
 
 
 class SettingsUpdateRequest(BaseModel):
     model_id: str | None = None
     auto_suggest: bool | None = None
     max_replies: int | None = None
+    user_name: str | None = None
 
 
 # Contact Profile

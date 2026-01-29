@@ -69,5 +69,5 @@ async def search_messages(
             total=len(results),
         )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Search failed")

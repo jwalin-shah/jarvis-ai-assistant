@@ -13,6 +13,24 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
+def _escape_applescript_string(s: str) -> str:
+    """Escape a string for safe use in AppleScript double-quoted strings.
+
+    AppleScript requires escaping of:
+    - Backslash -> \\
+    - Double quote -> \"
+    - Newlines and carriage returns (convert to space to avoid script issues)
+    - Tab characters (convert to space)
+    """
+    return (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", " ")
+        .replace("\r", " ")
+        .replace("\t", " ")
+    )
+
+
 @dataclass
 class SendResult:
     """Result of sending a message."""
@@ -44,11 +62,11 @@ def send_message(
         return SendResult(success=False, error="Chat ID is required")
 
     # Escape special characters for AppleScript
-    escaped_text = text.replace("\\", "\\\\").replace('"', '\\"')
+    escaped_text = _escape_applescript_string(text)
 
     if is_group:
         # For group chats, send directly to the chat
-        escaped_chat_id = chat_id.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_chat_id = _escape_applescript_string(chat_id)
         applescript = f'''
 tell application "Messages"
     set targetChat to chat id "{escaped_chat_id}"
@@ -62,7 +80,7 @@ end tell
             parts = chat_id.split(";")
             recipient = parts[-1] if len(parts) >= 3 else chat_id
 
-        escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_recipient = _escape_applescript_string(recipient)
         applescript = f'''
 tell application "Messages"
     set targetService to 1st account whose service type = iMessage

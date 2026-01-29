@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-01-29 11:21:59",
+  "n_iterations": 3,
+  "models": {
+    "llama-3.2-3b": {
+      "reliable_tests": 7,
+      "total_tests": 8,
+      "avg_score": 0.7625,
+      "test_summaries": {
+        "structured_format": {
+          "pass_rate": 1.0,
+          "avg_score": 0.6999999999999998
+        },
+        "ask_on_invitation": {
+          "pass_rate": 1.0,
+          "avg_score": 1.0
+        },
+        "reply_on_reaction": {
+          "pass_rate": 1.0,
+          "avg_score": 0.6999999999999998
+        },
+        "brevity": {
+          "pass_rate": 1.0,
+          "avg_score": 1.0
+        },
+        "few_shot_style": {
+          "pass_rate": 1.0,
+          "avg_score": 1.0
+        },
+        "uncertainty_detection": {
+          "pass_rate": 1.0,
+          "avg_score": 0.6999999999999998
+        },
+        "diverse_options": {
+          "pass_rate": 0.0,
+          "avg_score": 0.20000000000000004
+        },
+        "intent_classification": {
+          "pass_rate": 1.0,
+          "avg_score": 0.8000000000000002
+        }
+      }
+    }
+  }
+}

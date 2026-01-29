@@ -50,16 +50,6 @@ class ConversationContext:
     summary: str
 
 
-@dataclass
-class ReplyStrategy:
-    """Strategy for generating replies."""
-
-    reply_types: list[str]
-    tone: str
-    max_length: int
-    include_question: bool
-
-
 class ContextAnalyzer:
     """Analyzes conversation context for reply generation."""
 
@@ -120,82 +110,18 @@ class ContextAnalyzer:
             summary=summary,
         )
 
-    def get_reply_strategy(self, context: ConversationContext) -> ReplyStrategy:
-        """Get reply generation strategy based on context.
-
-        Args:
-            context: Analyzed conversation context
-
-        Returns:
-            ReplyStrategy with generation parameters
-        """
-        reply_types = []
-        tone = "casual"
-        max_length = 15
-        include_question = False
-
-        match context.intent:
-            case MessageIntent.YES_NO_QUESTION:
-                reply_types = ["enthusiastic_yes", "polite_decline", "conditional_maybe"]
-
-            case MessageIntent.OPEN_QUESTION:
-                reply_types = ["direct_answer", "answer_with_question", "defer_politely"]
-
-            case MessageIntent.CHOICE_QUESTION:
-                reply_types = ["pick_first_option", "pick_second_option", "suggest_alternative"]
-
-            case MessageIntent.STATEMENT:
-                reply_types = ["acknowledge", "react_positively", "ask_followup"]
-                include_question = True
-
-            case MessageIntent.EMOTIONAL:
-                reply_types = ["supportive", "empathetic", "offer_help"]
-                tone = "warm"
-
-            case MessageIntent.GREETING:
-                reply_types = ["greeting_back", "greeting_with_update", "greeting_with_question"]
-
-            case MessageIntent.LOGISTICS:
-                reply_types = ["confirm", "acknowledge", "clarify"]
-                max_length = 10
-
-            case MessageIntent.SHARING:
-                reply_types = ["positive_reaction", "interested_question", "thanks"]
-
-            case MessageIntent.THANKS:
-                reply_types = ["welcome", "no_problem", "happy_to_help"]
-                max_length = 8
-
-            case MessageIntent.FAREWELL:
-                reply_types = ["bye_casual", "bye_warm", "talk_soon"]
-                max_length = 8
-
-            case _:
-                reply_types = ["acknowledge", "respond", "ask_question"]
-
-        # Adjust for relationship
-        if context.relationship == RelationshipType.WORK:
-            tone = "professional"
-            max_length = min(max_length + 5, 25)
-        elif context.relationship == RelationshipType.CLOSE_FRIEND:
-            tone = "very_casual"
-        elif context.relationship == RelationshipType.ROMANTIC:
-            tone = "affectionate"
-
-        # Adjust for urgency
-        if context.urgency == "high":
-            max_length = min(max_length, 10)
-
-        return ReplyStrategy(
-            reply_types=reply_types,
-            tone=tone,
-            max_length=max_length,
-            include_question=include_question,
-        )
-
     def _detect_intent(self, text: str) -> MessageIntent:
         """Detect intent of a message."""
         text_lower = text.lower().strip()
+
+        # Greeting patterns - check FIRST (before questions)
+        # Many greetings end with "?" like "what's up?" or "how are you?"
+        greetings = [
+            "hey", "hi", "hello", "what's up", "whats up", "sup", "how are",
+            "how's it", "hows it", "good morning", "good afternoon", "good evening", "yo",
+        ]
+        if any(text_lower.startswith(g) for g in greetings):
+            return MessageIntent.GREETING
 
         # Question detection
         if text.rstrip().endswith("?"):
@@ -214,14 +140,6 @@ class ContextAnalyzer:
                 return MessageIntent.CHOICE_QUESTION
 
             return MessageIntent.OPEN_QUESTION
-
-        # Greeting patterns
-        greetings = [
-            "hey", "hi", "hello", "what's up", "sup", "how are", "how's it",
-            "good morning", "good afternoon", "good evening", "yo",
-        ]
-        if any(text_lower.startswith(g) for g in greetings):
-            return MessageIntent.GREETING
 
         # Farewell patterns
         farewells = [

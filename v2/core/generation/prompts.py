@@ -292,7 +292,7 @@ def get_examples_for_intent(intent_value: str) -> str:
     return "\n".join(lines)
 
 
-def _get_display_name(msg: dict, fallback: str = "Them") -> str:
+def _get_display_name(msg: dict, fallback: str = "Them") -> str | None:
     """Get display name for a message sender, preferring name over phone number."""
     if msg.get("is_from_me"):
         return None  # Will use user_name instead
@@ -345,7 +345,9 @@ def _build_messages_array(messages: list[dict], max_messages: int = 6) -> tuple[
 
 
 def format_past_replies(past_replies: list[tuple[str, str, float]] | None) -> str:
-    """Format past replies as examples for the prompt.
+    """Format past replies as few-shot examples for the prompt.
+
+    This is the KEY learning signal - showing the model how you ACTUALLY reply.
 
     Args:
         past_replies: List of (their_message, your_reply, similarity) tuples
@@ -356,21 +358,134 @@ def format_past_replies(past_replies: list[tuple[str, str, float]] | None) -> st
     if not past_replies:
         return ""
 
-    lines = ["Your past replies to similar messages:"]
-    for their_msg, your_reply, _sim in past_replies[:3]:  # Top 3 examples
-        # Truncate long messages
-        their_msg = their_msg[:50] + "..." if len(their_msg) > 50 else their_msg
-        your_reply = your_reply[:50] + "..." if len(your_reply) > 50 else your_reply
-        lines.append(f'- They said: "{their_msg}" → You: "{your_reply}"')
+    # Format as clear input->output examples
+    lines = ["How you replied to similar messages:"]
+    for their_msg, your_reply, _sim in past_replies[:4]:  # Top 4 examples
+        # Truncate long messages but keep enough context
+        their_msg = their_msg[:60] + "..." if len(their_msg) > 60 else their_msg
+        your_reply = your_reply[:40] if len(your_reply) <= 40 else your_reply[:40] + "..."
+        lines.append(f"Them: {their_msg}")
+        lines.append(f"You: {your_reply}")
+        lines.append("")  # Blank line between examples
 
-    return "\n".join(lines)
+    return "\n".join(lines).strip()
 
 
-# Prompt template with past replies section
-# Note: No trailing "user:" - ChatML handles turn structure via <|im_start|>assistant
-REPLY_PROMPT_WITH_HISTORY = '''Text message conversation. Reply briefly as {user_name}.
-{past_replies_section}{availability_hint}
-{conversation}'''
+def format_style_samples(messages: list[dict], limit: int = 5) -> str:
+    """Extract message samples showing the user's actual reply style.
+
+    Only includes messages that are RESPONSES (following a message from them),
+    not isolated messages or reactions. These are more useful as examples.
+
+    Args:
+        messages: Recent conversation messages
+        limit: Max samples to include
+
+    Returns:
+        Formatted string with style samples
+    """
+    # Get user's messages that are actual RESPONSES (following their message)
+    response_samples = []
+    prev_was_theirs = False
+
+    for msg in messages:
+        is_from_me = msg.get("is_from_me", False)
+        text = (msg.get("text") or "").replace("\ufffc", "").strip()
+
+        if not is_from_me:
+            prev_was_theirs = True
+        elif is_from_me and prev_was_theirs and text:
+            # This is a response to their message
+            # Filter: 3-40 chars, not a reaction, not just emoji
+            if 3 <= len(text) <= 40:
+                # Skip reactions like "Loved an image" or "Laughed at..."
+                text_lower = text.lower()
+                if not any(r in text_lower for r in ["loved", "liked", "emphasized", "laughed at"]):
+                    # Skip pure emoji messages
+                    if any(c.isalpha() for c in text):
+                        response_samples.append(text)
+            prev_was_theirs = False
+
+    # Get most recent samples
+    recent = response_samples[-limit:] if len(response_samples) > limit else response_samples
+
+    if not recent:
+        return ""
+
+    return "How you typically reply: " + " | ".join(recent)
+
+
+# Simple conversation continuation prompt
+# Shows actual conversation and lets model continue naturally
+# This works better than complex few-shot examples
+CONVERSATION_PROMPT = '''[{style_hint}]
+
+{conversation}
+me:'''
+
+# Generic few-shot examples (fallback when no conversation history)
+CASUAL_FEW_SHOT = """casual texts between friends:
+
+them: wanna hang?
+me: ya sure
+
+them: you coming tonight?
+me: prob not
+
+them: what time?
+me: like 7ish
+
+them: how was it?
+me: pretty good tbh
+
+"""
+
+# Legacy prompt template (kept for backwards compatibility)
+REPLY_PROMPT_WITH_HISTORY = '''{few_shot}{past_replies_section}{availability_hint}them: {last_message}
+me:'''
+
+
+def build_conversation_prompt(
+    messages: list[dict],
+    style_hint: str = "brief, casual",
+    max_messages: int = 10,
+) -> str:
+    """Build a simple conversation-continuation prompt.
+
+    This is the NEW approach - just show the conversation and let the model continue.
+    Works better than complex few-shot examples for most models.
+
+    Args:
+        messages: Recent conversation messages
+        style_hint: Brief style instruction
+        max_messages: Max messages to include
+
+    Returns:
+        Prompt string ending with "me:" for completion
+    """
+    if not messages:
+        return f"[{style_hint}]\n\nthem: hey\nme:"
+
+    # Take last N messages
+    recent = messages[-max_messages:] if len(messages) > max_messages else messages
+
+    # Format as simple conversation
+    lines = []
+    for msg in recent:
+        text = (msg.get("text") or "").replace("\ufffc", "").strip()
+        if not text or len(text) < 1:
+            continue
+        if msg.get("is_from_me"):
+            lines.append(f"me: {text}")
+        else:
+            lines.append(f"them: {text}")
+
+    conversation = "\n".join(lines)
+
+    return CONVERSATION_PROMPT.format(
+        style_hint=style_hint,
+        conversation=conversation,
+    )
 
 
 def build_reply_prompt(
@@ -378,68 +493,75 @@ def build_reply_prompt(
     last_message: str,
     last_sender: str,
     style_instructions: str,
-    reply_types: list[str],
-    tone: str,
-    max_length: int,
-    intent_value: str,
     past_replies: list[tuple[str, str, float]] | None = None,
     user_name: str = "me",
     recent_topics: list[str] | None = None,
     availability: str | None = None,
+    your_phrases: list[str] | None = None,
+    global_style=None,
+    contact_profile=None,
 ) -> str:
     """Build the complete reply generation prompt.
+
+    Uses few-shot examples to teach Llama 3.2 the casual texting style.
+    The model learns from examples better than from instructions.
 
     Args:
         messages: Recent conversation messages
         last_message: The message to reply to
         last_sender: Who sent the last message
-        style_instructions: User style instructions
-        reply_types: Types of replies to generate
-        tone: Tone for replies
-        max_length: Max words per reply
-        intent_value: Detected intent
+        style_instructions: User style instructions (used to build custom examples)
         past_replies: User's past replies to similar messages
         user_name: User's name for personalization
         recent_topics: Recent conversation topics for context
         availability: User's current availability ("busy", "free", or None)
+        your_phrases: Common phrases the user uses (for personalization)
+        global_style: Optional GlobalUserStyle with personality info
+        contact_profile: Optional ContactProfile with relationship info
 
     Returns:
-        Complete prompt string (JSON format for Qwen3)
+        Complete prompt string for Llama 3.2
     """
-    # Build simple conversation format
-    lines = []
+    # Start with default few-shot examples
+    few_shot = CASUAL_FEW_SHOT
 
-    # Add topic hint if available (helps maintain conversation context)
-    if recent_topics:
-        topic_hint = f"[Recent topics: {', '.join(recent_topics[:3])}]"
-        lines.append(topic_hint)
-
-    for msg in messages[-6:]:  # Last 6 messages
-        text = msg.get("text", "").replace("\ufffc", "").strip()
-        if not text or len(text) < 2:
-            continue
-        if msg.get("is_from_me"):
-            lines.append(f"{user_name}: {text}")
-        else:
-            lines.append(f"Them: {text}")
-
-    conversation = "\n".join(lines)
-
-    # Format past replies section
-    past_replies_section = format_past_replies(past_replies)
-    if past_replies_section:
-        past_replies_section = "\n" + past_replies_section + "\n"
+    # If we have user's past replies, use those instead (more personalized)
+    if past_replies and len(past_replies) >= 2:
+        lines = ["casual texts:\n"]
+        for their_msg, your_reply, _ in past_replies[:4]:
+            their_msg = their_msg[:50]
+            your_reply = your_reply[:30]
+            lines.append(f"them: {their_msg}")
+            lines.append(f"me: {your_reply}")
+            lines.append("")
+        few_shot = "\n".join(lines)
 
     # Format availability hint
     availability_hint = ""
     if availability == "busy":
-        availability_hint = "\n[Context: You've been busy lately]\n"
+        availability_hint = "(busy) "
     elif availability == "free":
-        availability_hint = "\n[Context: You're free/available]\n"
+        availability_hint = "(free) "
+
+    # Build past replies section if we have some but not enough for full few-shot
+    past_replies_section = ""
+    if past_replies and len(past_replies) < 2:
+        past_replies_section = format_past_replies(past_replies) + "\n\n"
+
+    # Get the last message to reply to
+    # Clean it up
+    clean_message = (last_message or "").replace("\ufffc", "").strip()
+    if not clean_message:
+        # Fall back to last message in conversation
+        for msg in reversed(messages):
+            if not msg.get("is_from_me"):
+                clean_message = (msg.get("text") or "").replace("\ufffc", "").strip()
+                if clean_message:
+                    break
 
     return REPLY_PROMPT_WITH_HISTORY.format(
-        user_name=user_name,
-        conversation=conversation,
+        few_shot=few_shot,
         past_replies_section=past_replies_section,
         availability_hint=availability_hint,
+        last_message=clean_message,
     )

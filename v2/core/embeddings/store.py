@@ -11,14 +11,16 @@ import logging
 import sqlite3
 import threading
 import time
-from collections import Counter
+from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from core.utils import STOP_WORDS, MessageDict
 from .model import get_embedding_model, EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
@@ -95,39 +97,35 @@ class EmbeddingStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
-        # FAISS index cache per chat_id with LRU eviction
-        self._faiss_indices: dict[str, tuple[Any, list[dict]]] = {}  # cache_key -> (index, metadata)
-        self._faiss_access_order: list[str] = []  # LRU tracking: oldest first
+        # FAISS index cache per chat_id with LRU eviction (OrderedDict for O(1) operations)
+        self._faiss_indices: OrderedDict[str, tuple[Any, list[dict]]] = OrderedDict()
         self._faiss_lock = threading.Lock()
 
     def _faiss_cache_get(self, cache_key: str) -> tuple[Any, list[dict]] | None:
-        """Get from FAISS cache and update LRU order."""
+        """Get from FAISS cache and update LRU order (O(1) with OrderedDict)."""
         with self._faiss_lock:
             if cache_key in self._faiss_indices:
-                # Move to end (most recently used)
-                if cache_key in self._faiss_access_order:
-                    self._faiss_access_order.remove(cache_key)
-                self._faiss_access_order.append(cache_key)
+                # Move to end (most recently used) - O(1) operation
+                self._faiss_indices.move_to_end(cache_key)
                 return self._faiss_indices[cache_key]
         return None
 
     def _faiss_cache_set(self, cache_key: str, value: tuple[Any, list[dict]]) -> None:
-        """Set in FAISS cache with LRU eviction."""
+        """Set in FAISS cache with LRU eviction (O(1) with OrderedDict)."""
         with self._faiss_lock:
+            # If key exists, update and move to end
+            if cache_key in self._faiss_indices:
+                self._faiss_indices[cache_key] = value
+                self._faiss_indices.move_to_end(cache_key)
+                return
+
             # Evict oldest if at capacity
             while len(self._faiss_indices) >= MAX_FAISS_CACHE_SIZE:
-                if self._faiss_access_order:
-                    oldest_key = self._faiss_access_order.pop(0)
-                    self._faiss_indices.pop(oldest_key, None)
-                    logger.debug(f"Evicted FAISS index for {oldest_key} (LRU)")
-                else:
-                    break
+                oldest_key, _ = self._faiss_indices.popitem(last=False)
+                logger.debug(f"Evicted FAISS index for {oldest_key} (LRU)")
 
-            # Add new entry
+            # Add new entry at end (most recently used)
             self._faiss_indices[cache_key] = value
-            if cache_key in self._faiss_access_order:
-                self._faiss_access_order.remove(cache_key)
-            self._faiss_access_order.append(cache_key)
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
@@ -365,7 +363,7 @@ class EmbeddingStore:
 
     def index_messages(
         self,
-        messages: list[dict],
+        messages: list[MessageDict],
         progress_callback: callable | None = None,
     ) -> dict[str, int]:
         """Index messages for similarity search.
@@ -447,24 +445,22 @@ class EmbeddingStore:
 
         return stats
 
-    def _get_index_cache_path(self, chat_id: str, only_from_me: bool | None) -> Path:
+    def _get_index_cache_path(self, chat_id: str) -> Path:
         """Get path for cached FAISS index."""
         FAISS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        suffix = f"_from_me_{only_from_me}" if only_from_me is not None else ""
         # Sanitize chat_id for filename
         safe_id = chat_id.replace("/", "_").replace(":", "_")
-        return FAISS_CACHE_DIR / f"{safe_id}{suffix}.faiss"
+        return FAISS_CACHE_DIR / f"{safe_id}.faiss"
 
-    def _get_metadata_cache_path(self, chat_id: str, only_from_me: bool | None) -> Path:
+    def _get_metadata_cache_path(self, chat_id: str) -> Path:
         """Get path for cached metadata."""
-        index_path = self._get_index_cache_path(chat_id, only_from_me)
+        index_path = self._get_index_cache_path(chat_id)
         return index_path.with_suffix(".meta.json")
 
-    def _get_or_build_faiss_index(
-        self, chat_id: str, only_from_me: bool | None = None
-    ) -> tuple[Any, list[dict]] | None:
+    def _get_or_build_faiss_index(self, chat_id: str) -> tuple[Any, list[dict]] | None:
         """Get or build FAISS index for a chat.
 
+        Always builds full index (all messages), filtering is done in memory.
         Uses HNSW for O(log n) search and persists to disk.
 
         Returns (faiss_index, metadata_list) or None if FAISS unavailable.
@@ -472,8 +468,8 @@ class EmbeddingStore:
         if not FAISS_AVAILABLE:
             return None
 
-        # Cache key includes the filter
-        cache_key = f"{chat_id}:{only_from_me}"
+        # Cache key is just chat_id (no filter - build full index once)
+        cache_key = chat_id
 
         # Check memory cache first (with LRU tracking)
         cached = self._faiss_cache_get(cache_key)
@@ -481,8 +477,8 @@ class EmbeddingStore:
             return cached
 
         # Check disk cache
-        index_path = self._get_index_cache_path(chat_id, only_from_me)
-        meta_path = self._get_metadata_cache_path(chat_id, only_from_me)
+        index_path = self._get_index_cache_path(chat_id)
+        meta_path = self._get_metadata_cache_path(chat_id)
 
         if index_path.exists() and meta_path.exists():
             try:
@@ -495,12 +491,10 @@ class EmbeddingStore:
 
                 # Verify count matches
                 with self._get_connection() as conn:
-                    sql = "SELECT COUNT(*) FROM message_embeddings WHERE chat_id = ?"
-                    params: list[Any] = [chat_id]
-                    if only_from_me is not None:
-                        sql += " AND is_from_me = ?"
-                        params.append(1 if only_from_me else 0)
-                    current_count = conn.execute(sql, params).fetchone()[0]
+                    current_count = conn.execute(
+                        "SELECT COUNT(*) FROM message_embeddings WHERE chat_id = ?",
+                        [chat_id]
+                    ).fetchone()[0]
 
                 if current_count == len(metadata):
                     elapsed = (time.time() - start) * 1000
@@ -513,22 +507,18 @@ class EmbeddingStore:
             except Exception as e:
                 logger.warning(f"Failed to load cached index: {e}, rebuilding")
 
-        # Build index
+        # Build index for ALL messages (no is_from_me filter)
         start = time.time()
         with self._get_connection() as conn:
-            sql = """
+            rows = conn.execute(
+                """
                 SELECT message_id, chat_id, embedding, text_preview,
                        sender, sender_name, timestamp, is_from_me
                 FROM message_embeddings
                 WHERE chat_id = ?
-            """
-            params = [chat_id]
-
-            if only_from_me is not None:
-                sql += " AND is_from_me = ?"
-                params.append(1 if only_from_me else 0)
-
-            rows = conn.execute(sql, params).fetchall()
+                """,
+                [chat_id]
+            ).fetchall()
 
         if not rows:
             return None
@@ -554,7 +544,7 @@ class EmbeddingStore:
 
         index.add(embeddings)
 
-        # Store metadata for lookup
+        # Store metadata for lookup (including is_from_me for filtering)
         metadata = [
             {
                 "message_id": row["message_id"],
@@ -615,7 +605,7 @@ class EmbeddingStore:
 
         # Try FAISS first (fast path)
         if chat_id and FAISS_AVAILABLE:
-            faiss_result = self._get_or_build_faiss_index(chat_id, only_from_me)
+            faiss_result = self._get_or_build_faiss_index(chat_id)
             if faiss_result:
                 index, metadata = faiss_result
 
@@ -624,8 +614,10 @@ class EmbeddingStore:
                 query_norm = query_embedding.reshape(1, -1).copy()
                 faiss.normalize_L2(query_norm)
 
-                # Search - get more than needed to filter by min_similarity
-                k = min(limit * 2, len(metadata))
+                # Search - get more than needed to filter by min_similarity and only_from_me
+                # If filtering by only_from_me, search more to compensate for filtering
+                search_k = limit * 4 if only_from_me is not None else limit * 2
+                k = min(search_k, len(metadata))
                 similarities, indices = index.search(query_norm, k)
 
                 results = []
@@ -633,6 +625,11 @@ class EmbeddingStore:
                     if idx < 0 or sim < min_similarity:
                         continue
                     meta = metadata[idx]
+
+                    # Filter by is_from_me in memory
+                    if only_from_me is not None and meta["is_from_me"] != only_from_me:
+                        continue
+
                     results.append(
                         SimilarMessage(
                             message_id=meta["message_id"],
@@ -711,12 +708,16 @@ class EmbeddingStore:
         logger.info(f"Brute-force search: {len(results[:limit])} results in {brute_time:.1f}ms (searched {len(rows)} messages)")
         return results[:limit]
 
-    def is_index_ready(self, chat_id: str, only_from_me: bool | None = None) -> bool:
-        """Check if FAISS index is already built and cached for this chat."""
+    def is_index_ready(self, chat_id: str, only_from_me: bool = False) -> bool:
+        """Check if FAISS index is already built and cached for this chat.
+
+        Args:
+            chat_id: Conversation ID
+            only_from_me: Ignored for now (we use a single index per chat)
+        """
         if not FAISS_AVAILABLE:
             return False
-        cache_key = f"{chat_id}:{only_from_me}"
-        return cache_key in self._faiss_indices
+        return chat_id in self._faiss_indices
 
     def preload_index(self, chat_id: str) -> None:
         """Pre-build FAISS index for a chat in the background.
@@ -726,10 +727,10 @@ class EmbeddingStore:
         import threading
 
         def _build():
-            # Build index for "not from me" (needed for past_replies)
-            self._get_or_build_faiss_index(chat_id, only_from_me=False)
+            # Build full index (all messages)
+            self._get_or_build_faiss_index(chat_id)
 
-        if not self.is_index_ready(chat_id, only_from_me=False):
+        if not self.is_index_ready(chat_id):
             thread = threading.Thread(target=_build, daemon=True)
             thread.start()
             logger.info(f"Started background FAISS index build for {chat_id}")
@@ -768,9 +769,14 @@ class EmbeddingStore:
             List of (their_message, your_reply, score) tuples
         """
         # Skip if index isn't ready and we don't want to wait for it to build
-        if skip_if_slow and chat_id and not self.is_index_ready(chat_id, only_from_me=False):
-            logger.info(f"Skipping past_replies - FAISS index not cached for {chat_id}")
-            return []
+        if skip_if_slow:
+            if chat_id is None:
+                # Global search uses brute-force which is slow - skip
+                logger.info("Skipping past_replies - global search would use slow brute-force")
+                return []
+            if not self.is_index_ready(chat_id):
+                logger.info(f"Skipping past_replies - FAISS index not cached for {chat_id}")
+                return []
 
         # Find similar messages that were NOT from you
         similar_incoming = self.find_similar(
@@ -779,6 +785,7 @@ class EmbeddingStore:
             limit=limit * 3,  # Get more to find replies
             min_similarity=min_similarity,
             only_from_me=False,
+            max_messages=200,  # Limit brute-force fallback
         )
 
         now = datetime.now()
@@ -815,28 +822,51 @@ class EmbeddingStore:
                 day_boost
             )
 
+        if not similar_incoming:
+            return []
+
+        # Batch lookup: group messages by chat_id
+        lookups: dict[str, list[tuple[int, str, float, datetime]]] = {}
+        for msg in similar_incoming:
+            if msg.chat_id not in lookups:
+                lookups[msg.chat_id] = []
+            lookups[msg.chat_id].append((
+                int(msg.timestamp.timestamp()),
+                msg.text,
+                msg.similarity,
+                msg.timestamp,
+            ))
+
         results = []
 
         with self._get_connection() as conn:
-            for msg in similar_incoming:
-                # Find YOUR next reply after this message
-                row = conn.execute(
-                    """
-                    SELECT text_preview
-                    FROM message_embeddings
-                    WHERE chat_id = ?
-                      AND is_from_me = 1
-                      AND timestamp > ?
-                      AND timestamp < ? + 3600
-                    ORDER BY timestamp
-                    LIMIT 1
-                    """,
-                    (msg.chat_id, int(msg.timestamp.timestamp()), int(msg.timestamp.timestamp())),
-                ).fetchone()
+            for chat_id_key, items in lookups.items():
+                # Get all your replies in this chat within the time window
+                min_ts = min(ts for ts, _, _, _ in items)
+                max_ts = max(ts for ts, _, _, _ in items) + 3600
 
-                if row and row["text_preview"]:
-                    score = compute_time_weighted_score(msg.similarity, msg.timestamp)
-                    results.append((msg.text, row["text_preview"], score))
+                rows = conn.execute(
+                    """
+                    SELECT timestamp, text_preview
+                    FROM message_embeddings
+                    WHERE chat_id = ? AND is_from_me = 1
+                      AND timestamp >= ? AND timestamp <= ?
+                    ORDER BY timestamp
+                    """,
+                    (chat_id_key, min_ts, max_ts),
+                ).fetchall()
+
+                # Build list of (timestamp, text) for matching
+                reply_list = [(r["timestamp"], r["text_preview"]) for r in rows if r["text_preview"]]
+
+                # Match replies to incoming messages
+                for ts, their_text, sim, msg_timestamp in items:
+                    # Find first reply after this timestamp within 1 hour
+                    for reply_ts, reply_text in reply_list:
+                        if reply_ts > ts and reply_ts < ts + 3600:
+                            score = compute_time_weighted_score(sim, msg_timestamp)
+                            results.append((their_text, reply_text, score))
+                            break
 
         # Re-sort by time-weighted score and limit
         results.sort(key=lambda x: x[2], reverse=True)
@@ -931,18 +961,12 @@ class EmbeddingStore:
 
     def _extract_common_words(self, texts: list[str]) -> list[str]:
         """Extract commonly used words."""
-        stop_words = {
-            "the", "a", "an", "is", "it", "to", "and", "or", "of", "in", "on",
-            "for", "with", "at", "by", "from", "this", "that", "i", "you", "we",
-            "my", "your", "am", "are", "was", "were", "be", "have", "has", "do",
-            "does", "did", "will", "would", "could", "should", "just", "so", "but",
-        }
         words = []
         for text in texts:
             if text:
                 words.extend(
                     w.lower() for w in text.split()
-                    if len(w) > 2 and w.lower() not in stop_words
+                    if len(w) > 2 and w.lower() not in STOP_WORDS
                 )
         return [word for word, _ in Counter(words).most_common(20)]
 
@@ -1139,18 +1163,41 @@ class EmbeddingStore:
             conn.commit()
 
 
-# Singleton
-_store: EmbeddingStore | None = None
-_store_lock = threading.Lock()
+# Singleton using lru_cache for thread safety
+_store_override: EmbeddingStore | None = None
+
+
+@lru_cache(maxsize=1)
+def _create_default_store() -> EmbeddingStore:
+    """Create the default embedding store (thread-safe via lru_cache)."""
+    return EmbeddingStore()
 
 
 def get_embedding_store(db_path: Path | str | None = None) -> EmbeddingStore:
-    """Get singleton embedding store."""
-    global _store
+    """Get singleton embedding store.
 
-    if _store is None or db_path:
-        with _store_lock:
-            if _store is None or db_path:
-                _store = EmbeddingStore(db_path)
+    Args:
+        db_path: Optional path override. If provided, resets the singleton to use this path.
 
-    return _store
+    Returns:
+        EmbeddingStore instance
+    """
+    global _store_override
+
+    if db_path is not None:
+        # Override requested - create new store with specific path
+        _store_override = EmbeddingStore(db_path)
+        return _store_override
+
+    # Return override if set, otherwise use cached default
+    if _store_override is not None:
+        return _store_override
+
+    return _create_default_store()
+
+
+def reset_embedding_store() -> None:
+    """Reset the embedding store singleton."""
+    global _store_override
+    _store_override = None
+    _create_default_store.cache_clear()
