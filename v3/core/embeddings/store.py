@@ -36,9 +36,9 @@ except ImportError:
         "FAISS not installed - using brute force search. Install with: pip install faiss-cpu"
     )
 
-# Configuration
-DEFAULT_DB_PATH = Path.home() / ".jarvis" / "embeddings.db"
-FAISS_CACHE_DIR = Path.home() / ".jarvis" / "faiss_indices"
+# Configuration - All data stored in v3/data/
+DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "embeddings" / "embeddings.db"
+FAISS_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "embeddings" / "faiss_indices"
 BATCH_SIZE = 100
 MIN_TEXT_LENGTH = 3
 

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Default path to contact profiles
 DEFAULT_PROFILES_PATH = (
-    Path(__file__).parent.parent.parent / "results" / "contacts" / "contact_profiles.json"
+    Path(__file__).parent.parent.parent / "data" / "contacts" / "contact_profiles.json"
 )
 
 # Categories for relationship grouping
