@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import sqlite3
 import threading
 from dataclasses import dataclass

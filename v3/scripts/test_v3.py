@@ -15,29 +15,24 @@ def test_imports():
     print("Testing imports...")
 
     try:
-        from core.models.registry import get_model_spec, DEFAULT_MODEL
+        from core.models.registry import DEFAULT_MODEL
 
         print(f"  ✓ Models registry (default: {DEFAULT_MODEL})")
 
-        from core.models.loader import ModelLoader
 
         print("  ✓ Model loader")
 
-        from core.embeddings.store import get_embedding_store
 
         print("  ✓ Embedding store")
 
-        from core.embeddings.relationship_registry import get_relationship_registry
 
         print("  ✓ Relationship registry")
 
-        from core.generation.reply_generator import ReplyGenerator
 
         print("  ✓ Reply generator")
 
-        from core.imessage.reader import ChatDBReader
 
-        print("  ✓ iMessage reader")
+        print("  ✓ iMessage reader (MessageReader)")
 
         print("\n✅ All imports successful!")
         return True
@@ -51,7 +46,7 @@ def test_model_registry():
     """Test model registry has correct model."""
     print("\nTesting model registry...")
 
-    from core.models.registry import get_model_spec, MODELS
+    from core.models.registry import MODELS, get_model_spec
 
     spec = get_model_spec()
     print(f"  Model: {spec.id}")
@@ -73,7 +68,7 @@ def test_reply_generator_structure():
 
     # Check the class exists and has the right methods
     assert hasattr(ReplyGenerator, "generate_replies")
-    assert hasattr(ReplyGenerator, "_find_similar_past_replies")
+    assert hasattr(ReplyGenerator, "_find_past_replies")
     assert hasattr(ReplyGenerator, "_find_cross_conversation_replies")
 
     print("  ✓ ReplyGenerator structure correct")

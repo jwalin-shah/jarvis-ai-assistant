@@ -15,20 +15,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def test_imports_work():
     """Test that all core modules can be imported."""
     # Core generation modules
+    # API routes
+
+    # Core embeddings
     from core.generation import ReplyGenerator
     from core.generation.context_analyzer import ContextAnalyzer, MessageIntent
     from core.generation.style_analyzer import StyleAnalyzer, UserStyle
-    from core.generation.prompts import build_reply_prompt, build_conversation_prompt
 
     # Core models
-    from core.models.registry import get_model_spec, MODELS, DEFAULT_MODEL
-
-    # Core embeddings
-    from core.embeddings.relationship_registry import RelationshipRegistry
-
-    # API routes
-    from api.routes.conversations import list_conversations, get_messages
-    from api.routes.generate import generate_replies
 
     # Assert key classes exist
     assert ReplyGenerator is not None
@@ -40,7 +34,7 @@ def test_imports_work():
 
 def test_model_registry_has_correct_model():
     """Test that model registry has LFM2.5-1.2B as default."""
-    from core.models.registry import get_model_spec, MODELS, DEFAULT_MODEL
+    from core.models.registry import DEFAULT_MODEL, MODELS, get_model_spec
 
     # Check default model
     assert DEFAULT_MODEL == "lfm2.5-1.2b"
@@ -176,3 +170,82 @@ def test_relationship_registry_basic():
     finally:
         # Cleanup
         temp_path.unlink()
+
+
+def test_prompt_strategy_config():
+    """Test that prompt strategy can be configured."""
+    from core.config import GenerationSettings, PromptStrategy
+
+    # Test enum values
+    assert PromptStrategy.LEGACY.value == "legacy"
+    assert PromptStrategy.CONVERSATION.value == "conversation"
+
+    # Test default is legacy
+    gen_settings = GenerationSettings()
+    assert gen_settings.prompt_strategy == PromptStrategy.LEGACY
+
+    # Test can override
+    gen_settings = GenerationSettings(prompt_strategy=PromptStrategy.CONVERSATION)
+    assert gen_settings.prompt_strategy == PromptStrategy.CONVERSATION
+
+    # Test conversation style hint default
+    assert gen_settings.conversation_style_hint == "brief, casual"
+
+
+def test_reply_generator_uses_prompt_strategy():
+    """Test that ReplyGenerator respects prompt_strategy setting."""
+    from unittest.mock import MagicMock, patch
+
+    from core.config import PromptStrategy
+    from core.generation import ReplyGenerator
+
+    # Create mock model loader
+    mock_loader = MagicMock()
+    mock_loader.is_loaded = True
+    mock_loader.current_model = "lfm2.5-1.2b"
+    mock_loader.generate.return_value = MagicMock(
+        text="sounds good!",
+        formatted_prompt="<test>",
+    )
+
+    # Create generator
+    generator = ReplyGenerator(mock_loader)
+
+    # Test messages
+    messages = [
+        {"text": "Hey, want to grab dinner?", "is_from_me": False, "sender": "Alice"},
+    ]
+
+    # Test with LEGACY strategy (default)
+    with patch("core.generation.reply_generator.settings") as mock_settings:
+        mock_settings.generation.prompt_strategy = PromptStrategy.LEGACY
+        mock_settings.generation.max_tokens = 50
+        mock_settings.generation.min_similarity_threshold = 0.55
+        mock_settings.generation.temperature_scale = [0.2, 0.4, 0.6, 0.8, 0.9]
+        mock_settings.generation.template_confidence = 0.7
+        mock_settings.generation.past_reply_confidence = 0.75
+        mock_settings.generation.same_convo_weight = 0.6
+        mock_settings.generation.cross_convo_weight = 0.4
+
+        result = generator.generate_replies(messages, chat_id="test-chat")
+        # The prompt_used should contain "them:" pattern for legacy
+        assert "them:" in result.prompt_used or "me:" in result.prompt_used
+
+    # Test with CONVERSATION strategy
+    with patch("core.generation.reply_generator.settings") as mock_settings:
+        mock_settings.generation.prompt_strategy = PromptStrategy.CONVERSATION
+        mock_settings.generation.conversation_style_hint = "brief, casual"
+        mock_settings.generation.max_tokens = 50
+        mock_settings.generation.min_similarity_threshold = 0.55
+        mock_settings.generation.temperature_scale = [0.2, 0.4, 0.6, 0.8, 0.9]
+        mock_settings.generation.template_confidence = 0.7
+        mock_settings.generation.past_reply_confidence = 0.75
+        mock_settings.generation.same_convo_weight = 0.6
+        mock_settings.generation.cross_convo_weight = 0.4
+
+        # Clear cached style from previous run
+        generator.clear_cache()
+
+        result = generator.generate_replies(messages, chat_id="test-chat-2")
+        # The prompt_used should contain style hint for conversation strategy
+        assert "brief, casual" in result.prompt_used

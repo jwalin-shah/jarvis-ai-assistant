@@ -58,6 +58,17 @@
 
 ## Core Components
 
+### Configuration
+
+Runtime configuration is centralized in `core/config.py` using Pydantic Settings.
+Override values with environment variables using the `JARVIS_` prefix and `__`
+for nested fields. Example:
+
+```bash
+export JARVIS_GENERATION__MAX_TOKENS="50"
+export JARVIS_API__ALLOW_ORIGINS='["http://localhost:1420"]'
+```
+
 ### 1. Reply Generation Flow
 
 ```

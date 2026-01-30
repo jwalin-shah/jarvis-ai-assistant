@@ -445,8 +445,10 @@ me: pretty good tbh
 """
 
 # Legacy prompt template (kept for backwards compatibility)
-REPLY_PROMPT_WITH_HISTORY = """{few_shot}{past_replies_section}{availability_hint}them: {last_message}
-me:"""
+REPLY_PROMPT_WITH_HISTORY = (
+    "{few_shot}{past_replies_section}{availability_hint}"
+    "them: {last_message}\nme:"
+)
 
 
 def build_conversation_prompt(
@@ -498,8 +500,6 @@ def build_balanced_few_shot() -> str:
     Selects 1 example from each major intent category to ensure the model
     sees a diverse range of response types (questions, statements, reactions).
     """
-    selected = []
-
     # Priority intents to include
     intents = [
         "yes_no_question",
@@ -539,14 +539,14 @@ def build_reply_prompt(
 ) -> str:
     """Build the complete reply generation prompt.
 
-    Uses few-shot examples to teach Llama 3.2 the casual texting style.
-    The model learns from examples better than from instructions.
+    Uses few-shot examples to teach the model the casual texting style.
+    Incorporates style instructions and global style for personalization.
 
     Args:
         messages: Recent conversation messages
         last_message: The message to reply to
         last_sender: Who sent the last message
-        style_instructions: User style instructions (used to build custom examples)
+        style_instructions: User style instructions (e.g., "casual, uses emoji")
         past_replies: User's past replies to similar messages
         user_name: User's name for personalization
         recent_topics: Recent conversation topics for context
@@ -556,8 +556,35 @@ def build_reply_prompt(
         contact_profile: Optional ContactProfile with relationship info
 
     Returns:
-        Complete prompt string for Llama 3.2
+        Complete prompt string
     """
+    # Build style header from available style info
+    style_parts = []
+
+    # Add global personality if available
+    if global_style and hasattr(global_style, 'personality_summary') and global_style.personality_summary:
+        style_parts.append(global_style.personality_summary)
+
+    # Add style instructions (e.g., "casual, uses abbreviations")
+    if style_instructions and style_instructions.strip():
+        style_parts.append(f"Style: {style_instructions}")
+
+    # Add common phrases if available
+    if your_phrases and len(your_phrases) > 0:
+        phrases_str = ", ".join(your_phrases[:5])
+        style_parts.append(f"Common phrases: {phrases_str}")
+
+    # Add relationship context if available
+    if contact_profile and hasattr(contact_profile, 'relationship_type'):
+        rel = contact_profile.relationship_type
+        if rel and rel != "unknown" and rel != "acquaintance":
+            style_parts.append(f"Relationship: {rel}")
+
+    # Build the style header
+    style_header = ""
+    if style_parts:
+        style_header = "[" + " | ".join(style_parts) + "]\n\n"
+
     # Start with balanced few-shot examples (better than generic static ones)
     few_shot = build_balanced_few_shot()
 
@@ -595,9 +622,369 @@ def build_reply_prompt(
                 if clean_message:
                     break
 
-    return REPLY_PROMPT_WITH_HISTORY.format(
+    return style_header + REPLY_PROMPT_WITH_HISTORY.format(
         few_shot=few_shot,
         past_replies_section=past_replies_section,
         availability_hint=availability_hint,
         last_message=clean_message,
+    )
+
+
+# =============================================================================
+# RAG-Enhanced Reply Template (ported from root/jarvis/prompts.py)
+# =============================================================================
+
+RAG_REPLY_TEMPLATE = """### Communication Style with {contact_name}:
+{relationship_context}
+
+### Similar Past Exchanges:
+{similar_exchanges}
+
+### Current Conversation:
+{context}
+
+### Message Type: {intent_hint}
+
+### Instructions:
+Generate a natural reply to the last message that:
+- Matches how you typically communicate with {contact_name} ({tone})
+- Is consistent with your past response patterns
+- Sounds authentic to your voice
+{response_guidance}
+{custom_instruction}
+
+### Last message to reply to:
+{last_message}
+
+### Your reply:"""
+
+
+# Intent-specific response guidance
+INTENT_RESPONSE_GUIDANCE = {
+    "yes_no_question": "- This is a yes/no question - give a direct answer (yes/no/maybe) with brief context",
+    "open_question": "- This is an open question - provide a thoughtful answer",
+    "choice_question": "- This is a choice question - pick one option or express a preference",
+    "statement": "- This is a statement - acknowledge it or add to the conversation",
+    "emotional": "- This has emotional content - respond with empathy and support",
+    "greeting": "- This is a greeting - respond warmly",
+    "thanks": "- They're thanking you - acknowledge graciously",
+    "farewell": "- They're saying goodbye - respond appropriately",
+    "request": "- This is a request - confirm you'll do it or explain if you can't",
+    "logistics": "- This is logistics info - acknowledge and confirm if needed",
+    "sharing": "- They're sharing something - show interest or appreciation",
+    "information_seeking": "- They're asking about specific info - answer if you know, or ask for clarification",
+}
+
+
+# Threaded reply template for group chats
+THREADED_REPLY_TEMPLATE = """### Thread Context:
+Topic: {thread_topic}
+State: {thread_state}
+Your role: {user_role}
+{participants_info}
+
+### Relevant Messages:
+{context}
+
+### Instructions:
+Generate a natural reply that:
+- Matches the thread's {response_style} tone
+- Is {length_guidance}
+{additional_instructions}
+
+### Last message to reply to:
+{last_message}
+
+### Your reply:"""
+
+
+# =============================================================================
+# Tone Detection (ported from root)
+# =============================================================================
+
+CASUAL_INDICATORS: set[str] = {
+    "lol", "haha", "hehe", "lmao", "omg", "btw", "brb", "ttyl", "idk", "ikr",
+    "nvm", "tbh", "imo", "fyi", "np", "k", "kk", "ok", "yeah", "yep", "nope",
+    "yup", "gonna", "wanna", "gotta", "cuz", "bc", "u", "ur", "r", "y", "thx",
+    "ty", "pls", "plz", "omw", "wya", "wassup", "sup", "hey", "yo", "dude",
+    "bro", "sis", "fam", "lit", "chill", "cool", "nice", "sick", "dope", "yay",
+    "ooh", "ahh", "hmm", "meh", "ugh", "whoa", "wow", "aww", "oops", "whoops",
+}
+
+PROFESSIONAL_INDICATORS: set[str] = {
+    "regarding", "pursuant", "attached", "please", "kindly", "sincerely",
+    "regards", "cordially", "respectfully", "appreciate", "opportunity",
+    "discussed", "confirmed", "scheduled", "deadline", "deliverable",
+    "milestone", "stakeholder", "proposal", "presentation", "quarterly",
+    "annual", "fiscal", "eod", "eow", "asap", "ensure", "verify", "confirm",
+    "acknowledge", "proceed", "follow-up", "followup", "meeting", "conference",
+    "agenda", "minutes", "action item",
+}
+
+
+def detect_tone(messages: list[dict[str, Any]]) -> str:
+    """Detect the tone of a conversation (casual/professional/mixed).
+
+    Args:
+        messages: List of messages from the conversation
+
+    Returns:
+        'casual', 'professional', or 'mixed'
+    """
+    casual_count = 0
+    professional_count = 0
+
+    for msg in messages:
+        text = (msg.get("text") or "").lower()
+        words = set(text.split())
+
+        casual_count += len(words & CASUAL_INDICATORS)
+        professional_count += len(words & PROFESSIONAL_INDICATORS)
+
+        # Check for emoji (casual indicator)
+        if any(ord(c) > 127 for c in text):
+            casual_count += 1
+
+    total = casual_count + professional_count
+    if total == 0:
+        return "casual"  # Default
+
+    casual_ratio = casual_count / total
+    if casual_ratio > 0.7:
+        return "casual"
+    elif casual_ratio < 0.3:
+        return "professional"
+    else:
+        return "mixed"
+
+
+def _format_similar_exchanges(exchanges: list[tuple[str, str, float]]) -> str:
+    """Format similar past exchanges for RAG prompt.
+
+    Args:
+        exchanges: List of (their_message, your_reply, similarity) tuples
+
+    Returns:
+        Formatted string with examples
+    """
+    if not exchanges:
+        return "(No similar past exchanges found)"
+
+    formatted = []
+    for i, (their_msg, your_reply, _sim) in enumerate(exchanges[:3], 1):
+        # Truncate long messages
+        their_preview = their_msg[:100] + "..." if len(their_msg) > 100 else their_msg
+        formatted.append(f"Example {i}:\nThem: {their_preview}\nYou: {your_reply}")
+
+    return "\n\n".join(formatted)
+
+
+def _format_relationship_context(
+    tone: str,
+    avg_length: float,
+    relationship_type: str | None = None,
+) -> str:
+    """Format relationship context for RAG prompt.
+
+    Args:
+        tone: Typical communication tone
+        avg_length: Average message length
+        relationship_type: Type of relationship (friend, family, work, etc.)
+
+    Returns:
+        Formatted relationship context string
+    """
+    lines = []
+
+    # Relationship type
+    if relationship_type and relationship_type not in ("unknown", "acquaintance"):
+        rel_descriptions = {
+            "close_friend": "This is a close friend",
+            "family": "This is a family member",
+            "work": "This is a work colleague",
+            "romantic": "This is a romantic partner",
+        }
+        desc = rel_descriptions.get(relationship_type)
+        if desc:
+            lines.append(f"- {desc}")
+
+    # Tone description
+    tone_descriptions = {
+        "casual": "You typically use casual, friendly language with this person",
+        "professional": "You typically use professional, formal language with this person",
+        "mixed": "You use a mix of casual and professional language with this person",
+    }
+    lines.append(f"- {tone_descriptions.get(tone, tone_descriptions['casual'])}")
+
+    # Message length guidance
+    if avg_length < 30:
+        lines.append("- You usually keep messages short and concise")
+    elif avg_length < 100:
+        lines.append("- You usually write moderate-length messages")
+    else:
+        lines.append("- You tend to write longer, detailed messages")
+
+    return "\n".join(lines)
+
+
+def build_rag_reply_prompt(
+    messages: list[dict[str, Any]],
+    last_message: str,
+    contact_name: str,
+    similar_exchanges: list[tuple[str, str, float]] | None = None,
+    relationship_type: str | None = None,
+    avg_message_length: float = 50.0,
+    instruction: str | None = None,
+    message_intent: str | None = None,
+) -> str:
+    """Build a RAG-enhanced prompt for generating personalized replies.
+
+    Uses retrieved similar past exchanges and relationship context to generate
+    responses that match the user's typical communication style.
+
+    Args:
+        messages: Recent conversation messages
+        last_message: The message to reply to
+        contact_name: Name of the contact
+        similar_exchanges: List of (their_msg, your_reply, similarity) from RAG
+        relationship_type: Type of relationship (friend, family, work)
+        avg_message_length: Average length of your messages to this person
+        instruction: Optional custom instruction
+        message_intent: Detected intent of the incoming message (e.g., "yes_no_question")
+
+    Returns:
+        Formatted prompt string
+    """
+    # Detect tone from messages
+    tone = detect_tone(messages)
+
+    # Format relationship context
+    relationship_context = _format_relationship_context(
+        tone=tone,
+        avg_length=avg_message_length,
+        relationship_type=relationship_type,
+    )
+
+    # Format similar exchanges
+    similar_context = _format_similar_exchanges(similar_exchanges or [])
+
+    # Format conversation context
+    context_lines = []
+    for msg in messages[-8:]:  # Last 8 messages
+        text = (msg.get("text") or "").replace("\ufffc", "").strip()
+        if not text:
+            continue
+        if msg.get("is_from_me"):
+            context_lines.append(f"You: {text}")
+        else:
+            context_lines.append(f"Them: {text}")
+    context = "\n".join(context_lines)
+
+    # Format custom instruction
+    custom_instruction = ""
+    if instruction:
+        custom_instruction = f"- Additional guidance: {instruction}"
+
+    # Get intent hint and response guidance
+    intent_hint = "General message"
+    response_guidance = ""
+    if message_intent:
+        intent_labels = {
+            "yes_no_question": "Yes/No Question",
+            "open_question": "Open Question",
+            "choice_question": "Choice Question",
+            "statement": "Statement",
+            "emotional": "Emotional Message",
+            "greeting": "Greeting",
+            "thanks": "Thank You",
+            "farewell": "Goodbye",
+            "request": "Request",
+            "logistics": "Logistics Info",
+            "sharing": "Sharing Something",
+        }
+        intent_hint = intent_labels.get(message_intent, "General message")
+        response_guidance = INTENT_RESPONSE_GUIDANCE.get(message_intent, "")
+
+    return RAG_REPLY_TEMPLATE.format(
+        contact_name=contact_name,
+        relationship_context=relationship_context,
+        similar_exchanges=similar_context,
+        context=context,
+        intent_hint=intent_hint,
+        response_guidance=response_guidance,
+        tone=tone,
+        custom_instruction=custom_instruction,
+        last_message=last_message,
+    )
+
+
+def build_threaded_reply_prompt(
+    messages: list[dict[str, Any]],
+    last_message: str,
+    thread_topic: str = "General",
+    thread_state: str = "Active",
+    user_role: str = "Participant",
+    participants: list[str] | None = None,
+    is_group: bool = False,
+) -> str:
+    """Build a prompt for threaded/group chat replies.
+
+    Args:
+        messages: Recent conversation messages
+        last_message: The message to reply to
+        thread_topic: Topic of the thread
+        thread_state: State of the thread (active, planning, etc.)
+        user_role: User's role in the conversation
+        participants: List of participant names
+        is_group: Whether this is a group chat
+
+    Returns:
+        Formatted prompt string
+    """
+    # Detect tone
+    tone = detect_tone(messages)
+    response_style = "casual" if tone == "casual" else "professional"
+
+    # Format participants info
+    if participants and len(participants) > 1:
+        participants_info = f"Participants: {', '.join(participants[:5])}"
+        if len(participants) > 5:
+            participants_info += f" (+{len(participants) - 5} more)"
+    else:
+        participants_info = ""
+
+    # Format context
+    context_lines = []
+    for msg in messages[-10:]:
+        text = (msg.get("text") or "").replace("\ufffc", "").strip()
+        if not text:
+            continue
+        sender = msg.get("sender_name") or msg.get("sender") or "Someone"
+        if msg.get("is_from_me"):
+            context_lines.append(f"You: {text}")
+        else:
+            context_lines.append(f"{sender}: {text}")
+    context = "\n".join(context_lines)
+
+    # Length guidance based on group size
+    if is_group:
+        length_guidance = "concise (group chats work better with shorter messages)"
+    else:
+        length_guidance = "appropriate length for the conversation"
+
+    # Additional instructions for group chats
+    additional_instructions = ""
+    if is_group:
+        additional_instructions = "- Keep it relevant to the group discussion\n- Be mindful of the group dynamic"
+
+    return THREADED_REPLY_TEMPLATE.format(
+        thread_topic=thread_topic,
+        thread_state=thread_state,
+        user_role=user_role,
+        participants_info=participants_info,
+        context=context,
+        response_style=response_style,
+        length_guidance=length_guidance,
+        additional_instructions=additional_instructions,
+        last_message=last_message,
     )

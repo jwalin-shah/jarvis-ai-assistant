@@ -67,7 +67,6 @@ v3/
 │       ├── health.py
 │       ├── conversations.py
 │       ├── generate.py      # POST /generate/replies
-│       └── settings.py
 ├── scripts/                 # Essential scripts only
 │   ├── profile_contacts.py  # Label contact relationships
 │   ├── extract_all_contacts.py
@@ -126,9 +125,32 @@ GET  /health                          # Health check
 GET  /conversations                   # List conversations
 GET  /conversations/{id}/messages     # Get messages
 POST /generate/replies                # Generate reply suggestions
-GET  /settings                        # Get settings
-PUT  /settings                        # Update settings
 ```
+
+## Configuration
+
+Runtime settings live in `core/config.py` and are loaded via Pydantic Settings.
+Override values with environment variables using the `JARVIS_` prefix and `__`
+as a nested delimiter.
+
+Examples:
+
+```bash
+# Model + generation
+export JARVIS_GENERATION__MODEL_NAME="lfm2.5-1.2b"
+export JARVIS_GENERATION__MAX_TOKENS="50"
+export JARVIS_GENERATION__TEMPERATURE_SCALE='[0.2,0.4,0.6,0.8,0.9]'
+
+# API
+export JARVIS_API__PORT="8000"
+export JARVIS_API__DEBUG="false"
+export JARVIS_API__ALLOW_ORIGINS='["http://localhost:1420"]'
+```
+
+Key sections:
+- `generation`: model, max tokens, temperature scale, RAG weights
+- `embeddings`: data paths, FAISS settings, time-weighting
+- `api`: host/port/debug, CORS, pagination limits
 
 ## Development
 
@@ -145,7 +167,28 @@ make format        # Auto-format code
 - **Simplified**: Single consolidated documentation
 - **Focused**: Just reply generation, nothing else
 
-## Success Metrics
+## Current Performance (January 2026)
+
+### Quality Metrics
+
+| Metric | Baseline | After Improvements |
+|--------|----------|-------------------|
+| Fallback usage | 63% | **12%** (-81%) |
+| RAG suggestions | 0% | **58%** (new!) |
+| Generation time | 2,038ms | **1,395ms** (-31%) |
+| Intent match | 28% | 28% (no change) |
+
+### Startup Performance
+
+| Metric | Before Preload | After Preload |
+|--------|---------------|---------------|
+| First query delay | ~15s | Instant |
+| App startup time | ~1s | ~15s |
+| RAG lookup | 10-30ms | 10-30ms |
+
+The ~15s startup delay comes from PyTorch/sentence-transformers initialization, not the embedding model itself. See [docs/EMBEDDING_PERFORMANCE.md](docs/EMBEDDING_PERFORMANCE.md) for optimization strategies.
+
+### Success Metrics
 
 Current baseline: 28% intent match (lfm2.5-1.2b with roleplay prompt)
 
@@ -157,6 +200,7 @@ Target improvements:
 ## Documentation
 
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - System design, components, data flow, and roadmap
+- **[Embedding Performance](docs/EMBEDDING_PERFORMANCE.md)** - Startup timing, optimization strategies, MLX options
 - **[Visual Flowcharts](docs/FLOWCHARTS.md)** - Mermaid diagrams showing how everything connects
 - **[Testing Guide](docs/TESTING.md)** - How to test, evaluate quality, and debug
 - **[Data Storage Guide](docs/DATA_STORAGE.md)** - Where everything lives (contacts, embeddings, chat IDs)

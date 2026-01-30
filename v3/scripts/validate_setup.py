@@ -81,7 +81,7 @@ def test_context_analysis():
     print("Testing Context Analysis")
     print("=" * 50)
 
-    from core.generation.context_analyzer import ContextAnalyzer, ConversationContext
+    from core.generation.context_analyzer import ContextAnalyzer
 
     analyzer = ContextAnalyzer()
 
@@ -137,7 +137,7 @@ def test_style_analysis():
     print("Testing Style Analysis")
     print("=" * 50)
 
-    from core.generation.style_analyzer import StyleAnalyzer, UserStyle
+    from core.generation.style_analyzer import StyleAnalyzer
 
     analyzer = StyleAnalyzer()
 
@@ -164,7 +164,7 @@ def test_style_analysis():
 
         style = analyzer.analyze(sample_messages)
 
-        print(f"\n✅ Style detected:")
+        print("\n✅ Style detected:")
         print(f"   • Avg words: {style.avg_word_count:.1f}")
         print(f"   • Avg chars: {style.avg_char_count:.0f}")
         print(f"   • Uses emojis: {style.uses_emoji} ({style.emoji_frequency:.0%})")

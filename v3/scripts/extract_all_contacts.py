@@ -14,7 +14,6 @@ import argparse
 import json
 import sqlite3
 from pathlib import Path
-from collections import defaultdict
 
 ADDRESSBOOK_PATH = Path.home() / "Library" / "Application Support" / "AddressBook" / "Sources"
 OUTPUT_FILE = Path("results/contacts/all_contacts_with_phones.json")

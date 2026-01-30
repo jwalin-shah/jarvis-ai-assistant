@@ -1,5 +1,5 @@
 """iMessage integration."""
 
-from .reader import MessageReader, Message, Conversation
+from .reader import Conversation, Message, MessageReader
 
 __all__ = ["MessageReader", "Message", "Conversation"]
