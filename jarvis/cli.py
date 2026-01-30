@@ -48,6 +48,7 @@ from contracts.models import GenerationRequest
 from core.health import get_degradation_controller, reset_degradation_controller
 from core.memory import get_memory_controller, reset_memory_controller
 from jarvis.context import ContextFetcher
+from jarvis.db import get_db
 from jarvis.errors import (
     ConfigurationError,
     JarvisError,
@@ -1561,6 +1562,374 @@ def cmd_mcp_serve(args: argparse.Namespace) -> int:
             return 1
 
 
+def cmd_db(args: argparse.Namespace) -> int:
+    """Handle database operations.
+
+    Args:
+        args: Parsed arguments with subcommand.
+
+    Returns:
+        Exit code.
+    """
+    subcommand = args.db_command
+    if subcommand is None:
+        console.print("[red]Error: Please specify a db subcommand[/red]")
+        console.print(
+            "Available: init, add-contact, list-contacts, extract, cluster, label-cluster, build-index, stats"
+        )
+        return 1
+
+    if subcommand == "init":
+        return _cmd_db_init(args)
+    elif subcommand == "add-contact":
+        return _cmd_db_add_contact(args)
+    elif subcommand == "list-contacts":
+        return _cmd_db_list_contacts(args)
+    elif subcommand == "extract":
+        return _cmd_db_extract(args)
+    elif subcommand == "cluster":
+        return _cmd_db_cluster(args)
+    elif subcommand == "label-cluster":
+        return _cmd_db_label_cluster(args)
+    elif subcommand == "build-index":
+        return _cmd_db_build_index(args)
+    elif subcommand == "stats":
+        return _cmd_db_stats(args)
+    else:
+        console.print(f"[red]Unknown db subcommand: {subcommand}[/red]")
+        return 1
+
+
+def _cmd_db_init(args: argparse.Namespace) -> int:
+    """Initialize the JARVIS database."""
+
+    console.print("[bold]Initializing JARVIS database...[/bold]")
+
+    db = get_db()
+
+    if db.exists() and not args.force:
+        console.print(f"[yellow]Database already exists at {db.db_path}[/yellow]")
+        console.print("Use --force to reinitialize")
+        return 0
+
+    created = db.init_schema()
+
+    if created:
+        console.print(f"[green]Database created at {db.db_path}[/green]")
+    else:
+        console.print(f"[green]Database already up to date at {db.db_path}[/green]")
+
+    return 0
+
+
+def _cmd_db_add_contact(args: argparse.Namespace) -> int:
+    """Add or update a contact."""
+
+    db = get_db()
+
+    # Ensure database exists
+    if not db.exists():
+        db.init_schema()
+
+    contact = db.add_contact(
+        display_name=args.name,
+        chat_id=args.chat_id,
+        phone_or_email=args.phone,
+        relationship=args.relationship,
+        style_notes=args.style,
+    )
+
+    console.print("[green]Contact added/updated:[/green]")
+    console.print(f"  Name: {contact.display_name}")
+    if contact.relationship:
+        console.print(f"  Relationship: {contact.relationship}")
+    if contact.style_notes:
+        console.print(f"  Style: {contact.style_notes}")
+    if contact.chat_id:
+        console.print(f"  Chat ID: {contact.chat_id}")
+
+    return 0
+
+
+def _cmd_db_list_contacts(args: argparse.Namespace) -> int:
+    """List all contacts."""
+
+    db = get_db()
+
+    if not db.exists():
+        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
+        return 1
+
+    contacts = db.list_contacts(limit=args.limit)
+
+    if not contacts:
+        console.print("[dim]No contacts found. Add some with 'jarvis db add-contact'[/dim]")
+        return 0
+
+    table = Table(title=f"Contacts ({len(contacts)})")
+    table.add_column("ID", style="dim")
+    table.add_column("Name")
+    table.add_column("Relationship")
+    table.add_column("Style")
+    table.add_column("Chat ID", style="dim")
+
+    for c in contacts:
+        table.add_row(
+            str(c.id),
+            c.display_name,
+            c.relationship or "",
+            c.style_notes or "",
+            c.chat_id or "",
+        )
+
+    console.print(table)
+    return 0
+
+
+def _cmd_db_extract(args: argparse.Namespace) -> int:
+    """Extract (trigger, response) pairs from iMessage history."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from jarvis.extract import ExtractionConfig, extract_all_pairs
+
+    if not _check_imessage_access():
+        console.print(
+            "[red]Cannot access iMessage. Grant Full Disk Access in "
+            "System Settings > Privacy & Security.[/red]"
+        )
+        return 1
+
+    db = get_db()
+    if not db.exists():
+        db.init_schema()
+        console.print(f"[dim]Created database at {db.db_path}[/dim]")
+
+    # Configure extraction
+    config = ExtractionConfig(
+        min_trigger_length=args.min_length,
+        min_response_length=args.min_length,
+        max_response_delay_hours=args.max_delay,
+    )
+
+    console.print("[bold]Extracting (trigger, response) pairs from iMessage...[/bold]\n")
+
+    from integrations.imessage import ChatDBReader
+
+    with ChatDBReader() as reader:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Processing conversations...", total=None)
+
+            def progress_cb(current: int, total: int, chat_id: str) -> None:
+                progress.update(
+                    task,
+                    description=f"Processing {current}/{total}: {chat_id[:30]}...",
+                )
+
+            stats = extract_all_pairs(reader, db, config, progress_cb)
+
+    # Display results
+    console.print("\n[bold green]Extraction complete![/bold green]")
+    console.print(f"  Messages scanned: {stats.get('total_messages_scanned', 'N/A')}")
+    console.print(f"  Turns identified: {stats.get('turns_identified', 'N/A')}")
+    console.print(f"  Conversations processed: {stats['conversations_processed']}")
+    console.print(f"  Candidate pairs: {stats.get('candidate_pairs', 'N/A')}")
+    console.print(f"  Pairs extracted: {stats['pairs_extracted']}")
+    console.print(f"  Pairs added to database: {stats['pairs_added']}")
+    console.print(f"  Duplicates skipped: {stats['pairs_skipped_duplicate']}")
+
+    # Show dropped reasons if available
+    dropped = stats.get("dropped_by_reason", {})
+    if dropped and any(v > 0 for v in dropped.values()):
+        console.print("\n[dim]Dropped pairs by reason:[/dim]")
+        for reason, count in dropped.items():
+            if count > 0:
+                console.print(f"  {reason}: {count}")
+
+    if stats["errors"]:
+        console.print(f"\n[yellow]Errors: {len(stats['errors'])}[/yellow]")
+
+    return 0
+
+
+def _cmd_db_cluster(args: argparse.Namespace) -> int:
+    """Cluster response patterns using HDBSCAN."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from jarvis.cluster import ClusterConfig, cluster_and_store
+
+    db = get_db()
+    if not db.exists():
+        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
+        return 1
+
+    pair_count = db.count_pairs()
+    if pair_count == 0:
+        console.print("[yellow]No pairs found. Run 'jarvis db extract' first.[/yellow]")
+        return 1
+
+    console.print(f"[bold]Clustering {pair_count} response patterns...[/bold]\n")
+
+    config = ClusterConfig(
+        min_cluster_size=args.min_size,
+        min_samples=args.min_samples,
+    )
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Initializing...", total=None)
+
+        def progress_cb(stage: str, pct: float, msg: str) -> None:
+            progress.update(task, description=msg)
+
+        try:
+            stats = cluster_and_store(db, config, progress_cb)
+        except ImportError as e:
+            console.print(f"[red]Missing dependency: {e}[/red]")
+            console.print("Install with: pip install hdbscan")
+            return 1
+
+    # Display results
+    console.print("\n[bold green]Clustering complete![/bold green]")
+    console.print(f"  Pairs processed: {stats['pairs_processed']}")
+    console.print(f"  Clusters found: {stats['clusters_found']}")
+    console.print(f"  Noise (unclustered): {stats['noise_pairs']}")
+
+    if stats["clusters_created"]:
+        console.print("\n[bold]Clusters:[/bold]")
+        for cluster in stats["clusters_created"]:
+            console.print(f"  {cluster['name']}: {cluster['size']} responses")
+
+    console.print("\n[dim]Use 'jarvis db label-cluster <id> <name>' to rename clusters[/dim]")
+
+    return 0
+
+
+def _cmd_db_label_cluster(args: argparse.Namespace) -> int:
+    """Label a cluster with a name."""
+
+    db = get_db()
+    if not db.exists():
+        console.print("[yellow]Database not initialized.[/yellow]")
+        return 1
+
+    cluster = db.get_cluster(args.cluster_id)
+    if not cluster:
+        console.print(f"[red]Cluster {args.cluster_id} not found[/red]")
+        console.print("\nAvailable clusters:")
+        for c in db.list_clusters():
+            console.print(f"  {c.id}: {c.name}")
+        return 1
+
+    old_name = cluster.name
+    db.update_cluster_label(args.cluster_id, args.name, args.description)
+
+    console.print(f"[green]Renamed cluster {args.cluster_id}:[/green]")
+    console.print(f"  {old_name} → {args.name}")
+
+    return 0
+
+
+def _cmd_db_build_index(args: argparse.Namespace) -> int:
+    """Build FAISS index of triggers."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from jarvis.index import build_index_from_db
+
+    db = get_db()
+    if not db.exists():
+        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
+        return 1
+
+    pair_count = db.count_pairs()
+    if pair_count == 0:
+        console.print("[yellow]No pairs found. Run 'jarvis db extract' first.[/yellow]")
+        return 1
+
+    console.print(f"[bold]Building FAISS index for {pair_count} triggers...[/bold]\n")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Initializing...", total=None)
+
+        def progress_cb(stage: str, pct: float, msg: str) -> None:
+            progress.update(task, description=msg)
+
+        result = build_index_from_db(db, None, progress_cb)
+
+    if not result["success"]:
+        console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
+        return 1
+
+    console.print("\n[bold green]Index built successfully![/bold green]")
+    console.print(f"  Triggers indexed: {result['pairs_indexed']}")
+    console.print(f"  Embedding dimension: {result['dimension']}")
+    console.print(f"  Index size: {result['index_size_bytes'] / 1024:.1f} KB")
+    console.print(f"  Index path: {result['index_path']}")
+
+    return 0
+
+
+def _cmd_db_stats(args: argparse.Namespace) -> int:
+    """Show database statistics."""
+    from jarvis.index import get_index_stats
+
+    db = get_db()
+
+    if not db.exists():
+        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
+        return 1
+
+    stats = db.get_stats()
+
+    console.print(Panel("[bold]JARVIS Database Statistics[/bold]", title="Stats"))
+
+    # Overview table
+    overview = Table(title="Overview")
+    overview.add_column("Metric", style="bold")
+    overview.add_column("Count")
+
+    overview.add_row("Contacts", str(stats["contacts"]))
+    overview.add_row("Pairs (total)", str(stats["pairs"]))
+    overview.add_row("Pairs (quality >= 0.5)", str(stats.get("pairs_quality_gte_50", "N/A")))
+    overview.add_row("Clusters", str(stats["clusters"]))
+    overview.add_row("Embeddings", str(stats["embeddings"]))
+
+    console.print(overview)
+
+    # Pairs per contact
+    if stats["pairs_per_contact"]:
+        console.print("\n[bold]Top Contacts by Pairs:[/bold]")
+        for item in stats["pairs_per_contact"][:5]:
+            if item["count"] > 0:
+                console.print(f"  {item['name']}: {item['count']} pairs")
+
+    # Index stats (pass db for versioned index support)
+    index_stats = get_index_stats(db)
+    if index_stats and index_stats.get("exists"):
+        console.print("\n[bold]FAISS Index:[/bold]")
+        console.print(f"  Version: {index_stats.get('version_id', 'N/A')}")
+        console.print(f"  Model: {index_stats.get('model_name', 'N/A')}")
+        console.print(f"  Vectors: {index_stats['num_vectors']}")
+        console.print(f"  Dimension: {index_stats['dimension']}")
+        console.print(f"  Size: {index_stats['size_bytes'] / 1024:.1f} KB")
+        if index_stats.get("created_at"):
+            console.print(f"  Created: {index_stats['created_at']}")
+    else:
+        console.print("\n[dim]FAISS index not built. Run 'jarvis db build-index'[/dim]")
+
+    return 0
+
+
 def cmd_examples(args: argparse.Namespace) -> int:
     """Display detailed usage examples.
 
@@ -2354,6 +2723,178 @@ For detailed documentation, see: docs/MCP_INTEGRATION.md
         help="port number for HTTP transport (default: 8765)",
     )
     mcp_serve_parser.set_defaults(func=cmd_mcp_serve)
+
+    # Database command
+    db_parser = subparsers.add_parser(
+        "db",
+        help="manage JARVIS database (contacts, pairs, clusters, index)",
+        description=(
+            "Manage the JARVIS database for personalized responses.\n\n"
+            "The JARVIS database stores:\n"
+            "  - Contacts with relationship labels and style notes\n"
+            "  - (trigger, response) pairs extracted from your iMessage history\n"
+            "  - Intent clusters discovered from your response patterns\n"
+            "  - FAISS index for fast semantic search\n\n"
+            "Workflow:\n"
+            "  1. jarvis db init           - Create the database\n"
+            "  2. jarvis db add-contact    - Add contacts with relationship info\n"
+            "  3. jarvis db extract        - Extract pairs from iMessage\n"
+            "  4. jarvis db cluster        - Cluster response patterns\n"
+            "  5. jarvis db build-index    - Build FAISS search index"
+        ),
+        formatter_class=HelpFormatter,
+        epilog="""
+Examples:
+  jarvis db init                         Initialize database
+  jarvis db add-contact --name "Sarah" --relationship sister
+                                         Add contact with relationship
+  jarvis db list-contacts                View all contacts
+  jarvis db extract                      Extract pairs from iMessage
+  jarvis db cluster                      Cluster responses
+  jarvis db label-cluster 1 GREETING     Rename a cluster
+  jarvis db build-index                  Build FAISS index
+  jarvis db stats                        Show database statistics
+        """,
+    )
+    db_subparsers = db_parser.add_subparsers(dest="db_command")
+
+    # db init
+    db_init_parser = db_subparsers.add_parser(
+        "init",
+        help="initialize the JARVIS database",
+    )
+    db_init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="force reinitialization if database exists",
+    )
+
+    # db add-contact
+    db_add_contact_parser = db_subparsers.add_parser(
+        "add-contact",
+        help="add or update a contact",
+    )
+    db_add_contact_parser.add_argument(
+        "--name",
+        required=True,
+        metavar="<name>",
+        help="contact display name",
+    )
+    db_add_contact_parser.add_argument(
+        "--relationship",
+        metavar="<type>",
+        help="relationship type (e.g., sister, coworker, boss, friend)",
+    )
+    db_add_contact_parser.add_argument(
+        "--style",
+        metavar="<notes>",
+        help="communication style notes (e.g., 'casual, uses emojis')",
+    )
+    db_add_contact_parser.add_argument(
+        "--phone",
+        metavar="<number>",
+        help="phone number or email address",
+    )
+    db_add_contact_parser.add_argument(
+        "--chat-id",
+        dest="chat_id",
+        metavar="<id>",
+        help="iMessage chat ID to link",
+    )
+
+    # db list-contacts
+    db_list_contacts_parser = db_subparsers.add_parser(
+        "list-contacts",
+        help="list all contacts",
+    )
+    db_list_contacts_parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        default=100,
+        metavar="<n>",
+        help="maximum contacts to show (default: 100)",
+    )
+
+    # db extract
+    db_extract_parser = db_subparsers.add_parser(
+        "extract",
+        help="extract (trigger, response) pairs from iMessage",
+    )
+    db_extract_parser.add_argument(
+        "--min-length",
+        dest="min_length",
+        type=int,
+        default=2,
+        metavar="<n>",
+        help="minimum message length in characters (default: 2)",
+    )
+    db_extract_parser.add_argument(
+        "--max-delay",
+        dest="max_delay",
+        type=float,
+        default=1.0,
+        metavar="<hours>",
+        help="maximum hours between trigger and response (default: 1.0)",
+    )
+
+    # db cluster
+    db_cluster_parser = db_subparsers.add_parser(
+        "cluster",
+        help="cluster response patterns using HDBSCAN",
+    )
+    db_cluster_parser.add_argument(
+        "--min-size",
+        dest="min_size",
+        type=int,
+        default=10,
+        metavar="<n>",
+        help="minimum cluster size (default: 10)",
+    )
+    db_cluster_parser.add_argument(
+        "--min-samples",
+        dest="min_samples",
+        type=int,
+        default=5,
+        metavar="<n>",
+        help="minimum samples for core points (default: 5)",
+    )
+
+    # db label-cluster
+    db_label_cluster_parser = db_subparsers.add_parser(
+        "label-cluster",
+        help="label a cluster with a name",
+    )
+    db_label_cluster_parser.add_argument(
+        "cluster_id",
+        type=int,
+        metavar="<id>",
+        help="cluster ID to label",
+    )
+    db_label_cluster_parser.add_argument(
+        "name",
+        metavar="<name>",
+        help="new name for the cluster (e.g., GREETING, ACCEPT_INVITATION)",
+    )
+    db_label_cluster_parser.add_argument(
+        "--description",
+        metavar="<text>",
+        help="optional description for the cluster",
+    )
+
+    # db build-index
+    db_build_index_parser = db_subparsers.add_parser(
+        "build-index",
+        help="build FAISS index of triggers",
+    )
+
+    # db stats
+    db_stats_parser = db_subparsers.add_parser(
+        "stats",
+        help="show database statistics",
+    )
+
+    db_parser.set_defaults(func=cmd_db)
 
     return parser
 
