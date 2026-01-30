@@ -85,6 +85,25 @@ v3/
    - Retrieve your actual replies as examples
    - Generate 3 suggestions using MLX model
 
+## Data Storage
+
+All data lives in **`v3/data/`** (self-contained, no v2 dependencies):
+
+```
+v3/data/
+├── contacts/contact_profiles.json     # Your 562 labeled relationships ⭐
+├── embeddings/embeddings.db           # RAG message embeddings ⭐
+└── embeddings/faiss_indices/          # Fast search indices
+```
+
+**iMessage** (read-only, system): `~/Library/Messages/chat.db`
+
+See [docs/DATA_STORAGE.md](docs/DATA_STORAGE.md) for complete details on:
+- How chat IDs map to contacts
+- Where embeddings are stored
+- How to backup/reset data
+- Troubleshooting missing data
+
 ## Key Features
 
 - **Relationship-Aware RAG**: Searches your past replies across similar relationships
@@ -140,11 +159,13 @@ Target improvements:
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - System design, components, data flow, and roadmap
 - **[Visual Flowcharts](docs/FLOWCHARTS.md)** - Mermaid diagrams showing how everything connects
 - **[Testing Guide](docs/TESTING.md)** - How to test, evaluate quality, and debug
+- **[Data Storage Guide](docs/DATA_STORAGE.md)** - Where everything lives (contacts, embeddings, chat IDs)
 
 **Quick Navigation:**
 - [System Overview](#system-overview) - High-level architecture
 - [Quick Start](#quick-start) - Get running in 5 minutes
 - [How It Works](#how-it-works) - 30-second explanation
+- [Data Storage](#data-storage) - Where contacts, embeddings, and chat IDs live
 - [Testing Strategy](#testing-strategy) - Validate everything works
 - [Roadmap](#next-steps) - Where we're going
 
