@@ -234,7 +234,9 @@ class ModelLoader:
 
             # Calculate actual generation speed (excluding prefill)
             gen_tok_per_sec = tokens / (generation_only_ms / 1000) if generation_only_ms > 0 else 0
-            prefill_tok_per_sec = prompt_tokens / (prefill_time_ms / 1000) if prefill_time_ms > 0 else 0
+            prefill_tok_per_sec = (
+                prompt_tokens / (prefill_time_ms / 1000) if prefill_time_ms > 0 else 0
+            )
 
             logger.info(
                 f"LLM: {prompt_tokens} prompt tokens, {tokens} output tokens | "

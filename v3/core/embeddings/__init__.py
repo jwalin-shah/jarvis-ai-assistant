@@ -7,21 +7,21 @@ Provides:
 - Relationship-aware cross-conversation RAG
 """
 
+from .contact_profiler import ContactProfile, ContactProfiler, TopicCluster, get_contact_profile
+from .indexer import IndexingStats, MessageIndexer, run_indexing
 from .model import EmbeddingModel, get_embedding_model
-from .store import (
-    EmbeddingStore,
-    get_embedding_store,
-    SimilarMessage,
-    ConversationContext,
-    StyleProfile,
-)
-from .indexer import MessageIndexer, run_indexing, IndexingStats
-from .contact_profiler import ContactProfiler, ContactProfile, TopicCluster, get_contact_profile
 from .relationship_registry import (
-    RelationshipRegistry,
     RelationshipInfo,
+    RelationshipRegistry,
     get_relationship_registry,
     reset_relationship_registry,
+)
+from .store import (
+    ConversationContext,
+    EmbeddingStore,
+    SimilarMessage,
+    StyleProfile,
+    get_embedding_store,
 )
 
 __all__ = [

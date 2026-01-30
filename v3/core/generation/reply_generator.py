@@ -12,18 +12,19 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+from core.config import PromptStrategy, settings
+
 from .context_analyzer import ContextAnalyzer, ConversationContext, RelationshipType
 from .global_styler import get_global_user_style
-from .prompts import build_reply_prompt
+from .prompts import (
+    build_conversation_prompt,
+    build_rag_reply_prompt,
+    build_reply_prompt,
+    build_threaded_reply_prompt,
+)
 from .style_analyzer import StyleAnalyzer, UserStyle
 
 logger = logging.getLogger(__name__)
-
-# Generation constants
-TEMPERATURE_SCALE = [0.2, 0.4, 0.6, 0.8, 0.9]  # Temps for regen 0, 1, 2, 3, 4+
-MAX_REPLY_TOKENS = 30  # Short replies only
-TEMPLATE_CONFIDENCE = 0.7  # Min confidence for personal template match
-PAST_REPLY_CONFIDENCE = 0.75  # Min confidence for past reply to be "high quality"
 
 
 def _get_template_matcher():
@@ -122,11 +123,12 @@ class ReplyGenerator:
     # Max recent generations to track per chat
     MAX_RECENT_GENERATIONS = 5
 
-    def __init__(self, model_loader):
+    def __init__(self, model_loader, preload_embeddings: bool = True):
         """Initialize generator.
 
         Args:
             model_loader: ModelLoader instance for LLM generation
+            preload_embeddings: If True, preload embedding model for fast RAG
         """
         self.model_loader = model_loader
         self.style_analyzer = StyleAnalyzer()
@@ -137,6 +139,32 @@ class ReplyGenerator:
 
         # Per-conversation state (style cache, recent generations, regen tracking)
         self._chat_states: dict[str, ChatState] = {}
+
+        # Preload embedding model for fast RAG queries
+        # Without this, first RAG query takes ~10s to load the model
+        if preload_embeddings:
+            self._preload_embeddings()
+
+    def _preload_embeddings(self) -> None:
+        """Preload embedding model and FAISS index for fast RAG queries."""
+        # 1. Preload embedding model (~10s cold, instant if cached)
+        try:
+            from core.embeddings.model import get_embedding_model
+            model = get_embedding_model()
+            if not model.is_loaded:
+                logger.info("Preloading embedding model...")
+                model.preload()
+        except Exception as e:
+            logger.warning(f"Failed to preload embedding model: {e}")
+
+        # 2. Preload reply-pairs FAISS index (~1s from disk)
+        try:
+            store = _get_embedding_store()
+            if store and store.is_reply_pairs_index_ready():
+                logger.info("Preloading reply-pairs FAISS index...")
+                store._get_or_build_reply_pairs_index()
+        except Exception as e:
+            logger.warning(f"Failed to preload FAISS index: {e}")
 
     def _get_chat_state(self, chat_id: str) -> ChatState:
         """Get or create chat state for a conversation."""
@@ -175,7 +203,9 @@ class ReplyGenerator:
             state.regen_count += 1
 
         # Temperature scaling: increases with each regeneration
-        temp = TEMPERATURE_SCALE[min(state.regen_count, len(TEMPERATURE_SCALE) - 1)]
+        temp = settings.generation.temperature_scale[
+            min(state.regen_count, len(settings.generation.temperature_scale) - 1)
+        ]
 
         if state.regen_count > 0:
             logger.info(f"Regeneration #{state.regen_count}, using temperature {temp}")
@@ -253,10 +283,17 @@ class ReplyGenerator:
         start_time = time.time()
         timings: dict[str, float] = {}
 
+        # Debug flag - set to True to see step-by-step progress
+        DEBUG = True
+
         # 0. Filter to coherent segment (detect topic breaks)
+        if DEBUG:
+            print("         [step 0] coherence filter...", end=" ", flush=True)
         t0 = time.time()
         coherent_messages = self._get_coherent_messages(messages)
         timings["coherence_filter"] = (time.time() - t0) * 1000
+        if DEBUG:
+            print(f"done ({timings['coherence_filter']:.0f}ms)", flush=True)
 
         # 0.5 FAST PATH: Check response templates FIRST (before any other processing)
         # This skips all style analysis, context analysis, and LLM for common responses
@@ -308,18 +345,28 @@ class ReplyGenerator:
         timings["template_check"] = (time.time() - t0) * 1000
 
         # 1. Analyze user's texting style (use all messages for style)
+        if DEBUG:
+            print("         [step 1] style analysis...", end=" ", flush=True)
         t0 = time.time()
         style = self._get_or_analyze_style(messages, chat_id)
         timings["style_analysis"] = (time.time() - t0) * 1000
+        if DEBUG:
+            print(f"done ({timings['style_analysis']:.0f}ms)", flush=True)
 
         # 2. Analyze conversation context (use coherent segment only)
+        if DEBUG:
+            print("         [step 2] context analysis...", end=" ", flush=True)
         t0 = time.time()
         context = self.context_analyzer.analyze(coherent_messages)
         timings["context_analysis"] = (time.time() - t0) * 1000
+        if DEBUG:
+            print(f"done ({timings['context_analysis']:.0f}ms)", flush=True)
 
         # 3. Find YOUR past replies to similar messages (few-shot learning)
         # Search within THIS conversation (uses FAISS index = fast)
         # TODO: Build global FAISS index to search ALL conversations
+        if DEBUG:
+            print("         [step 3] past replies lookup (RAG)...", end=" ", flush=True)
         t0 = time.time()
         past_replies = []
         availability = self._extract_availability_signal(coherent_messages)
@@ -330,10 +377,13 @@ class ReplyGenerator:
                 incoming_message=context.last_message,
                 chat_id=chat_id,  # Search this conversation (has FAISS index)
                 recent_messages=coherent_messages,
+                min_similarity=settings.generation.min_similarity_threshold,
             )
             if past_replies:
                 logger.info(f"Found {len(past_replies)} past replies for few-shot learning")
         timings["past_replies_lookup"] = (time.time() - t0) * 1000
+        if DEBUG:
+            print(f"done ({timings['past_replies_lookup']:.0f}ms, found {len(past_replies)})", flush=True)
 
         # 4b. Template matching - if past replies are very similar and consistent, skip LLM
         template_reply = self._try_template_match(past_replies)
@@ -357,17 +407,25 @@ class ReplyGenerator:
         # 5. Get contact profile for better style info (from ALL your messages, not just recent)
         # Skip topic extraction (LLM call) - only need style info for generation
         # Profile is cached for fast retrieval after first computation
+        if DEBUG:
+            print("         [step 5] contact profile...", end=" ", flush=True)
         t0 = time.time()
         profile = None
         if chat_id:
             profile = _get_contact_profile(chat_id, include_topics=False)
         timings["contact_profile"] = (time.time() - t0) * 1000
+        if DEBUG:
+            print(f"done ({timings['contact_profile']:.0f}ms)", flush=True)
 
         # 5.5 Get global user style (all messages, all chats)
         # This gives us your overall texting personality + LLM-generated summary
+        if DEBUG:
+            print("         [step 5.5] global style...", end=" ", flush=True)
         t0 = time.time()
         global_style = get_global_user_style(use_cache=True)
         timings["global_style"] = (time.time() - t0) * 1000
+        if DEBUG:
+            print(f"done ({timings['global_style']:.0f}ms)", flush=True)
 
         # 6. Build style instructions - use global style + contact profile
         style_instructions = self.style_analyzer.build_style_instructions(
@@ -398,21 +456,79 @@ class ReplyGenerator:
         # Use coherent messages directly (no historical injection)
         messages_for_prompt = coherent_messages.copy()
 
-        prompt = build_reply_prompt(
-            messages=messages_for_prompt,  # Use coherent segment + refreshed context
-            last_message=context.last_message,
-            last_sender=context.last_sender,
-            style_instructions=style_instructions,
-            past_replies=past_replies,
-            user_name=self._user_name,
-            recent_topics=recent_topics,
-            availability=availability if availability != "unknown" else None,
-            your_phrases=your_phrases,
-            global_style=global_style,
-            contact_profile=profile,
-        )
+        # Build prompt based on available context
+        # Priority: RAG prompt (if good past_replies) > Threaded (if group) > Conversation > Legacy
+
+        # Detect if this is a group chat
+        is_group_chat = len(set(
+            m.get("sender") for m in coherent_messages if not m.get("is_from_me")
+        )) > 1
+
+        # Use RAG prompt if we have good past replies (more personalized)
+        if past_replies and len(past_replies) >= 2:
+            # Get average message length from profile
+            avg_length = 50.0
+            if profile and hasattr(profile, "avg_your_length") and profile.avg_your_length:
+                avg_length = profile.avg_your_length
+
+            # Get intent to guide response type
+            message_intent = context.intent.value if context.intent else None
+
+            prompt = build_rag_reply_prompt(
+                messages=messages_for_prompt,
+                last_message=context.last_message,
+                contact_name=self._contact_name or "them",
+                similar_exchanges=past_replies,
+                relationship_type=profile.relationship_type if profile else None,
+                avg_message_length=avg_length,
+                message_intent=message_intent,
+            )
+            logger.debug("Using RAG prompt strategy (found %d past replies, intent=%s)", len(past_replies), message_intent)
+
+        elif is_group_chat:
+            # Use threaded prompt for group chats
+            participants = list(set(
+                m.get("sender_name") or m.get("sender") or "Someone"
+                for m in coherent_messages if not m.get("is_from_me")
+            ))
+            prompt = build_threaded_reply_prompt(
+                messages=messages_for_prompt,
+                last_message=context.last_message,
+                thread_topic=context.topic or "General",
+                participants=participants,
+                is_group=True,
+            )
+            logger.debug("Using THREADED prompt strategy (group chat)")
+
+        elif settings.generation.prompt_strategy == PromptStrategy.CONVERSATION:
+            # Simple conversation continuation prompt
+            prompt = build_conversation_prompt(
+                messages=messages_for_prompt,
+                style_hint=settings.generation.conversation_style_hint,
+                max_messages=10,
+            )
+            logger.debug("Using CONVERSATION prompt strategy")
+
+        else:
+            # LEGACY: Few-shot examples with "them: X\nme:" completion
+            prompt = build_reply_prompt(
+                messages=messages_for_prompt,
+                last_message=context.last_message,
+                last_sender=context.last_sender,
+                style_instructions=style_instructions,
+                past_replies=past_replies,
+                user_name=self._user_name,
+                recent_topics=recent_topics,
+                availability=availability if availability != "unknown" else None,
+                your_phrases=your_phrases,
+                global_style=global_style,
+                contact_profile=profile,
+            )
+            logger.debug("Using LEGACY prompt strategy")
 
         # 7. Generate with LLM
+        if DEBUG:
+            print("         [step 7] LLM generation...", end=" ", flush=True)
         t0 = time.time()
         formatted_prompt = ""  # Will store the actual ChatML prompt for debugging
         try:
@@ -421,7 +537,7 @@ class ReplyGenerator:
 
             result = self.model_loader.generate(
                 prompt=prompt,
-                max_tokens=MAX_REPLY_TOKENS,
+                max_tokens=settings.generation.max_tokens,
                 temperature=temperature,
                 stop=["\n", "2.", "2)", "##", "Note:", "---"],
                 use_chat_template=False,  # Raw completion works better for few-shot
@@ -429,6 +545,8 @@ class ReplyGenerator:
             raw_output = result.text
             formatted_prompt = result.formatted_prompt  # The actual ChatML prompt
             timings["llm_generation"] = (time.time() - t0) * 1000
+            if DEBUG:
+                print(f"done ({timings['llm_generation']:.0f}ms)", flush=True)
         except Exception as e:
             logger.error(f"Generation failed: {e}")
             # Return fallback replies
@@ -443,7 +561,35 @@ class ReplyGenerator:
         # 9. Filter out repetitive replies (recently used in this conversation)
         replies = self._filter_repetitive(replies, chat_id)
 
-        # Ensure we have enough replies
+        # 9.5 Use RAG past_replies as additional suggestions (BEFORE generic fallbacks)
+        # This is the key improvement: your actual past replies are better than "got it", "cool"
+        if len(replies) < num_replies and past_replies:
+            rag_suggestions = self._get_rag_suggestions(
+                past_replies, num_replies - len(replies)
+            )
+            rag_suggestions = self._filter_repetitive(rag_suggestions, chat_id)
+            # Don't duplicate the LLM-generated reply
+            existing_texts = {r.text.lower().strip() for r in replies}
+            rag_suggestions = [r for r in rag_suggestions if r.text.lower().strip() not in existing_texts]
+            replies.extend(rag_suggestions)
+
+        # 9.7 Add clarification responses if context is needed but not found
+        if len(replies) < num_replies and self._should_add_clarification(past_replies, context):
+            clarifications = self._get_clarification_responses(
+                context.intent.value,
+                needs_context=True,
+                is_specific_question=True,
+            )
+            # Only add one clarification option
+            if clarifications:
+                existing_texts = {r.text.lower().strip() for r in replies}
+                for c in clarifications[:1]:
+                    if c.text.lower().strip() not in existing_texts:
+                        replies.append(c)
+                        break
+            logger.debug("Added clarification response (low-confidence context)")
+
+        # 10. Fall back to generic templates only if still not enough
         if len(replies) < num_replies:
             fallbacks = self._get_fallback_replies(
                 context.intent.value, num_replies - len(replies), chat_id
@@ -616,13 +762,152 @@ class ReplyGenerator:
                 GeneratedReply(
                     text=text,
                     reply_type="personal_template",
-                    confidence=TEMPLATE_CONFIDENCE,
+                    confidence=settings.generation.template_confidence,
                 )
                 for text in replies[:count]
             ]
         except Exception as e:
             logger.debug(f"Failed to get personal templates: {e}")
             return []
+
+    def _get_clarification_responses(
+        self,
+        intent_value: str,
+        needs_context: bool,
+        is_specific_question: bool,
+    ) -> list[GeneratedReply]:
+        """Get clarification responses when context is needed but not found.
+
+        Args:
+            intent_value: Detected intent type
+            needs_context: Whether the message needs specific context
+            is_specific_question: Whether asking about specific facts
+
+        Returns:
+            List of clarification responses
+        """
+        responses = []
+
+        if is_specific_question or needs_context:
+            # Generic clarification for specific questions
+            clarifications = {
+                "information_seeking": [
+                    "hmm not sure, when was that?",
+                    "can you give me more context?",
+                    "remind me what we were talking about?",
+                ],
+                "open_question": [
+                    "what do you mean?",
+                    "can you be more specific?",
+                    "not sure I follow",
+                ],
+                "yes_no_question": [
+                    "hmm not sure",
+                    "I'd have to check",
+                    "remind me?",
+                ],
+            }
+
+            options = clarifications.get(intent_value, clarifications["open_question"])
+            for text in options[:2]:  # Max 2 clarification options
+                responses.append(
+                    GeneratedReply(
+                        text=text,
+                        reply_type="clarification",
+                        confidence=0.6,
+                    )
+                )
+
+        return responses
+
+    def _should_add_clarification(
+        self,
+        past_replies: list[tuple[str, str, float]],
+        context: ConversationContext,
+        min_similarity: float = 0.35,
+    ) -> bool:
+        """Check if we should add a clarification response.
+
+        Returns True if:
+        - Message needs context (asking about specific info)
+        - RAG didn't find good matches (low similarity)
+
+        Args:
+            past_replies: RAG results with similarity scores
+            context: Conversation context with intent info
+            min_similarity: Threshold for "good" RAG match
+
+        Returns:
+            True if clarification might be helpful
+        """
+        # Check if context detected a specific question needing context
+        intent_result = None
+        try:
+            from core.intent import classify_incoming_message
+            intent_result = classify_incoming_message(context.last_message)
+        except Exception:
+            pass
+
+        if intent_result and (intent_result.needs_context or intent_result.is_specific_question):
+            # Check if RAG found good matches
+            if not past_replies:
+                return True
+            max_similarity = max(score for _, _, score in past_replies)
+            if max_similarity < min_similarity:
+                return True
+
+        return False
+
+    def _get_rag_suggestions(
+        self,
+        past_replies: list[tuple[str, str, float]],
+        count: int,
+    ) -> list[GeneratedReply]:
+        """Convert RAG past_replies into reply suggestions.
+
+        This uses your ACTUAL past replies as suggestions, which are much
+        better than generic fallbacks like "got it" or "cool".
+
+        Args:
+            past_replies: List of (their_message, your_reply, similarity) tuples
+            count: Number of suggestions needed
+
+        Returns:
+            List of GeneratedReply objects from your past messages
+        """
+        if not past_replies:
+            return []
+
+        suggestions = []
+        seen_texts = set()
+
+        for their_msg, your_reply, similarity in past_replies:
+            # Skip if we've seen this exact reply
+            reply_key = your_reply.lower().strip()
+            if reply_key in seen_texts:
+                continue
+            seen_texts.add(reply_key)
+
+            # Clean up the reply
+            reply_text = your_reply.strip()
+
+            # Skip very short or very long replies
+            if len(reply_text) < 2 or len(reply_text) > 100:
+                continue
+
+            suggestions.append(
+                GeneratedReply(
+                    text=reply_text,
+                    reply_type="rag_suggestion",
+                    confidence=min(0.85, similarity + 0.1),  # Boost slightly
+                )
+            )
+
+            if len(suggestions) >= count:
+                break
+
+        logger.debug(f"Created {len(suggestions)} RAG suggestions from past replies")
+        return suggestions
 
     def _fallback_result(
         self,
@@ -791,6 +1076,7 @@ class ReplyGenerator:
         incoming_message: str,
         chat_id: str | None,
         recent_messages: list[dict] | None = None,
+        min_similarity: float | None = None,
     ) -> list[tuple[str, str, float]]:
         """Find YOUR past replies to similar incoming messages.
 
@@ -801,6 +1087,7 @@ class ReplyGenerator:
             incoming_message: The message to find similar responses for
             chat_id: Optional conversation filter
             recent_messages: Recent messages for context/availability detection
+            min_similarity: Minimum similarity threshold
 
         Returns:
             List of (their_message, your_reply, score) tuples
@@ -809,13 +1096,16 @@ class ReplyGenerator:
         if not store:
             return []
 
+        if min_similarity is None:
+            min_similarity = settings.generation.min_similarity_threshold
+
         try:
             # 1. Same-conversation search (high priority)
             same_convo_results = store.find_your_past_replies(
                 incoming_message=incoming_message,
                 chat_id=chat_id,
                 limit=5,
-                min_similarity=0.55,
+                min_similarity=min_similarity,
                 use_time_weighting=True,
             )
 
@@ -824,10 +1114,15 @@ class ReplyGenerator:
                 incoming_message=incoming_message,
                 current_chat_id=chat_id,
                 limit=5,
+                min_similarity=min_similarity,
             )
 
             # 3. Merge results (prioritize same-conversation)
-            results = self._merge_past_replies(same_convo_results, cross_convo_results)
+            results = self._merge_past_replies(
+                same_convo_results,
+                cross_convo_results,
+                same_convo_boost=0.05,  # Boost for same-convo
+            )
 
             # 4. Apply availability-based filtering
             availability = self._extract_availability_signal(recent_messages)
@@ -845,6 +1140,8 @@ class ReplyGenerator:
         incoming_message: str,
         current_chat_id: str | None,
         limit: int = 5,
+        min_similarity: float | None = None,
+        skip_if_slow: bool = True,
     ) -> list[tuple[str, str, float]]:
         """Find past replies from contacts with similar relationships.
 
@@ -855,6 +1152,8 @@ class ReplyGenerator:
             incoming_message: The message to find similar responses for
             current_chat_id: Current conversation's chat_id
             limit: Max results
+            min_similarity: Minimum similarity threshold
+            skip_if_slow: If True, skip if reply-pairs index isn't cached
 
         Returns:
             List of (their_message, your_reply, score) tuples
@@ -864,6 +1163,14 @@ class ReplyGenerator:
 
         if not store or not registry:
             return []
+
+        # Skip if index isn't ready (avoids slow on-demand build)
+        if skip_if_slow and not store.is_reply_pairs_index_ready():
+            logger.info("Skipping cross-conversation search - reply-pairs index not ready")
+            return []
+
+        if min_similarity is None:
+            min_similarity = settings.generation.min_similarity_threshold
 
         try:
             # Get relationship info - try chat_id first, then contact_name fallback
@@ -878,8 +1185,10 @@ class ReplyGenerator:
                     logger.debug(f"Using contact_name fallback for {self._contact_name}")
 
             if not relationship_info:
+                contact = getattr(self, "_contact_name", None)
                 logger.debug(
-                    f"No relationship info found for chat_id={current_chat_id}, contact_name={getattr(self, '_contact_name', None)}"
+                    f"No relationship info found for chat_id={current_chat_id}, "
+                    f"contact_name={contact}"
                 )
                 return []
 
@@ -915,7 +1224,7 @@ class ReplyGenerator:
                 incoming_message=incoming_message,
                 target_chat_ids=target_chat_ids,
                 limit=limit,
-                min_similarity=0.55,
+                min_similarity=min_similarity,
             )
 
             # Convert to same format (drop chat_id from tuple)
@@ -946,14 +1255,23 @@ class ReplyGenerator:
         Returns:
             Merged and deduplicated list of (their_msg, your_reply, score)
         """
+        same_weight = settings.generation.same_convo_weight
+        cross_weight = settings.generation.cross_convo_weight
+
         # Boost same-conversation scores
         boosted_same = [
-            (their_msg, your_reply, score + same_convo_boost)
+            (their_msg, your_reply, (score + same_convo_boost) * same_weight)
             for their_msg, your_reply, score in same_convo
         ]
 
+        # Apply weight to cross-conversation scores
+        weighted_cross = [
+            (their_msg, your_reply, score * cross_weight)
+            for their_msg, your_reply, score in cross_convo
+        ]
+
         # Combine and sort
-        combined = boosted_same + list(cross_convo)
+        combined = boosted_same + weighted_cross
         combined.sort(key=lambda x: x[2], reverse=True)
 
         # Deduplicate by reply text (case-insensitive)
@@ -1107,7 +1425,9 @@ class ReplyGenerator:
             return None
 
         # Check if top replies are very similar (>75% similarity)
-        high_confidence = [r for r in past_replies if r[2] >= PAST_REPLY_CONFIDENCE]
+        high_confidence = [
+            r for r in past_replies if r[2] >= settings.generation.past_reply_confidence
+        ]
         if len(high_confidence) < 2:
             return None
 

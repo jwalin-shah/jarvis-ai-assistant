@@ -150,10 +150,15 @@ class ProfileCache:
                 """INSERT OR REPLACE INTO profile_cache
                 (chat_id, include_topics, profile_json, computed_at, message_count)
                 VALUES (?, ?, ?, ?, ?)""",
-                (chat_id, 1 if include_topics else 0, profile_json, int(time.time()), message_count),
+                (
+                    chat_id, 1 if include_topics else 0, profile_json,
+                    int(time.time()), message_count
+                ),
             )
             conn.commit()
-        logger.debug(f"Cached profile for {chat_id} ({message_count} messages, topics={include_topics})")
+        logger.debug(
+            f"Cached profile for {chat_id} ({message_count} messages, topics={include_topics})"
+        )
 
     def invalidate(self, chat_id: str) -> None:
         """Remove a profile from cache."""
@@ -364,8 +369,14 @@ class ContactProfiler:
             is_playful=analysis["is_playful"],
             topics=topics,
             most_active_hours=active_hours,
-            last_message_date=datetime.fromtimestamp(stats["last_timestamp"]) if stats["last_timestamp"] else None,
-            first_message_date=datetime.fromtimestamp(stats["first_timestamp"]) if stats["first_timestamp"] else None,
+            last_message_date=(
+                datetime.fromtimestamp(stats["last_timestamp"])
+                if stats["last_timestamp"] else None
+            ),
+            first_message_date=(
+                datetime.fromtimestamp(stats["first_timestamp"])
+                if stats["first_timestamp"] else None
+            ),
             their_common_phrases=self._extract_common_phrases(their_texts),
             your_common_phrases=self._extract_common_phrases(your_texts)
         )
@@ -401,7 +412,8 @@ class ContactProfiler:
                     AVG(CASE WHEN is_from_me = 0 THEN LENGTH(text_preview) END) as avg_their_length,
                     MIN(timestamp) as first_timestamp,
                     MAX(timestamp) as last_timestamp,
-                    MIN(CASE WHEN is_from_me = 0 THEN COALESCE(sender_name, sender) END) as display_name
+                    MIN(CASE WHEN is_from_me = 0
+                        THEN COALESCE(sender_name, sender) END) as display_name
                 FROM message_embeddings
                 WHERE chat_id = ?
                 """,
@@ -1045,11 +1057,19 @@ class ContactProfiler:
         name = display_name or "this person"
         rel_type = profile.relationship_type
         tone = profile.tone
-        topics_str = ", ".join(t.name.lower() for t in profile.topics[:3]) if profile.topics else "various topics"
+        topics_str = (
+            ", ".join(t.name.lower() for t in profile.topics[:3])
+            if profile.topics else "various topics"
+        )
 
         # Compute interaction patterns
         you_ratio = profile.you_sent / max(profile.total_messages, 1)
-        balance = "balanced" if 0.4 <= you_ratio <= 0.6 else ("you talk more" if you_ratio > 0.6 else "they talk more")
+        if 0.4 <= you_ratio <= 0.6:
+            balance = "balanced"
+        elif you_ratio > 0.6:
+            balance = "you talk more"
+        else:
+            balance = "they talk more"
 
         try:
             from core.models.loader import get_model_loader
@@ -1057,7 +1077,8 @@ class ContactProfiler:
             loader = get_model_loader()
             sample_str = "\n".join(sample_msgs[:25])
 
-            prompt = f"""Analyze this text message conversation and describe the relationship in 2-3 sentences.
+            prompt = f"""Analyze this conversation and describe the relationship \
+in 2-3 sentences.
 
 Contact: {name}
 Relationship type: {rel_type}

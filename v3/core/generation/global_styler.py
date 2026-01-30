@@ -257,7 +257,10 @@ class GlobalUserStyler:
         logger.info(f"Building global style from {len(all_texts)} messages")
 
         if len(all_texts) < MIN_MESSAGES_FOR_ANALYSIS:
-            logger.warning(f"Not enough messages for global style ({len(all_texts)} < {MIN_MESSAGES_FOR_ANALYSIS})")
+            logger.warning(
+                f"Not enough messages for global style "
+                f"({len(all_texts)} < {MIN_MESSAGES_FOR_ANALYSIS})"
+            )
             return GlobalUserStyle(total_messages_analyzed=len(all_texts))
 
         # 2. Extract phrase patterns
@@ -527,7 +530,7 @@ class GlobalUserStyler:
         samples = self._select_diverse_samples(texts, n=50)
 
         # 2. Build analysis prompt
-        prompt = f"""Analyze these text messages sent by one person and describe their texting personality.
+        prompt = f"""Analyze these text messages and describe their texting personality.
 
 Messages (50 samples):
 {self._format_samples(samples)}
@@ -563,7 +566,7 @@ Description:"""
 
         samples = random.sample(informative, min(100, len(informative)))
 
-        prompt = f"""Analyze these text messages sent by one person and extract information about them.
+        prompt = f"""Analyze these text messages and extract information about the sender.
 
 Messages (samples):
 {self._format_samples(samples)}
@@ -637,7 +640,9 @@ def get_global_user_style(use_cache: bool = True, skip_llm: bool = False) -> Glo
     # Get current message count
     total_count = styler._get_total_message_count()
     if total_count < MIN_MESSAGES_FOR_ANALYSIS:
-        logger.debug(f"Not enough messages for global style ({total_count} < {MIN_MESSAGES_FOR_ANALYSIS})")
+        logger.debug(
+            f"Not enough messages for global style ({total_count} < {MIN_MESSAGES_FOR_ANALYSIS})"
+        )
         return None
 
     # Try cache first

@@ -6,27 +6,31 @@ This is a one-time setup that indexes your message history so JARVIS can:
 2. Find your past replies to similar messages
 3. Generate responses that match how YOU actually text
 
-Run with: python -m v2.scripts.index_messages
+Run with: uv run python scripts/index_messages.py
 """
 
 from __future__ import annotations
 
 import sys
 import time
+from pathlib import Path
+
+# Add v3 directory to path so we can import core modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 def main():
     from rich.console import Console
+    from rich.panel import Panel
     from rich.progress import (
+        BarColumn,
         Progress,
         SpinnerColumn,
-        TextColumn,
-        BarColumn,
         TaskProgressColumn,
+        TextColumn,
         TimeElapsedColumn,
         TimeRemainingColumn,
     )
-    from rich.panel import Panel
     from rich.table import Table
 
     console = Console()
@@ -52,8 +56,8 @@ def main():
     # First, count messages to give accurate estimate
     console.print("[dim]Scanning conversations...[/dim]")
 
+    from core.embeddings import get_embedding_model, get_embedding_store
     from core.imessage import MessageReader
-    from core.embeddings import get_embedding_store, get_embedding_model
 
     reader = MessageReader()
     conversations = reader.get_conversations(limit=None)  # All conversations
@@ -136,19 +140,47 @@ def main():
     # Results
     console.print()
     console.print(Panel.fit(
-        f"[green]✓ Indexing Complete![/green]\n\n"
+        f"[green]✓ Embedding Indexing Complete![/green]\n\n"
         f"Messages indexed: [cyan]{indexed:,}[/cyan]\n"
         f"Already indexed: [dim]{duplicates:,}[/dim]\n"
         f"Skipped (too short): [dim]{skipped:,}[/dim]\n"
         f"Time: [cyan]{elapsed:.1f} seconds[/cyan]\n\n"
         f"Database: [dim]~/.jarvis/embeddings.db[/dim]",
-        title="Results",
+        title="Embeddings",
     ))
 
-    if indexed > 0:
-        console.print()
-        console.print("[green]Your message history is now indexed![/green]")
-        console.print("JARVIS will use your past replies to match your texting style.")
+    # Build FAISS indices for fast RAG lookup
+    console.print()
+    console.print("[bold]Building FAISS indices for fast RAG lookup...[/bold]")
+    console.print("[dim](This enables cross-conversation style learning)[/dim]")
+    console.print()
+
+    with console.status("[bold green]Building reply-pairs index (~2-3 minutes)...[/bold green]"):
+        faiss_start = time.time()
+        result = store._get_or_build_reply_pairs_index()
+        faiss_elapsed = time.time() - faiss_start
+
+    if result:
+        _, metadata = result
+        console.print(f"[green]✓[/green] Reply-pairs index: [cyan]{len(metadata):,}[/cyan] pairs in [cyan]{faiss_elapsed:.1f}s[/cyan]")
+    else:
+        console.print("[yellow]⚠[/yellow] Reply-pairs index build failed (FAISS may not be available)")
+
+    # Show final status
+    console.print()
+    stats = store.get_stats()
+    console.print(Panel.fit(
+        f"[green]✓ Setup Complete![/green]\n\n"
+        f"Total messages: [cyan]{stats['total_messages']:,}[/cyan]\n"
+        f"Conversations: [cyan]{stats['unique_conversations']}[/cyan]\n"
+        f"Reply-pairs index: [green]{'Ready' if store.is_reply_pairs_index_ready() else 'Not ready'}[/green]\n"
+        f"Database size: [dim]{stats['db_size_mb']:.1f} MB[/dim]",
+        title="Final Status",
+    ))
+
+    console.print()
+    console.print("[green]Your message history is now indexed and ready for RAG![/green]")
+    console.print("JARVIS will use your past replies to match your texting style.")
     console.print()
 
 

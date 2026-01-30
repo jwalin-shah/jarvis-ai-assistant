@@ -277,7 +277,7 @@ def infer_groups(profiles, contacts):
         print(f"    → {dominant}_group ({', '.join(member_info[:3])})")
 
     save_profiles(profiles)
-    print(f"\n✓ Saved group profiles")
+    print("\n✓ Saved group profiles")
 
 
 def show_stats():
@@ -296,13 +296,13 @@ def show_stats():
 
     # By category
     cats = Counter(p.get("category", "other") for p in profiles.values())
-    print(f"\nBy category:")
+    print("\nBy category:")
     for cat, count in cats.most_common():
         print(f"  {cat}: {count}")
 
     # By relationship
     rels = Counter(p.get("relationship", "?") for p in profiles.values())
-    print(f"\nBy relationship:")
+    print("\nBy relationship:")
     for rel, count in rels.most_common(15):
         print(f"  {rel}: {count}")
 

@@ -20,8 +20,10 @@ from typing import Any
 
 import numpy as np
 
+from core.config import settings
 from core.utils import STOP_WORDS, MessageDict
-from .model import get_embedding_model, EMBEDDING_DIM
+
+from .model import EMBEDDING_DIM, get_embedding_model
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +37,6 @@ except ImportError:
     logger.info(
         "FAISS not installed - using brute force search. Install with: pip install faiss-cpu"
     )
-
-# Configuration - All data stored in v3/data/
-DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "embeddings" / "embeddings.db"
-FAISS_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "embeddings" / "faiss_indices"
-BATCH_SIZE = 100
-MIN_TEXT_LENGTH = 3
-
-# HNSW parameters for 337K vectors
-HNSW_M = 32  # Number of neighbors (higher = better recall, more memory)
-HNSW_EF_CONSTRUCTION = 200  # Build quality
-HNSW_EF_SEARCH = 64  # Search quality
-
-# LRU cache settings for FAISS indices
-MAX_FAISS_CACHE_SIZE = 50  # Max number of cached indices
 
 
 @dataclass
@@ -98,7 +86,7 @@ class EmbeddingStore:
     """SQLite-backed storage for message embeddings with FAISS indexing."""
 
     def __init__(self, db_path: Path | str | None = None):
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self.db_path = Path(db_path) if db_path else settings.embeddings.db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
@@ -125,7 +113,7 @@ class EmbeddingStore:
                 return
 
             # Evict oldest if at capacity
-            while len(self._faiss_indices) >= MAX_FAISS_CACHE_SIZE:
+            while len(self._faiss_indices) >= settings.embeddings.max_faiss_cache_size:
                 oldest_key, _ = self._faiss_indices.popitem(last=False)
                 logger.debug(f"Evicted FAISS index for {oldest_key} (LRU)")
 
@@ -180,16 +168,25 @@ class EmbeddingStore:
                     VALUES (new.message_id, new.message_id, new.chat_id, new.text_preview);
                 END;
 
-                CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON message_embeddings BEGIN
-                    INSERT INTO messages_fts(messages_fts, rowid, message_id, chat_id, text_preview)
-                    VALUES ('delete', old.message_id, old.message_id, old.chat_id, old.text_preview);
+                CREATE TRIGGER IF NOT EXISTS messages_ad
+                    AFTER DELETE ON message_embeddings BEGIN
+                    INSERT INTO messages_fts(
+                        messages_fts, rowid, message_id, chat_id, text_preview)
+                    VALUES (
+                        'delete', old.message_id, old.message_id,
+                        old.chat_id, old.text_preview);
                 END;
 
-                CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON message_embeddings BEGIN
-                    INSERT INTO messages_fts(messages_fts, rowid, message_id, chat_id, text_preview)
-                    VALUES ('delete', old.message_id, old.message_id, old.chat_id, old.text_preview);
+                CREATE TRIGGER IF NOT EXISTS messages_au
+                    AFTER UPDATE ON message_embeddings BEGIN
+                    INSERT INTO messages_fts(
+                        messages_fts, rowid, message_id, chat_id, text_preview)
+                    VALUES (
+                        'delete', old.message_id, old.message_id,
+                        old.chat_id, old.text_preview);
                     INSERT INTO messages_fts(rowid, message_id, chat_id, text_preview)
-                    VALUES (new.message_id, new.message_id, new.chat_id, new.text_preview);
+                    VALUES (
+                        new.message_id, new.message_id, new.chat_id, new.text_preview);
                 END;
             """)
             conn.commit()
@@ -384,7 +381,11 @@ class EmbeddingStore:
         stats = {"indexed": 0, "skipped": 0, "duplicates": 0}
 
         # Filter valid messages
-        valid = [m for m in messages if m.get("text") and len(m["text"].strip()) >= MIN_TEXT_LENGTH]
+        valid = [
+            m
+            for m in messages
+            if m.get("text") and len(m["text"].strip()) >= settings.embeddings.min_text_length
+        ]
         stats["skipped"] = len(messages) - len(valid)
 
         if not valid:
@@ -399,7 +400,8 @@ class EmbeddingStore:
             existing = set(
                 row[0]
                 for row in conn.execute(
-                    f"SELECT message_id FROM message_embeddings WHERE message_id IN ({placeholders})",
+                    "SELECT message_id FROM message_embeddings "
+                    f"WHERE message_id IN ({placeholders})",
                     msg_ids,
                 ).fetchall()
             )
@@ -411,8 +413,8 @@ class EmbeddingStore:
                 return stats
 
             # Batch embed
-            for i in range(0, len(new_messages), BATCH_SIZE):
-                batch = new_messages[i : i + BATCH_SIZE]
+            for i in range(0, len(new_messages), settings.embeddings.batch_size):
+                batch = new_messages[i : i + settings.embeddings.batch_size]
                 texts = [m["text"] for m in batch]
                 embeddings = model.embed_batch(texts)
 
@@ -438,7 +440,7 @@ class EmbeddingStore:
                             msg.get("sender_name"),
                             timestamp,
                             1 if msg.get("is_from_me") else 0,
-                            msg["text"][:200],
+                            msg["text"],  # Store full text, not truncated
                         ),
                     )
                     stats["indexed"] += 1
@@ -452,10 +454,10 @@ class EmbeddingStore:
 
     def _get_index_cache_path(self, chat_id: str) -> Path:
         """Get path for cached FAISS index."""
-        FAISS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        settings.embeddings.faiss_cache_dir.mkdir(parents=True, exist_ok=True)
         # Sanitize chat_id for filename
         safe_id = chat_id.replace("/", "_").replace(":", "_")
-        return FAISS_CACHE_DIR / f"{safe_id}.faiss"
+        return settings.embeddings.faiss_cache_dir / f"{safe_id}.faiss"
 
     def _get_metadata_cache_path(self, chat_id: str) -> Path:
         """Get path for cached metadata."""
@@ -504,14 +506,16 @@ class EmbeddingStore:
                 if current_count == len(metadata):
                     elapsed = (time.time() - start) * 1000
                     logger.info(
-                        f"Loaded FAISS index from cache for {chat_id} ({len(metadata)} vectors) in {elapsed:.0f}ms"
+                        f"Loaded FAISS index from cache for {chat_id} "
+                        f"({len(metadata)} vectors) in {elapsed:.0f}ms"
                     )
 
                     self._faiss_cache_set(cache_key, (index, metadata))
                     return index, metadata
                 else:
                     logger.info(
-                        f"Index stale for {chat_id} (cached={len(metadata)}, current={current_count}), rebuilding"
+                        f"Index stale for {chat_id} "
+                        f"(cached={len(metadata)}, current={current_count}), rebuilding"
                     )
             except Exception as e:
                 logger.warning(f"Failed to load cached index: {e}, rebuilding")
@@ -546,9 +550,9 @@ class EmbeddingStore:
         if len(rows) < 1000:
             index = faiss.IndexFlatIP(EMBEDDING_DIM)
         else:
-            index = faiss.IndexHNSWFlat(EMBEDDING_DIM, HNSW_M)
-            index.hnsw.efConstruction = HNSW_EF_CONSTRUCTION
-            index.hnsw.efSearch = HNSW_EF_SEARCH
+            index = faiss.IndexHNSWFlat(EMBEDDING_DIM, settings.embeddings.hnsw_m)
+            index.hnsw.efConstruction = settings.embeddings.hnsw_ef_construction
+            index.hnsw.efSearch = settings.embeddings.hnsw_ef_search
 
         index.add(embeddings)
 
@@ -580,7 +584,8 @@ class EmbeddingStore:
         elapsed = (time.time() - start) * 1000
         index_type = "HNSW" if len(rows) >= 1000 else "Flat"
         logger.info(
-            f"Built FAISS {index_type} index for {chat_id} with {len(rows)} vectors in {elapsed:.0f}ms"
+            f"Built FAISS {index_type} index for {chat_id} "
+            f"with {len(rows)} vectors in {elapsed:.0f}ms"
         )
 
         self._faiss_cache_set(cache_key, (index, metadata))
@@ -658,14 +663,14 @@ class EmbeddingStore:
 
                 search_time = (time.time() - search_start) * 1000
                 logger.info(
-                    f"FAISS search: {len(results)} results in {search_time:.1f}ms (index: {len(metadata)} vectors)"
+                    f"FAISS search: {len(results)} results in {search_time:.1f}ms "
+                    f"(index: {len(metadata)} vectors)"
                 )
                 return results
 
         # Brute force fallback (FAISS not available or no chat_id filter)
-        logger.info(
-            f"Using brute-force search (FAISS={'available' if FAISS_AVAILABLE else 'not installed'}, chat_id={chat_id})"
-        )
+        faiss_status = "available" if FAISS_AVAILABLE else "not installed"
+        logger.info(f"Using brute-force search (FAISS={faiss_status}, chat_id={chat_id})")
         brute_start = time.time()
         with self._get_connection() as conn:
             sql = """
@@ -721,7 +726,8 @@ class EmbeddingStore:
         results.sort(key=lambda x: x.similarity, reverse=True)
         brute_time = (time.time() - brute_start) * 1000
         logger.info(
-            f"Brute-force search: {len(results[:limit])} results in {brute_time:.1f}ms (searched {len(rows)} messages)"
+            f"Brute-force search: {len(results[:limit])} results in {brute_time:.1f}ms "
+            f"(searched {len(rows)} messages)"
         )
         return results[:limit]
 
@@ -760,11 +766,11 @@ class EmbeddingStore:
         min_similarity: float = 0.7,
         skip_if_slow: bool = True,
         # Time-weighting parameters
-        use_time_weighting: bool = True,
-        recency_weight: float = 0.15,
-        time_window_boost: float = 0.1,
-        day_type_boost: float = 0.05,
-        max_age_days: int = 365,
+        use_time_weighting: bool | None = None,
+        recency_weight: float | None = None,
+        time_window_boost: float | None = None,
+        day_type_boost: float | None = None,
+        max_age_days: int | None = None,
     ) -> list[tuple[str, str, float]]:
         """Find YOUR past replies to similar incoming messages.
 
@@ -785,6 +791,18 @@ class EmbeddingStore:
         Returns:
             List of (their_message, your_reply, score) tuples
         """
+        # Load defaults from settings if not provided
+        if use_time_weighting is None:
+            use_time_weighting = settings.embeddings.use_time_weighting
+        if recency_weight is None:
+            recency_weight = settings.embeddings.recency_weight
+        if time_window_boost is None:
+            time_window_boost = settings.embeddings.time_window_boost
+        if day_type_boost is None:
+            day_type_boost = settings.embeddings.day_type_boost
+        if max_age_days is None:
+            max_age_days = settings.embeddings.max_age_days
+
         # Skip if index isn't ready and we don't want to wait for it to build
         if skip_if_slow:
             if chat_id is None:
@@ -858,34 +876,62 @@ class EmbeddingStore:
 
         with self._get_connection() as conn:
             for chat_id_key, items in lookups.items():
-                # Get all your replies in this chat within the time window
                 min_ts = min(ts for ts, _, _, _ in items)
-                max_ts = max(ts for ts, _, _, _ in items) + 3600
 
+                # Get ALL messages in this chat (both sides) to find consecutive pairs
                 rows = conn.execute(
                     """
-                    SELECT timestamp, text_preview
+                    SELECT timestamp, text_preview, is_from_me
                     FROM message_embeddings
-                    WHERE chat_id = ? AND is_from_me = 1
-                      AND timestamp >= ? AND timestamp <= ?
+                    WHERE chat_id = ? AND timestamp >= ?
                     ORDER BY timestamp
                     """,
-                    (chat_id_key, min_ts, max_ts),
+                    (chat_id_key, min_ts),
                 ).fetchall()
 
-                # Build list of (timestamp, text) for matching
-                reply_list = [
-                    (r["timestamp"], r["text_preview"]) for r in rows if r["text_preview"]
-                ]
+                # Build reply pairs: find your reply after their message(s)
+                # Your reply must come within 2 hours of their last message
+                # and there can't be big time gaps (>30 min) between their messages
+                MAX_REPLY_GAP = 7200  # 2 hours max between their last msg and your reply
+                MAX_THEIR_GAP = 1800  # 30 minutes max between their consecutive messages
 
-                # Match replies to incoming messages
+                reply_pairs = {}  # timestamp -> (context, your_reply)
+
+                i = 0
+                while i < len(rows):
+                    # Find a sequence of their messages (with no big time gaps)
+                    their_messages = []
+                    while i < len(rows) and not rows[i]["is_from_me"]:
+                        if rows[i]["text_preview"]:
+                            curr_ts = rows[i]["timestamp"]
+                            # Check for time gap from previous message
+                            if their_messages and (curr_ts - their_messages[-1][0]) > MAX_THEIR_GAP:
+                                # Big gap - start fresh sequence
+                                their_messages = []
+                            their_messages.append((curr_ts, rows[i]["text_preview"]))
+                        i += 1
+
+                    # Check if followed by your reply within time limit
+                    if their_messages and i < len(rows) and rows[i]["is_from_me"]:
+                        your_reply = rows[i]["text_preview"]
+                        your_ts = rows[i]["timestamp"]
+                        last_their_ts = their_messages[-1][0]
+
+                        # Only pair if your reply is within 30 min of their last message
+                        if your_reply and (your_ts - last_their_ts) <= MAX_REPLY_GAP:
+                            # Combine all their messages as context
+                            combined_context = " | ".join(text for _, text in their_messages)
+                            # Index under each of their message timestamps
+                            for ts, text in their_messages:
+                                reply_pairs[ts] = (combined_context, your_reply)
+                    i += 1
+
+                # Match our similar messages to these pairs
                 for ts, their_text, sim, msg_timestamp in items:
-                    # Find first reply after this timestamp within 1 hour
-                    for reply_ts, reply_text in reply_list:
-                        if reply_ts > ts and reply_ts < ts + 3600:
-                            score = compute_time_weighted_score(sim, msg_timestamp)
-                            results.append((their_text, reply_text, score))
-                            break
+                    if ts in reply_pairs:
+                        context, your_reply = reply_pairs[ts]
+                        score = compute_time_weighted_score(sim, msg_timestamp)
+                        results.append((context, your_reply, score))
 
         # Re-sort by time-weighted score and limit
         results.sort(key=lambda x: x[2], reverse=True)
@@ -1199,8 +1245,8 @@ class EmbeddingStore:
 
     def _get_phone_to_chatids_cache_path(self) -> Path:
         """Get path for cached phone-to-chat_ids mapping."""
-        FAISS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        return FAISS_CACHE_DIR / "phone_to_chatids.json"
+        settings.embeddings.faiss_cache_dir.mkdir(parents=True, exist_ok=True)
+        return settings.embeddings.faiss_cache_dir / "phone_to_chatids.json"
 
     def _get_or_build_phone_to_chatids(self) -> dict[str, list[str]]:
         """Get or build mapping of phone numbers to actual chat_ids.
@@ -1330,8 +1376,8 @@ class EmbeddingStore:
 
     def _get_global_index_cache_path(self) -> Path:
         """Get path for cached global FAISS index."""
-        FAISS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        return FAISS_CACHE_DIR / "global_index.faiss"
+        settings.embeddings.faiss_cache_dir.mkdir(parents=True, exist_ok=True)
+        return settings.embeddings.faiss_cache_dir / "global_index.faiss"
 
     def _get_global_metadata_cache_path(self) -> Path:
         """Get path for cached global metadata."""
@@ -1421,9 +1467,9 @@ class EmbeddingStore:
         faiss.normalize_L2(embeddings)
 
         # Always use HNSW for global index (many vectors)
-        index = faiss.IndexHNSWFlat(EMBEDDING_DIM, HNSW_M)
-        index.hnsw.efConstruction = HNSW_EF_CONSTRUCTION
-        index.hnsw.efSearch = HNSW_EF_SEARCH
+        index = faiss.IndexHNSWFlat(EMBEDDING_DIM, settings.embeddings.hnsw_m)
+        index.hnsw.efConstruction = settings.embeddings.hnsw_ef_construction
+        index.hnsw.efSearch = settings.embeddings.hnsw_ef_search
         index.add(embeddings)
 
         # Store metadata for lookup
@@ -1459,20 +1505,58 @@ class EmbeddingStore:
 
     def _get_reply_pairs_index_path(self) -> Path:
         """Get path for cached reply-pairs FAISS index."""
-        FAISS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        return FAISS_CACHE_DIR / "reply_pairs_index.faiss"
+        settings.embeddings.faiss_cache_dir.mkdir(parents=True, exist_ok=True)
+        return settings.embeddings.faiss_cache_dir / "reply_pairs_index.faiss"
 
     def _get_reply_pairs_metadata_path(self) -> Path:
         """Get path for cached reply-pairs metadata."""
         return self._get_reply_pairs_index_path().with_suffix(".meta.json")
 
-    def _get_or_build_reply_pairs_index(self) -> tuple[Any, list[dict]] | None:
+    def _get_reply_pairs_state_path(self) -> Path:
+        """Get path for reply-pairs index state (for incremental updates)."""
+        return self._get_reply_pairs_index_path().with_suffix(".state.json")
+
+    def _is_reply_pairs_index_stale(self) -> bool:
+        """Check if reply-pairs index needs rebuilding.
+
+        Returns True if:
+        - Index doesn't exist
+        - New messages have been added since last build
+        """
+        state_path = self._get_reply_pairs_state_path()
+        if not state_path.exists():
+            return True
+
+        try:
+            import json
+            with open(state_path) as f:
+                state = json.load(f)
+
+            last_indexed_id = state.get("last_message_id", 0)
+
+            # Check if new messages exist
+            with self._get_connection() as conn:
+                max_id = conn.execute(
+                    "SELECT MAX(message_id) FROM message_embeddings"
+                ).fetchone()[0] or 0
+
+            return max_id > last_indexed_id
+        except Exception:
+            return True
+
+    def _get_or_build_reply_pairs_index(
+        self, force_rebuild: bool = False
+    ) -> tuple[Any, list[dict]] | None:
         """Get or build FAISS index of (incoming_message -> your_reply) pairs.
 
         This is the FAST index for cross-conversation search:
         - Only indexes incoming messages that YOU replied to
         - Stores your reply directly in metadata (no DB lookup needed)
-        - ~50-100K vectors vs 336K in global index
+        - Deduplicates by (their_text, your_reply) to reduce size
+        - Tracks last_message_id for incremental rebuilds
+
+        Args:
+            force_rebuild: If True, rebuild even if cached index exists
 
         Returns:
             (faiss_index, metadata_list) or None if FAISS unavailable
@@ -1482,72 +1566,122 @@ class EmbeddingStore:
 
         cache_key = "__reply_pairs__"
 
-        # Check memory cache
-        cached = self._faiss_cache_get(cache_key)
-        if cached is not None:
-            return cached
+        # Check memory cache (unless forcing rebuild)
+        if not force_rebuild:
+            cached = self._faiss_cache_get(cache_key)
+            if cached is not None:
+                # Check if stale
+                if not self._is_reply_pairs_index_stale():
+                    return cached
 
         # Check disk cache
         index_path = self._get_reply_pairs_index_path()
         meta_path = self._get_reply_pairs_metadata_path()
 
-        if index_path.exists() and meta_path.exists():
-            try:
-                start = time.time()
-                index = faiss.read_index(str(index_path))
+        if not force_rebuild and index_path.exists() and meta_path.exists():
+            # Check staleness before loading
+            if not self._is_reply_pairs_index_stale():
+                try:
+                    start = time.time()
+                    index = faiss.read_index(str(index_path))
 
-                import json
+                    import json
+                    with open(meta_path) as f:
+                        metadata = json.load(f)
 
-                with open(meta_path) as f:
-                    metadata = json.load(f)
+                    elapsed = (time.time() - start) * 1000
+                    logger.info(
+                        f"Loaded reply-pairs index from cache "
+                        f"({len(metadata)} pairs) in {elapsed:.0f}ms"
+                    )
 
-                elapsed = (time.time() - start) * 1000
-                logger.info(
-                    f"Loaded reply-pairs index from cache "
-                    f"({len(metadata)} pairs) in {elapsed:.0f}ms"
-                )
+                    self._faiss_cache_set(cache_key, (index, metadata))
+                    return index, metadata
 
-                self._faiss_cache_set(cache_key, (index, metadata))
-                return index, metadata
-
-            except Exception as e:
-                logger.warning(f"Failed to load reply-pairs index: {e}, rebuilding")
+                except Exception as e:
+                    logger.warning(f"Failed to load reply-pairs index: {e}, rebuilding")
 
         # Build index of reply pairs
         start = time.time()
-        logger.info("Building reply-pairs index (this may take a minute)...")
+        logger.info("Building reply-pairs index...")
 
         # Query: find all (their_message, your_reply) pairs
-        # Your reply must be within 5 minutes after their message
+        # - Your reply must be within 5 minutes after their message
+        # - Deduplicate by grouping on (their_text, your_reply)
+        # - Keep most recent occurrence of each unique pair
         with self._get_connection() as conn:
+            # Get max message_id for state tracking
+            max_id = conn.execute(
+                "SELECT MAX(message_id) FROM message_embeddings"
+            ).fetchone()[0] or 0
+
+            # Query with smart filtering to reduce index size:
+            # 1. Skip reactions ("Loved an image", "Laughed at")
+            # 2. Require substantive replies (>=5 chars, has letters)
+            # 3. Skip common filler replies (lol, haha, yeah, etc.)
+            # 4. Limit to 20 examples per unique reply (diversity vs size tradeoff)
+            # 5. Keep most recent examples (recency matters)
+            #
+            # This reduces ~560K pairs to ~50-100K quality pairs
             rows = conn.execute(
                 """
-                SELECT
-                    m1.message_id as their_msg_id,
-                    m1.chat_id,
-                    m1.embedding as their_embedding,
-                    m1.text_preview as their_text,
-                    m1.sender,
-                    m1.sender_name,
-                    m1.timestamp as their_ts,
-                    m2.text_preview as your_reply
-                FROM message_embeddings m1
-                JOIN message_embeddings m2 ON m2.chat_id = m1.chat_id
-                WHERE m1.is_from_me = 0
-                  AND m2.is_from_me = 1
-                  AND m2.timestamp > m1.timestamp
-                  AND m2.timestamp < m1.timestamp + 300
-                  AND m1.text_preview IS NOT NULL
-                  AND m2.text_preview IS NOT NULL
-                  AND LENGTH(m1.text_preview) >= 3
-                  AND LENGTH(m2.text_preview) >= 2
-                ORDER BY m1.timestamp DESC
+                WITH filtered_pairs AS (
+                    SELECT
+                        m1.message_id as their_msg_id,
+                        m1.chat_id,
+                        m1.embedding as their_embedding,
+                        m1.text_preview as their_text,
+                        m1.sender,
+                        m1.sender_name,
+                        m1.timestamp as their_ts,
+                        m2.text_preview as your_reply,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY LOWER(TRIM(m2.text_preview))
+                            ORDER BY m1.timestamp DESC
+                        ) as reply_rank
+                    FROM message_embeddings m1
+                    JOIN message_embeddings m2 ON m2.chat_id = m1.chat_id
+                    WHERE m1.is_from_me = 0
+                      AND m2.is_from_me = 1
+                      AND m2.timestamp > m1.timestamp
+                      AND m2.timestamp < m1.timestamp + 300
+                      AND m1.text_preview IS NOT NULL
+                      AND m2.text_preview IS NOT NULL
+                      -- Their message should be meaningful
+                      AND LENGTH(m1.text_preview) >= 5
+                      -- Your reply should be substantive (>=5 chars)
+                      AND LENGTH(TRIM(m2.text_preview)) >= 5
+                      -- Skip reactions (tapbacks)
+                      AND LOWER(m2.text_preview) NOT LIKE 'loved %'
+                      AND LOWER(m2.text_preview) NOT LIKE 'liked %'
+                      AND LOWER(m2.text_preview) NOT LIKE 'laughed at%'
+                      AND LOWER(m2.text_preview) NOT LIKE 'emphasized%'
+                      AND LOWER(m2.text_preview) NOT LIKE 'questioned%'
+                      AND LOWER(m2.text_preview) NOT LIKE 'disliked%'
+                      -- Skip common low-info filler (keep in per-chat, not global)
+                      AND LOWER(TRIM(m2.text_preview)) NOT IN (
+                          'lol', 'haha', 'hahaha', 'hahahaha', 'lmao', 'lmfao',
+                          'yeah', 'yea', 'yes', 'yep', 'yup', 'ya',
+                          'no', 'nah', 'nope',
+                          'ok', 'okay', 'k', 'kk',
+                          'true', 'same', 'facts', 'fr', 'frfr',
+                          'nice', 'cool', 'damn', 'bruh', 'bro',
+                          'what', 'huh', 'hmm', 'idk', 'omg', 'wow'
+                      )
+                )
+                SELECT their_msg_id, chat_id, their_embedding, their_text,
+                       sender, sender_name, their_ts, your_reply
+                FROM filtered_pairs
+                WHERE reply_rank <= 20  -- Max 20 examples per unique reply
+                ORDER BY their_ts DESC
                 """
             ).fetchall()
 
         if not rows:
             logger.warning("No reply pairs found for index")
             return None
+
+        logger.info(f"Found {len(rows)} unique reply pairs (deduplicated)")
 
         # Build numpy array of embeddings (only their messages)
         embeddings = np.array(
@@ -1558,13 +1692,13 @@ class EmbeddingStore:
         # Normalize for cosine similarity
         faiss.normalize_L2(embeddings)
 
-        # Use HNSW for fast search
+        # Use HNSW for fast search (or Flat for small indices)
         if len(rows) < 1000:
             index = faiss.IndexFlatIP(EMBEDDING_DIM)
         else:
-            index = faiss.IndexHNSWFlat(EMBEDDING_DIM, HNSW_M)
-            index.hnsw.efConstruction = HNSW_EF_CONSTRUCTION
-            index.hnsw.efSearch = HNSW_EF_SEARCH
+            index = faiss.IndexHNSWFlat(EMBEDDING_DIM, settings.embeddings.hnsw_m)
+            index.hnsw.efConstruction = settings.embeddings.hnsw_ef_construction
+            index.hnsw.efSearch = settings.embeddings.hnsw_ef_search
 
         index.add(embeddings)
 
@@ -1588,6 +1722,12 @@ class EmbeddingStore:
             faiss.write_index(index, str(index_path))
             with open(meta_path, "w") as f:
                 json.dump(metadata, f)
+
+            # Save state for incremental updates
+            state_path = self._get_reply_pairs_state_path()
+            with open(state_path, "w") as f:
+                json.dump({"last_message_id": max_id, "pair_count": len(metadata)}, f)
+
             logger.debug(f"Cached reply-pairs index to {index_path}")
         except Exception as e:
             logger.warning(f"Failed to cache reply-pairs index: {e}")
@@ -1686,24 +1826,6 @@ class EmbeddingStore:
 
         return results
 
-        # Deduplicate by reply text (avoid "yeah" 5 times)
-        seen_replies = set()
-        deduplicated = []
-        for item in results:
-            reply_key = item[1].lower().strip()
-            if reply_key not in seen_replies:
-                seen_replies.add(reply_key)
-                deduplicated.append(item)
-                if len(deduplicated) >= limit:
-                    break
-
-        logger.info(
-            f"Cross-conversation search: {len(deduplicated)} unique replies "
-            f"from {len(by_chat)} conversations"
-        )
-
-        return deduplicated
-
     def is_global_index_ready(self) -> bool:
         """Check if global FAISS index is already built and cached.
 
@@ -1720,6 +1842,26 @@ class EmbeddingStore:
         # Check disk cache
         index_path = self._get_global_index_cache_path()
         meta_path = self._get_global_metadata_cache_path()
+        return index_path.exists() and meta_path.exists()
+
+    def is_reply_pairs_index_ready(self) -> bool:
+        """Check if reply-pairs FAISS index is already built and cached.
+
+        This index is used for fast cross-conversation search.
+
+        Returns:
+            True if reply-pairs index is in memory or on disk
+        """
+        if not FAISS_AVAILABLE:
+            return False
+
+        # Check memory cache
+        if "__reply_pairs__" in self._faiss_indices:
+            return True
+
+        # Check disk cache
+        index_path = self._get_reply_pairs_index_path()
+        meta_path = self._get_reply_pairs_metadata_path()
         return index_path.exists() and meta_path.exists()
 
     # TODO: Remove if unused - not currently called anywhere

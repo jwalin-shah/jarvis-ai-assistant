@@ -15,6 +15,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.config import settings
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -36,21 +38,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="JARVIS v3",
     description="Minimal iMessage reply generation API",
-    version="3.0.0",
+    version=settings.version,
     lifespan=lifespan,
+    debug=settings.api.debug,
 )
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.api.allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Import and include routes
-from .routes import conversations, generate, health
+# Import and include routes (after app creation to avoid circular imports)
+from .routes import conversations, generate, health  # noqa: E402
 
 app.include_router(health.router, tags=["health"])
 app.include_router(conversations.router, prefix="/conversations", tags=["conversations"])
@@ -62,6 +65,6 @@ async def root():
     """API root."""
     return {
         "name": "JARVIS v3",
-        "version": "3.0.0",
+        "version": settings.version,
         "docs": "/docs",
     }

@@ -7,6 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from core.config import settings
+
 router = APIRouter()
 
 
@@ -54,7 +56,7 @@ async def list_conversations(limit: int = 50) -> dict[str, Any]:
 @router.get("/{chat_id}/messages")
 async def get_messages(
     chat_id: str,
-    limit: int = 50,
+    limit: int | None = None,
     before: str | None = None,
 ) -> dict[str, Any]:
     """Get messages for a conversation.
@@ -64,6 +66,8 @@ async def get_messages(
         limit: Maximum number of messages to return
         before: ISO timestamp - only return messages before this time (for pagination)
     """
+    if limit is None:
+        limit = settings.api.default_message_limit
     reader = _get_reader()
 
     try:

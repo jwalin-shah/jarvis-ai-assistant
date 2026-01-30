@@ -134,28 +134,27 @@ class ContextAnalyzer:
 
         # Question detection
         if text.rstrip().endswith("?"):
-            # Yes/No patterns
+            # Yes/No patterns - includes "u" variants for casual texting
             yes_no_starters = [
-                "do you",
-                "are you",
-                "can you",
-                "will you",
-                "would you",
-                "want to",
-                "wanna",
-                "could you",
-                "should we",
+                "do you", "do u",
+                "are you", "are u", "r u",
+                "can you", "can u",
+                "will you", "will u",
+                "would you", "would u",
+                "want to", "wanna",
+                "could you", "could u",
+                "should we", "should u",
                 "shall we",
-                "is it",
+                "is it", "is this", "is that",
                 "are we",
-                "did you",
-                "have you",
+                "did you", "did u",
+                "have you", "have u",
                 "has ",
-                "was ",
-                "were you",
-                "r u",
-                "u wanna",
-                "u want",
+                "was ", "was it", "was that",
+                "were you", "were u",
+                "u wanna", "u want",
+                "does ", "doesn't ",
+                "isn't ", "aren't ", "wasn't ", "weren't ",
             ]
             if any(text_lower.startswith(s) for s in yes_no_starters):
                 return MessageIntent.YES_NO_QUESTION
@@ -164,6 +163,36 @@ class ContextAnalyzer:
             if " or " in text_lower:
                 return MessageIntent.CHOICE_QUESTION
 
+            return MessageIntent.OPEN_QUESTION
+
+        # Questions WITHOUT "?" (common in casual texting)
+        # Check for yes/no question patterns even without question mark
+        yes_no_starters_no_qmark = [
+            "do you", "do u",
+            "are you", "are u", "r u",
+            "can you", "can u",
+            "did you", "did u",
+            "have you", "have u",
+            "were you", "were u",
+            "was it", "was that",
+            "is this", "is that",
+        ]
+        if any(text_lower.startswith(s) for s in yes_no_starters_no_qmark):
+            return MessageIntent.YES_NO_QUESTION
+
+        # Open question patterns without "?"
+        open_q_starters = [
+            "what ", "what's", "whats",
+            "how ", "how's", "hows",
+            "where ", "where's",
+            "when ", "when's",
+            "why ", "why's",
+            "who ", "who's",
+            "any progress",
+            "how's it looking",
+            "hows it looking",
+        ]
+        if any(text_lower.startswith(s) for s in open_q_starters):
             return MessageIntent.OPEN_QUESTION
 
         # Farewell patterns

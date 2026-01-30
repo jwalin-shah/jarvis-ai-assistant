@@ -9,7 +9,7 @@ import logging
 import re
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
 ADDRESSBOOK_PATH = Path.home() / "Library" / "Application Support" / "AddressBook" / "Sources"
 
 # Apple's timestamp epoch (2001-01-01)
-APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
+APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=UTC)
 
 # Database connection timeout
 DB_TIMEOUT_SECONDS = 5.0
@@ -69,7 +69,9 @@ class Conversation:
             "chat_id": self.chat_id,
             "display_name": self.display_name,
             "participants": self.participants,
-            "last_message_date": self.last_message_date.isoformat() if self.last_message_date else None,
+            "last_message_date": (
+                self.last_message_date.isoformat() if self.last_message_date else None
+            ),
             "last_message_text": self.last_message_text,
             "last_message_is_from_me": self.last_message_is_from_me,
             "message_count": self.message_count,
@@ -83,7 +85,7 @@ def _parse_apple_timestamp(timestamp: int | None) -> datetime | None:
         return None
     # Apple timestamps are in nanoseconds since 2001-01-01
     seconds = timestamp / 1_000_000_000
-    return datetime.fromtimestamp(APPLE_EPOCH.timestamp() + seconds, tz=timezone.utc)
+    return datetime.fromtimestamp(APPLE_EPOCH.timestamp() + seconds, tz=UTC)
 
 
 def _datetime_to_apple_timestamp(dt: datetime) -> int:
@@ -246,8 +248,8 @@ class MessageReader:
             except sqlite3.OperationalError as e:
                 if "unable to open" in str(e).lower():
                     raise PermissionError(
-                        f"Cannot access iMessage database. Grant Full Disk Access in "
-                        f"System Settings > Privacy & Security > Full Disk Access"
+                        "Cannot access iMessage database. Grant Full Disk Access in "
+                        "System Settings > Privacy & Security > Full Disk Access"
                     ) from e
                 raise
 
@@ -338,7 +340,10 @@ class MessageReader:
                     self._load_contacts_from_db(ab_db)
                     loaded_count += 1
 
-            logger.debug(f"Loaded {len(self._contacts_cache)} contacts from {loaded_count} AddressBook sources")
+            logger.debug(
+                f"Loaded {len(self._contacts_cache)} contacts "
+                f"from {loaded_count} AddressBook sources"
+            )
         except PermissionError:
             logger.debug("Permission denied accessing AddressBook directory")
         except OSError as e:
@@ -513,7 +518,10 @@ class MessageReader:
                 if is_group and resolved_participants:
                     # For groups, join first 3 names
                     names = resolved_participants[:3]
-                    more = f" +{len(resolved_participants) - 3}" if len(resolved_participants) > 3 else ""
+                    more = (
+                        f" +{len(resolved_participants) - 3}"
+                        if len(resolved_participants) > 3 else ""
+                    )
                     display_name = ", ".join(names) + more
                 elif len(resolved_participants) == 1:
                     display_name = resolved_participants[0]
@@ -624,8 +632,9 @@ class MessageReader:
             reaction_prefixes = [
                 'loved "', 'liked "', 'disliked "', 'laughed at "',
                 'emphasized "', 'questioned "',
-                'loved \u201c', 'liked \u201c', 'disliked \u201c', 'laughed at \u201c',  # Smart quotes
-                'emphasized \u201c', 'questioned \u201c',
+                # Smart quotes
+                'loved \u201c', 'liked \u201c', 'disliked \u201c',
+                'laughed at \u201c', 'emphasized \u201c', 'questioned \u201c',
             ]
             if any(text_lower.startswith(prefix) for prefix in reaction_prefixes):
                 continue

@@ -8,6 +8,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from core.config import settings
+
 router = APIRouter()
 
 # Module-level singleton ReplyGenerator to avoid initialization overhead per request
@@ -33,9 +35,12 @@ def _get_generator():
         return _generator
 
 
-def _fetch_messages(chat_id: str, limit: int = 30):
+def _fetch_messages(chat_id: str, limit: int | None = None):
     """Fetch messages from iMessage database (blocking I/O)."""
     from core.imessage import MessageReader
+
+    if limit is None:
+        limit = settings.api.generation_context_limit
 
     reader = MessageReader()
     try:
@@ -66,7 +71,9 @@ async def generate_replies(request: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="chat_id is required")
 
     # Fetch messages in thread pool to avoid blocking async event loop
-    messages, error = await asyncio.to_thread(_fetch_messages, chat_id, 30)
+    messages, error = await asyncio.to_thread(
+        _fetch_messages, chat_id, settings.api.generation_context_limit
+    )
 
     if error:
         raise HTTPException(status_code=503, detail=error)

@@ -14,8 +14,8 @@ Usage:
 import argparse
 import json
 import sys
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -133,12 +133,12 @@ Commands: [f/c/a/w/r/q/g/s] to label, [enter] to skip, [quit] to exit
         print(f"  Is group chat: {info['is_group']}")
 
         if info["sample_responses"]:
-            print(f"  Sample exchanges:")
+            print("  Sample exchanges:")
             for sample in info["sample_responses"]:
                 print(f"    them: \"{sample['last_msg']}\"")
                 print(f"    you:  \"{sample['gold']}\"")
 
-        print(f"\n  [f]amily [c]lose [a]casual [w]ork [r]omantic [q]acquaint [g]roup [s]kip")
+        print("\n  [f]amily [c]lose [a]casual [w]ork [r]omantic [q]acquaint [g]roup [s]kip")
 
         while True:
             choice = input("  Relationship: ").strip().lower()
@@ -186,12 +186,13 @@ def show_stats():
         for name in labels.keys()
         if name in contacts
     )
-    print(f"Sample coverage: {labeled_samples}/{total_samples} ({labeled_samples/total_samples*100:.0f}%)")
+    pct = labeled_samples / total_samples * 100
+    print(f"Sample coverage: {labeled_samples}/{total_samples} ({pct:.0f}%)")
 
     # Distribution
     if labels:
         dist = Counter(v["relationship"] for v in labels.values())
-        print(f"\nRelationship distribution:")
+        print("\nRelationship distribution:")
         for rel, count in dist.most_common():
             print(f"  {rel}: {count}")
 
@@ -203,7 +204,7 @@ def show_stats():
     unlabeled.sort(key=lambda x: x[1]["sample_count"], reverse=True)
 
     if unlabeled:
-        print(f"\nTop unlabeled contacts (by message count):")
+        print("\nTop unlabeled contacts (by message count):")
         for name, info in unlabeled[:10]:
             print(f"  {name}: {info['sample_count']} messages")
 
@@ -244,7 +245,7 @@ def apply_labels():
 
     # Show distribution
     dist = Counter(d.get("relationship", "unknown") for d in updated)
-    print(f"\nRelationship distribution in test data:")
+    print("\nRelationship distribution in test data:")
     for rel, count in dist.most_common():
         pct = count / len(updated) * 100
         print(f"  {rel}: {count} ({pct:.0f}%)")
