@@ -31,14 +31,35 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, runtime_checkable
 
 import numpy as np
 
+from jarvis.embedding_adapter import get_embedder, reset_embedder
 from jarvis.metrics import get_template_analytics
 
 if TYPE_CHECKING:
-    from sentence_transformers import SentenceTransformer
+    from numpy.typing import NDArray
+
+
+@runtime_checkable
+class Embedder(Protocol):
+    """Protocol for embedder objects that can encode text to embeddings.
+
+    This allows TemplateMatcher to accept either UnifiedEmbedder or CachedEmbedder
+    (or any other compatible embedder) for cache cohesion across the request pipeline.
+    """
+
+    def encode(
+        self,
+        texts: list[str] | str,
+        normalize: bool = True,
+        convert_to_numpy: bool = True,
+        normalize_embeddings: bool | None = None,
+    ) -> NDArray[np.float32]:
+        """Encode texts to embeddings."""
+        ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -120,57 +141,55 @@ class EmbeddingCache(Generic[K, V]):
             }
 
 
-# Lazy-loaded sentence transformer
-_sentence_model: SentenceTransformer | None = None
-
-
 class SentenceModelError(Exception):
     """Raised when sentence transformer model cannot be loaded."""
 
 
 def _get_sentence_model() -> Any:
-    """Lazy-load the sentence transformer model.
+    """Get the embedder for template matching.
+
+    Returns the unified embedder instance. For backward compatibility,
+    this function name is preserved but now delegates to the unified adapter.
 
     Returns:
-        The loaded SentenceTransformer model
+        The UnifiedEmbedder instance (not SentenceTransformer directly)
 
     Raises:
-        SentenceModelError: If model cannot be loaded (network issues, etc.)
+        SentenceModelError: If no embedding backend is available
     """
-    global _sentence_model
-    if _sentence_model is None:
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            logger.info("Loading sentence transformer: all-MiniLM-L6-v2")
-            _sentence_model = SentenceTransformer("all-MiniLM-L6-v2")
-        except Exception as e:
-            logger.exception("Failed to load sentence transformer")
-            msg = f"Failed to load sentence transformer: {e}"
-            raise SentenceModelError(msg) from e
-    return _sentence_model
+    try:
+        embedder = get_embedder()
+        if not embedder.is_available():
+            raise SentenceModelError("No embedding backend available")
+        return embedder
+    except Exception as e:
+        logger.exception("Failed to initialize embedding backend")
+        msg = f"Failed to initialize embedding backend: {e}"
+        raise SentenceModelError(msg) from e
 
 
 def unload_sentence_model() -> None:
-    """Unload the sentence transformer model to free memory.
+    """Unload the embedding model to free memory.
 
     Call this when template matching is no longer needed and you want
     to reclaim memory for other operations (e.g., loading the MLX model).
     """
-    global _sentence_model
-    if _sentence_model is not None:
-        logger.info("Unloading sentence transformer model")
-        _sentence_model = None
-        gc.collect()
+    logger.info("Unloading embedding model")
+    reset_embedder()
+    gc.collect()
 
 
 def is_sentence_model_loaded() -> bool:
-    """Check if the sentence transformer model is currently loaded.
+    """Check if an embedding model is currently available.
 
     Returns:
-        True if model is loaded, False otherwise
+        True if an embedding backend is available, False otherwise
     """
-    return _sentence_model is not None
+    try:
+        embedder = get_embedder()
+        return embedder.backend != "none"
+    except Exception:
+        return False
 
 
 @dataclass
@@ -1904,7 +1923,7 @@ class TemplateMatcher:
         """Compute and cache embeddings for all template patterns.
 
         Uses double-check locking for thread-safe lazy initialization.
-        Pre-normalizes embeddings for faster cosine similarity computation.
+        Embeddings are normalized by the embedder for direct cosine similarity.
         """
         # Fast path: embeddings already computed
         if self._pattern_embeddings is not None:
@@ -1916,7 +1935,7 @@ class TemplateMatcher:
             if self._pattern_embeddings is not None:
                 return
 
-            model = _get_sentence_model()
+            embedder = _get_sentence_model()
 
             # Collect all patterns with their templates
             all_patterns = []
@@ -1929,10 +1948,11 @@ class TemplateMatcher:
             embeddings = None
             norms = None
             try:
-                # Compute embeddings in batch
-                embeddings = model.encode(all_patterns, convert_to_numpy=True)
+                # Compute embeddings in batch (normalized by default)
+                embeddings = embedder.encode(all_patterns, normalize=True)
 
                 # Pre-compute norms for faster cosine similarity
+                # Even though embeddings are normalized, we keep this for consistency
                 norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
                 # Avoid division by zero
                 norms = np.where(norms == 0, 1, norms)
@@ -1949,15 +1969,23 @@ class TemplateMatcher:
                 logger.error("Failed to compute pattern embeddings: %s", e)
                 raise
 
-    def _get_query_embedding(self, query: str) -> np.ndarray:
+    def _get_query_embedding(self, query: str, embedder: Embedder | None = None) -> np.ndarray:
         """Get embedding for a query, using cache if available.
 
         Args:
             query: Query string to encode
+            embedder: Optional embedder override. If provided, uses this embedder
+                directly (which may have its own caching, e.g., CachedEmbedder).
+                If None, uses internal cache with default embedder.
 
         Returns:
-            Query embedding as numpy array
+            Query embedding as numpy array (normalized)
         """
+        # If external embedder provided, use it directly (it handles its own caching)
+        if embedder is not None:
+            embedding_result = embedder.encode([query], normalize=True)[0]
+            return np.asarray(embedding_result)
+
         # Create cache key from query hash
         cache_key = hashlib.md5(query.encode(), usedforsecurity=False).hexdigest()
 
@@ -1966,20 +1994,29 @@ class TemplateMatcher:
         if cached is not None:
             return cached
 
-        # Encode and cache
-        model = _get_sentence_model()
-        embedding_result = model.encode([query], convert_to_numpy=True)[0]
+        # Encode and cache (normalized by default)
+        default_embedder = _get_sentence_model()
+        embedding_result = default_embedder.encode([query], normalize=True)[0]
         # Cast to ndarray to satisfy mypy (encode returns Any)
         embedding: np.ndarray = np.asarray(embedding_result)
         self._query_cache.set(cache_key, embedding)
         return embedding
 
-    def match(self, query: str, track_analytics: bool = True) -> TemplateMatch | None:
+    def match(
+        self,
+        query: str,
+        track_analytics: bool = True,
+        embedder: Embedder | None = None,
+    ) -> TemplateMatch | None:
         """Find best matching template for a query.
 
         Args:
             query: Input prompt to match against templates
             track_analytics: Whether to record this query in template analytics
+            embedder: Optional embedder override for cache cohesion. If provided,
+                uses this embedder (e.g., CachedEmbedder from router) instead of
+                internal cache. This allows sharing cached embeddings across the
+                request pipeline.
 
         Returns:
             TemplateMatch if similarity >= threshold, None otherwise.
@@ -2001,8 +2038,8 @@ class TemplateMatcher:
                 pattern_norms = np.linalg.norm(pattern_embeddings, axis=1)
                 pattern_norms = np.where(pattern_norms == 0, 1, pattern_norms)
 
-            # Get query embedding (cached if previously seen)
-            query_embedding = self._get_query_embedding(query)
+            # Get query embedding (uses external embedder if provided for cache cohesion)
+            query_embedding = self._get_query_embedding(query, embedder=embedder)
             query_norm = np.linalg.norm(query_embedding)
 
             if query_norm == 0:
@@ -2085,7 +2122,11 @@ class TemplateMatcher:
         return True
 
     def match_with_context(
-        self, query: str, group_size: int | None = None, track_analytics: bool = True
+        self,
+        query: str,
+        group_size: int | None = None,
+        track_analytics: bool = True,
+        embedder: Embedder | None = None,
     ) -> TemplateMatch | None:
         """Find best matching template considering conversation context.
 
@@ -2095,13 +2136,16 @@ class TemplateMatcher:
             query: Input prompt to match
             group_size: Number of participants in the chat
             track_analytics: Whether to record in analytics
+            embedder: Optional embedder override for cache cohesion. If provided,
+                uses this embedder (e.g., CachedEmbedder from router) instead of
+                internal cache.
 
         Returns:
             TemplateMatch or None
         """
         # If no group size provided, use standard match
         if group_size is None:
-            return self.match(query, track_analytics)
+            return self.match(query, track_analytics, embedder=embedder)
 
         try:
             self._ensure_embeddings()
@@ -2115,8 +2159,8 @@ class TemplateMatcher:
                 pattern_norms = np.linalg.norm(pattern_embeddings, axis=1)
                 pattern_norms = np.where(pattern_norms == 0, 1, pattern_norms)
 
-            # Get query embedding
-            query_embedding = self._get_query_embedding(query)
+            # Get query embedding (uses external embedder if provided for cache cohesion)
+            query_embedding = self._get_query_embedding(query, embedder=embedder)
             query_norm = np.linalg.norm(query_embedding)
             if query_norm == 0:
                 return None
