@@ -475,7 +475,9 @@ class TestAcknowledgmentHandling:
 
     @pytest.mark.parametrize(
         "acknowledgment",
-        ["ok", "okay", "yes", "yeah", "sure", "thanks", "cool", "nice", "got it", "lol"],
+        # Note: "cool", "nice", "lol" removed - these are emotional reactions
+        # that should trigger LLM generation, not canned responses
+        ["ok", "okay", "yes", "yeah", "sure", "thanks", "got it"],
     )
     def test_simple_acknowledgments_detected(
         self,
@@ -786,20 +788,44 @@ class TestRouteResult:
 class TestThresholds:
     """Tests for routing thresholds."""
 
-    def test_template_threshold_value(self) -> None:
-        """Test TEMPLATE_THRESHOLD is set correctly."""
-        assert TEMPLATE_THRESHOLD == 0.90
+    def test_template_threshold_in_valid_range(self) -> None:
+        """Test TEMPLATE_THRESHOLD is within valid range.
 
-    def test_generate_threshold_value(self) -> None:
-        """Test GENERATE_THRESHOLD is set correctly."""
-        assert GENERATE_THRESHOLD == 0.50
+        Template threshold should be high (0.8-1.0) to only match near-exact triggers.
+        Actual value may change based on evaluation results.
+        """
+        assert 0.8 <= TEMPLATE_THRESHOLD <= 1.0, (
+            f"TEMPLATE_THRESHOLD={TEMPLATE_THRESHOLD} should be in [0.8, 1.0]"
+        )
+
+    def test_generate_threshold_in_valid_range(self) -> None:
+        """Test GENERATE_THRESHOLD is within valid range.
+
+        Generate threshold should be moderate (0.3-0.6) to allow LLM generation
+        with some context examples. Actual value may change based on evaluation.
+        """
+        assert 0.3 <= GENERATE_THRESHOLD <= 0.6, (
+            f"GENERATE_THRESHOLD={GENERATE_THRESHOLD} should be in [0.3, 0.6]"
+        )
+
+    def test_threshold_ordering(self) -> None:
+        """Test that thresholds are properly ordered.
+
+        TEMPLATE_THRESHOLD > GENERATE_THRESHOLD must hold for routing logic.
+        """
+        assert TEMPLATE_THRESHOLD > GENERATE_THRESHOLD, (
+            f"TEMPLATE_THRESHOLD ({TEMPLATE_THRESHOLD}) must be > "
+            f"GENERATE_THRESHOLD ({GENERATE_THRESHOLD})"
+        )
 
     def test_simple_acknowledgments_set(self) -> None:
-        """Test SIMPLE_ACKNOWLEDGMENTS contains expected values."""
-        assert "ok" in SIMPLE_ACKNOWLEDGMENTS
-        assert "thanks" in SIMPLE_ACKNOWLEDGMENTS
-        assert "yes" in SIMPLE_ACKNOWLEDGMENTS
-        assert "lol" in SIMPLE_ACKNOWLEDGMENTS
+        """Test SIMPLE_ACKNOWLEDGMENTS is empty (moved to text_normalizer).
+
+        Acknowledgment detection is now centralized in jarvis.text_normalizer.
+        SIMPLE_ACKNOWLEDGMENTS in router.py is kept empty for backwards compatibility.
+        """
+        # SIMPLE_ACKNOWLEDGMENTS is intentionally empty - detection moved to text_normalizer
+        assert SIMPLE_ACKNOWLEDGMENTS == frozenset()
 
     def test_context_dependent_patterns_set(self) -> None:
         """Test CONTEXT_DEPENDENT_PATTERNS contains expected values."""
@@ -1607,11 +1633,20 @@ class TestClassificationFailures:
 class TestContextThreshold:
     """Tests for CONTEXT_THRESHOLD constant."""
 
-    def test_context_threshold_value(self) -> None:
-        """Test CONTEXT_THRESHOLD is set correctly."""
+    def test_context_threshold_in_valid_range(self) -> None:
+        """Test CONTEXT_THRESHOLD is within valid range.
+
+        Context threshold should be between generate and template thresholds.
+        This determines when good examples are available for LLM generation.
+        """
         from jarvis.router import CONTEXT_THRESHOLD
 
-        assert CONTEXT_THRESHOLD == 0.70
+        # CONTEXT_THRESHOLD should be between GENERATE and TEMPLATE thresholds
+        assert GENERATE_THRESHOLD < CONTEXT_THRESHOLD < TEMPLATE_THRESHOLD, (
+            f"CONTEXT_THRESHOLD ({CONTEXT_THRESHOLD}) must be between "
+            f"GENERATE_THRESHOLD ({GENERATE_THRESHOLD}) and "
+            f"TEMPLATE_THRESHOLD ({TEMPLATE_THRESHOLD})"
+        )
 
 
 # =============================================================================

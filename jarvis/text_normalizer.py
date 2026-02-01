@@ -73,8 +73,8 @@ ACKNOWLEDGMENT_PHRASES = frozenset(
         "otw",
         "on my way",
         "be there soon",
-        # NOTE: Removed emotional reactions (cool, nice, good, great, awesome, lol, lmao, haha, hehe)
-        # These should trigger LLM generation, not canned acknowledgment responses
+        # NOTE: Removed emotional reactions (cool, nice, good, great, awesome)
+        # and lol/lmao/haha/hehe - these need LLM generation, not canned responses
         "see you",
         "bye",
         "later",
@@ -137,6 +137,34 @@ REPEATED_EMOJI_PATTERN = re.compile(
 # Question words for detecting questions
 QUESTION_WORDS = {"who", "what", "when", "where", "why", "how", "which", "whose"}
 
+# Pre-compiled patterns for hot path functions (avoid recompiling in loops)
+_WHITESPACE_PATTERN = re.compile(r"[ \t]+")
+_TRAILING_PUNCT_PATTERN = re.compile(r"[.!?,;]+$")
+
+# Request patterns - triggers that expect substantive responses
+_REQUEST_PATTERNS = [
+    re.compile(r"\bcan you\b"),
+    re.compile(r"\bcould you\b"),
+    re.compile(r"\bwould you\b"),
+    re.compile(r"\bwill you\b"),
+    re.compile(r"\bdo you want\b"),
+    re.compile(r"\bwanna\b"),
+    re.compile(r"\blet me know\b"),
+    re.compile(r"\btell me\b"),
+    re.compile(r"\bwhat do you think\b"),
+    re.compile(r"\bthoughts\?\s*$"),
+]
+
+# Proposal patterns - triggers expecting yes/no + elaboration
+_PROPOSAL_PATTERNS = [
+    re.compile(r"\bhow about\b"),
+    re.compile(r"\bwhat about\b"),
+    re.compile(r"\bshould we\b"),
+    re.compile(r"\bshall we\b"),
+    re.compile(r"\blet's\b"),
+    re.compile(r"\bwe could\b"),
+]
+
 # Temporal reference patterns
 TEMPORAL_PATTERNS = [
     r"\b(today|tomorrow|yesterday|tonight|later|soon)\b",
@@ -184,8 +212,8 @@ def normalize_text(
     lines = cleaned.split("\n")
     normalized_lines = []
     for line in lines:
-        # Collapse multiple spaces/tabs to single space
-        line = re.sub(r"[ \t]+", " ", line.strip())
+        # Collapse multiple spaces/tabs to single space (use pre-compiled pattern)
+        line = _WHITESPACE_PATTERN.sub(" ", line.strip())
         if line:
             normalized_lines.append(line)
     cleaned = "\n".join(normalized_lines)
@@ -215,8 +243,8 @@ def is_acknowledgment_only(text: str) -> bool:
     if not text:
         return False
     normalized = text.lower().strip()
-    # Also check for just punctuation added
-    stripped = re.sub(r"[.!?,;]+$", "", normalized)
+    # Also check for just punctuation added (use pre-compiled pattern)
+    stripped = _TRAILING_PUNCT_PATTERN.sub("", normalized)
     return stripped in ACKNOWLEDGMENT_PHRASES or normalized in ACKNOWLEDGMENT_PHRASES
 
 
@@ -369,34 +397,14 @@ def trigger_expects_content(text: str) -> bool:
     if is_question(text):
         return True
 
-    # Request patterns
-    request_patterns = [
-        r"\bcan you\b",
-        r"\bcould you\b",
-        r"\bwould you\b",
-        r"\bwill you\b",
-        r"\bdo you want\b",
-        r"\bwanna\b",
-        r"\blet me know\b",
-        r"\btell me\b",
-        r"\bwhat do you think\b",
-        r"\bthoughts\?\s*$",
-    ]
-    for pattern in request_patterns:
-        if re.search(pattern, normalized):
+    # Request patterns (use pre-compiled patterns)
+    for pattern in _REQUEST_PATTERNS:
+        if pattern.search(normalized):
             return True
 
-    # Proposal patterns (expecting yes/no + elaboration)
-    proposal_patterns = [
-        r"\bhow about\b",
-        r"\bwhat about\b",
-        r"\bshould we\b",
-        r"\bshall we\b",
-        r"\blet's\b",
-        r"\bwe could\b",
-    ]
-    for pattern in proposal_patterns:
-        if re.search(pattern, normalized):
+    # Proposal patterns (use pre-compiled patterns)
+    for pattern in _PROPOSAL_PATTERNS:
+        if pattern.search(normalized):
             return True
 
     return False

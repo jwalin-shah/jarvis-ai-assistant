@@ -111,6 +111,13 @@ class Pair:
     gate_b_score: float | None = None  # Embedding similarity score
     gate_c_verdict: str | None = None  # NLI verdict (accept/reject/uncertain)
     validity_status: str | None = None  # Final: valid/invalid/uncertain
+    # Dialogue act classification (v7+)
+    trigger_da_type: str | None = None  # e.g., WH_QUESTION, INFO_STATEMENT
+    trigger_da_conf: float | None = None  # Classifier confidence 0-1
+    response_da_type: str | None = None  # e.g., STATEMENT, AGREE, ACKNOWLEDGE
+    response_da_conf: float | None = None  # Classifier confidence 0-1
+    # HDBSCAN cluster assignment
+    cluster_id: int | None = None  # -1 for noise, else cluster number
     # Freshness and usage tracking
     usage_count: int = 0
     last_used_at: datetime | None = None
@@ -298,6 +305,12 @@ CREATE TABLE IF NOT EXISTS pairs (
     gate_b_score REAL,                -- Embedding similarity score
     gate_c_verdict TEXT,              -- NLI verdict (accept/reject/uncertain)
     validity_status TEXT,             -- Final: valid/invalid/uncertain
+    -- Dialogue act classification (v7+)
+    trigger_da_type TEXT,             -- e.g., WH_QUESTION, INFO_STATEMENT
+    trigger_da_conf REAL,             -- Classifier confidence 0-1
+    response_da_type TEXT,            -- e.g., STATEMENT, AGREE, ACKNOWLEDGE
+    response_da_conf REAL,            -- Classifier confidence 0-1
+    cluster_id INTEGER,               -- HDBSCAN cluster assignment (-1 for noise)
     -- Freshness and usage tracking
     usage_count INTEGER DEFAULT 0,    -- times this pair was used for generation
     last_used_at TIMESTAMP,           -- last time pair was used
@@ -358,7 +371,7 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_index ON pair_embeddings(index_version
 CREATE INDEX IF NOT EXISTS idx_embeddings_faiss ON pair_embeddings(faiss_id);
 """
 
-CURRENT_SCHEMA_VERSION = 6  # Added validity gates and split tables
+CURRENT_SCHEMA_VERSION = 7  # Added DA classification and cluster_id
 
 
 class JarvisDB:
@@ -472,6 +485,22 @@ class JarvisDB:
 
                 # Create new tables (handled by SCHEMA_SQL, but ensure they exist)
                 # pair_artifacts and contact_style_targets are created by executescript
+
+            if current_version <= 6:
+                # Migration v6 -> v7: Add dialogue act classification and cluster columns
+                da_columns = [
+                    ("trigger_da_type", "TEXT"),
+                    ("trigger_da_conf", "REAL"),
+                    ("response_da_type", "TEXT"),
+                    ("response_da_conf", "REAL"),
+                    ("cluster_id", "INTEGER"),
+                ]
+                for col_name, col_type in da_columns:
+                    try:
+                        conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
+                        logger.info("Added %s column to pairs table", col_name)
+                    except sqlite3.OperationalError:
+                        pass
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)
@@ -819,6 +848,44 @@ class JarvisDB:
             )
             return [self._row_to_pair(row) for row in cursor]
 
+    def get_pair(self, pair_id: int) -> Pair | None:
+        """Get a single pair by ID.
+
+        Args:
+            pair_id: The pair ID to fetch.
+
+        Returns:
+            The Pair if found, None otherwise.
+        """
+        with self.connection() as conn:
+            cursor = conn.execute("SELECT * FROM pairs WHERE id = ?", (pair_id,))
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_pair(row)
+            return None
+
+    def get_pairs_by_ids(self, pair_ids: list[int]) -> dict[int, Pair]:
+        """Batch fetch pairs by IDs.
+
+        More efficient than calling get_pair in a loop.
+
+        Args:
+            pair_ids: List of pair IDs to fetch.
+
+        Returns:
+            Dict mapping pair_id -> Pair for found pairs.
+        """
+        if not pair_ids:
+            return {}
+
+        with self.connection() as conn:
+            placeholders = ",".join("?" * len(pair_ids))
+            cursor = conn.execute(
+                f"SELECT * FROM pairs WHERE id IN ({placeholders})",
+                pair_ids,
+            )
+            return {row["id"]: self._row_to_pair(row) for row in cursor}
+
     def get_all_pairs(self, min_quality: float = 0.0) -> list[Pair]:
         """Get all pairs in the database."""
         return self.get_pairs(min_quality=min_quality, limit=1000000)
@@ -856,6 +923,89 @@ class JarvisDB:
             conn.execute("DELETE FROM pair_embeddings")
             cursor = conn.execute("DELETE FROM pairs")
             return cursor.rowcount
+
+    def update_da_classifications(
+        self,
+        updates: list[tuple[int, str, float, str, float]],
+    ) -> int:
+        """Bulk update DA classifications for pairs.
+
+        Args:
+            updates: List of (pair_id, trigger_da_type, trigger_da_conf,
+                             response_da_type, response_da_conf) tuples.
+
+        Returns:
+            Number of pairs updated.
+        """
+        with self.connection() as conn:
+            cursor = conn.executemany(
+                """UPDATE pairs SET
+                   trigger_da_type = ?,
+                   trigger_da_conf = ?,
+                   response_da_type = ?,
+                   response_da_conf = ?
+                   WHERE id = ?""",
+                [
+                    (trigger_da, trigger_conf, response_da, response_conf, pair_id)
+                    for pair_id, trigger_da, trigger_conf, response_da, response_conf in updates
+                ],
+            )
+            return cursor.rowcount
+
+    def update_cluster_assignments(
+        self,
+        assignments: list[tuple[int, int]],
+    ) -> int:
+        """Bulk update cluster assignments for pairs.
+
+        Args:
+            assignments: List of (pair_id, cluster_id) tuples.
+                        Use cluster_id=-1 for noise/outliers.
+
+        Returns:
+            Number of pairs updated.
+        """
+        with self.connection() as conn:
+            cursor = conn.executemany(
+                "UPDATE pairs SET cluster_id = ? WHERE id = ?",
+                [(cluster_id, pair_id) for pair_id, cluster_id in assignments],
+            )
+            return cursor.rowcount
+
+    def get_da_distribution(self) -> dict[str, Any]:
+        """Get distribution of DA types in the database.
+
+        Returns:
+            Dictionary with trigger and response DA type counts.
+        """
+        with self.connection() as conn:
+            # Trigger DA distribution
+            cursor = conn.execute(
+                """SELECT trigger_da_type, COUNT(*) as cnt
+                   FROM pairs WHERE trigger_da_type IS NOT NULL
+                   GROUP BY trigger_da_type ORDER BY cnt DESC"""
+            )
+            trigger_dist = {row["trigger_da_type"]: row["cnt"] for row in cursor}
+
+            # Response DA distribution
+            cursor = conn.execute(
+                """SELECT response_da_type, COUNT(*) as cnt
+                   FROM pairs WHERE response_da_type IS NOT NULL
+                   GROUP BY response_da_type ORDER BY cnt DESC"""
+            )
+            response_dist = {row["response_da_type"]: row["cnt"] for row in cursor}
+
+            # Total classified
+            cursor = conn.execute(
+                "SELECT COUNT(*) as cnt FROM pairs WHERE trigger_da_type IS NOT NULL"
+            )
+            total_classified = cursor.fetchone()["cnt"]
+
+            return {
+                "trigger_da": trigger_dist,
+                "response_da": response_dist,
+                "total_classified": total_classified,
+            }
 
     def get_pairs_by_trigger_pattern(
         self,
@@ -944,6 +1094,23 @@ class JarvisDB:
             ),
             gate_c_verdict=row["gate_c_verdict"] if "gate_c_verdict" in keys else None,
             validity_status=row["validity_status"] if "validity_status" in keys else None,
+            trigger_da_type=row["trigger_da_type"] if "trigger_da_type" in keys else None,
+            trigger_da_conf=(
+                float(row["trigger_da_conf"])
+                if "trigger_da_conf" in keys and row["trigger_da_conf"] is not None
+                else None
+            ),
+            response_da_type=row["response_da_type"] if "response_da_type" in keys else None,
+            response_da_conf=(
+                float(row["response_da_conf"])
+                if "response_da_conf" in keys and row["response_da_conf"] is not None
+                else None
+            ),
+            cluster_id=(
+                int(row["cluster_id"])
+                if "cluster_id" in keys and row["cluster_id"] is not None
+                else None
+            ),
         )
 
     # -------------------------------------------------------------------------
@@ -1034,27 +1201,47 @@ class JarvisDB:
                 "holdout_contact_ids": holdout_contacts,
             }
 
-    def get_training_pairs(self, min_quality: float = 0.0, limit: int = 100000) -> list[Pair]:
+    def get_training_pairs(self, min_quality: float = 0.0, limit: int | None = None) -> list[Pair]:
         """Get pairs designated for training (is_holdout=False)."""
         with self.connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT * FROM pairs
-                WHERE is_holdout = FALSE AND quality_score >= ?
-                ORDER BY trigger_timestamp DESC
-                LIMIT ?
-                """,
-                (min_quality, limit),
-            )
+            if limit is None:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE is_holdout = FALSE AND quality_score >= ?
+                    ORDER BY trigger_timestamp DESC
+                    """,
+                    (min_quality,),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE is_holdout = FALSE AND quality_score >= ?
+                    ORDER BY trigger_timestamp DESC
+                    LIMIT ?
+                    """,
+                    (min_quality, limit),
+                )
             return [self._row_to_pair(row) for row in cursor]
 
-    def get_holdout_pairs(self, min_quality: float = 0.0, limit: int = 100000) -> list[Pair]:
+    def get_holdout_pairs(self, min_quality: float = 0.0, limit: int | None = None) -> list[Pair]:
         """Get pairs designated for evaluation (is_holdout=True)."""
         with self.connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT * FROM pairs
-                WHERE is_holdout = TRUE AND quality_score >= ?
+            if limit is None:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE is_holdout = TRUE AND quality_score >= ?
+                    ORDER BY trigger_timestamp DESC
+                    """,
+                    (min_quality,),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE is_holdout = TRUE AND quality_score >= ?
                 ORDER BY trigger_timestamp DESC
                 LIMIT ?
                 """,
@@ -1286,6 +1473,106 @@ class JarvisDB:
             if row:
                 return self._row_to_pair(row)
             return None
+
+    def get_pairs_by_faiss_ids(
+        self, faiss_ids: list[int], index_version: str | None = None
+    ) -> dict[int, "Pair"]:
+        """Batch fetch pairs by FAISS IDs.
+
+        More efficient than calling get_pair_by_faiss_id in a loop.
+
+        Args:
+            faiss_ids: List of FAISS IDs to fetch.
+            index_version: Optional index version to filter by.
+
+        Returns:
+            Dict mapping faiss_id -> Pair for found pairs.
+        """
+        if not faiss_ids:
+            return {}
+
+        with self.connection() as conn:
+            placeholders = ",".join("?" * len(faiss_ids))
+            if index_version:
+                cursor = conn.execute(
+                    f"""
+                    SELECT p.*, e.faiss_id FROM pairs p
+                    JOIN pair_embeddings e ON p.id = e.pair_id
+                    WHERE e.faiss_id IN ({placeholders}) AND e.index_version = ?
+                    """,
+                    (*faiss_ids, index_version),
+                )
+            else:
+                cursor = conn.execute(
+                    f"""
+                    SELECT p.*, e.faiss_id FROM pairs p
+                    JOIN pair_embeddings e ON p.id = e.pair_id
+                    WHERE e.faiss_id IN ({placeholders})
+                    """,
+                    faiss_ids,
+                )
+            result = {}
+            for row in cursor:
+                pair = self._row_to_pair(row)
+                result[row["faiss_id"]] = pair
+            return result
+
+    def get_embeddings_by_pair_ids(self, pair_ids: list[int]) -> dict[int, "PairEmbedding"]:
+        """Batch fetch embeddings by pair IDs.
+
+        More efficient than calling get_embedding_by_pair in a loop.
+
+        Args:
+            pair_ids: List of pair IDs to fetch embeddings for.
+
+        Returns:
+            Dict mapping pair_id -> PairEmbedding for found embeddings.
+        """
+        if not pair_ids:
+            return {}
+
+        with self.connection() as conn:
+            placeholders = ",".join("?" * len(pair_ids))
+            cursor = conn.execute(
+                f"SELECT * FROM pair_embeddings WHERE pair_id IN ({placeholders})",
+                pair_ids,
+            )
+            result = {}
+            for row in cursor:
+                result[row["pair_id"]] = PairEmbedding(
+                    pair_id=row["pair_id"],
+                    faiss_id=row["faiss_id"],
+                    cluster_id=row["cluster_id"],
+                    index_version=row["index_version"] if "index_version" in row.keys() else None,
+                )
+            return result
+
+    def get_clusters_batch(self, cluster_ids: list[int]) -> dict[int, "Cluster"]:
+        """Batch fetch clusters by IDs.
+
+        More efficient than calling get_cluster in a loop.
+
+        Args:
+            cluster_ids: List of cluster IDs to fetch.
+
+        Returns:
+            Dict mapping cluster_id -> Cluster for found clusters.
+        """
+        if not cluster_ids:
+            return {}
+
+        # Filter out None values
+        valid_ids = [cid for cid in cluster_ids if cid is not None]
+        if not valid_ids:
+            return {}
+
+        with self.connection() as conn:
+            placeholders = ",".join("?" * len(valid_ids))
+            cursor = conn.execute(
+                f"SELECT * FROM clusters WHERE id IN ({placeholders})",
+                valid_ids,
+            )
+            return {row["id"]: self._row_to_cluster(row) for row in cursor}
 
     def clear_embeddings(self, index_version: str | None = None) -> int:
         """Delete embeddings, optionally for a specific index version."""
@@ -1780,6 +2067,233 @@ class JarvisDB:
                 (min_quality, limit),
             )
             return [self._row_to_pair(row) for row in cursor]
+
+    # -------------------------------------------------------------------------
+    # DA-Filtered Retrieval Operations
+    # -------------------------------------------------------------------------
+
+    def get_pairs_by_response_da(
+        self,
+        response_da: str,
+        min_conf: float = 0.5,
+        min_quality: float = 0.0,
+        limit: int = 100,
+        exclude_holdout: bool = True,
+    ) -> list[Pair]:
+        """Get pairs filtered by response dialogue act type.
+
+        Used for DA-filtered retrieval to find examples of specific response types.
+
+        Args:
+            response_da: Response dialogue act type (e.g., 'AGREE', 'DECLINE').
+            min_conf: Minimum classifier confidence (default 0.5).
+            min_quality: Minimum quality score (default 0.0).
+            limit: Maximum pairs to return.
+            exclude_holdout: If True, exclude holdout pairs (default True).
+
+        Returns:
+            List of Pair objects matching the criteria.
+        """
+        with self.connection() as conn:
+            if exclude_holdout:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE response_da_type = ?
+                    AND response_da_conf >= ?
+                    AND quality_score >= ?
+                    AND is_holdout = FALSE
+                    ORDER BY response_da_conf DESC, quality_score DESC
+                    LIMIT ?
+                    """,
+                    (response_da, min_conf, min_quality, limit),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE response_da_type = ?
+                    AND response_da_conf >= ?
+                    AND quality_score >= ?
+                    ORDER BY response_da_conf DESC, quality_score DESC
+                    LIMIT ?
+                    """,
+                    (response_da, min_conf, min_quality, limit),
+                )
+            return [self._row_to_pair(row) for row in cursor]
+
+    def get_pairs_by_trigger_da(
+        self,
+        trigger_da: str,
+        min_conf: float = 0.5,
+        min_quality: float = 0.0,
+        limit: int = 100,
+        exclude_holdout: bool = True,
+    ) -> list[Pair]:
+        """Get pairs filtered by trigger dialogue act type.
+
+        Used for finding pairs where the trigger is a specific type
+        (e.g., INVITATION triggers to find how user responds to invitations).
+
+        Args:
+            trigger_da: Trigger dialogue act type (e.g., 'INVITATION', 'YN_QUESTION').
+            min_conf: Minimum classifier confidence (default 0.5).
+            min_quality: Minimum quality score (default 0.0).
+            limit: Maximum pairs to return.
+            exclude_holdout: If True, exclude holdout pairs (default True).
+
+        Returns:
+            List of Pair objects matching the criteria.
+        """
+        with self.connection() as conn:
+            if exclude_holdout:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE trigger_da_type = ?
+                    AND trigger_da_conf >= ?
+                    AND quality_score >= ?
+                    AND is_holdout = FALSE
+                    ORDER BY trigger_da_conf DESC, quality_score DESC
+                    LIMIT ?
+                    """,
+                    (trigger_da, min_conf, min_quality, limit),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE trigger_da_type = ?
+                    AND trigger_da_conf >= ?
+                    AND quality_score >= ?
+                    ORDER BY trigger_da_conf DESC, quality_score DESC
+                    LIMIT ?
+                    """,
+                    (trigger_da, min_conf, min_quality, limit),
+                )
+            return [self._row_to_pair(row) for row in cursor]
+
+    def get_pairs_by_trigger_and_response_da(
+        self,
+        trigger_da: str,
+        response_da: str,
+        min_conf: float = 0.5,
+        min_quality: float = 0.0,
+        limit: int = 100,
+        exclude_holdout: bool = True,
+    ) -> list[Pair]:
+        """Get pairs filtered by both trigger and response DA types.
+
+        Used for finding examples of specific trigger->response patterns
+        (e.g., INVITATION->AGREE pairs for affirmative response examples).
+
+        Args:
+            trigger_da: Trigger dialogue act type.
+            response_da: Response dialogue act type.
+            min_conf: Minimum classifier confidence for both (default 0.5).
+            min_quality: Minimum quality score (default 0.0).
+            limit: Maximum pairs to return.
+            exclude_holdout: If True, exclude holdout pairs (default True).
+
+        Returns:
+            List of Pair objects matching the criteria.
+        """
+        with self.connection() as conn:
+            if exclude_holdout:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE trigger_da_type = ?
+                    AND response_da_type = ?
+                    AND trigger_da_conf >= ?
+                    AND response_da_conf >= ?
+                    AND quality_score >= ?
+                    AND is_holdout = FALSE
+                    ORDER BY quality_score DESC, response_da_conf DESC
+                    LIMIT ?
+                    """,
+                    (trigger_da, response_da, min_conf, min_conf, min_quality, limit),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM pairs
+                    WHERE trigger_da_type = ?
+                    AND response_da_type = ?
+                    AND trigger_da_conf >= ?
+                    AND response_da_conf >= ?
+                    AND quality_score >= ?
+                    ORDER BY quality_score DESC, response_da_conf DESC
+                    LIMIT ?
+                    """,
+                    (trigger_da, response_da, min_conf, min_conf, min_quality, limit),
+                )
+            return [self._row_to_pair(row) for row in cursor]
+
+    def get_high_quality_exemplars(
+        self,
+        response_da: str,
+        min_quality: float = 6.0,
+        min_conf: float = 0.7,
+        limit: int = 50,
+    ) -> list[Pair]:
+        """Get high-quality exemplar pairs for a response type.
+
+        These are the best examples for few-shot learning - high quality scores
+        AND high classifier confidence for the response DA type.
+
+        Args:
+            response_da: Response dialogue act type.
+            min_quality: Minimum quality score (default 6.0 for high quality).
+            min_conf: Minimum DA classifier confidence (default 0.7).
+            limit: Maximum exemplars to return.
+
+        Returns:
+            List of high-quality Pair objects for this response type.
+        """
+        with self.connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM pairs
+                WHERE response_da_type = ?
+                AND response_da_conf >= ?
+                AND quality_score >= ?
+                AND is_holdout = FALSE
+                ORDER BY quality_score DESC, response_da_conf DESC
+                LIMIT ?
+                """,
+                (response_da, min_conf, min_quality, limit),
+            )
+            return [self._row_to_pair(row) for row in cursor]
+
+    def get_da_cross_tabulation(self) -> dict[str, dict[str, int]]:
+        """Get cross-tabulation of trigger DA vs response DA types.
+
+        Shows how different trigger types are responded to in the data.
+        Useful for understanding response patterns and validating DA mappings.
+
+        Returns:
+            Nested dict of {trigger_da: {response_da: count}}.
+        """
+        with self.connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT trigger_da_type, response_da_type, COUNT(*) as cnt
+                FROM pairs
+                WHERE trigger_da_type IS NOT NULL
+                AND response_da_type IS NOT NULL
+                GROUP BY trigger_da_type, response_da_type
+                ORDER BY trigger_da_type, cnt DESC
+                """
+            )
+            result: dict[str, dict[str, int]] = {}
+            for row in cursor:
+                trigger = row["trigger_da_type"]
+                response = row["response_da_type"]
+                if trigger not in result:
+                    result[trigger] = {}
+                result[trigger][response] = row["cnt"]
+            return result
 
 
 # Singleton instance

@@ -13,7 +13,8 @@ from .experiments import router as experiments_router
 from .export import router as export_router
 from .feedback import router as feedback_router
 from .health import router as health_router
-from .insights import router as insights_router
+
+# Note: insights.py is a consolidation module, not a router
 from .metrics import router as metrics_router
 from .pdf_export import router as pdf_export_router
 from .priority import router as priority_router
@@ -43,7 +44,6 @@ __all__ = [
     "export_router",
     "feedback_router",
     "health_router",
-    "insights_router",
     "metrics_router",
     "pdf_export_router",
     "priority_router",

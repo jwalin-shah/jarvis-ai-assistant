@@ -463,9 +463,9 @@ class TestAccessChecks:
 class TestChatCommandMocked:
     """Tests for chat command with full mocking (no MLX required)."""
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.get_memory_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.get_memory_controller")
+    @patch("jarvis.cli.deps.console")
     def test_chat_generates_and_displays_response(self, mock_console, mock_mem_ctrl, mock_deg_ctrl):
         """Chat generates response and displays it."""
         # Setup mocks
@@ -491,9 +491,9 @@ class TestChatCommandMocked:
         # Verify response was printed
         assert mock_console.print.call_count >= 3  # Panel, mode, response, goodbye
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.get_memory_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.get_memory_controller")
+    @patch("jarvis.cli.deps.console")
     def test_chat_handles_empty_input(self, mock_console, mock_mem_ctrl, mock_deg_ctrl):
         """Chat skips empty input."""
         mock_state = MagicMock()
@@ -515,9 +515,9 @@ class TestChatCommandMocked:
         # Degradation controller should not have been called for empty input
         mock_deg_ctrl.return_value.execute.assert_not_called()
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.get_memory_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.get_memory_controller")
+    @patch("jarvis.cli.deps.console")
     def test_chat_exits_on_q_shortcut(self, mock_console, mock_mem_ctrl, mock_deg_ctrl):
         """Chat exits on 'q' shortcut."""
         mock_state = MagicMock()
@@ -536,9 +536,9 @@ class TestChatCommandMocked:
 
         assert exit_code == 0
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.get_memory_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.get_memory_controller")
+    @patch("jarvis.cli.deps.console")
     def test_chat_handles_generation_error(self, mock_console, mock_mem_ctrl, mock_deg_ctrl):
         """Chat handles errors during generation."""
         mock_state = MagicMock()
@@ -563,8 +563,8 @@ class TestChatCommandMocked:
         error_calls = [c for c in mock_console.print.call_args_list if "Error" in str(c)]
         assert len(error_calls) >= 1
 
-    @patch("jarvis.cli.get_memory_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_memory_controller")
+    @patch("jarvis.cli.deps.console")
     def test_chat_returns_error_on_import_failure(self, mock_console, mock_mem_ctrl):
         """Chat returns error code when models module unavailable."""
         mock_state = MagicMock()
@@ -606,9 +606,9 @@ class TestChatCommandMocked:
         # Should return 1 on import error
         assert exit_code == 1
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.get_memory_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.get_memory_controller")
+    @patch("jarvis.cli.deps.console")
     def test_chat_handles_eof_error(self, mock_console, mock_mem_ctrl, mock_deg_ctrl):
         """Chat handles EOFError (pipe closed)."""
         mock_state = MagicMock()
@@ -683,8 +683,8 @@ class TestParseDateFunction:
 class TestSearchMessagesExtended:
     """Extended tests for search-messages command."""
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_displays_results(self, mock_console, mock_deg_ctrl):
         """Search displays results in table format."""
         from datetime import datetime
@@ -712,8 +712,8 @@ class TestSearchMessagesExtended:
         # Table should be printed
         assert mock_console.print.call_count >= 2
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_handles_empty_results(self, mock_console, mock_deg_ctrl):
         """Search handles empty results gracefully."""
         from jarvis.cli import cmd_search_messages
@@ -732,8 +732,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("No messages found" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_handles_permission_error(self, mock_console, mock_deg_ctrl):
         """Search handles PermissionError appropriately."""
         from jarvis.cli import cmd_search_messages
@@ -754,8 +754,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("Permission error" in c or "Full Disk Access" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_handles_generic_exception(self, mock_console, mock_deg_ctrl):
         """Search handles generic exceptions."""
         from jarvis.cli import cmd_search_messages
@@ -774,8 +774,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("Error" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_truncates_long_messages(self, mock_console, mock_deg_ctrl):
         """Search truncates long messages in display."""
         from datetime import datetime
@@ -800,8 +800,8 @@ class TestSearchMessagesExtended:
 
         assert exit_code == 0
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_handles_message_without_date(self, mock_console, mock_deg_ctrl):
         """Search handles messages without date."""
         from jarvis.cli import cmd_search_messages
@@ -823,8 +823,8 @@ class TestSearchMessagesExtended:
 
         assert exit_code == 0
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_with_start_date_filter(self, mock_console, mock_deg_ctrl):
         """Search passes start_date filter to reader."""
         from jarvis.cli import cmd_search_messages
@@ -843,8 +843,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("after 2024-01-15" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_with_end_date_filter(self, mock_console, mock_deg_ctrl):
         """Search passes end_date filter to reader."""
         from jarvis.cli import cmd_search_messages
@@ -863,8 +863,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("before 2024-12-31" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_with_sender_filter(self, mock_console, mock_deg_ctrl):
         """Search passes sender filter to reader."""
         from jarvis.cli import cmd_search_messages
@@ -883,8 +883,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("from +15551234567" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_with_has_attachment_filter(self, mock_console, mock_deg_ctrl):
         """Search passes has_attachment=True filter to reader."""
         from jarvis.cli import cmd_search_messages
@@ -903,8 +903,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("with attachments" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_with_no_attachment_filter(self, mock_console, mock_deg_ctrl):
         """Search passes has_attachment=False filter to reader."""
         from jarvis.cli import cmd_search_messages
@@ -923,8 +923,8 @@ class TestSearchMessagesExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("without attachments" in c for c in print_calls)
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_with_all_filters_combined(self, mock_console, mock_deg_ctrl):
         """Search with all filters shows all filter info."""
         from jarvis.cli import cmd_search_messages
@@ -956,8 +956,8 @@ class TestSearchMessagesExtended:
         filter_line = [c for c in print_calls if "Filters:" in c]
         assert len(filter_line) >= 1
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.console")
     def test_search_invalid_date_handled_gracefully(self, mock_console, mock_deg_ctrl):
         """Search handles invalid date format gracefully."""
         from jarvis.cli import cmd_search_messages
@@ -978,7 +978,7 @@ class TestSearchMessagesExtended:
 class TestHealthExtended:
     """Extended tests for health command."""
 
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_health_shows_model_loaded(self, mock_console):
         """Health shows model loaded status."""
         initialize_system()
@@ -995,7 +995,7 @@ class TestHealthExtended:
 
         assert exit_code == 0
 
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_health_shows_model_not_loaded(self, mock_console):
         """Health shows model not loaded status."""
         initialize_system()
@@ -1010,7 +1010,7 @@ class TestHealthExtended:
 
         assert exit_code == 0
 
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_health_handles_model_exception(self, mock_console):
         """Health handles exception when checking model status."""
         initialize_system()
@@ -1029,8 +1029,8 @@ class TestHealthExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("unavailable" in c.lower() for c in print_calls)
 
-    @patch("jarvis.cli._check_imessage_access")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps._check_imessage_access")
+    @patch("jarvis.cli.deps.console")
     def test_health_shows_degraded_features(self, mock_console, mock_imessage_check):
         """Health shows degraded feature status."""
         from core.health import get_degradation_controller
@@ -1062,7 +1062,7 @@ class TestHealthExtended:
 class TestBenchmarkExtended:
     """Extended tests for benchmark command."""
 
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_benchmark_unknown_type_returns_error(self, mock_console):
         """Benchmark with unknown type returns error."""
         from jarvis.cli import cmd_benchmark
@@ -1081,7 +1081,7 @@ class TestBenchmarkExtended:
         assert any("Unknown benchmark type" in c for c in print_calls)
 
     @patch("subprocess.run")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_benchmark_handles_subprocess_exception(self, mock_console, mock_run):
         """Benchmark handles subprocess exception."""
         from jarvis.cli import cmd_benchmark
@@ -1114,8 +1114,8 @@ class TestBenchmarkExtended:
 class TestMainExtended:
     """Extended tests for main entry point."""
 
-    @patch("jarvis.cli.initialize_system")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.initialize_system")
+    @patch("jarvis.cli.deps.console")
     def test_main_handles_failed_initialization(self, mock_console, mock_init):
         """Main handles failed system initialization."""
         mock_init.return_value = (False, ["Critical error"])
@@ -1126,7 +1126,7 @@ class TestMainExtended:
         print_calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("Failed to initialize" in c for c in print_calls)
 
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_main_displays_warnings(self, mock_console):
         """Main displays initialization warnings."""
         with patch("jarvis.system._check_imessage_access", return_value=False):
@@ -1140,8 +1140,8 @@ class TestMainExtended:
 class TestCleanupExtended:
     """Extended tests for cleanup function."""
 
-    @patch("jarvis.cli.reset_memory_controller")
-    @patch("jarvis.cli.reset_degradation_controller")
+    @patch("jarvis.cli.deps.reset_memory_controller")
+    @patch("jarvis.cli.deps.reset_degradation_controller")
     def test_cleanup_handles_reset_generator_exception(self, mock_deg, mock_mem):
         """Cleanup handles exception in reset_generator."""
         from jarvis.cli import cleanup
@@ -1154,7 +1154,7 @@ class TestCleanupExtended:
             # Should not raise
             cleanup()
 
-    @patch("jarvis.cli.reset_memory_controller")
+    @patch("jarvis.cli.deps.reset_memory_controller")
     def test_cleanup_handles_memory_controller_exception(self, mock_mem):
         """Cleanup handles exception in reset_memory_controller."""
         from jarvis.cli import cleanup
@@ -1185,7 +1185,7 @@ class TestRunFunction:
 
     @patch("jarvis.cli.main")
     @patch("jarvis.cli.cleanup")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_run_handles_keyboard_interrupt(self, mock_console, mock_cleanup, mock_main):
         """Run handles KeyboardInterrupt."""
         mock_main.side_effect = KeyboardInterrupt()
@@ -1200,7 +1200,7 @@ class TestRunFunction:
 
     @patch("jarvis.cli.main")
     @patch("jarvis.cli.cleanup")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.console")
     def test_run_handles_unexpected_exception(self, mock_console, mock_cleanup, mock_main):
         """Run handles unexpected exceptions."""
         mock_main.side_effect = RuntimeError("Unexpected error")
@@ -1283,8 +1283,8 @@ class TestReplyCommand:
         assert args.person == "Sarah"
         assert args.instruction == "say yes politely"
 
-    @patch("jarvis.cli._check_imessage_access")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps._check_imessage_access")
+    @patch("jarvis.cli.deps.console")
     def test_reply_no_imessage_access(self, mock_console, mock_check):
         """Reply returns error when no iMessage access."""
         from jarvis.cli import cmd_reply
@@ -1301,8 +1301,8 @@ class TestReplyCommand:
         assert any("Full Disk Access" in c for c in print_calls)
 
     @patch("integrations.imessage.ChatDBReader")
-    @patch("jarvis.cli._check_imessage_access")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps._check_imessage_access")
+    @patch("jarvis.cli.deps.console")
     def test_reply_person_not_found(self, mock_console, mock_check, mock_reader_class):
         """Reply shows helpful message when person not found."""
         from jarvis.cli import cmd_reply
@@ -1355,8 +1355,8 @@ class TestSummarizeCommand:
         assert args.person == "Dad"
         assert args.messages == 100
 
-    @patch("jarvis.cli._check_imessage_access")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps._check_imessage_access")
+    @patch("jarvis.cli.deps.console")
     def test_summarize_no_imessage_access(self, mock_console, mock_check):
         """Summarize returns error when no iMessage access."""
         from jarvis.cli import cmd_summarize
@@ -1531,9 +1531,9 @@ class TestPromptBuilders:
 class TestIntentRouting:
     """Tests for intent-based routing in chat."""
 
-    @patch("jarvis.cli.get_degradation_controller")
-    @patch("jarvis.cli.get_memory_controller")
-    @patch("jarvis.cli.console")
+    @patch("jarvis.cli.deps.get_degradation_controller")
+    @patch("jarvis.cli.deps.get_memory_controller")
+    @patch("jarvis.cli.deps.console")
     def test_chat_routes_quick_reply_to_template(self, mock_console, mock_mem_ctrl, mock_deg_ctrl):
         """Chat routes quick reply intent to template matcher."""
         mock_state = MagicMock()

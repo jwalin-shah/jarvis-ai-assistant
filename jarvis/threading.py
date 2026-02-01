@@ -532,6 +532,7 @@ class ThreadAnalyzer:
 
         sorted_messages = sorted(messages, key=lambda m: m.date)
         threads: list[Thread] = []
+        threads_by_id: dict[str, Thread] = {}  # O(1) lookup by thread_id
         current_msgs: list[Message] = []
         current_start: datetime | None = None
         reply_threads: dict[int, str] = {}
@@ -539,13 +540,13 @@ class ThreadAnalyzer:
         for i, msg in enumerate(sorted_messages):
             if msg.reply_to_id is not None and msg.reply_to_id in reply_threads:
                 tid = reply_threads[msg.reply_to_id]
-                for t in threads:
-                    if t.thread_id == tid:
-                        t.messages.append(msg.id)
-                        t.message_count += 1
-                        t.end_time = msg.date
-                        reply_threads[msg.id] = tid
-                        break
+                # O(1) dict lookup instead of O(n) linear search
+                thread = threads_by_id.get(tid)
+                if thread is not None:
+                    thread.messages.append(msg.id)
+                    thread.message_count += 1
+                    thread.end_time = msg.date
+                    reply_threads[msg.id] = tid
                 continue
 
             if not current_msgs:
@@ -558,14 +559,18 @@ class ThreadAnalyzer:
                     msg, sorted_messages[i - 1], current_start
                 )
                 if should_start:
-                    threads.append(self._create_thread(current_msgs, chat_id, reply_threads))
+                    new_thread = self._create_thread(current_msgs, chat_id, reply_threads)
+                    threads.append(new_thread)
+                    threads_by_id[new_thread.thread_id] = new_thread
                     current_msgs = [msg]
                     current_start = msg.date
                 else:
                     current_msgs.append(msg)
 
         if current_msgs:
-            threads.append(self._create_thread(current_msgs, chat_id, reply_threads))
+            new_thread = self._create_thread(current_msgs, chat_id, reply_threads)
+            threads.append(new_thread)
+            threads_by_id[new_thread.thread_id] = new_thread
 
         return threads
 

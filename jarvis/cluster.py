@@ -212,29 +212,30 @@ class ResponseClusterer:
         if len(embeddings) <= num_examples:
             return list(range(len(embeddings)))
 
+        n = len(embeddings)
+
         # Use farthest point sampling for diversity
+        # Vectorized: track min distance to any selected point for each candidate
         selected = [0]  # Start with first point
-        remaining = set(range(1, len(embeddings)))
 
-        while len(selected) < num_examples and remaining:
-            # Find point farthest from all selected points
-            max_min_dist = -1
-            best_idx = None
+        # Initialize min distances from all points to the first selected point
+        # This avoids O(n²) nested loop by incrementally updating distances
+        min_distances = np.linalg.norm(embeddings - embeddings[0], axis=1)
+        min_distances[0] = -1  # Mark first point as selected (negative = selected)
 
-            for idx in remaining:
-                # Distance to nearest selected point
-                min_dist = float("inf")
-                for sel_idx in selected:
-                    dist = np.linalg.norm(embeddings[idx] - embeddings[sel_idx])
-                    min_dist = min(min_dist, dist)
+        while len(selected) < num_examples:
+            # Find point with maximum min-distance to selected set
+            best_idx = int(np.argmax(min_distances))
 
-                if min_dist > max_min_dist:
-                    max_min_dist = min_dist
-                    best_idx = idx
+            if min_distances[best_idx] <= 0:
+                break  # All points selected or no valid candidates
 
-            if best_idx is not None:
-                selected.append(best_idx)
-                remaining.discard(best_idx)
+            selected.append(best_idx)
+
+            # Update min distances: for each point, check if new selected point is closer
+            new_distances = np.linalg.norm(embeddings - embeddings[best_idx], axis=1)
+            min_distances = np.minimum(min_distances, new_distances)
+            min_distances[best_idx] = -1  # Mark as selected
 
         return selected
 
