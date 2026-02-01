@@ -339,38 +339,60 @@ class TriggerIndexSearcher:
             embedder=embedder,
         )
 
+        if not matches:
+            return []
+
+        # Batch fetch all data in 3 queries instead of 3*k queries
+        faiss_ids = [faiss_id for faiss_id, _ in matches]
+
+        # Query 1: Get all pairs by FAISS IDs
+        pairs_by_faiss = self.jarvis_db.get_pairs_by_faiss_ids(faiss_ids, active_index.version_id)
+        if not pairs_by_faiss:
+            return []
+
+        # Query 2: Get all embeddings for found pairs
+        pair_ids = [p.id for p in pairs_by_faiss.values()]
+        embeddings_by_pair = self.jarvis_db.get_embeddings_by_pair_ids(pair_ids)
+
+        # Query 3: Get all clusters for embeddings that have cluster_id
+        cluster_ids = [e.cluster_id for e in embeddings_by_pair.values() if e.cluster_id]
+        clusters_by_id = self.jarvis_db.get_clusters_batch(cluster_ids) if cluster_ids else {}
+
+        # Build results using pre-fetched data
         results = []
         for faiss_id, score in matches:
-            pair = self.jarvis_db.get_pair_by_faiss_id(faiss_id, active_index.version_id)
-            if pair:
-                # Apply freshness weighting if requested
-                final_score = score
-                if prefer_recent and pair.source_timestamp:
-                    # Decay factor: lose 10% per year of age
-                    age_days = (datetime.now() - pair.source_timestamp).days
-                    decay = max(0.5, 1.0 - (age_days / 365) * 0.1)
-                    final_score = score * decay
+            pair = pairs_by_faiss.get(faiss_id)
+            if not pair:
+                continue
 
-                embedding = self.jarvis_db.get_embedding_by_pair(pair.id)
-                cluster = None
-                if embedding and embedding.cluster_id:
-                    cluster = self.jarvis_db.get_cluster(embedding.cluster_id)
+            # Apply freshness weighting if requested
+            final_score = score
+            if prefer_recent and pair.source_timestamp:
+                # Decay factor: lose 10% per year of age
+                age_days = (datetime.now() - pair.source_timestamp).days
+                decay = max(0.5, 1.0 - (age_days / 365) * 0.1)
+                final_score = score * decay
 
-                results.append(
-                    {
-                        "similarity": round(score, 3),
-                        "weighted_score": round(final_score, 3),
-                        "trigger_text": pair.trigger_text,
-                        "response_text": pair.response_text,
-                        "chat_id": pair.chat_id,
-                        "faiss_id": faiss_id,
-                        "pair_id": pair.id,
-                        "source_timestamp": pair.source_timestamp,
-                        "quality_score": pair.quality_score,
-                        "cluster_id": embedding.cluster_id if embedding else None,
-                        "cluster_name": cluster.name if cluster else None,
-                    }
-                )
+            embedding = embeddings_by_pair.get(pair.id)
+            cluster = clusters_by_id.get(embedding.cluster_id) if embedding and embedding.cluster_id else None
+
+            results.append(
+                {
+                    "similarity": round(score, 3),
+                    "weighted_score": round(final_score, 3),
+                    "trigger_text": pair.trigger_text,
+                    "response_text": pair.response_text,
+                    "chat_id": pair.chat_id,
+                    "faiss_id": faiss_id,
+                    "pair_id": pair.id,
+                    "source_timestamp": pair.source_timestamp,
+                    "quality_score": pair.quality_score,
+                    "response_da_type": pair.response_da_type,
+                    "response_da_conf": pair.response_da_conf,
+                    "cluster_id": embedding.cluster_id if embedding else None,
+                    "cluster_name": cluster.name if cluster else None,
+                }
+            )
 
         # Sort by weighted score and limit
         results.sort(key=lambda x: x["weighted_score"], reverse=True)
@@ -792,13 +814,32 @@ class IncrementalTriggerIndex:
             embedder=embedder,
         )
 
-        results = []
+        if not matches:
+            return []
+
+        # Collect pair IDs from FAISS ID mapping
+        faiss_to_pair_ids = {}
+        pair_ids_to_fetch = []
         for faiss_id, score in matches:
             pair_id = self._faiss_to_pair.get(faiss_id)
+            if pair_id is not None:
+                faiss_to_pair_ids[faiss_id] = pair_id
+                pair_ids_to_fetch.append(pair_id)
+
+        if not pair_ids_to_fetch:
+            return []
+
+        # Batch fetch all pairs in one query
+        pairs_by_id = self.jarvis_db.get_pairs_by_ids(pair_ids_to_fetch)
+
+        # Build results using pre-fetched data
+        results = []
+        for faiss_id, score in matches:
+            pair_id = faiss_to_pair_ids.get(faiss_id)
             if pair_id is None:
                 continue
 
-            pair = self.jarvis_db.get_pair(pair_id)
+            pair = pairs_by_id.get(pair_id)
             if pair is None:
                 continue
 
@@ -897,12 +938,12 @@ class IncrementalTriggerIndex:
                 if faiss_id not in self._deleted_faiss_ids
             ]
 
-            # Fetch pairs from database
-            active_pairs = []
-            for pair_id in active_pair_ids:
-                pair = self.jarvis_db.get_pair(pair_id)
-                if pair and (pair.quality_score or 0) >= min_quality:
-                    active_pairs.append(pair)
+            # Batch fetch pairs from database (single query instead of N queries)
+            pairs_by_id = self.jarvis_db.get_pairs_by_ids(active_pair_ids)
+            active_pairs = [
+                pair for pair in pairs_by_id.values()
+                if (pair.quality_score or 0) >= min_quality
+            ]
 
             if not active_pairs:
                 logger.warning("No active pairs to compact")

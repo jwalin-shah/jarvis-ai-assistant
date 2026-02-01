@@ -1,0 +1,21 @@
+{
+  "total_evaluated": 26414,
+  "threshold": 0.5,
+  "exact_match_rate": 0.0015522071628681759,
+  "semantic_match_rate": 1.0,
+  "mean_top_score": 0.8767911120137846,
+  "median_top_score": 0.8658360838890076,
+  "p90_top_score": 1.0,
+  "p10_top_score": 0.7786394953727722,
+  "score_distribution": {
+    "0.9+": 9484,
+    "0.8-0.9": 12180,
+    "0.7-0.8": 4646,
+    "0.6-0.7": 104,
+    "0.5-0.6": 0,
+    "<0.5": 0
+  },
+  "encode_time_sec": 41.991105794906616,
+  "search_time_sec": 2.1867570877075195,
+  "total_time_sec": 44.177862882614136
+}

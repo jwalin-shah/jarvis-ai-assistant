@@ -31,6 +31,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from jarvis.text_normalizer import is_acknowledgment_only
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -114,11 +116,6 @@ class MessageClassification:
 
 # Compiled regex patterns for rule-based classification
 # High confidence patterns that don't need embedding fallback
-
-# Import centralized acknowledgment detection from text_normalizer
-# This ensures exact matching (not substring matching) across all modules
-from jarvis.text_normalizer import is_acknowledgment_only
-
 
 # Legacy wrapper for regex-based checking - now uses centralized exact matching
 def _match_acknowledgment(text: str) -> bool:

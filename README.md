@@ -182,7 +182,7 @@ uv run python scripts/check_gates.py results/latest/
 ```
 jarvis-ai-assistant/
 ├── jarvis/             # CLI, config, metrics, export, intent classification
-│   ├── cli.py          # CLI entry point with all commands
+│   ├── _cli_main.py    # CLI implementation (re-exported via cli/ package)
 │   ├── config.py       # Nested configuration with migration
 │   ├── export.py       # JSON/CSV/TXT export functionality
 │   ├── metrics.py      # Memory sampling, latency histograms, caching

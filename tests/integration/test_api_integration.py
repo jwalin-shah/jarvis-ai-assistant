@@ -91,7 +91,7 @@ class TestFastAPIAppStartup:
             "/metrics",  # includes template-analytics at /metrics/templates
             "/search",
             "/stats",
-            "/insights",
+            # Note: /insights removed - functionality now in /stats and /digest
             "/ws",  # websocket
             "/tasks",
             "/batch",

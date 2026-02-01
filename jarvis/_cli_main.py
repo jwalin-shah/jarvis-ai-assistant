@@ -1498,68 +1498,19 @@ def cmd_serve(args: argparse.Namespace) -> int:
 def cmd_mcp_serve(args: argparse.Namespace) -> int:
     """Start the MCP (Model Context Protocol) server.
 
+    Note: MCP server functionality has been removed in the current version.
+
     Args:
-        args: Parsed arguments with transport, host, and port options.
+        args: Parsed arguments (unused).
 
     Returns:
-        Exit code.
+        Exit code (always 1 - feature removed).
     """
-    import asyncio
-
-    from mcp_server.server import MCPServer, StdioTransport, run_http_server
-
-    transport = args.transport
-    verbose = getattr(args, "verbose", False)
-
-    if transport == "stdio":
-        console.print(
-            "[bold green]Starting JARVIS MCP Server (stdio mode)[/bold green]",
-            file=sys.stderr,
-        )
-        console.print(
-            "[dim]Communication via stdin/stdout - ready for Claude Code[/dim]",
-            file=sys.stderr,
-        )
-
-        # Configure logging to stderr
-        logging.basicConfig(
-            level=logging.DEBUG if verbose else logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            stream=sys.stderr,
-        )
-
-        server = MCPServer()
-        stdio_transport = StdioTransport(server)
-        try:
-            stdio_transport.run()
-            return 0
-        except Exception as e:
-            console.print(f"[red]Error running MCP server: {e}[/red]", file=sys.stderr)
-            return 1
-    else:
-        # HTTP transport
-        host = args.host
-        port = args.port
-
-        console.print(
-            Panel(
-                f"[bold green]Starting JARVIS MCP Server (HTTP mode)[/bold green]\n"
-                f"Host: {host}\n"
-                f"Port: {port}\n"
-                f"Endpoint: http://{host}:{port}/mcp",
-                title="MCP Server",
-            )
-        )
-
-        try:
-            asyncio.run(run_http_server(host, port))
-            return 0
-        except KeyboardInterrupt:
-            console.print("\n[dim]MCP server stopped.[/dim]")
-            return 0
-        except Exception as e:
-            console.print(f"[red]Error starting MCP server: {e}[/red]")
-            return 1
+    console.print(
+        "[yellow]The MCP server feature has been removed.[/yellow]\n"
+        "[dim]Use 'jarvis serve' for the REST API instead.[/dim]"
+    )
+    return 1
 
 
 def cmd_db(args: argparse.Namespace) -> int:

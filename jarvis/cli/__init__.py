@@ -9,6 +9,9 @@ the eventual migration of commands to individual modules.
 """
 
 # Re-export all CLI functions from the main module
+# Re-export core controllers for patching in tests
+from core.health import get_degradation_controller, reset_degradation_controller
+from core.memory import get_memory_controller, reset_memory_controller
 from jarvis._cli_main import (
     cmd_batch,
     cmd_benchmark,
@@ -39,6 +42,15 @@ from jarvis.cli.utils import (
     print_feature_status_table,
     run_with_error_handling,
     setup_logging,
+)
+
+# Re-export ContextFetcher for patching in tests
+from jarvis.context import ContextFetcher
+from jarvis.system import (
+    FEATURE_CHAT,
+    FEATURE_IMESSAGE,
+    _check_imessage_access,
+    initialize_system,
 )
 
 __all__ = [
@@ -72,4 +84,16 @@ __all__ = [
     "print_feature_status_table",
     "run_with_error_handling",
     "setup_logging",
+    # Feature constants and system functions
+    "FEATURE_CHAT",
+    "FEATURE_IMESSAGE",
+    "_check_imessage_access",
+    "initialize_system",
+    # Core controllers (for testing)
+    "get_degradation_controller",
+    "reset_degradation_controller",
+    "get_memory_controller",
+    "reset_memory_controller",
+    # Context fetcher (for testing)
+    "ContextFetcher",
 ]

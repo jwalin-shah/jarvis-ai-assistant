@@ -20,7 +20,7 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 | Memory Controller (WS5) | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
 | Degradation Controller (WS6) | COMPLETE | Circuit breaker pattern |
 | Setup Wizard | COMPLETE | Environment validation, config init, health report |
-| CLI Entry Point | COMPLETE | `jarvis/cli.py` with chat, search, reply, summarize, export, serve commands |
+| CLI Entry Point | COMPLETE | `jarvis/_cli_main.py` (re-exported via `jarvis/cli/`) with chat, search, reply, summarize, export, serve commands |
 | FastAPI Layer | COMPLETE | `api/` module for Tauri frontend integration |
 | Config System | COMPLETE | `jarvis/config.py` with nested sections and migration |
 | Model Registry | COMPLETE | `models/registry.py` with multi-model support (0.5B/1.5B/3B/LFM tiers) |
@@ -37,6 +37,10 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 | Evaluation Pipeline | COMPLETE | `scripts/eval_pipeline.py` for testing on holdout data |
 | Embedding Profiles | COMPLETE | `jarvis/embedding_profile.py` for semantic relationship analysis |
 | Pair Quality Scoring | COMPLETE | `scripts/score_pair_quality.py` for coherence analysis |
+| Response Classifier | COMPLETE | `jarvis/response_classifier.py` hybrid 3-layer classifier (structural + centroid + kNN) |
+| DA Classifier | COMPLETE | `scripts/build_da_classifier.py` with proportional sampling, ~64% accuracy |
+| Multi-Option Generation | COMPLETE | `jarvis/multi_option.py` for AGREE/DECLINE/DEFER options |
+| Typed Retrieval | COMPLETE | `jarvis/retrieval.py` for DA-filtered FAISS retrieval |
 
 **Default Model**: LFM-2.5-1.2B-Instruct-4bit (configured in `models/registry.py`)
 
@@ -523,6 +527,42 @@ See `docs/PLAN.md` Phase 2 for threshold tuning history.
 
 Use `get_reply_router()` for singleton access. API endpoint: `POST /drafts/smart-reply`.
 
+**Response Classifier**: `jarvis/response_classifier.py` provides `HybridResponseClassifier` for classifying response dialogue acts. Three-layer hybrid approach:
+1. **Structural patterns** (10.8%): High-precision regex patterns for clear cases ("yes", "no", "?")
+2. **Centroid verification**: Semantic check using class embedding centroids
+3. **kNN fallback** (61.1%): DA classifier with proportional sampling
+
+Key improvements implemented:
+- **Confidence threshold**: Low-confidence (<0.5) predictions default to ANSWER
+- **Trigger filtering**: Commitment responses (AGREE/DECLINE/DEFER) only for commitment triggers
+- **Better exemplars**: Mined from user's data using structural patterns
+
+Accuracy by category (validated on 135 samples):
+- REACT_POSITIVE: 86%, ANSWER: 77%, QUESTION: 73%, ACKNOWLEDGE: 73%
+- AGREE: 50%, DEFER: 45%, DECLINE: 41%
+- **Overall: 64.4%**
+
+Use `get_response_classifier()` for singleton access.
+
+**Multi-Option Generation**: `jarvis/multi_option.py` generates diverse response options for commitment questions (invitations, requests, yes/no questions). For triggers like "Want to grab lunch?", generates 3 options:
+- AGREE: "Yeah I'm down!"
+- DECLINE: "Can't today, sorry"
+- DEFER: "Let me check my schedule"
+
+Use `get_multi_option_generator()` or `generate_response_options(trigger)`. API endpoint: `POST /drafts/multi-option`.
+
+**Typed Retrieval**: `jarvis/retrieval.py` provides DA-filtered FAISS retrieval via `TypedRetriever`:
+- `get_typed_examples(trigger, target_response_type, k=5)` - Get examples of specific type
+- `get_examples_for_commitment(trigger, k_per_type=3)` - Get AGREE/DECLINE/DEFER examples
+
+**DA Classifier**: `scripts/build_da_classifier.py` builds k-NN classifiers for trigger and response dialogue acts:
+```bash
+uv run python -m scripts.build_da_classifier --build --proportional  # Build with proportional sampling
+uv run python -m scripts.eval_full_classifier                        # Evaluate on full dataset
+uv run python -m scripts.eval_full_classifier --validate 200         # Sample for manual review
+uv run python -m scripts.eval_full_classifier --score                # Score manual review
+```
+
 **FAISS Trigger Index**: `jarvis/index.py` provides `TriggerIndexBuilder` and `TriggerIndexSearcher` for versioned vector search. Indexes trigger texts from extracted pairs. Use `build_index_from_db()` to build, `TriggerIndexSearcher.search_with_pairs()` to query.
 
 **JARVIS Database**: `jarvis/db.py` provides `JarvisDB` for managing:
@@ -655,3 +695,8 @@ uv run python -m scripts.build_embedding_profiles --limit 50        # Batch buil
 - **Error Handling**: All JARVIS-specific errors inherit from `JarvisError` in `jarvis/errors.py`; API errors are mapped to appropriate HTTP status codes via `api/errors.py`
 - **Prompts Centralization**: All prompts must be defined in `jarvis/prompts.py` - do not create prompts in other modules
 - **iMessage Sender Limitations**: `IMessageSender` in `integrations/imessage/sender.py` is deprecated. Apple's AppleScript automation has significant restrictions: requires Automation permission, may be blocked by SIP, requires Messages.app running, and may break in future macOS versions. Consider this experimental and unreliable for production use.
+- **Batch Processing for Efficiency**: When processing multiple items (embeddings, classifications, etc.), always use batched operations to take advantage of GPU/MPS acceleration. Embedding models are 5-10x faster with batching. Use `classify_batch()` instead of looping `classify()`, `embedder.encode(list_of_texts)` instead of encoding one at a time. Recommended batch sizes:
+  - 64-128: Safe for 8GB systems
+  - 256-512: Good for 16GB+ systems
+  - For real-time single-item processing, batching doesn't apply
+  - See `jarvis/response_classifier.py:classify_batch()` for reference implementation

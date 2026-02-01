@@ -54,6 +54,7 @@ from jarvis.relationships import (
     generate_style_guide,
     load_profile,
 )
+from jarvis.text_normalizer import is_acknowledgment_only as _is_ack
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
@@ -68,20 +69,27 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Similarity thresholds for routing decisions
-# Updated thresholds to force more LLM generation for better quality
-TEMPLATE_THRESHOLD = 0.90  # Very confident -> use template directly
-CONTEXT_THRESHOLD = 0.70  # Below this -> ask for clarification
-GENERATE_THRESHOLD = 0.50  # Minimum for attempting generation
+#
+# IMPORTANT: Evaluation on 26k holdout pairs (2026-01-31) showed:
+# - Trigger similarity does NOT predict response appropriateness
+# - Even at 0.9+ trigger match, response similarity was only 0.56
+# - This means direct template responses are often inappropriate
+#
+# Strategy: Use retrieval for EXAMPLES, not direct responses
+# - High similarity → more confident examples for LLM
+# - Low similarity → fewer/no examples, more cautious generation
+#
+TEMPLATE_THRESHOLD = 0.95  # Extremely high - only near-exact matches (rare)
+CONTEXT_THRESHOLD = 0.65   # Good examples available for LLM
+GENERATE_THRESHOLD = 0.45  # Some examples available
 
 # Coherence threshold for filtering responses
-COHERENCE_THRESHOLD = 0.5  # Minimum coherence score to use a template response
+# Note: Even at 0.5+, response may not fit current context
+COHERENCE_THRESHOLD = 0.6  # Raised from 0.5 based on evaluation
 
 # Response variety
 MAX_TEMPLATE_RESPONSES = 5  # Max responses to choose from for variety
 MIN_RESPONSE_SIMILARITY = 0.6  # Responses must be somewhat similar to pick randomly
-
-# Import centralized acknowledgment detection from text_normalizer
-from jarvis.text_normalizer import is_acknowledgment_only as _is_ack
 
 # Keep this for backwards compatibility during migration
 # All code should use is_acknowledgment_only() from text_normalizer for exact matching
@@ -1334,6 +1342,75 @@ class ReplyRouter:
             "similarity_score": 0.0,
             "reason": reason,
         }
+
+    def route_multi_option(
+        self,
+        incoming: str,
+        contact_id: int | None = None,
+        chat_id: str | None = None,
+        force_multi: bool = False,
+    ) -> dict[str, Any]:
+        """Route with multi-option generation for commitment questions.
+
+        For commitment questions (invitations, requests, yes/no questions),
+        generates multiple response options (AGREE, DECLINE, DEFER).
+
+        Args:
+            incoming: The incoming message text.
+            contact_id: Optional contact ID for personalization.
+            chat_id: Optional chat ID for context lookup.
+            force_multi: If True, force multi-option even for non-commitment.
+
+        Returns:
+            Dict with routing result including:
+            - is_commitment: Whether this is a commitment question
+            - options: List of {type, response, confidence} for commitment questions
+            - suggestions: List of response texts (backward compatible)
+            - trigger_da: Classified trigger type
+        """
+        from jarvis.multi_option import get_multi_option_generator
+
+        # Get contact info
+        contact = None
+        contact_name = None
+        if contact_id:
+            contact = self.db.get_contact(contact_id)
+        elif chat_id:
+            contact = self.db.get_contact_by_chat_id(chat_id)
+
+        if contact:
+            contact_name = contact.display_name
+
+        # Generate options
+        generator = get_multi_option_generator()
+        result = generator.generate_options(
+            trigger=incoming,
+            contact_name=contact_name,
+            contact=contact,
+            force_commitment=force_multi,
+        )
+
+        # Convert to dict for API
+        response = result.to_dict()
+
+        # If not a commitment question, fall back to single response
+        if not result.is_commitment and not force_multi:
+            # Use regular routing
+            single_result = self.route(
+                incoming=incoming,
+                contact_id=contact_id,
+                chat_id=chat_id,
+            )
+            # Add commitment info
+            single_result["is_commitment"] = False
+            single_result["options"] = []
+            return single_result
+
+        # Add metadata
+        response["type"] = "multi_option"
+        response["confidence"] = "high" if result.has_options else "low"
+
+        return response
 
     def get_routing_stats(self) -> dict[str, Any]:
         """Get statistics about the router's index and database.

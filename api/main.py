@@ -36,7 +36,6 @@ from api.routers import (
     export_router,
     feedback_router,
     health_router,
-    insights_router,
     metrics_router,
     pdf_export_router,
     priority_router,
@@ -370,7 +369,7 @@ app.include_router(search_router)
 app.include_router(suggestions_router)
 app.include_router(settings_router)
 app.include_router(stats_router)
-app.include_router(insights_router)
+# Note: insights endpoints are provided by stats_router and digest_router
 app.include_router(metrics_router)
 app.include_router(template_analytics_router)
 app.include_router(threads_router)
