@@ -29,6 +29,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -53,7 +54,12 @@ OPTION_PRIORITY = [
 ]
 
 # Trigger types that should use multi-option generation
+# New trigger classifier uses coarser labels: "commitment" covers invitations/requests
+# Keep old labels for backwards compatibility with any remaining old classifier usage
 COMMITMENT_TRIGGER_TYPES = frozenset({
+    # New hybrid classifier labels (TriggerType enum values)
+    "commitment",
+    # Legacy DA classifier labels (for backwards compatibility)
     "INVITATION",
     "REQUEST",
     "YN_QUESTION",
@@ -61,8 +67,6 @@ COMMITMENT_TRIGGER_TYPES = frozenset({
 
 # Patterns that look like REQUEST but are actually INFO_STATEMENT (status updates)
 # These should NOT trigger commitment options even if classifier says REQUEST
-import re
-
 INFO_STATEMENT_PATTERNS = [
     # Location/transit status
     re.compile(r"^(i'?m |i am )?(on my way|omw|otw|heading|coming|leaving|almost)", re.IGNORECASE),
@@ -279,12 +283,12 @@ class MultiOptionGenerator:
         # First check for INFO_STATEMENT patterns (status updates that shouldn't trigger)
         # This catches false positives where classifier says REQUEST but it's really status
         if _is_info_statement(trigger):
-            return False, "INFO_STATEMENT"
+            return False, "statement"  # New-style label
 
         # Check for WH_QUESTION patterns (asking for info, not invitations)
         # "Who's coming?" asks for info, "Want to come?" is an invitation
         if _is_wh_question(trigger):
-            return False, "WH_QUESTION"
+            return False, "question"  # New-style label
 
         trigger_da, conf = self.retriever.classify_trigger(trigger)
         is_commitment = trigger_da in COMMITMENT_TRIGGER_TYPES
@@ -339,6 +343,108 @@ class MultiOptionGenerator:
             source="fallback",
         )
 
+    def _generate_all_options_batched(
+        self,
+        trigger: str,
+        types_needed: list[ResponseType],
+        examples_by_type: dict[ResponseType, list],
+        contact_name: str | None = None,
+    ) -> dict[ResponseType, ResponseOption]:
+        """Generate all options in a single LLM call (batched).
+
+        This is more efficient than calling the LLM 3 times separately.
+        Reduces latency from ~3x to ~1x for the generation phase.
+
+        Args:
+            trigger: Trigger text.
+            types_needed: List of response types to generate.
+            examples_by_type: Examples for each type.
+            contact_name: Optional contact name for personalization.
+
+        Returns:
+            Dict mapping response type to generated option.
+        """
+        if not self.generator or not types_needed:
+            return {}
+
+        try:
+            from contracts.models import GenerationRequest
+
+            # Build the batched prompt
+            type_instructions = {
+                ResponseType.AGREE: ("YES/accept", "Yeah I'm down, Sure, Definitely"),
+                ResponseType.DECLINE: ("NO/decline politely", "Can't sorry, Nah I'm busy"),
+                ResponseType.DEFER: ("UNSURE/need to check", "Let me check, Maybe, I'll see"),
+            }
+
+            # Format: ask for all needed types in one prompt
+            type_lines = []
+            for rt in types_needed:
+                instr, examples = type_instructions.get(rt, (rt.value, ""))
+                type_lines.append(f"{rt.value}: ({instr}) e.g. {examples}")
+
+            prompt = f"""Generate short iMessage replies for this message. One reply for each type.
+
+Message: "{trigger}"
+
+Rules for ALL replies:
+- Maximum 5 words each
+- Casual texting style
+- NO emojis, NO "Hey!"
+- Just the reply text
+
+Generate exactly these replies:
+{chr(10).join(type_lines)}
+
+Replies:"""
+
+            request = GenerationRequest(
+                prompt=prompt,
+                context_documents=[],
+                few_shot_examples=[],
+                max_tokens=80,  # Enough for 3 short responses
+                temperature=0.7,
+            )
+
+            response = self.generator.generate(request)
+            text = response.text.strip()
+
+            # Parse the response - look for TYPE: reply patterns
+            results: dict[ResponseType, ResponseOption] = {}
+            lines = text.split('\n')
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                for rt in types_needed:
+                    # Look for patterns like "AGREE: yes" or "AGREE - yes"
+                    prefixes = [f"{rt.value}:", f"{rt.value} -", f"{rt.value.lower()}:"]
+                    for prefix in prefixes:
+                        if line.lower().startswith(prefix.lower()):
+                            reply_text = line[len(prefix):].strip()
+                            reply_text = self._cleanup_generated_text(reply_text)
+
+                            if reply_text and len(reply_text) >= 2 and rt not in results:
+                                results[rt] = ResponseOption(
+                                    text=reply_text,
+                                    response_type=rt,
+                                    confidence=0.7,
+                                    source="generated_batch",
+                                )
+                            break
+
+            logger.debug(
+                "Batched generation: needed %d types, got %d",
+                len(types_needed), len(results)
+            )
+            return results
+
+        except Exception as e:
+            logger.warning("Batched LLM generation failed: %s", e)
+            return {}
+
     def _generate_option(
         self,
         trigger: str,
@@ -346,7 +452,7 @@ class MultiOptionGenerator:
         examples: list,
         contact_name: str | None = None,
     ) -> ResponseOption | None:
-        """Generate an option using LLM.
+        """Generate a single option using LLM (fallback for when batching fails).
 
         Args:
             trigger: Trigger text.
@@ -524,15 +630,24 @@ Reply:"""
                 options=[],
             )
 
+        # OPTIMIZATION: Create cached embedder for reuse across all FAISS searches
+        from jarvis.embedding_adapter import CachedEmbedder, get_embedder
+        cached_embedder = CachedEmbedder(get_embedder())
+
         # Get examples for commitment types
+        # Pass trigger_da to avoid re-classification, and cached_embedder for efficiency
         multi_examples = self.retriever.get_examples_for_commitment(
             trigger=trigger,
             k_per_type=3,
+            embedder=cached_embedder,
+            trigger_da=trigger_da,  # Reuse classification from above
         )
 
         # Generate options for each type
         options: list[ResponseOption] = []
+        types_needing_generation: list[ResponseType] = []
 
+        # Phase 1: Try templates first (fast path)
         for response_type in OPTION_PRIORITY:
             if len(options) >= self._max_options:
                 break
@@ -546,18 +661,51 @@ Reply:"""
                     options.append(option)
                     continue
 
-            # Strategy 2: Try LLM generation
+            # Mark for LLM generation
             if self._use_llm:
+                types_needing_generation.append(response_type)
+
+        # Phase 2: Batched LLM generation (1 call instead of N)
+        if types_needing_generation and self._use_llm:
+            # Collect examples for batched generation
+            examples_for_batch = {
+                rt: multi_examples.get_examples(rt)
+                for rt in types_needing_generation
+            }
+
+            # Single batched LLM call for all needed types
+            batched_results = self._generate_all_options_batched(
+                trigger=trigger,
+                types_needed=types_needing_generation,
+                examples_by_type=examples_for_batch,
+                contact_name=contact_name,
+            )
+
+            # Add successful batched results
+            for response_type in types_needing_generation:
+                if response_type in batched_results:
+                    options.append(batched_results[response_type])
+                    types_needing_generation.remove(response_type)
+
+            # Phase 3: Individual generation for any that failed batching
+            for response_type in types_needing_generation:
+                examples = multi_examples.get_examples(response_type)
                 option = self._generate_option(
                     trigger, response_type, examples, contact_name
                 )
                 if option:
                     options.append(option)
-                    continue
+                else:
+                    # Strategy 4: Fallback template
+                    options.append(self._get_fallback_option(response_type))
 
-            # Strategy 3: Fallback template
-            option = self._get_fallback_option(response_type)
-            options.append(option)
+        # Phase 4: Fallback for any remaining types (if LLM disabled)
+        types_covered = {opt.response_type for opt in options}
+        for response_type in OPTION_PRIORITY:
+            if len(options) >= self._max_options:
+                break
+            if response_type not in types_covered:
+                options.append(self._get_fallback_option(response_type))
 
         # Ensure diversity - no duplicate texts
         seen_texts = set()

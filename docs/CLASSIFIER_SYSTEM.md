@@ -1,6 +1,91 @@
-# Response Classifier System
+# Classifier System
 
-This document describes the dialogue act classification system used for multi-option reply generation.
+This document describes the classification systems used for trigger and response classification.
+
+## Trigger Classifier
+
+Located in `jarvis/trigger_classifier.py`. Classifies **incoming messages** to determine what type of response is needed.
+
+### Trigger Types (5 labels)
+
+| Type | Description | Examples |
+|------|-------------|----------|
+| COMMITMENT | Invitations/requests | "Want to grab lunch?", "Can you pick me up?" |
+| QUESTION | Yes/no or info questions | "What time?", "Did you finish?" |
+| REACTION | Emotional content | "That's crazy!", "I got the job!" |
+| SOCIAL | Greetings/acks/tapbacks | "hey", "ok", "Loved 'message'" |
+| STATEMENT | Neutral info sharing | "I'm on my way", "Meeting at 3pm" |
+
+### Architecture
+
+```
+Input Message
+    │
+    ▼
+┌─────────────────────────────────────┐
+│ LAYER 1: Structural Patterns        │  Regex for tapbacks, greetings,
+│ (high precision, fast)              │  WH-questions, invitations
+└─────────────────────────────────────┘
+    │ no high-confidence match
+    ▼
+┌─────────────────────────────────────┐
+│ LAYER 2: Trained SVM Classifier     │  Embedding-based, 71% macro F1
+│ (balanced sampling, C=5, gamma=scale)│  Uses bge-small embeddings
+└─────────────────────────────────────┘
+    │ low confidence
+    ▼
+┌─────────────────────────────────────┐
+│ FALLBACK: STATEMENT                 │
+└─────────────────────────────────────┘
+```
+
+### Accuracy
+
+| Class | F1 Score | Key Signals |
+|-------|----------|-------------|
+| SOCIAL | 77% | Tapbacks (32%), greetings, acks |
+| QUESTION | 74% | 37% end with "?", WH-words |
+| REACTION | 69% | Emotional words (damn, bro, crazy) |
+| STATEMENT | 69% | "I" statements, neutral info |
+| COMMITMENT | 68% | "wanna", "can you", "let's" |
+| **Overall** | **71%** | Macro F1 |
+
+### Usage
+
+```python
+from jarvis.trigger_classifier import classify_trigger, TriggerType
+
+result = classify_trigger("Want to grab lunch?")
+print(result.trigger_type)  # TriggerType.COMMITMENT
+print(result.confidence)    # 0.95
+print(result.is_commitment) # True
+```
+
+### Training
+
+```bash
+# Train with multiple sampling strategies, save best model
+uv run python -m scripts.train_trigger_classifier --save-best
+
+# Analyze patterns in labeled data
+uv run python -m scripts.analyze_trigger_patterns
+```
+
+### File Locations
+
+| File | Purpose |
+|------|---------|
+| `jarvis/trigger_classifier.py` | Hybrid trigger classifier |
+| `data/trigger_labeling.jsonl` | 3,000 labeled examples |
+| `~/.jarvis/trigger_classifier_model/` | Trained SVM model |
+| `scripts/train_trigger_classifier.py` | Training script |
+| `scripts/analyze_trigger_patterns.py` | Pattern analysis |
+
+---
+
+## Response Classifier
+
+Located in `jarvis/response_classifier.py`. Classifies **response messages** into dialogue act types.
 
 ## Overview
 

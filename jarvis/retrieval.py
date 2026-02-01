@@ -39,10 +39,12 @@ from jarvis.response_classifier import (
     TRIGGER_TO_VALID_RESPONSES,
     ResponseType,
 )
+from jarvis.trigger_classifier import get_trigger_classifier
 
 if TYPE_CHECKING:
     from jarvis.embedding_adapter import Embedder
     from jarvis.index import TriggerIndexSearcher
+    from jarvis.trigger_classifier import HybridTriggerClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -129,33 +131,35 @@ class TypedRetriever:
         return self._index_searcher
 
     @property
-    def trigger_classifier(self):
-        """Get or create the trigger DA classifier."""
+    def trigger_classifier(self) -> HybridTriggerClassifier | None:
+        """Get or create the trigger classifier (hybrid structural + SVM)."""
         if self._trigger_classifier is None:
             with self._lock:
                 if self._trigger_classifier is None:
                     try:
-                        from scripts.build_da_classifier import DialogueActClassifier
-                        self._trigger_classifier = DialogueActClassifier("trigger")
+                        self._trigger_classifier = get_trigger_classifier()
                     except Exception as e:
                         logger.warning("Failed to load trigger classifier: %s", e)
         return self._trigger_classifier
 
     def classify_trigger(self, trigger: str) -> tuple[str | None, float]:
-        """Classify the trigger DA type.
+        """Classify the trigger type using hybrid structural + SVM classifier.
 
         Args:
             trigger: Trigger text to classify.
 
         Returns:
-            Tuple of (trigger_da_type, confidence).
+            Tuple of (trigger_type_value, confidence).
+            trigger_type_value is one of: "commitment", "question", "reaction",
+            "social", "statement", or None if classification fails.
         """
         if not self.trigger_classifier:
             return None, 0.0
 
         try:
             result = self.trigger_classifier.classify(trigger)
-            return result.label, result.confidence
+            # Return the enum value (e.g., "commitment") for compatibility
+            return result.trigger_type.value, result.confidence
         except Exception as e:
             logger.warning("Trigger classification failed: %s", e)
             return None, 0.0
@@ -272,38 +276,123 @@ class TypedRetriever:
         min_similarity: float = 0.3,
         min_quality: float = 0.0,
         embedder: Embedder | None = None,
+        trigger_da: str | None = None,
     ) -> MultiTypeExamples:
         """Get examples for all commitment response types (AGREE, DECLINE, DEFER).
 
         Used for multi-option generation where we need examples of each type.
+
+        Performance optimization: Does ONE FAISS search and filters results by type,
+        instead of 3 separate searches. This reduces embedding computation from 3x to 1x.
 
         Args:
             trigger: Query trigger text.
             k_per_type: Number of examples per response type.
             min_similarity: Minimum similarity threshold.
             min_quality: Minimum pair quality score.
-            embedder: Optional embedder for FAISS search.
+            embedder: Optional embedder for FAISS search (pass CachedEmbedder for reuse).
+            trigger_da: Pre-classified trigger type (avoids re-classification).
 
         Returns:
             MultiTypeExamples with examples grouped by type.
         """
-        # Classify trigger to understand context
-        trigger_da, trigger_conf = self.classify_trigger(trigger)
+        # Use pre-classified trigger_da if provided, otherwise classify once
+        if trigger_da is None:
+            trigger_da, _ = self.classify_trigger(trigger)
 
-        # Get examples for each commitment type
-        examples_by_type: dict[ResponseType, list[TypedExample]] = {}
+        # Ensure we have a cached embedder for efficiency
+        if embedder is None:
+            from jarvis.embedding_adapter import CachedEmbedder, get_embedder
+            embedder = CachedEmbedder(get_embedder())
 
-        for response_type in COMMITMENT_RESPONSE_TYPES:
-            examples = self.get_typed_examples(
-                trigger=trigger,
-                target_response_type=response_type,
-                k=k_per_type,
-                min_similarity=min_similarity,
-                min_quality=min_quality,
+        # OPTIMIZATION: Single FAISS search with larger k, then filter by type
+        # This avoids 3 separate searches with 3 separate embeddings
+        num_types = len(COMMITMENT_RESPONSE_TYPES)
+        total_k = k_per_type * num_types * 3  # Extra buffer for filtering
+
+        try:
+            search_results = self.index_searcher.search_with_pairs(
+                query=trigger,
+                k=total_k,
+                threshold=min_similarity,
                 embedder=embedder,
             )
-            if examples:
-                examples_by_type[response_type] = examples
+        except Exception as e:
+            logger.warning("FAISS search failed: %s", e)
+            search_results = []
+
+        # Group results by response type
+        examples_by_type: dict[ResponseType, list[TypedExample]] = {
+            rt: [] for rt in COMMITMENT_RESPONSE_TYPES
+        }
+
+        for result in search_results:
+            pair_id = result.get("pair_id")
+            if not pair_id:
+                continue
+
+            # Check quality
+            quality = result.get("quality_score", 0.0)
+            if quality < min_quality:
+                continue
+
+            # Get response type and check if it's a commitment type
+            response_da = result.get("response_da_type")
+            if not response_da:
+                continue
+
+            try:
+                response_type = ResponseType(response_da)
+            except ValueError:
+                continue
+
+            if response_type not in COMMITMENT_RESPONSE_TYPES:
+                continue
+
+            # Add to appropriate bucket if not full
+            if len(examples_by_type[response_type]) < k_per_type:
+                examples_by_type[response_type].append(TypedExample(
+                    trigger_text=result["trigger_text"],
+                    response_text=result["response_text"],
+                    response_type=response_type,
+                    similarity=result["similarity"],
+                    confidence=result.get("response_da_conf") or 0.0,
+                    pair_id=pair_id,
+                ))
+
+        # Check if we need DB fallback for any type
+        for response_type in COMMITMENT_RESPONSE_TYPES:
+            current_count = len(examples_by_type[response_type])
+            if current_count < k_per_type:
+                # Get more from DB
+                seen_pair_ids = {e.pair_id for e in examples_by_type[response_type]}
+                needed = k_per_type - current_count
+
+                db_pairs = self.db.get_pairs_by_response_da(
+                    response_da=response_type.value,
+                    min_quality=min_quality,
+                    limit=needed * 2,
+                )
+
+                for pair in db_pairs:
+                    if pair.id in seen_pair_ids:
+                        continue
+
+                    seen_pair_ids.add(pair.id)
+                    examples_by_type[response_type].append(TypedExample(
+                        trigger_text=pair.trigger_text,
+                        response_text=pair.response_text,
+                        response_type=response_type,
+                        similarity=0.0,
+                        confidence=pair.response_da_conf or 0.0,
+                        pair_id=pair.id,
+                    ))
+
+                    if len(examples_by_type[response_type]) >= k_per_type:
+                        break
+
+        # Remove empty type entries
+        examples_by_type = {k: v for k, v in examples_by_type.items() if v}
 
         return MultiTypeExamples(
             query_trigger=trigger,
@@ -325,13 +414,16 @@ class TypedRetriever:
         Uses TRIGGER_TO_VALID_RESPONSES to determine which response types
         are appropriate for the trigger type.
 
+        Performance optimization: Does ONE FAISS search and filters results by type,
+        instead of N separate searches for N valid types.
+
         Args:
             trigger: Query trigger text.
             trigger_da: Trigger DA type (auto-classified if None).
             k_per_type: Number of examples per response type.
             min_similarity: Minimum similarity threshold.
             min_quality: Minimum pair quality score.
-            embedder: Optional embedder for FAISS search.
+            embedder: Optional embedder for FAISS search (pass CachedEmbedder for reuse).
 
         Returns:
             MultiTypeExamples with examples for valid response types.
@@ -346,20 +438,95 @@ class TypedRetriever:
             # Default to commitment types if unknown trigger
             valid_types = list(COMMITMENT_RESPONSE_TYPES)
 
-        # Get examples for each valid type
-        examples_by_type: dict[ResponseType, list[TypedExample]] = {}
+        # Ensure we have a cached embedder for efficiency
+        if embedder is None:
+            from jarvis.embedding_adapter import CachedEmbedder, get_embedder
+            embedder = CachedEmbedder(get_embedder())
 
-        for response_type in valid_types:
-            examples = self.get_typed_examples(
-                trigger=trigger,
-                target_response_type=response_type,
-                k=k_per_type,
-                min_similarity=min_similarity,
-                min_quality=min_quality,
+        # OPTIMIZATION: Single FAISS search with larger k, then filter by type
+        num_types = len(valid_types)
+        total_k = k_per_type * num_types * 3  # Extra buffer for filtering
+
+        try:
+            search_results = self.index_searcher.search_with_pairs(
+                query=trigger,
+                k=total_k,
+                threshold=min_similarity,
                 embedder=embedder,
             )
-            if examples:
-                examples_by_type[response_type] = examples
+        except Exception as e:
+            logger.warning("FAISS search failed: %s", e)
+            search_results = []
+
+        # Initialize buckets for valid types only
+        valid_types_set = set(valid_types)
+        examples_by_type: dict[ResponseType, list[TypedExample]] = {
+            rt: [] for rt in valid_types
+        }
+
+        for result in search_results:
+            pair_id = result.get("pair_id")
+            if not pair_id:
+                continue
+
+            quality = result.get("quality_score", 0.0)
+            if quality < min_quality:
+                continue
+
+            response_da = result.get("response_da_type")
+            if not response_da:
+                continue
+
+            try:
+                response_type = ResponseType(response_da)
+            except ValueError:
+                continue
+
+            if response_type not in valid_types_set:
+                continue
+
+            if len(examples_by_type[response_type]) < k_per_type:
+                examples_by_type[response_type].append(TypedExample(
+                    trigger_text=result["trigger_text"],
+                    response_text=result["response_text"],
+                    response_type=response_type,
+                    similarity=result["similarity"],
+                    confidence=result.get("response_da_conf") or 0.0,
+                    pair_id=pair_id,
+                ))
+
+        # DB fallback for types that need more examples
+        for response_type in valid_types:
+            current_count = len(examples_by_type[response_type])
+            if current_count < k_per_type:
+                seen_pair_ids = {e.pair_id for e in examples_by_type[response_type]}
+                needed = k_per_type - current_count
+
+                db_pairs = self.db.get_pairs_by_response_da(
+                    response_da=response_type.value,
+                    min_quality=min_quality,
+                    limit=needed * 2,
+                )
+
+                for pair in db_pairs:
+                    if pair.id in seen_pair_ids:
+                        continue
+
+                    seen_pair_ids.add(pair.id)
+                    examples_by_type[response_type].append(TypedExample(
+                        trigger_text=pair.trigger_text,
+                        response_text=pair.response_text,
+                        response_type=response_type,
+                        similarity=0.0,
+                        confidence=pair.response_da_conf or 0.0,
+                        pair_id=pair.id,
+                    ))
+
+                    if len(examples_by_type[response_type]) >= k_per_type:
+                        break
+
+        # Remove empty type entries
+        examples_by_type = {k: v for k, v in examples_by_type.items() if v}
 
         return MultiTypeExamples(
             query_trigger=trigger,
