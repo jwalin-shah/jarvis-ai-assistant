@@ -13,6 +13,7 @@ import argparse
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Any, cast
 
 from jarvis.trigger_classifier import TriggerType, get_trigger_classifier
 
@@ -47,7 +48,7 @@ def _score(
     mode: str,
     min_confidence: float,
     require_label: bool,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     classifier = get_trigger_classifier()
     valid_labels = _valid_labels()
 
@@ -104,7 +105,7 @@ def _score(
     accuracy = correct / covered if covered else 0.0
     coverage = covered / labeled if labeled else 0.0
 
-    per_label_metrics = {}
+    per_label_metrics: dict[str, dict[str, float]] = {}
     for label in sorted(valid_labels):
         tp = per_label_correct[label]
         total_label = per_label_counts[label]
@@ -120,18 +121,42 @@ def _score(
             "support": total_label,
         }
 
+    supports = [per_label_metrics[label]["support"] for label in per_label_metrics]
+    total_support = sum(supports)
+    macro_f1 = (
+        sum(
+            per_label_metrics[label]["f1"]
+            for label in per_label_metrics
+            if per_label_metrics[label]["support"] > 0
+        )
+        / sum(1 for label in per_label_metrics if per_label_metrics[label]["support"] > 0)
+        if any(per_label_metrics[label]["support"] > 0 for label in per_label_metrics)
+        else 0.0
+    )
+    weighted_f1 = (
+        sum(
+            per_label_metrics[label]["f1"] * per_label_metrics[label]["support"]
+            for label in per_label_metrics
+        )
+        / total_support
+        if total_support
+        else 0.0
+    )
+
     return {
         "total_rows": total,
         "labeled_rows": labeled,
         "covered_rows": covered,
         "coverage": coverage,
         "accuracy_on_covered": accuracy,
+        "macro_f1": macro_f1,
+        "weighted_f1": weighted_f1,
         "per_label": per_label_metrics,
         "confusions": {label: dict(counts) for label, counts in confusions.items()},
     }
 
 
-def _print_summary(results: dict[str, object]) -> None:
+def _print_summary(results: dict[str, Any], print_confusion: bool) -> None:
     print("=" * 70)
     print("TRIGGER CLASSIFIER SCORECARD")
     print("=" * 70)
@@ -140,15 +165,30 @@ def _print_summary(results: dict[str, object]) -> None:
     print(f"Rows covered:   {results['covered_rows']}")
     print(f"Coverage:       {results['coverage']:.3f}")
     print(f"Accuracy@cov:   {results['accuracy_on_covered']:.3f}")
+    print(f"Macro F1:       {results['macro_f1']:.3f}")
+    print(f"Weighted F1:    {results['weighted_f1']:.3f}")
 
     print("\nPer-label metrics (precision/recall/f1/support):")
-    per_label = results["per_label"]
+    per_label = cast(dict[str, dict[str, float]], results["per_label"])
     for label in sorted(per_label.keys()):
         metrics = per_label[label]
         print(
             f"  {label:16}  P={metrics['precision']:.3f}  R={metrics['recall']:.3f}"
             f"  F1={metrics['f1']:.3f}  n={metrics['support']}"
         )
+
+    if print_confusion:
+        print("\nConfusion matrix (actual -> predicted counts):")
+        labels = sorted(per_label.keys())
+        confusions = cast(dict[str, dict[str, int]], results.get("confusions", {}))
+        header = " " * 16 + " ".join(f"{label[:7]:>7}" for label in labels)
+        print(header)
+        for actual in labels:
+            row = [f"{actual:16}"]
+            counts = confusions.get(actual, {})
+            for pred in labels:
+                row.append(f"{counts.get(pred, 0):7d}")
+            print(" ".join(row))
 
 
 def main() -> None:
@@ -176,6 +216,11 @@ def main() -> None:
         type=Path,
         help="Optional JSON output for metrics",
     )
+    parser.add_argument(
+        "--print-confusion",
+        action="store_true",
+        help="Print confusion matrix (default: off)",
+    )
     args = parser.parse_args()
 
     results = _score(
@@ -184,7 +229,7 @@ def main() -> None:
         min_confidence=args.min_confidence,
         require_label=not args.allow_unlabeled,
     )
-    _print_summary(results)
+    _print_summary(results, print_confusion=args.print_confusion)
 
     if args.output_json:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)

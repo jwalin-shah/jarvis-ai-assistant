@@ -41,6 +41,7 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 | DA Classifier | COMPLETE | `scripts/build_da_classifier.py` with proportional sampling, ~64% accuracy |
 | Multi-Option Generation | COMPLETE | `jarvis/multi_option.py` for AGREE/DECLINE/DEFER options |
 | Typed Retrieval | COMPLETE | `jarvis/retrieval.py` for DA-filtered FAISS retrieval |
+| Trigger Classifier | COMPLETE | `jarvis/trigger_classifier.py` hybrid structural+SVM, 71% macro F1 |
 
 **Default Model**: LFM-2.5-1.2B-Instruct-4bit (configured in `models/registry.py`)
 
@@ -543,6 +544,29 @@ Accuracy by category (validated on 135 samples):
 - **Overall: 64.4%**
 
 Use `get_response_classifier()` for singleton access.
+
+**Trigger Classifier**: `jarvis/trigger_classifier.py` provides `HybridTriggerClassifier` for classifying incoming messages. Determines what type of response is needed:
+- **COMMITMENT**: Invitations/requests (need AGREE/DECLINE/DEFER)
+- **QUESTION**: Yes/no or info questions (need answer)
+- **REACTION**: Emotional content (need emotional response)
+- **SOCIAL**: Greetings/acknowledgments/tapbacks
+- **STATEMENT**: Neutral info sharing (fallback)
+
+Hybrid approach:
+1. **Structural patterns** (high precision): Regex for tapbacks, greetings, WH-questions, invitation phrases
+2. **Trained SVM** (71% macro F1): Embedding-based classifier with balanced sampling
+
+Training data: 3,000 hand-labeled triggers in `data/trigger_labeling.jsonl`
+Model location: `~/.jarvis/trigger_classifier_model/`
+
+Per-class performance:
+- SOCIAL: 77% F1 (tapbacks are reliable signals)
+- QUESTION: 74% F1 (37% end with "?", WH-words help)
+- REACTION: 69% F1 (emotional words like "damn", "bro", "crazy")
+- STATEMENT: 69% F1 (fallback category)
+- COMMITMENT: 68% F1 (hardest - "can you", "wanna" help)
+
+Use `classify_trigger(text)` or `get_trigger_classifier()`. Training: `uv run python -m scripts.train_trigger_classifier --save-best`.
 
 **Multi-Option Generation**: `jarvis/multi_option.py` generates diverse response options for commitment questions (invitations, requests, yes/no questions). For triggers like "Want to grab lunch?", generates 3 options:
 - AGREE: "Yeah I'm down!"

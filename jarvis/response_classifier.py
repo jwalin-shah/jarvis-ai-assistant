@@ -73,6 +73,27 @@ COMMITMENT_RESPONSE_TYPES = frozenset({
 # Trigger type -> Valid response types (dialogue structure constraints)
 # From the DA classifier mappings - use to constrain possible response types
 TRIGGER_TO_VALID_RESPONSES: dict[str, list[ResponseType]] = {
+    # === New hybrid trigger classifier labels (TriggerType enum values) ===
+    # These are coarser categories that map to the fine-grained labels below
+    "commitment": [
+        ResponseType.AGREE, ResponseType.DECLINE, ResponseType.DEFER, ResponseType.QUESTION
+    ],
+    "question": [
+        ResponseType.ANSWER, ResponseType.AGREE, ResponseType.DECLINE,
+        ResponseType.DEFER, ResponseType.QUESTION
+    ],
+    "reaction": [
+        ResponseType.REACT_POSITIVE, ResponseType.REACT_SYMPATHY,
+        ResponseType.QUESTION, ResponseType.ACKNOWLEDGE
+    ],
+    "social": [
+        ResponseType.GREETING, ResponseType.ACKNOWLEDGE, ResponseType.QUESTION
+    ],
+    "statement": [
+        ResponseType.ACKNOWLEDGE, ResponseType.REACT_POSITIVE, ResponseType.REACT_SYMPATHY,
+        ResponseType.QUESTION, ResponseType.STATEMENT
+    ],
+    # === Legacy fine-grained DA classifier labels (backwards compatibility) ===
     "INVITATION": [
         ResponseType.AGREE, ResponseType.DECLINE, ResponseType.DEFER, ResponseType.QUESTION
     ],
