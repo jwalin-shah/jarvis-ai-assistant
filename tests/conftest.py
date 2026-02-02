@@ -56,11 +56,32 @@ if not MLX_AVAILABLE:
     _mock_mlx_modules()
 
 # Check if sentence_transformers can load properly (AFTER mocking MLX)
-try:
-    from sentence_transformers import SentenceTransformer  # noqa: F401
+# Import is deferred to avoid torch circular import issues during pytest collection
+SENTENCE_TRANSFORMERS_AVAILABLE = False
 
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
-except (ImportError, ValueError):
+
+def _check_sentence_transformers():
+    """Lazy check for sentence_transformers availability."""
+    global SENTENCE_TRANSFORMERS_AVAILABLE
+    try:
+        from sentence_transformers import SentenceTransformer  # noqa: F401
+
+        SENTENCE_TRANSFORMERS_AVAILABLE = True
+    except (ImportError, ValueError, AttributeError, TypeError):
+        # AttributeError: torch._C or torch.fx not available (broken torch install)
+        # TypeError: packaging version parse error
+        SENTENCE_TRANSFORMERS_AVAILABLE = False
+    return SENTENCE_TRANSFORMERS_AVAILABLE
+
+
+# Defer the check to first actual use rather than import time
+# This avoids torch circular import issues during pytest collection
+try:
+    # Quick check without full import - just see if the package exists
+    import importlib.util
+
+    SENTENCE_TRANSFORMERS_AVAILABLE = importlib.util.find_spec("sentence_transformers") is not None
+except Exception:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 

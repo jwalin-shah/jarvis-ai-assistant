@@ -85,11 +85,13 @@ class ChatConfig(BaseModel):
 class RoutingConfig(BaseModel):
     """Routing thresholds and A/B testing configuration."""
 
-    template_threshold: float = Field(default=0.90, ge=0.0, le=1.0)
+    quick_reply_threshold: float = Field(default=0.90, ge=0.0, le=1.0)
     context_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
     generate_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     ab_test_group: str = Field(default="control")
     ab_test_thresholds: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # DEPRECATED: Use quick_reply_threshold instead (renamed for clarity)
+    template_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class RateLimitConfig(BaseModel):
@@ -178,9 +180,9 @@ class JarvisConfig(BaseModel):
     Attributes:
         config_version: Schema version for migration tracking.
         model_path: HuggingFace model path for MLX inference (deprecated, use model.model_id).
-        template_similarity_threshold: DEPRECATED - use routing.template_threshold instead.
+        template_similarity_threshold: DEPRECATED - use routing.quick_reply_threshold instead.
             Kept for backwards compatibility. Non-default values are migrated to
-            routing.template_threshold during config load.
+            routing.quick_reply_threshold during config load.
         memory_thresholds: Memory thresholds for mode selection.
         imessage_default_limit: Default limit for iMessage search (deprecated).
         ui: UI preferences for the Tauri frontend.
@@ -296,9 +298,9 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
     if version < 8:
         logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
 
-        # Migrate template_similarity_threshold to routing.template_threshold
+        # Migrate template_similarity_threshold to routing.quick_reply_threshold
         # Only migrate if legacy field has a non-default value (0.7) and routing
-        # section doesn't have an explicit template_threshold set
+        # section doesn't have an explicit quick_reply_threshold set
         legacy_threshold = data.get("template_similarity_threshold")
         if "routing" not in data:
             data["routing"] = {}
@@ -307,13 +309,19 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
         if (
             legacy_threshold is not None
             and legacy_threshold != 0.7
-            and "template_threshold" not in routing
+            and "quick_reply_threshold" not in routing
         ):
             logger.info(
                 f"Migrating template_similarity_threshold={legacy_threshold} "
-                f"to routing.template_threshold"
+                f"to routing.quick_reply_threshold"
             )
-            routing["template_threshold"] = legacy_threshold
+            routing["quick_reply_threshold"] = legacy_threshold
+
+        # Also migrate template_threshold to quick_reply_threshold
+        if "template_threshold" in routing and "quick_reply_threshold" not in routing:
+            logger.info("Migrating routing.template_threshold to routing.quick_reply_threshold")
+            routing["quick_reply_threshold"] = routing["template_threshold"]
+            del routing["template_threshold"]
 
         version = 8
 

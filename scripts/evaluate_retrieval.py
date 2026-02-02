@@ -20,16 +20,14 @@ from pathlib import Path
 
 import numpy as np
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class EvalResult:
     """Result for a single holdout pair."""
+
     pair_id: int
     trigger: str
     expected_response: str
@@ -49,13 +47,13 @@ def batch_encode(texts: list[str], batch_size: int = 500) -> np.ndarray:
     all_embeddings = []
 
     for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
+        batch = texts[i : i + batch_size]
         embeddings = embedder.encode(batch, normalize=True)
         all_embeddings.append(embeddings)
 
         progress = min(i + batch_size, len(texts))
         if progress % 2000 == 0 or progress == len(texts):
-            logger.info(f"  Encoded {progress}/{len(texts)} ({100*progress/len(texts):.1f}%)")
+            logger.info(f"  Encoded {progress}/{len(texts)} ({100 * progress / len(texts):.1f}%)")
 
     return np.vstack(all_embeddings).astype(np.float32)
 
@@ -139,14 +137,14 @@ def run_evaluation(
     triggers = [p.trigger_text for p in holdout_pairs]
     query_embeddings = batch_encode(triggers, batch_size=batch_size)
     encode_time = time.time() - start_time
-    logger.info(f"  Encoded in {encode_time:.1f}s ({len(triggers)/encode_time:.0f} texts/sec)")
+    logger.info(f"  Encoded in {encode_time:.1f}s ({len(triggers) / encode_time:.0f} texts/sec)")
 
     # Batch search
     logger.info("Searching FAISS index...")
     start_time = time.time()
     scores, indices = batch_search(query_embeddings, index, k=k)
     search_time = time.time() - start_time
-    logger.info(f"  Searched in {search_time:.2f}s ({len(triggers)/search_time:.0f} queries/sec)")
+    logger.info(f"  Searched in {search_time:.2f}s ({len(triggers) / search_time:.0f} queries/sec)")
 
     # Analyze results
     logger.info("Analyzing results...")
@@ -200,17 +198,19 @@ def run_evaluation(
         else:
             score_buckets["<0.5"] += 1
 
-        results.append(EvalResult(
-            pair_id=pair.id,
-            trigger=pair.trigger_text,
-            expected_response=pair.response_text,
-            top_match_trigger=matched_pair.trigger_text if matched_pair else None,
-            top_match_response=matched_pair.response_text if matched_pair else None,
-            top_score=top_score,
-            top_k_scores=top_k_scores,
-            is_exact_match=is_exact,
-            is_semantic_match=is_semantic,
-        ))
+        results.append(
+            EvalResult(
+                pair_id=pair.id,
+                trigger=pair.trigger_text,
+                expected_response=pair.response_text,
+                top_match_trigger=matched_pair.trigger_text if matched_pair else None,
+                top_match_response=matched_pair.response_text if matched_pair else None,
+                top_score=top_score,
+                top_k_scores=top_k_scores,
+                is_exact_match=is_exact,
+                is_semantic_match=is_semantic,
+            )
+        )
 
     # Compute metrics
     n = len(results)
@@ -348,7 +348,7 @@ def print_report(eval_output: dict) -> None:
 
     print("\n--- Trigger Score Distribution ---")
     for bucket, count in metrics["score_distribution"].items():
-        pct = 100 * count / metrics['total_evaluated']
+        pct = 100 * count / metrics["total_evaluated"]
         bar = "█" * int(pct / 2)
         print(f"  {bucket:>8}: {count:5d} ({pct:5.1f}%) {bar}")
 
@@ -378,19 +378,19 @@ def print_report(eval_output: dict) -> None:
     print("\n--- Example Matches (high score) ---")
     high_score = [r for r in results if r.top_score >= 0.9][:3]
     for r in high_score:
-        print(f"\n  Query: \"{r.trigger[:60]}...\"")
+        print(f'\n  Query: "{r.trigger[:60]}..."')
         match_t = r.top_match_trigger[:60] if r.top_match_trigger else "N/A"
-        print(f"  Match: \"{match_t}...\" [{r.top_score:.3f}]")
-        print(f"  Expected: \"{r.expected_response[:40]}...\"")
+        print(f'  Match: "{match_t}..." [{r.top_score:.3f}]')
+        print(f'  Expected: "{r.expected_response[:40]}..."')
         match_r = r.top_match_response[:40] if r.top_match_response else "N/A"
-        print(f"  Got:      \"{match_r}...\"")
+        print(f'  Got:      "{match_r}..."')
 
     print("\n--- Example Matches (low score) ---")
     low_score = [r for r in results if r.top_score < 0.5][:3]
     for r in low_score:
-        print(f"\n  Query: \"{r.trigger[:60]}...\"")
+        print(f'\n  Query: "{r.trigger[:60]}..."')
         match_t = r.top_match_trigger[:60] if r.top_match_trigger else "N/A"
-        print(f"  Match: \"{match_t}...\" [{r.top_score:.3f}]")
+        print(f'  Match: "{match_t}..." [{r.top_score:.3f}]')
 
     print("\n" + "=" * 60)
 

@@ -55,35 +55,66 @@ PATTERNS: list[tuple[re.Pattern, MessagePattern]] = [
     # Invitations - asking someone to do something (with OR without ?)
     (re.compile(r"\b(want to|wanna|down to|dtf|tryna)\b", re.I), MessagePattern.INVITATION),
     (re.compile(r"^(lets|let's|lemme|lmk if you wanna)\b", re.I), MessagePattern.INVITATION),
-    (re.compile(r"\b(can you|could you|would you|will you)\s+(come|make it|join|hang)\b", re.I), MessagePattern.INVITATION),
-    (re.compile(r"\b(free|available|busy)\s*(today|tonight|tomorrow|tmrw|this weekend)?\s*\??", re.I), MessagePattern.INVITATION),
-
+    (
+        re.compile(r"\b(can you|could you|would you|will you)\s+(come|make it|join|hang)\b", re.I),
+        MessagePattern.INVITATION,
+    ),
+    (
+        re.compile(
+            r"\b(free|available|busy)\s*(today|tonight|tomorrow|tmrw|this weekend)?\s*\??", re.I
+        ),
+        MessagePattern.INVITATION,
+    ),
     # Reaction prompts - exciting news/events wanting reaction
-    (re.compile(r"^(omg|oh my god|dude|bro|yo)\b.*(wtf|crazy|insane|\?)", re.I), MessagePattern.REACTION_PROMPT),
-    (re.compile(r"\b(did you see|have you seen|did you hear)\b", re.I), MessagePattern.REACTION_PROMPT),
-    (re.compile(r"\b(can you believe|isn't that|wasn't that)\b", re.I), MessagePattern.REACTION_PROMPT),
-    (re.compile(r"\bwtf\b.*\b(happened|is going on|was that)\b", re.I), MessagePattern.REACTION_PROMPT),
-
+    (
+        re.compile(r"^(omg|oh my god|dude|bro|yo)\b.*(wtf|crazy|insane|\?)", re.I),
+        MessagePattern.REACTION_PROMPT,
+    ),
+    (
+        re.compile(r"\b(did you see|have you seen|did you hear)\b", re.I),
+        MessagePattern.REACTION_PROMPT,
+    ),
+    (
+        re.compile(r"\b(can you believe|isn't that|wasn't that)\b", re.I),
+        MessagePattern.REACTION_PROMPT,
+    ),
+    (
+        re.compile(r"\bwtf\b.*\b(happened|is going on|was that)\b", re.I),
+        MessagePattern.REACTION_PROMPT,
+    ),
     # Venting - emotional expressions
     (re.compile(r"^(fuck+|shit+|damn+|ugh+|bruh+)\b", re.I), MessagePattern.VENTING),
-    (re.compile(r"\b(so (frustrated|annoyed|tired|stressed|upset))\b", re.I), MessagePattern.VENTING),
+    (
+        re.compile(r"\b(so (frustrated|annoyed|tired|stressed|upset))\b", re.I),
+        MessagePattern.VENTING,
+    ),
     (re.compile(r"\b(i('m| am) (done|over it|sick of))\b", re.I), MessagePattern.VENTING),
-
     # Info questions - what/when/where/who/how (with OR without ?)
     (re.compile(r"^(what|when|where|who|which|how)\b", re.I), MessagePattern.INFO_QUESTION),
     (re.compile(r"\b(what time|what day|how long|how much)\b", re.I), MessagePattern.INFO_QUESTION),
     (re.compile(r"\b(when'?s|where'?s|what'?s)\s+the\b", re.I), MessagePattern.INFO_QUESTION),
-
     # Yes/No questions
-    (re.compile(r"^(do|does|did|is|are|was|were|can|could|will|would|have|has)\s+(you|u|we|they|i|it)\b", re.I), MessagePattern.YN_QUESTION),
+    (
+        re.compile(
+            r"^(do|does|did|is|are|was|were|can|could|will|would|have|has)\s+(you|u|we|they|i|it)\b",
+            re.I,
+        ),
+        MessagePattern.YN_QUESTION,
+    ),
     (re.compile(r"\?\s*$", re.I), MessagePattern.YN_QUESTION),  # Fallback: ends with ?
-
     # Greetings
-    (re.compile(r"^(hey|hi|hello|yo|sup|what'?s up|wassup|hiya)\s*[!?]?\s*$", re.I), MessagePattern.GREETING),
-
+    (
+        re.compile(r"^(hey|hi|hello|yo|sup|what'?s up|wassup|hiya)\s*[!?]?\s*$", re.I),
+        MessagePattern.GREETING,
+    ),
     # Acknowledgments
-    (re.compile(r"^(ok|okay|k|kk|sure|bet|got it|sounds good|cool|alright|thanks|ty|thx)\s*[!.]?\s*$", re.I), MessagePattern.ACKNOWLEDGMENT),
-
+    (
+        re.compile(
+            r"^(ok|okay|k|kk|sure|bet|got it|sounds good|cool|alright|thanks|ty|thx)\s*[!.]?\s*$",
+            re.I,
+        ),
+        MessagePattern.ACKNOWLEDGMENT,
+    ),
     # Statements (no question mark, declarative) - MUST BE LAST
     (re.compile(r"^[^?]+[.!]?\s*$", re.I), MessagePattern.STATEMENT),
 ]
@@ -228,6 +259,7 @@ class ReplySuggester:
         """Get or create database instance."""
         if self._db is None:
             from jarvis.db import get_db
+
             self._db = get_db()
         return self._db
 
@@ -236,6 +268,7 @@ class ReplySuggester:
         """Get or create FAISS index searcher."""
         if self._index_searcher is None:
             from jarvis.index import TriggerIndexSearcher
+
             self._index_searcher = TriggerIndexSearcher(self.db)
         return self._index_searcher
 
@@ -287,11 +320,13 @@ class ReplySuggester:
                     continue
 
                 seen_responses.add(response_lower)
-                suggestions.append(ReplySuggestion(
-                    text=response,
-                    source="retrieval",
-                    confidence=result.get("similarity", 0.5),
-                ))
+                suggestions.append(
+                    ReplySuggestion(
+                        text=response,
+                        source="retrieval",
+                        confidence=result.get("similarity", 0.5),
+                    )
+                )
 
                 if len(suggestions) >= n_suggestions:
                     break
@@ -308,11 +343,13 @@ class ReplySuggester:
                 # Don't add template if similar response already exists
                 if any(template.lower() == s.text.lower() for s in suggestions):
                     continue
-                suggestions.append(ReplySuggestion(
-                    text=template,
-                    source="template",
-                    confidence=0.7,
-                ))
+                suggestions.append(
+                    ReplySuggestion(
+                        text=template,
+                        source="template",
+                        confidence=0.7,
+                    )
+                )
 
         return SuggestionResult(
             suggestions=suggestions[:n_suggestions],

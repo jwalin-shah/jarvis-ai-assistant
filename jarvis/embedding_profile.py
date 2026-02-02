@@ -14,7 +14,6 @@ Profile storage: ~/.jarvis/embedding_profiles/{contact_hash}.json
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -99,6 +98,8 @@ class EmbeddingProfile:
         embedding_model: Model used for embeddings.
         last_updated: ISO timestamp of last update.
         version: Profile format version.
+        relationship_type: Classified relationship (family, close friend, coworker, etc.).
+        relationship_confidence: Confidence score for the classification (0-1).
     """
 
     contact_id: str
@@ -109,6 +110,8 @@ class EmbeddingProfile:
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     last_updated: str = ""
     version: str = PROFILE_VERSION
+    relationship_type: str | None = None
+    relationship_confidence: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert profile to dictionary for serialization."""
@@ -121,6 +124,8 @@ class EmbeddingProfile:
             "embedding_model": self.embedding_model,
             "last_updated": self.last_updated,
             "version": self.version,
+            "relationship_type": self.relationship_type,
+            "relationship_confidence": self.relationship_confidence,
         }
 
     @classmethod
@@ -139,6 +144,8 @@ class EmbeddingProfile:
             embedding_model=data.get("embedding_model", "BAAI/bge-small-en-v1.5"),
             last_updated=data.get("last_updated", ""),
             version=data.get("version", PROFILE_VERSION),
+            relationship_type=data.get("relationship_type"),
+            relationship_confidence=data.get("relationship_confidence"),
         )
 
 
@@ -149,7 +156,9 @@ class EmbeddingProfile:
 
 def _hash_contact_id(contact_id: str) -> str:
     """Create a stable hash for contact ID storage."""
-    return hashlib.sha256(contact_id.encode("utf-8")).hexdigest()[:16]
+    from jarvis.contact_utils import hash_contact_id
+
+    return hash_contact_id(contact_id)
 
 
 def _compute_embeddings(
@@ -620,6 +629,173 @@ def get_relevant_topic_cluster(
     return best_cluster
 
 
+def build_profiles_for_all_chats(
+    db: Any,
+    embedder: Any,
+    min_pairs: int = 30,
+    limit: int | None = None,
+    classify_relationships: bool = True,
+    include_groups: bool = True,
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    """Build embedding profiles for ALL chat_ids in the database.
+
+    Unlike build_profiles_for_all_contacts, this works with ANY chat
+    (phone number or group chat), not just saved contacts.
+
+    For group chats, we still build embedding profiles (topic clusters,
+    communication dynamics, your response patterns) but skip relationship
+    classification since groups contain multiple people.
+
+    Args:
+        db: JarvisDB instance.
+        embedder: Embedding model with encode() method.
+        min_pairs: Minimum pairs required for a profile.
+        limit: Maximum number of chats to process.
+        classify_relationships: If True, also run relationship classifier (1:1 only).
+        include_groups: If True, also build profiles for group chats.
+        force_rebuild: If False, skip chats that already have profiles.
+
+    Returns:
+        Statistics about the profile building.
+    """
+    from collections import defaultdict
+
+    # Get all pairs grouped by chat_id
+    all_pairs = db.get_training_pairs(min_quality=0.0)
+    pairs_by_chat: dict[str, list] = defaultdict(list)
+    group_chats: set[str] = set()
+
+    for p in all_pairs:
+        if not p.chat_id:
+            continue
+        if p.is_group:
+            if include_groups:
+                pairs_by_chat[p.chat_id].append(p)
+                group_chats.add(p.chat_id)
+        else:
+            pairs_by_chat[p.chat_id].append(p)
+
+    # Sort by pair count descending
+    sorted_chats = sorted(
+        pairs_by_chat.items(),
+        key=lambda x: len(x[1]),
+        reverse=True,
+    )
+
+    if limit:
+        sorted_chats = sorted_chats[:limit]
+
+    n_groups = sum(1 for chat_id, _ in sorted_chats if chat_id in group_chats)
+    n_direct = len(sorted_chats) - n_groups
+    logger.info(
+        "Building embedding profiles for %d chats (%d direct, %d groups)",
+        len(sorted_chats),
+        n_direct,
+        n_groups,
+    )
+
+    # Initialize relationship classifier if needed
+    relationship_classifier = None
+    if classify_relationships:
+        try:
+            from jarvis.relationship_classifier import RelationshipClassifier
+
+            relationship_classifier = RelationshipClassifier()
+            logger.info("Relationship classifier initialized")
+        except Exception as e:
+            logger.warning("Failed to initialize relationship classifier: %s", e)
+
+    stats = {
+        "chats_processed": 0,
+        "profiles_created": 0,
+        "profiles_skipped": 0,
+        "profiles_skipped_existing": 0,
+        "group_profiles_created": 0,
+        "total_messages_analyzed": 0,
+        "relationships_classified": 0,
+        "errors": [],
+    }
+
+    for chat_id, pairs in sorted_chats:
+        if len(pairs) < min_pairs:
+            stats["profiles_skipped"] += 1
+            continue
+
+        is_group = chat_id in group_chats
+
+        # Skip if profile already exists (unless force_rebuild)
+        if not force_rebuild:
+            existing = load_embedding_profile(chat_id)
+            if existing and existing.message_count > 0:
+                stats["profiles_skipped_existing"] += 1
+                logger.debug("Skipping %s - profile already exists", chat_id[:20])
+                continue
+
+        try:
+            # Convert pairs to mock messages
+            messages = []
+            for p in pairs:
+                # Use source_timestamp if available, otherwise use a default
+                timestamp = p.source_timestamp or datetime.now()
+                messages.append(_MockMessage(p.trigger_text, False, timestamp))
+                messages.append(_MockMessage(p.response_text, True, timestamp))
+
+            # Build embedding profile
+            profile = build_embedding_profile(
+                contact_id=chat_id,
+                messages=messages,
+                embedder=embedder,
+                contact_name=chat_id,  # Use chat_id as name
+            )
+
+            # Mark as group chat if applicable
+            if is_group:
+                profile.relationship_type = "group"
+                profile.relationship_confidence = 1.0
+
+            # Classify relationship type (skip for groups - can't classify a group)
+            elif relationship_classifier:
+                try:
+                    result = relationship_classifier.classify_contact(chat_id)
+                    profile.relationship_type = result.relationship
+                    profile.relationship_confidence = result.confidence
+                    stats["relationships_classified"] += 1
+                    logger.debug(
+                        "Classified %s as %s (%.0f%%)",
+                        chat_id[:15],
+                        result.relationship,
+                        result.confidence * 100,
+                    )
+                except Exception as e:
+                    logger.debug("Failed to classify relationship for %s: %s", chat_id, e)
+
+            # Save profile
+            if save_embedding_profile(profile):
+                stats["profiles_created"] += 1
+                if is_group:
+                    stats["group_profiles_created"] += 1
+                stats["total_messages_analyzed"] += profile.message_count
+                logger.info(
+                    "Created profile for %s (%d msgs, %d clusters, rel=%s)",
+                    chat_id[:20],
+                    profile.message_count,
+                    len(profile.topic_clusters),
+                    profile.relationship_type or "unknown",
+                )
+            else:
+                stats["errors"].append(f"Failed to save profile for {chat_id}")
+
+            stats["chats_processed"] += 1
+
+        except Exception as e:
+            logger.warning("Error processing %s: %s", chat_id, e)
+            stats["errors"].append(f"{chat_id}: {str(e)}")
+            stats["chats_processed"] += 1
+
+    return stats
+
+
 def generate_embedding_style_guide(profile: EmbeddingProfile) -> str:
     """Generate style guidance based on embedding analysis.
 
@@ -629,19 +805,38 @@ def generate_embedding_style_guide(profile: EmbeddingProfile) -> str:
     Returns:
         Natural language description of communication patterns.
     """
+    parts = []
+
+    # Relationship type (most important for tone)
+    if profile.relationship_type:
+        rel = profile.relationship_type
+        if rel == "family":
+            parts.append("This is a family member - use warm, caring tone")
+        elif rel == "close friend":
+            parts.append("This is a close friend - casual, relaxed tone is appropriate")
+        elif rel == "romantic partner":
+            parts.append("This is a romantic partner - affectionate tone")
+        elif rel == "coworker":
+            parts.append("This is a coworker - professional but friendly tone")
+        elif rel == "acquaintance":
+            parts.append("This is an acquaintance - polite, somewhat formal tone")
+        else:
+            parts.append(f"Relationship: {rel}")
+
     if not profile.dynamics:
+        if parts:
+            return ". ".join(parts) + "."
         return "Limited embedding data. Using default patterns."
 
-    parts = []
     dynamics = profile.dynamics
 
     # Style similarity guidance
     if dynamics.style_similarity > 0.8:
-        parts.append("You and this person communicate very similarly")
+        parts.append("you communicate very similarly")
     elif dynamics.style_similarity > 0.6:
-        parts.append("Your communication styles are moderately aligned")
+        parts.append("your styles are moderately aligned")
     else:
-        parts.append("You and this person have different communication styles")
+        parts.append("you have different communication styles")
 
     # Initiation guidance
     if dynamics.initiation_ratio > 0.7:
@@ -691,6 +886,7 @@ __all__ = [
     # Profile building
     "build_embedding_profile",
     "build_profiles_for_all_contacts",
+    "build_profiles_for_all_chats",
     # Storage
     "save_embedding_profile",
     "load_embedding_profile",

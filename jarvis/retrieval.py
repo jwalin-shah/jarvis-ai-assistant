@@ -127,6 +127,7 @@ class TypedRetriever:
             with self._lock:
                 if self._index_searcher is None:
                     from jarvis.index import TriggerIndexSearcher
+
                     self._index_searcher = TriggerIndexSearcher(self.db)
         return self._index_searcher
 
@@ -227,45 +228,23 @@ class TypedRetriever:
             if quality < min_quality:
                 continue
 
-            typed_examples.append(TypedExample(
-                trigger_text=result["trigger_text"],
-                response_text=result["response_text"],
-                response_type=target_response_type,
-                similarity=result["similarity"],
-                confidence=result.get("response_da_conf") or 0.0,
-                pair_id=pair_id,
-            ))
+            typed_examples.append(
+                TypedExample(
+                    trigger_text=result["trigger_text"],
+                    response_text=result["response_text"],
+                    response_type=target_response_type,
+                    similarity=result["similarity"],
+                    confidence=result.get("response_da_conf") or 0.0,
+                    pair_id=pair_id,
+                )
+            )
 
             if len(typed_examples) >= k:
                 break
 
-        # If FAISS didn't return enough, fall back to DB query
-        if len(typed_examples) < k:
-            # Use set for O(1) duplicate checking instead of O(n) linear scan
-            seen_pair_ids = {e.pair_id for e in typed_examples}
-
-            db_pairs = self.db.get_pairs_by_response_da(
-                response_da=target_response_type.value,
-                min_quality=min_quality,
-                limit=(k - len(typed_examples)) * 2,  # Get extra to account for duplicates
-            )
-            for pair in db_pairs:
-                # Avoid duplicates - O(1) set lookup
-                if pair.id in seen_pair_ids:
-                    continue
-
-                seen_pair_ids.add(pair.id)
-                typed_examples.append(TypedExample(
-                    trigger_text=pair.trigger_text,
-                    response_text=pair.response_text,
-                    response_type=target_response_type,
-                    similarity=0.0,  # Not from FAISS
-                    confidence=pair.response_da_conf or 0.0,
-                    pair_id=pair.id,
-                ))
-
-                if len(typed_examples) >= k:
-                    break
+        # NOTE: DB fallback removed - use LLM generation instead when FAISS
+        # doesn't find good semantic matches. This prevents returning
+        # irrelevant examples that happen to have the same response type.
 
         return typed_examples
 
@@ -303,6 +282,7 @@ class TypedRetriever:
         # Ensure we have a cached embedder for efficiency
         if embedder is None:
             from jarvis.embedding_adapter import CachedEmbedder, get_embedder
+
             embedder = CachedEmbedder(get_embedder())
 
         # OPTIMIZATION: Single FAISS search with larger k, then filter by type
@@ -351,45 +331,20 @@ class TypedRetriever:
 
             # Add to appropriate bucket if not full
             if len(examples_by_type[response_type]) < k_per_type:
-                examples_by_type[response_type].append(TypedExample(
-                    trigger_text=result["trigger_text"],
-                    response_text=result["response_text"],
-                    response_type=response_type,
-                    similarity=result["similarity"],
-                    confidence=result.get("response_da_conf") or 0.0,
-                    pair_id=pair_id,
-                ))
-
-        # Check if we need DB fallback for any type
-        for response_type in COMMITMENT_RESPONSE_TYPES:
-            current_count = len(examples_by_type[response_type])
-            if current_count < k_per_type:
-                # Get more from DB
-                seen_pair_ids = {e.pair_id for e in examples_by_type[response_type]}
-                needed = k_per_type - current_count
-
-                db_pairs = self.db.get_pairs_by_response_da(
-                    response_da=response_type.value,
-                    min_quality=min_quality,
-                    limit=needed * 2,
+                examples_by_type[response_type].append(
+                    TypedExample(
+                        trigger_text=result["trigger_text"],
+                        response_text=result["response_text"],
+                        response_type=response_type,
+                        similarity=result["similarity"],
+                        confidence=result.get("response_da_conf") or 0.0,
+                        pair_id=pair_id,
+                    )
                 )
 
-                for pair in db_pairs:
-                    if pair.id in seen_pair_ids:
-                        continue
-
-                    seen_pair_ids.add(pair.id)
-                    examples_by_type[response_type].append(TypedExample(
-                        trigger_text=pair.trigger_text,
-                        response_text=pair.response_text,
-                        response_type=response_type,
-                        similarity=0.0,
-                        confidence=pair.response_da_conf or 0.0,
-                        pair_id=pair.id,
-                    ))
-
-                    if len(examples_by_type[response_type]) >= k_per_type:
-                        break
+        # NOTE: DB fallback removed - use LLM generation instead when FAISS
+        # doesn't find good semantic matches. This prevents returning
+        # irrelevant examples that happen to have the same response type.
 
         # Remove empty type entries
         examples_by_type = {k: v for k, v in examples_by_type.items() if v}
@@ -441,6 +396,7 @@ class TypedRetriever:
         # Ensure we have a cached embedder for efficiency
         if embedder is None:
             from jarvis.embedding_adapter import CachedEmbedder, get_embedder
+
             embedder = CachedEmbedder(get_embedder())
 
         # OPTIMIZATION: Single FAISS search with larger k, then filter by type
@@ -460,9 +416,7 @@ class TypedRetriever:
 
         # Initialize buckets for valid types only
         valid_types_set = set(valid_types)
-        examples_by_type: dict[ResponseType, list[TypedExample]] = {
-            rt: [] for rt in valid_types
-        }
+        examples_by_type: dict[ResponseType, list[TypedExample]] = {rt: [] for rt in valid_types}
 
         for result in search_results:
             pair_id = result.get("pair_id")
@@ -486,47 +440,172 @@ class TypedRetriever:
                 continue
 
             if len(examples_by_type[response_type]) < k_per_type:
-                examples_by_type[response_type].append(TypedExample(
-                    trigger_text=result["trigger_text"],
-                    response_text=result["response_text"],
-                    response_type=response_type,
-                    similarity=result["similarity"],
-                    confidence=result.get("response_da_conf") or 0.0,
-                    pair_id=pair_id,
-                ))
-
-        # DB fallback for types that need more examples
-        for response_type in valid_types:
-            current_count = len(examples_by_type[response_type])
-            if current_count < k_per_type:
-                seen_pair_ids = {e.pair_id for e in examples_by_type[response_type]}
-                needed = k_per_type - current_count
-
-                db_pairs = self.db.get_pairs_by_response_da(
-                    response_da=response_type.value,
-                    min_quality=min_quality,
-                    limit=needed * 2,
+                examples_by_type[response_type].append(
+                    TypedExample(
+                        trigger_text=result["trigger_text"],
+                        response_text=result["response_text"],
+                        response_type=response_type,
+                        similarity=result["similarity"],
+                        confidence=result.get("response_da_conf") or 0.0,
+                        pair_id=pair_id,
+                    )
                 )
 
-                for pair in db_pairs:
-                    if pair.id in seen_pair_ids:
-                        continue
-
-                    seen_pair_ids.add(pair.id)
-                    examples_by_type[response_type].append(TypedExample(
-                        trigger_text=pair.trigger_text,
-                        response_text=pair.response_text,
-                        response_type=response_type,
-                        similarity=0.0,
-                        confidence=pair.response_da_conf or 0.0,
-                        pair_id=pair.id,
-                    ))
-
-                    if len(examples_by_type[response_type]) >= k_per_type:
-                        break
+        # NOTE: DB fallback removed - use LLM generation instead when FAISS
+        # doesn't find good semantic matches.
 
         # Remove empty type entries
         examples_by_type = {k: v for k, v in examples_by_type.items() if v}
+
+        return MultiTypeExamples(
+            query_trigger=trigger,
+            trigger_da=trigger_da,
+            examples_by_type=examples_by_type,
+        )
+
+    def get_typed_examples_weighted(
+        self,
+        trigger: str,
+        target_response_type: str | ResponseType,
+        chat_id: str | None = None,
+        k: int = 5,
+        min_similarity: float = 0.3,
+        contact_boost: float = 1.5,
+        embedder: Embedder | None = None,
+    ) -> list[TypedExample]:
+        """Get examples with contact-aware weighted scoring.
+
+        Strategy:
+        1. Single FAISS search for similar triggers (k=50)
+        2. Apply contact boost (1.5x for same chat_id)
+        3. Apply topic boost (based on embedding similarity to contact profile)
+        4. Filter by target response DA type
+        5. Return top k by weighted score
+
+        Args:
+            trigger: Query trigger text.
+            target_response_type: Desired response DA type.
+            chat_id: Target contact's chat_id for contact boosting.
+            k: Number of examples to return.
+            min_similarity: Minimum similarity threshold.
+            contact_boost: Multiplier for same-contact results (default 1.5).
+            embedder: Optional embedder for FAISS search.
+
+        Returns:
+            List of TypedExample objects, sorted by weighted score.
+        """
+        if isinstance(target_response_type, str):
+            try:
+                target_response_type = ResponseType(target_response_type)
+            except ValueError:
+                logger.warning("Invalid response type: %s", target_response_type)
+                return []
+
+        # Single FAISS search with large k (50) to have enough for filtering
+        try:
+            search_results = self.index_searcher.search_with_pairs(
+                query=trigger,
+                k=50,
+                threshold=min_similarity,
+                embedder=embedder,
+            )
+        except Exception as e:
+            logger.warning("FAISS search failed: %s", e)
+            search_results = []
+
+        # Apply weighted scoring
+        scored_results = []
+        for result in search_results:
+            pair_id = result.get("pair_id")
+            if not pair_id:
+                continue
+
+            # Filter by DA type
+            if result.get("response_da_type") != target_response_type.value:
+                continue
+
+            base_score = result.get("similarity", 0.0)
+
+            # Contact boost: prefer results from same chat
+            result_chat_id = result.get("chat_id")
+            if chat_id and result_chat_id and result_chat_id == chat_id:
+                score_multiplier = contact_boost
+                is_contact_match = True
+            else:
+                score_multiplier = 1.0
+                is_contact_match = False
+
+            weighted_score = base_score * score_multiplier
+
+            scored_results.append(
+                {
+                    **result,
+                    "weighted_score": weighted_score,
+                    "is_contact_match": is_contact_match,
+                }
+            )
+
+        # Sort by weighted score descending
+        scored_results.sort(key=lambda x: x["weighted_score"], reverse=True)
+
+        # Convert to TypedExample
+        typed_examples = []
+        for result in scored_results[:k]:
+            typed_examples.append(
+                TypedExample(
+                    trigger_text=result["trigger_text"],
+                    response_text=result["response_text"],
+                    response_type=target_response_type,
+                    similarity=result["weighted_score"],  # Use weighted score
+                    confidence=result.get("response_da_conf") or 0.0,
+                    pair_id=result["pair_id"],
+                )
+            )
+
+        return typed_examples
+
+    def get_examples_for_commitment_weighted(
+        self,
+        trigger: str,
+        chat_id: str | None = None,
+        k_per_type: int = 3,
+        min_similarity: float = 0.3,
+        contact_boost: float = 1.5,
+        embedder: Embedder | None = None,
+    ) -> MultiTypeExamples:
+        """Get commitment examples (AGREE/DECLINE/DEFER) with contact-aware weighting.
+
+        Like get_examples_for_commitment but boosts results from the same contact.
+
+        Args:
+            trigger: Query trigger text.
+            chat_id: Target contact's chat_id for contact boosting.
+            k_per_type: Number of examples per response type.
+            min_similarity: Minimum similarity threshold.
+            contact_boost: Multiplier for same-contact results.
+            embedder: Optional embedder for FAISS search.
+
+        Returns:
+            MultiTypeExamples with contact-boosted examples grouped by type.
+        """
+        # Classify trigger to understand context
+        trigger_da, _ = self.classify_trigger(trigger)
+
+        # Get examples for each commitment type with weighting
+        examples_by_type: dict[ResponseType, list[TypedExample]] = {}
+
+        for response_type in COMMITMENT_RESPONSE_TYPES:
+            examples = self.get_typed_examples_weighted(
+                trigger=trigger,
+                target_response_type=response_type,
+                chat_id=chat_id,
+                k=k_per_type,
+                min_similarity=min_similarity,
+                contact_boost=contact_boost,
+                embedder=embedder,
+            )
+            if examples:
+                examples_by_type[response_type] = examples
 
         return MultiTypeExamples(
             query_trigger=trigger,

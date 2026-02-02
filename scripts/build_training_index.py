@@ -53,7 +53,7 @@ def load_jsonl(path: Path) -> list[dict]:
             except json.JSONDecodeError:
                 errors += 1
                 if errors <= 5:
-                    logger.warning(f"JSON error on line {i+1}: {line[:50]}...")
+                    logger.warning(f"JSON error on line {i + 1}: {line[:50]}...")
     if errors:
         logger.warning(f"Total JSON errors: {errors}")
     return records
@@ -117,16 +117,18 @@ def merge_and_dedupe(
             response_dt = parse_date(response_date)
             trigger_dt = response_dt  # Use same timestamp (we don't have separate trigger time)
 
-            pairs.append({
-                "trigger_text": trigger,
-                "response_text": response,
-                "context_text": context if context else None,
-                "trigger_timestamp": trigger_dt,
-                "response_timestamp": response_dt,
-                "chat_id": chat_id,
-                "is_group": is_group,
-                "quality_score": 1.0,  # Will be computed later
-            })
+            pairs.append(
+                {
+                    "trigger_text": trigger,
+                    "response_text": response,
+                    "context_text": context if context else None,
+                    "trigger_timestamp": trigger_dt,
+                    "response_timestamp": response_dt,
+                    "chat_id": chat_id,
+                    "is_group": is_group,
+                    "quality_score": 1.0,  # Will be computed later
+                }
+            )
 
     logger.info(f"Merge stats: {json.dumps(stats, indent=2)}")
     logger.info(f"Unique pairs: {len(pairs)}")
@@ -147,7 +149,7 @@ def import_to_db(pairs: list[dict], batch_size: int = 1000) -> int:
 
     total_added = 0
     for i in range(0, len(pairs), batch_size):
-        batch = pairs[i:i + batch_size]
+        batch = pairs[i : i + batch_size]
         added = db.add_pairs_bulk(batch)
         total_added += added
         if (i + batch_size) % 10000 == 0 or i + batch_size >= len(pairs):
@@ -189,14 +191,14 @@ def build_index(min_quality: float = 0.5, holdout_ratio: float = 0.2) -> dict:
         holdout_list = list(holdout_ids)
         batch_size = 500
         for i in range(0, len(holdout_list), batch_size):
-            batch = holdout_list[i:i + batch_size]
+            batch = holdout_list[i : i + batch_size]
             placeholders = ",".join("?" * len(batch))
             conn.execute(f"UPDATE pairs SET is_holdout = 1 WHERE id IN ({placeholders})", batch)
         conn.commit()
 
     logger.info(
         f"Split: {len(training_ids)} training, {len(holdout_ids)} holdout "
-        f"({holdout_count/len(pair_ids):.1%})"
+        f"({holdout_count / len(pair_ids):.1%})"
     )
 
     # Build index (excludes holdout by default)
@@ -242,13 +244,13 @@ def test_retrieval(queries: list[str] | None = None, k: int = 3) -> None:
     for query in queries:
         results = searcher.search_with_pairs(query, k=k, threshold=0.3)
 
-        print(f"\nQuery: \"{query}\"")
+        print(f'\nQuery: "{query}"')
         if not results:
             print("  No matches above threshold")
         else:
             for i, r in enumerate(results):
-                print(f"  {i+1}. [{r['similarity']:.3f}] \"{r['trigger_text'][:50]}...\"")
-                print(f"     -> \"{r['response_text'][:50]}...\"")
+                print(f'  {i + 1}. [{r["similarity"]:.3f}] "{r["trigger_text"][:50]}..."')
+                print(f'     -> "{r["response_text"][:50]}..."')
 
 
 def main():
@@ -286,6 +288,7 @@ def main():
         # Step 2: Clear DB if requested
         if args.clear_db:
             from jarvis.db import get_db
+
             db = get_db()
             logger.info("Clearing existing pairs...")
             with db.connection() as conn:

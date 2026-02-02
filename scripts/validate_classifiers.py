@@ -30,6 +30,7 @@ from pathlib import Path
 @dataclass
 class ValidationResult:
     """Result from validating a single example."""
+
     text: str
     predicted: str
     confidence: float
@@ -110,14 +111,16 @@ def validate_trigger(samples: list[tuple[str, str]]) -> list[ValidationResult]:
 
         human_verified = True if response == "y" else (False if response == "n" else None)
 
-        results.append(ValidationResult(
-            text=text,
-            predicted=result.trigger_type.value,
-            confidence=result.confidence,
-            ground_truth=ground_truth,
-            human_verified=human_verified,
-            method=result.method,
-        ))
+        results.append(
+            ValidationResult(
+                text=text,
+                predicted=result.trigger_type.value,
+                confidence=result.confidence,
+                ground_truth=ground_truth,
+                human_verified=human_verified,
+                method=result.method,
+            )
+        )
 
     return results
 
@@ -165,14 +168,16 @@ def validate_response(samples: list[tuple[str, str]]) -> list[ValidationResult]:
 
         human_verified = True if response == "y" else (False if response == "n" else None)
 
-        results.append(ValidationResult(
-            text=text,
-            predicted=result.label.value,
-            confidence=result.confidence,
-            ground_truth=ground_truth,
-            human_verified=human_verified,
-            method=result.method,
-        ))
+        results.append(
+            ValidationResult(
+                text=text,
+                predicted=result.label.value,
+                confidence=result.confidence,
+                ground_truth=ground_truth,
+                human_verified=human_verified,
+                method=result.method,
+            )
+        )
 
     return results
 

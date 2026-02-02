@@ -1,7 +1,7 @@
-"""Reply Router - Decision logic for template, generation, or clarification routing.
+"""Reply Router - Decision logic for quick reply, generation, or clarification routing.
 
 Routes incoming messages to the appropriate response strategy:
-- Template (high confidence): Direct template response when similarity >= TEMPLATE_THRESHOLD
+- Quick Reply (high confidence): Cached response when similarity >= QUICK_REPLY_THRESHOLD
 - Generate (medium confidence): LLM generation with context and few-shot examples
 - Clarify (low confidence): Request more information when context is insufficient
 
@@ -18,7 +18,7 @@ Usage:
         thread=["Hey!", "What's up?"],
     )
 
-    if result['type'] == 'template':
+    if result['type'] == 'quick_reply':
         print(f"Quick response: {result['response']}")
     elif result['type'] == 'generated':
         print(f"AI response: {result['response']}")
@@ -73,14 +73,14 @@ logger = logging.getLogger(__name__)
 # IMPORTANT: Evaluation on 26k holdout pairs (2026-01-31) showed:
 # - Trigger similarity does NOT predict response appropriateness
 # - Even at 0.9+ trigger match, response similarity was only 0.56
-# - This means direct template responses are often inappropriate
+# - This means direct quick replies are often inappropriate
 #
 # Strategy: Use retrieval for EXAMPLES, not direct responses
 # - High similarity → more confident examples for LLM
 # - Low similarity → fewer/no examples, more cautious generation
 #
-TEMPLATE_THRESHOLD = 0.95  # Extremely high - only near-exact matches (rare)
-CONTEXT_THRESHOLD = 0.65   # Good examples available for LLM
+QUICK_REPLY_THRESHOLD = 0.95  # Extremely high - only near-exact matches (rare)
+CONTEXT_THRESHOLD = 0.65  # Good examples available for LLM
 GENERATE_THRESHOLD = 0.45  # Some examples available
 
 # Coherence threshold for filtering responses
@@ -88,7 +88,7 @@ GENERATE_THRESHOLD = 0.45  # Some examples available
 COHERENCE_THRESHOLD = 0.6  # Raised from 0.5 based on evaluation
 
 # Response variety
-MAX_TEMPLATE_RESPONSES = 5  # Max responses to choose from for variety
+MAX_QUICK_REPLIES = 5  # Max responses to choose from for variety
 MIN_RESPONSE_SIMILARITY = 0.6  # Responses must be somewhat similar to pick randomly
 
 # Keep this for backwards compatibility during migration
@@ -105,7 +105,7 @@ def _check_acknowledgment(text: str) -> bool:
 
 
 # Context-dependent patterns that ALWAYS need clarification
-# These should NEVER use template responses even with high similarity
+# These should NEVER use quick_reply responses even with high similarity
 # because the answer depends on current context, not past responses
 CONTEXT_DEPENDENT_PATTERNS = frozenset(
     {
@@ -194,16 +194,16 @@ class RouteResult:
 
     Attributes:
         response: The response text.
-        type: Response type ('template', 'generated', 'clarify').
+        type: Response type ('quick_reply', 'generated', 'clarify').
         confidence: Confidence level ('high', 'medium', 'low').
         similarity_score: Best similarity score from FAISS search.
-        cluster_name: Name of matched cluster (for templates).
+        cluster_name: Name of matched cluster (for quick_replies).
         contact_style: Style notes for the contact.
         similar_triggers: List of similar past triggers found.
     """
 
     response: str
-    type: str  # 'template', 'generated', 'clarify'
+    type: str  # 'quick_reply', 'generated', 'clarify'
     confidence: str  # 'high', 'medium', 'low'
     similarity_score: float = 0.0
     cluster_name: str | None = None
@@ -217,10 +217,10 @@ class RouteResult:
 
 
 class ReplyRouter:
-    """Routes incoming messages to template, LLM generation, or clarification.
+    """Routes incoming messages to quick_reply, LLM generation, or clarification.
 
     Implements a three-tier routing strategy:
-    1. Template (similarity >= template threshold): Return cached response instantly
+    1. Quick Reply (similarity >= threshold): Return cached response instantly
     2. Generate (similarity >= generate threshold): Use LLM with similar examples
     3. Clarify (below thresholds): Ask user for more context
 
@@ -361,13 +361,13 @@ class ReplyRouter:
         if routing.ab_test_group in routing.ab_test_thresholds:
             group_thresholds = routing.ab_test_thresholds[routing.ab_test_group]
             return {
-                "template": group_thresholds.get("template", routing.template_threshold),
+                "quick_reply": group_thresholds.get("quick_reply", routing.quick_reply_threshold),
                 "context": group_thresholds.get("context", routing.context_threshold),
                 "generate": group_thresholds.get("generate", routing.generate_threshold),
             }
 
         return {
-            "template": routing.template_threshold,
+            "quick_reply": routing.quick_reply_threshold,
             "context": routing.context_threshold,
             "generate": routing.generate_threshold,
         }
@@ -375,8 +375,8 @@ class ReplyRouter:
     def _normalize_routing_decision(self, result_type: str) -> str:
         if result_type == "generated":
             return "generate"
-        if result_type == "template":
-            return "template"
+        if result_type == "quick_reply":
+            return "quick_reply"
         return "clarify"
 
     def _record_routing_metrics(
@@ -433,7 +433,7 @@ class ReplyRouter:
 
         Uses centralized exact matching to avoid substring false positives.
         Simple acknowledgments like "ok", "thanks", "yes" are too
-        context-dependent for template matching and should be handled
+        context-dependent for quick_reply matching and should be handled
         directly with generic responses.
 
         Args:
@@ -447,7 +447,7 @@ class ReplyRouter:
     def _is_context_dependent(self, text: str) -> bool:
         """Check if the message is context-dependent or requires user input.
 
-        Two categories that should NOT use template responses:
+        Two categories that should NOT use quick_reply responses:
         1. Context-dependent: "what time?", "where?" - need to know WHAT we're discussing
         2. User-input-required: "are you coming?", "can you?" - system can't answer for user
 
@@ -619,7 +619,7 @@ class ReplyRouter:
         - Intent classifier determines user intent (reply, summarize, search, etc.)
         - Simple acknowledgments/reactions are handled directly
         - Messages needing clarification are flagged appropriately
-        - Other messages go through the template/generate/clarify pipeline
+        - Other messages go through the quick_reply/generate/clarify pipeline
 
         Args:
             incoming: The incoming message text to respond to.
@@ -629,7 +629,7 @@ class ReplyRouter:
 
         Returns:
             Dict with routing result containing:
-            - type: 'template', 'generated', 'clarify', or 'acknowledgment'
+            - type: 'quick_reply', 'generated', 'clarify', or 'acknowledgment'
             - response: The response text
             - confidence: 'high', 'medium', or 'low'
             - Additional metadata (cluster_name, similarity_score, message_type, etc.)
@@ -787,7 +787,7 @@ class ReplyRouter:
             )
 
         thresholds = self._get_thresholds()
-        template_threshold = thresholds["template"]
+        quick_reply_threshold = thresholds["quick_reply"]
         context_threshold = thresholds["context"]
         generate_threshold = thresholds["generate"]
 
@@ -813,7 +813,7 @@ class ReplyRouter:
         # Step 6: Check if message is context-dependent (needs current info)
         is_context_dependent = self._is_context_dependent(incoming)
         if is_context_dependent:
-            logger.debug("Message is context-dependent, skipping template matching")
+            logger.debug("Message is context-dependent, skipping quick_reply matching")
             # Context-dependent questions need clarification or current context
             if not thread or len(thread) < 2:
                 result = self._ask_for_clarification(incoming, thread)
@@ -849,17 +849,17 @@ class ReplyRouter:
             best_result = search_results[0]
             best_score = best_result["similarity"]
 
-            # High confidence -> template response with top-K variety
-            if best_score >= template_threshold:
+            # High confidence -> quick_reply response with top-K variety
+            if best_score >= quick_reply_threshold:
                 # Get all high-confidence matches for variety
                 high_confidence_matches = [
-                    r for r in search_results if r["similarity"] >= template_threshold
+                    r for r in search_results if r["similarity"] >= quick_reply_threshold
                 ]
-                template_start = time.perf_counter()
-                result = self._template_response(high_confidence_matches, contact, incoming)
-                latency_ms["template_select"] = (time.perf_counter() - template_start) * 1000
+                quick_reply_start = time.perf_counter()
+                result = self._quick_reply_response(high_confidence_matches, contact, incoming)
+                latency_ms["quick_reply_select"] = (time.perf_counter() - quick_reply_start) * 1000
 
-                # Handle fallback if no coherent templates found
+                # Handle fallback if no coherent quick_replies found
                 if result.get("type") == "fallback_to_generation":
                     logger.debug("Falling back to generation due to no coherent matches")
                     model_loaded = self.generator.is_loaded()
@@ -871,7 +871,7 @@ class ReplyRouter:
                         thread,
                         chat_id=chat_id,
                         fallback=True,
-                        reason="no_coherent_templates",
+                        reason="no_coherent_quick_replies",
                     )
                     latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
                     return record_and_return(
@@ -885,7 +885,7 @@ class ReplyRouter:
                     result,
                     similarity_score=best_score,
                     faiss_candidates=len(search_results),
-                    decision="template",
+                    decision="quick_reply",
                 )
 
             # Medium confidence -> LLM generation with context
@@ -960,13 +960,13 @@ class ReplyRouter:
             decision="generate",
         )
 
-    def _template_response(
+    def _quick_reply_response(
         self,
         matches: list[dict[str, Any]],
         contact: Contact | None,
         incoming: str = "",
     ) -> dict[str, Any]:
-        """Return a template response with variety from top-K matches.
+        """Return a quick_reply response with variety from top-K matches.
 
         Uses quality filtering and contact-aware selection:
         - Filter by coherence score (response appropriateness)
@@ -979,7 +979,7 @@ class ReplyRouter:
             incoming: The incoming message (for coherence scoring).
 
         Returns:
-            Routing result dict with template response.
+            Routing result dict with quick_reply response.
         """
         if not matches:
             # Shouldn't happen, but handle gracefully
@@ -1015,11 +1015,11 @@ class ReplyRouter:
         # Step 3: If no coherent/appropriate responses remain, fall back to generation
         if not scored_matches:
             logger.debug(
-                "No coherent template matches (original: %d), falling back to generation",
+                "No coherent quick_reply matches (original: %d), falling back to generation",
                 len(matches),
             )
             # Return None to signal caller to use generation instead
-            # But we're already in _template_response, so return a clarify response
+            # But we're already in _quick_reply_response, so return a clarify response
             # Actually, we should fall back to generation - let's return a special marker
             return {
                 "type": "fallback_to_generation",
@@ -1034,7 +1034,7 @@ class ReplyRouter:
         if len(scored_matches) == 1:
             match, coherence = scored_matches[0]
             return {
-                "type": "template",
+                "type": "quick_reply",
                 "response": match["response_text"],
                 "confidence": "high",
                 "similarity_score": match["similarity"],
@@ -1045,7 +1045,7 @@ class ReplyRouter:
             }
 
         # Multiple coherent matches: pick randomly from top responses for variety
-        top_matches = scored_matches[:MAX_TEMPLATE_RESPONSES]
+        top_matches = scored_matches[:MAX_QUICK_REPLIES]
         candidate_responses = [m["response_text"] for m, _ in top_matches]
 
         # Deduplicate similar responses (exact matches)
@@ -1064,7 +1064,7 @@ class ReplyRouter:
                 break
 
         return {
-            "type": "template",
+            "type": "quick_reply",
             "response": selected_response,
             "confidence": "high",
             "similarity_score": best_match["similarity"],  # Report best score
@@ -1097,7 +1097,7 @@ class ReplyRouter:
             chat_id: Chat ID for fetching conversation history from iMessage.
             cautious: If True, add hedge language to response.
             fallback: If True, this is a fallback when no patterns matched.
-            reason: Optional reason why generation was chosen over template.
+            reason: Optional reason why generation was chosen over quick_reply.
 
         Returns:
             Routing result dict with generated response.
@@ -1477,7 +1477,7 @@ def reset_reply_router() -> None:
 
 __all__ = [
     # Configuration
-    "TEMPLATE_THRESHOLD",
+    "QUICK_REPLY_THRESHOLD",
     "CONTEXT_THRESHOLD",
     "GENERATE_THRESHOLD",
     # Exceptions

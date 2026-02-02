@@ -218,8 +218,12 @@ class TestGateBEmbedding:
         mock_embedder = MagicMock()
         import numpy as np
 
-        # Return similar embeddings (high dot product)
-        mock_embedder.encode.return_value = [np.array([1.0, 0, 0])]
+        # Return identical embeddings for trigger and response (cosine sim = 1.0)
+        # encode() is called with [trigger, response] and returns both embeddings
+        mock_embedder.encode.return_value = np.array([
+            [1.0, 0, 0],  # trigger embedding
+            [1.0, 0, 0],  # response embedding (same = high similarity)
+        ])
 
         gate = ValidityGate(embedder=mock_embedder)
         result = gate.validate(exchange)
@@ -235,14 +239,15 @@ class TestGateBEmbedding:
             response_text="Goodbye",
         )
 
-        # Mock embedder with orthogonal embeddings
+        # Mock embedder with orthogonal embeddings (cosine sim = 0.0)
         mock_embedder = MagicMock()
         import numpy as np
 
-        mock_embedder.encode.side_effect = [
-            [np.array([1.0, 0, 0])],
-            [np.array([0, 1.0, 0])],
-        ]
+        # encode() is called with [trigger, response] and returns both embeddings
+        mock_embedder.encode.return_value = np.array([
+            [1.0, 0, 0],  # trigger embedding
+            [0, 1.0, 0],  # response embedding (orthogonal = low similarity)
+        ])
 
         gate = ValidityGate(embedder=mock_embedder)
         result = gate.validate(exchange)
@@ -265,9 +270,11 @@ class TestGateBEmbedding:
         import numpy as np
 
         # Return ~0.65 similarity (above accept threshold normally)
-        vec = np.array([0.8, 0.6, 0])
-        vec = vec / np.linalg.norm(vec)
-        mock_embedder.encode.return_value = [vec]
+        # Normalized vectors for trigger and response
+        trigger_vec = np.array([1.0, 0, 0])
+        response_vec = np.array([0.8, 0.6, 0])
+        response_vec = response_vec / np.linalg.norm(response_vec)
+        mock_embedder.encode.return_value = np.array([trigger_vec, response_vec])
 
         gate = ValidityGate(embedder=mock_embedder)
         result = gate.validate(exchange)
@@ -293,8 +300,12 @@ class TestGateCNLI:
         mock_embedder = MagicMock()
         import numpy as np
 
-        # Return ~0.55 similarity (borderline)
-        mock_embedder.encode.return_value = [np.array([0.74, 0.67, 0])]
+        # Return ~0.55 similarity (borderline) - trigger and response embeddings
+        # 0.74 * 1.0 + 0.67 * 0 = 0.74 cosine similarity (but need proper normalization)
+        trigger_vec = np.array([1.0, 0, 0])
+        response_vec = np.array([0.74, 0.67, 0])
+        response_vec = response_vec / np.linalg.norm(response_vec)  # normalize
+        mock_embedder.encode.return_value = np.array([trigger_vec, response_vec])
 
         gate = ValidityGate(embedder=mock_embedder, nli_model=None)
         result = gate.validate(exchange)
@@ -309,11 +320,14 @@ class TestGateCNLI:
             response_text="Yes, I am! What did you have in mind?",
         )
 
-        # Mock embedder for borderline
+        # Mock embedder for borderline similarity
         mock_embedder = MagicMock()
         import numpy as np
 
-        mock_embedder.encode.return_value = [np.array([0.74, 0.67, 0])]
+        trigger_vec = np.array([1.0, 0, 0])
+        response_vec = np.array([0.74, 0.67, 0])
+        response_vec = response_vec / np.linalg.norm(response_vec)  # normalize
+        mock_embedder.encode.return_value = np.array([trigger_vec, response_vec])
 
         # Mock NLI model
         mock_nli = MagicMock()
@@ -347,7 +361,11 @@ class TestValidityGateIntegration:
         mock_embedder = MagicMock()
         import numpy as np
 
-        mock_embedder.encode.return_value = [np.array([1.0, 0, 0])]
+        # encode() is called with [trigger, response] and returns both embeddings
+        mock_embedder.encode.return_value = np.array([
+            [1.0, 0, 0],  # trigger embedding
+            [1.0, 0, 0],  # response embedding (same = high similarity)
+        ])
 
         gate = ValidityGate(embedder=mock_embedder)
         result = gate.validate(exchange)

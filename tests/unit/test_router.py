@@ -4,7 +4,7 @@ Tests cover routing logic, similarity-based path selection, acknowledgment handl
 singleton pattern, and edge cases.
 
 The ReplyRouter routes messages through three paths based on similarity:
-- Template (similarity >= 0.90): Direct cached response
+- Quick Reply (similarity >= 0.90): Direct cached response
 - Generate (0.50-0.90): LLM generation with context
 - Clarify (< 0.50): Request more information
 """
@@ -25,14 +25,17 @@ from jarvis.message_classifier import (
 from jarvis.router import (
     CONTEXT_DEPENDENT_PATTERNS,
     GENERATE_THRESHOLD,
+    QUICK_REPLY_THRESHOLD,
     SIMPLE_ACKNOWLEDGMENTS,
-    TEMPLATE_THRESHOLD,
     ReplyRouter,
     RouterError,
     RouteResult,
     get_reply_router,
     reset_reply_router,
 )
+
+# Alias for backwards compatibility with tests
+TEMPLATE_THRESHOLD = QUICK_REPLY_THRESHOLD
 
 # Marker for tests requiring sentence_transformers
 
@@ -236,7 +239,7 @@ class TestReplyRouterInit:
 
 
 class TestRouteTemplatePath:
-    """Tests for routing to template path (high similarity >= 0.90)."""
+    """Tests for routing to quick_reply path (high similarity >= 0.95)."""
 
     def test_template_path_with_high_similarity(
         self,
@@ -244,20 +247,20 @@ class TestRouteTemplatePath:
         mock_index_searcher: MagicMock,
         mock_db: MagicMock,
     ) -> None:
-        """Test that high similarity scores route to template path."""
+        """Test that high similarity scores route to quick_reply path."""
         # Configure mock to return high similarity result
         mock_index_searcher.search_with_pairs.return_value = [
             {
                 "trigger_text": "want to get lunch?",
                 "response_text": "Sounds good! What time?",
-                "similarity": 0.95,
+                "similarity": 0.96,  # Above QUICK_REPLY_THRESHOLD (0.95)
                 "cluster_name": "lunch_plans",
             }
         ]
 
         result = router.route("want to grab lunch?")
 
-        assert result["type"] == "template"
+        assert result["type"] == "quick_reply"
         assert result["confidence"] == "high"
         assert result["similarity_score"] >= TEMPLATE_THRESHOLD
 
@@ -266,25 +269,25 @@ class TestRouteTemplatePath:
         router: ReplyRouter,
         mock_index_searcher: MagicMock,
     ) -> None:
-        """Test template selection from multiple high-confidence matches."""
+        """Test quick_reply selection from multiple high-confidence matches."""
         mock_index_searcher.search_with_pairs.return_value = [
             {
                 "trigger_text": "want to get lunch?",
                 "response_text": "Sure! What time?",
-                "similarity": 0.95,
+                "similarity": 0.96,  # Above QUICK_REPLY_THRESHOLD (0.95)
                 "cluster_name": "lunch",
             },
             {
                 "trigger_text": "want to grab food?",
                 "response_text": "Yes! Where?",
-                "similarity": 0.92,
+                "similarity": 0.96,
                 "cluster_name": "lunch",
             },
         ]
 
         result = router.route("want to grab lunch?")
 
-        assert result["type"] == "template"
+        assert result["type"] == "quick_reply"
         # Response should be one of the matched responses
         assert result["response"] in ["Sure! What time?", "Yes! Where?"]
 
@@ -1017,56 +1020,56 @@ class TestAskForClarification:
 # =============================================================================
 
 
-class TestTemplateResponse:
-    """Tests for _template_response method."""
+class TestQuickReplyResponse:
+    """Tests for _quick_reply_response method."""
 
-    def test_template_response_single_match(
+    def test_quick_reply_response_single_match(
         self,
         router: ReplyRouter,
     ) -> None:
-        """Test template response with single match."""
+        """Test quick_reply response with single match."""
         matches = [
             {
                 "trigger_text": "want lunch?",
                 "response_text": "Sure! When?",
-                "similarity": 0.95,
+                "similarity": 0.96,
                 "cluster_name": "lunch",
             }
         ]
 
-        result = router._template_response(matches, None, "want lunch?")
+        result = router._quick_reply_response(matches, None, "want lunch?")
 
         # May fall back to generation if coherence check fails
-        assert result["type"] in ["template", "fallback_to_generation"]
+        assert result["type"] in ["quick_reply", "fallback_to_generation"]
 
-    def test_template_response_no_matches_clarifies(
+    def test_quick_reply_response_no_matches_clarifies(
         self,
         router: ReplyRouter,
     ) -> None:
-        """Test template response with no matches returns clarify."""
-        result = router._template_response([], None, "test")
+        """Test quick_reply response with no matches returns clarify."""
+        result = router._quick_reply_response([], None, "test")
 
         assert result["type"] == "clarify"
 
-    def test_template_response_with_contact_style(
+    def test_quick_reply_response_with_contact_style(
         self,
         router: ReplyRouter,
         sample_contact: Contact,
     ) -> None:
-        """Test template response considers contact style."""
+        """Test quick_reply response considers contact style."""
         sample_contact.relationship = "boss"
         matches = [
             {
                 "trigger_text": "update?",
                 "response_text": "I'll have it ready by EOD.",
-                "similarity": 0.95,
+                "similarity": 0.96,
             }
         ]
 
-        result = router._template_response(matches, sample_contact, "status update?")
+        result = router._quick_reply_response(matches, sample_contact, "status update?")
 
         # Should filter for professional responses when contact is boss
-        if result["type"] == "template":
+        if result["type"] == "quick_reply":
             assert result["contact_style"] == sample_contact.style_notes
 
 
@@ -1250,7 +1253,7 @@ class TestThresholdConfiguration:
         """Test _get_thresholds returns default values."""
         with patch("jarvis.router.get_config") as mock_config:
             mock_routing = MagicMock()
-            mock_routing.template_threshold = 0.90
+            mock_routing.quick_reply_threshold = 0.95
             mock_routing.context_threshold = 0.70
             mock_routing.generate_threshold = 0.50
             mock_routing.ab_test_group = None
@@ -1259,7 +1262,7 @@ class TestThresholdConfiguration:
 
             thresholds = router._get_thresholds()
 
-            assert thresholds["template"] == 0.90
+            assert thresholds["quick_reply"] == 0.95
             assert thresholds["context"] == 0.70
             assert thresholds["generate"] == 0.50
 
@@ -1270,13 +1273,13 @@ class TestThresholdConfiguration:
         """Test _get_thresholds uses A/B test overrides when configured."""
         with patch("jarvis.router.get_config") as mock_config:
             mock_routing = MagicMock()
-            mock_routing.template_threshold = 0.90
+            mock_routing.quick_reply_threshold = 0.95
             mock_routing.context_threshold = 0.70
             mock_routing.generate_threshold = 0.50
             mock_routing.ab_test_group = "test_group"
             mock_routing.ab_test_thresholds = {
                 "test_group": {
-                    "template": 0.85,
+                    "quick_reply": 0.90,
                     "context": 0.60,
                     "generate": 0.40,
                 }
@@ -1285,7 +1288,7 @@ class TestThresholdConfiguration:
 
             thresholds = router._get_thresholds()
 
-            assert thresholds["template"] == 0.85
+            assert thresholds["quick_reply"] == 0.90
             assert thresholds["context"] == 0.60
             assert thresholds["generate"] == 0.40
 
@@ -1665,13 +1668,13 @@ class TestNormalizeRoutingDecision:
         result = router._normalize_routing_decision("generated")
         assert result == "generate"
 
-    def test_normalize_template_unchanged(
+    def test_normalize_quick_reply_unchanged(
         self,
         router: ReplyRouter,
     ) -> None:
-        """Test 'template' remains unchanged."""
-        result = router._normalize_routing_decision("template")
-        assert result == "template"
+        """Test 'quick_reply' remains unchanged."""
+        result = router._normalize_routing_decision("quick_reply")
+        assert result == "quick_reply"
 
     def test_normalize_other_to_clarify(
         self,
@@ -1681,6 +1684,9 @@ class TestNormalizeRoutingDecision:
         result = router._normalize_routing_decision("unknown")
         assert result == "clarify"
         result = router._normalize_routing_decision("acknowledgment")
+        assert result == "clarify"
+        # 'template' is no longer a valid type
+        result = router._normalize_routing_decision("template")
         assert result == "clarify"
 
 

@@ -374,7 +374,11 @@ class TriggerIndexSearcher:
                 final_score = score * decay
 
             embedding = embeddings_by_pair.get(pair.id)
-            cluster = clusters_by_id.get(embedding.cluster_id) if embedding and embedding.cluster_id else None
+            cluster = (
+                clusters_by_id.get(embedding.cluster_id)
+                if embedding and embedding.cluster_id
+                else None
+            )
 
             results.append(
                 {
@@ -941,8 +945,7 @@ class IncrementalTriggerIndex:
             # Batch fetch pairs from database (single query instead of N queries)
             pairs_by_id = self.jarvis_db.get_pairs_by_ids(active_pair_ids)
             active_pairs = [
-                pair for pair in pairs_by_id.values()
-                if (pair.quality_score or 0) >= min_quality
+                pair for pair in pairs_by_id.values() if (pair.quality_score or 0) >= min_quality
             ]
 
             if not active_pairs:
