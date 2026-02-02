@@ -3,18 +3,11 @@
 Common functions used across multiple CLI commands.
 """
 
+import importlib.util
 import logging
 import sys
 from datetime import UTC, datetime
 from typing import NoReturn
-
-# Optional argcomplete support for shell completion
-try:
-    import argcomplete
-
-    ARGCOMPLETE_AVAILABLE = True
-except ImportError:
-    ARGCOMPLETE_AVAILABLE = False
 
 from rich.console import Console
 from rich.text import Text
@@ -29,6 +22,9 @@ from jarvis.errors import (
     iMessageError,
 )
 from jarvis.system import _check_imessage_access
+
+# Optional argcomplete support for shell completion
+ARGCOMPLETE_AVAILABLE = importlib.util.find_spec("argcomplete") is not None
 
 console = Console()
 logger = logging.getLogger(__name__)

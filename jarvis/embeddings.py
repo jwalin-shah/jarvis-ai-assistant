@@ -123,8 +123,12 @@ class ConversationContext:
 
 
 @dataclass
-class RelationshipProfile:
-    """Aggregated profile of communication patterns with a contact."""
+class EmbeddingStoreProfile:
+    """Aggregated profile of communication patterns with a contact.
+
+    Note: This class was renamed from RelationshipProfile to avoid collision
+    with jarvis.relationships.RelationshipProfile (which is the primary profile class).
+    """
 
     contact_id: str
     display_name: str | None = None
@@ -136,6 +140,10 @@ class RelationshipProfile:
     avg_message_length: float = 0.0
     response_patterns: dict[str, Any] = field(default_factory=dict)
     last_interaction: datetime | None = None
+
+
+# Backwards compatibility alias
+RelationshipProfile = EmbeddingStoreProfile
 
 
 # =============================================================================
@@ -612,7 +620,7 @@ class EmbeddingStore:
             return max(topic_scores, key=lambda t: topic_scores[t])
         return "general"
 
-    def get_relationship_profile(self, contact_id: str) -> RelationshipProfile:
+    def get_relationship_profile(self, contact_id: str) -> EmbeddingStoreProfile:
         """Get or compute a relationship profile for a contact.
 
         Args:
@@ -1001,7 +1009,8 @@ __all__ = [
     # Data classes
     "SimilarMessage",
     "ConversationContext",
-    "RelationshipProfile",
+    "EmbeddingStoreProfile",
+    "RelationshipProfile",  # Backwards compatibility alias
     # Store
     "EmbeddingStore",
     "get_embedding_store",

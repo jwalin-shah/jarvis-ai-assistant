@@ -1,0 +1,7 @@
+[
+  {"size": 6000, "C": 10.0, "gamma": "scale", "cv_mean": 0.859, "cv_std": 0.011},
+  {"size": 6892, "C": 10.0, "gamma": "scale", "cv_mean": 0.845, "cv_std": 0.010},
+  {"size": 5000, "C": 5.0, "gamma": "scale", "cv_mean": 0.825, "cv_std": 0.012},
+  {"size": 4000, "C": 5.0, "gamma": "scale", "cv_mean": 0.784, "cv_std": 0.012},
+  {"size": 3000, "C": 5.0, "gamma": "scale", "cv_mean": 0.761, "cv_std": 0.025}
+]

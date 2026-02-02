@@ -36,6 +36,9 @@ dependencies = [
     "python-dateutil>=2.9.0",
     "faiss-cpu>=1.9.0",
     "pyarrow>=18.0.0",
+    "umap-learn>=0.5.11",
+    "datasets>=4.5.0",
+    "huggingface-hub>=1.3.5",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +61,9 @@ benchmarks = [
     "tqdm>=4.67.0",
     "hdbscan>=0.8.38",
 ]
+ml = [
+    "torch>=2.10.0",
+]
 
 [project.scripts]
 jarvis = "jarvis._cli_main:run"
@@ -73,7 +79,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["contracts", "integrations", "core", "models", "benchmarks", "jarvis", "api", "mcp_server"]
+packages = ["contracts", "integrations", "core", "models", "benchmarks", "jarvis", "api"]
 
 [tool.ruff]
 line-length = 100
@@ -81,6 +87,13 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
+
+[tool.ruff.lint.per-file-ignores]
+# ML scripts use standard conventions like X, C, X_train, BATCH_SIZE
+"experiments/**/*.py" = ["N803", "N806"]
+"scripts/train_*.py" = ["N803", "N806"]
+"scripts/eval_*.py" = ["N806"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -92,12 +105,12 @@ warn_unused_ignores = true
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov=mcp_server --cov-report=term-missing"
+addopts = "-v --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing"
 timeout = 30
 timeout_method = "thread"
 
 [tool.coverage.run]
-source = ["jarvis", "api", "models", "core", "integrations", "contracts", "benchmarks", "mcp_server"]
+source = ["jarvis", "api", "models", "core", "integrations", "contracts", "benchmarks"]
 omit = ["tests/*", "*/test_*.py"]
 
 [tool.coverage.report]

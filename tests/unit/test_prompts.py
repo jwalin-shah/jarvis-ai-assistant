@@ -20,12 +20,12 @@ from jarvis.prompts import (
     PROMPT_LAST_UPDATED,
     PROMPT_VERSION,
     REPLY_EXAMPLES,
-    REPLY_TEMPLATE,
+    REPLY_PROMPT,
     SEARCH_ANSWER_EXAMPLES,
-    SEARCH_ANSWER_TEMPLATE,
+    SEARCH_PROMPT,
     SUMMARIZATION_EXAMPLES,
     SUMMARY_EXAMPLES,
-    SUMMARY_TEMPLATE,
+    SUMMARY_PROMPT,
     TEXT_ABBREVIATIONS,
     FewShotExample,
     PromptMetadata,
@@ -91,36 +91,36 @@ class TestPromptTemplates:
 
     def test_reply_template_defined(self):
         """Verify reply template is properly defined."""
-        assert REPLY_TEMPLATE.name == "reply_generation"
-        assert "{context}" in REPLY_TEMPLATE.template
-        assert "{last_message}" in REPLY_TEMPLATE.template
-        assert "{tone}" in REPLY_TEMPLATE.template
-        assert "{examples}" in REPLY_TEMPLATE.template
+        assert REPLY_PROMPT.name == "reply_generation"
+        assert "{context}" in REPLY_PROMPT.template
+        assert "{last_message}" in REPLY_PROMPT.template
+        assert "{tone}" in REPLY_PROMPT.template
+        assert "{examples}" in REPLY_PROMPT.template
 
     def test_summary_template_defined(self):
         """Verify summary template is properly defined."""
-        assert SUMMARY_TEMPLATE.name == "conversation_summary"
-        assert "{context}" in SUMMARY_TEMPLATE.template
-        assert "{examples}" in SUMMARY_TEMPLATE.template
+        assert SUMMARY_PROMPT.name == "conversation_summary"
+        assert "{context}" in SUMMARY_PROMPT.template
+        assert "{examples}" in SUMMARY_PROMPT.template
 
     def test_search_answer_template_defined(self):
         """Verify search answer template is properly defined."""
-        assert SEARCH_ANSWER_TEMPLATE.name == "search_answer"
-        assert "{context}" in SEARCH_ANSWER_TEMPLATE.template
-        assert "{question}" in SEARCH_ANSWER_TEMPLATE.template
-        assert "{examples}" in SEARCH_ANSWER_TEMPLATE.template
+        assert SEARCH_PROMPT.name == "search_answer"
+        assert "{context}" in SEARCH_PROMPT.template
+        assert "{question}" in SEARCH_PROMPT.template
+        assert "{examples}" in SEARCH_PROMPT.template
 
     def test_templates_have_system_messages(self):
         """Verify all templates have system messages."""
-        assert REPLY_TEMPLATE.system_message
-        assert SUMMARY_TEMPLATE.system_message
-        assert SEARCH_ANSWER_TEMPLATE.system_message
+        assert REPLY_PROMPT.system_message
+        assert SUMMARY_PROMPT.system_message
+        assert SEARCH_PROMPT.system_message
 
     def test_templates_have_max_output_tokens(self):
         """Verify all templates have max output tokens defined."""
-        assert REPLY_TEMPLATE.max_output_tokens > 0
-        assert SUMMARY_TEMPLATE.max_output_tokens > 0
-        assert SEARCH_ANSWER_TEMPLATE.max_output_tokens > 0
+        assert REPLY_PROMPT.max_output_tokens > 0
+        assert SUMMARY_PROMPT.max_output_tokens > 0
+        assert SEARCH_PROMPT.max_output_tokens > 0
 
 
 class TestToneDetection:
@@ -724,7 +724,7 @@ class TestPromptRegistry:
         """Test retrieving template by name."""
         template = registry.get_template("reply_generation")
         assert template.name == "reply_generation"
-        assert template is REPLY_TEMPLATE
+        assert template is REPLY_PROMPT
 
     def test_get_template_unknown_raises(self, registry):
         """Test that unknown template raises KeyError."""

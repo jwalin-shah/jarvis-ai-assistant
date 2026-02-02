@@ -91,7 +91,12 @@ class TestIsAcknowledgmentOnly:
     """Tests for acknowledgment detection."""
 
     def test_positive_cases(self) -> None:
-        """Test recognized acknowledgments."""
+        """Test recognized acknowledgments.
+
+        Note: Emotional reactions (lol, haha, cool, nice, great, awesome) are
+        NOT acknowledgments. They express emotion and need context-aware LLM
+        generation, not canned responses.
+        """
         assert is_acknowledgment_only("ok")
         assert is_acknowledgment_only("OK")
         assert is_acknowledgment_only("okay")
@@ -99,8 +104,8 @@ class TestIsAcknowledgmentOnly:
         assert is_acknowledgment_only("thanks")
         assert is_acknowledgment_only("thank you")
         assert is_acknowledgment_only("sure")
-        assert is_acknowledgment_only("lol")
-        assert is_acknowledgment_only("haha")
+        # Note: lol and haha are NOT acknowledgments - they're emotional reactions
+        # that should trigger LLM generation for context-appropriate responses
         assert is_acknowledgment_only("sounds good")
         assert is_acknowledgment_only("got it")
         assert is_acknowledgment_only("omw")

@@ -533,15 +533,19 @@ class TestTriggerIndexSearcher:
             is_active=True,
         )
         mock_jarvis_db.get_active_index.return_value = mock_active_index
-        mock_jarvis_db.get_pair_by_faiss_id.side_effect = (
-            lambda fid, _: sample_pairs[fid] if fid < len(sample_pairs) else None
-        )
-        mock_jarvis_db.get_embedding_by_pair.return_value = PairEmbedding(
-            pair_id=1, faiss_id=0, cluster_id=1, index_version="test-version"
-        )
-        mock_jarvis_db.get_cluster.return_value = Cluster(
-            id=1, name="DINNER", description="Dinner plans"
-        )
+        # Mock batch methods used by search_with_pairs
+        mock_jarvis_db.get_pairs_by_faiss_ids.return_value = {
+            i: sample_pairs[i] for i in range(len(sample_pairs))
+        }
+        mock_jarvis_db.get_embeddings_by_pair_ids.return_value = {
+            p.id: PairEmbedding(
+                pair_id=p.id, faiss_id=i, cluster_id=1, index_version="test-version"
+            )
+            for i, p in enumerate(sample_pairs)
+        }
+        mock_jarvis_db.get_clusters_batch.return_value = {
+            1: Cluster(id=1, name="DINNER", description="Dinner plans")
+        }
 
         (temp_jarvis_dir / "test.faiss").write_bytes(b"fake")
 
@@ -611,10 +615,13 @@ class TestTriggerIndexSearcher:
             is_active=True,
         )
         mock_jarvis_db.get_active_index.return_value = mock_active_index
-        mock_jarvis_db.get_pair_by_faiss_id.side_effect = (
-            lambda fid, _: [old_pair, new_pair][fid] if fid < 2 else None
-        )
-        mock_jarvis_db.get_embedding_by_pair.return_value = None
+        # Mock batch methods used by search_with_pairs
+        mock_jarvis_db.get_pairs_by_faiss_ids.return_value = {
+            0: old_pair,
+            1: new_pair,
+        }
+        mock_jarvis_db.get_embeddings_by_pair_ids.return_value = {}
+        mock_jarvis_db.get_clusters_batch.return_value = {}
 
         (temp_jarvis_dir / "test.faiss").write_bytes(b"fake")
 
@@ -1277,14 +1284,11 @@ class TestIncrementalTriggerIndex:
         """Test compact rebuilds index without deleted pairs."""
         mock_get_embedder.return_value = mock_embedder
 
-        # Mock get_pair to return pairs by ID
-        def mock_get_pair(pair_id: int) -> Pair | None:
-            for p in sample_pairs:
-                if p.id == pair_id:
-                    return p
-            return None
+        # Mock batch get_pairs_by_ids used by compact
+        def mock_get_pairs_by_ids(pair_ids: list[int]) -> dict[int, Pair]:
+            return {p.id: p for p in sample_pairs if p.id in pair_ids}
 
-        mock_jarvis_db.get_pair.side_effect = mock_get_pair
+        mock_jarvis_db.get_pairs_by_ids.side_effect = mock_get_pairs_by_ids
 
         with patch("jarvis.index.INDEXES_DIR", incremental_config.indexes_dir):
             index = IncrementalTriggerIndex(mock_jarvis_db, incremental_config)

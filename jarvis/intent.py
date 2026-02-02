@@ -539,16 +539,14 @@ class IntentClassifier:
 
         try:
             query_embedder = embedder or self._get_embedder()
+            # Embedding is already normalized when normalize=True
             query_embedding = query_embedder.encode([query], normalize=True)[0]
-
-            # Embedding is already normalized, but compute norm for safety
-            query_norm = query_embedding / np.linalg.norm(query_embedding)
 
             # Compute similarity to each intent centroid
             similarities: dict[IntentType, float] = {}
             for intent_type, centroid in self._intent_centroids.items():
                 # Cosine similarity with normalized vectors is just dot product
-                similarity = float(np.dot(query_norm, centroid))
+                similarity = float(np.dot(query_embedding, centroid))
                 similarities[intent_type] = similarity
 
             # Find best matching intent

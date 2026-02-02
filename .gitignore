@@ -88,6 +88,12 @@ token.json
 *.bin
 models/cache/
 
+# Embeddings cache (large, regeneratable)
+*.npz
+
+# Large data files (personal, regeneratable)
+semantic_conversations.jsonl
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -103,3 +109,14 @@ temp/
 # Training data (personal, large, regeneratable)
 training_pairs.jsonl
 response_templates.json
+
+# Intermediate labeling data
+data/*_original*.jsonl
+data/*_clean*.jsonl
+data/*_sample*.jsonl
+data/*_supplement*.jsonl
+data/*_remaining*.jsonl
+data/*_review*.jsonl
+data/*_manual*.jsonl
+data/*.md
+!data/README.md

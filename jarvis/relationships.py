@@ -14,7 +14,6 @@ Profile storage: ~/.jarvis/relationships/{contact_hash}.json
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
@@ -435,7 +434,9 @@ def _hash_contact_id(contact_id: str) -> str:
     Returns:
         SHA-256 hash prefix (first 16 chars) for filename safety
     """
-    return hashlib.sha256(contact_id.encode("utf-8")).hexdigest()[:16]
+    from jarvis.contact_utils import hash_contact_id
+
+    return hash_contact_id(contact_id)
 
 
 def _normalize_text(text: str) -> str:
@@ -784,22 +785,30 @@ def _extract_common_phrases(messages: list[Any], min_count: int = 3) -> list[str
         normalized = _normalize_text(msg.text)
         words = _tokenize(normalized)
 
-        # Extract 2-word phrases
+        # Extract 2-word phrases (check stopwords directly, don't re-split)
         for i in range(len(words) - 1):
-            phrase = f"{words[i]} {words[i + 1]}"
+            w1, w2 = words[i], words[i + 1]
+            # Skip if both words are stopwords
+            if w1 in STOPWORDS and w2 in STOPWORDS:
+                continue
+            phrase = f"{w1} {w2}"
             if len(phrase) >= 5:  # Skip very short phrases
-                if not all(w in STOPWORDS for w in phrase.split()):
-                    phrase_counter[phrase] += 1
+                phrase_counter[phrase] += 1
 
         # Extract 3-word phrases
         for i in range(len(words) - 2):
-            phrase = f"{words[i]} {words[i + 1]} {words[i + 2]}"
-            if not all(w in STOPWORDS for w in phrase.split()):
-                phrase_counter[phrase] += 1
+            w1, w2, w3 = words[i], words[i + 1], words[i + 2]
+            # Skip if all words are stopwords
+            if w1 in STOPWORDS and w2 in STOPWORDS and w3 in STOPWORDS:
+                continue
+            phrase_counter[f"{w1} {w2} {w3}"] += 1
 
-    # Filter and return top phrases
-    filtered = [(p, c) for p, c in phrase_counter.items() if c >= min_count]
-    return [p for p, _ in sorted(filtered, key=lambda x: x[1], reverse=True)[:5]]
+    # Filter and return top phrases using heapq for efficiency
+    import heapq
+
+    filtered = [(c, p) for p, c in phrase_counter.items() if c >= min_count]
+    top_5 = heapq.nlargest(5, filtered)
+    return [p for _, p in top_5]
 
 
 def _build_keyword_topic_distribution(messages: list[Any]) -> TopicDistribution:
