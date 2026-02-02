@@ -1,6 +1,22 @@
 # JARVIS Architecture
 
-Detailed architecture documentation moved from CLAUDE.md to reduce context size.
+Technical architecture and implementation status for the JARVIS AI assistant.
+
+**Related Documentation:**
+- [DESIGN.md](./DESIGN.md) - **Comprehensive design document** with rationale, decisions, and lessons learned (recommended for understanding the "why")
+- [ARCHITECTURE_V2.md](./ARCHITECTURE_V2.md) - Direct SQLite + Unix Socket architecture for faster desktop performance
+- [CLASSIFIER_SYSTEM.md](./CLASSIFIER_SYSTEM.md) - Deep dive into the hybrid classifier system
+
+## Quick Overview
+
+JARVIS is a **privacy-first AI assistant** for iMessage on Apple Silicon. Key innovations:
+
+| Feature | Approach | Result |
+|---------|----------|--------|
+| Classification | 3-layer hybrid (structural → centroid → SVM) | 82% F1 |
+| Response Generation | Retrieval-augmented generation (RAG) | Personalized |
+| Performance | Unix sockets + direct SQLite (V2) | 30-50x faster |
+| Privacy | All local, MLX on Apple Silicon | No cloud |
 
 ## Implementation Status
 
@@ -32,6 +48,8 @@ Detailed architecture documentation moved from CLAUDE.md to reduce context size.
 | Trigger Classifier | COMPLETE | `jarvis/trigger_classifier.py` hybrid structural+SVM (82.0% F1) |
 | Multi-Option Generation | COMPLETE | `jarvis/multi_option.py` for AGREE/DECLINE/DEFER |
 | Typed Retrieval | COMPLETE | `jarvis/retrieval.py` for DA-filtered FAISS |
+| Unix Socket Server | COMPLETE | `jarvis/socket_server.py` for desktop IPC (V2) |
+| File Watcher | COMPLETE | `jarvis/watcher.py` for real-time notifications (V2) |
 
 ## Contract-Based Design
 
@@ -50,13 +68,15 @@ Python Protocols in `contracts/` enable parallel development:
 
 | Directory | Purpose |
 |-----------|---------|
-| `jarvis/` | CLI, config, errors, metrics, export, prompts, intent classification |
-| `api/` | FastAPI REST layer for Tauri frontend |
+| `jarvis/` | CLI, config, errors, metrics, export, prompts, intent classification, socket server, watcher |
+| `api/` | FastAPI REST layer for CLI and web clients |
 | `benchmarks/` | Memory, hallucination, latency benchmarks |
 | `core/` | Memory controller, health monitoring |
 | `models/` | MLX model inference, registry, templates |
 | `integrations/imessage/` | iMessage reader with filters |
-| `desktop/` | Tauri desktop app (Svelte frontend) |
+| `desktop/` | Tauri desktop app (Svelte frontend) with direct SQLite + socket |
+| `desktop/src/lib/db/` | Direct SQLite access layer (V2) |
+| `desktop/src/lib/socket/` | Unix socket client (V2) |
 | `tests/` | Unit and integration tests |
 
 ## Key Patterns

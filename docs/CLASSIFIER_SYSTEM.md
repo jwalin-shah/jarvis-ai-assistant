@@ -174,8 +174,8 @@ Instead of equal 500/class sampling (which over-predicted minority classes), use
 | Class | F1 Score |
 |-------|----------|
 | QUESTION | 89.6% |
-| OTHER | 87.2% |
-| REACTION | 83.3% |
+| STATEMENT | 87.2% |
+| ACKNOWLEDGE | 83.3% |
 | DECLINE | 80.0% |
 | AGREE | 79.2% |
 | DEFER | 71.8% |
@@ -183,8 +183,8 @@ Instead of equal 500/class sampling (which over-predicted minority classes), use
 Training: `scripts/train_response_classifier.py`
 
 ### Known Issues
-- DEFER is weakest class (71.8% F1) - often confused with OTHER
-- AGREE has precision issues (72.4%) - some OTHER misclassified as AGREE
+- DEFER is weakest class (71.8% F1) - often confused with STATEMENT
+- AGREE has precision issues (72.4%) - some STATEMENT misclassified as AGREE
 
 ## Usage
 
