@@ -1,36 +1,54 @@
 # Embedding Improvements
 
-## 1D. Faster Embedding Models (HIGH PRIORITY)
+## 1D. Faster Embedding Models ✅ IMPLEMENTED
+
+**Status**: Complete. Multi-model support added Feb 2026.
 
 **Goal**: Reduce embedding latency from ~100-150ms to ~50-70ms.
 
-**Current Bottleneck**:
-```
-├─ Embed query text     → ~100-150ms  ← THE BOTTLENECK
-├─ FAISS search         → ~5-10ms
-├─ Classification       → ~15-30ms
-└─ Generation           → ~200-500ms
-```
-
 ### Available Models
+
+Configure via `~/.jarvis/config.json`:
+```json
+{"embedding": {"model_name": "gte-tiny"}}
+```
 
 | Model | Layers | MTEB | Expected Latency | Quality Loss |
 |-------|--------|------|------------------|--------------|
-| `bge-small` | 12 | ~62 | 100-150ms | **Baseline** |
+| `bge-small` | 12 | ~62 | 100-150ms | **Default** |
 | `gte-tiny` | 6 | ~57 | ~50-70ms | ~8% |
 | `minilm-l6` | 6 | ~56 | ~50-70ms | ~10% |
 | `bge-micro` | 3 | ~54 | ~30-40ms | ~13% |
 
 All output 384 dimensions - index structure compatible.
 
-### Implementation
+### What Was Implemented
 
-1. Add embedding model versioning to config
-2. Namespace artifacts by model: `~/.jarvis/embeddings/{model_name}/`
-3. Retrain classifiers with new embeddings
-4. Compare F1 scores and latency
+1. ✅ Model registry in `jarvis/embedding_adapter.py`
+2. ✅ Per-model artifact storage: `~/.jarvis/embeddings/{model_name}/`
+3. ✅ Per-model FAISS indexes: `~/.jarvis/indexes/{model_name}/`
+4. ✅ Config-driven model selection
+5. ✅ MLX service supports all models (downloads on first use)
+6. ✅ Removed CPU fallback (MLX-only for simplicity)
 
-**Effort**: Low-Medium (1-2 days + training)
+### Switching Models
+
+```bash
+# 1. Update config
+vim ~/.jarvis/config.json  # Set model_name
+
+# 2. Restart MLX service
+pkill -f "mlx-embed-service"
+cd ~/.jarvis/mlx-embed-service && uv run python server.py &
+
+# 3. Retrain classifiers
+uv run python -m scripts.train_trigger_classifier --save-best
+uv run python -m scripts.train_response_classifier --save-best
+
+# 4. Rebuild FAISS index
+uv run python -m jarvis.index build
+```
+
 **Recommendation**: Try `gte-tiny` first - best speed/quality balance.
 
 ---

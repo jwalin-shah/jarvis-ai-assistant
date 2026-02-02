@@ -6,7 +6,7 @@
 
 | Component | Implementation | Performance |
 |-----------|----------------|-------------|
-| **Embeddings** | bge-small-en-v1.5 (384-dim) | **100-150ms** ← bottleneck |
+| **Embeddings** | Multi-model (bge-small/gte-tiny/minilm-l6/bge-micro) | 50-150ms (model-dependent) |
 | **Generation** | LFM2.5-1.2B-4bit | 600-3000ms E2E |
 | **Classifiers** | 3-layer hybrid | ~82% F1, <50ms |
 | **Retrieval** | FAISS flat/IVF | 5-50ms search |
@@ -16,13 +16,13 @@
 
 ### Quick Wins (1-2 weeks)
 
-| Improvement | Impact | Effort | Risk |
-|-------------|--------|--------|------|
-| **Faster Embedding Models** | **High** | **Low** | Medium |
-| Temporal Weighting | Medium | Low | Low |
-| Multi-Option Diversity | Medium | Low | Low |
-| Hybrid Retrieval | High | Low | Low |
-| Longer Context | Medium | Low | Low |
+| Improvement | Impact | Effort | Risk | Status |
+|-------------|--------|--------|------|--------|
+| **Faster Embedding Models** | **High** | **Low** | Medium | ✅ Done |
+| Temporal Weighting | Medium | Low | Low | |
+| Multi-Option Diversity | Medium | Low | Low | |
+| Hybrid Retrieval | High | Low | Low | |
+| Longer Context | Medium | Low | Low | |
 
 ### Medium-Term (2-4 weeks)
 

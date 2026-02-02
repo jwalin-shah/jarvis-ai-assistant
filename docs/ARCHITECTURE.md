@@ -6,6 +6,8 @@ Technical architecture and implementation status for the JARVIS AI assistant.
 - [DESIGN.md](./DESIGN.md) - **Comprehensive design document** with rationale, decisions, and lessons learned (recommended for understanding the "why")
 - [ARCHITECTURE_V2.md](./ARCHITECTURE_V2.md) - Direct SQLite + Unix Socket architecture for faster desktop performance
 - [CLASSIFIER_SYSTEM.md](./CLASSIFIER_SYSTEM.md) - Deep dive into the hybrid classifier system
+- [design/EMBEDDINGS.md](./design/EMBEDDINGS.md) - Embedding models, multi-model support, FAISS
+- [design/TEXT_NORMALIZATION.md](./design/TEXT_NORMALIZATION.md) - Text normalization for consistent embeddings
 
 ## Quick Overview
 
@@ -40,7 +42,7 @@ JARVIS is a **privacy-first AI assistant** for iMessage on Apple Silicon. Key in
 | Export System | COMPLETE | `jarvis/export.py` for JSON/CSV/TXT export |
 | Error Handling | COMPLETE | `jarvis/errors.py` unified exception hierarchy |
 | Prompts Registry | COMPLETE | `jarvis/prompts.py` centralized prompt templates |
-| MLX Embeddings | COMPLETE | `models/embeddings.py` for Apple Silicon |
+| MLX Embeddings | COMPLETE | `models/embeddings.py` + `jarvis/embedding_adapter.py` multi-model support |
 | Reply Router | COMPLETE | `jarvis/router.py` with template/generate/clarify routing |
 | FAISS Index | COMPLETE | `jarvis/index.py` for trigger similarity search |
 | JARVIS Database | COMPLETE | `jarvis/db.py` with contacts, pairs, clusters |
@@ -110,15 +112,17 @@ Configurable via `~/.jarvis/config.json`:
 - 3-layer hybrid: structural patterns → centroid verification → SVM
 - **81.9% macro F1** [95% CI: 78.4% - 84.9%] on held-out test set
 - 6 labels: AGREE, DECLINE, DEFER, OTHER, QUESTION, REACTION
-- Model: `~/.jarvis/response_classifier_model/`
+- Model: `~/.jarvis/embeddings/{model_name}/response_classifier_model/`
 - Training: `scripts/train_response_classifier.py`
 
 **Trigger Classifier** (`jarvis/trigger_classifier.py`):
 - Hybrid: structural patterns → SVM with per-class thresholds
 - **82.0% macro F1** [95% CI: 79.3% - 84.4%] on held-out test set
 - 5 labels: COMMITMENT, QUESTION, REACTION, SOCIAL, STATEMENT
-- Model: `~/.jarvis/trigger_classifier_model/`
+- Model: `~/.jarvis/embeddings/{model_name}/trigger_classifier_model/`
 - Training: `scripts/train_trigger_classifier.py`
+
+**Note:** Classifier models are stored per embedding model. Switching embedding models requires retraining classifiers.
 
 ### Singleton Pattern
 

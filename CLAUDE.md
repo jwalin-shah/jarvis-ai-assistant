@@ -96,11 +96,23 @@ make verify         # Full verification (lint + typecheck + test)
 - **AFTER** tests, **ALWAYS** read `test_results.txt`
 - If tests fail, **quote the ACTUAL error** from `test_results.txt`
 
+### When to Run Tests
+- **DO** run tests after code changes (`.py` files)
+- **DON'T** run tests after doc-only changes (`.md` files) - wastes tokens
+- **DON'T** re-run tests if `test_results.txt` already has the info you need
+
+### Running Tests Efficiently
+1. Run `make test` (outputs to `test_results.txt`)
+2. If tests hang or take too long, read `test_results.txt` to check progress
+3. Use `tail -20 test_results.txt` to check recent output without re-running
+4. **NEVER** re-run tests just to see results - read the file instead
+
 ### Before Saying "Done"
-1. Run `make verify`
+1. Run `make verify` (only after code changes)
 2. Read `test_results.txt` - confirm all pass
 3. Run `git diff` - verify surgical changes
-4. Report with **specific evidence** ("All 47 tests pass")
+4. **Commit your changes** - don't leave work uncommitted
+5. Report with **specific evidence** ("All 47 tests pass")
 
 ### When Tests Fail
 1. Read FULL error from `test_results.txt`

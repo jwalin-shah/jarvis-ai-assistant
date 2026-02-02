@@ -25,7 +25,7 @@ The system learns from **your actual messaging patterns** by extracting (trigger
 │  ├─ Classifiers (Trigger/Response) - 3-layer hybrid        │
 │  ├─ Router (FAISS + Thresholds)                            │
 │  ├─ Generator (MLX LLM)                                    │
-│  └─ Embedding Layer (bge-small-en-v1.5, 384-dim)           │
+│  └─ Embedding Layer (MLX, 384-dim, text normalization)     │
 │                                                             │
 │  Data Layer:                                                │
 │  ├─ chat.db (iMessage, read-only)                          │
@@ -60,7 +60,8 @@ The system learns from **your actual messaging patterns** by extracting (trigger
 
 - [Pipeline Details](./PIPELINE.md) - Classification and routing flow
 - [V2 Architecture](./V2_ARCHITECTURE.md) - Unix sockets, direct SQLite
-- [Embeddings](./EMBEDDINGS.md) - Model choices, caching, FAISS
+- [Embeddings](./EMBEDDINGS.md) - Model choices, multi-model support, FAISS
+- [Text Normalization](./TEXT_NORMALIZATION.md) - Unicode/whitespace normalization for consistent embeddings
 - [Feedback System](./FEEDBACK.md) - Learning from user actions
 - [Design Decisions](./DECISIONS.md) - Rationale and lessons learned
 - [Metrics](./METRICS.md) - Performance benchmarks
