@@ -157,21 +157,103 @@ health:
 	@echo "PROJECT HEALTH SUMMARY"
 	@echo "============================================"
 	@echo ""
-	@echo "## Test Count"
+	@echo "## Git Status"
+	@echo "Branch: $$(git branch --show-current)"
+	@echo "Uncommitted changes: $$(git status --porcelain | wc -l | tr -d ' ') files"
+	@echo "Untracked files: $$(git status --porcelain | grep '^??' | wc -l | tr -d ' ')"
+	@echo ""
+	@echo "## Test Results"
 	@uv run pytest tests/ --collect-only -q 2>/dev/null | tail -1 || echo "Run 'make test' to see test results"
+	@if [ -f test_results.xml ]; then \
+		failed=$$(grep -o 'failures="[0-9]*"' test_results.xml 2>/dev/null | head -1 | grep -o '[0-9]*'); \
+		errors=$$(grep -o 'errors="[0-9]*"' test_results.xml 2>/dev/null | head -1 | grep -o '[0-9]*'); \
+		if [ -n "$$failed" ] && [ "$$failed" != "0" ]; then \
+			echo "Failed tests: $$failed"; \
+		elif [ -n "$$errors" ] && [ "$$errors" != "0" ]; then \
+			echo "Test errors: $$errors"; \
+		else \
+			echo "Last run: all passed"; \
+		fi; \
+	else \
+		echo "No test results. Run 'make test'"; \
+	fi
 	@echo ""
 	@echo "## Coverage"
-	@if [ -f .coverage ]; then uv run coverage report --format=total 2>/dev/null || echo "No coverage data"; else echo "No coverage data. Run 'make test-coverage'"; fi
+	@if [ -f .coverage ]; then uv run coverage report --format=total 2>/dev/null || echo "No coverage data"; else echo "No coverage data. Run 'make test'"; fi
 	@echo ""
-	@echo "## Lint Errors"
-	@uv run ruff check . --statistics 2>/dev/null | tail -3 || echo "No lint errors"
+	@echo "## Lint Errors (ruff)"
+	@lint_output=$$(uv run ruff check . 2>/dev/null); \
+	if echo "$$lint_output" | grep -q "All checks passed"; then \
+		echo "0 errors"; \
+	else \
+		lint_count=$$(echo "$$lint_output" | grep "Found [0-9]* error" | grep -o "[0-9]*" | head -1); \
+		if [ -n "$$lint_count" ]; then \
+			echo "$$lint_count errors (run 'make lint' for details)"; \
+		else \
+			echo "0 errors"; \
+		fi; \
+	fi
+	@echo ""
+	@echo "## Unused Imports (dead code)"
+	@unused_output=$$(uv run ruff check . --select=F401 2>/dev/null); \
+	if echo "$$unused_output" | grep -q "All checks passed"; then \
+		echo "0 unused imports"; \
+	else \
+		unused=$$(echo "$$unused_output" | grep "Found [0-9]* error" | grep -o "[0-9]*" | head -1); \
+		if [ -n "$$unused" ]; then \
+			echo "$$unused unused imports"; \
+		else \
+			echo "0 unused imports"; \
+		fi; \
+	fi
+	@echo ""
+	@echo "## Type Errors (mypy)"
+	@mypy_output=$$(uv run mypy jarvis/ core/ models/ api/ --ignore-missing-imports 2>&1); \
+	if echo "$$mypy_output" | grep -q "Success"; then \
+		echo "0 errors"; \
+	else \
+		mypy_errors=$$(echo "$$mypy_output" | grep ": error:" | wc -l | tr -d ' '); \
+		if [ "$$mypy_errors" = "0" ]; then \
+			echo "0 errors"; \
+		else \
+			echo "$$mypy_errors errors (run 'make typecheck' for details)"; \
+		fi; \
+	fi
 	@echo ""
 	@echo "## TODOs in Code"
-	@echo "TODO count: $$(grep -rn 'TODO\|FIXME\|XXX\|HACK' core/ models/ integrations/ benchmarks/ --include='*.py' 2>/dev/null | wc -l | tr -d ' ')"
+	@todo_count=$$(grep -rn 'TODO\|FIXME\|XXX\|HACK' jarvis/ core/ models/ integrations/ benchmarks/ scripts/ --include='*.py' 2>/dev/null | wc -l | tr -d ' '); \
+	echo "$$todo_count TODO/FIXME/XXX/HACK comments"
+	@echo ""
+	@echo "## Security Scan"
+	@secrets=$$(grep -rn 'password\s*=\s*["\x27][^"\x27]*["\x27]\|api_key\s*=\s*["\x27][^"\x27]*["\x27]\|secret\s*=\s*["\x27][^"\x27]*["\x27]' jarvis/ core/ models/ --include='*.py' 2>/dev/null | grep -v 'test_\|_test\|mock\|example\|placeholder\|TODO\|None\|""' | wc -l | tr -d ' '); \
+	if [ "$$secrets" = "0" ]; then \
+		echo "No hardcoded secrets detected"; \
+	else \
+		echo "WARNING: $$secrets potential hardcoded secrets found"; \
+	fi
+	@env_files=$$(find . -name '.env' -o -name '.env.*' 2>/dev/null | grep -v '.venv' | wc -l | tr -d ' '); \
+	if [ "$$env_files" != "0" ]; then \
+		echo "WARNING: $$env_files .env files found (ensure not committed)"; \
+	fi
+	@echo ""
+	@echo "## ML Models Status"
+	@if [ -d "$$HOME/.jarvis/trigger_classifier_model" ]; then \
+		echo "Trigger classifier (SVM): present"; \
+	else \
+		echo "Trigger classifier (SVM): MISSING (~/.jarvis/trigger_classifier_model/)"; \
+	fi
+	@if [ -d "$$HOME/.jarvis/response_classifier_model" ]; then \
+		echo "Response classifier (SVM): present"; \
+	else \
+		echo "Response classifier (SVM): MISSING (~/.jarvis/response_classifier_model/)"; \
+	fi
 	@echo ""
 	@echo "## Dependencies"
 	@echo "Lock file: $$(if [ -f uv.lock ]; then echo 'present'; else echo 'MISSING - run uv sync'; fi)"
 	@echo "Venv: $$(if [ -d .venv ]; then echo 'present'; else echo 'MISSING - run make install'; fi)"
+	@echo ""
+	@echo "## Outdated Packages (top 5)"
+	@uv pip list --outdated 2>/dev/null | head -6 || echo "Run 'uv pip list --outdated' to check"
 
 # ============================================================================
 # CLEANUP

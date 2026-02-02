@@ -31,6 +31,9 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from jarvis.classifiers import EmbedderMixin, SingletonFactory
+from jarvis.text_normalizer import is_acknowledgment_only
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -114,10 +117,6 @@ class MessageClassification:
 
 # Compiled regex patterns for rule-based classification
 # High confidence patterns that don't need embedding fallback
-
-# Import centralized acknowledgment detection from text_normalizer
-# This ensures exact matching (not substring matching) across all modules
-from jarvis.text_normalizer import is_acknowledgment_only
 
 
 # Legacy wrapper for regex-based checking - now uses centralized exact matching
@@ -380,11 +379,13 @@ MESSAGE_TYPE_EXAMPLES: dict[MessageType, list[str]] = {
 # =============================================================================
 
 
-class MessageClassifier:
+class MessageClassifier(EmbedderMixin):
     """Hybrid rule-based + embedding message classifier.
 
     Uses fast rule-based classification for clear patterns, falling back
     to embedding similarity for ambiguous cases.
+
+    Uses EmbedderMixin for lazy-loaded embedder access.
 
     Thread Safety:
         This class is thread-safe for concurrent classify() calls.
@@ -397,26 +398,17 @@ class MessageClassifier:
 
     def __init__(self) -> None:
         """Initialize the classifier."""
-        self._embedder = None
-        self._centroids: dict[MessageType, NDArray[np.float32]] | None = None
+        self._message_centroids: dict[MessageType, NDArray[np.float32]] | None = None
         self._lock = threading.Lock()
         self._init_attempted = False
 
-    def _get_embedder(self) -> Any:
-        """Get the embedder for semantic classification."""
-        if self._embedder is None:
-            from jarvis.embedding_adapter import get_embedder
-
-            self._embedder = get_embedder()
-        return self._embedder
-
     def _ensure_centroids_computed(self) -> None:
         """Compute and cache centroids for each message type."""
-        if self._centroids is not None:
+        if self._message_centroids is not None:
             return
 
         with self._lock:
-            if self._centroids is not None:
+            if self._message_centroids is not None:
                 return
 
             if self._init_attempted:
@@ -425,24 +417,22 @@ class MessageClassifier:
             self._init_attempted = True
 
             try:
-                embedder = self._get_embedder()
-
                 centroids: dict[MessageType, NDArray[np.float32]] = {}
                 for msg_type, examples in MESSAGE_TYPE_EXAMPLES.items():
-                    # Compute embeddings for all examples
-                    embeddings = embedder.encode(examples, normalize=True)
+                    # Compute embeddings for all examples using EmbedderMixin
+                    embeddings = self.embedder.encode(examples, normalize=True)
                     # Compute centroid (mean embedding)
                     centroid = np.mean(embeddings, axis=0)
                     # Normalize the centroid
                     centroid = centroid / np.linalg.norm(centroid)
                     centroids[msg_type] = centroid.astype(np.float32)
 
-                self._centroids = centroids
+                self._message_centroids = centroids
                 logger.info("Computed centroids for %d message types", len(centroids))
 
             except Exception as e:
                 logger.warning("Failed to compute message type centroids: %s", e)
-                self._centroids = None
+                self._message_centroids = None
 
     def _classify_by_rules(self, text: str) -> tuple[MessageType | None, float, str | None]:
         """Classify message using rule-based patterns.
@@ -501,6 +491,7 @@ class MessageClassifier:
 
         Args:
             text: The message text to classify.
+            embedder: Optional embedder override (uses EmbedderMixin if not provided).
 
         Returns:
             Tuple of (MessageType or None, confidence)
@@ -508,17 +499,18 @@ class MessageClassifier:
         try:
             self._ensure_centroids_computed()
 
-            if self._centroids is None:
+            if self._message_centroids is None:
                 return None, 0.0
 
-            query_embedder = embedder or self._get_embedder()
+            # Use provided embedder or fall back to EmbedderMixin
+            query_embedder = embedder if embedder is not None else self.embedder
             query_embedding = query_embedder.encode([text], normalize=True)[0]
 
             # Find most similar centroid
             best_type = None
             best_similarity = -1.0
 
-            for msg_type, centroid in self._centroids.items():
+            for msg_type, centroid in self._message_centroids.items():
                 similarity = float(np.dot(query_embedding, centroid))
                 if similarity > best_similarity:
                     best_similarity = similarity
@@ -692,8 +684,7 @@ class MessageClassifier:
 # Singleton Access
 # =============================================================================
 
-_classifier: MessageClassifier | None = None
-_classifier_lock = threading.Lock()
+_factory: SingletonFactory[MessageClassifier] = SingletonFactory(MessageClassifier)
 
 
 def get_message_classifier() -> MessageClassifier:
@@ -702,14 +693,7 @@ def get_message_classifier() -> MessageClassifier:
     Returns:
         The shared MessageClassifier instance.
     """
-    global _classifier
-
-    if _classifier is None:
-        with _classifier_lock:
-            if _classifier is None:
-                _classifier = MessageClassifier()
-
-    return _classifier
+    return _factory.get()
 
 
 def reset_message_classifier() -> None:
@@ -718,10 +702,7 @@ def reset_message_classifier() -> None:
     Clears the singleton. A new instance will be created on
     the next get_message_classifier() call.
     """
-    global _classifier
-
-    with _classifier_lock:
-        _classifier = None
+    _factory.reset()
 
 
 def classify_message(text: str) -> MessageClassification:

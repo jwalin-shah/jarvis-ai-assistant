@@ -862,3 +862,270 @@ async def generate_smart_reply(
         similar_triggers=result.get("similar_triggers"),
         context_used=context_info,
     )
+
+
+# =============================================================================
+# Multi-Option Reply Endpoint
+# =============================================================================
+
+
+class ResponseOptionSchema(BaseModel):
+    """A single response option with type and confidence."""
+
+    type: str = Field(..., description="Response type: AGREE, DECLINE, DEFER, etc.")
+    response: str = Field(..., description="The response text")
+    confidence: float = Field(..., description="Confidence score 0-1")
+    source: str = Field(default="template", description="Source: template, generated, fallback")
+
+
+class MultiOptionRequest(BaseModel):
+    """Request for multi-option reply generation.
+
+    For commitment questions (invitations, requests), generates multiple
+    diverse response options (AGREE, DECLINE, DEFER).
+    """
+
+    chat_id: str = Field(
+        ...,
+        description="Conversation ID to generate reply for",
+    )
+    last_message: str | None = Field(
+        default=None,
+        description="Override last message (uses latest from chat if not provided)",
+    )
+    force_multi: bool = Field(
+        default=False,
+        description="Force multi-option even for non-commitment questions",
+    )
+
+
+class MultiOptionResponse(BaseModel):
+    """Response with multiple reply options for commitment questions.
+
+    For commitment questions, returns 3 diverse options representing
+    different response intents (AGREE, DECLINE, DEFER).
+    """
+
+    is_commitment: bool = Field(
+        ...,
+        description="Whether the incoming message is a commitment question",
+    )
+    trigger_da: str | None = Field(
+        default=None,
+        description="Classified trigger dialogue act type (INVITATION, REQUEST, etc.)",
+    )
+    options: list[ResponseOptionSchema] = Field(
+        default_factory=list,
+        description="Response options with type and confidence",
+    )
+    suggestions: list[str] = Field(
+        default_factory=list,
+        description="Just the response texts (backward compatible)",
+    )
+    response: str | None = Field(
+        default=None,
+        description="Single response (when not a commitment question)",
+    )
+    response_type: str | None = Field(
+        default=None,
+        description="Response type (when not a commitment question)",
+    )
+    confidence: str = Field(
+        default="medium",
+        description="Overall confidence level",
+    )
+    context_used: ContextInfo | None = Field(
+        default=None,
+        description="Information about the context used",
+    )
+
+
+def _route_multi_option_sync(
+    chat_id: str,
+    last_message: str,
+    force_multi: bool = False,
+) -> dict[str, Any]:
+    """Run multi-option routing synchronously.
+
+    Args:
+        chat_id: Chat ID for contact lookup.
+        last_message: The message to respond to.
+        force_multi: Force multi-option even for non-commitment.
+
+    Returns:
+        Multi-option routing result dict.
+    """
+    from jarvis.router import get_reply_router
+
+    router = get_reply_router()
+    return router.route_multi_option(
+        incoming=last_message,
+        chat_id=chat_id,
+        force_multi=force_multi,
+    )
+
+
+@router.post(
+    "/multi-option",
+    response_model=MultiOptionResponse,
+    response_model_exclude_unset=True,
+    response_description="Multiple reply options for commitment questions",
+    summary="Generate multiple reply options",
+    responses={
+        200: {
+            "description": "Multi-option reply generated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "is_commitment": True,
+                        "trigger_da": "INVITATION",
+                        "options": [
+                            {
+                                "type": "AGREE",
+                                "response": "Yeah I'm down!",
+                                "confidence": 0.9,
+                                "source": "template",
+                            },
+                            {
+                                "type": "DECLINE",
+                                "response": "Can't today, sorry",
+                                "confidence": 0.85,
+                                "source": "template",
+                            },
+                            {
+                                "type": "DEFER",
+                                "response": "Let me check my schedule",
+                                "confidence": 0.8,
+                                "source": "fallback",
+                            },
+                        ],
+                        "suggestions": [
+                            "Yeah I'm down!",
+                            "Can't today, sorry",
+                            "Let me check my schedule",
+                        ],
+                        "confidence": "high",
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Conversation not found",
+            "model": ErrorResponse,
+        },
+    },
+)
+@limiter.limit(RATE_LIMIT_GENERATION)
+async def generate_multi_option_reply(
+    multi_request: MultiOptionRequest,
+    request: Request,
+    reader: ChatDBReader = Depends(get_imessage_reader),
+) -> MultiOptionResponse:
+    """Generate multiple reply options for commitment questions.
+
+    For commitment questions (invitations, requests, yes/no questions),
+    generates 3 diverse response options representing different intents:
+
+    - **AGREE**: Positive acceptance ("Yeah I'm down!", "Sure!")
+    - **DECLINE**: Polite rejection ("Can't make it", "Not today")
+    - **DEFER**: Non-committal ("Let me check", "Maybe")
+
+    This follows the Smart Reply pattern, ensuring users have meaningful
+    choices rather than variations of the same response.
+
+    **When to use:**
+    - Messages like "Want to grab lunch?" → Get AGREE/DECLINE/DEFER options
+    - Messages like "Can you help me move?" → Get AGREE/DECLINE/DEFER options
+    - Messages like "Are you free Saturday?" → Get AGREE/DECLINE/DEFER options
+
+    **For non-commitment questions:**
+    Returns `is_commitment: false` and falls back to single response.
+    Use `force_multi: true` to always get multiple options.
+
+    Args:
+        multi_request: MultiOptionRequest with chat_id and optional last_message
+
+    Returns:
+        MultiOptionResponse with options for commitment, or single response otherwise
+    """
+    # Fetch messages to get the last message if not provided
+    try:
+        messages = await run_in_threadpool(
+            reader.get_messages,
+            chat_id=multi_request.chat_id,
+            limit=5,
+        )
+    except Exception as e:
+        logger.error("Failed to fetch messages for chat %s: %s", multi_request.chat_id, e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch conversation context: {e}",
+        ) from e
+
+    if not messages:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No messages found for chat_id: {multi_request.chat_id}",
+        )
+
+    # Determine the message to respond to
+    last_message = multi_request.last_message
+    if not last_message:
+        for msg in messages:
+            if not msg.is_from_me and msg.text:
+                last_message = msg.text
+                break
+
+    if not last_message:
+        last_message = messages[0].text if messages[0].text else ""
+
+    # Build context info
+    participants = list({m.sender_name or m.sender for m in messages if not m.is_from_me})
+    context_info = ContextInfo(
+        num_messages=len(messages),
+        participants=participants,
+        last_message=last_message,
+    )
+
+    # Route with multi-option
+    try:
+        async with asyncio.timeout(TIMEOUT_GENERATION):
+            result = await run_in_threadpool(
+                _route_multi_option_sync,
+                multi_request.chat_id,
+                last_message,
+                multi_request.force_multi,
+            )
+    except TimeoutError:
+        raise HTTPException(
+            status_code=408,
+            detail=f"Request timed out after {TIMEOUT_GENERATION} seconds",
+        ) from None
+    except Exception as e:
+        logger.error("Failed to generate multi-option reply: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate multi-option reply",
+        ) from e
+
+    # Build response
+    options = [
+        ResponseOptionSchema(
+            type=opt.get("type", "STATEMENT"),
+            response=opt.get("response", ""),
+            confidence=opt.get("confidence", 0.5),
+            source=opt.get("source", "fallback"),
+        )
+        for opt in result.get("options", [])
+    ]
+
+    return MultiOptionResponse(
+        is_commitment=result.get("is_commitment", False),
+        trigger_da=result.get("trigger_da"),
+        options=options,
+        suggestions=result.get("suggestions", []),
+        response=result.get("response"),
+        response_type=result.get("type"),
+        confidence=result.get("confidence", "medium"),
+        context_used=context_info,
+    )

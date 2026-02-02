@@ -262,14 +262,14 @@ class ValidityGate:
         if not self.embedder or not trigger_text or not response_text:
             return 0.0, "reject", False
 
-        # Get embeddings
+        # Get embeddings (batch both texts together for efficiency)
         try:
-            trigger_emb = self.embedder.encode([trigger_text])[0]
-            response_emb = self.embedder.encode([response_text])[0]
-
-            # Compute cosine similarity (embeddings are L2-normalized)
             import numpy as np
 
+            embeddings = self.embedder.encode([trigger_text, response_text])
+            trigger_emb, response_emb = embeddings[0], embeddings[1]
+
+            # Compute cosine similarity (embeddings are L2-normalized)
             similarity = float(np.dot(trigger_emb, response_emb))
         except Exception as e:
             logger.warning("Embedding failed: %s", e)

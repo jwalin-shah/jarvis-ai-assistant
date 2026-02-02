@@ -29,28 +29,15 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from contracts.imessage import Message
+from jarvis.text_normalizer import is_acknowledgment_only as is_simple_acknowledgment
+from jarvis.text_normalizer import is_reaction as is_reaction_message
+from jarvis.text_normalizer import starts_new_topic as is_topic_shift
 
 if TYPE_CHECKING:
     from jarvis.embedding_adapter import UnifiedEmbedder
     from jarvis.exchange import CandidateExchange
 
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Module-Level Detection Functions (imported from text_normalizer)
-# =============================================================================
-
-# Import centralized detection functions from text_normalizer
-from jarvis.text_normalizer import (
-    is_acknowledgment_only as is_simple_acknowledgment,
-)
-from jarvis.text_normalizer import (
-    is_reaction as is_reaction_message,
-)
-from jarvis.text_normalizer import (
-    starts_new_topic as is_topic_shift,
-)
 
 
 @dataclass

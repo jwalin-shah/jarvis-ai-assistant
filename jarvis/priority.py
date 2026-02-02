@@ -326,11 +326,42 @@ class MessagePriorityScorer:
 
             logger.debug("Computed priority intent embeddings")
 
-    def _detect_question(self, text: str) -> tuple[bool, float]:
+    def _get_text_embedding(self, text: str) -> np.ndarray | None:
+        """Compute normalized embedding for text (cached per call site).
+
+        Args:
+            text: Text to embed.
+
+        Returns:
+            Normalized embedding array, or None if encoding fails.
+        """
+        if not text:
+            return None
+
+        try:
+            model = self._get_sentence_model()
+            embedding = model.encode([text], convert_to_numpy=True)[0]
+            # Normalize for cosine similarity
+            norm = np.linalg.norm(embedding)
+            if norm > 0:
+                embedding = embedding / norm
+            return embedding
+        except (ValueError, TypeError) as e:
+            logger.debug("Text embedding failed: %s", e)
+        except (RuntimeError, OSError) as e:
+            logger.debug("Text embedding failed (runtime/I/O): %s", e)
+        except Exception:
+            logger.debug("Text embedding unavailable", exc_info=True)
+        return None
+
+    def _detect_question(
+        self, text: str, embedding: np.ndarray | None = None
+    ) -> tuple[bool, float]:
         """Detect if message contains a question.
 
         Args:
-            text: Message text to analyze
+            text: Message text to analyze.
+            embedding: Pre-computed text embedding (optional, avoids recomputation).
 
         Returns:
             Tuple of (is_question, confidence)
@@ -345,33 +376,21 @@ class MessagePriorityScorer:
 
         # Semantic similarity if model available
         if self._intent_embeddings and "question" in self._intent_embeddings:
-            try:
-                model = self._get_sentence_model()
-                embedding = model.encode([text], convert_to_numpy=True)[0]
-                embedding = embedding / np.linalg.norm(embedding)
+            if embedding is not None:
                 similarity = float(np.dot(embedding, self._intent_embeddings["question"]))
                 if similarity > 0.6:
                     return True, similarity
-            except (ValueError, TypeError) as e:
-                # Invalid input or numeric operation errors
-                logger.debug("Question detection semantic matching failed: %s", e)
-            except (RuntimeError, OSError) as e:
-                # Model state errors or I/O issues during encoding
-                logger.debug("Question detection semantic matching failed (runtime/I/O): %s", e)
-            except Exception:
-                # Last resort catch-all for truly unexpected model/embedding errors.
-                # This is intentionally broad because the sentence transformer library
-                # can raise various exceptions during encoding. Fall back to pattern
-                # matching result to maintain functionality.
-                logger.debug("Question detection semantic matching unavailable", exc_info=True)
 
         return False, 0.0
 
-    def _detect_action_request(self, text: str) -> tuple[bool, float]:
+    def _detect_action_request(
+        self, text: str, embedding: np.ndarray | None = None
+    ) -> tuple[bool, float]:
         """Detect if message contains an action request.
 
         Args:
-            text: Message text to analyze
+            text: Message text to analyze.
+            embedding: Pre-computed text embedding (optional, avoids recomputation).
 
         Returns:
             Tuple of (is_action, confidence)
@@ -386,33 +405,21 @@ class MessagePriorityScorer:
 
         # Semantic similarity if model available
         if self._intent_embeddings and "action" in self._intent_embeddings:
-            try:
-                model = self._get_sentence_model()
-                embedding = model.encode([text], convert_to_numpy=True)[0]
-                embedding = embedding / np.linalg.norm(embedding)
+            if embedding is not None:
                 similarity = float(np.dot(embedding, self._intent_embeddings["action"]))
                 if similarity > 0.6:
                     return True, similarity
-            except (ValueError, TypeError) as e:
-                # Invalid input or numeric operation errors
-                logger.debug("Action detection semantic matching failed: %s", e)
-            except (RuntimeError, OSError) as e:
-                # Model state errors or I/O issues during encoding
-                logger.debug("Action detection semantic matching failed (runtime/I/O): %s", e)
-            except Exception:
-                # Last resort catch-all for truly unexpected model/embedding errors.
-                # This is intentionally broad because the sentence transformer library
-                # can raise various exceptions during encoding. Fall back to pattern
-                # matching result to maintain functionality.
-                logger.debug("Action detection semantic matching unavailable", exc_info=True)
 
         return False, 0.0
 
-    def _detect_time_sensitive(self, text: str) -> tuple[bool, float]:
+    def _detect_time_sensitive(
+        self, text: str, embedding: np.ndarray | None = None
+    ) -> tuple[bool, float]:
         """Detect if message is time-sensitive.
 
         Args:
-            text: Message text to analyze
+            text: Message text to analyze.
+            embedding: Pre-computed text embedding (optional, avoids recomputation).
 
         Returns:
             Tuple of (is_time_sensitive, confidence)
@@ -434,29 +441,10 @@ class MessagePriorityScorer:
 
         # Semantic similarity if model available
         if self._intent_embeddings and "urgent" in self._intent_embeddings:
-            try:
-                model = self._get_sentence_model()
-                embedding = model.encode([text], convert_to_numpy=True)[0]
-                embedding = embedding / np.linalg.norm(embedding)
+            if embedding is not None:
                 similarity = float(np.dot(embedding, self._intent_embeddings["urgent"]))
                 if similarity > 0.65:
                     return True, similarity
-            except (ValueError, TypeError) as e:
-                # Invalid input or numeric operation errors
-                logger.debug("Time-sensitive detection semantic matching failed: %s", e)
-            except (RuntimeError, OSError) as e:
-                # Model state errors or I/O issues during encoding
-                logger.debug(
-                    "Time-sensitive detection semantic matching failed (runtime/I/O): %s", e
-                )
-            except Exception:
-                # Last resort catch-all for truly unexpected model/embedding errors.
-                # This is intentionally broad because the sentence transformer library
-                # can raise various exceptions during encoding. Fall back to pattern
-                # matching result to maintain functionality.
-                logger.debug(
-                    "Time-sensitive detection semantic matching unavailable", exc_info=True
-                )
 
         return False, 0.0
 
@@ -525,20 +513,24 @@ class MessagePriorityScorer:
 
         text = message.text or ""
 
+        # Compute embedding ONCE for all semantic detection methods
+        # This avoids 3x encoding overhead for the same text
+        text_embedding = self._get_text_embedding(text) if self._intent_embeddings else None
+
         # 1. Detect questions
-        is_question, question_conf = self._detect_question(text)
+        is_question, question_conf = self._detect_question(text, text_embedding)
         if is_question:
             component_scores["question"] = question_conf
             reasons.append(PriorityReason.CONTAINS_QUESTION)
 
         # 2. Detect action requests
-        is_action, action_conf = self._detect_action_request(text)
+        is_action, action_conf = self._detect_action_request(text, text_embedding)
         if is_action:
             component_scores["action"] = action_conf
             reasons.append(PriorityReason.ACTION_REQUESTED)
 
         # 3. Detect time sensitivity
-        is_time_sensitive, time_conf = self._detect_time_sensitive(text)
+        is_time_sensitive, time_conf = self._detect_time_sensitive(text, text_embedding)
         if is_time_sensitive:
             component_scores["time_sensitive"] = time_conf
             reasons.append(PriorityReason.TIME_SENSITIVE)

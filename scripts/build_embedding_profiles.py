@@ -25,7 +25,7 @@ from jarvis.db import get_db
 from jarvis.embedding_adapter import get_embedder
 from jarvis.embedding_profile import (
     build_embedding_profile,
-    build_profiles_for_all_contacts,
+    build_profiles_for_all_chats,
     generate_embedding_style_guide,
     save_embedding_profile,
 )
@@ -108,6 +108,19 @@ def build_single_contact_profile(
         contact_name=contact.display_name,
     )
 
+    # Classify relationship
+    try:
+        from jarvis.relationship_classifier import RelationshipClassifier
+
+        classifier = RelationshipClassifier()
+        if contact.chat_id:
+            result = classifier.classify_contact(contact.chat_id)
+            profile.relationship_type = result.relationship
+            profile.relationship_confidence = result.confidence
+            print(f"Relationship: {result.relationship} ({result.confidence:.0%})")
+    except Exception as e:
+        logger.debug("Failed to classify relationship: %s", e)
+
     # Save profile
     if save_embedding_profile(profile):
         result = {
@@ -158,6 +171,12 @@ def main():
         action="store_true",
         help="Show detailed progress",
     )
+    parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Rebuild all profiles even if they already exist",
+    )
 
     args = parser.parse_args()
 
@@ -189,39 +208,38 @@ def main():
         return
 
     # Full processing mode
-    print("Building embedding profiles for all contacts...")
+    print("Building embedding profiles for all chats...")
+    print("This includes embedding analysis + relationship classification")
 
     db = get_db()
     db.init_schema()
 
     embedder = get_embedder()
 
-    # Try to get iMessage reader
-    try:
-        from integrations.imessage.reader import ChatDBReader
-
-        reader = ChatDBReader()
-        print("Using iMessage database for message history")
-    except Exception as e:
-        logger.warning("iMessage reader not available: %s", e)
-        reader = None
-
-    stats = build_profiles_for_all_contacts(
+    stats = build_profiles_for_all_chats(
         db=db,
         embedder=embedder,
-        imessage_reader=reader,
-        min_messages=args.min_messages,
+        min_pairs=args.min_messages,
         limit=args.limit,
+        classify_relationships=True,
+        include_groups=True,  # Include group chats
+        force_rebuild=args.force,
     )
 
     # Print summary
     print("\n" + "=" * 60)
     print("EMBEDDING PROFILE BUILD SUMMARY")
     print("=" * 60)
-    print(f"Contacts processed: {stats['contacts_processed']}")
+    print(f"Chats processed:    {stats['chats_processed']}")
     print(f"Profiles created:   {stats['profiles_created']}")
-    print(f"Profiles skipped:   {stats['profiles_skipped']}")
+    direct_chats = stats['profiles_created'] - stats.get('group_profiles_created', 0)
+    print(f"  - Direct chats:   {direct_chats}")
+    print(f"  - Group chats:    {stats.get('group_profiles_created', 0)}")
+    print(f"Profiles skipped:   {stats['profiles_skipped']} (< {args.min_messages} messages)")
+    if stats.get('profiles_skipped_existing', 0) > 0:
+        print(f"Already existed:    {stats['profiles_skipped_existing']} (use --force to rebuild)")
     print(f"Messages analyzed:  {stats['total_messages_analyzed']}")
+    print(f"Relationships:      {stats['relationships_classified']} (1:1 chats only)")
 
     if stats["errors"]:
         print(f"\nErrors ({len(stats['errors'])}):")
