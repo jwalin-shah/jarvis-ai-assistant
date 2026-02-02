@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 from sklearn.metrics import accuracy_score, classification_report, f1_score
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
 from jarvis.embedding_adapter import get_embedder
@@ -99,6 +99,76 @@ def undersample_majority(
             sampled = label_texts
         else:
             indices = rng.choice(len(label_texts), size=cap, replace=False)
+            sampled = [label_texts[i] for i in indices]
+
+        new_texts.extend(sampled)
+        new_labels.extend([label] * len(sampled))
+
+    return new_texts, new_labels
+
+
+def downsample_to_target(
+    texts: list[str],
+    labels: list[str],
+    target_total: int = 2000,
+    minority_classes: list[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Downsample majority classes while protecting minority classes.
+
+    For trigger classification, STATEMENT is ~53% of data and dominates training.
+    This function keeps minority classes (COMMITMENT, QUESTION, REACTION, SOCIAL)
+    intact while downsampling STATEMENT to reduce imbalance.
+
+    Args:
+        texts: Input texts
+        labels: Input labels
+        target_total: Target total number of samples
+        minority_classes: Classes to keep fully (not downsample). Defaults to
+            all non-STATEMENT classes.
+    """
+    if minority_classes is None:
+        # For trigger classification: protect non-STATEMENT classes
+        minority_classes = ["commitment", "question", "reaction", "social"]
+
+    counts = Counter(labels)
+
+    # Group by label
+    by_label: dict[str, list[str]] = {lbl: [] for lbl in set(labels)}
+    for text, label in zip(texts, labels):
+        by_label[label].append(text)
+
+    # Calculate minority total (classes we keep fully)
+    minority_total = sum(counts[cls] for cls in minority_classes if cls in counts)
+    majority_classes = [cls for cls in counts if cls not in minority_classes]
+    majority_total = sum(counts[cls] for cls in majority_classes)
+
+    # Budget for majority classes
+    majority_budget = target_total - minority_total
+
+    if majority_budget <= 0:
+        # Not enough budget, just return as-is
+        return texts, labels
+
+    # Build new dataset: keep all minority, proportionally reduce majority
+    rng = np.random.default_rng(42)
+    new_texts = []
+    new_labels = []
+
+    # Keep all minority class samples
+    for label in minority_classes:
+        if label in by_label:
+            new_texts.extend(by_label[label])
+            new_labels.extend([label] * len(by_label[label]))
+
+    # Proportionally reduce majority classes
+    for label in majority_classes:
+        target_count = int(counts[label] / majority_total * majority_budget)
+        label_texts = by_label[label]
+
+        if len(label_texts) <= target_count:
+            sampled = label_texts
+        else:
+            indices = rng.choice(len(label_texts), size=target_count, replace=False)
             sampled = [label_texts[i] for i in indices]
 
         new_texts.extend(sampled)
@@ -187,14 +257,20 @@ def main():
     print(f"  Done! Embeddings shape: {all_embeddings.shape}", flush=True)
 
     # Sampling strategies to try
+    # Format: (name, max_per_class, target_ratio, downsample_target)
+    # downsample_target is for the new downsample_to_target function
     sampling_configs = [
-        ("natural", None, None),  # Use natural distribution
-        ("balanced", None, 1.0),  # Equal samples per class (ratio=1.0 means min_count)
-        ("cap_500", 500, None),   # Cap at 500 per class
-        ("cap_400", 400, None),   # Cap at 400 per class
-        ("cap_300", 300, None),   # Cap at 300 per class
-        ("ratio_2x", None, 2.0),  # Max 2x the minority class
-        ("ratio_3x", None, 3.0),  # Max 3x the minority class
+        ("natural", None, None, None),  # Use natural distribution
+        ("balanced", None, 1.0, None),  # Equal samples per class (ratio=1.0 means min_count)
+        ("cap_500", 500, None, None),   # Cap at 500 per class
+        ("cap_400", 400, None, None),   # Cap at 400 per class
+        ("cap_300", 300, None, None),   # Cap at 300 per class
+        ("ratio_2x", None, 2.0, None),  # Max 2x the minority class
+        ("ratio_3x", None, 3.0, None),  # Max 3x the minority class
+        # New: Protect minority classes, only downsample STATEMENT (majority)
+        ("protect_2500", None, None, 2500),  # Target 2500 total samples
+        ("protect_2000", None, None, 2000),  # Target 2000 total samples
+        ("protect_1500", None, None, 1500),  # Target 1500 total samples
     ]
 
     # Hyperparameters to try
@@ -210,12 +286,17 @@ def main():
     print(f"Running {total_experiments} experiments...", flush=True)
     print("=" * 70, flush=True)
 
-    for sampling_name, max_per_class, target_ratio in sampling_configs:
+    for sampling_name, max_per_class, target_ratio, downsample_target in sampling_configs:
         print(f"\n--- Sampling: {sampling_name} ---", flush=True)
 
         # Apply sampling
         if sampling_name == "natural":
             sampled_texts, sampled_labels = texts, labels
+        elif downsample_target is not None:
+            # Use new downsample_to_target (protects minority, reduces majority)
+            sampled_texts, sampled_labels = downsample_to_target(
+                texts, labels, target_total=downsample_target
+            )
         else:
             sampled_texts, sampled_labels = undersample_majority(
                 texts, labels, max_per_class, target_ratio
@@ -278,11 +359,11 @@ def main():
         print(f"Hyperparams: C={best_result.C}, gamma={best_result.gamma}")
         print(f"Train size: {best_result.train_size}, Test size: {best_result.test_size}")
         print(f"Train distribution: {best_result.train_distribution}")
-        print(f"\nOverall Metrics:")
+        print("\nOverall Metrics:")
         print(f"  Accuracy:    {best_result.accuracy:.3f}")
         print(f"  Macro F1:    {best_result.macro_f1:.3f}")
         print(f"  Weighted F1: {best_result.weighted_f1:.3f}")
-        print(f"\nPer-Class Performance:")
+        print("\nPer-Class Performance:")
         print(f"  {'Class':<12} {'Precision':>10} {'Recall':>10} {'F1':>10} {'Support':>10}")
         print("  " + "-" * 52)
         for cls, metrics in sorted(best_result.per_class.items()):
@@ -326,11 +407,16 @@ def main():
             final_texts, final_labels = texts, labels
         else:
             # Find the config
-            for sname, max_pc, ratio in sampling_configs:
+            for sname, max_pc, ratio, ds_target in sampling_configs:
                 if sname == sampling_name:
-                    final_texts, final_labels = undersample_majority(
-                        texts, labels, max_pc, ratio
-                    )
+                    if ds_target is not None:
+                        final_texts, final_labels = downsample_to_target(
+                            texts, labels, target_total=ds_target
+                        )
+                    else:
+                        final_texts, final_labels = undersample_majority(
+                            texts, labels, max_pc, ratio
+                        )
                     break
             else:
                 final_texts, final_labels = texts, labels
@@ -368,6 +454,22 @@ def main():
         }
         with open(model_path / "config.json", "w") as f:
             json.dump(config, f, indent=2)
+
+        # Compute and save centroids for optional centroid verification
+        print("Computing class centroids...", flush=True)
+        unique_labels = sorted(set(final_labels))
+        centroids = {}
+        for label in unique_labels:
+            mask = [i for i, lbl in enumerate(final_labels) if lbl == label]
+            if mask:
+                class_embeddings = final_embeddings[mask]
+                centroid = np.mean(class_embeddings, axis=0)
+                # Normalize centroid for cosine similarity
+                centroid = centroid / np.linalg.norm(centroid)
+                centroids[label] = centroid.tolist()
+
+        np.save(model_path / "centroids.npy", centroids)
+        print(f"Saved centroids for {len(centroids)} classes", flush=True)
 
         print(f"Model saved to {model_path}")
         print(f"Config: {config}")

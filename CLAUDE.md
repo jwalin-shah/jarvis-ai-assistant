@@ -37,11 +37,11 @@ JARVIS is a local-first AI assistant for macOS that provides intelligent iMessag
 | Evaluation Pipeline | COMPLETE | `scripts/eval_pipeline.py` for testing on holdout data |
 | Embedding Profiles | COMPLETE | `jarvis/embedding_profile.py` for semantic relationship analysis |
 | Pair Quality Scoring | COMPLETE | `scripts/score_pair_quality.py` for coherence analysis |
-| Response Classifier | COMPLETE | `jarvis/response_classifier.py` hybrid 3-layer classifier (structural + centroid + kNN) |
+| Response Classifier | COMPLETE | `jarvis/response_classifier.py` hybrid 3-layer classifier (structural + centroid + SVM 78.7% F1) |
 | DA Classifier | COMPLETE | `scripts/build_da_classifier.py` with proportional sampling, ~64% accuracy |
 | Multi-Option Generation | COMPLETE | `jarvis/multi_option.py` for AGREE/DECLINE/DEFER options |
 | Typed Retrieval | COMPLETE | `jarvis/retrieval.py` for DA-filtered FAISS retrieval |
-| Trigger Classifier | COMPLETE | `jarvis/trigger_classifier.py` hybrid structural+SVM, 71% macro F1 |
+| Trigger Classifier | COMPLETE | `jarvis/trigger_classifier.py` hybrid structural+SVM with per-class thresholds |
 
 **Default Model**: LFM-2.5-1.2B-Instruct-4bit (configured in `models/registry.py`)
 
@@ -531,17 +531,20 @@ Use `get_reply_router()` for singleton access. API endpoint: `POST /drafts/smart
 **Response Classifier**: `jarvis/response_classifier.py` provides `HybridResponseClassifier` for classifying response dialogue acts. Three-layer hybrid approach:
 1. **Structural patterns** (10.8%): High-precision regex patterns for clear cases ("yes", "no", "?")
 2. **Centroid verification**: Semantic check using class embedding centroids
-3. **kNN fallback** (61.1%): DA classifier with proportional sampling
+3. **SVM classifier**: Trained SVM replaces DA k-NN for better accuracy
+
+Performance (5-fold cross-validation):
+- **73.6% ± 2.9% macro F1** (honest estimate)
+- Single 80/20 split showed 78.7% but was optimistic
 
 Key improvements implemented:
+- **SVM fallback**: Uses trained SVM instead of DA k-NN for Layer 3
+- **Label mapping**: SVM uses 6 labels (REACTION→REACT_POSITIVE, OTHER→ANSWER)
 - **Confidence threshold**: Low-confidence (<0.5) predictions default to ANSWER
 - **Trigger filtering**: Commitment responses (AGREE/DECLINE/DEFER) only for commitment triggers
-- **Better exemplars**: Mined from user's data using structural patterns
 
-Accuracy by category (validated on 135 samples):
-- REACT_POSITIVE: 86%, ANSWER: 77%, QUESTION: 73%, ACKNOWLEDGE: 73%
-- AGREE: 50%, DEFER: 45%, DECLINE: 41%
-- **Overall: 64.4%**
+Model location: `~/.jarvis/response_classifier_model/`
+Training: `uv run python -m scripts.train_response_classifier --save-best`
 
 Use `get_response_classifier()` for singleton access.
 
@@ -554,19 +557,44 @@ Use `get_response_classifier()` for singleton access.
 
 Hybrid approach:
 1. **Structural patterns** (high precision): Regex for tapbacks, greetings, WH-questions, invitation phrases
-2. **Trained SVM** (71% macro F1): Embedding-based classifier with balanced sampling
+2. **Trained SVM** with per-class thresholds: Embedding-based classifier with balanced sampling
+3. **Optional centroid verification**: Experimental feature to verify SVM predictions
+
+Per-class SVM thresholds (in `PER_CLASS_SVM_THRESHOLDS`):
+- COMMITMENT: 0.50 (most important, highest threshold)
+- REACTION: 0.40
+- STATEMENT: 0.40
+- QUESTION: 0.35
+- SOCIAL: 0.25 (structural patterns strong, low threshold)
+
+Performance (5-fold cross-validation):
+- **67.3% ± 1.7% macro F1** (honest estimate)
+- Single 80/20 split showed 71.3% but was optimistic
+- Main confusion: STATEMENT↔REACTION (310 cases), STATEMENT↔COMMITMENT (214 cases)
 
 Training data: 3,000 hand-labeled triggers in `data/trigger_labeling.jsonl`
 Model location: `~/.jarvis/trigger_classifier_model/`
 
-Per-class performance:
-- SOCIAL: 77% F1 (tapbacks are reliable signals)
-- QUESTION: 74% F1 (37% end with "?", WH-words help)
-- REACTION: 69% F1 (emotional words like "damn", "bro", "crazy")
-- STATEMENT: 69% F1 (fallback category)
-- COMMITMENT: 68% F1 (hardest - "can you", "wanna" help)
+Training options include `downsample_to_target()` which protects minority classes while reducing STATEMENT (53% of data):
+```bash
+uv run python -m scripts.train_trigger_classifier              # Run experiments
+uv run python -m scripts.train_trigger_classifier --save-best  # Save best model + centroids
+```
 
-Use `classify_trigger(text)` or `get_trigger_classifier()`. Training: `uv run python -m scripts.train_trigger_classifier --save-best`.
+Use `classify_trigger(text)` or `get_trigger_classifier()`. For centroid verification:
+`HybridTriggerClassifier(use_centroid_verification=True)`
+
+**Label Quality Tools**: Scripts for validating and improving classifier training data:
+```bash
+# Validate classifier predictions with manual review
+uv run python -m scripts.validate_classifiers --classifier trigger --samples 50
+uv run python -m scripts.validate_classifiers --classifier response --samples 50
+
+# Review and fix mislabeled examples (interactive)
+uv run python -m scripts.review_labels --type trigger --stats-only  # See confusion stats
+uv run python -m scripts.review_labels --type trigger --limit 50    # Review top 50 confused
+uv run python -m scripts.review_labels --type trigger --pattern "statement->reaction"
+```
 
 **Multi-Option Generation**: `jarvis/multi_option.py` generates diverse response options for commitment questions (invitations, requests, yes/no questions). For triggers like "Want to grab lunch?", generates 3 options:
 - AGREE: "Yeah I'm down!"
