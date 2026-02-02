@@ -125,15 +125,14 @@ class TriggerIndexBuilder:
         return self._embedder
 
     def _get_model_name(self) -> str:
-        """Get the model name from the embedder."""
-        from jarvis.embedding_adapter import EMBEDDING_MODEL
+        """Get the model name from config."""
+        from jarvis.embedding_adapter import get_configured_model_name
 
-        return EMBEDDING_MODEL
+        return get_configured_model_name()
 
     def _get_model_dir_name(self) -> str:
-        """Get safe directory name for model."""
-        # Convert "BAAI/bge-small-en-v1.5" to "bge-small-en-v1.5"
-        return self._get_model_name().split("/")[-1]
+        """Get safe directory name for model (e.g., 'bge-small', 'gte-tiny')."""
+        return self._get_model_name()
 
     def _generate_version_id(self) -> str:
         """Generate a version ID based on current timestamp."""
@@ -711,10 +710,10 @@ class IncrementalTriggerIndex:
         return self._embedder
 
     def _get_model_dir_name(self) -> str:
-        """Get safe directory name for model."""
-        from jarvis.embedding_adapter import EMBEDDING_MODEL
+        """Get safe directory name for model (e.g., 'bge-small', 'gte-tiny')."""
+        from jarvis.embedding_adapter import get_configured_model_name
 
-        return EMBEDDING_MODEL.split("/")[-1]
+        return get_configured_model_name()
 
     def _get_index_dir(self) -> Path:
         """Get the directory for incremental index."""
