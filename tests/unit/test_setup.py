@@ -16,7 +16,7 @@ from contracts.health import Permission, PermissionStatus, SchemaInfo
 from contracts.memory import MemoryMode
 from jarvis.setup import (
     DEFAULT_MODEL_PATH,
-    DEFAULT_TEMPLATE_THRESHOLD,
+    DEFAULT_QUICK_REPLY_THRESHOLD,
     CheckResult,
     CheckStatus,
     JarvisConfig,
@@ -40,7 +40,7 @@ class TestJarvisConfigInSetup:
         """Test default configuration values."""
         config = JarvisConfig()
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == DEFAULT_TEMPLATE_THRESHOLD
+        assert config.template_similarity_threshold == DEFAULT_QUICK_REPLY_THRESHOLD
 
     def test_model_dump(self):
         """Test conversion to dictionary via model_dump."""
@@ -69,7 +69,7 @@ class TestJarvisConfigInSetup:
         """Test creation from partial dictionary uses defaults."""
         config = JarvisConfig.model_validate({})
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == DEFAULT_TEMPLATE_THRESHOLD
+        assert config.template_similarity_threshold == DEFAULT_QUICK_REPLY_THRESHOLD
 
 
 class TestCheckResult:
@@ -402,7 +402,7 @@ class TestSetupWizard:
         with config_file.open() as f:
             config = json.load(f)
         assert config["model_path"] == DEFAULT_MODEL_PATH
-        assert config["template_similarity_threshold"] == DEFAULT_TEMPLATE_THRESHOLD
+        assert config["template_similarity_threshold"] == DEFAULT_QUICK_REPLY_THRESHOLD
         # New config should have nested sections
         assert "ui" in config
         assert "search" in config

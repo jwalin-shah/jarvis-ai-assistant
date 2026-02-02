@@ -1,6 +1,6 @@
 # Decision Log
 
-**Last Updated**: 2026-01-27
+**Last Updated**: 2026-02-01
 
 This document tracks decisions that need to be made, are pending, or have been made.
 
@@ -8,57 +8,23 @@ This document tracks decisions that need to be made, are pending, or have been m
 
 ## Pending Decisions
 
-### D1: Default Model Selection
-
-**Context**: The model registry has 5 models. `qwen-1.5b` is the coded default, but `gemma3-4b` is marked as "recommended" in comments.
-
-**Options**:
-| Option | Pros | Cons |
-|--------|------|------|
-| Keep qwen-1.5b | Smaller (1.5GB), works on 8GB | May have lower quality |
-| Switch to gemma3-4b | Better quality per comments | Larger (2.75GB), may not fit 8GB |
-| Auto-select by RAM | Best of both worlds | More complexity |
-
-**Recommendation**: Run HHEM benchmark on both, select based on actual quality scores.
-
-**Blocked by**: Benchmark results needed
+### ~~D1: Default Model Selection~~ → RESOLVED (see M12)
 
 ---
 
-### D2: Cloud Fallback Implementation
+### ~~D2: Cloud Fallback Implementation~~ → REJECTED
 
-**Context**: Design doc mentions cloud fallback for:
-- MINIMAL mode (under 8GB RAM)
-- Cold-start latency scenarios
-- HHEM rejection when local fails quality
+**Decision**: No cloud fallback. JARVIS is local-first only.
 
-**Options**:
-| Option | Pros | Cons |
-|--------|------|------|
-| Implement with Anthropic API | High quality | Cost, privacy concern |
-| Implement with Ollama cloud | Self-hosted option | Still requires server |
-| Skip for v1 | Simpler | Reduced functionality on low-RAM |
-
-**Recommendation**: Skip for v1, document as limitation.
-
-**Blocked by**: Product decision needed
+**Rationale**: Privacy is core to the product. Cloud defeats the purpose.
 
 ---
 
-### D3: API Router Test Coverage
+### ~~D3: API Router Test Coverage~~ → RESOLVED
 
-**Context**: 21 of 29 API routers lack dedicated tests. The 97% coverage metric is misleading.
-
-**Options**:
-| Option | Effort | Impact |
-|--------|--------|--------|
-| Add tests for all routers | 2-3 weeks | HIGH |
-| Add tests for user-facing only | 1 week | MEDIUM |
-| Accept current coverage | None | LOW (technical debt) |
-
-**Recommendation**: Add tests for `conversations`, `search`, `tasks` first (user-facing).
-
-**Blocked by**: Time/priority decision
+**Status**: Router tests exist:
+- `tests/unit/test_router.py` (1769 lines)
+- `tests/integration/test_api*.py` (4 files)
 
 ---
 
@@ -191,6 +157,73 @@ This document tracks decisions that need to be made, are pending, or have been m
 **Consequences**: All prompts must be defined in one place.
 
 **Status**: IMPLEMENTED (`jarvis/prompts.py`)
+
+---
+
+### M9: SVM over k-NN for Classifiers
+
+**Decision**: Use SVM classifiers instead of k-NN (DA classifier) for both trigger and response classification.
+
+**Rationale**:
+- SVM achieves 82% macro F1 vs ~70% for k-NN
+- Faster inference (single model forward pass vs k-nearest search)
+- Per-class thresholds enable precision/recall tuning
+
+**Consequences**:
+- Removed DA classifier code and dependencies
+- Centroids still used for structural hint verification (loaded from cache)
+- Training scripts: `scripts/train_trigger_classifier.py`, `scripts/train_response_classifier.py`
+
+**Status**: IMPLEMENTED (`jarvis/trigger_classifier.py`, `jarvis/response_classifier.py`)
+
+---
+
+### M10: K-means over HDBSCAN for Topic Clustering
+
+**Decision**: Use K-means (sklearn) for topic clustering in embedding profiles, remove HDBSCAN from core dependencies.
+
+**Rationale**:
+- Topics are informational only (not critical to reply generation)
+- K-means is simpler and faster
+- HDBSCAN adds heavy dependency for minimal benefit
+- Fixed cluster count (5) is acceptable for topic discovery
+
+**Consequences**:
+- HDBSCAN moved to optional `[benchmarks]` dependency
+- Removed `jarvis/cluster.py` (HDBSCAN response clustering)
+- Topic clustering in `jarvis/embedding_profile.py` uses K-means
+
+**Status**: IMPLEMENTED
+
+---
+
+### M11: Hybrid Classifier Architecture
+
+**Decision**: Three-layer hybrid approach: Structural patterns → Centroid verification → SVM fallback.
+
+**Rationale**:
+- Structural patterns (regex) catch high-confidence cases instantly (~11%)
+- Centroid verification adds semantic check without full classification
+- SVM handles ambiguous cases with 82% accuracy
+
+**Consequences**: Fast for common cases, accurate for edge cases.
+
+**Status**: IMPLEMENTED (`jarvis/response_classifier.py`, `jarvis/trigger_classifier.py`)
+
+---
+
+### M12: Default Model: LFM-2.5-1.2B-Instruct-4bit
+
+**Decision**: Use LFM-2.5-1.2B-Instruct-4bit as default model.
+
+**Rationale**:
+- Small footprint (~1GB) works on 8GB RAM
+- 4-bit quantization balances quality vs memory
+- Sufficient quality for reply suggestions
+
+**Consequences**: Users with more RAM can select larger models via config.
+
+**Status**: IMPLEMENTED (default in `CLAUDE.md`, `models/registry.py`)
 
 ---
 

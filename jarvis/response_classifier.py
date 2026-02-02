@@ -29,9 +29,7 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import logging
-import pickle
 import re
 import threading
 from dataclasses import dataclass
@@ -41,12 +39,19 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from jarvis.classifiers import (
+    EmbedderMixin,
+    PatternMatcherByLabel,
+    SingletonFactory,
+    SVMModelMixin,
+)
+
 if TYPE_CHECKING:
     from jarvis.embedding_adapter import Embedder
 
 logger = logging.getLogger(__name__)
 
-# Path to trained SVM model (78.7% F1, trained by scripts/train_response_classifier.py)
+# Path to trained SVM model (81.9% F1, trained by scripts/train_response_classifier.py)
 RESPONSE_SVM_MODEL_PATH = Path.home() / ".jarvis" / "response_classifier_model"
 
 
@@ -71,11 +76,13 @@ class ResponseType(str, Enum):
 
 
 # Response types for commitment questions (invitations, requests)
-COMMITMENT_RESPONSE_TYPES = frozenset({
-    ResponseType.AGREE,
-    ResponseType.DECLINE,
-    ResponseType.DEFER,
-})
+COMMITMENT_RESPONSE_TYPES = frozenset(
+    {
+        ResponseType.AGREE,
+        ResponseType.DECLINE,
+        ResponseType.DEFER,
+    }
+)
 
 # Trigger type -> Valid response types (dialogue structure constraints)
 # From the DA classifier mappings - use to constrain possible response types
@@ -83,41 +90,65 @@ TRIGGER_TO_VALID_RESPONSES: dict[str, list[ResponseType]] = {
     # === New hybrid trigger classifier labels (TriggerType enum values) ===
     # These are coarser categories that map to the fine-grained labels below
     "commitment": [
-        ResponseType.AGREE, ResponseType.DECLINE, ResponseType.DEFER, ResponseType.QUESTION
+        ResponseType.AGREE,
+        ResponseType.DECLINE,
+        ResponseType.DEFER,
+        ResponseType.QUESTION,
     ],
     "question": [
-        ResponseType.ANSWER, ResponseType.AGREE, ResponseType.DECLINE,
-        ResponseType.DEFER, ResponseType.QUESTION
+        ResponseType.ANSWER,
+        ResponseType.AGREE,
+        ResponseType.DECLINE,
+        ResponseType.DEFER,
+        ResponseType.QUESTION,
     ],
     "reaction": [
-        ResponseType.REACT_POSITIVE, ResponseType.REACT_SYMPATHY,
-        ResponseType.QUESTION, ResponseType.ACKNOWLEDGE
+        ResponseType.REACT_POSITIVE,
+        ResponseType.REACT_SYMPATHY,
+        ResponseType.QUESTION,
+        ResponseType.ACKNOWLEDGE,
     ],
-    "social": [
-        ResponseType.GREETING, ResponseType.ACKNOWLEDGE, ResponseType.QUESTION
-    ],
+    "social": [ResponseType.GREETING, ResponseType.ACKNOWLEDGE, ResponseType.QUESTION],
     "statement": [
-        ResponseType.ACKNOWLEDGE, ResponseType.REACT_POSITIVE, ResponseType.REACT_SYMPATHY,
-        ResponseType.QUESTION, ResponseType.STATEMENT
+        ResponseType.ACKNOWLEDGE,
+        ResponseType.REACT_POSITIVE,
+        ResponseType.REACT_SYMPATHY,
+        ResponseType.QUESTION,
+        ResponseType.STATEMENT,
     ],
     # === Legacy fine-grained DA classifier labels (backwards compatibility) ===
     "INVITATION": [
-        ResponseType.AGREE, ResponseType.DECLINE, ResponseType.DEFER, ResponseType.QUESTION
+        ResponseType.AGREE,
+        ResponseType.DECLINE,
+        ResponseType.DEFER,
+        ResponseType.QUESTION,
     ],
     "YN_QUESTION": [
-        ResponseType.AGREE, ResponseType.DECLINE, ResponseType.DEFER,
-        ResponseType.ANSWER, ResponseType.QUESTION
+        ResponseType.AGREE,
+        ResponseType.DECLINE,
+        ResponseType.DEFER,
+        ResponseType.ANSWER,
+        ResponseType.QUESTION,
     ],
     "WH_QUESTION": [ResponseType.ANSWER, ResponseType.DEFER, ResponseType.QUESTION],
     "INFO_STATEMENT": [
-        ResponseType.ACKNOWLEDGE, ResponseType.REACT_POSITIVE, ResponseType.REACT_SYMPATHY,
-        ResponseType.QUESTION, ResponseType.STATEMENT
+        ResponseType.ACKNOWLEDGE,
+        ResponseType.REACT_POSITIVE,
+        ResponseType.REACT_SYMPATHY,
+        ResponseType.QUESTION,
+        ResponseType.STATEMENT,
     ],
     "OPINION": [
-        ResponseType.AGREE, ResponseType.DECLINE, ResponseType.ACKNOWLEDGE, ResponseType.QUESTION
+        ResponseType.AGREE,
+        ResponseType.DECLINE,
+        ResponseType.ACKNOWLEDGE,
+        ResponseType.QUESTION,
     ],
     "REQUEST": [
-        ResponseType.AGREE, ResponseType.DECLINE, ResponseType.DEFER, ResponseType.QUESTION
+        ResponseType.AGREE,
+        ResponseType.DECLINE,
+        ResponseType.DEFER,
+        ResponseType.QUESTION,
     ],
     "GOOD_NEWS": [ResponseType.REACT_POSITIVE, ResponseType.QUESTION, ResponseType.ACKNOWLEDGE],
     "BAD_NEWS": [ResponseType.REACT_SYMPATHY, ResponseType.QUESTION, ResponseType.ACKNOWLEDGE],
@@ -138,15 +169,15 @@ TRIGGER_TO_VALID_RESPONSES: dict[str, list[ResponseType]] = {
 _QUOTE_PATTERN = r'["\u201c\u201d]'
 
 TAPBACK_POSITIVE_PATTERNS = [
-    re.compile(rf'^Liked\s+{_QUOTE_PATTERN}', re.IGNORECASE),
-    re.compile(rf'^Loved\s+{_QUOTE_PATTERN}', re.IGNORECASE),
-    re.compile(r'^Laughed at\s+', re.IGNORECASE),
+    re.compile(rf"^Liked\s+{_QUOTE_PATTERN}", re.IGNORECASE),
+    re.compile(rf"^Loved\s+{_QUOTE_PATTERN}", re.IGNORECASE),
+    re.compile(r"^Laughed at\s+", re.IGNORECASE),
 ]
 
 TAPBACK_FILTERED_PATTERNS = [
-    re.compile(rf'^Disliked\s+{_QUOTE_PATTERN}', re.IGNORECASE),
-    re.compile(rf'^Emphasized\s+{_QUOTE_PATTERN}', re.IGNORECASE),
-    re.compile(rf'^Questioned\s+{_QUOTE_PATTERN}', re.IGNORECASE),
+    re.compile(rf"^Disliked\s+{_QUOTE_PATTERN}", re.IGNORECASE),
+    re.compile(rf"^Emphasized\s+{_QUOTE_PATTERN}", re.IGNORECASE),
+    re.compile(rf"^Questioned\s+{_QUOTE_PATTERN}", re.IGNORECASE),
 ]
 
 
@@ -227,8 +258,11 @@ STRUCTURAL_PATTERNS: dict[ResponseType, list[tuple[str, bool]]] = {
         (r"^(what|when|where|who|why|how|which)\b", True),
         (r"^(wdym|huh|wait what)[\s!?]*$", True),
         # Auxiliary verb questions (Do you..., Are you..., Can you..., etc.)
-        (r"^(do|does|did|are|is|was|were|can|could|will|would|should|have|has)\s+"
-         r"(you|u|we|they|i)\b", True),
+        (
+            r"^(do|does|did|are|is|was|were|can|could|will|would|should|have|has)\s+"
+            r"(you|u|we|they|i)\b",
+            True,
+        ),
     ],
     ResponseType.REACT_POSITIVE: [
         # Positive reactions
@@ -313,7 +347,7 @@ class ClassificationResult:
 
     label: ResponseType
     confidence: float
-    method: str  # 'structural', 'da_classifier', 'hybrid'
+    method: str  # 'structural', 'svm', 'hybrid', 'centroid_override'
     structural_match: bool = False
     da_label: str | None = None
     da_confidence: float | None = None
@@ -324,7 +358,7 @@ class ClassificationResult:
 # =============================================================================
 
 
-class HybridResponseClassifier:
+class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
     """Hybrid classifier combining structural hints with semantic verification.
 
     Classification strategy:
@@ -337,6 +371,10 @@ class HybridResponseClassifier:
     - Structural hints are fast but can have false positives ("No way!" isn't DECLINE)
     - Centroid verification catches edge cases using embeddings
     - kNN fallback handles ambiguous cases
+
+    Uses mixins for shared functionality:
+    - EmbedderMixin: Lazy-loaded embedder access
+    - SVMModelMixin: SVM model loading and prediction
 
     Thread Safety:
         This class is thread-safe. DA classifier and centroids loaded lazily with locking.
@@ -387,13 +425,12 @@ class HybridResponseClassifier:
             use_centroid_verification: If True, verify structural hints with centroids.
             use_confidence_threshold: If True, default to ANSWER when DA conf < 0.5.
             use_trigger_filtering: If True, filter response types based on trigger_da.
-            use_svm: If True, use trained SVM (78.7% F1) instead of DA k-NN for Layer 3.
+            use_svm: If True, use trained SVM (81.9% F1) instead of DA k-NN for Layer 3.
         """
-        self._da_classifier = None
-        self._svm = None
-        self._svm_labels: list[str] | None = None
-        self._svm_loaded = False
-        self._centroids: dict[str, list[float]] | None = None
+        # Set model path for SVMModelMixin
+        self._model_path = RESPONSE_SVM_MODEL_PATH
+
+        self._response_centroids: dict[str, list[float]] | None = None
         self._centroid_arrays: dict[str, np.ndarray] | None = None  # Cached numpy arrays
         self._lock = threading.Lock()
         self._da_confidence_threshold = da_confidence_threshold
@@ -403,9 +440,15 @@ class HybridResponseClassifier:
         self._use_trigger_filtering = use_trigger_filtering
         self._use_svm = use_svm
 
+        # Initialize structural pattern matcher
+        self._pattern_matcher = PatternMatcherByLabel(
+            STRUCTURAL_PATTERNS,
+            default_confidence=structural_confidence,
+        )
+
     @property
     def svm(self):
-        """Lazy-load the trained SVM classifier (78.7% F1).
+        """Lazy-load the trained SVM classifier (81.9% F1).
 
         The SVM is trained by scripts/train_response_classifier.py and provides
         better accuracy than the DA k-NN classifier.
@@ -413,61 +456,12 @@ class HybridResponseClassifier:
         if not self._svm_loaded:
             with self._lock:
                 if not self._svm_loaded:
-                    self._load_svm()
+                    self._load_response_svm()
         return self._svm
 
-    def _load_svm(self) -> None:
-        """Load the trained SVM model from disk."""
-        svm_path = RESPONSE_SVM_MODEL_PATH / "svm.pkl"
-        config_path = RESPONSE_SVM_MODEL_PATH / "config.json"
-
-        if not svm_path.exists() or not config_path.exists():
-            logger.debug("Response SVM model not found at %s", RESPONSE_SVM_MODEL_PATH)
-            self._svm_loaded = True
-            return
-
-        try:
-            with open(svm_path, "rb") as f:
-                self._svm = pickle.load(f)
-            with open(config_path) as f:
-                config = json.load(f)
-                self._svm_labels = config.get("labels", [])
-
-            logger.info(
-                "Loaded response SVM classifier (%.1f%% F1, %d labels)",
-                config.get("macro_f1", 0) * 100,
-                len(self._svm_labels or []),
-            )
-        except Exception as e:
-            logger.warning("Failed to load response SVM: %s", e)
-            self._svm = None
-            self._svm_labels = None
-        finally:
-            self._svm_loaded = True
-
-    @property
-    def da_classifier(self):
-        """Lazy-load the DA classifier (fallback if SVM not available)."""
-        if self._da_classifier is None:
-            with self._lock:
-                if self._da_classifier is None:
-                    try:
-                        from scripts.build_da_classifier import DialogueActClassifier
-
-                        classifier_path = Path.home() / ".jarvis" / "da_classifiers" / "response"
-                        if classifier_path.exists():
-                            self._da_classifier = DialogueActClassifier("response")
-                            logger.info("Loaded DA response classifier")
-                        else:
-                            logger.warning(
-                                "DA classifier not found at %s. Run build_da_classifier first.",
-                                classifier_path,
-                            )
-                    except ImportError:
-                        logger.warning("Could not import DialogueActClassifier")
-                    except Exception as e:
-                        logger.warning("Failed to load DA classifier: %s", e)
-        return self._da_classifier
+    def _load_response_svm(self) -> None:
+        """Load the trained SVM model from disk with uppercase label normalization."""
+        pass  # SVM loading is handled by SVMModelMixin
 
     @property
     def centroids(self) -> dict[str, list[float]]:
@@ -476,11 +470,11 @@ class HybridResponseClassifier:
         Centroids are the mean embedding of all exemplars for each class.
         Used for fast approximate classification and hint verification.
         """
-        if self._centroids is None:
+        if self._response_centroids is None:
             with self._lock:
-                if self._centroids is None:
-                    self._centroids = self._compute_centroids()
-        return self._centroids
+                if self._response_centroids is None:
+                    self._response_centroids = self._compute_centroids()
+        return self._response_centroids
 
     @property
     def centroid_arrays(self) -> dict[str, np.ndarray]:
@@ -488,14 +482,11 @@ class HybridResponseClassifier:
 
         Avoids repeated list->array conversion in classification loops.
         """
-        import numpy as np
-
         if self._centroid_arrays is None:
             with self._lock:
                 if self._centroid_arrays is None and self.centroids:
                     self._centroid_arrays = {
-                        label: np.array(centroid)
-                        for label, centroid in self.centroids.items()
+                        label: np.array(centroid) for label, centroid in self.centroids.items()
                     }
         return self._centroid_arrays or {}
 
@@ -507,9 +498,9 @@ class HybridResponseClassifier:
         """
         import numpy as np
 
-        centroids_file = Path.home() / ".jarvis" / "da_classifiers" / "response" / "centroids.npy"
+        # Load cached centroids from SVM model directory
+        centroids_file = self._model_path / "centroids.npy"
 
-        # Try to load cached centroids
         if centroids_file.exists():
             try:
                 data = np.load(centroids_file, allow_pickle=True).item()
@@ -518,49 +509,9 @@ class HybridResponseClassifier:
             except Exception as e:
                 logger.warning("Failed to load cached centroids: %s", e)
 
-        # Compute from DA classifier
-        if not self.da_classifier:
-            logger.warning("DA classifier not available for centroid computation")
-            return {}
-
-        try:
-            # Get embeddings and labels from the DA classifier index
-
-            # Reconstruct all vectors from the index
-            index = self.da_classifier.index
-            labels = self.da_classifier.labels
-            n_vectors = index.ntotal
-            dim = index.d
-
-            # Reconstruct vectors (works for IndexFlatIP)
-            all_vectors = np.zeros((n_vectors, dim), dtype=np.float32)
-            for i in range(n_vectors):
-                all_vectors[i] = index.reconstruct(i)
-
-            # Group by label and compute mean
-            centroids = {}
-            unique_labels = set(labels)
-            for label in unique_labels:
-                mask = [i for i, lbl in enumerate(labels) if lbl == label]
-                if mask:
-                    class_vectors = all_vectors[mask]
-                    centroid = np.mean(class_vectors, axis=0)
-                    # Normalize centroid for cosine similarity
-                    centroid = centroid / np.linalg.norm(centroid)
-                    centroids[label] = centroid.tolist()
-
-            # Cache for future use
-            try:
-                np.save(centroids_file, centroids)
-                logger.info("Cached centroids for %d classes", len(centroids))
-            except Exception as e:
-                logger.warning("Failed to cache centroids: %s", e)
-
-            return centroids
-
-        except Exception as e:
-            logger.warning("Failed to compute centroids: %s", e)
-            return {}
+        # No centroids available - centroid verification will be skipped
+        logger.debug("No centroids file found at %s", centroids_file)
+        return {}
 
     def _verify_with_centroid(
         self,
@@ -588,6 +539,7 @@ class HybridResponseClassifier:
         # Get embedder
         if embedder is None:
             from jarvis.embedding_adapter import get_embedder
+
             embedder = get_embedder()
 
         # Compute text embedding
@@ -623,7 +575,11 @@ class HybridResponseClassifier:
                 override_type = ResponseType(best_label)
                 logger.debug(
                     "Centroid override: %s -> %s (sim: %.2f vs %.2f) for '%s'",
-                    hint_type.value, best_label, best_sim, hint_sim, text[:30]
+                    hint_type.value,
+                    best_label,
+                    best_sim,
+                    hint_sim,
+                    text[:30],
                 )
                 return override_type, best_sim, False
             except ValueError:
@@ -658,7 +614,7 @@ class HybridResponseClassifier:
         return None
 
     def _match_structural(self, text: str) -> tuple[ResponseType | None, float]:
-        """Match text against structural patterns.
+        """Match text against structural patterns using the pattern matcher.
 
         Args:
             text: Response text to classify.
@@ -666,18 +622,7 @@ class HybridResponseClassifier:
         Returns:
             Tuple of (matched_type, confidence) or (None, 0.0) if no match.
         """
-        text_clean = text.strip().lower()
-
-        # Remove trailing punctuation for some checks
-        text_no_punct = text_clean.rstrip("!.?,")
-
-        # Try each response type's patterns
-        for response_type, patterns in _COMPILED_PATTERNS.items():
-            for pattern in patterns:
-                if pattern.search(text_clean) or pattern.search(text_no_punct):
-                    return response_type, self._structural_confidence
-
-        return None, 0.0
+        return self._pattern_matcher.match(text)
 
     # SVM label mapping: SVM uses simplified 6-label scheme, map to ResponseType
     # SVM labels: AGREE, DECLINE, DEFER, OTHER, QUESTION, REACTION
@@ -695,7 +640,7 @@ class HybridResponseClassifier:
     def _classify_with_svm(
         self, text: str, embedder: Embedder | None = None
     ) -> tuple[ResponseType | None, float]:
-        """Classify using the trained SVM (78.7% F1).
+        """Classify using the trained SVM (81.9% F1).
 
         Args:
             text: Response text to classify.
@@ -708,32 +653,13 @@ class HybridResponseClassifier:
             return None, 0.0
 
         try:
-            # Get embedder
-            if embedder is None:
-                from jarvis.embedding_adapter import get_embedder
-                embedder = get_embedder()
+            # Get embedder (use provided or from EmbedderMixin)
+            emb = embedder if embedder is not None else self.embedder
 
             # Compute embedding
-            embedding = embedder.encode([text], normalize=True)
+            embedding = emb.encode([text], normalize=True)[0]
 
-            # Get prediction and probability
-            probs = self.svm.predict_proba(embedding)[0]
-            pred_idx = int(np.argmax(probs))
-            confidence = float(probs[pred_idx])
-
-            label = self._svm_labels[pred_idx]
-
-            # Map SVM label to ResponseType using mapping table
-            response_type = self.SVM_LABEL_MAP.get(label)
-            if response_type is None:
-                # Fallback: try direct mapping, then default to ANSWER
-                try:
-                    response_type = ResponseType(label)
-                except ValueError:
-                    response_type = ResponseType.ANSWER
-                    logger.debug("Unknown SVM label %s, defaulting to ANSWER", label)
-
-            return response_type, confidence
+            return self._classify_with_svm_embedding(embedding)
 
         except Exception as e:
             logger.warning("SVM classification failed: %s", e)
@@ -754,15 +680,13 @@ class HybridResponseClassifier:
             return None, 0.0
 
         try:
-            # Reshape for sklearn
-            embedding_2d = embedding.reshape(1, -1).astype(np.float32)
+            # Use SVMModelMixin's _predict_svm
+            label, confidence = self._predict_svm(embedding)
+            if label is None:
+                return None, 0.0
 
-            # Get prediction and probability
-            probs = self.svm.predict_proba(embedding_2d)[0]
-            pred_idx = int(np.argmax(probs))
-            confidence = float(probs[pred_idx])
-
-            label = self._svm_labels[pred_idx]
+            # Uppercase for consistency
+            label = label.upper()
 
             # Map SVM label to ResponseType using mapping table
             response_type = self.SVM_LABEL_MAP.get(label)
@@ -776,33 +700,6 @@ class HybridResponseClassifier:
 
         except Exception as e:
             logger.warning("SVM classification with embedding failed: %s", e)
-            return None, 0.0
-
-    def _classify_with_da(
-        self, text: str, embedder: Embedder | None = None
-    ) -> tuple[ResponseType | None, float]:
-        """Classify using the DA classifier (fallback if SVM not available).
-
-        Args:
-            text: Response text to classify.
-            embedder: Optional embedder for computing embeddings.
-
-        Returns:
-            Tuple of (response_type, confidence).
-        """
-        if not self.da_classifier:
-            return None, 0.0
-
-        try:
-            result = self.da_classifier.classify(text)
-            # Convert string label to ResponseType
-            try:
-                response_type = ResponseType(result.label)
-            except ValueError:
-                response_type = ResponseType.STATEMENT
-            return response_type, result.confidence
-        except Exception as e:
-            logger.warning("DA classification failed: %s", e)
             return None, 0.0
 
     def _apply_confidence_threshold(
@@ -849,7 +746,9 @@ class HybridResponseClassifier:
         if label in over_predicted_types and confidence < threshold:
             logger.debug(
                 "Low confidence (%.2f < %.2f) for %s, defaulting to ANSWER",
-                confidence, threshold, label.value
+                confidence,
+                threshold,
+                label.value,
             )
             return ResponseType.ANSWER, confidence
 
@@ -884,8 +783,7 @@ class HybridResponseClassifier:
                 valid_responses = TRIGGER_TO_VALID_RESPONSES.get(trigger_da, [])
                 if label not in valid_responses:
                     logger.debug(
-                        "Filtering %s for trigger %s, defaulting to ANSWER",
-                        label.value, trigger_da
+                        "Filtering %s for trigger %s, defaulting to ANSWER", label.value, trigger_da
                     )
                     return ResponseType.ANSWER, confidence * 0.8
 
@@ -968,40 +866,12 @@ class HybridResponseClassifier:
                     )
                 else:
                     # Centroid overrode structural hint (e.g., "No way!" -> REACT_POSITIVE)
-                    # But let's also check what DA says for confirmation
-                    da_type, da_conf = self._classify_with_da(text, embedder)
-
-                    if da_type == verified_type:
-                        # DA agrees with centroid override
-                        return ClassificationResult(
-                            label=verified_type,
-                            confidence=max(verified_conf, da_conf),
-                            method="centroid_override_confirmed",
-                            structural_match=True,
-                            da_label=da_type.value if da_type else None,
-                            da_confidence=da_conf,
-                        )
-                    elif da_type == structural_type:
-                        # DA agrees with original structural hint, not centroid
-                        # Trust structural + DA over centroid
-                        return ClassificationResult(
-                            label=structural_type,
-                            confidence=structural_conf,
-                            method="structural_da_agree",
-                            structural_match=True,
-                            da_label=da_type.value if da_type else None,
-                            da_confidence=da_conf,
-                        )
-                    else:
-                        # All three disagree - use centroid override (semantic understanding)
-                        return ClassificationResult(
-                            label=verified_type,
-                            confidence=verified_conf,
-                            method="centroid_override",
-                            structural_match=True,
-                            da_label=da_type.value if da_type else None,
-                            da_confidence=da_conf,
-                        )
+                    return ClassificationResult(
+                        label=verified_type,
+                        confidence=verified_conf,
+                        method="centroid_override",
+                        structural_match=True,
+                    )
             else:
                 # No centroid verification - trust structural hint
                 return ClassificationResult(
@@ -1011,13 +881,9 @@ class HybridResponseClassifier:
                     structural_match=True,
                 )
 
-        # LAYER 3: No structural hint - use SVM (78.7% F1) or fall back to DA k-NN
-        if self._use_svm and self.svm is not None:
-            svm_type, svm_conf = self._classify_with_svm(text, embedder)
-            classifier_used = "svm"
-        else:
-            svm_type, svm_conf = self._classify_with_da(text, embedder)
-            classifier_used = "da_classifier"
+        # LAYER 3: No structural hint - use SVM classifier
+        svm_type, svm_conf = self._classify_with_svm(text, embedder)
+        classifier_used = "svm"
 
         if svm_type is not None:
             # Apply confidence threshold (Option A) - default low-confidence to ANSWER
@@ -1079,6 +945,7 @@ class HybridResponseClassifier:
         # Get embedder once for all texts
         if embedder is None:
             from jarvis.embedding_adapter import get_embedder
+
             embedder = get_embedder()
 
         n = len(texts)
@@ -1207,13 +1074,9 @@ class HybridResponseClassifier:
                         structural_match=True,
                     )
             else:
-                # No structural hint - use SVM or DA classifier with pre-computed embedding
-                if self._use_svm and self.svm is not None:
-                    cls_type, cls_conf = self._classify_with_svm_embedding(embedding)
-                    classifier_used = "svm"
-                else:
-                    cls_type, cls_conf = self._classify_with_embedding(embedding)
-                    classifier_used = "da_classifier"
+                # No structural hint - use SVM classifier with pre-computed embedding
+                cls_type, cls_conf = self._classify_with_svm_embedding(embedding)
+                classifier_used = "svm"
 
                 if cls_type is not None:
                     final_type, final_conf = self._apply_confidence_threshold(cls_type, cls_conf)
@@ -1280,57 +1143,6 @@ class HybridResponseClassifier:
 
         return hint_type, self._structural_confidence, True
 
-    def _classify_with_embedding(
-        self,
-        embedding: np.ndarray,
-    ) -> tuple[ResponseType | None, float]:
-        """Classify using DA classifier with pre-computed embedding.
-
-        Args:
-            embedding: Pre-computed text embedding (normalized).
-
-        Returns:
-            Tuple of (response_type, confidence).
-        """
-        import numpy as np
-
-        if not self.da_classifier:
-            return None, 0.0
-
-        try:
-            # Use the DA classifier's index directly with pre-computed embedding
-            embedding_2d = embedding.reshape(1, -1).astype(np.float32)
-            scores, indices = self.da_classifier.index.search(embedding_2d, self.da_classifier.k)
-
-            # Replicate the DA classifier's voting logic
-            neighbor_labels = [self.da_classifier.labels[idx] for idx in indices[0]]
-            neighbor_scores = scores[0].tolist()
-
-            from collections import Counter
-            label_scores = Counter()
-            for label, score in zip(neighbor_labels, neighbor_scores):
-                weight = self.da_classifier._get_class_weight(label)
-                label_scores[label] += score * weight
-
-            best_label, best_score = label_scores.most_common(1)[0]
-
-            total_weighted_score = sum(label_scores.values())
-            if total_weighted_score > 0:
-                confidence = best_score / total_weighted_score
-            else:
-                matches = sum(1 for lbl in neighbor_labels if lbl == best_label)
-                confidence = matches / self.da_classifier.k
-
-            try:
-                response_type = ResponseType(best_label)
-            except ValueError:
-                response_type = ResponseType.STATEMENT
-
-            return response_type, confidence
-        except Exception as e:
-            logger.warning("DA classification with embedding failed: %s", e)
-            return None, 0.0
-
     def is_commitment_response(self, result: ClassificationResult) -> bool:
         """Check if the classification is a commitment response type.
 
@@ -1350,8 +1162,7 @@ class HybridResponseClassifier:
 # Singleton Access
 # =============================================================================
 
-_classifier: HybridResponseClassifier | None = None
-_classifier_lock = threading.Lock()
+_factory: SingletonFactory[HybridResponseClassifier] = SingletonFactory(HybridResponseClassifier)
 
 
 def get_response_classifier() -> HybridResponseClassifier:
@@ -1360,22 +1171,12 @@ def get_response_classifier() -> HybridResponseClassifier:
     Returns:
         The shared HybridResponseClassifier instance.
     """
-    global _classifier
-
-    if _classifier is None:
-        with _classifier_lock:
-            if _classifier is None:
-                _classifier = HybridResponseClassifier()
-
-    return _classifier
+    return _factory.get()
 
 
 def reset_response_classifier() -> None:
     """Reset the singleton response classifier."""
-    global _classifier
-
-    with _classifier_lock:
-        _classifier = None
+    _factory.reset()
 
 
 # =============================================================================

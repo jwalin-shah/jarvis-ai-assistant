@@ -14,7 +14,6 @@ Profile storage: ~/.jarvis/relationships/{contact_hash}.json
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
@@ -435,7 +434,9 @@ def _hash_contact_id(contact_id: str) -> str:
     Returns:
         SHA-256 hash prefix (first 16 chars) for filename safety
     """
-    return hashlib.sha256(contact_id.encode("utf-8")).hexdigest()[:16]
+    from jarvis.contact_utils import hash_contact_id
+
+    return hash_contact_id(contact_id)
 
 
 def _normalize_text(text: str) -> str:
@@ -804,6 +805,7 @@ def _extract_common_phrases(messages: list[Any], min_count: int = 3) -> list[str
 
     # Filter and return top phrases using heapq for efficiency
     import heapq
+
     filtered = [(c, p) for p, c in phrase_counter.items() if c >= min_count]
     top_5 = heapq.nlargest(5, filtered)
     return [p for _, p in top_5]

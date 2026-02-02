@@ -28,6 +28,7 @@ from jarvis.embedding_adapter import get_embedder
 @dataclass
 class ExperimentResult:
     """Result from a single experiment."""
+
     name: str
     sampling: str
     C: float
@@ -203,8 +204,7 @@ def run_experiment(
     # Get per-class metrics
     report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
     per_class = {
-        k: v for k, v in report.items()
-        if k not in ["accuracy", "macro avg", "weighted avg"]
+        k: v for k, v in report.items() if k not in ["accuracy", "macro avg", "weighted avg"]
     }
 
     return ExperimentResult(
@@ -262,9 +262,9 @@ def main():
     sampling_configs = [
         ("natural", None, None, None),  # Use natural distribution
         ("balanced", None, 1.0, None),  # Equal samples per class (ratio=1.0 means min_count)
-        ("cap_500", 500, None, None),   # Cap at 500 per class
-        ("cap_400", 400, None, None),   # Cap at 400 per class
-        ("cap_300", 300, None, None),   # Cap at 300 per class
+        ("cap_500", 500, None, None),  # Cap at 500 per class
+        ("cap_400", 400, None, None),  # Cap at 400 per class
+        ("cap_300", 300, None, None),  # Cap at 300 per class
         ("ratio_2x", None, 2.0, None),  # Max 2x the minority class
         ("ratio_3x", None, 3.0, None),  # Max 3x the minority class
         # New: Protect minority classes, only downsample STATEMENT (majority)
@@ -326,8 +326,14 @@ def main():
                 print(f"  [{exp_count}/{total_experiments}] {name}...", end=" ", flush=True)
 
                 result = run_experiment(
-                    X_train, X_test, y_train, y_test,
-                    C=C, gamma=gamma, name=name, sampling=sampling_name
+                    X_train,
+                    X_test,
+                    y_train,
+                    y_test,
+                    C=C,
+                    gamma=gamma,
+                    name=name,
+                    sampling=sampling_name,
                 )
                 results.append(result)
                 print(f"acc={result.accuracy:.3f} f1={result.macro_f1:.3f}", flush=True)
@@ -347,7 +353,10 @@ def main():
     print("-" * 70)
 
     for i, r in enumerate(results[:10], 1):
-        print(f"{i:<5} {r.name:<30} {r.accuracy:>7.3f} {r.macro_f1:>8.3f} {r.weighted_f1:>8.3f} {r.train_size:>6}")
+        print(
+            f"{i:<5} {r.name:<30} {r.accuracy:>7.3f} {r.macro_f1:>8.3f} "
+            f"{r.weighted_f1:>8.3f} {r.train_size:>6}"
+        )
 
     # Print best result details
     if best_result:
@@ -368,7 +377,11 @@ def main():
         print("  " + "-" * 52)
         for cls, metrics in sorted(best_result.per_class.items()):
             if isinstance(metrics, dict):
-                print(f"  {cls:<12} {metrics.get('precision', 0):>10.3f} {metrics.get('recall', 0):>10.3f} {metrics.get('f1-score', 0):>10.3f} {metrics.get('support', 0):>10.0f}")
+                prec = metrics.get("precision", 0)
+                rec = metrics.get("recall", 0)
+                f1 = metrics.get("f1-score", 0)
+                sup = metrics.get("support", 0)
+                print(f"  {cls:<12} {prec:>10.3f} {rec:>10.3f} {f1:>10.3f} {sup:>10.0f}")
 
     # Save results
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -33,6 +33,7 @@ console = Console()
 # Note: MLX models should be imported lazily in actual code to avoid loading
 # until needed, but we expose the import path here for test patching.
 
+
 def cleanup() -> None:
     """Cleanup function to reset singletons and release resources.
 

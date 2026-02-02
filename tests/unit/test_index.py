@@ -538,7 +538,9 @@ class TestTriggerIndexSearcher:
             i: sample_pairs[i] for i in range(len(sample_pairs))
         }
         mock_jarvis_db.get_embeddings_by_pair_ids.return_value = {
-            p.id: PairEmbedding(pair_id=p.id, faiss_id=i, cluster_id=1, index_version="test-version")
+            p.id: PairEmbedding(
+                pair_id=p.id, faiss_id=i, cluster_id=1, index_version="test-version"
+            )
             for i, p in enumerate(sample_pairs)
         }
         mock_jarvis_db.get_clusters_batch.return_value = {

@@ -51,6 +51,27 @@ class FeedbackAction(str, Enum):
     EDITED = "edited"  # User edited before sending
     DISMISSED = "dismissed"  # User dismissed the suggestion
     COPIED = "copied"  # User copied but didn't send yet
+    WROTE_FROM_SCRATCH = "wrote_from_scratch"  # User ignored suggestion, wrote own
+
+
+class FailureReason(str, Enum):
+    """Why a suggestion failed (for learning what capabilities are needed)."""
+
+    # Classifier/generation issues
+    CLASSIFIER_WRONG = "classifier_wrong"  # Wrong trigger type detected
+    TONE_WRONG = "tone_wrong"  # Right content, wrong style/formality
+    TOO_GENERIC = "too_generic"  # Response was too vague
+    CONTEXT_INSUFFICIENT = "context_insufficient"  # Needed more conversation history
+
+    # Capability gaps (system can't help without new features)
+    NEEDS_CALENDAR = "needs_calendar"  # Scheduling, availability questions
+    NEEDS_MEMORY = "needs_memory"  # "Remember X", "What did we decide..."
+    NEEDS_TASK_TRACKING = "needs_tasks"  # Commitments, todos, reminders
+    NEEDS_CONTACT_INFO = "needs_contacts"  # "What's X's number/email"
+    NEEDS_EXTERNAL_INFO = "needs_external"  # Weather, news, lookups
+
+    # Other
+    UNKNOWN = "unknown"  # Not sure why it failed
 
 
 @dataclass
@@ -781,9 +802,10 @@ class FeedbackStore:
             edited = action_counts[FeedbackAction.EDITED]
             dismissed = action_counts[FeedbackAction.DISMISSED]
             copied = action_counts[FeedbackAction.COPIED]
+            wrote_scratch = action_counts.get(FeedbackAction.WROTE_FROM_SCRATCH, 0)
 
             # Calculate rates
-            total_actioned = sent + edited + dismissed
+            total_actioned = sent + edited + dismissed + wrote_scratch
             acceptance_rate = sent / total_actioned if total_actioned > 0 else 0.0
             edit_rate = edited / total_actioned if total_actioned > 0 else 0.0
 
@@ -798,15 +820,24 @@ class FeedbackStore:
                     "overall_score": statistics.mean(e.overall_score for e in eval_scores),
                 }
 
+            # Count failure reasons from metadata
+            failure_reasons: dict[str, int] = {}
+            for entry in self._entries:
+                reason = entry.metadata.get("failure_reason")
+                if reason:
+                    failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
+
             stats = {
                 "total_feedback": total,
                 "sent_unchanged": sent,
                 "edited": edited,
                 "dismissed": dismissed,
                 "copied": copied,
+                "wrote_from_scratch": wrote_scratch,
                 "acceptance_rate": round(acceptance_rate, 3),
                 "edit_rate": round(edit_rate, 3),
                 "avg_evaluation_scores": avg_scores,
+                "failure_reasons": failure_reasons if failure_reasons else None,
             }
 
             self._stats_cache = stats
@@ -957,6 +988,99 @@ class FeedbackStore:
         with self._lock:
             return list(reversed(self._entries[-limit:]))
 
+    def get_capability_gaps(self) -> dict[str, Any]:
+        """Analyze failure reasons to identify capability gaps.
+
+        Returns what % of failures are due to missing capabilities vs
+        classifier/generation issues. Helps prioritize what to build next.
+
+        Returns:
+            Dictionary with capability gap analysis
+        """
+        self._load_if_needed()
+
+        with self._lock:
+            # Only look at failures (dismissed, wrote_from_scratch)
+            failures = [
+                e
+                for e in self._entries
+                if e.action in (FeedbackAction.DISMISSED, FeedbackAction.WROTE_FROM_SCRATCH)
+            ]
+
+            if not failures:
+                return {
+                    "total_failures": 0,
+                    "tagged_failures": 0,
+                    "capability_gaps": {},
+                    "classifier_issues": {},
+                    "recommendation": "No failures recorded yet",
+                }
+
+            # Separate capability gaps from classifier issues
+            capability_reasons = {
+                FailureReason.NEEDS_CALENDAR.value,
+                FailureReason.NEEDS_MEMORY.value,
+                FailureReason.NEEDS_TASK_TRACKING.value,
+                FailureReason.NEEDS_CONTACT_INFO.value,
+                FailureReason.NEEDS_EXTERNAL_INFO.value,
+            }
+
+            classifier_reasons = {
+                FailureReason.CLASSIFIER_WRONG.value,
+                FailureReason.TONE_WRONG.value,
+                FailureReason.TOO_GENERIC.value,
+                FailureReason.CONTEXT_INSUFFICIENT.value,
+            }
+
+            capability_counts: dict[str, int] = {}
+            classifier_counts: dict[str, int] = {}
+            untagged = 0
+
+            for entry in failures:
+                reason = entry.metadata.get("failure_reason")
+                if not reason:
+                    untagged += 1
+                elif reason in capability_reasons:
+                    capability_counts[reason] = capability_counts.get(reason, 0) + 1
+                elif reason in classifier_reasons:
+                    classifier_counts[reason] = classifier_counts.get(reason, 0) + 1
+
+            total_failures = len(failures)
+            tagged = total_failures - untagged
+            total_capability = sum(capability_counts.values())
+            total_classifier = sum(classifier_counts.values())
+
+            # Generate recommendation
+            recommendation = ""
+            if tagged < 10:
+                recommendation = f"Tag more failures ({tagged} tagged, need ~50 for insights)"
+            elif total_capability > total_classifier:
+                top_gap = (
+                    max(capability_counts, key=capability_counts.get) if capability_counts else None
+                )
+                if top_gap:
+                    gap_name = top_gap.replace("needs_", "")
+                    gap_count = capability_counts[top_gap]
+                    recommendation = f"Build {gap_name} integration ({gap_count} failures)"
+            else:
+                top_issue = (
+                    max(classifier_counts, key=classifier_counts.get) if classifier_counts else None
+                )
+                if top_issue:
+                    issue_count = classifier_counts[top_issue]
+                    recommendation = f"Fix {top_issue} ({issue_count} failures)"
+
+            return {
+                "total_failures": total_failures,
+                "tagged_failures": tagged,
+                "untagged_failures": untagged,
+                "capability_gaps": capability_counts,
+                "capability_gap_total": total_capability,
+                "classifier_issues": classifier_counts,
+                "classifier_issue_total": total_classifier,
+                "recommendation": recommendation,
+            }
+
     def clear(self) -> None:
         """Clear all feedback data (for testing)."""
         with self._lock:
@@ -1013,6 +1137,7 @@ def reset_evaluation() -> None:
 __all__ = [
     # Enums
     "FeedbackAction",
+    "FailureReason",
     # Data classes
     "ToneAnalysis",
     "EvaluationResult",

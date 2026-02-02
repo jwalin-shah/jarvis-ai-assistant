@@ -1245,8 +1245,8 @@ class JarvisDB:
                 ORDER BY trigger_timestamp DESC
                 LIMIT ?
                 """,
-                (min_quality, limit),
-            )
+                    (min_quality, limit),
+                )
             return [self._row_to_pair(row) for row in cursor]
 
     def get_split_stats(self) -> dict[str, Any]:

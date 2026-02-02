@@ -29,8 +29,8 @@ Input Message
     │ no high-confidence match
     ▼
 ┌─────────────────────────────────────┐
-│ LAYER 2: Trained SVM Classifier     │  Embedding-based, 71% macro F1
-│ (balanced sampling, C=5, gamma=scale)│  Uses bge-small embeddings
+│ LAYER 2: Trained SVM Classifier     │  Embedding-based, 82% macro F1
+│ (C=10, gamma=scale, 6000 examples)  │  Uses bge-small embeddings
 └─────────────────────────────────────┘
     │ low confidence
     ▼
@@ -41,14 +41,17 @@ Input Message
 
 ### Accuracy
 
+**82.0% macro F1** [95% CI: 79.3% - 84.4%] on held-out test set (973 examples)
+
 | Class | F1 Score | Key Signals |
 |-------|----------|-------------|
-| SOCIAL | 77% | Tapbacks (32%), greetings, acks |
-| QUESTION | 74% | 37% end with "?", WH-words |
-| REACTION | 69% | Emotional words (damn, bro, crazy) |
-| STATEMENT | 69% | "I" statements, neutral info |
-| COMMITMENT | 68% | "wanna", "can you", "let's" |
-| **Overall** | **71%** | Macro F1 |
+| QUESTION | 86.6% | 37% end with "?", WH-words |
+| STATEMENT | 86.2% | "I" statements, neutral info |
+| SOCIAL | 85.3% | Tapbacks (32%), greetings, acks |
+| COMMITMENT | 76.8% | "wanna", "can you", "let's" |
+| REACTION | 75.2% | Emotional words (damn, bro, crazy) |
+
+Training: `experiments/trigger/` (coarse_search → final_eval)
 
 ### Usage
 
@@ -76,10 +79,10 @@ uv run python -m scripts.analyze_trigger_patterns
 | File | Purpose |
 |------|---------|
 | `jarvis/trigger_classifier.py` | Hybrid trigger classifier |
-| `data/trigger_labeling.jsonl` | 3,000 labeled examples |
+| `data/trigger_labeling.jsonl` | 4,865 labeled examples |
+| `data/trigger_new_batch_3000.jsonl` | 3,000 auto-labeled examples |
 | `~/.jarvis/trigger_classifier_model/` | Trained SVM model |
-| `scripts/train_trigger_classifier.py` | Training script |
-| `scripts/analyze_trigger_patterns.py` | Pattern analysis |
+| `experiments/trigger/` | Training experiment scripts |
 
 ---
 
@@ -117,8 +120,8 @@ Input Text
     │ no structural hint
     ▼
 ┌─────────────────────────────────────┐
-│ LAYER 3: DA Classifier (k-NN)       │  ~61% of cases
-│ + Confidence threshold filtering    │  ~28% filtered to ANSWER
+│ LAYER 3: SVM Classifier             │  ~61% of cases
+│ + Confidence threshold filtering    │  81.9% macro F1
 └─────────────────────────────────────┘
 ```
 
@@ -166,23 +169,22 @@ Instead of equal 500/class sampling (which over-predicted minority classes), use
 
 ## Accuracy
 
-Validated on 135 manually-labeled samples:
+**81.9% macro F1** [95% CI: 78.4% - 84.9%] on held-out test set (971 examples)
 
-| Category | Accuracy |
-|----------|----------|
-| REACT_POSITIVE | 86.4% |
-| ANSWER | 77.3% |
-| QUESTION | 72.7% |
-| ACKNOWLEDGE | 72.7% |
-| AGREE | 50.0% |
-| DEFER | 45.5% |
-| DECLINE | 40.9% |
-| **OVERALL** | **64.4%** |
+| Class | F1 Score |
+|-------|----------|
+| QUESTION | 89.6% |
+| OTHER | 87.2% |
+| REACTION | 83.3% |
+| DECLINE | 80.0% |
+| AGREE | 79.2% |
+| DEFER | 71.8% |
+
+Training: `scripts/train_response_classifier.py`
 
 ### Known Issues
-- DECLINE is still over-predicted for negative-sentiment statements
-- DEFER catches uncertain statements that aren't actually deferring
-- AGREE sometimes matches agreement with statements, not just commitments
+- DEFER is weakest class (71.8% F1) - often confused with OTHER
+- AGREE has precision issues (72.4%) - some OTHER misclassified as AGREE
 
 ## Usage
 
@@ -232,16 +234,13 @@ for ex in examples:
 
 ## Scripts
 
-### Build DA Classifier
+### Train Classifier
 ```bash
-# Build with proportional sampling (recommended)
-uv run python -m scripts.build_da_classifier --build --proportional
+# Train response classifier with multiple sampling strategies
+uv run python -m scripts.train_response_classifier --save-best
 
-# Build with equal sampling
-uv run python -m scripts.build_da_classifier --build
-
-# Validate on test examples
-uv run python -m scripts.build_da_classifier --validate
+# Train trigger classifier
+uv run python -m scripts.train_trigger_classifier --save-best
 ```
 
 ### Evaluate Classifier
@@ -251,15 +250,6 @@ uv run python -m scripts.eval_full_classifier
 
 # Sample for manual validation
 uv run python -m scripts.eval_full_classifier --validate 200
-
-# Score manual validation
-uv run python -m scripts.eval_full_classifier --score
-```
-
-### Mine Exemplars
-```bash
-# Mine exemplars from high-purity clusters
-uv run python -m scripts.mine_da_exemplars --extract
 ```
 
 ## File Locations
@@ -269,12 +259,9 @@ uv run python -m scripts.mine_da_exemplars --extract
 | `jarvis/response_classifier.py` | Hybrid response classifier |
 | `jarvis/multi_option.py` | Multi-option generation |
 | `jarvis/retrieval.py` | DA-filtered retrieval |
-| `scripts/build_da_classifier.py` | Build DA classifier indices |
+| `scripts/train_response_classifier.py` | Train SVM response classifier |
 | `scripts/eval_full_classifier.py` | Evaluate classifier |
-| `scripts/mine_da_exemplars.py` | Mine exemplars from data |
-| `~/.jarvis/da_classifiers/` | Classifier indices |
-| `~/.jarvis/da_exemplars/` | Mined exemplars |
-| `~/.jarvis/classifier_validation.json` | Manual validation samples |
+| `~/.jarvis/response_classifier_model/` | Trained SVM model |
 
 ## Future Improvements
 

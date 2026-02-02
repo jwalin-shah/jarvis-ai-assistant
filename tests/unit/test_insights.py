@@ -144,10 +144,11 @@ class TestAnalyzeSentimentTrends:
 
     def test_weekly_granularity(self):
         """Weekly granularity groups by week."""
-        now = datetime.now()
+        # Use fixed date mid-week to avoid crossing week boundaries
+        base_date = datetime(2024, 6, 12, 12, 0, 0)  # Wednesday
         messages = [
-            create_message("Message 1", date=now),
-            create_message("Message 2", date=now + timedelta(days=1)),
+            create_message("Message 1", date=base_date),
+            create_message("Message 2", date=base_date + timedelta(days=1)),
         ]
         result = analyze_sentiment_trends(messages, granularity="week")
         # Both messages should be in the same week

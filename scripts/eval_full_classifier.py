@@ -47,14 +47,16 @@ def validate_sample(n_samples: int = 200):
         label = result.label.value
         if label not in by_type:
             by_type[label] = []
-        by_type[label].append({
-            "trigger": trigger[:100] if trigger else "",
-            "response": response[:100] if response else "",
-            "predicted": label,
-            "confidence": round(result.confidence, 2),
-            "method": result.method,
-            "correct": None,  # Fill this in manually
-        })
+        by_type[label].append(
+            {
+                "trigger": trigger[:100] if trigger else "",
+                "response": response[:100] if response else "",
+                "predicted": label,
+                "confidence": round(result.confidence, 2),
+                "method": result.method,
+                "correct": None,  # Fill this in manually
+            }
+        )
 
     # Take proportional samples from each type
     samples_per_type = max(10, n_samples // len(by_type))
@@ -77,13 +79,13 @@ def validate_sample(n_samples: int = 200):
     for t, c in sorted(type_counts.items(), key=lambda x: -x[1]):
         print(f"  {t}: {c}")
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("INSTRUCTIONS")
-    print("="*70)
+    print("=" * 70)
     print("1. Open the JSON file")
     print("2. For each sample, set 'correct': true or false")
     print("3. Run: uv run python -m scripts.eval_full_classifier --score")
-    print("="*70)
+    print("=" * 70)
 
 
 def score_validation():
@@ -125,11 +127,11 @@ def score_validation():
         print("Edit the JSON file and set 'correct': true or false for each sample.")
         return
 
-    print("="*70)
+    print("=" * 70)
     print("VALIDATION RESULTS")
-    print("="*70)
+    print("=" * 70)
     print(f"\n{'Category':<20} {'Correct':<10} {'Total':<10} {'Accuracy':<10}")
-    print("-"*50)
+    print("-" * 50)
 
     for label in sorted(by_type.keys(), key=lambda x: -by_type[x]["total"]):
         stats = by_type[label]
@@ -137,7 +139,7 @@ def score_validation():
         bar = "█" * int(acc / 5) + "░" * (20 - int(acc / 5))
         print(f"{label:<20} {stats['correct']:<10} {stats['total']:<10} {acc:5.1f}% {bar}")
 
-    print("-"*50)
+    print("-" * 50)
     overall_acc = total_correct / total_judged * 100
     print(f"{'OVERALL':<20} {total_correct:<10} {total_judged:<10} {overall_acc:5.1f}%")
     print()
@@ -145,9 +147,9 @@ def score_validation():
     # Show some incorrect examples
     incorrect = [s for s in samples if s.get("correct") is False]
     if incorrect:
-        print("="*70)
+        print("=" * 70)
         print(f"SAMPLE ERRORS ({len(incorrect)} total)")
-        print("="*70)
+        print("=" * 70)
         for s in incorrect[:10]:
             print(f"\n  Predicted: {s['predicted']} ({s['method']})")
             print(f"  Response:  {s['response'][:60]}...")
@@ -155,10 +157,10 @@ def score_validation():
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate response classifier")
-    parser.add_argument("--validate", type=int, metavar="N",
-                        help="Sample N messages for manual validation")
-    parser.add_argument("--score", action="store_true",
-                        help="Score the manual validation results")
+    parser.add_argument(
+        "--validate", type=int, metavar="N", help="Sample N messages for manual validation"
+    )
+    parser.add_argument("--score", action="store_true", help="Score the manual validation results")
     args = parser.parse_args()
 
     if args.validate:
@@ -230,7 +232,7 @@ def main():
 
     elapsed = time.time() - start
 
-    print(f"\nCompleted {total} pairs in {elapsed:.1f}s ({total/elapsed:.0f}/sec)")
+    print(f"\nCompleted {total} pairs in {elapsed:.1f}s ({total / elapsed:.0f}/sec)")
     print()
     print("=" * 70)
     print("FULL DATASET DISTRIBUTION")
@@ -246,7 +248,7 @@ def main():
     print("CLASSIFICATION METHODS")
     print("=" * 70)
     for method, count in sorted(method_counts.items(), key=lambda x: -x[1]):
-        print(f"  {method:30} {count:6} ({count/total*100:.1f}%)")
+        print(f"  {method:30} {count:6} ({count / total * 100:.1f}%)")
 
     # Summary stats
     structural = sum(c for m, c in method_counts.items() if "structural" in m)
@@ -257,10 +259,10 @@ def main():
     print("SUMMARY")
     print("=" * 70)
     print(f"  Total pairs:           {total:,}")
-    print(f"  Structural matches:    {structural:,} ({structural/total*100:.1f}%)")
-    print(f"  Filtered to ANSWER:    {filtered:,} ({filtered/total*100:.1f}%)")
-    print(f"  STATEMENT %:           {counts.get('STATEMENT', 0)/total*100:.1f}%")
-    print(f"  ANSWER %:              {counts.get('ANSWER', 0)/total*100:.1f}%")
+    print(f"  Structural matches:    {structural:,} ({structural / total * 100:.1f}%)")
+    print(f"  Filtered to ANSWER:    {filtered:,} ({filtered / total * 100:.1f}%)")
+    print(f"  STATEMENT %:           {counts.get('STATEMENT', 0) / total * 100:.1f}%")
+    print(f"  ANSWER %:              {counts.get('ANSWER', 0) / total * 100:.1f}%")
 
 
 if __name__ == "__main__":
