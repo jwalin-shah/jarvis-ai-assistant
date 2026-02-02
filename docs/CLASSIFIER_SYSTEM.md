@@ -263,6 +263,77 @@ uv run python -m scripts.eval_full_classifier --validate 200
 | `scripts/eval_full_classifier.py` | Evaluate classifier |
 | `~/.jarvis/response_classifier_model/` | Trained SVM model |
 
+## Text Normalization
+
+All text is normalized before embedding (both training and inference).
+See [design/TEXT_NORMALIZATION.md](./design/TEXT_NORMALIZATION.md) for details.
+
+```python
+def normalize_text(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text)  # Smart quotes → ASCII
+    text = " ".join(text.split())                # Collapse whitespace/newlines
+    return text
+```
+
+**Why?**
+- Training data is mostly single messages
+- Inference sees multi-message turns (rapid-fire texts joined with `\n`)
+- iOS uses smart quotes (`"` `'`) that differ from ASCII
+- Normalization ensures consistent embeddings
+
+## Training Data Format
+
+### Trigger Classifier
+
+`data/trigger_labeling.jsonl` (~4,865 examples):
+```json
+{"id": 1, "text": "Wanna just hang out tmrw then?", "label": "commitment"}
+{"id": 2, "text": "What are you trying to do?", "label": "question"}
+```
+
+Distribution:
+- statement: 2,270 (47%)
+- reaction: 791 (16%)
+- question: 667 (14%)
+- social: 644 (13%)
+- commitment: 493 (10%)
+
+### Response Classifier
+
+`data/response_labeling.jsonl` (~4,865 examples):
+```json
+{"id": 1, "response": "Yeah I'm down!", "label": "AGREE"}
+{"id": 2, "response": "Can't today, sorry", "label": "DECLINE"}
+```
+
+### Auto-Labeled Data
+
+`data/trigger_auto_labeled.jsonl` - Generated using:
+- **centroid**: Embedding similarity to known examples
+- **structural**: Pattern matching rules
+
+```json
+{"text": "Sure", "label": "social", "confidence": 0.82, "method": "centroid"}
+{"text": "Why?", "label": "question", "confidence": 0.9, "method": "structural"}
+```
+
+## Multi-Model Training
+
+Classifiers must be retrained when switching embedding models.
+See [design/EMBEDDINGS.md](./design/EMBEDDINGS.md) for supported models.
+
+```bash
+# Train on specific model
+uv run python -m scripts.train_trigger_classifier --model gte-tiny --save
+uv run python -m scripts.train_response_classifier --model gte-tiny --save
+```
+
+Models are stored per embedding model:
+```
+~/.jarvis/embeddings/{model_name}/trigger_classifier_model/
+~/.jarvis/embeddings/{model_name}/response_classifier_model/
+```
+
 ## Future Improvements
 
 1. **Better DECLINE/DEFER exemplars**: Mine more clear examples of actual declines/deferrals

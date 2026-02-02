@@ -32,6 +32,16 @@ When a new message arrives:
    Stream tokens via Unix socket → Desktop app
 ```
 
+## Text Normalization
+
+Before classification, all text is normalized:
+```python
+text = unicodedata.normalize("NFKC", text)  # Smart quotes → ASCII
+text = " ".join(text.split())                # Collapse whitespace/newlines
+```
+
+See [TEXT_NORMALIZATION.md](./TEXT_NORMALIZATION.md) for details.
+
 ## Three-Layer Hybrid Classification
 
 Both classifiers use the same pattern:
