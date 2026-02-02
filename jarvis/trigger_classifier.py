@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from jarvis.embedding_adapter import Embedder
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,20 @@ class TriggerType(str, Enum):
 
 # Default model path
 DEFAULT_MODEL_PATH = Path.home() / ".jarvis" / "trigger_classifier_model"
+
+
+# Per-class SVM thresholds (tuned based on per-class performance)
+# Higher thresholds for important/hard classes, lower for classes with strong structural patterns
+PER_CLASS_SVM_THRESHOLDS: dict[TriggerType, float] = {
+    TriggerType.COMMITMENT: 0.50,  # Most important class - need high confidence
+    TriggerType.QUESTION: 0.35,    # Moderate - "?" helps structural
+    TriggerType.REACTION: 0.40,    # Medium - emotional words help
+    TriggerType.SOCIAL: 0.25,      # Low - structural patterns very strong (tapbacks, greetings)
+    TriggerType.STATEMENT: 0.40,   # Medium - fallback category
+}
+
+# Default threshold for unknown types
+DEFAULT_SVM_THRESHOLD = 0.35
 
 
 # What response types are valid for each trigger type
@@ -256,9 +270,22 @@ class HybridTriggerClassifier:
     3. Fallback to STATEMENT if still unsure
     """
 
-    SVM_THRESHOLD = 0.3  # Minimum probability to trust SVM
+    # Centroid verification thresholds (experimental feature)
+    CENTROID_VERIFY_THRESHOLD = 0.4  # Minimum similarity to accept centroid verification
+    CENTROID_MARGIN = 0.15  # Margin by which another class must beat predicted class
 
-    def __init__(self, model_path: Path | str | None = None):
+    def __init__(
+        self,
+        model_path: Path | str | None = None,
+        use_centroid_verification: bool = False,
+    ):
+        """Initialize the trigger classifier.
+
+        Args:
+            model_path: Path to trained model directory. Defaults to ~/.jarvis/trigger_classifier_model/
+            use_centroid_verification: If True, verify SVM predictions with centroid distance.
+                This is an experimental feature that may improve accuracy for some cases.
+        """
         self._embedder = None
         self._lock = threading.Lock()
 
@@ -267,6 +294,11 @@ class HybridTriggerClassifier:
         self._svm_labels: list[str] | None = None
         self._svm_loaded = False
         self._model_path = Path(model_path) if model_path else DEFAULT_MODEL_PATH
+
+        # Centroid verification (experimental)
+        self._use_centroid_verification = use_centroid_verification
+        self._centroids: dict[str, np.ndarray] | None = None
+        self._centroids_loaded = False
 
         # Try to load the trained model
         self._load_trained_model()
@@ -277,6 +309,89 @@ class HybridTriggerClassifier:
             from jarvis.embedding_adapter import get_embedder
             self._embedder = get_embedder()
         return self._embedder
+
+    def _load_centroids(self) -> None:
+        """Load centroids from file if available.
+
+        Centroids are the mean embeddings for each class, computed during training.
+        Used for optional centroid verification to catch edge cases.
+        """
+        if self._centroids_loaded:
+            return
+
+        centroids_path = self._model_path / "centroids.npy"
+        if not centroids_path.exists():
+            logger.debug("Centroids not found at %s", centroids_path)
+            self._centroids_loaded = True
+            return
+
+        try:
+            data = np.load(centroids_path, allow_pickle=True).item()
+            self._centroids = {
+                label: np.array(centroid) for label, centroid in data.items()
+            }
+            self._centroids_loaded = True
+            logger.info("Loaded centroids for %d trigger classes", len(self._centroids))
+        except Exception as e:
+            logger.warning("Failed to load centroids: %s", e)
+            self._centroids_loaded = True
+
+    def _verify_with_centroid(
+        self,
+        embedding: np.ndarray,
+        predicted_type: TriggerType,
+    ) -> tuple[TriggerType, float, bool]:
+        """Verify SVM prediction using centroid distance.
+
+        If the embedding is closer to another class's centroid by a significant
+        margin, override the SVM prediction. This catches edge cases where the
+        SVM is confident but semantically wrong.
+
+        Args:
+            embedding: Normalized text embedding.
+            predicted_type: SVM's predicted trigger type.
+
+        Returns:
+            Tuple of (final_type, confidence, was_verified).
+            was_verified=True if prediction was confirmed, False if overridden.
+        """
+        if self._centroids is None:
+            return predicted_type, 0.0, True
+
+        # Compute similarity to all centroids
+        similarities = {}
+        for label, centroid in self._centroids.items():
+            # Cosine similarity (vectors are normalized)
+            sim = float(np.dot(embedding, centroid))
+            similarities[label] = sim
+
+        predicted_sim = similarities.get(predicted_type.value, 0.0)
+        best_label = max(similarities, key=similarities.get)
+        best_sim = similarities[best_label]
+
+        # Decision logic:
+        # 1. If predicted class has high similarity -> confirm
+        # 2. If another class is significantly closer -> override
+        # 3. Otherwise -> confirm prediction
+
+        if predicted_sim >= self.CENTROID_VERIFY_THRESHOLD:
+            # Prediction confirmed by centroid proximity
+            return predicted_type, predicted_sim, True
+
+        if best_sim - predicted_sim > self.CENTROID_MARGIN:
+            # Another class is significantly closer - override
+            try:
+                override_type = TriggerType(best_label)
+                logger.debug(
+                    "Centroid override: %s -> %s (sim: %.2f vs %.2f)",
+                    predicted_type.value, best_label, best_sim, predicted_sim
+                )
+                return override_type, best_sim, False
+            except ValueError:
+                pass
+
+        # Default: trust SVM prediction
+        return predicted_type, predicted_sim, True
 
     def _load_trained_model(self) -> None:
         """Load the trained SVM classifier if available."""
@@ -290,7 +405,7 @@ class HybridTriggerClassifier:
         try:
             with open(svm_path, "rb") as f:
                 self._svm = pickle.load(f)
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = json.load(f)
                 self._svm_labels = config.get("labels", [])
 
@@ -301,26 +416,37 @@ class HybridTriggerClassifier:
             self._svm = None
             self._svm_labels = None
 
-    def _match_svm(self, text: str) -> tuple[TriggerType | None, float]:
+    def _get_svm_threshold(self, trigger_type: TriggerType) -> float:
+        """Get the SVM confidence threshold for a trigger type.
+
+        Uses per-class thresholds tuned based on performance analysis.
+        Higher thresholds for hard/important classes (COMMITMENT),
+        lower for classes with strong structural patterns (SOCIAL).
+        """
+        return PER_CLASS_SVM_THRESHOLDS.get(trigger_type, DEFAULT_SVM_THRESHOLD)
+
+    def _match_svm(self, text: str) -> tuple[TriggerType | None, float, str]:
         """Match using trained SVM classifier.
 
+        Uses per-class confidence thresholds - higher for important classes
+        like COMMITMENT (0.50), lower for SOCIAL (0.25) where structural
+        patterns are strong.
+
         Returns:
-            Tuple of (trigger_type, confidence) or (None, 0).
+            Tuple of (trigger_type, confidence, method) or (None, 0, 'svm').
+            method is 'svm' or 'svm+centroid' if centroid verification was used.
         """
         if not self._svm_loaded or self._svm is None:
-            return None, 0.0
+            return None, 0.0, "svm"
 
         try:
             embedder = self._get_embedder()
-            embedding = embedder.encode([text], normalize=True)
+            embedding = embedder.encode([text], normalize=True)[0]
 
             # Get prediction and probability
-            probs = self._svm.predict_proba(embedding)[0]
+            probs = self._svm.predict_proba(embedding.reshape(1, -1))[0]
             pred_idx = int(np.argmax(probs))
             confidence = float(probs[pred_idx])
-
-            if confidence < self.SVM_THRESHOLD:
-                return None, confidence
 
             label = self._svm_labels[pred_idx]
 
@@ -329,13 +455,31 @@ class HybridTriggerClassifier:
                 trigger_type = TriggerType(label)
             except ValueError:
                 logger.warning("Unknown SVM label: %s", label)
-                return None, confidence
+                return None, confidence, "svm"
 
-            return trigger_type, confidence
+            # Use per-class threshold
+            threshold = self._get_svm_threshold(trigger_type)
+            if confidence < threshold:
+                return None, confidence, "svm"
+
+            # Optional: verify with centroid distance
+            method = "svm"
+            if self._use_centroid_verification:
+                self._load_centroids()
+                if self._centroids is not None:
+                    verified_type, _, was_verified = self._verify_with_centroid(
+                        embedding, trigger_type
+                    )
+                    if not was_verified:
+                        # Centroid overrode SVM prediction
+                        trigger_type = verified_type
+                        method = "svm+centroid"
+
+            return trigger_type, confidence, method
 
         except Exception as e:
             logger.warning("SVM classification failed: %s", e)
-            return None, 0.0
+            return None, 0.0, "svm"
 
     def _match_structural(self, text: str) -> tuple[TriggerType | None, float]:
         """Match against structural patterns.
@@ -383,9 +527,11 @@ class HybridTriggerClassifier:
 
         # Step 2: Try trained SVM classifier (if available)
         if use_svm and self._svm_loaded:
-            svm_type, svm_conf = self._match_svm(text)
+            svm_type, svm_conf, svm_method = self._match_svm(text)
 
-            if svm_type is not None and svm_conf >= self.SVM_THRESHOLD:
+            # _match_svm already applies per-class threshold, so if svm_type is not None,
+            # the confidence already passed the threshold check
+            if svm_type is not None:
                 # If structural had a partial match, check if they agree
                 if struct_type is not None and struct_type == svm_type:
                     # They agree - boost confidence
@@ -396,11 +542,11 @@ class HybridTriggerClassifier:
                         valid_response_types=TRIGGER_TO_RESPONSE_TYPES[struct_type],
                     )
 
-                # Use SVM prediction
+                # Use SVM prediction (with or without centroid verification)
                 return TriggerClassification(
                     trigger_type=svm_type,
                     confidence=svm_conf,
-                    method="svm",
+                    method=svm_method,
                     valid_response_types=TRIGGER_TO_RESPONSE_TYPES[svm_type],
                 )
 
@@ -474,6 +620,8 @@ def classify_trigger(text: str, use_svm: bool = True) -> TriggerClassification:
 __all__ = [
     "TriggerType",
     "TRIGGER_TO_RESPONSE_TYPES",
+    "PER_CLASS_SVM_THRESHOLDS",
+    "DEFAULT_SVM_THRESHOLD",
     "TriggerClassification",
     "HybridTriggerClassifier",
     "get_trigger_classifier",
