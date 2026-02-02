@@ -320,3 +320,109 @@ class TestLoadRoutingMetrics:
         assert len(result) == 3
         # Should be ordered by timestamp DESC
         assert result[0]["timestamp"] == 9.0
+
+
+class TestDisableFlag:
+    """Tests for metrics disable flag."""
+
+    def test_disabled_store_ignores_records(self, temp_db: Path):
+        """Records are ignored when store is disabled."""
+        store = RoutingMetricsStore(
+            db_path=temp_db,
+            enable_background_flush=False,
+            enabled=False,
+        )
+        try:
+            store.record(make_metric())
+            store.record(make_metric())
+            assert store.pending_count() == 0
+
+            store.flush()
+
+            # Database should not exist since nothing was written
+            assert not temp_db.exists()
+        finally:
+            store.close()
+
+    def test_enabled_property(self, temp_db: Path):
+        """Enabled property can be read and modified."""
+        store = RoutingMetricsStore(
+            db_path=temp_db,
+            enable_background_flush=False,
+            enabled=True,
+        )
+        try:
+            assert store.enabled is True
+
+            # Record works when enabled
+            store.record(make_metric())
+            assert store.pending_count() == 1
+
+            # Disable at runtime
+            store.enabled = False
+            assert store.enabled is False
+
+            # Record is ignored when disabled
+            store.record(make_metric())
+            assert store.pending_count() == 1  # Still 1, not 2
+        finally:
+            store.close()
+
+    def test_disabled_background_thread_not_started(self, temp_db: Path):
+        """Background thread is not started when disabled."""
+        store = RoutingMetricsStore(
+            db_path=temp_db,
+            enable_background_flush=True,  # Would start thread if enabled
+            enabled=False,
+        )
+        try:
+            assert store._flush_thread is None
+        finally:
+            store.close()
+
+
+class TestBackgroundQueue:
+    """Tests for background queue processing."""
+
+    def test_background_queue_processes_metrics(self, temp_db: Path):
+        """Metrics are processed through background queue."""
+        store = RoutingMetricsStore(
+            db_path=temp_db,
+            buffer_size=1000,
+            flush_interval_seconds=0.1,
+            enable_background_flush=True,
+        )
+        try:
+            # Record multiple metrics
+            for _ in range(5):
+                store.record(make_metric())
+
+            # Wait for background processing
+            time.sleep(0.3)
+
+            # All should be flushed
+            assert store.pending_count() == 0
+            with sqlite3.connect(temp_db) as conn:
+                count = conn.execute("SELECT COUNT(*) FROM routing_metrics").fetchone()[0]
+            assert count == 5
+        finally:
+            store.close()
+
+    def test_close_drains_queue(self, temp_db: Path):
+        """Close drains the queue and flushes all metrics."""
+        store = RoutingMetricsStore(
+            db_path=temp_db,
+            buffer_size=1000,
+            flush_interval_seconds=60.0,  # Long interval
+            enable_background_flush=True,
+        )
+        # Record metrics
+        for _ in range(10):
+            store.record(make_metric())
+
+        # Close should drain queue and flush
+        store.close()
+
+        with sqlite3.connect(temp_db) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM routing_metrics").fetchone()[0]
+        assert count == 10

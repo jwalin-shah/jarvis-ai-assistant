@@ -6,9 +6,9 @@ including headers, styled message bubbles, attachments, and reactions.
 
 import base64
 import io
-import os
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from reportlab.lib import colors
@@ -171,20 +171,20 @@ def _get_image_thumbnail(file_path: str | None, max_width: float = 2 * inch) -> 
         return None
 
     # Expand ~ in path
-    expanded_path = os.path.expanduser(file_path)
+    path = Path(file_path).expanduser()
 
-    if not os.path.exists(expanded_path):
+    if not path.exists():
         return None
 
     # Check if it's an image based on extension
     image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".heic"}
-    ext = os.path.splitext(expanded_path)[1].lower()
+    ext = path.suffix.lower()
 
     if ext not in image_extensions:
         return None
 
     try:
-        img = Image(expanded_path)
+        img = Image(str(path))
 
         # Scale to fit within max_width while maintaining aspect ratio
         aspect = img.imageHeight / img.imageWidth

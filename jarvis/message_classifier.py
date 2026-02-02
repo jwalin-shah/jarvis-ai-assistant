@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from jarvis.classifiers import EmbedderMixin, SingletonFactory
+from jarvis.config import get_config
 from jarvis.text_normalizer import is_acknowledgment_only
 
 if TYPE_CHECKING:
@@ -391,11 +392,6 @@ class MessageClassifier(EmbedderMixin):
         This class is thread-safe for concurrent classify() calls.
     """
 
-    # Confidence thresholds
-    RULE_CONFIDENCE = 0.95  # High confidence for rule matches
-    EMBEDDING_THRESHOLD = 0.65  # Minimum embedding similarity to use
-    RULE_FALLBACK_THRESHOLD = 0.7  # If rule confidence below this, try embeddings
-
     def __init__(self) -> None:
         """Initialize the classifier."""
         self._message_centroids: dict[MessageType, NDArray[np.float32]] | None = None
@@ -445,34 +441,35 @@ class MessageClassifier(EmbedderMixin):
         """
         text_stripped = text.strip()
         text_lower = text_stripped.lower()
+        rule_conf = get_config().classifier_thresholds.message_rule_confidence
 
         # Check acknowledgment using centralized exact matching
         if _match_acknowledgment(text_stripped):
-            return MessageType.ACKNOWLEDGMENT, self.RULE_CONFIDENCE, "acknowledgment"
+            return MessageType.ACKNOWLEDGMENT, rule_conf, "acknowledgment"
 
         # Check reaction
         if REACTION_PATTERNS.match(text_stripped):
-            return MessageType.REACTION, self.RULE_CONFIDENCE, "reaction"
+            return MessageType.REACTION, rule_conf, "reaction"
 
         # Check greeting
         if GREETING_PATTERNS.match(text_lower):
-            return MessageType.GREETING, self.RULE_CONFIDENCE, "greeting"
+            return MessageType.GREETING, rule_conf, "greeting"
 
         # Check farewell
         if FAREWELL_PATTERNS.match(text_lower):
-            return MessageType.FAREWELL, self.RULE_CONFIDENCE, "farewell"
+            return MessageType.FAREWELL, rule_conf, "farewell"
 
         # Check request (before questions, as "can you..." could be both)
         if REQUEST_PATTERNS.match(text_lower):
-            return MessageType.REQUEST_ACTION, self.RULE_CONFIDENCE, "request"
+            return MessageType.REQUEST_ACTION, rule_conf, "request"
 
         # Check info questions
         if INFO_QUESTION_PATTERNS.match(text_lower):
-            return MessageType.QUESTION_INFO, self.RULE_CONFIDENCE, "info_question"
+            return MessageType.QUESTION_INFO, rule_conf, "info_question"
 
         # Check yes/no questions
         if YESNO_QUESTION_PATTERNS.match(text_lower):
-            return MessageType.QUESTION_YESNO, self.RULE_CONFIDENCE, "yesno_question"
+            return MessageType.QUESTION_YESNO, rule_conf, "yesno_question"
 
         # Check for question mark at end (heuristic for questions)
         if text_stripped.endswith("?"):
@@ -516,7 +513,7 @@ class MessageClassifier(EmbedderMixin):
                     best_similarity = similarity
                     best_type = msg_type
 
-            if best_similarity >= self.EMBEDDING_THRESHOLD:
+            if best_similarity >= get_config().classifier_thresholds.message_embedding_threshold:
                 return best_type, best_similarity
 
             return None, best_similarity
@@ -646,7 +643,7 @@ class MessageClassifier(EmbedderMixin):
 
         # Phase 2: If low confidence or no match, try embeddings
         classification_method = "rule"
-        if msg_type is None or rule_conf < self.RULE_FALLBACK_THRESHOLD:
+        if msg_type is None or rule_conf < get_config().classifier_thresholds.message_rule_fallback:
             emb_type, emb_conf = self._classify_by_embedding(text, embedder=embedder)
             if emb_type is not None and emb_conf > rule_conf:
                 msg_type = emb_type

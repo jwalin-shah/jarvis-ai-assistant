@@ -1,10 +1,22 @@
 /**
- * Conversations store for managing chat state with real-time polling and pagination
+ * Conversations store for managing chat state with real-time updates and pagination
+ *
+ * Uses direct SQLite reads for ~20-100x faster message loading with HTTP API fallback.
+ * Supports both polling mode (legacy) and push mode (via socket server).
  */
 
 import { writable, derived, get } from "svelte/store";
 import type { Conversation, Message, SearchFilters } from "../api/types";
 import { api } from "../api/client";
+import {
+  initDatabases,
+  isDirectAccessAvailable,
+  getConversations as getConversationsDirect,
+  getMessages as getMessagesDirect,
+  getLastMessageRowid,
+  getNewMessagesSince,
+} from "../db";
+import { jarvis, type ConnectionState as SocketConnectionState } from "../socket";
 
 /** Default number of messages to fetch per page */
 const PAGE_SIZE = 50;
@@ -84,21 +96,33 @@ export const hasNewMessages = derived(
 );
 
 // Polling intervals (in milliseconds)
-const CONVERSATION_POLL_INTERVAL = 30000; // 30 seconds
-const MESSAGE_POLL_INTERVAL = 10000; // 10 seconds
+// When socket is connected, we use longer intervals as fallback
+// When socket is disconnected, we poll more frequently
+const CONVERSATION_POLL_INTERVAL_CONNECTED = 60000; // 1 minute when socket connected
+const CONVERSATION_POLL_INTERVAL_DISCONNECTED = 30000; // 30 seconds when disconnected
+const MESSAGE_POLL_INTERVAL_CONNECTED = 30000; // 30 seconds when socket connected
+const MESSAGE_POLL_INTERVAL_DISCONNECTED = 10000; // 10 seconds when disconnected
 
 // Polling interval handles
 let conversationPollInterval: ReturnType<typeof setInterval> | null = null;
 let messagePollInterval: ReturnType<typeof setInterval> | null = null;
 
+// Track if socket push is active
+let socketPushActive = false;
+
+// AbortControllers for request deduplication
+let conversationFetchController: AbortController | null = null;
+let messageFetchController: AbortController | null = null;
+let loadMoreController: AbortController | null = null;
+
 /**
  * Update connection status
  */
 function setConnectionStatus(status: ConnectionStatus): void {
-  conversationsStore.update((state) => ({
-    ...state,
-    connectionStatus: status,
-  }));
+  conversationsStore.update((state) => {
+    if (state.connectionStatus === status) return state; // Early return if unchanged
+    return { ...state, connectionStatus: status };
+  });
 }
 
 /**
@@ -106,6 +130,7 @@ function setConnectionStatus(status: ConnectionStatus): void {
  */
 export function markConversationAsNew(chatId: string): void {
   conversationsStore.update((state) => {
+    if (state.conversationsWithNewMessages.has(chatId)) return state; // Already marked
     const newSet = new Set(state.conversationsWithNewMessages);
     newSet.add(chatId);
     return { ...state, conversationsWithNewMessages: newSet };
@@ -117,6 +142,7 @@ export function markConversationAsNew(chatId: string): void {
  */
 export function clearNewMessageIndicator(chatId: string): void {
   conversationsStore.update((state) => {
+    if (!state.conversationsWithNewMessages.has(chatId)) return state; // Not present
     const newSet = new Set(state.conversationsWithNewMessages);
     newSet.delete(chatId);
     return { ...state, conversationsWithNewMessages: newSet };
@@ -125,8 +151,16 @@ export function clearNewMessageIndicator(chatId: string): void {
 
 /**
  * Fetch conversations and detect new messages
+ * Uses direct SQLite read with HTTP API fallback
  */
 export async function fetchConversations(isPolling = false): Promise<void> {
+  // Cancel any in-flight conversation fetch
+  if (conversationFetchController) {
+    conversationFetchController.abort();
+  }
+  conversationFetchController = new AbortController();
+  const signal = conversationFetchController.signal;
+
   if (!isPolling) {
     conversationsStore.update((state) => ({ ...state, loading: true, error: null }));
   }
@@ -134,7 +168,23 @@ export async function fetchConversations(isPolling = false): Promise<void> {
   setConnectionStatus("connecting");
 
   try {
-    const conversations = await api.getConversations();
+    let conversations: Conversation[];
+
+    // Try direct SQLite read first (much faster)
+    if (isDirectAccessAvailable()) {
+      try {
+        conversations = await getConversationsDirect(50);
+      } catch (directError) {
+        console.warn("[Conversations] Direct read failed, falling back to HTTP:", directError);
+        conversations = await api.getConversations();
+      }
+    } else {
+      // Fall back to HTTP API
+      conversations = await api.getConversations();
+    }
+
+    // Check if request was aborted
+    if (signal.aborted) return;
 
     conversationsStore.update((state) => {
       const newConversationsWithNewMessages = new Set(state.conversationsWithNewMessages);
@@ -165,6 +215,8 @@ export async function fetchConversations(isPolling = false): Promise<void> {
       };
     });
   } catch (error) {
+    // Ignore abort errors
+    if (error instanceof Error && error.name === "AbortError") return;
     const message = error instanceof Error ? error.message : "Failed to fetch conversations";
     conversationsStore.update((state) => ({
       ...state,
@@ -177,11 +229,25 @@ export async function fetchConversations(isPolling = false): Promise<void> {
 
 /**
  * Fetch messages for a conversation
+ * Uses direct SQLite read with HTTP API fallback
  * Returns the new messages if any (for polling use)
  */
 export async function fetchMessages(chatId: string): Promise<Message[]> {
   try {
-    const messages = await api.getMessages(chatId);
+    let messages: Message[];
+
+    // Try direct SQLite read first (much faster)
+    if (isDirectAccessAvailable()) {
+      try {
+        messages = await getMessagesDirect(chatId, PAGE_SIZE);
+      } catch (directError) {
+        console.warn("[Messages] Direct read failed, falling back to HTTP:", directError);
+        messages = await api.getMessages(chatId, PAGE_SIZE);
+      }
+    } else {
+      messages = await api.getMessages(chatId, PAGE_SIZE);
+    }
+
     // Reverse messages so oldest is at top, newest at bottom (API returns newest first)
     return [...messages].reverse();
   } catch (error) {
@@ -201,8 +267,18 @@ export async function pollMessages(): Promise<Message[]> {
     return [];
   }
 
+  // Cancel any in-flight message fetch
+  if (messageFetchController) {
+    messageFetchController.abort();
+  }
+  messageFetchController = new AbortController();
+  const signal = messageFetchController.signal;
+
   try {
     const freshMessages = await fetchMessages(state.selectedChatId);
+
+    // Check if request was aborted
+    if (signal.aborted) return [];
     const currentMessages = state.messages;
 
     // Find messages that are new (not in current list)
@@ -228,6 +304,8 @@ export async function pollMessages(): Promise<Message[]> {
 
     return newMessages;
   } catch (error) {
+    // Ignore abort errors
+    if (error instanceof Error && error.name === "AbortError") return [];
     console.error("Error polling messages:", error);
     return [];
   }
@@ -237,6 +315,16 @@ export async function pollMessages(): Promise<Message[]> {
  * Select a conversation and load its messages
  */
 export async function selectConversation(chatId: string): Promise<void> {
+  // Cancel any in-flight message requests when switching conversations
+  if (messageFetchController) {
+    messageFetchController.abort();
+    messageFetchController = null;
+  }
+  if (loadMoreController) {
+    loadMoreController.abort();
+    loadMoreController = null;
+  }
+
   // Clear new message indicator when selecting
   clearNewMessageIndicator(chatId);
 
@@ -268,7 +356,23 @@ export async function selectConversation(chatId: string): Promise<void> {
   }));
 
   try {
-    const messages = await api.getMessages(chatId, PAGE_SIZE);
+    let messages: Message[];
+
+    // Try direct SQLite read first (much faster)
+    if (isDirectAccessAvailable()) {
+      try {
+        console.log("[SelectConversation] Using direct SQLite for:", chatId);
+        messages = await getMessagesDirect(chatId, PAGE_SIZE);
+      } catch (directError) {
+        console.warn("[SelectConversation] Direct read failed, falling back to HTTP:", directError);
+        messages = await api.getMessages(chatId, PAGE_SIZE);
+      }
+    } else {
+      console.log("[SelectConversation] Using HTTP API for:", chatId);
+      messages = await api.getMessages(chatId, PAGE_SIZE);
+      console.log("[SelectConversation] Got messages:", messages.length);
+    }
+
     // Reverse messages so oldest is at top, newest at bottom (API returns newest first)
     const chronologicalMessages = [...messages].reverse();
     // If we got fewer messages than requested, we've reached the end
@@ -290,6 +394,7 @@ export async function selectConversation(chatId: string): Promise<void> {
     // Start message polling for this conversation
     startMessagePolling();
   } catch (error) {
+    console.error("[SelectConversation] Error fetching messages:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch messages";
     conversationsStore.update((state) => ({
       ...state,
@@ -316,6 +421,13 @@ export async function loadMoreMessages(): Promise<boolean> {
   const oldestMessage = messages[0];
   const beforeDate = oldestMessage.date;
 
+  // Cancel any in-flight loadMore request
+  if (loadMoreController) {
+    loadMoreController.abort();
+  }
+  loadMoreController = new AbortController();
+  const signal = loadMoreController.signal;
+
   conversationsStore.update((state) => ({
     ...state,
     loadingMore: true,
@@ -323,6 +435,9 @@ export async function loadMoreMessages(): Promise<boolean> {
 
   try {
     const olderMessages = await api.getMessages(selectedChatId, PAGE_SIZE, beforeDate);
+
+    // Check if request was aborted
+    if (signal.aborted) return false;
 
     // If we got fewer messages than requested, we've reached the end
     const newHasMore = olderMessages.length >= PAGE_SIZE;
@@ -349,6 +464,8 @@ export async function loadMoreMessages(): Promise<boolean> {
 
     return olderMessages.length > 0;
   } catch (error) {
+    // Ignore abort errors
+    if (error instanceof Error && error.name === "AbortError") return false;
     const message = error instanceof Error ? error.message : "Failed to load more messages";
     conversationsStore.update((state) => ({
       ...state,
@@ -363,6 +480,15 @@ export async function loadMoreMessages(): Promise<boolean> {
  * Clear the current conversation selection
  */
 export function clearSelection(): void {
+  // Cancel any in-flight message requests
+  if (messageFetchController) {
+    messageFetchController.abort();
+    messageFetchController = null;
+  }
+  if (loadMoreController) {
+    loadMoreController.abort();
+    loadMoreController = null;
+  }
   stopMessagePolling();
   conversationsStore.update((state) => ({
     ...state,
@@ -397,13 +523,18 @@ export function startConversationPolling(): void {
   // Initial fetch
   fetchConversations();
 
+  // Use longer interval when socket push is active
+  const interval = socketPushActive
+    ? CONVERSATION_POLL_INTERVAL_CONNECTED
+    : CONVERSATION_POLL_INTERVAL_DISCONNECTED;
+
   // Set up polling interval
   conversationPollInterval = setInterval(() => {
     const state = get(conversationsStore);
     if (state.isWindowFocused) {
       fetchConversations(true);
     }
-  }, CONVERSATION_POLL_INTERVAL);
+  }, interval);
 }
 
 /**
@@ -413,6 +544,10 @@ export function stopConversationPolling(): void {
   if (conversationPollInterval) {
     clearInterval(conversationPollInterval);
     conversationPollInterval = null;
+  }
+  if (conversationFetchController) {
+    conversationFetchController.abort();
+    conversationFetchController = null;
   }
 }
 
@@ -425,13 +560,18 @@ export function startMessagePolling(): void {
     clearInterval(messagePollInterval);
   }
 
+  // Use longer interval when socket push is active
+  const interval = socketPushActive
+    ? MESSAGE_POLL_INTERVAL_CONNECTED
+    : MESSAGE_POLL_INTERVAL_DISCONNECTED;
+
   // Set up polling interval
   messagePollInterval = setInterval(() => {
     const state = get(conversationsStore);
     if (state.isWindowFocused && state.selectedChatId) {
       pollMessages();
     }
-  }, MESSAGE_POLL_INTERVAL);
+  }, interval);
 }
 
 /**
@@ -442,16 +582,20 @@ export function stopMessagePolling(): void {
     clearInterval(messagePollInterval);
     messagePollInterval = null;
   }
+  if (messageFetchController) {
+    messageFetchController.abort();
+    messageFetchController = null;
+  }
 }
 
 /**
  * Handle window focus change
  */
 export function setWindowFocused(focused: boolean): void {
-  conversationsStore.update((state) => ({
-    ...state,
-    isWindowFocused: focused,
-  }));
+  conversationsStore.update((state) => {
+    if (state.isWindowFocused === focused) return state; // Early return if unchanged
+    return { ...state, isWindowFocused: focused };
+  });
 
   if (focused) {
     // Resume polling when window gains focus
@@ -464,10 +608,140 @@ export function setWindowFocused(focused: boolean): void {
 }
 
 /**
+ * Initialize direct database access
+ * Call this early in app lifecycle
+ */
+export async function initializeDirectAccess(): Promise<boolean> {
+  try {
+    await initDatabases();
+    console.log("[Conversations] Direct database access initialized");
+    return true;
+  } catch (error) {
+    console.warn("[Conversations] Direct database access unavailable, using HTTP fallback:", error);
+    return false;
+  }
+}
+
+/**
+ * Initialize socket connection for push notifications
+ */
+async function initializeSocketPush(): Promise<boolean> {
+  try {
+    const connected = await jarvis.connect();
+    if (!connected) {
+      console.warn("[Conversations] Socket connection failed, using polling fallback");
+      return false;
+    }
+
+    // Register for new message notifications
+    jarvis.on<{
+      message_id: number;
+      chat_id: string;
+      sender: string;
+      text: string;
+      date: string;
+      is_from_me: boolean;
+    }>("new_message", (data) => {
+      handleNewMessagePush(data);
+    });
+
+    // Handle socket connection state changes
+    jarvis.on("disconnected", () => {
+      console.log("[Conversations] Socket disconnected, switching to polling mode");
+      socketPushActive = false;
+      adjustPollingIntervals();
+    });
+
+    jarvis.on("connected", () => {
+      console.log("[Conversations] Socket connected, reducing poll frequency");
+      socketPushActive = true;
+      adjustPollingIntervals();
+    });
+
+    socketPushActive = true;
+    console.log("[Conversations] Socket push notifications enabled");
+    return true;
+  } catch (error) {
+    console.warn("[Conversations] Socket push unavailable:", error);
+    return false;
+  }
+}
+
+/**
+ * Handle a new message push notification
+ */
+function handleNewMessagePush(data: {
+  message_id: number;
+  chat_id: string;
+  sender: string;
+  text: string;
+  date: string;
+  is_from_me: boolean;
+}): void {
+  const state = get(conversationsStore);
+
+  // Mark conversation as having new message if not currently viewing
+  if (data.chat_id !== state.selectedChatId) {
+    markConversationAsNew(data.chat_id);
+  }
+
+  // Update last known date
+  conversationsStore.update((s) => {
+    const newLastKnownDates = new Map(s.lastKnownMessageDates);
+    newLastKnownDates.set(data.chat_id, data.date);
+    return { ...s, lastKnownMessageDates: newLastKnownDates };
+  });
+
+  // If this is the selected conversation, add the message
+  if (data.chat_id === state.selectedChatId) {
+    // Fetch the full message to get all details (attachments, reactions, etc.)
+    fetchMessages(data.chat_id).then((messages) => {
+      conversationsStore.update((s) => ({
+        ...s,
+        messages,
+      }));
+
+      // Update cache
+      const cached = messageCache.get(data.chat_id);
+      if (cached) {
+        messageCache.set(data.chat_id, {
+          ...cached,
+          messages,
+        });
+      }
+    });
+  }
+
+  // Refresh conversation list to update order and last message preview
+  fetchConversations(true);
+}
+
+/**
+ * Adjust polling intervals based on socket connection state
+ */
+function adjustPollingIntervals(): void {
+  // Restart polling with appropriate intervals
+  stopConversationPolling();
+  stopMessagePolling();
+  startConversationPolling();
+
+  const state = get(conversationsStore);
+  if (state.selectedChatId) {
+    startMessagePolling();
+  }
+}
+
+/**
  * Initialize polling and window focus listeners
  * Call this on app mount
  */
 export function initializePolling(): () => void {
+  // Initialize direct database access (async, non-blocking)
+  initializeDirectAccess();
+
+  // Initialize socket push notifications (async, non-blocking)
+  initializeSocketPush();
+
   // Start conversation polling
   startConversationPolling();
 
@@ -482,6 +756,7 @@ export function initializePolling(): () => void {
   return () => {
     stopConversationPolling();
     stopMessagePolling();
+    jarvis.disconnect();
     window.removeEventListener("focus", handleFocus);
     window.removeEventListener("blur", handleBlur);
   };

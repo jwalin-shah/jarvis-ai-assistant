@@ -17,7 +17,7 @@
   let cleanup: (() => void) | null = null;
 
   // API base URL for avatar endpoint
-  const API_BASE = "http://localhost:8742";
+  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8742";
 
   // Track loaded avatars and their states
   let avatarStates: Map<string, "loading" | "loaded" | "error"> = new Map();
@@ -135,6 +135,12 @@
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
 
+      // Revoke any existing blob URL before setting the new one
+      const existingUrl = avatarUrls.get(identifier);
+      if (existingUrl && existingUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(existingUrl);
+      }
+
       avatarUrls.set(identifier, url);
       avatarStates.set(identifier, "loaded");
       avatarUrls = avatarUrls; // Trigger reactivity
@@ -163,10 +169,31 @@
     }
   }
 
+  function formatParticipant(p: string): string {
+    // If it looks like an email, show just the username
+    if (p.includes("@")) {
+      return p.split("@")[0];
+    }
+    // For phone numbers, show last 4 digits if long
+    if (/^\+?\d{10,}$/.test(p.replace(/[\s\-()]/g, ""))) {
+      const digits = p.replace(/\D/g, "");
+      return "..." + digits.slice(-4);
+    }
+    return p;
+  }
+
   function getDisplayName(conv: typeof $conversationsStore.conversations[0]): string {
     if (conv.display_name) return conv.display_name;
-    if (conv.participants.length === 1) return conv.participants[0];
-    return conv.participants.slice(0, 2).join(", ") +
+    if (conv.participants.length === 1) {
+      return formatParticipant(conv.participants[0]);
+    }
+    // For group chats without a name, show formatted participants
+    if (conv.is_group && conv.participants.length > 1) {
+      const formatted = conv.participants.slice(0, 2).map(formatParticipant);
+      return formatted.join(", ") +
+        (conv.participants.length > 2 ? ` +${conv.participants.length - 2}` : "");
+    }
+    return conv.participants.slice(0, 2).map(formatParticipant).join(", ") +
       (conv.participants.length > 2 ? ` +${conv.participants.length - 2}` : "");
   }
 

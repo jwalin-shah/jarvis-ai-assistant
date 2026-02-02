@@ -1545,9 +1545,8 @@ class TestEmbedderIntegration:
         """Semantic similarity should be computed when embedder is provided."""
         mock_embedder = MagicMock()
         # High similarity embeddings (same direction)
-        mock_embedder.encode.return_value = np.array(
-            [[0.707, 0.707], [0.707, 0.707]], dtype=np.float32
-        )
+        # With caching, encode is called once per unique text
+        mock_embedder.encode.return_value = np.array([[0.707, 0.707]], dtype=np.float32)
 
         extractor = TurnBasedExtractor(embedder=mock_embedder)
 
@@ -1555,7 +1554,8 @@ class TestEmbedderIntegration:
 
         assert similarity is not None
         assert similarity > 0.9  # Identical vectors = similarity ~1.0
-        mock_embedder.encode.assert_called_once()
+        # With caching, encode is called once per unique text
+        assert mock_embedder.encode.call_count == 2
 
     def test_compute_semantic_similarity_without_embedder(
         self, extractor: TurnBasedExtractor
@@ -1563,6 +1563,71 @@ class TestEmbedderIntegration:
         """Semantic similarity should be None when no embedder is provided."""
         similarity = extractor._compute_semantic_similarity("Hello there", "Hi there")
         assert similarity is None
+
+    def test_embedding_cache_avoids_recomputation(self) -> None:
+        """Embedding cache should avoid recomputing embeddings for repeated text."""
+        mock_embedder = MagicMock()
+        mock_embedder.encode.return_value = np.array([[0.707, 0.707]], dtype=np.float32)
+
+        extractor = TurnBasedExtractor(embedder=mock_embedder)
+
+        # First call - should compute both embeddings
+        extractor._compute_semantic_similarity("Hello", "World")
+        assert mock_embedder.encode.call_count == 2
+
+        # Second call with same texts - should use cache (no new calls)
+        extractor._compute_semantic_similarity("Hello", "World")
+        assert mock_embedder.encode.call_count == 2  # Still 2, not 4
+
+        # Call with one new text - should compute only the new one
+        extractor._compute_semantic_similarity("Hello", "New text")
+        assert mock_embedder.encode.call_count == 3  # Only 1 new call
+
+    def test_clear_embedding_cache(self) -> None:
+        """clear_embedding_cache should clear the cache."""
+        mock_embedder = MagicMock()
+        mock_embedder.encode.return_value = np.array([[0.707, 0.707]], dtype=np.float32)
+
+        extractor = TurnBasedExtractor(embedder=mock_embedder)
+
+        # Populate cache
+        extractor._compute_semantic_similarity("Hello", "World")
+        assert len(extractor._embedding_cache) == 2
+
+        # Clear cache
+        extractor.clear_embedding_cache()
+        assert len(extractor._embedding_cache) == 0
+
+        # After clearing, should recompute
+        extractor._compute_semantic_similarity("Hello", "World")
+        assert mock_embedder.encode.call_count == 4  # 2 original + 2 new
+
+    def test_embedding_cache_respects_max_size(self) -> None:
+        """Embedding cache should not exceed max_cache_size."""
+        mock_embedder = MagicMock()
+        mock_embedder.encode.return_value = np.array([[0.707, 0.707]], dtype=np.float32)
+
+        # Small cache size
+        extractor = TurnBasedExtractor(embedder=mock_embedder, max_cache_size=2)
+
+        # Add 2 embeddings (fills cache)
+        extractor._get_embedding("text1")
+        extractor._get_embedding("text2")
+        assert len(extractor._embedding_cache) == 2
+
+        # Third embedding should not be cached (cache full)
+        extractor._get_embedding("text3")
+        assert len(extractor._embedding_cache) == 2  # Still 2
+
+    def test_embedding_cache_disabled_with_zero_size(self) -> None:
+        """Embedding cache should be disabled when max_cache_size is 0."""
+        mock_embedder = MagicMock()
+        mock_embedder.encode.return_value = np.array([[0.707, 0.707]], dtype=np.float32)
+
+        extractor = TurnBasedExtractor(embedder=mock_embedder, max_cache_size=0)
+
+        extractor._get_embedding("text1")
+        assert len(extractor._embedding_cache) == 0  # Not cached
 
 
 # =============================================================================

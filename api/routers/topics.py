@@ -334,8 +334,9 @@ class TopicDetector:
     Thread-safe with lazy initialization of embeddings.
     """
 
-    CONFIDENCE_THRESHOLD = 0.35  # Minimum confidence to include a topic
+    CONFIDENCE_THRESHOLD = 0.45  # Minimum confidence to include a topic
     TOP_TOPICS_COUNT = 2  # Number of topics to return for display
+    MAX_ALL_TOPICS = 5  # Maximum number of all topics to return
 
     def __init__(self) -> None:
         """Initialize the topic detector."""
@@ -580,11 +581,13 @@ def analyze_topics(
 
     # Top 2 for display
     top_topics = all_topic_responses[: TopicDetector.TOP_TOPICS_COUNT]
+    # Limit all_topics to prevent overwhelming UI
+    limited_all_topics = all_topic_responses[: TopicDetector.MAX_ALL_TOPICS]
 
     result = {
         "chat_id": chat_id,
         "topics": [t.model_dump() for t in top_topics],
-        "all_topics": [t.model_dump() for t in all_topic_responses],
+        "all_topics": [t.model_dump() for t in limited_all_topics],
         "cached": False,
         "message_count_analyzed": len(message_texts),
     }

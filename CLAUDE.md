@@ -6,8 +6,13 @@ Guidance for Claude Code when working with this repository.
 
 JARVIS is a local-first AI assistant for macOS providing intelligent iMessage management using MLX-based language models on Apple Silicon.
 
-**Default Model**: LFM-2.5-1.2B-Instruct-4bit
-**Docs**: `docs/ARCHITECTURE.md` (detailed), `docs/CLI_GUIDE.md` (CLI usage)
+**Default Model**: LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit
+
+**Documentation:**
+- `docs/DESIGN.md` - Comprehensive design doc with rationale and decisions (start here)
+- `docs/ARCHITECTURE.md` - Technical implementation status
+- `docs/ARCHITECTURE_V2.md` - Unix socket + direct SQLite optimizations
+- `docs/CLI_GUIDE.md` - CLI usage
 
 ## Quick Reference
 
@@ -75,8 +80,16 @@ make verify         # Full verification (lint + typecheck + test)
 ---
 
 ### Shell Commands
-- **Always use `uv run`** for Python commands
+- **Always use `uv run`** for Python commands (not pip, python directly)
+- **Always use `pnpm`** for Node.js (not npm, yarn)
 - **Always use `rm -f`** to avoid interactive prompts
+
+### Use Efficient Tools (NOT Bash equivalents)
+- **Grep tool** for searching - NEVER `grep -r` or `rg` via Bash (slow on large dirs like node_modules)
+- **Glob tool** for finding files - NEVER `find` via Bash
+- **Read tool** for file contents - NEVER `cat`, `head`, `tail` via Bash
+- **Edit tool** for modifications - NEVER `sed`, `awk` via Bash
+- Bash is for: git, make, npm, uv, and actual shell operations only
 
 ### Test Rules (MANDATORY)
 - **ALWAYS** use `make test` - never raw pytest

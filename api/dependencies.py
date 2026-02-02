@@ -1,13 +1,14 @@
 """Shared dependencies for API endpoints.
 
 Provides singleton instances of iMessage reader and other shared resources.
+Uses a connection pool for thread-safe database access.
 """
 
 import threading
 
 from fastapi import HTTPException
 
-from integrations.imessage import ChatDBReader
+from integrations.imessage import ChatDBReader, reset_connection_pool
 
 # Singleton iMessage reader instance
 _reader: ChatDBReader | None = None
@@ -18,7 +19,8 @@ def get_imessage_reader() -> ChatDBReader:
     """Get or create the singleton iMessage reader.
 
     Uses double-check locking pattern to prevent race conditions in
-    multi-threaded async environments.
+    multi-threaded async environments. The reader uses a shared connection
+    pool for thread-safe database access.
 
     Returns:
         ChatDBReader instance
@@ -34,6 +36,7 @@ def get_imessage_reader() -> ChatDBReader:
         with _reader_lock:
             # Double-check after acquiring lock
             if _reader is None:
+                # use_pool=True (default) enables connection pooling
                 _reader = ChatDBReader()
 
     if not _reader.check_access():
@@ -55,8 +58,11 @@ def get_imessage_reader() -> ChatDBReader:
 
 
 def reset_imessage_reader() -> None:
-    """Reset the singleton reader (for testing or reconnection)."""
+    """Reset the singleton reader and connection pool (for testing or reconnection)."""
     global _reader
-    if _reader is not None:
-        _reader.close()
-        _reader = None
+    with _reader_lock:
+        if _reader is not None:
+            _reader.close()
+            _reader = None
+        # Also reset the underlying connection pool
+        reset_connection_pool()

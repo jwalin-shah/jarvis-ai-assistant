@@ -29,6 +29,12 @@ from jarvis.config import (
     save_config,
 )
 
+# Get actual defaults from config models to avoid hardcoding
+_DEFAULT_CONFIG = JarvisConfig()
+DEFAULT_MODEL_PATH = _DEFAULT_CONFIG.model_path
+DEFAULT_EMBEDDING_MODEL = _DEFAULT_CONFIG.embedding.model_name
+DEFAULT_MODEL_ID = _DEFAULT_CONFIG.model.model_id
+
 
 @pytest.fixture(autouse=True)
 def reset_singletons():
@@ -425,7 +431,8 @@ class TestConfigMigrationEdgeCases:
         assert config.rate_limit.enabled is True
         assert config.task_queue.max_completed_tasks == 100
         assert config.digest.enabled is True
-        assert config.model.model_id == "qwen-1.5b"
+        assert config.model.model_id == DEFAULT_MODEL_ID
+        assert config.embedding.model_name == "bge-small"
 
     def test_migration_from_v2_to_current(self, tmp_path):
         """Migration from v2 adds model, rate_limit, task_queue, digest sections."""
@@ -450,10 +457,11 @@ class TestConfigMigrationEdgeCases:
 
         # New v3+ sections added
         assert config.config_version == CONFIG_VERSION
-        assert config.model.model_id == "qwen-1.5b"
+        assert config.model.model_id == DEFAULT_MODEL_ID
         assert config.rate_limit.enabled is True
         assert config.task_queue.max_completed_tasks == 100
         assert config.digest.enabled is True
+        assert config.embedding.model_name == "bge-small"
 
     def test_migration_from_v3_to_current(self, tmp_path):
         """Migration from v3 adds rate_limit, task_queue, digest sections."""
@@ -482,7 +490,7 @@ class TestConfigMigrationEdgeCases:
         """Migration maps known model paths to model IDs."""
         config_file = tmp_path / "config.json"
 
-        # Test each known model path
+        # Test each known model path (only Qwen paths have mappings in migration)
         known_mappings = {
             "mlx-community/Qwen2.5-0.5B-Instruct-4bit": "qwen-0.5b",
             "mlx-community/Qwen2.5-1.5B-Instruct-4bit": "qwen-1.5b",
@@ -510,7 +518,7 @@ class TestConfigMigrationEdgeCases:
         config = load_config(config_file)
 
         # Should return all defaults
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.template_similarity_threshold == 0.7
         assert config.config_version == CONFIG_VERSION
 
@@ -522,7 +530,7 @@ class TestConfigMigrationEdgeCases:
         config = load_config(config_file)
 
         # Should use all defaults
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.ui.theme == "system"
         assert config.config_version == CONFIG_VERSION
 
@@ -534,7 +542,7 @@ class TestConfigMigrationEdgeCases:
         config = load_config(config_file)
 
         # Should use all defaults
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.config_version == CONFIG_VERSION
 
     def test_invalid_field_values_returns_defaults(self, tmp_path):
@@ -681,7 +689,7 @@ class TestConfigMigrationEdgeCases:
 
         config = load_config(nonexistent_path)
 
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.config_version == CONFIG_VERSION
 
     def test_unreadable_config_file_returns_defaults(self, tmp_path):

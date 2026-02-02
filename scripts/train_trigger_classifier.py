@@ -22,6 +22,7 @@ from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
+from jarvis.config import get_config, get_trigger_classifier_path
 from jarvis.embedding_adapter import get_embedder
 
 
@@ -449,9 +450,10 @@ def main():
         )
         final_clf.fit(final_embeddings, final_labels)
 
-        # Save
-        model_path = Path.home() / ".jarvis" / "trigger_classifier_model"
+        # Save to versioned path based on configured embedding model
+        model_path = get_trigger_classifier_path()
         model_path.mkdir(parents=True, exist_ok=True)
+        print(f"Saving model to: {model_path} (embedding model: {get_config().embedding.model_name})")
 
         with open(model_path / "svm.pkl", "wb") as f:
             pickle.dump(final_clf, f)

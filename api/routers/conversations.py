@@ -23,8 +23,10 @@ from api.ratelimit import (
 )
 from api.schemas import (
     ConversationResponse,
+    ConversationsListResponse,
     ErrorResponse,
     MessageResponse,
+    MessagesListResponse,
     SendAttachmentRequest,
     SendMessageRequest,
     SendMessageResponse,
@@ -37,7 +39,7 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 @router.get(
     "",
-    response_model=list[ConversationResponse],
+    response_model=ConversationsListResponse,
     response_model_exclude_unset=True,
     response_description="List of conversations sorted by last message date",
     summary="List recent conversations",
@@ -95,7 +97,7 @@ async def list_conversations(
         examples=["2024-01-15T10:30:00Z"],
     ),
     reader: ChatDBReader = Depends(get_imessage_reader),
-) -> list[ConversationResponse]:
+) -> ConversationsListResponse:
     """List recent iMessage conversations.
 
     Uses TTL cache (30s) for repeated requests with same parameters.
@@ -169,7 +171,8 @@ async def list_conversations(
             conversations = await run_in_threadpool(
                 reader.get_conversations, limit=limit, since=since, before=before
             )
-            result = [ConversationResponse.model_validate(c) for c in conversations]
+            items = [ConversationResponse.model_validate(c) for c in conversations]
+            result = ConversationsListResponse(conversations=items, total=len(items))
     except TimeoutError:
         raise HTTPException(
             status_code=408,
@@ -182,7 +185,7 @@ async def list_conversations(
 
 @router.get(
     "/{chat_id}/messages",
-    response_model=list[MessageResponse],
+    response_model=MessagesListResponse,
     response_model_exclude_unset=True,
     response_description="List of messages in the conversation",
     summary="Get messages for a conversation",
@@ -238,7 +241,7 @@ async def get_messages(
         examples=["2024-01-15T10:30:00Z"],
     ),
     reader: ChatDBReader = Depends(get_imessage_reader),
-) -> list[MessageResponse]:
+) -> MessagesListResponse:
     """Get messages for a specific conversation.
 
     Returns messages sorted by date (newest first). Includes attachments,
@@ -302,7 +305,8 @@ async def get_messages(
             messages = await run_in_threadpool(
                 reader.get_messages, chat_id=chat_id, limit=limit, before=before
             )
-            return [MessageResponse.model_validate(m) for m in messages]
+            items = [MessageResponse.model_validate(m) for m in messages]
+            return MessagesListResponse(messages=items, chat_id=chat_id, total=len(items))
     except TimeoutError:
         raise HTTPException(
             status_code=408,

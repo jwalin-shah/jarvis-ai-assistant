@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -38,6 +40,11 @@ if TYPE_CHECKING:
     from jarvis.exchange import CandidateExchange
 
 logger = logging.getLogger(__name__)
+
+# Pre-compiled regex patterns for performance (avoid recompilation in loops)
+_WHITESPACE_PATTERN = re.compile(r"[ \t]+")
+_DIGIT_PATTERN = re.compile(r"\d")
+_NON_WORD_PATTERN = re.compile(r"[^\w]")
 
 
 @dataclass
@@ -85,7 +92,7 @@ class ExtractionConfig:
     semantic_borderline_threshold: float = 0.55
 
 
-@dataclass
+@dataclass(slots=True)
 class Turn:
     """A turn in a conversation - one or more consecutive messages from same speaker."""
 
@@ -123,7 +130,7 @@ class Turn:
         self.messages.append(msg)
 
 
-@dataclass
+@dataclass(slots=True)
 class ExtractedPair:
     """A (trigger_turn, response_turn) pair extracted from conversation."""
 
@@ -187,10 +194,20 @@ class TurnBasedExtractor:
         self,
         config: ExtractionConfig | None = None,
         embedder: UnifiedEmbedder | None = None,
+        max_cache_size: int = 10000,
     ) -> None:
-        """Initialize extractor with configuration and optional embedder."""
+        """Initialize extractor with configuration and optional embedder.
+
+        Args:
+            config: Extraction configuration.
+            embedder: Optional embedder for semantic similarity filtering.
+            max_cache_size: Maximum number of embeddings to cache (default 10000).
+                Set to 0 to disable caching.
+        """
         self.config = config or ExtractionConfig()
         self._embedder = embedder
+        self._embedding_cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._max_cache_size = max_cache_size
 
         # Auto-enable semantic similarity if embedder is provided
         if embedder is not None and not self.config.use_semantic_similarity:
@@ -213,8 +230,42 @@ class TurnBasedExtractor:
                 semantic_borderline_threshold=self.config.semantic_borderline_threshold,
             )
 
+    def _get_embedding(self, text: str) -> np.ndarray | None:
+        """Get embedding for text, using LRU cache with eviction.
+
+        Args:
+            text: The text to embed.
+
+        Returns:
+            Normalized embedding vector, or None if embedder unavailable.
+        """
+        if self._embedder is None:
+            return None
+
+        # Check cache first (move to end if found = most recently used)
+        if text in self._embedding_cache:
+            self._embedding_cache.move_to_end(text)
+            return self._embedding_cache[text]
+
+        # Compute embedding
+        try:
+            embedding = self._embedder.encode([text], normalize=True)[0]
+        except Exception as e:
+            logger.warning("Failed to compute embedding: %s", e)
+            return None
+
+        # Add to cache with FIFO eviction if over size limit
+        if self._max_cache_size > 0:
+            self._embedding_cache[text] = embedding
+            if len(self._embedding_cache) > self._max_cache_size:
+                self._embedding_cache.popitem(last=False)  # Remove oldest
+
+        return embedding
+
     def _compute_semantic_similarity(self, trigger_text: str, response_text: str) -> float | None:
-        """Compute semantic similarity between trigger and response.
+        """Compute semantic similarity between trigger and response (cached).
+
+        Uses cached embeddings when available to avoid recomputation.
 
         Returns:
             Cosine similarity (0.0-1.0) if embedder is available, None otherwise.
@@ -223,12 +274,21 @@ class TurnBasedExtractor:
             return None
 
         try:
-            embeddings = self._embedder.encode([trigger_text, response_text], normalize=True)
-            similarity = float(np.dot(embeddings[0], embeddings[1]))
+            trigger_emb = self._get_embedding(trigger_text)
+            response_emb = self._get_embedding(response_text)
+
+            if trigger_emb is None or response_emb is None:
+                return None
+
+            similarity = float(np.dot(trigger_emb, response_emb))
             return similarity
         except Exception as e:
             logger.warning("Failed to compute semantic similarity: %s", e)
             return None
+
+    def clear_embedding_cache(self) -> None:
+        """Clear the embedding cache to free memory."""
+        self._embedding_cache.clear()
 
     def extract_pairs(
         self,
@@ -466,7 +526,7 @@ class TurnBasedExtractor:
 
         # Normalize internal whitespace (but preserve newlines for multi-message turns)
         lines = cleaned.split("\n")
-        cleaned_lines = [re.sub(r"[ \t]+", " ", line.strip()) for line in lines]
+        cleaned_lines = [_WHITESPACE_PATTERN.sub(" ", line.strip()) for line in lines]
         cleaned = "\n".join(line for line in cleaned_lines if line)
 
         return cleaned
@@ -574,7 +634,7 @@ class TurnBasedExtractor:
         if "?" in text:
             return True
         # Check for numbers or time patterns
-        if re.search(r"\d", text):
+        if _DIGIT_PATTERN.search(text):
             return True
         return False
 
@@ -587,7 +647,7 @@ class TurnBasedExtractor:
             if i == 0:
                 continue
             # Check if word is capitalized and not all caps
-            clean_word = re.sub(r"[^\w]", "", word)
+            clean_word = _NON_WORD_PATTERN.sub("", word)
             if clean_word and clean_word[0].isupper() and not clean_word.isupper():
                 proper_nouns.add(clean_word.lower())
         return proper_nouns
@@ -799,6 +859,39 @@ def extract_pairs_from_reader(
     return pair_dicts, stats
 
 
+def _extract_single_conversation(
+    conv: Any,
+    chat_db_reader: Any,
+    extractor: TurnBasedExtractor,
+    jarvis_db: Any,
+) -> tuple[list[ExtractedPair], ExtractionStats, int | None, bool, str, Any]:
+    """Extract pairs from a single conversation (helper for parallel processing).
+
+    Args:
+        conv: Conversation object.
+        chat_db_reader: An open ChatDBReader instance.
+        extractor: TurnBasedExtractor instance.
+        jarvis_db: JarvisDB instance for looking up contacts.
+
+    Returns:
+        Tuple of (pairs, stats, contact_id, is_group, chat_id, conv).
+    """
+    # Look up contact
+    contact = jarvis_db.get_contact_by_chat_id(conv.chat_id)
+    contact_id = contact.id if contact else None
+
+    # Get is_group from conversation metadata (not string pattern matching)
+    is_group = getattr(conv, "is_group", False)
+
+    # Get messages
+    messages = chat_db_reader.get_messages(conv.chat_id, limit=10000)
+
+    # Extract pairs
+    pairs, stats = extractor.extract_pairs(messages, conv.chat_id, is_group=is_group)
+
+    return pairs, stats, contact_id, is_group, conv.chat_id, conv
+
+
 def extract_all_pairs(
     chat_db_reader: Any,
     jarvis_db: Any,
@@ -849,72 +942,92 @@ def extract_all_pairs(
     conversations = chat_db_reader.get_conversations(limit=1000)
     total = len(conversations)
 
-    for idx, conv in enumerate(conversations):
-        if progress_callback:
-            progress_callback(idx, total, conv.chat_id)
+    if total == 0:
+        return aggregate_stats
 
-        try:
-            # Look up contact
-            contact = jarvis_db.get_contact_by_chat_id(conv.chat_id)
-            contact_id = contact.id if contact else None
+    # Use ThreadPoolExecutor for parallel extraction
+    max_workers = min(4, total)  # Don't over-parallelize
+    completed = 0
 
-            # Get is_group from conversation metadata (not string pattern matching)
-            is_group = getattr(conv, "is_group", False)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all extraction tasks
+        futures = {
+            executor.submit(
+                _extract_single_conversation,
+                conv,
+                chat_db_reader,
+                extractor,
+                jarvis_db,
+            ): conv
+            for conv in conversations
+        }
 
-            # Get messages
-            messages = chat_db_reader.get_messages(conv.chat_id, limit=10000)
+        # Process results as they complete
+        for future in as_completed(futures):
+            conv = futures[future]
 
-            # Extract pairs
-            pairs, stats = extractor.extract_pairs(messages, conv.chat_id, is_group=is_group)
+            try:
+                pairs, stats, contact_id, is_group, chat_id, _ = future.result()
 
-            # Update aggregate stats
-            aggregate_stats["total_messages_scanned"] += stats.total_messages_scanned
-            aggregate_stats["turns_identified"] += stats.turns_identified
-            aggregate_stats["candidate_pairs"] += stats.candidate_pairs
-            aggregate_stats["dropped_by_reason"]["short_trigger"] += stats.dropped_short_trigger
-            aggregate_stats["dropped_by_reason"]["short_response"] += stats.dropped_short_response
-            aggregate_stats["dropped_by_reason"]["long_trigger"] += stats.dropped_long_trigger
-            aggregate_stats["dropped_by_reason"]["long_response"] += stats.dropped_long_response
-            aggregate_stats["dropped_by_reason"]["no_text"] += stats.dropped_no_text
-            aggregate_stats["dropped_by_reason"]["time_gap"] += stats.dropped_time_gap
-            # Track quality flags
-            aggregate_stats["flagged_by_reason"]["reaction"] += stats.flagged_reaction
-            aggregate_stats["flagged_by_reason"]["low_similarity"] += stats.flagged_low_similarity
-            aggregate_stats["flagged_by_reason"]["topic_shift"] += stats.flagged_topic_shift
-            aggregate_stats["flagged_by_reason"]["ack_substantive"] += stats.flagged_ack_substantive
+                # Update progress callback
+                if progress_callback:
+                    progress_callback(completed, total, chat_id)
+                completed += 1
 
-            # Convert and add to database
-            pair_dicts = [
-                {
-                    "contact_id": contact_id,
-                    "trigger_text": pair.trigger_text,
-                    "response_text": pair.response_text,
-                    "trigger_timestamp": pair.trigger_timestamp,
-                    "response_timestamp": pair.response_timestamp,
-                    "chat_id": pair.chat_id,
-                    "trigger_msg_id": pair.trigger_msg_id,
-                    "response_msg_id": pair.response_msg_id,
-                    "trigger_msg_ids": pair.trigger_msg_ids,
-                    "response_msg_ids": pair.response_msg_ids,
-                    "context_text": pair.context_text,  # Conversation context for LLM
-                    "is_group": pair.is_group,
-                    "quality_score": pair.quality_score,
-                    "flags": pair.flags,
-                    "source_timestamp": pair.trigger_timestamp,
-                }
-                for pair in pairs
-            ]
+                # Update aggregate stats
+                aggregate_stats["total_messages_scanned"] += stats.total_messages_scanned
+                aggregate_stats["turns_identified"] += stats.turns_identified
+                aggregate_stats["candidate_pairs"] += stats.candidate_pairs
+                aggregate_stats["dropped_by_reason"]["short_trigger"] += stats.dropped_short_trigger
+                aggregate_stats["dropped_by_reason"][
+                    "short_response"
+                ] += stats.dropped_short_response
+                aggregate_stats["dropped_by_reason"]["long_trigger"] += stats.dropped_long_trigger
+                aggregate_stats["dropped_by_reason"]["long_response"] += stats.dropped_long_response
+                aggregate_stats["dropped_by_reason"]["no_text"] += stats.dropped_no_text
+                aggregate_stats["dropped_by_reason"]["time_gap"] += stats.dropped_time_gap
+                # Track quality flags
+                aggregate_stats["flagged_by_reason"]["reaction"] += stats.flagged_reaction
+                aggregate_stats["flagged_by_reason"][
+                    "low_similarity"
+                ] += stats.flagged_low_similarity
+                aggregate_stats["flagged_by_reason"]["topic_shift"] += stats.flagged_topic_shift
+                aggregate_stats["flagged_by_reason"][
+                    "ack_substantive"
+                ] += stats.flagged_ack_substantive
 
-            added = jarvis_db.add_pairs_bulk(pair_dicts)
+                # Convert and add to database
+                pair_dicts = [
+                    {
+                        "contact_id": contact_id,
+                        "trigger_text": pair.trigger_text,
+                        "response_text": pair.response_text,
+                        "trigger_timestamp": pair.trigger_timestamp,
+                        "response_timestamp": pair.response_timestamp,
+                        "chat_id": pair.chat_id,
+                        "trigger_msg_id": pair.trigger_msg_id,
+                        "response_msg_id": pair.response_msg_id,
+                        "trigger_msg_ids": pair.trigger_msg_ids,
+                        "response_msg_ids": pair.response_msg_ids,
+                        "context_text": pair.context_text,  # Conversation context for LLM
+                        "is_group": pair.is_group,
+                        "quality_score": pair.quality_score,
+                        "flags": pair.flags,
+                        "source_timestamp": pair.trigger_timestamp,
+                    }
+                    for pair in pairs
+                ]
 
-            aggregate_stats["conversations_processed"] += 1
-            aggregate_stats["pairs_extracted"] += len(pairs)
-            aggregate_stats["pairs_added"] += added
-            aggregate_stats["pairs_skipped_duplicate"] += len(pairs) - added
+                added = jarvis_db.add_pairs_bulk(pair_dicts)
 
-        except Exception as e:
-            logger.warning("Error extracting from %s: %s", conv.chat_id, e)
-            aggregate_stats["errors"].append({"chat_id": conv.chat_id, "error": str(e)})
+                aggregate_stats["conversations_processed"] += 1
+                aggregate_stats["pairs_extracted"] += len(pairs)
+                aggregate_stats["pairs_added"] += added
+                aggregate_stats["pairs_skipped_duplicate"] += len(pairs) - added
+
+            except Exception as e:
+                logger.warning("Error extracting from %s: %s", conv.chat_id, e)
+                aggregate_stats["errors"].append({"chat_id": conv.chat_id, "error": str(e)})
 
     return aggregate_stats
 

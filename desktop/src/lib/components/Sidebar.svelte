@@ -3,17 +3,35 @@
 
   type ViewType = "messages" | "dashboard" | "health" | "settings" | "templates";
 
-  let { currentView = $bindable<ViewType>("messages") } = $props<{ currentView?: ViewType }>();
+  let { currentView = $bindable<ViewType>("messages"), collapsed = $bindable(false) } = $props<{
+    currentView?: ViewType;
+    collapsed?: boolean;
+  }>();
 
   function navigate(view: ViewType) {
     currentView = view;
   }
+
+  function toggleCollapse() {
+    collapsed = !collapsed;
+  }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:collapsed>
   <div class="logo">
     <span class="logo-icon">J</span>
-    <span class="logo-text">JARVIS</span>
+    {#if !collapsed}
+      <span class="logo-text">JARVIS</span>
+    {/if}
+    <button class="collapse-btn" on:click={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        {#if collapsed}
+          <polyline points="9 18 15 12 9 6"></polyline>
+        {:else}
+          <polyline points="15 18 9 12 15 6"></polyline>
+        {/if}
+      </svg>
+    </button>
   </div>
 
   <nav class="nav">
@@ -29,7 +47,7 @@
         <rect x="14" y="14" width="7" height="7" />
         <rect x="3" y="14" width="7" height="7" />
       </svg>
-      <span>Dashboard</span>
+      {#if !collapsed}<span>Dashboard</span>{/if}
     </button>
 
     <button
@@ -43,7 +61,7 @@
           d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
         />
       </svg>
-      <span>Messages</span>
+      {#if !collapsed}<span>Messages</span>{/if}
     </button>
 
     <button
@@ -59,7 +77,7 @@
         <line x1="16" y1="17" x2="8" y2="17" />
         <polyline points="10 9 9 9 8 9" />
       </svg>
-      <span>Templates</span>
+      {#if !collapsed}<span>Templates</span>{/if}
     </button>
 
     <button
@@ -73,7 +91,7 @@
           d="M22 12h-4l-3 9L9 3l-3 9H2"
         />
       </svg>
-      <span>Health</span>
+      {#if !collapsed}<span>Health</span>{/if}
     </button>
 
     <button
@@ -88,17 +106,17 @@
           d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
         />
       </svg>
-      <span>Settings</span>
+      {#if !collapsed}<span>Settings</span>{/if}
     </button>
   </nav>
 
   <div class="status">
     {#if $healthStore.connected}
       <span class="status-dot connected" />
-      <span class="status-text">Connected</span>
+      {#if !collapsed}<span class="status-text">Connected</span>{/if}
     {:else}
       <span class="status-dot disconnected" />
-      <span class="status-text">Disconnected</span>
+      {#if !collapsed}<span class="status-text">Disconnected</span>{/if}
     {/if}
   </div>
 </aside>
@@ -112,6 +130,12 @@
     display: flex;
     flex-direction: column;
     padding: 16px 0;
+    transition: width 0.2s ease, min-width 0.2s ease;
+  }
+
+  .sidebar.collapsed {
+    width: 60px;
+    min-width: 60px;
   }
 
   .logo {
@@ -120,6 +144,40 @@
     gap: 8px;
     padding: 0 16px;
     margin-bottom: 24px;
+  }
+
+  .sidebar.collapsed .logo {
+    padding: 0 8px;
+    justify-content: center;
+  }
+
+  .collapse-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+
+  .collapse-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .collapse-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sidebar.collapsed .collapse-btn {
+    margin-left: 0;
+    margin-top: 8px;
   }
 
   .logo-icon {
@@ -178,6 +236,11 @@
     flex-shrink: 0;
   }
 
+  .sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 10px;
+  }
+
   .status {
     display: flex;
     align-items: center;
@@ -204,5 +267,10 @@
   .status-text {
     font-size: 12px;
     color: var(--text-secondary);
+  }
+
+  .sidebar.collapsed .status {
+    justify-content: center;
+    padding: 12px 8px;
   }
 </style>

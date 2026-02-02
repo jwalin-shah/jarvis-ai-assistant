@@ -88,7 +88,7 @@ test-verbose:
 	@echo "Results saved to test_results.txt and test_results.xml"
 
 test-coverage:
-	uv run pytest tests/ --tb=long -v --cov=core --cov=models --cov=integrations --cov=benchmarks \
+	uv run pytest tests/ --tb=long -v --cov=jarvis --cov=api --cov=core --cov=models --cov=integrations --cov=contracts --cov=benchmarks \
 		--cov-report=html --cov-report=term --junit-xml=test_results.xml --timeout=30 --timeout-method=thread 2>&1 | tee test_results.txt
 	@echo ""
 	@echo "Results saved to test_results.txt, test_results.xml, and htmlcov/"

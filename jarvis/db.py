@@ -17,6 +17,8 @@ Usage:
 import json
 import logging
 import sqlite3
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -25,6 +27,98 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# TTL-enabled LRU Cache for query results
+# ---------------------------------------------------------------------------
+
+
+class TTLCache:
+    """Thread-safe LRU cache with TTL expiration.
+
+    Provides caching for frequently called database queries with automatic
+    expiration to prevent stale data.
+    """
+
+    def __init__(self, maxsize: int = 128, ttl_seconds: float = 30.0) -> None:
+        """Initialize cache.
+
+        Args:
+            maxsize: Maximum number of entries to cache.
+            ttl_seconds: Time-to-live for cache entries in seconds.
+        """
+        self._cache: dict[Any, tuple[Any, float]] = {}
+        self._maxsize = maxsize
+        self._ttl = ttl_seconds
+        self._lock = threading.RLock()
+        self._access_order: list[Any] = []  # For LRU tracking
+
+    def get(self, key: Any) -> tuple[bool, Any]:
+        """Get value from cache.
+
+        Args:
+            key: Cache key.
+
+        Returns:
+            Tuple of (hit, value). hit is True if found and not expired.
+        """
+        with self._lock:
+            if key not in self._cache:
+                return (False, None)
+
+            value, timestamp = self._cache[key]
+            if time.time() - timestamp > self._ttl:
+                # Expired - remove and return miss
+                del self._cache[key]
+                if key in self._access_order:
+                    self._access_order.remove(key)
+                return (False, None)
+
+            # Update access order for LRU
+            if key in self._access_order:
+                self._access_order.remove(key)
+            self._access_order.append(key)
+            return (True, value)
+
+    def set(self, key: Any, value: Any) -> None:
+        """Set value in cache.
+
+        Args:
+            key: Cache key.
+            value: Value to cache.
+        """
+        with self._lock:
+            # Evict oldest if at capacity
+            while len(self._cache) >= self._maxsize and self._access_order:
+                oldest = self._access_order.pop(0)
+                self._cache.pop(oldest, None)
+
+            self._cache[key] = (value, time.time())
+            if key in self._access_order:
+                self._access_order.remove(key)
+            self._access_order.append(key)
+
+    def invalidate(self, key: Any) -> None:
+        """Remove a specific key from cache."""
+        with self._lock:
+            self._cache.pop(key, None)
+            if key in self._access_order:
+                self._access_order.remove(key)
+
+    def clear(self) -> None:
+        """Clear all cache entries."""
+        with self._lock:
+            self._cache.clear()
+            self._access_order.clear()
+
+    def stats(self) -> dict[str, int]:
+        """Get cache statistics."""
+        with self._lock:
+            return {
+                "size": len(self._cache),
+                "maxsize": self._maxsize,
+            }
 
 
 # Register custom timestamp converter that handles timezone-aware timestamps
@@ -369,7 +463,35 @@ CREATE INDEX IF NOT EXISTS idx_pairs_validity ON pairs(validity_status);
 CREATE INDEX IF NOT EXISTS idx_contacts_chat ON contacts(chat_id);
 CREATE INDEX IF NOT EXISTS idx_embeddings_index ON pair_embeddings(index_version);
 CREATE INDEX IF NOT EXISTS idx_embeddings_faiss ON pair_embeddings(faiss_id);
+
+-- Indexes for trigger pattern lookups (acknowledgment checks in router)
+CREATE INDEX IF NOT EXISTS idx_pairs_trigger_text ON pairs(contact_id, LOWER(TRIM(trigger_text)));
+CREATE INDEX IF NOT EXISTS idx_pairs_timestamp ON pairs(trigger_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_pairs_source_timestamp ON pairs(source_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_contacts_id ON contacts(id);
+
+-- Composite indexes for common query patterns (faster filtered queries)
+CREATE INDEX IF NOT EXISTS idx_pairs_chat_timestamp ON pairs(chat_id, trigger_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_pairs_contact_quality ON pairs(contact_id, quality_score DESC);
 """
+
+# Expected indices for verification
+EXPECTED_INDICES = {
+    "idx_pairs_contact",
+    "idx_pairs_chat",
+    "idx_pairs_quality",
+    "idx_pairs_validity",
+    "idx_contacts_chat",
+    "idx_embeddings_index",
+    "idx_embeddings_faiss",
+    "idx_pairs_trigger_text",
+    "idx_pairs_timestamp",
+    "idx_pairs_source_timestamp",
+    "idx_contacts_id",
+    # Composite indexes for faster filtered queries
+    "idx_pairs_chat_timestamp",
+    "idx_pairs_contact_quality",
+}
 
 CURRENT_SCHEMA_VERSION = 7  # Added DA classification and cluster_id
 
@@ -378,6 +500,7 @@ class JarvisDB:
     """Manager for the JARVIS SQLite database.
 
     Thread-safe connection management with context manager support.
+    Includes TTL-based caching for frequently accessed data.
     """
 
     def __init__(self, db_path: Path | None = None) -> None:
@@ -387,33 +510,89 @@ class JarvisDB:
             db_path: Path to database file. Uses default if None.
         """
         self.db_path = db_path or JARVIS_DB_PATH
+        self._local = threading.local()
         self._ensure_directory()
+
+        # Query result caches with 30-second TTL
+        self._contact_cache = TTLCache(maxsize=256, ttl_seconds=30.0)
+        self._stats_cache = TTLCache(maxsize=16, ttl_seconds=60.0)
+        self._trigger_pattern_cache = TTLCache(maxsize=128, ttl_seconds=30.0)
 
     def _ensure_directory(self) -> None:
         """Ensure the database directory exists."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
+    def _get_connection(self) -> sqlite3.Connection:
+        """Get or create a thread-local connection.
+
+        Connections are reused per-thread for efficiency. SQLite pragmas are
+        set for optimal read performance while maintaining data integrity.
+
+        Returns:
+            SQLite connection with row_factory set to sqlite3.Row.
+        """
+        if not hasattr(self._local, "connection") or self._local.connection is None:
+            self._local.connection = sqlite3.connect(
+                str(self.db_path),
+                detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+                timeout=30.0,
+                check_same_thread=False,
+            )
+            self._local.connection.row_factory = sqlite3.Row
+            # Enable foreign keys
+            self._local.connection.execute("PRAGMA foreign_keys = ON")
+            # Optimize for read-heavy workloads
+            self._local.connection.execute("PRAGMA journal_mode = WAL")
+            self._local.connection.execute("PRAGMA synchronous = NORMAL")
+            self._local.connection.execute("PRAGMA cache_size = -8000")  # 8MB cache
+            self._local.connection.execute("PRAGMA temp_store = MEMORY")
+        return self._local.connection
+
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
-        """Get a database connection with automatic cleanup.
+        """Get a database connection (reuses thread-local connection).
 
         Yields:
             SQLite connection with row_factory set to sqlite3.Row.
         """
-        conn = sqlite3.connect(
-            str(self.db_path),
-            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
-        )
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn = self._get_connection()
         try:
             yield conn
             conn.commit()
         except Exception:
             conn.rollback()
             raise
-        finally:
-            conn.close()
+
+    def close(self) -> None:
+        """Close the thread-local connection if it exists."""
+        if hasattr(self._local, "connection") and self._local.connection is not None:
+            self._local.connection.close()
+            self._local.connection = None
+        # Clear caches on close
+        self._contact_cache.clear()
+        self._stats_cache.clear()
+        self._trigger_pattern_cache.clear()
+
+    def clear_caches(self) -> None:
+        """Clear all query result caches.
+
+        Call this after bulk modifications to ensure fresh data.
+        """
+        self._contact_cache.clear()
+        self._stats_cache.clear()
+        self._trigger_pattern_cache.clear()
+
+    def get_cache_stats(self) -> dict[str, dict[str, int]]:
+        """Get statistics about cache usage.
+
+        Returns:
+            Dictionary with cache names and their stats.
+        """
+        return {
+            "contact_cache": self._contact_cache.stats(),
+            "stats_cache": self._stats_cache.stats(),
+            "trigger_pattern_cache": self._trigger_pattern_cache.stats(),
+        }
 
     def init_schema(self) -> bool:
         """Initialize database schema.
@@ -522,6 +701,51 @@ class JarvisDB:
         """Check if the database file exists."""
         return self.db_path.exists()
 
+    def verify_indices(self, create_missing: bool = True) -> dict[str, Any]:
+        """Verify that required indices exist and optionally create missing ones.
+
+        Args:
+            create_missing: If True, create any missing indices.
+
+        Returns:
+            Dictionary with verification results:
+            - existing: Set of existing index names
+            - missing: Set of missing index names
+            - created: Set of newly created index names (if create_missing=True)
+        """
+        with self.connection() as conn:
+            # Get existing indices
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
+            )
+            existing_indices = {row["name"] for row in cursor}
+
+            missing_indices = EXPECTED_INDICES - existing_indices
+            created_indices: set[str] = set()
+
+            if create_missing and missing_indices:
+                # Re-run the schema SQL which has CREATE INDEX IF NOT EXISTS
+                conn.executescript(SCHEMA_SQL)
+
+                # Check what was created
+                cursor = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
+                )
+                new_existing = {row["name"] for row in cursor}
+                created_indices = new_existing - existing_indices
+                existing_indices = new_existing
+                missing_indices = EXPECTED_INDICES - existing_indices
+
+                if created_indices:
+                    logger.info("Created missing indices: %s", created_indices)
+
+            return {
+                "existing": existing_indices,
+                "missing": missing_indices,
+                "created": created_indices,
+                "all_present": len(missing_indices) == 0,
+            }
+
     # -------------------------------------------------------------------------
     # Contact Operations
     # -------------------------------------------------------------------------
@@ -578,6 +802,9 @@ class JarvisDB:
                             chat_id,
                         ),
                     )
+                    # Invalidate cache entries for this contact
+                    self._contact_cache.invalidate(("contact_id", existing["id"]))
+                    self._contact_cache.invalidate(("chat_id", chat_id))
                     return Contact(
                         id=existing["id"],
                         chat_id=chat_id,
@@ -599,7 +826,7 @@ class JarvisDB:
                 (chat_id, display_name, phone_or_email, relationship, style_notes, handles_json),
             )
 
-            return Contact(
+            new_contact = Contact(
                 id=cursor.lastrowid,
                 chat_id=chat_id,
                 display_name=display_name,
@@ -610,24 +837,43 @@ class JarvisDB:
                 created_at=now,
                 updated_at=now,
             )
+            # Invalidate stats cache since we added a new contact
+            self._stats_cache.invalidate("db_stats")
+            return new_contact
 
     def get_contact(self, contact_id: int) -> Contact | None:
-        """Get a contact by ID."""
+        """Get a contact by ID.
+
+        Results are cached with 30-second TTL for performance.
+        """
+        cache_key = ("contact_id", contact_id)
+        hit, cached = self._contact_cache.get(cache_key)
+        if hit:
+            return cached
+
         with self.connection() as conn:
             cursor = conn.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
             row = cursor.fetchone()
-            if row:
-                return self._row_to_contact(row)
-            return None
+            result = self._row_to_contact(row) if row else None
+            self._contact_cache.set(cache_key, result)
+            return result
 
     def get_contact_by_chat_id(self, chat_id: str) -> Contact | None:
-        """Get a contact by their chat ID."""
+        """Get a contact by their chat ID.
+
+        Results are cached with 30-second TTL for performance.
+        """
+        cache_key = ("chat_id", chat_id)
+        hit, cached = self._contact_cache.get(cache_key)
+        if hit:
+            return cached
+
         with self.connection() as conn:
             cursor = conn.execute("SELECT * FROM contacts WHERE chat_id = ?", (chat_id,))
             row = cursor.fetchone()
-            if row:
-                return self._row_to_contact(row)
-            return None
+            result = self._row_to_contact(row) if row else None
+            self._contact_cache.set(cache_key, result)
+            return result
 
     def get_contact_by_name(self, name: str) -> Contact | None:
         """Get a contact by display name (case-insensitive partial match)."""
@@ -659,6 +905,11 @@ class JarvisDB:
     def delete_contact(self, contact_id: int) -> bool:
         """Delete a contact and their associated pairs."""
         with self.connection() as conn:
+            # Get chat_id before deletion for cache invalidation
+            cursor = conn.execute("SELECT chat_id FROM contacts WHERE id = ?", (contact_id,))
+            row = cursor.fetchone()
+            chat_id = row["chat_id"] if row else None
+
             # Delete embeddings for this contact's pairs
             conn.execute(
                 """DELETE FROM pair_embeddings WHERE pair_id IN
@@ -668,7 +919,18 @@ class JarvisDB:
             # Delete pairs
             conn.execute("DELETE FROM pairs WHERE contact_id = ?", (contact_id,))
             cursor = conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
-            return cursor.rowcount > 0
+            deleted = cursor.rowcount > 0
+
+            if deleted:
+                # Invalidate caches
+                self._contact_cache.invalidate(("contact_id", contact_id))
+                if chat_id:
+                    self._contact_cache.invalidate(("chat_id", chat_id))
+                self._stats_cache.invalidate("db_stats")
+                # Clear trigger pattern cache for this contact
+                self._trigger_pattern_cache.clear()  # Simpler than tracking individual keys
+
+            return deleted
 
     def _row_to_contact(self, row: sqlite3.Row) -> Contact:
         """Convert a database row to a Contact object."""
@@ -1007,6 +1269,22 @@ class JarvisDB:
                 "total_classified": total_classified,
             }
 
+    # Pre-computed acknowledgment triggers for pattern matching
+    _ACK_TRIGGERS = (
+        "ok",
+        "okay",
+        "sure",
+        "yes",
+        "yeah",
+        "yep",
+        "yup",
+        "got it",
+        "k",
+        "kk",
+        "alright",
+        "sounds good",
+    )
+
     def get_pairs_by_trigger_pattern(
         self,
         contact_id: int,
@@ -1019,6 +1297,9 @@ class JarvisDB:
         For example, checking if user typically provides substantive info after
         acknowledgments like "ok" or "sure".
 
+        Results are cached with 30-second TTL since this is called frequently
+        during acknowledgment message routing.
+
         Args:
             contact_id: Contact to query.
             pattern_type: Pattern to match. Currently supported:
@@ -1028,22 +1309,14 @@ class JarvisDB:
         Returns:
             List of Pair objects matching the pattern, ordered by recency.
         """
+        # Check cache first
+        cache_key = (contact_id, pattern_type, limit)
+        hit, cached = self._trigger_pattern_cache.get(cache_key)
+        if hit:
+            return cached
+
         if pattern_type == "acknowledgment":
-            ack_triggers = (
-                "ok",
-                "okay",
-                "sure",
-                "yes",
-                "yeah",
-                "yep",
-                "yup",
-                "got it",
-                "k",
-                "kk",
-                "alright",
-                "sounds good",
-            )
-            placeholders = ",".join("?" * len(ack_triggers))
+            placeholders = ",".join("?" * len(self._ACK_TRIGGERS))
             query = f"""
                 SELECT * FROM pairs
                 WHERE contact_id = ?
@@ -1053,10 +1326,89 @@ class JarvisDB:
                 LIMIT ?
             """
             with self.connection() as conn:
-                cursor = conn.execute(query, (contact_id, *ack_triggers, limit))
-                return [self._row_to_pair(row) for row in cursor]
+                cursor = conn.execute(query, (contact_id, *self._ACK_TRIGGERS, limit))
+                result = [self._row_to_pair(row) for row in cursor]
+                self._trigger_pattern_cache.set(cache_key, result)
+                return result
 
+        # Unknown pattern type - cache empty result
+        self._trigger_pattern_cache.set(cache_key, [])
         return []
+
+    def get_pairs_by_trigger_patterns_batch(
+        self,
+        contact_ids: list[int],
+        pattern_type: str = "acknowledgment",
+        limit_per_contact: int = 10,
+    ) -> dict[int, list[Pair]]:
+        """Batch fetch pairs by trigger pattern for multiple contacts.
+
+        More efficient than calling get_pairs_by_trigger_pattern in a loop
+        when checking patterns for multiple contacts.
+
+        Args:
+            contact_ids: List of contact IDs to query.
+            pattern_type: Pattern to match (currently "acknowledgment").
+            limit_per_contact: Max pairs per contact.
+
+        Returns:
+            Dict mapping contact_id -> list of matching Pairs.
+        """
+        if not contact_ids or pattern_type != "acknowledgment":
+            return {cid: [] for cid in contact_ids}
+
+        # Check cache for already-cached contacts
+        result: dict[int, list[Pair]] = {}
+        uncached_ids: list[int] = []
+
+        for cid in contact_ids:
+            cache_key = (cid, pattern_type, limit_per_contact)
+            hit, cached = self._trigger_pattern_cache.get(cache_key)
+            if hit:
+                result[cid] = cached
+            else:
+                uncached_ids.append(cid)
+
+        if not uncached_ids:
+            return result
+
+        # Batch query for uncached contacts
+        contact_placeholders = ",".join("?" * len(uncached_ids))
+        trigger_placeholders = ",".join("?" * len(self._ACK_TRIGGERS))
+
+        # Use window function to limit per contact
+        query = f"""
+            SELECT * FROM (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY contact_id ORDER BY trigger_timestamp DESC
+                ) as rn
+                FROM pairs
+                WHERE contact_id IN ({contact_placeholders})
+                AND LOWER(TRIM(trigger_text)) IN ({trigger_placeholders})
+                AND quality_score >= 0.5
+            ) WHERE rn <= ?
+        """
+
+        with self.connection() as conn:
+            cursor = conn.execute(
+                query, (*uncached_ids, *self._ACK_TRIGGERS, limit_per_contact)
+            )
+
+            # Group results by contact_id
+            for cid in uncached_ids:
+                result[cid] = []
+
+            for row in cursor:
+                pair = self._row_to_pair(row)
+                if pair.contact_id in result:
+                    result[pair.contact_id].append(pair)
+
+        # Cache all results
+        for cid in uncached_ids:
+            cache_key = (cid, pattern_type, limit_per_contact)
+            self._trigger_pattern_cache.set(cache_key, result.get(cid, []))
+
+        return result
 
     def _row_to_pair(self, row: sqlite3.Row) -> Pair:
         """Convert a database row to a Pair object."""
@@ -1574,6 +1926,70 @@ class JarvisDB:
             )
             return {row["id"]: self._row_to_cluster(row) for row in cursor}
 
+    def get_pairs_with_clusters_by_faiss_ids(
+        self,
+        faiss_ids: list[int],
+        index_version: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """Batch fetch pairs with embedding and cluster info in a single query.
+
+        Consolidates 3 queries (pairs, embeddings, clusters) into 1 with JOINs.
+        More efficient for search_with_pairs which needs all this data.
+
+        Args:
+            faiss_ids: List of FAISS IDs to fetch.
+            index_version: Optional index version to filter by.
+            limit: Optional limit on results (for safety on large result sets).
+
+        Returns:
+            List of dicts with pair, embedding, and cluster info.
+        """
+        if not faiss_ids:
+            return []
+
+        # Apply limit if specified
+        ids_to_query = faiss_ids[:limit] if limit else faiss_ids
+
+        with self.connection() as conn:
+            placeholders = ",".join("?" * len(ids_to_query))
+            if index_version:
+                cursor = conn.execute(
+                    f"""
+                    SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id,
+                           c.name as cluster_name, c.description as cluster_description
+                    FROM pairs p
+                    JOIN pair_embeddings e ON p.id = e.pair_id
+                    LEFT JOIN clusters c ON e.cluster_id = c.id
+                    WHERE e.faiss_id IN ({placeholders}) AND e.index_version = ?
+                    """,
+                    (*ids_to_query, index_version),
+                )
+            else:
+                cursor = conn.execute(
+                    f"""
+                    SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id,
+                           c.name as cluster_name, c.description as cluster_description
+                    FROM pairs p
+                    JOIN pair_embeddings e ON p.id = e.pair_id
+                    LEFT JOIN clusters c ON e.cluster_id = c.id
+                    WHERE e.faiss_id IN ({placeholders})
+                    """,
+                    ids_to_query,
+                )
+
+            results = []
+            for row in cursor:
+                pair = self._row_to_pair(row)
+                results.append({
+                    "pair": pair,
+                    "faiss_id": row["faiss_id"],
+                    "cluster_id": row["embedding_cluster_id"],
+                    "cluster_name": row["cluster_name"],
+                    "cluster_description": row["cluster_description"],
+                })
+            return results
+
     def clear_embeddings(self, index_version: str | None = None) -> int:
         """Delete embeddings, optionally for a specific index version."""
         with self.connection() as conn:
@@ -1687,8 +2103,20 @@ class JarvisDB:
     # Statistics
     # -------------------------------------------------------------------------
 
-    def get_stats(self) -> dict[str, Any]:
-        """Get database statistics."""
+    def get_stats(self, use_cache: bool = True) -> dict[str, Any]:
+        """Get database statistics.
+
+        Results are cached with 60-second TTL since stats don't change frequently.
+
+        Args:
+            use_cache: If True (default), use cached results if available.
+        """
+        cache_key = "db_stats"
+        if use_cache:
+            hit, cached = self._stats_cache.get(cache_key)
+            if hit:
+                return cached
+
         with self.connection() as conn:
             stats: dict[str, Any] = {}
 
@@ -1730,6 +2158,7 @@ class JarvisDB:
                 {"name": row["display_name"], "count": row["pair_count"]} for row in cursor
             ]
 
+            self._stats_cache.set(cache_key, stats)
             return stats
 
     # -------------------------------------------------------------------------
@@ -2309,6 +2738,8 @@ def get_db(db_path: Path | None = None) -> JarvisDB:
 
 
 def reset_db() -> None:
-    """Reset the singleton database instance."""
+    """Reset the singleton database instance (closes any open connections)."""
     global _db
+    if _db is not None:
+        _db.close()
     _db = None

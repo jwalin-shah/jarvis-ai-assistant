@@ -58,15 +58,15 @@ test.describe("App Launch", () => {
     await page.goto("/");
     await waitForAppLoad(page);
 
-    // Status indicator should be visible
-    await expect(page.locator(".status")).toBeVisible();
+    // Status indicator should be visible in sidebar
+    await expect(page.locator(".sidebar .status")).toBeVisible();
 
     // With mocked API, should show connected
     const status = await getConnectionStatus(page);
     expect(status).toBe("connected");
 
-    // Status text should show Connected
-    await expect(page.locator(".status-text")).toHaveText("Connected");
+    // Status text should show Connected (in sidebar)
+    await expect(page.locator(".sidebar .status-text")).toHaveText("Connected");
   });
 
   test("shows disconnected when API unavailable", async ({
@@ -80,9 +80,9 @@ test.describe("App Launch", () => {
     // Give time for connection check to complete
     await page.waitForTimeout(2000);
 
-    // Status should show disconnected
-    await expect(page.locator(".status-dot.disconnected")).toBeVisible();
-    await expect(page.locator(".status-text")).toHaveText("Disconnected");
+    // Status should show disconnected (in sidebar)
+    await expect(page.locator(".sidebar .status-dot.disconnected")).toBeVisible();
+    await expect(page.locator(".sidebar .status-text")).toHaveText("Disconnected");
   });
 
   test("defaults to messages view", async ({ mockedPage: page }) => {

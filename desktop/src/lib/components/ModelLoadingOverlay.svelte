@@ -4,7 +4,7 @@
 
   export let onLoaded: () => void = () => {};
   export let onError: (error: string) => void = () => {};
-  export let apiUrl: string = "http://localhost:8742";
+  export let apiUrl: string = import.meta.env.VITE_API_URL || "http://localhost:8742";
 
   interface ModelStatus {
     state: "unloaded" | "loading" | "loaded" | "error";

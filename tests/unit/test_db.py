@@ -1923,3 +1923,204 @@ class TestEdgeCases:
 
         # Count should be same as before (transaction rolled back)
         assert len(db.list_contacts()) == initial_count
+
+
+class TestCaching:
+    """Tests for query result caching."""
+
+    @pytest.fixture
+    def db(self, tmp_path: Path) -> JarvisDB:
+        """Create a fresh database for each test."""
+        db_path = tmp_path / "jarvis.db"
+        db = JarvisDB(db_path)
+        db.init_schema()
+        return db
+
+    def test_contact_cache_hit(self, db: JarvisDB) -> None:
+        """Test that get_contact uses cache on second call."""
+        contact = db.add_contact(display_name="Test", chat_id="chat1")
+
+        # First call populates cache
+        result1 = db.get_contact(contact.id)  # type: ignore[arg-type]
+        assert result1 is not None
+
+        # Second call should hit cache
+        result2 = db.get_contact(contact.id)  # type: ignore[arg-type]
+        assert result2 is not None
+        assert result2.display_name == "Test"
+
+        # Cache stats should show entry
+        stats = db.get_cache_stats()
+        assert stats["contact_cache"]["size"] > 0
+
+    def test_contact_cache_invalidation_on_update(self, db: JarvisDB) -> None:
+        """Test that updating a contact invalidates the cache."""
+        db.add_contact(display_name="Original", chat_id="chat1")
+
+        # Populate cache
+        result1 = db.get_contact_by_chat_id("chat1")
+        assert result1 is not None
+        assert result1.display_name == "Original"
+
+        # Update contact (should invalidate cache)
+        db.add_contact(display_name="Updated", chat_id="chat1")
+
+        # Should get fresh data
+        result2 = db.get_contact_by_chat_id("chat1")
+        assert result2 is not None
+        assert result2.display_name == "Updated"
+
+    def test_trigger_pattern_cache(self, db: JarvisDB) -> None:
+        """Test that trigger pattern queries are cached."""
+        contact = db.add_contact(display_name="Test", chat_id="chat1")
+        now = datetime.now()
+
+        # Add an acknowledgment pair
+        db.add_pair(
+            trigger_text="ok",
+            response_text="Great!",
+            trigger_timestamp=now,
+            response_timestamp=now,
+            chat_id="chat1",
+            contact_id=contact.id,
+            trigger_msg_id=1,
+            response_msg_id=2,
+        )
+
+        # First call should populate cache
+        pairs1 = db.get_pairs_by_trigger_pattern(contact.id, "acknowledgment")  # type: ignore[arg-type]
+        assert len(pairs1) == 1
+
+        # Second call should use cache
+        pairs2 = db.get_pairs_by_trigger_pattern(contact.id, "acknowledgment")  # type: ignore[arg-type]
+        assert len(pairs2) == 1
+
+        # Cache stats should show entry
+        stats = db.get_cache_stats()
+        assert stats["trigger_pattern_cache"]["size"] > 0
+
+    def test_stats_cache(self, db: JarvisDB) -> None:
+        """Test that get_stats uses cache."""
+        db.add_contact(display_name="Test")
+
+        # First call populates cache
+        stats1 = db.get_stats()
+        assert stats1["contacts"] == 1
+
+        # Second call should use cache
+        stats2 = db.get_stats()
+        assert stats2["contacts"] == 1
+
+        # Cache stats should show entry
+        cache_stats = db.get_cache_stats()
+        assert cache_stats["stats_cache"]["size"] > 0
+
+    def test_clear_caches(self, db: JarvisDB) -> None:
+        """Test that clear_caches empties all caches."""
+        db.add_contact(display_name="Test", chat_id="chat1")
+
+        # Populate caches
+        db.get_contact_by_chat_id("chat1")
+        db.get_stats()
+
+        # Clear caches
+        db.clear_caches()
+
+        # All caches should be empty
+        stats = db.get_cache_stats()
+        assert stats["contact_cache"]["size"] == 0
+        assert stats["stats_cache"]["size"] == 0
+
+
+class TestIndices:
+    """Tests for index verification."""
+
+    @pytest.fixture
+    def db(self, tmp_path: Path) -> JarvisDB:
+        """Create a fresh database for each test."""
+        db_path = tmp_path / "jarvis.db"
+        db = JarvisDB(db_path)
+        db.init_schema()
+        return db
+
+    def test_verify_indices_all_present(self, db: JarvisDB) -> None:
+        """Test that verify_indices reports all indices after init_schema."""
+        result = db.verify_indices(create_missing=False)
+
+        # All expected indices should be present after init_schema
+        assert result["all_present"] is True
+        assert len(result["missing"]) == 0
+        assert "idx_pairs_contact" in result["existing"]
+        assert "idx_pairs_trigger_text" in result["existing"]
+
+    def test_verify_indices_creates_missing(self, db: JarvisDB) -> None:
+        """Test that verify_indices can create missing indices."""
+        # Result should still show all present (they were created)
+        result = db.verify_indices(create_missing=True)
+        assert result["all_present"] is True
+
+
+class TestBatchOperations:
+    """Tests for batch query operations."""
+
+    @pytest.fixture
+    def db(self, tmp_path: Path) -> JarvisDB:
+        """Create a fresh database for each test."""
+        db_path = tmp_path / "jarvis.db"
+        db = JarvisDB(db_path)
+        db.init_schema()
+        return db
+
+    def test_get_pairs_by_trigger_patterns_batch(self, db: JarvisDB) -> None:
+        """Test batch trigger pattern lookup for multiple contacts."""
+        now = datetime.now()
+
+        # Create two contacts with acknowledgment pairs
+        contact1 = db.add_contact(display_name="Contact1", chat_id="chat1")
+        contact2 = db.add_contact(display_name="Contact2", chat_id="chat2")
+
+        db.add_pair(
+            trigger_text="ok",
+            response_text="Response 1",
+            trigger_timestamp=now,
+            response_timestamp=now,
+            chat_id="chat1",
+            contact_id=contact1.id,
+            trigger_msg_id=1,
+            response_msg_id=2,
+        )
+
+        db.add_pair(
+            trigger_text="sure",
+            response_text="Response 2",
+            trigger_timestamp=now,
+            response_timestamp=now,
+            chat_id="chat2",
+            contact_id=contact2.id,
+            trigger_msg_id=3,
+            response_msg_id=4,
+        )
+
+        # Batch lookup
+        result = db.get_pairs_by_trigger_patterns_batch(
+            [contact1.id, contact2.id],  # type: ignore[list-item]
+            pattern_type="acknowledgment",
+        )
+
+        assert contact1.id in result
+        assert contact2.id in result
+        assert len(result[contact1.id]) == 1  # type: ignore[index]
+        assert len(result[contact2.id]) == 1  # type: ignore[index]
+
+    def test_get_pairs_by_trigger_patterns_batch_empty(self, db: JarvisDB) -> None:
+        """Test batch trigger pattern lookup with no matches."""
+        contact = db.add_contact(display_name="Test", chat_id="chat1")
+
+        # No pairs added, should return empty lists
+        result = db.get_pairs_by_trigger_patterns_batch(
+            [contact.id],  # type: ignore[list-item]
+            pattern_type="acknowledgment",
+        )
+
+        assert contact.id in result
+        assert result[contact.id] == []  # type: ignore[index]

@@ -1,7 +1,8 @@
 """MLX Embedding Service Client - Low-level GPU-accelerated embeddings.
 
 This is the LOW-LEVEL MLX embedding service client. It communicates with
-a separate MLX microservice via HTTP for GPU-accelerated embeddings.
+a separate MLX microservice via Unix socket for GPU-accelerated embeddings.
+Unix sockets provide ~10-50x lower latency than HTTP for local IPC.
 
 IMPORTANT: Most code should NOT import from this module directly.
 Instead, use the unified interface in jarvis/embedding_adapter.py:
@@ -21,6 +22,7 @@ This module is appropriate for:
 
 Key Features:
 - GPU acceleration on Apple Silicon via MLX
+- Unix socket communication (JSON-RPC 2.0 protocol)
 - Thread-safe singleton pattern
 - Automatic service health checking
 
@@ -51,10 +53,29 @@ logger = logging.getLogger(__name__)
 # Configuration
 # =============================================================================
 
-DEFAULT_MLX_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-MLX_EMBEDDING_DIM = 384  # Dimension for bge-small-en-v1.5
-MLX_EMBED_SERVICE_URL = "http://127.0.0.1:8766"
+# Embedding dimension is 384 for all supported models
+MLX_EMBEDDING_DIM = 384
+MLX_EMBED_SERVICE_SOCKET = "/tmp/jarvis-embed.sock"
 MLX_EMBED_SERVICE_DIR = Path.home() / ".jarvis" / "mlx-embed-service"
+
+# Legacy constant for backwards compatibility
+DEFAULT_MLX_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+
+def _get_mlx_model_name() -> str:
+    """Get the MLX model name from config.
+
+    Returns:
+        MLX model name (e.g., "bge-small", "gte-tiny").
+    """
+    try:
+        from jarvis.embedding_adapter import get_model_info
+
+        _, mlx_model_name = get_model_info()
+        return mlx_model_name
+    except Exception:
+        # Fallback to legacy model if config unavailable
+        return "bge-small"
 
 
 # =============================================================================
@@ -91,11 +112,10 @@ MLXModelNotAvailableError = MLXServiceNotAvailableError
 
 
 class MLXEmbedder:
-    """Client for MLX embedding microservice.
+    """Client for MLX embedding microservice via Unix socket.
 
-    Communicates with a separate MLX embedding service to generate
-    embeddings. The service runs in its own environment to avoid
-    dependency conflicts.
+    Communicates with a separate MLX embedding service using JSON-RPC 2.0
+    over Unix sockets for low-latency GPU-accelerated embeddings.
 
     Thread Safety:
         This class is thread-safe for concurrent encode() calls.
@@ -110,22 +130,101 @@ class MLXEmbedder:
     def __init__(
         self,
         model_name: str = DEFAULT_MLX_EMBEDDING_MODEL,
-        service_url: str = MLX_EMBED_SERVICE_URL,
+        socket_path: str = MLX_EMBED_SERVICE_SOCKET,
         timeout: float = 30.0,
     ) -> None:
         """Initialize the MLX embedder client.
 
         Args:
             model_name: Name/path of the embedding model to use.
-            service_url: URL of the MLX embedding service.
+            socket_path: Path to the Unix socket for the MLX embedding service.
             timeout: Request timeout in seconds.
         """
         self.model_name = model_name
-        self.service_url = service_url.rstrip("/")
+        self.socket_path = socket_path
         self.timeout = timeout
         self._lock = threading.Lock()
         self._service_available: bool | None = None
         self._last_health_check: float = 0
+        self._request_id = 0
+
+    def _next_request_id(self) -> int:
+        """Get next request ID for JSON-RPC."""
+        self._request_id += 1
+        return self._request_id
+
+    def _send_request(
+        self, method: str, params: dict | None = None, timeout: float | None = None
+    ) -> dict:
+        """Send a JSON-RPC request over Unix socket.
+
+        Args:
+            method: JSON-RPC method name.
+            params: Optional parameters dict.
+            timeout: Optional timeout override.
+
+        Returns:
+            Result dict from the response.
+
+        Raises:
+            MLXServiceNotAvailableError: If socket connection fails.
+            MLXEmbeddingError: If the request fails.
+        """
+        import json
+        import socket
+
+        request = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params or {},
+            "id": self._next_request_id(),
+        }
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(timeout or self.timeout)
+
+        try:
+            sock.connect(self.socket_path)
+            # Send newline-delimited JSON
+            sock.sendall(json.dumps(request).encode() + b"\n")
+
+            # Read response (newline-delimited)
+            response_data = b""
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                response_data += chunk
+                if b"\n" in response_data:
+                    break
+
+            if not response_data:
+                raise MLXServiceNotAvailableError("Empty response from MLX service")
+
+            response = json.loads(response_data.decode().strip())
+
+            if "error" in response:
+                error = response["error"]
+                raise MLXEmbeddingError(
+                    f"MLX service error: {error.get('message', 'Unknown error')}"
+                )
+
+            return response.get("result", {})
+
+        except FileNotFoundError:
+            raise MLXServiceNotAvailableError(
+                f"MLX embedding service socket not found at {self.socket_path}. "
+                "Start it with: cd ~/.jarvis/mlx-embed-service && uv run python server.py"
+            )
+        except ConnectionRefusedError:
+            raise MLXServiceNotAvailableError(
+                "MLX embedding service is not running. "
+                "Start it with: cd ~/.jarvis/mlx-embed-service && uv run python server.py"
+            )
+        except socket.timeout:
+            raise MLXEmbeddingError("MLX service request timed out")
+        finally:
+            sock.close()
 
     def _check_service_health(self, force: bool = False) -> bool:
         """Check if the embedding service is healthy.
@@ -143,15 +242,11 @@ class MLXEmbedder:
                 return self._service_available
 
         try:
-            import urllib.request
-
-            url = f"{self.service_url}/health"
-            req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=5) as response:
-                if response.status == 200:
-                    self._service_available = True
-                    self._last_health_check = now
-                    return True
+            result = self._send_request("ping", timeout=5)
+            if result.get("status") == "ok":
+                self._service_available = True
+                self._last_health_check = now
+                return True
         except Exception as e:
             logger.debug("Health check failed: %s", e)
 
@@ -205,35 +300,22 @@ class MLXEmbedder:
             )
 
         try:
-            import json
-            import urllib.request
-
-            # Prepare request
-            url = f"{self.service_url}/embed"
-            data = json.dumps(
+            result = self._send_request(
+                "embed",
                 {
                     "texts": texts,
                     "normalize": normalize,
                     "model": self.model_name,
-                }
-            ).encode("utf-8")
-
-            req = urllib.request.Request(
-                url,
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
+                },
             )
-
-            # Make request
-            with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                result = json.loads(response.read().decode("utf-8"))
 
             # Convert to numpy array
             embeddings = np.array(result["embeddings"], dtype=np.float32)
             return embeddings
 
         except MLXServiceNotAvailableError:
+            raise
+        except MLXEmbeddingError:
             raise
         except Exception as e:
             logger.exception("Failed to encode texts via MLX service")
@@ -252,14 +334,8 @@ class MLXEmbedder:
             return False
 
         try:
-            import json
-            import urllib.request
-
-            url = f"{self.service_url}/health"
-            req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=5) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                return bool(result.get("model_loaded", False))
+            result = self._send_request("health", timeout=5)
+            return bool(result.get("model_loaded", False))
         except Exception:
             return False
 
@@ -272,12 +348,7 @@ class MLXEmbedder:
             return
 
         try:
-            import urllib.request
-
-            url = f"{self.service_url}/unload"
-            req = urllib.request.Request(url, method="POST")
-            with urllib.request.urlopen(req, timeout=5):
-                pass
+            self._send_request("unload", timeout=5)
             logger.info("Requested model unload from MLX service")
         except Exception as e:
             logger.warning("Failed to unload model: %s", e)
@@ -306,6 +377,7 @@ def get_mlx_embedder(model_name: str | None = None) -> MLXEmbedder:
     Args:
         model_name: Optional model name. If provided and different from
                    the current model, a new embedder will be created.
+                   If None, uses the model from config.embedding.model_name.
 
     Returns:
         The shared MLXEmbedder instance.
@@ -316,19 +388,22 @@ def get_mlx_embedder(model_name: str | None = None) -> MLXEmbedder:
     """
     global _mlx_embedder
 
+    # Get model from config if not provided
+    effective_model = model_name or _get_mlx_model_name()
+
     # Fast path: singleton exists and model matches
     if _mlx_embedder is not None:
-        if model_name is None or model_name == _mlx_embedder.model_name:
+        if effective_model == _mlx_embedder.model_name:
             return _mlx_embedder
 
     with _mlx_embedder_lock:
         # Double-check after acquiring lock
         if _mlx_embedder is not None:
-            if model_name is None or model_name == _mlx_embedder.model_name:
+            if effective_model == _mlx_embedder.model_name:
                 return _mlx_embedder
 
         # Create new embedder
-        _mlx_embedder = MLXEmbedder(model_name or DEFAULT_MLX_EMBEDDING_MODEL)
+        _mlx_embedder = MLXEmbedder(effective_model)
         return _mlx_embedder
 
 
@@ -412,7 +487,7 @@ __all__ = [
     # Constants
     "DEFAULT_MLX_EMBEDDING_MODEL",
     "MLX_EMBEDDING_DIM",
-    "MLX_EMBED_SERVICE_URL",
+    "MLX_EMBED_SERVICE_SOCKET",
     # Exceptions
     "MLXEmbeddingError",
     "MLXServiceNotAvailableError",

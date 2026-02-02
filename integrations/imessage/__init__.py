@@ -19,16 +19,25 @@ Example:
 
 from .avatar import ContactAvatarData, get_contact_avatar
 from .parser import categorize_attachment_type
-from .reader import CHAT_DB_PATH, ChatDBReader
+from .reader import (
+    CHAT_DB_PATH,
+    ChatDBReader,
+    ConnectionPool,
+    get_connection_pool,
+    reset_connection_pool,
+)
 from .sender import IMessageSender, SendResult, TapbackType
 
 __all__ = [
     "categorize_attachment_type",
     "ChatDBReader",
     "CHAT_DB_PATH",
+    "ConnectionPool",
     "ContactAvatarData",
+    "get_connection_pool",
     "get_contact_avatar",
     "IMessageSender",
+    "reset_connection_pool",
     "SendResult",
     "TapbackType",
 ]

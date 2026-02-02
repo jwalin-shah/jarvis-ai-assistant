@@ -217,6 +217,10 @@ class MLXGenerator:
                 - token_index: Index of this token in the sequence
                 - is_final: Whether this is the last token
         """
+        import asyncio
+        import queue
+        import threading
+
         # Try template match first - if matched, yield complete response
         template_response = self._try_template_match(request, embedder=embedder)
         if template_response is not None:
@@ -244,18 +248,49 @@ class MLXGenerator:
             # Build formatted prompt
             formatted_prompt = self._prompt_builder.build(request)
 
-            # Stream tokens from the loader
-            async for stream_token in self._loader.generate_stream(
-                prompt=formatted_prompt,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-                stop_sequences=request.stop_sequences,
-            ):
-                yield {
-                    "token": stream_token.token,
-                    "token_index": stream_token.token_index,
-                    "is_final": stream_token.is_final,
-                }
+            # Use a queue to bridge sync generator and async iteration
+            token_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+            generation_error: list[Exception] = []
+
+            def producer() -> None:
+                """Run in thread: generate tokens and put in queue."""
+                try:
+                    for stream_token in self._loader.generate_stream(
+                        prompt=formatted_prompt,
+                        max_tokens=request.max_tokens,
+                        temperature=request.temperature,
+                        stop_sequences=request.stop_sequences,
+                    ):
+                        token_queue.put({
+                            "token": stream_token.token,
+                            "token_index": stream_token.token_index,
+                            "is_final": stream_token.is_final,
+                        })
+                    token_queue.put(None)  # Signal completion
+                except Exception as e:
+                    generation_error.append(e)
+                    token_queue.put(None)
+
+            # Start generation in background thread
+            gen_thread = threading.Thread(target=producer, daemon=True)
+            gen_thread.start()
+
+            # Consume tokens and yield to caller
+            while True:
+                try:
+                    item = await asyncio.to_thread(token_queue.get, timeout=60.0)
+                except Exception:
+                    break
+
+                if item is None:
+                    break
+
+                yield item
+
+            gen_thread.join(timeout=5.0)
+
+            if generation_error:
+                raise generation_error[0]
 
         except Exception:
             # If we loaded the model for this call and generation failed,

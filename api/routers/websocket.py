@@ -55,6 +55,7 @@ class WebSocketClient:
     websocket: WebSocket
     client_id: str
     connected_at: float = field(default_factory=time.time)
+    last_activity: float = field(default_factory=time.time)
     subscribed_to_health: bool = False
     active_generation_id: str | None = None
 
@@ -67,13 +68,20 @@ class ConnectionManager:
     - Broadcast to all clients
     - Health update subscriptions
     - Active generation tracking for cancellation
+    - Periodic cleanup of stale connections
     """
+
+    # Connection limits and TTL settings
+    MAX_CONNECTIONS = 100  # Maximum concurrent connections
+    CONNECTION_TTL_SECONDS = 3600  # 1 hour TTL for inactive connections
+    CLEANUP_INTERVAL_SECONDS = 300  # Run cleanup every 5 minutes
 
     def __init__(self) -> None:
         """Initialize the connection manager."""
         self._clients: dict[str, WebSocketClient] = {}
         self._lock = asyncio.Lock()
         self._health_task: asyncio.Task[None] | None = None
+        self._cleanup_task: asyncio.Task[None] | None = None
 
     @property
     def active_connections(self) -> int:
@@ -207,6 +215,82 @@ class ConnectionManager:
             List of client IDs.
         """
         return list(self._clients.keys())
+
+    async def update_activity(self, client_id: str) -> None:
+        """Update the last activity timestamp for a client.
+
+        Args:
+            client_id: The client ID to update.
+        """
+        async with self._lock:
+            client = self._clients.get(client_id)
+            if client:
+                client.last_activity = time.time()
+
+    async def cleanup_stale_connections(self) -> int:
+        """Remove stale connections that have exceeded TTL.
+
+        Returns:
+            Number of connections removed.
+        """
+        now = time.time()
+        stale_clients: list[str] = []
+
+        async with self._lock:
+            for client_id, client in self._clients.items():
+                if now - client.last_activity > self.CONNECTION_TTL_SECONDS:
+                    stale_clients.append(client_id)
+
+        # Close and remove stale connections outside the lock
+        for client_id in stale_clients:
+            logger.info("Removing stale WebSocket connection: %s", client_id)
+            try:
+                client = self._clients.get(client_id)
+                if client:
+                    await client.websocket.close(code=1000, reason="Connection timeout")
+            except Exception as e:
+                logger.debug("Error closing stale connection %s: %s", client_id, e)
+            await self.disconnect(client_id)
+
+        if stale_clients:
+            logger.info("Cleaned up %d stale WebSocket connections", len(stale_clients))
+
+        return len(stale_clients)
+
+    async def start_cleanup_task(self) -> None:
+        """Start the periodic cleanup task."""
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+            logger.info("Started WebSocket cleanup task")
+
+    async def stop_cleanup_task(self) -> None:
+        """Stop the periodic cleanup task."""
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("Stopped WebSocket cleanup task")
+
+    async def _periodic_cleanup(self) -> None:
+        """Periodically clean up stale connections."""
+        while True:
+            try:
+                await asyncio.sleep(self.CLEANUP_INTERVAL_SECONDS)
+                await self.cleanup_stale_connections()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("Error in cleanup task: %s", e)
+
+    def is_at_capacity(self) -> bool:
+        """Check if the connection manager is at capacity.
+
+        Returns:
+            True if at or over MAX_CONNECTIONS, False otherwise.
+        """
+        return len(self._clients) >= self.MAX_CONNECTIONS
 
 
 # Global connection manager instance
@@ -573,6 +657,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         - health_update: Health status update
         - error: Generic error
     """
+    # Check connection limit before accepting
+    if manager.is_at_capacity():
+        logger.warning("WebSocket connection rejected: at capacity (%d)", manager.MAX_CONNECTIONS)
+        await websocket.close(code=1013, reason="Server at capacity")
+        return
+
+    # Ensure cleanup task is running
+    await manager.start_cleanup_task()
+
     client = await manager.connect(websocket)
 
     # Send connection confirmation
@@ -598,6 +691,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     {"error": "Invalid JSON"},
                 )
                 continue
+
+            # Update activity timestamp on each message
+            await manager.update_activity(client.client_id)
 
             # Handle message
             await _handle_message(client, message)

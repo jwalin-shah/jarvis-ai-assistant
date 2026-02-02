@@ -12,6 +12,7 @@ Endpoints:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
 from api.schemas import (
@@ -129,7 +130,7 @@ def _get_contact_name(reader: ChatDBReader, chat_id: str) -> str | None:
         },
     },
 )
-def get_relationship_profile(
+async def get_relationship_profile(
     contact_id: str,
     auto_build: bool = Query(
         default=True,
@@ -193,8 +194,8 @@ def get_relationship_profile(
         HTTPException 404: No profile exists and auto_build is False
         HTTPException 403: Full Disk Access permission not granted
     """
-    # Try to load existing profile
-    profile = load_profile(contact_id)
+    # Try to load existing profile (file I/O)
+    profile = await run_in_threadpool(load_profile, contact_id)
 
     if profile is not None:
         return _profile_to_response(profile)
@@ -211,9 +212,11 @@ def get_relationship_profile(
             },
         )
 
-    # Fetch messages and build profile
+    # Fetch messages and build profile (DB I/O)
     try:
-        messages = reader.get_messages(chat_id=contact_id, limit=message_limit)
+        messages = await run_in_threadpool(
+            reader.get_messages, chat_id=contact_id, limit=message_limit
+        )
     except Exception as e:
         raise HTTPException(
             status_code=400,
@@ -233,17 +236,21 @@ def get_relationship_profile(
             },
         )
 
-    # Get contact name
-    contact_name = _get_contact_name(reader, contact_id)
+    # Get contact name (DB I/O)
+    contact_name = await run_in_threadpool(_get_contact_name, reader, contact_id)
 
-    # Build and save profile
-    profile = build_relationship_profile(
-        contact_id,
-        messages,
-        contact_name,
-        use_embeddings=True,
-    )
-    save_profile(profile)
+    # Build and save profile (CPU + file I/O)
+    def _build_and_save() -> RelationshipProfile:
+        built_profile = build_relationship_profile(
+            contact_id,
+            messages,
+            contact_name,
+            use_embeddings=True,
+        )
+        save_profile(built_profile)
+        return built_profile
+
+    profile = await run_in_threadpool(_build_and_save)
 
     return _profile_to_response(profile)
 
@@ -282,7 +289,7 @@ def get_relationship_profile(
         },
     },
 )
-def get_style_guide(
+async def get_style_guide(
     contact_id: str,
     auto_build: bool = Query(
         default=True,
@@ -331,8 +338,8 @@ def get_style_guide(
         HTTPException 404: No profile exists and auto_build is False
         HTTPException 403: Full Disk Access permission not granted
     """
-    # Try to load existing profile
-    profile = load_profile(contact_id)
+    # Try to load existing profile (file I/O)
+    profile = await run_in_threadpool(load_profile, contact_id)
 
     if profile is None:
         if not auto_build:
@@ -345,9 +352,9 @@ def get_style_guide(
                 },
             )
 
-        # Build profile automatically
+        # Build profile automatically (DB I/O)
         try:
-            messages = reader.get_messages(chat_id=contact_id, limit=500)
+            messages = await run_in_threadpool(reader.get_messages, chat_id=contact_id, limit=500)
         except Exception as e:
             raise HTTPException(
                 status_code=400,
@@ -367,14 +374,19 @@ def get_style_guide(
                 },
             )
 
-        contact_name = _get_contact_name(reader, contact_id)
-        profile = build_relationship_profile(
-            contact_id,
-            messages,
-            contact_name,
-            use_embeddings=True,
-        )
-        save_profile(profile)
+        contact_name = await run_in_threadpool(_get_contact_name, reader, contact_id)
+
+        def _build_and_save() -> RelationshipProfile:
+            built_profile = build_relationship_profile(
+                contact_id,
+                messages,
+                contact_name,
+                use_embeddings=True,
+            )
+            save_profile(built_profile)
+            return built_profile
+
+        profile = await run_in_threadpool(_build_and_save)
 
     # Generate style guide
     style_guide = generate_style_guide(profile)
@@ -412,7 +424,7 @@ def get_style_guide(
         },
     },
 )
-def refresh_relationship_profile(
+async def refresh_relationship_profile(
     contact_id: str,
     request: RefreshProfileRequest | None = None,
     reader: ChatDBReader = Depends(get_imessage_reader),

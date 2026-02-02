@@ -94,6 +94,11 @@ models/cache/
 # Large data files (personal, regeneratable)
 semantic_conversations.jsonl
 
+# Desktop test artifacts
+desktop/test-results/
+desktop/debug-screenshot.png
+desktop/playwright-report/
+
 # Jupyter
 .ipynb_checkpoints/
 

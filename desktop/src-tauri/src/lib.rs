@@ -2,6 +2,7 @@
 //!
 //! Provides the Tauri application setup and tray functionality.
 
+mod socket;
 mod tray;
 
 use tauri::Manager;
@@ -11,6 +12,16 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_sql::Builder::default().build())
+        // Register socket state for persistent connection
+        .manage(socket::SocketState::default())
+        .invoke_handler(tauri::generate_handler![
+            socket::connect_socket,
+            socket::disconnect_socket,
+            socket::send_message,
+            socket::send_streaming_message,
+            socket::is_socket_connected,
+        ])
         .setup(|app| {
             // Set up the system tray
             tray::setup_tray(app)?;

@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 # Constants
 FEEDBACK_FILE_NAME = "feedback.jsonl"
 MAX_FEEDBACK_ENTRIES = 10000  # Maximum entries to keep in memory
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Same model used in intent.py
 
 
 class FeedbackAction(str, Enum):

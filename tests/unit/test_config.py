@@ -14,6 +14,7 @@ from jarvis.config import (
     CONFIG_PATH,
     CONFIG_VERSION,
     ChatConfig,
+    EmbeddingConfig,
     JarvisConfig,
     MemoryThresholds,
     SearchConfig,
@@ -23,6 +24,11 @@ from jarvis.config import (
     reset_config,
     save_config,
 )
+
+# Get actual defaults from config models to avoid hardcoding
+_DEFAULT_CONFIG = JarvisConfig()
+DEFAULT_MODEL_PATH = _DEFAULT_CONFIG.model_path
+DEFAULT_EMBEDDING_MODEL = _DEFAULT_CONFIG.embedding.model_name
 
 
 class TestMemoryThresholds:
@@ -47,7 +53,7 @@ class TestJarvisConfig:
     def test_default_values(self):
         """Test default configuration values."""
         config = JarvisConfig()
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.template_similarity_threshold == 0.7
         assert config.memory_thresholds.full_mode_mb == 8000
         assert config.memory_thresholds.lite_mode_mb == 4000
@@ -93,7 +99,7 @@ class TestLoadConfig:
         nonexistent_path = tmp_path / "nonexistent" / "config.json"
         config = load_config(nonexistent_path)
 
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.template_similarity_threshold == 0.7
         assert config.memory_thresholds.full_mode_mb == 8000
         assert config.imessage_default_limit == 50
@@ -129,7 +135,7 @@ class TestLoadConfig:
         config = load_config(config_file)
 
         # Should return defaults
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.template_similarity_threshold == 0.7
 
     def test_load_config_validates_threshold_range(self, tmp_path):
@@ -179,7 +185,7 @@ class TestLoadConfig:
         config = load_config(config_file)
 
         # Should use all defaults
-        assert config.model_path == "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        assert config.model_path == DEFAULT_MODEL_PATH
         assert config.template_similarity_threshold == 0.7
 
 

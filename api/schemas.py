@@ -224,6 +224,24 @@ class MessageResponse(BaseModel):
     )
 
 
+class MessagesListResponse(BaseModel):
+    """Response containing a list of messages with metadata."""
+
+    messages: list[MessageResponse] = Field(
+        ...,
+        description="List of messages",
+    )
+    chat_id: str = Field(
+        ...,
+        description="Conversation ID these messages belong to",
+    )
+    total: int = Field(
+        ...,
+        description="Total number of messages returned",
+        ge=0,
+    )
+
+
 class ConversationResponse(BaseModel):
     """Conversation summary response model.
 
@@ -292,6 +310,20 @@ class ConversationResponse(BaseModel):
         default=None,
         description="Preview of the most recent message text",
         examples=["See you at dinner!", "Thanks!"],
+    )
+
+
+class ConversationsListResponse(BaseModel):
+    """Response containing a list of conversations with pagination metadata."""
+
+    conversations: list[ConversationResponse] = Field(
+        ...,
+        description="List of conversations",
+    )
+    total: int = Field(
+        ...,
+        description="Total number of conversations returned",
+        ge=0,
     )
 
 

@@ -11,7 +11,7 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 import psutil
 from fastapi import APIRouter, HTTPException, Request
@@ -30,50 +30,26 @@ from api.schemas import (
 )
 from integrations.imessage import ChatDBReader
 from jarvis.config import get_config, save_config
+from models.registry import (
+    MODEL_REGISTRY,
+    ModelSpec,
+    get_model_spec,
+    is_model_available,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-class ModelRegistry(TypedDict):
-    """Type definition for model registry entries."""
-
-    model_id: str
-    name: str
-    size_gb: float
-    quality_tier: str
-    ram_requirement_gb: float
-    description: str
+# Models to expose in the UI (subset of MODEL_REGISTRY)
+# Show LFM models for comparison
+ENABLED_MODEL_IDS = ["lfm-0.3b", "lfm-1.2b"]
 
 
-# Model registry - defines available models with their characteristics
-AVAILABLE_MODELS: list[ModelRegistry] = [
-    {
-        "model_id": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-        "name": "Qwen 0.5B (Fast)",
-        "size_gb": 0.4,
-        "quality_tier": "basic",
-        "ram_requirement_gb": 4,
-        "description": "Fastest responses, good for simple tasks",
-    },
-    {
-        "model_id": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-        "name": "Qwen 1.5B (Balanced)",
-        "size_gb": 1.0,
-        "quality_tier": "good",
-        "ram_requirement_gb": 8,
-        "description": "Balanced speed and quality",
-    },
-    {
-        "model_id": "mlx-community/Qwen2.5-3B-Instruct-4bit",
-        "name": "Qwen 3B (Quality)",
-        "size_gb": 2.0,
-        "quality_tier": "best",
-        "ram_requirement_gb": 16,
-        "description": "Best quality, requires more RAM",
-    },
-]
+def _get_enabled_models() -> list[ModelSpec]:
+    """Get the list of models enabled for the UI."""
+    return [MODEL_REGISTRY[mid] for mid in ENABLED_MODEL_IDS if mid in MODEL_REGISTRY]
 
 # Settings file path for generation/behavior settings
 SETTINGS_PATH = Path.home() / ".jarvis" / "settings.json"
@@ -202,16 +178,12 @@ def _get_system_info() -> SystemInfo:
 
 def _get_recommended_model() -> str:
     """Get recommended model based on system RAM."""
+    from models.registry import get_recommended_model
+
     memory = psutil.virtual_memory()
     system_ram_gb = memory.total / (1024**3)
-
-    # Return the largest model that fits in available RAM
-    recommended: str = AVAILABLE_MODELS[0]["model_id"]
-    for model in AVAILABLE_MODELS:
-        if system_ram_gb >= model["ram_requirement_gb"]:
-            recommended = model["model_id"]
-
-    return recommended
+    recommended = get_recommended_model(system_ram_gb)
+    return recommended.id
 
 
 @router.get(
@@ -370,13 +342,17 @@ async def update_settings(
 
     # Update model if provided
     if settings_request.model_id is not None:
-        # Validate model_id is in our registry
-        valid_ids = [m["model_id"] for m in AVAILABLE_MODELS]
-        if settings_request.model_id not in valid_ids:
+        # Validate model_id is in our registry (accepts short ID or full path)
+        spec = get_model_spec(settings_request.model_id)
+        if spec is None:
+            # Try looking up by path
+            from models.registry import get_model_spec_by_path
+            spec = get_model_spec_by_path(settings_request.model_id)
+        if spec is None:
             raise HTTPException(
                 status_code=400, detail=f"Unknown model: {settings_request.model_id}"
             )
-        config.model_path = settings_request.model_id
+        config.model_path = spec.path
         save_config(config)
 
     # Update generation settings if provided
@@ -481,19 +457,18 @@ async def list_models(request: Request) -> list[AvailableModelInfo]:
     recommended_model = _get_recommended_model()
 
     models = []
-    for model in AVAILABLE_MODELS:
-        model_id = model["model_id"]
+    for spec in _get_enabled_models():
         models.append(
             AvailableModelInfo(
-                model_id=model_id,
-                name=model["name"],
-                size_gb=model["size_gb"],
-                quality_tier=model["quality_tier"],
-                ram_requirement_gb=model["ram_requirement_gb"],
-                is_downloaded=_check_model_downloaded(model_id),
-                is_loaded=_check_model_loaded(model_id),
-                is_recommended=(model_id == recommended_model),
-                description=model["description"],
+                model_id=spec.id,
+                name=spec.display_name,
+                size_gb=spec.size_gb,
+                quality_tier=spec.quality_tier,
+                ram_requirement_gb=float(spec.min_ram_gb),
+                is_downloaded=is_model_available(spec.id),
+                is_loaded=_check_model_loaded(spec.path),
+                is_recommended=(spec.id == recommended_model),
+                description=spec.description,
             )
         )
 
@@ -586,15 +561,18 @@ async def download_model(model_id: str, request: Request) -> DownloadStatus:
     Raises:
         HTTPException 404: Unknown model ID
     """
-    # Validate model_id
-    valid_ids = [m["model_id"] for m in AVAILABLE_MODELS]
-    if model_id not in valid_ids:
+    # Validate model_id (accepts short ID or full path)
+    spec = get_model_spec(model_id)
+    if spec is None:
+        from models.registry import get_model_spec_by_path
+        spec = get_model_spec_by_path(model_id)
+    if spec is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_id}")
 
     # Check if already downloaded
-    if _check_model_downloaded(model_id):
+    if is_model_available(spec.id):
         return DownloadStatus(
-            model_id=model_id,
+            model_id=spec.id,
             status="completed",
             progress=100.0,
         )
@@ -603,10 +581,10 @@ async def download_model(model_id: str, request: Request) -> DownloadStatus:
         # Use huggingface_hub to download
         from huggingface_hub import snapshot_download
 
-        snapshot_download(model_id)
+        snapshot_download(spec.path)
 
         return DownloadStatus(
-            model_id=model_id,
+            model_id=spec.id,
             status="completed",
             progress=100.0,
         )
@@ -704,23 +682,26 @@ async def activate_model(model_id: str, request: Request) -> ActivateResponse:
     Raises:
         HTTPException 404: Unknown model ID
     """
-    # Validate model_id
-    valid_ids = [m["model_id"] for m in AVAILABLE_MODELS]
-    if model_id not in valid_ids:
+    # Validate model_id (accepts short ID or full path)
+    spec = get_model_spec(model_id)
+    if spec is None:
+        from models.registry import get_model_spec_by_path
+        spec = get_model_spec_by_path(model_id)
+    if spec is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_id}")
 
     # Check if model is downloaded
-    if not _check_model_downloaded(model_id):
+    if not is_model_available(spec.id):
         return ActivateResponse(
             success=False,
-            model_id=model_id,
+            model_id=spec.id,
             error="Model not downloaded. Please download first.",
         )
 
     try:
-        # Update config
+        # Update config with the HuggingFace path
         config = get_config()
-        config.model_path = model_id
+        config.model_path = spec.path
         save_config(config)
 
         # Reset generator to force reload with new model
@@ -730,7 +711,7 @@ async def activate_model(model_id: str, request: Request) -> ActivateResponse:
 
         return ActivateResponse(
             success=True,
-            model_id=model_id,
+            model_id=spec.id,
         )
     except Exception as e:
         logger.exception(f"Failed to activate model {model_id}")

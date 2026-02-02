@@ -3,7 +3,15 @@
   import { v2Api, type V2GeneratedReply } from "../api/v2";
 
   // Props
-  let { chatId = "", isFocused = false }: { chatId: string; isFocused: boolean } = $props();
+  let {
+    chatId = "",
+    isFocused = false,
+    onSelectReply = (_text: string) => {},
+  }: {
+    chatId: string;
+    isFocused: boolean;
+    onSelectReply?: (text: string) => void;
+  } = $props();
 
   // State
   let suggestions = $state<V2GeneratedReply[]>([]);
@@ -59,10 +67,15 @@
 
   async function handleChipClick(suggestion: V2GeneratedReply) {
     try {
+      // Copy to clipboard
       await navigator.clipboard.writeText(suggestion.text);
-      showToast("Copied to clipboard");
+      // Also put in compose box via callback
+      onSelectReply(suggestion.text);
+      showToast("Copied & added to compose");
     } catch (err) {
-      showToast("Failed to copy");
+      // If clipboard fails, still try to put in compose box
+      onSelectReply(suggestion.text);
+      showToast("Added to compose");
     }
   }
 
