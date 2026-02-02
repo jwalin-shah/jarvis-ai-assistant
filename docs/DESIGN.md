@@ -14,6 +14,7 @@ This documentation has been split into focused files for better context manageme
 | [Pipeline](./design/PIPELINE.md) | Classification, routing flow | ~120 |
 | [V2 Architecture](./design/V2_ARCHITECTURE.md) | Unix sockets, direct SQLite | ~80 |
 | [Embeddings](./design/EMBEDDINGS.md) | Model choices, caching, FAISS | ~100 |
+| [Text Normalization](./design/TEXT_NORMALIZATION.md) | Unicode/whitespace normalization | ~80 |
 | [Feedback](./design/FEEDBACK.md) | Learning from user actions | ~120 |
 | [Decisions](./design/DECISIONS.md) | Rationale, lessons learned | ~130 |
 | [Metrics](./design/METRICS.md) | Benchmarks, future work | ~90 |
