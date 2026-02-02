@@ -757,6 +757,7 @@
 
   .emoji {
     font-size: 18px;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   }
 
   .emoji-count {

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from jarvis.config import get_config
 from jarvis.trigger_classifier import (
-    DEFAULT_SVM_THRESHOLD,
-    PER_CLASS_SVM_THRESHOLDS,
     TRIGGER_TO_RESPONSE_TYPES,
     HybridTriggerClassifier,
     TriggerClassification,
@@ -220,34 +219,53 @@ class TestHybridTriggerClassifier:
 
 
 class TestPerClassThresholds:
-    """Tests for per-class SVM thresholds."""
+    """Tests for per-class SVM thresholds from config."""
 
-    def test_thresholds_defined_for_main_types(self):
-        """Main trigger types have defined thresholds."""
-        assert TriggerType.COMMITMENT in PER_CLASS_SVM_THRESHOLDS
-        assert TriggerType.QUESTION in PER_CLASS_SVM_THRESHOLDS
-        assert TriggerType.REACTION in PER_CLASS_SVM_THRESHOLDS
-        assert TriggerType.SOCIAL in PER_CLASS_SVM_THRESHOLDS
-        assert TriggerType.STATEMENT in PER_CLASS_SVM_THRESHOLDS
+    def test_thresholds_defined_in_config(self):
+        """Main trigger types have thresholds defined in config."""
+        cfg = get_config().classifier_thresholds
+        # All threshold fields should exist and be valid floats
+        assert 0 < cfg.trigger_svm_commitment <= 1.0
+        assert 0 < cfg.trigger_svm_question <= 1.0
+        assert 0 < cfg.trigger_svm_reaction <= 1.0
+        assert 0 < cfg.trigger_svm_social <= 1.0
+        assert 0 < cfg.trigger_svm_statement <= 1.0
 
     def test_commitment_has_highest_threshold(self):
         """COMMITMENT has highest threshold (most important)."""
-        commitment_threshold = PER_CLASS_SVM_THRESHOLDS[TriggerType.COMMITMENT]
-        for trigger_type, threshold in PER_CLASS_SVM_THRESHOLDS.items():
-            if trigger_type != TriggerType.COMMITMENT:
+        cfg = get_config().classifier_thresholds
+        thresholds = {
+            "commitment": cfg.trigger_svm_commitment,
+            "question": cfg.trigger_svm_question,
+            "reaction": cfg.trigger_svm_reaction,
+            "social": cfg.trigger_svm_social,
+            "statement": cfg.trigger_svm_statement,
+        }
+        commitment_threshold = thresholds["commitment"]
+        for name, threshold in thresholds.items():
+            if name != "commitment":
                 assert commitment_threshold >= threshold
 
     def test_social_has_lowest_threshold(self):
         """SOCIAL has lowest threshold (strong structural patterns)."""
-        social_threshold = PER_CLASS_SVM_THRESHOLDS[TriggerType.SOCIAL]
-        for trigger_type, threshold in PER_CLASS_SVM_THRESHOLDS.items():
-            if trigger_type != TriggerType.SOCIAL:
+        cfg = get_config().classifier_thresholds
+        thresholds = {
+            "commitment": cfg.trigger_svm_commitment,
+            "question": cfg.trigger_svm_question,
+            "reaction": cfg.trigger_svm_reaction,
+            "social": cfg.trigger_svm_social,
+            "statement": cfg.trigger_svm_statement,
+        }
+        social_threshold = thresholds["social"]
+        for name, threshold in thresholds.items():
+            if name != "social":
                 assert social_threshold <= threshold
 
     def test_default_threshold_exists(self):
-        """Default SVM threshold is defined."""
-        assert DEFAULT_SVM_THRESHOLD > 0
-        assert DEFAULT_SVM_THRESHOLD < 1.0
+        """Default SVM threshold is defined in config."""
+        cfg = get_config().classifier_thresholds
+        assert cfg.trigger_svm_default > 0
+        assert cfg.trigger_svm_default < 1.0
 
 
 class TestSingletonFactory:

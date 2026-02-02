@@ -3,7 +3,7 @@
  * Simplified client for the v2 backend
  */
 
-const V2_API_BASE = "http://localhost:8000";
+const V2_API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8742";
 
 export interface V2HealthResponse {
   status: string;
@@ -91,12 +91,37 @@ class V2ApiClient {
     return this.fetch(`/conversations/${encodeURIComponent(chatId)}/messages?limit=${limit}`);
   }
 
-  // Generation
+  // Generation - uses /drafts/reply endpoint
   async generateReplies(chatId: string, numReplies: number = 3): Promise<V2GenerateRepliesResponse> {
-    return this.fetch<V2GenerateRepliesResponse>("/generate/replies", {
+    // Call the actual backend endpoint
+    const response = await this.fetch<{
+      suggestions: Array<{ text: string; confidence: number }>;
+      context_used: {
+        num_messages: number;
+        participants: string[];
+        last_message: string;
+      };
+    }>("/drafts/reply", {
       method: "POST",
-      body: JSON.stringify({ chat_id: chatId, num_replies: numReplies }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        num_suggestions: numReplies,
+        context_messages: 20,
+      }),
     });
+
+    // Transform to V2 response format
+    return {
+      replies: response.suggestions.map((s) => ({
+        text: s.text,
+        reply_type: "ai",
+        confidence: s.confidence,
+      })),
+      chat_id: chatId,
+      model_used: "mlx-local",
+      generation_time_ms: 0,
+      context_summary: response.context_used.last_message,
+    };
   }
 
   // Settings

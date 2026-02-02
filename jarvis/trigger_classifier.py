@@ -37,6 +37,7 @@ from jarvis.classifiers import (
     StructuralPatternMatcher,
     SVMModelMixin,
 )
+from jarvis.config import get_config, get_trigger_classifier_path
 
 logger = logging.getLogger(__name__)
 
@@ -68,22 +69,29 @@ class TriggerType(str, Enum):
     UNKNOWN = "unknown"
 
 
-# Default model path
-DEFAULT_MODEL_PATH = Path.home() / ".jarvis" / "trigger_classifier_model"
+def _get_default_model_path() -> Path:
+    """Get the default model path based on configured embedding model."""
+    return get_trigger_classifier_path()
 
 
-# Per-class SVM thresholds (tuned based on per-class performance)
-# Higher thresholds for important/hard classes, lower for classes with strong structural patterns
-PER_CLASS_SVM_THRESHOLDS: dict[TriggerType, float] = {
-    TriggerType.COMMITMENT: 0.50,  # Most important class - need high confidence
-    TriggerType.QUESTION: 0.35,  # Moderate - "?" helps structural
-    TriggerType.REACTION: 0.40,  # Medium - emotional words help
-    TriggerType.SOCIAL: 0.25,  # Low - structural patterns very strong (tapbacks, greetings)
-    TriggerType.STATEMENT: 0.40,  # Medium - fallback category
-}
+def _get_svm_thresholds() -> dict[TriggerType, float]:
+    """Build per-class SVM thresholds from config.
 
-# Default threshold for unknown types
-DEFAULT_SVM_THRESHOLD = 0.35
+    Higher thresholds for important/hard classes, lower for classes with strong structural patterns.
+    """
+    cfg = get_config().classifier_thresholds
+    return {
+        TriggerType.COMMITMENT: cfg.trigger_svm_commitment,
+        TriggerType.QUESTION: cfg.trigger_svm_question,
+        TriggerType.REACTION: cfg.trigger_svm_reaction,
+        TriggerType.SOCIAL: cfg.trigger_svm_social,
+        TriggerType.STATEMENT: cfg.trigger_svm_statement,
+    }
+
+
+def _get_default_svm_threshold() -> float:
+    """Get default SVM threshold from config for unknown types."""
+    return get_config().classifier_thresholds.trigger_svm_default
 
 
 # What response types are valid for each trigger type
@@ -372,9 +380,15 @@ class HybridTriggerClassifier(EmbedderMixin, SVMModelMixin, CentroidMixin):
     - CentroidMixin: Centroid-based verification
     """
 
-    # Centroid verification thresholds (override CentroidMixin defaults)
-    CENTROID_VERIFY_THRESHOLD = 0.4
-    CENTROID_MARGIN = 0.15
+    @property
+    def CENTROID_VERIFY_THRESHOLD(self) -> float:  # noqa: N802
+        """Centroid verification threshold from config (overrides CentroidMixin default)."""
+        return get_config().classifier_thresholds.trigger_centroid_verify
+
+    @property
+    def CENTROID_MARGIN(self) -> float:  # noqa: N802
+        """Centroid margin from config (overrides CentroidMixin default)."""
+        return get_config().classifier_thresholds.trigger_centroid_margin
 
     def __init__(
         self,
@@ -389,7 +403,7 @@ class HybridTriggerClassifier(EmbedderMixin, SVMModelMixin, CentroidMixin):
                 This is an experimental feature that may improve accuracy for some cases.
         """
         # Set model path (used by SVMModelMixin and CentroidMixin)
-        self._model_path = Path(model_path) if model_path else DEFAULT_MODEL_PATH
+        self._model_path = Path(model_path) if model_path else _get_default_model_path()
 
         # Centroid verification (experimental)
         self._use_centroid_verification = use_centroid_verification
@@ -410,7 +424,7 @@ class HybridTriggerClassifier(EmbedderMixin, SVMModelMixin, CentroidMixin):
         Higher thresholds for hard/important classes (COMMITMENT),
         lower for classes with strong structural patterns (SOCIAL).
         """
-        return PER_CLASS_SVM_THRESHOLDS.get(trigger_type, DEFAULT_SVM_THRESHOLD)
+        return _get_svm_thresholds().get(trigger_type, _get_default_svm_threshold())
 
     def _match_svm(self, text: str) -> tuple[TriggerType | None, float, str]:
         """Match using trained SVM classifier.
@@ -599,8 +613,6 @@ def classify_trigger(text: str, use_svm: bool = True) -> TriggerClassification:
 __all__ = [
     "TriggerType",
     "TRIGGER_TO_RESPONSE_TYPES",
-    "PER_CLASS_SVM_THRESHOLDS",
-    "DEFAULT_SVM_THRESHOLD",
     "TriggerClassification",
     "HybridTriggerClassifier",
     "get_trigger_classifier",

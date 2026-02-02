@@ -45,14 +45,17 @@ from jarvis.classifiers import (
     SingletonFactory,
     SVMModelMixin,
 )
+from jarvis.config import get_config, get_response_classifier_path
 
 if TYPE_CHECKING:
     from jarvis.embedding_adapter import Embedder
 
 logger = logging.getLogger(__name__)
 
-# Path to trained SVM model (81.9% F1, trained by scripts/train_response_classifier.py)
-RESPONSE_SVM_MODEL_PATH = Path.home() / ".jarvis" / "response_classifier_model"
+
+def _get_default_model_path() -> Path:
+    """Get the default model path based on configured embedding model."""
+    return get_response_classifier_path()
 
 
 # =============================================================================
@@ -380,30 +383,6 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
         This class is thread-safe. DA classifier and centroids loaded lazily with locking.
     """
 
-    # Centroid verification thresholds
-    # If cosine similarity to hinted class centroid is below this, reject the hint
-    CENTROID_VERIFY_THRESHOLD = 0.5
-
-    # If cosine similarity to another class is higher by this margin, override hint
-    CENTROID_MARGIN = 0.1
-
-    # Low confidence threshold - below this, default to ANSWER
-    # This prevents over-prediction of DECLINE/DEFER/AGREE when DA isn't confident
-    LOW_CONFIDENCE_THRESHOLD = 0.5
-
-    # DECLINE-specific threshold - higher because DECLINE is frequently misclassified
-    # Things like "lmfaoo", "u cutie patootie", "Ily dude" were getting 0.5-0.7 as DECLINE
-    # Validation showed 33.3% accuracy - increase to 0.85
-    DECLINE_CONFIDENCE_THRESHOLD = 0.85
-
-    # DEFER threshold - validation showed 0% accuracy, statements misclassified as deferrals
-    # Things like "might be one tmrw morning" were false positives
-    DEFER_CONFIDENCE_THRESHOLD = 0.80
-
-    # AGREE threshold - validation showed 16.7% accuracy
-    # Statements like "I think they're into it tho" were being misclassified
-    AGREE_CONFIDENCE_THRESHOLD = 0.80
-
     # Trigger types that allow commitment responses (AGREE/DECLINE/DEFER)
     # For other trigger types, commitment responses are filtered out
     COMMITMENT_TRIGGER_TYPES = frozenset({"INVITATION", "REQUEST", "YN_QUESTION", "OPINION"})
@@ -428,7 +407,7 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
             use_svm: If True, use trained SVM (81.9% F1) instead of DA k-NN for Layer 3.
         """
         # Set model path for SVMModelMixin
-        self._model_path = RESPONSE_SVM_MODEL_PATH
+        self._model_path = _get_default_model_path()
 
         self._response_centroids: dict[str, list[float]] | None = None
         self._centroid_arrays: dict[str, np.ndarray] | None = None  # Cached numpy arrays
@@ -565,11 +544,12 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
         # 2. If another class is significantly closer -> override hint
         # 3. Otherwise -> use hint (structural patterns are high precision)
 
-        if hint_sim >= self.CENTROID_VERIFY_THRESHOLD:
+        thresholds = get_config().classifier_thresholds
+        if hint_sim >= thresholds.response_centroid_verify:
             # Hint is confirmed by centroid
             return hint_type, min(0.95, hint_sim + 0.2), True
 
-        if best_sim - hint_sim > self.CENTROID_MARGIN:
+        if best_sim - hint_sim > thresholds.response_centroid_margin:
             # Another class is significantly closer - override
             try:
                 override_type = ResponseType(best_label)
@@ -734,14 +714,15 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
         }
 
         # Higher thresholds for frequently misclassified types
+        thresholds = get_config().classifier_thresholds
         if label == ResponseType.DECLINE:
-            threshold = self.DECLINE_CONFIDENCE_THRESHOLD
+            threshold = thresholds.response_decline_confidence
         elif label == ResponseType.DEFER:
-            threshold = self.DEFER_CONFIDENCE_THRESHOLD
+            threshold = thresholds.response_defer_confidence
         elif label == ResponseType.AGREE:
-            threshold = self.AGREE_CONFIDENCE_THRESHOLD
+            threshold = thresholds.response_agree_confidence
         else:
-            threshold = self.LOW_CONFIDENCE_THRESHOLD
+            threshold = thresholds.response_low_confidence
 
         if label in over_predicted_types and confidence < threshold:
             logger.debug(
@@ -1131,10 +1112,11 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
         best_label = max(similarities, key=similarities.get)
         best_sim = similarities[best_label]
 
-        if hint_sim >= self.CENTROID_VERIFY_THRESHOLD:
+        thresholds = get_config().classifier_thresholds
+        if hint_sim >= thresholds.response_centroid_verify:
             return hint_type, min(0.95, hint_sim + 0.2), True
 
-        if best_sim - hint_sim > self.CENTROID_MARGIN:
+        if best_sim - hint_sim > thresholds.response_centroid_margin:
             try:
                 override_type = ResponseType(best_label)
                 return override_type, best_sim, False

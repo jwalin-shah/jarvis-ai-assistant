@@ -4,10 +4,12 @@ Implements the iMessageReader protocol from contracts/imessage.py.
 """
 
 import logging
+import queue
 import sqlite3
 import threading
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Generic, Self, TypeVar
@@ -102,6 +104,265 @@ CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
 # Database connection timeout (handles SQLITE_BUSY from concurrent iMessage app access)
 DB_TIMEOUT_SECONDS = 5.0
 
+# Connection pool configuration
+DEFAULT_POOL_SIZE = 5
+MAX_POOL_SIZE = 10
+
+
+class ConnectionPool:
+    """Thread-safe connection pool for SQLite read-only connections.
+
+    Uses queue.Queue for thread-safe connection management with bounded size.
+    Connections are lazily created on first use and reused across requests.
+
+    Thread Safety:
+        This class is fully thread-safe. Multiple threads can safely acquire
+        and release connections concurrently.
+
+    Example:
+        pool = ConnectionPool(db_path, max_connections=5)
+        with pool.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM chat LIMIT 10")
+    """
+
+    def __init__(
+        self,
+        db_path: Path,
+        max_connections: int = DEFAULT_POOL_SIZE,
+        timeout: float = DB_TIMEOUT_SECONDS,
+    ) -> None:
+        """Initialize the connection pool.
+
+        Args:
+            db_path: Path to the SQLite database file
+            max_connections: Maximum number of connections in the pool (default 5, max 10)
+            timeout: Connection timeout in seconds
+        """
+        self.db_path = db_path
+        self.max_connections = min(max_connections, MAX_POOL_SIZE)
+        self.timeout = timeout
+        self._pool: queue.Queue[sqlite3.Connection] = queue.Queue(
+            maxsize=self.max_connections
+        )
+        self._created_count = 0
+        self._lock = threading.Lock()
+        self._closed = False
+        self._schema_version: str | None = None
+
+    def _create_connection(self) -> sqlite3.Connection:
+        """Create a new read-only database connection.
+
+        Returns:
+            SQLite connection with Row factory
+
+        Raises:
+            iMessageAccessError: If connection fails due to permissions or missing file.
+        """
+        db_path_str = str(self.db_path)
+
+        if not self.db_path.exists():
+            raise imessage_db_not_found(db_path_str)
+
+        try:
+            uri = f"file:{self.db_path}?mode=ro"
+            conn = sqlite3.connect(
+                uri,
+                uri=True,
+                timeout=self.timeout,
+                check_same_thread=False,
+            )
+            conn.row_factory = sqlite3.Row
+
+            # Detect schema version on first connection
+            if self._schema_version is None:
+                self._schema_version = detect_schema_version(conn)
+                logger.debug(f"Detected chat.db schema version: {self._schema_version}")
+
+            return conn
+        except PermissionError as e:
+            raise imessage_permission_denied(db_path_str) from e
+        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+            if "unable to open database" in str(e).lower():
+                raise imessage_permission_denied(db_path_str) from e
+            raise iMessageQueryError(
+                f"Failed to connect to database: {e}",
+                db_path=db_path_str,
+                cause=e,
+            ) from e
+        except OSError as e:
+            raise iMessageAccessError(
+                f"Failed to connect to database (I/O error): {e}",
+                db_path=db_path_str,
+                cause=e,
+            ) from e
+
+    def acquire(self, timeout: float | None = None) -> sqlite3.Connection:
+        """Acquire a connection from the pool.
+
+        If no connection is available and pool is not at capacity, creates a new one.
+        If pool is at capacity, blocks until a connection is available.
+
+        Args:
+            timeout: Maximum time to wait for a connection (None = wait forever)
+
+        Returns:
+            SQLite connection
+
+        Raises:
+            iMessageAccessError: If pool is closed or connection fails
+            queue.Empty: If timeout expires without getting a connection
+        """
+        if self._closed:
+            raise iMessageAccessError(
+                "Connection pool is closed",
+                db_path=str(self.db_path),
+            )
+
+        # Try to get from pool without blocking first
+        try:
+            return self._pool.get_nowait()
+        except queue.Empty:
+            pass
+
+        # Check if we can create a new connection
+        with self._lock:
+            if self._created_count < self.max_connections:
+                self._created_count += 1
+                try:
+                    return self._create_connection()
+                except Exception:
+                    self._created_count -= 1
+                    raise
+
+        # Pool is at capacity, wait for a connection
+        try:
+            return self._pool.get(timeout=timeout)
+        except queue.Empty:
+            raise iMessageAccessError(
+                f"Timeout waiting for database connection (pool size: {self.max_connections})",
+                db_path=str(self.db_path),
+            ) from None
+
+    def release(self, conn: sqlite3.Connection) -> None:
+        """Release a connection back to the pool.
+
+        Args:
+            conn: Connection to release
+        """
+        if self._closed:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return
+
+        try:
+            self._pool.put_nowait(conn)
+        except queue.Full:
+            # Pool is full (shouldn't happen), close the connection
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    @contextmanager
+    def connection(self, timeout: float | None = None) -> Iterator[sqlite3.Connection]:
+        """Context manager for acquiring and releasing connections.
+
+        Args:
+            timeout: Maximum time to wait for a connection
+
+        Yields:
+            SQLite connection
+
+        Example:
+            with pool.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM chat")
+        """
+        conn = self.acquire(timeout=timeout)
+        try:
+            yield conn
+        finally:
+            self.release(conn)
+
+    @property
+    def schema_version(self) -> str | None:
+        """Get the detected schema version."""
+        return self._schema_version
+
+    def close(self) -> None:
+        """Close all connections in the pool."""
+        self._closed = True
+
+        # Close all connections in the pool
+        while True:
+            try:
+                conn = self._pool.get_nowait()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            except queue.Empty:
+                break
+
+        with self._lock:
+            self._created_count = 0
+            self._schema_version = None
+
+    def stats(self) -> dict[str, Any]:
+        """Get pool statistics.
+
+        Returns:
+            Dictionary with pool stats (created, available, max)
+        """
+        return {
+            "created": self._created_count,
+            "available": self._pool.qsize(),
+            "max_connections": self.max_connections,
+            "closed": self._closed,
+        }
+
+
+# Module-level connection pool singleton
+_connection_pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
+
+
+def get_connection_pool(
+    db_path: Path | None = None,
+    max_connections: int = DEFAULT_POOL_SIZE,
+) -> ConnectionPool:
+    """Get or create the module-level connection pool singleton.
+
+    Args:
+        db_path: Path to chat.db (defaults to ~/Library/Messages/chat.db)
+        max_connections: Maximum connections in pool (default 5, max 10)
+
+    Returns:
+        ConnectionPool instance
+    """
+    global _connection_pool
+
+    if _connection_pool is None:
+        with _pool_lock:
+            if _connection_pool is None:
+                path = db_path or CHAT_DB_PATH
+                _connection_pool = ConnectionPool(path, max_connections=max_connections)
+
+    return _connection_pool
+
+
+def reset_connection_pool() -> None:
+    """Reset the module-level connection pool (for testing or reconnection)."""
+    global _connection_pool
+
+    with _pool_lock:
+        if _connection_pool is not None:
+            _connection_pool.close()
+            _connection_pool = None
+
 
 class ChatDBReader:
     """Read-only access to iMessage chat.db.
@@ -109,10 +370,10 @@ class ChatDBReader:
     Implements iMessageReader protocol from contracts/imessage.py.
 
     Thread Safety:
-        This class is NOT thread-safe. Each thread should create its own
-        ChatDBReader instance. The check_same_thread=False setting only
-        allows the connection to be used from async contexts on the same
-        thread, but does not provide synchronization for concurrent access.
+        This class uses a module-level connection pool for thread-safe access.
+        Multiple ChatDBReader instances can safely be used across threads.
+        Each method acquires a connection from the pool for its operation and
+        releases it back when done.
 
     Example:
         # Preferred: use as context manager for automatic cleanup
@@ -129,27 +390,51 @@ class ChatDBReader:
                 conversations = reader.get_conversations(limit=10)
         finally:
             reader.close()
+
+        # For high-concurrency scenarios, use the connection pool directly:
+        pool = get_connection_pool()
+        with pool.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM chat LIMIT 10")
     """
 
-    def __init__(self, db_path: Path | None = None):
+    def __init__(self, db_path: Path | None = None, use_pool: bool = True):
         """Initialize the reader.
 
         Args:
             db_path: Path to chat.db. Defaults to ~/Library/Messages/chat.db
+            use_pool: If True, use the shared connection pool. If False, use a
+                dedicated connection (for backwards compatibility or isolation).
         """
         self.db_path = db_path or CHAT_DB_PATH
+        self._use_pool = use_pool
+        # Connection (from pool or dedicated)
         self._connection: sqlite3.Connection | None = None
+        self._connection_from_pool = False  # Track if connection came from pool
         self._schema_version: str | None = None
         # Cache for contact name lookups (phone/email -> name)
         self._contacts_cache: dict[str, str] | None = None
         # LRU cache for GUID to ROWID mappings (bounded to prevent memory leaks)
         self._guid_to_rowid_cache: LRUCache[str, int] = LRUCache(maxsize=10000)
+        # Pool reference (lazy initialized)
+        self._pool: ConnectionPool | None = None
+
+    def _get_pool(self) -> ConnectionPool:
+        """Get the connection pool (lazy initialization).
+
+        Returns:
+            ConnectionPool instance
+        """
+        if self._pool is None:
+            self._pool = get_connection_pool(self.db_path)
+        return self._pool
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get a read-only database connection.
 
-        Uses connection pooling - same connection is reused across calls.
-        Connection is opened in read-only mode for safety.
+        When using pool mode (default), acquires a connection from the shared pool
+        and holds it for the lifetime of this reader instance (released on close()).
+        When using legacy mode (use_pool=False), maintains a dedicated connection.
 
         Returns:
             SQLite connection with Row factory
@@ -158,6 +443,19 @@ class ChatDBReader:
             iMessageAccessError: If connection fails due to permissions or missing file.
             iMessageQueryError: If connection fails for other reasons.
         """
+        # Return existing connection if we have one
+        if self._connection is not None:
+            return self._connection
+
+        if self._use_pool:
+            # Pool mode: acquire from shared pool and hold
+            pool = self._get_pool()
+            self._connection = pool.acquire()
+            self._connection_from_pool = True
+            self._schema_version = pool.schema_version
+            return self._connection
+
+        # Legacy mode: create dedicated connection
         if self._connection is None:
             db_path_str = str(self.db_path)
 
@@ -216,31 +514,43 @@ class ChatDBReader:
         return self._connection
 
     def close(self) -> None:
-        """Close the database connection.
+        """Close or release the database connection.
 
+        In pool mode, releases the connection back to the pool.
+        In legacy mode, closes the dedicated connection.
         Call this when done to release resources.
-        Connection will be recreated on next use if needed.
         """
         if self._connection is not None:
-            try:
-                self._connection.close()
-            except sqlite3.Error:
-                # SQLite errors during close (e.g., connection already closed)
-                # are expected and can be safely ignored during cleanup.
-                pass
-            except OSError:
-                # File system errors during close are recoverable and can be ignored.
-                logger.debug("I/O error closing database connection", exc_info=True)
-            except Exception:
-                # Last resort catch-all for truly unexpected cleanup errors (e.g., threading).
-                # These are logged but not propagated to avoid masking the original error
-                # in context manager exit. This is intentionally broad because cleanup
-                # must not raise to avoid exception chaining issues.
-                logger.debug("Unexpected error closing database connection", exc_info=True)
+            if self._connection_from_pool and self._pool is not None:
+                # Pool mode: release connection back to pool
+                try:
+                    self._pool.release(self._connection)
+                except Exception:
+                    logger.debug("Error releasing connection to pool", exc_info=True)
+            else:
+                # Legacy mode: close dedicated connection
+                try:
+                    self._connection.close()
+                except sqlite3.Error:
+                    # SQLite errors during close (e.g., connection already closed)
+                    # are expected and can be safely ignored during cleanup.
+                    pass
+                except OSError:
+                    # File system errors during close are recoverable and can be ignored.
+                    logger.debug("I/O error closing database connection", exc_info=True)
+                except Exception:
+                    # Last resort catch-all for truly unexpected cleanup errors (e.g., threading).
+                    # These are logged but not propagated to avoid masking the original error
+                    # in context manager exit. This is intentionally broad because cleanup
+                    # must not raise to avoid exception chaining issues.
+                    logger.debug("Unexpected error closing database connection", exc_info=True)
+
             self._connection = None
-            self._schema_version = None
-            self._contacts_cache = None
-            self._guid_to_rowid_cache.clear()
+            self._connection_from_pool = False
+
+        self._schema_version = None
+        self._contacts_cache = None
+        self._guid_to_rowid_cache.clear()
 
     def _get_attachments_for_message(self, message_id: int) -> list[Attachment]:
         """Fetch attachments for a specific message.

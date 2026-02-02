@@ -105,12 +105,12 @@ export async function waitForMessagesLoad(page: Page): Promise<void> {
 }
 
 /**
- * Helper to get the connection status indicator.
+ * Helper to get the connection status indicator (from sidebar).
  */
 export async function getConnectionStatus(
   page: Page
 ): Promise<"connected" | "disconnected"> {
-  const dot = page.locator(".status-dot");
+  const dot = page.locator(".sidebar .status-dot");
   const hasConnectedClass = await dot.evaluate((el) =>
     el.classList.contains("connected")
   );

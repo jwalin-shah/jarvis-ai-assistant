@@ -10,6 +10,7 @@
     scrollToMessageId,
     clearScrollTarget,
   } from "../stores/conversations";
+  import { WS_HTTP_BASE } from "../api/websocket";
   import AIDraftPanel from "./AIDraftPanel.svelte";
   import SummaryModal from "./SummaryModal.svelte";
   import SmartReplyChips from "./SmartReplyChips.svelte";
@@ -28,6 +29,199 @@
   let composeText = $state("");
   let sendingMessage = $state(false);
   let sendError = $state<string | null>(null);
+
+  // Virtual scrolling configuration
+  const ESTIMATED_MESSAGE_HEIGHT = 80; // Average message height for initial estimate
+  const BUFFER_SIZE = 10; // Extra messages to render above/below visible area
+  const MIN_VISIBLE_MESSAGES = 20; // Minimum messages to render
+
+  // Virtual scrolling state
+  let messageHeights = $state<Map<number, number>>(new Map()); // message.id -> measured height
+  let visibleStartIndex = $state(0);
+  let visibleEndIndex = $state(MIN_VISIBLE_MESSAGES);
+  let virtualTopPadding = $state(0);
+  let virtualBottomPadding = $state(0);
+  let pendingScrollToMessageId = $state<number | null>(null);
+
+  // Get estimated height for a message (use measured if available)
+  function getMessageHeight(messageId: number): number {
+    return messageHeights.get(messageId) ?? ESTIMATED_MESSAGE_HEIGHT;
+  }
+
+  // Update measured heights from DOM
+  function measureVisibleMessages() {
+    if (!messagesContainer) return;
+
+    const messageElements = messagesContainer.querySelectorAll("[data-message-id]");
+    let needsUpdate = false;
+    const newHeights = new Map(messageHeights);
+
+    messageElements.forEach((el) => {
+      const messageId = parseInt(el.getAttribute("data-message-id") || "0", 10);
+      const rect = el.getBoundingClientRect();
+      // Include margin in height calculation
+      const style = window.getComputedStyle(el);
+      const marginTop = parseFloat(style.marginTop) || 0;
+      const marginBottom = parseFloat(style.marginBottom) || 0;
+      const height = rect.height + marginTop + marginBottom;
+
+      if (messageId && height > 0 && newHeights.get(messageId) !== height) {
+        newHeights.set(messageId, height);
+        needsUpdate = true;
+      }
+    });
+
+    // Also measure date headers - add their height to the following message
+    const allElements = messagesContainer.querySelectorAll(".virtual-content > *");
+    let pendingHeaderHeight = 0;
+
+    allElements.forEach((el) => {
+      if (el.classList.contains("date-header")) {
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        const marginTop = parseFloat(style.marginTop) || 0;
+        const marginBottom = parseFloat(style.marginBottom) || 0;
+        pendingHeaderHeight = rect.height + marginTop + marginBottom;
+      } else if (el.hasAttribute("data-message-id") && pendingHeaderHeight > 0) {
+        const messageId = parseInt(el.getAttribute("data-message-id") || "0", 10);
+        const currentHeight = newHeights.get(messageId) ?? 0;
+        if (messageId && currentHeight > 0) {
+          // Add header height to message height
+          newHeights.set(messageId, currentHeight + pendingHeaderHeight);
+          needsUpdate = true;
+        }
+        pendingHeaderHeight = 0;
+      }
+    });
+
+    if (needsUpdate) {
+      messageHeights = newHeights;
+    }
+  }
+
+  // Calculate which messages should be visible based on scroll position
+  function calculateVisibleRange(scrollTop: number, containerHeight: number) {
+    const messages = $conversationsStore.messages;
+    if (messages.length === 0) {
+      visibleStartIndex = 0;
+      visibleEndIndex = 0;
+      virtualTopPadding = 0;
+      virtualBottomPadding = 0;
+      return;
+    }
+
+    // Account for load-earlier-section height (~48px)
+    const loadSectionHeight = 48;
+    const adjustedScrollTop = Math.max(0, scrollTop - loadSectionHeight);
+
+    // Find start index by accumulating heights
+    let accumulatedHeight = 0;
+    let startIdx = 0;
+
+    for (let i = 0; i < messages.length; i++) {
+      const height = getMessageHeight(messages[i].id);
+      if (accumulatedHeight + height >= adjustedScrollTop) {
+        startIdx = i;
+        break;
+      }
+      accumulatedHeight += height;
+    }
+
+    // Apply buffer above
+    startIdx = Math.max(0, startIdx - BUFFER_SIZE);
+
+    // Calculate top padding (height of messages above visible range)
+    let topPadding = 0;
+    for (let i = 0; i < startIdx; i++) {
+      topPadding += getMessageHeight(messages[i].id);
+    }
+
+    // Find end index
+    let visibleHeight = 0;
+    let endIdx = startIdx;
+
+    for (let i = startIdx; i < messages.length; i++) {
+      endIdx = i + 1;
+      visibleHeight += getMessageHeight(messages[i].id);
+      if (visibleHeight >= containerHeight + (BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT)) {
+        break;
+      }
+    }
+
+    // Ensure minimum rendered messages
+    endIdx = Math.min(messages.length, Math.max(endIdx, startIdx + MIN_VISIBLE_MESSAGES));
+
+    // Calculate bottom padding (height of messages below visible range)
+    let bottomPadding = 0;
+    for (let i = endIdx; i < messages.length; i++) {
+      bottomPadding += getMessageHeight(messages[i].id);
+    }
+
+    visibleStartIndex = startIdx;
+    visibleEndIndex = endIdx;
+    virtualTopPadding = topPadding;
+    virtualBottomPadding = bottomPadding;
+  }
+
+  // Get the slice of messages to render
+  function getVisibleMessages(): typeof $conversationsStore.messages {
+    return $conversationsStore.messages.slice(visibleStartIndex, visibleEndIndex);
+  }
+
+  // Update visible range when scroll or messages change
+  function updateVirtualScroll() {
+    if (!messagesContainer) return;
+    const { scrollTop, clientHeight } = messagesContainer;
+    calculateVisibleRange(scrollTop, clientHeight);
+  }
+
+  // Scroll to a specific message by ID (for search navigation)
+  async function scrollToMessage(messageId: number) {
+    const messages = $conversationsStore.messages;
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+
+    if (messageIndex === -1) return;
+
+    // Calculate scroll position for this message
+    let scrollPosition = 48; // load-earlier-section height
+    for (let i = 0; i < messageIndex; i++) {
+      scrollPosition += getMessageHeight(messages[i].id);
+    }
+
+    // Ensure the message is in the visible range
+    visibleStartIndex = Math.max(0, messageIndex - BUFFER_SIZE);
+    visibleEndIndex = Math.min(messages.length, messageIndex + BUFFER_SIZE + MIN_VISIBLE_MESSAGES);
+
+    // Recalculate padding
+    let topPadding = 0;
+    for (let i = 0; i < visibleStartIndex; i++) {
+      topPadding += getMessageHeight(messages[i].id);
+    }
+    virtualTopPadding = topPadding;
+
+    let bottomPadding = 0;
+    for (let i = visibleEndIndex; i < messages.length; i++) {
+      bottomPadding += getMessageHeight(messages[i].id);
+    }
+    virtualBottomPadding = bottomPadding;
+
+    // Wait for DOM update, then scroll
+    await tick();
+
+    if (messagesContainer) {
+      // Center the message in the viewport
+      const containerHeight = messagesContainer.clientHeight;
+      const targetScroll = scrollPosition - (containerHeight / 2) + (getMessageHeight(messageId) / 2);
+      messagesContainer.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" });
+    }
+
+    // Try to find and highlight the element after scroll
+    await tick();
+    const element = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
 
   // Auto-resize textarea as user types
   function autoResizeTextarea(event: Event) {
@@ -58,7 +252,7 @@
         ? $selectedConversation.participants[0]
         : undefined;
 
-      const response = await fetch(`http://localhost:8742/conversations/${encodeURIComponent(chatId)}/send`, {
+      const response = await fetch(`${WS_HTTP_BASE}/conversations/${encodeURIComponent(chatId)}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -116,6 +310,7 @@
   // Track previous message count and scroll height for position restoration (infinite scroll)
   let previousMessageCount = $state(0);
   let previousScrollHeight = $state(0);
+  let previousFirstMessageId = $state<number | null>(null);
 
   // Threshold for triggering load (200px from top)
   const SCROLL_THRESHOLD = 200;
@@ -125,10 +320,16 @@
   let hasNewMessagesBelow = $state(false);
   let newMessageIds = $state<Set<number>>(new Set());
 
-  // Handle scroll event for infinite scroll and bottom detection
+  // Handle scroll event for infinite scroll, bottom detection, and virtual scrolling
   async function handleScroll(event: Event) {
     const container = event.target as HTMLDivElement;
     if (!container) return;
+
+    // Update virtual scroll range
+    updateVirtualScroll();
+
+    // Measure visible messages after scroll for more accurate heights
+    requestAnimationFrame(() => measureVisibleMessages());
 
     // Check if user scrolled near the top (for loading older messages)
     if (
@@ -137,20 +338,28 @@
       !$conversationsStore.loadingMore &&
       $conversationsStore.messages.length > 0
     ) {
-      // Save current scroll position info before loading
+      // Save the ID of the first visible message to restore position
+      const firstVisibleMessage = $conversationsStore.messages[visibleStartIndex];
+      previousFirstMessageId = firstVisibleMessage?.id ?? null;
       previousScrollHeight = container.scrollHeight;
-      const prevCount = $conversationsStore.messages.length;
 
       await loadMoreMessages();
 
-      // Restore scroll position after messages are prepended
-      tick().then(() => {
-        if (messagesContainer && $conversationsStore.messages.length > prevCount) {
-          const newScrollHeight = messagesContainer.scrollHeight;
-          const scrollDelta = newScrollHeight - previousScrollHeight;
-          messagesContainer.scrollTop += scrollDelta;
+      // After loading, find the previously first message and restore scroll position
+      await tick();
+      if (messagesContainer && previousFirstMessageId !== null) {
+        const messages = $conversationsStore.messages;
+        const prevIndex = messages.findIndex(m => m.id === previousFirstMessageId);
+        if (prevIndex > 0) {
+          // Calculate new scroll position based on heights of new messages
+          let newScrollTop = 48; // load-earlier-section height
+          for (let i = 0; i < prevIndex; i++) {
+            newScrollTop += getMessageHeight(messages[i].id);
+          }
+          messagesContainer.scrollTop = newScrollTop;
         }
-      });
+        previousFirstMessageId = null;
+      }
     }
 
     // Check if user is at bottom (for new message indicators)
@@ -167,6 +376,8 @@
   // Handle explicit load button click
   async function handleLoadEarlier() {
     if (messagesContainer) {
+      const firstVisibleMessage = $conversationsStore.messages[visibleStartIndex];
+      previousFirstMessageId = firstVisibleMessage?.id ?? null;
       previousScrollHeight = messagesContainer.scrollHeight;
       previousMessageCount = $conversationsStore.messages.length;
     }
@@ -185,6 +396,8 @@
 
       if (isAtBottom) {
         // Auto-scroll to bottom if user was already at bottom
+        // Update visible range to include new messages first
+        visibleEndIndex = $conversationsStore.messages.length;
         scrollToBottom();
       } else {
         // Show "new messages below" indicator
@@ -199,15 +412,56 @@
     previousMessageCount = currentCount;
   });
 
+  // Track if we need to scroll to bottom after initial load
+  let needsScrollToBottom = false;
+  let lastMessageCount = 0;
+
+  // Update virtual scroll when messages change (only run once per actual change)
+  $effect(() => {
+    const msgCount = $conversationsStore.messages.length;
+    const isLoading = $conversationsStore.loadingMessages;
+
+    // Only process if count actually changed
+    if (msgCount === lastMessageCount) return;
+    lastMessageCount = msgCount;
+
+    console.log("[MessageView] Messages changed:", msgCount, "loading:", isLoading);
+
+    if (messagesContainer && msgCount > 0 && !isLoading) {
+      // If this is initial load, set range to show newest messages (end)
+      if (needsScrollToBottom) {
+        visibleEndIndex = msgCount;
+        visibleStartIndex = Math.max(0, msgCount - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+        virtualTopPadding = visibleStartIndex * 80; // Estimate 80px per message
+        virtualBottomPadding = 0;
+
+        console.log("[MessageView] Initial load - visible range:", visibleStartIndex, "-", visibleEndIndex);
+        needsScrollToBottom = false;
+
+        // Scroll to bottom after render
+        tick().then(() => scrollToBottom());
+      } else {
+        updateVirtualScroll();
+      }
+    }
+  });
+
   // Reset state when conversation changes
   $effect(() => {
     if ($selectedConversation) {
+      console.log("[MessageView] Conversation changed, resetting state");
       previousMessageCount = 0;
       newMessageIds = new Set();
       hasNewMessagesBelow = false;
       isAtBottom = true;
-      // Scroll to bottom when loading new conversation
-      tick().then(() => scrollToBottom());
+      needsScrollToBottom = true; // Mark that we need to scroll to bottom after messages load
+      lastMessageCount = 0; // Reset to trigger initial load logic
+      // Reset virtual scroll state
+      messageHeights = new Map();
+      visibleStartIndex = 0;
+      visibleEndIndex = MIN_VISIBLE_MESSAGES;
+      virtualTopPadding = 0;
+      virtualBottomPadding = 0;
     }
   });
 
@@ -225,6 +479,18 @@
 
   // Handle "new messages below" button click
   function handleNewMessagesClick() {
+    // Ensure last messages are in visible range
+    const messages = $conversationsStore.messages;
+    visibleEndIndex = messages.length;
+    visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+
+    let topPadding = 0;
+    for (let i = 0; i < visibleStartIndex; i++) {
+      topPadding += getMessageHeight(messages[i].id);
+    }
+    virtualTopPadding = topPadding;
+    virtualBottomPadding = 0;
+
     scrollToBottom();
   }
 
@@ -269,12 +535,7 @@
     // Subscribe to scroll target changes
     unsubscribeScroll = scrollToMessageId.subscribe(async (messageId) => {
       if (messageId !== null) {
-        // Wait for DOM to update
-        await tick();
-        const element = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
+        await scrollToMessage(messageId);
         clearScrollTarget();
       }
     });
@@ -312,19 +573,28 @@
     }
   }
 
+  // Check if date header should show for a message in the visible slice
+  // We need to check against the FULL message list, not just visible slice
   function shouldShowDateHeader(
-    messages: typeof $conversationsStore.messages,
-    index: number
+    visibleIndex: number
   ): boolean {
-    if (index === 0) return true;
-    const curr = new Date(messages[index].date).toDateString();
-    const prev = new Date(messages[index - 1].date).toDateString();
+    const actualIndex = visibleStartIndex + visibleIndex;
+    const messages = $conversationsStore.messages;
+
+    if (actualIndex === 0) return true;
+    if (actualIndex >= messages.length) return false;
+
+    const curr = new Date(messages[actualIndex].date).toDateString();
+    const prev = new Date(messages[actualIndex - 1].date).toDateString();
     return curr !== prev;
   }
 
   function isNewMessage(messageId: number): boolean {
     return newMessageIds.has(messageId);
   }
+
+  // Reactive visible messages
+  let visibleMessages = $derived(getVisibleMessages());
 </script>
 
 <div
@@ -435,56 +705,65 @@
           {/if}
         </div>
 
-        {#each $conversationsStore.messages as message, index (message.id)}
-          {#if shouldShowDateHeader($conversationsStore.messages, index)}
-            <div class="date-header">
-              <span>{formatDate(message.date)}</span>
-            </div>
-          {/if}
+        <!-- Virtual scroll spacer for messages above visible range -->
+        <div class="virtual-spacer-top" style="height: {virtualTopPadding}px;"></div>
 
-          {#if message.is_system_message}
-            <div class="system-message" data-message-id={message.id}>
-              {message.text}
-            </div>
-          {:else}
-            <div
-              class="message"
-              class:from-me={message.is_from_me}
-              class:new-message={isNewMessage(message.id)}
-              class:highlighted={$highlightedMessageId === message.id}
-              data-message-id={message.id}
-            >
-              <div class="bubble" class:from-me={message.is_from_me}>
-                {#if !message.is_from_me && $selectedConversation.is_group}
-                  <span class="sender">{message.sender_name || message.sender}</span>
-                {/if}
-                <p>{message.text}</p>
-                {#if message.attachments.length > 0}
-                  <div class="attachments">
-                    {#each message.attachments as attachment}
-                      <div class="attachment">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                        </svg>
-                        <span>{attachment.filename}</span>
-                      </div>
+        <!-- Only render visible messages -->
+        <div class="virtual-content">
+          {#each visibleMessages as message, visibleIndex (message.id)}
+            {#if shouldShowDateHeader(visibleIndex)}
+              <div class="date-header">
+                <span>{formatDate(message.date)}</span>
+              </div>
+            {/if}
+
+            {#if message.is_system_message}
+              <div class="system-message" data-message-id={message.id}>
+                {message.text}
+              </div>
+            {:else}
+              <div
+                class="message"
+                class:from-me={message.is_from_me}
+                class:new-message={isNewMessage(message.id)}
+                class:highlighted={$highlightedMessageId === message.id}
+                data-message-id={message.id}
+              >
+                <div class="bubble" class:from-me={message.is_from_me}>
+                  {#if !message.is_from_me && $selectedConversation.is_group}
+                    <span class="sender">{message.sender_name || message.sender}</span>
+                  {/if}
+                  <p>{message.text}</p>
+                  {#if message.attachments.length > 0}
+                    <div class="attachments">
+                      {#each message.attachments as attachment}
+                        <div class="attachment">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                          </svg>
+                          <span>{attachment.filename}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                  <span class="time">{formatTime(message.date)}</span>
+                </div>
+                {#if message.reactions.length > 0}
+                  <div class="reactions">
+                    {#each message.reactions as reaction}
+                      <span class="reaction" title={reaction.sender_name || reaction.sender}>
+                        {reaction.type}
+                      </span>
                     {/each}
                   </div>
                 {/if}
-                <span class="time">{formatTime(message.date)}</span>
               </div>
-              {#if message.reactions.length > 0}
-                <div class="reactions">
-                  {#each message.reactions as reaction}
-                    <span class="reaction" title={reaction.sender_name || reaction.sender}>
-                      {reaction.type}
-                    </span>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {/each}
+            {/if}
+          {/each}
+        </div>
+
+        <!-- Virtual scroll spacer for messages below visible range -->
+        <div class="virtual-spacer-bottom" style="height: {virtualBottomPadding}px;"></div>
       {/if}
     </div>
 
@@ -493,6 +772,7 @@
       <SmartReplyChipsV2
         chatId={$selectedConversation.chat_id}
         isFocused={messageViewFocused}
+        onSelectReply={(text) => { composeText = text; }}
       />
     {/if}
 
@@ -579,6 +859,8 @@
     flex-direction: column;
     background: var(--bg-primary);
     position: relative;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .empty-state {
@@ -637,9 +919,17 @@
     height: 20px;
   }
 
+  .header .info {
+    min-width: 0;
+    flex: 1;
+  }
+
   .header .info h2 {
     font-size: 16px;
     font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .header .info p {
@@ -692,6 +982,18 @@
     flex: 1;
     overflow-y: auto;
     padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Virtual scrolling spacers */
+  .virtual-spacer-top,
+  .virtual-spacer-bottom {
+    flex-shrink: 0;
+  }
+
+  .virtual-content {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -792,6 +1094,9 @@
     font-size: 15px;
     line-height: 1.4;
     word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
   }
 
   .bubble .time {
@@ -835,6 +1140,7 @@
 
   .reaction {
     font-size: 14px;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
     background: var(--bg-secondary);
     padding: 2px 6px;
     border-radius: 10px;
@@ -854,6 +1160,7 @@
     justify-content: center;
     padding: 16px 0;
     min-height: 48px;
+    flex-shrink: 0;
   }
 
   .loading-more {

@@ -17,11 +17,21 @@ Usage:
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 logger = logging.getLogger(__name__)
+
+# Download configuration defaults
+DEFAULT_DOWNLOAD_TIMEOUT = 60  # seconds
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_RETRY_BASE_DELAY = 1.0  # seconds (exponential backoff base)
+
+# Session cache for model availability checks
+# Maps model_id -> bool (is_available)
+_availability_cache: dict[str, bool] = {}
 
 
 @dataclass(frozen=True)
@@ -105,6 +115,16 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         quality_tier="excellent",
         description="Best instruction following, natural tone, concise responses. Recommended.",
         recommended_for=["quick_replies", "summarization", "drafting", "natural_conversation"],
+    ),
+    "lfm-0.3b": ModelSpec(
+        id="lfm-0.3b",
+        path="mlx-community/LFM2-350M-4bit",
+        display_name="LFM 2.5 0.3B (Fast)",
+        size_gb=0.3,
+        min_ram_gb=4,
+        quality_tier="basic",
+        description="LFM 2.5 0.3B - fastest responses, lighter quality. Good for quick tests.",
+        recommended_for=["quick_replies", "testing"],
     ),
     "lfm-1.2b": ModelSpec(
         id="lfm-1.2b",
@@ -225,17 +245,25 @@ def get_all_models() -> list[ModelSpec]:
     )
 
 
-def is_model_available(model_id: str) -> bool:
+def is_model_available(model_id: str, use_cache: bool = True) -> bool:
     """Check if a model is downloaded and cached locally.
 
     Checks the HuggingFace cache directory for the model files.
+    Results are cached for the session to avoid repeated filesystem checks.
 
     Args:
         model_id: The model identifier to check.
+        use_cache: If True, uses cached result if available (default: True).
 
     Returns:
         True if model is cached locally, False otherwise.
     """
+    global _availability_cache
+
+    # Check session cache first
+    if use_cache and model_id in _availability_cache:
+        return _availability_cache[model_id]
+
     spec = get_model_spec(model_id)
     if spec is None:
         return False
@@ -243,6 +271,7 @@ def is_model_available(model_id: str) -> bool:
     # Check HuggingFace cache
     cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
     if not cache_dir.exists():
+        _availability_cache[model_id] = False
         return False
 
     # HuggingFace cache uses a specific naming pattern
@@ -250,6 +279,7 @@ def is_model_available(model_id: str) -> bool:
     model_cache_name = f"models--{spec.path.replace('/', '--')}"
     model_cache_path = cache_dir / model_cache_name
 
+    is_available = False
     if model_cache_path.exists():
         # Check if there are actual model files (snapshots directory with content)
         snapshots_dir = model_cache_path / "snapshots"
@@ -257,45 +287,199 @@ def is_model_available(model_id: str) -> bool:
             # Check for at least one snapshot with model files
             for snapshot in snapshots_dir.iterdir():
                 if snapshot.is_dir() and any(snapshot.iterdir()):
-                    return True
+                    is_available = True
+                    break
 
-    return False
+    # Cache the result
+    _availability_cache[model_id] = is_available
+    return is_available
 
 
-def ensure_model_available(model_id: str) -> bool:
+def _invalidate_availability_cache(model_id: str | None = None) -> None:
+    """Invalidate the model availability cache.
+
+    Args:
+        model_id: Specific model to invalidate, or None to clear entire cache.
+    """
+    global _availability_cache
+    if model_id is None:
+        _availability_cache.clear()
+        logger.debug("Cleared entire model availability cache")
+    elif model_id in _availability_cache:
+        del _availability_cache[model_id]
+        logger.debug("Invalidated availability cache for %s", model_id)
+
+
+def clear_availability_cache() -> None:
+    """Clear the model availability cache.
+
+    Call this if models may have been downloaded/deleted outside of this module.
+    """
+    _invalidate_availability_cache(None)
+
+
+def ensure_model_available(
+    model_id: str,
+    timeout: int = DEFAULT_DOWNLOAD_TIMEOUT,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY,
+) -> bool:
     """Download model if not available.
 
     Uses huggingface_hub to download the model to the local cache.
+    Implements retry logic with exponential backoff for network failures.
 
     Args:
         model_id: The model identifier to ensure is available.
+        timeout: Timeout in seconds for the download (default: 60).
+        max_retries: Maximum number of retry attempts (default: 3).
+        retry_base_delay: Base delay in seconds for exponential backoff (default: 1.0).
 
     Returns:
         True if model is available (was cached or downloaded successfully),
-        False if model_id is invalid or download failed.
+        False if model_id is invalid or download failed after all retries.
     """
     spec = get_model_spec(model_id)
     if spec is None:
         logger.error("Unknown model ID: %s", model_id)
         return False
 
-    # Check if already available
+    # Check if already available (uses cache)
     if is_model_available(model_id):
         logger.debug("Model %s already available in cache", model_id)
         return True
 
-    # Try to download
+    # Try to download with retries
     try:
         from huggingface_hub import snapshot_download
-
-        logger.info("Downloading model %s (%s)...", model_id, spec.path)
-        snapshot_download(repo_id=spec.path)
-        logger.info("Model %s downloaded successfully", model_id)
-        return True
-
+        from huggingface_hub.utils import (
+            GatedRepoError,
+            HfHubHTTPError,
+            RepositoryNotFoundError,
+        )
     except ImportError:
         logger.error("huggingface_hub not installed. Install with: pip install huggingface_hub")
         return False
-    except Exception as e:
-        logger.error("Failed to download model %s: %s", model_id, e)
-        return False
+
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(
+                "Downloading model %s (%s)... [attempt %d/%d]",
+                model_id,
+                spec.path,
+                attempt,
+                max_retries,
+            )
+
+            # Configure etag_timeout and other network timeouts
+            snapshot_download(
+                repo_id=spec.path,
+                etag_timeout=timeout,
+                # Force online mode for download
+                local_files_only=False,
+            )
+
+            logger.info("Model %s downloaded successfully", model_id)
+            # Invalidate cache since model is now available
+            _invalidate_availability_cache(model_id)
+            return True
+
+        except RepositoryNotFoundError:
+            logger.error(
+                "Model not found: '%s' does not exist on HuggingFace Hub. "
+                "Check the model path: %s",
+                model_id,
+                spec.path,
+            )
+            return False  # Don't retry - model doesn't exist
+
+        except GatedRepoError:
+            logger.error(
+                "Access denied: Model '%s' requires authentication. "
+                "Run `huggingface-cli login` and accept the model terms at: "
+                "https://huggingface.co/%s",
+                model_id,
+                spec.path,
+            )
+            return False  # Don't retry - auth issue
+
+        except HfHubHTTPError as e:
+            last_error = e
+            status_code = getattr(e, "response", None)
+            status_code = getattr(status_code, "status_code", None) if status_code else None
+
+            if status_code == 429:
+                logger.warning(
+                    "Rate limited by HuggingFace Hub. Retrying in %ds...",
+                    retry_base_delay * (2 ** (attempt - 1)),
+                )
+            elif status_code and 400 <= status_code < 500:
+                logger.error("Client error downloading model %s: %s", model_id, e)
+                return False  # Don't retry client errors
+            else:
+                logger.warning(
+                    "Network error downloading model %s (attempt %d/%d): %s",
+                    model_id,
+                    attempt,
+                    max_retries,
+                    e,
+                )
+
+        except TimeoutError as e:
+            last_error = e
+            logger.warning(
+                "Download timed out after %ds (attempt %d/%d). "
+                "Try increasing timeout or check your network connection.",
+                timeout,
+                attempt,
+                max_retries,
+            )
+
+        except OSError as e:
+            last_error = e
+            # Check for common network-related OSError
+            error_str = str(e).lower()
+            if "connection" in error_str or "network" in error_str or "timeout" in error_str:
+                logger.warning(
+                    "Network error downloading model %s (attempt %d/%d): %s",
+                    model_id,
+                    attempt,
+                    max_retries,
+                    e,
+                )
+            else:
+                # Disk/permission errors - don't retry
+                logger.error(
+                    "Filesystem error downloading model %s: %s. "
+                    "Check disk space and permissions.",
+                    model_id,
+                    e,
+                )
+                return False
+
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "Unexpected error downloading model %s (attempt %d/%d): %s",
+                model_id,
+                attempt,
+                max_retries,
+                e,
+            )
+
+        # Exponential backoff before retry
+        if attempt < max_retries:
+            delay = retry_base_delay * (2 ** (attempt - 1))
+            logger.debug("Waiting %.1fs before retry...", delay)
+            time.sleep(delay)
+
+    # All retries exhausted
+    logger.error(
+        "Failed to download model %s after %d attempts. Last error: %s",
+        model_id,
+        max_retries,
+        last_error,
+    )
+    return False

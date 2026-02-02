@@ -24,7 +24,7 @@ from jarvis.embeddings import (
     get_relationship_profile,
     reset_embedding_store,
 )
-from tests.conftest import requires_sentence_transformers
+from tests.conftest import requires_real_embeddings
 
 # =============================================================================
 # Test Fixtures
@@ -740,7 +740,7 @@ class TestRAGPromptBuilder:
 # =============================================================================
 
 
-@requires_sentence_transformers
+@requires_real_embeddings
 class TestEmbeddingStoreIntegration:
     """Integration tests that use actual embedding computation."""
 

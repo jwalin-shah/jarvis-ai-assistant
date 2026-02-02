@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
+  import { onMount } from "svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
   import ConversationList from "./lib/components/ConversationList.svelte";
   import MessageView from "./lib/components/MessageView.svelte";
@@ -12,8 +11,12 @@
   import { checkApiConnection } from "./lib/stores/health";
   import { clearSelection } from "./lib/stores/conversations";
 
+  // Check if running in Tauri context
+  const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+
   let currentView = $state<"messages" | "dashboard" | "health" | "settings" | "templates">("messages");
   let showSearch = $state(false);
+  let sidebarCollapsed = $state(false);
 
   function handleKeydown(event: KeyboardEvent) {
     // Cmd+K or Cmd+F to open search (when search is not open)
@@ -28,33 +31,40 @@
     // Check API connection on start
     await checkApiConnection();
 
-    // Listen for navigation events from tray menu
-    const unlisten = await listen<string>("navigate", (event) => {
-      if (
-        event.payload === "health" ||
-        event.payload === "dashboard" ||
-        event.payload === "messages" ||
-        event.payload === "settings" ||
-        event.payload === "templates"
-      ) {
-        currentView = event.payload;
-        if (event.payload !== "messages") {
-          clearSelection();
-        }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let unlisten: (() => void) | null = null;
+
+    // Listen for navigation events from tray menu (only in Tauri context)
+    if (isTauri) {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<string>("navigate", (event) => {
+          if (
+            event.payload === "health" ||
+            event.payload === "dashboard" ||
+            event.payload === "messages" ||
+            event.payload === "settings" ||
+            event.payload === "templates"
+          ) {
+            currentView = event.payload;
+            if (event.payload !== "messages") {
+              clearSelection();
+            }
+          }
+        });
+      } catch (error) {
+        console.warn("Failed to set up Tauri event listener:", error);
       }
-    });
+    }
 
     // Add keyboard listener for search
     window.addEventListener("keydown", handleKeydown);
 
-    // Cleanup on unmount
+    // Cleanup on unmount - consolidate all cleanup in one place
     return () => {
-      unlisten();
+      if (unlisten) unlisten();
+      window.removeEventListener("keydown", handleKeydown);
     };
-  });
-
-  onDestroy(() => {
-    window.removeEventListener("keydown", handleKeydown);
   });
 
   function openSearch() {
@@ -67,7 +77,7 @@
 </script>
 
 <main class="app">
-  <Sidebar bind:currentView />
+  <Sidebar bind:currentView bind:collapsed={sidebarCollapsed} />
 
   {#if currentView === "dashboard"}
     <Dashboard on:navigate={(e) => currentView = e.detail} />

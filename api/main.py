@@ -17,6 +17,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.utils import get_openapi
 from slowapi.errors import RateLimitExceeded
 
@@ -29,6 +30,7 @@ from api.routers import (
     contacts_router,
     conversations_router,
     custom_templates_router,
+    debug_router,
     digest_router,
     drafts_router,
     embeddings_router,
@@ -324,6 +326,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Enable GZip compression for responses (50-75% bandwidth savings for large JSON responses)
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 
 # Request timing middleware
 @app.middleware("http")
@@ -355,6 +360,7 @@ async def metrics_middleware(request: Request, call_next):  # type: ignore[no-un
 
 # Include routers
 app.include_router(health_router)
+app.include_router(debug_router)
 app.include_router(attachments_router)
 app.include_router(calendar_router)
 app.include_router(contacts_router)

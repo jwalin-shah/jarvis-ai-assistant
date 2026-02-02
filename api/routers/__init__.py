@@ -6,6 +6,7 @@ from .calendar import router as calendar_router
 from .contacts import router as contacts_router
 from .conversations import router as conversations_router
 from .custom_templates import router as custom_templates_router
+from .debug import router as debug_router
 from .digest import router as digest_router
 from .drafts import router as drafts_router
 from .embeddings import router as embeddings_router
@@ -37,6 +38,7 @@ __all__ = [
     "contacts_router",
     "conversations_router",
     "custom_templates_router",
+    "debug_router",
     "digest_router",
     "drafts_router",
     "embeddings_router",

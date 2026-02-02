@@ -37,7 +37,7 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 import mlx.core as mx
 import psutil
-from mlx_lm import generate, load
+from mlx_lm import generate, load, stream_generate
 from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
 
 from jarvis.errors import (
@@ -161,6 +161,8 @@ class MLXModelLoader:
 
     Implements lazy loading with double-check locking, memory pressure checks,
     and complete unloading including Metal GPU cache cleanup.
+
+    Supports eager loading via preload() for faster first-request latency.
     """
 
     def __init__(self, config: ModelConfig | None = None) -> None:
@@ -174,10 +176,99 @@ class MLXModelLoader:
         self._tokenizer: Any = None
         self._load_lock = threading.Lock()
         self._loaded_at: float | None = None
+        self._preload_thread: threading.Thread | None = None
+        self._preload_error: Exception | None = None
 
     def is_loaded(self) -> bool:
         """Check if model is currently loaded in memory."""
         return self._model is not None and self._tokenizer is not None
+
+    def is_preloading(self) -> bool:
+        """Check if model is currently being preloaded in background."""
+        return self._preload_thread is not None and self._preload_thread.is_alive()
+
+    def preload(self, wait: bool = False, timeout: float | None = None) -> None:
+        """Start loading the model in a background thread.
+
+        This allows the model to be loaded during app startup, avoiding the
+        2-5 second delay on the first request.
+
+        Args:
+            wait: If True, blocks until loading completes.
+            timeout: Maximum seconds to wait if wait=True (None = no timeout).
+
+        Raises:
+            ModelLoadError: If wait=True and loading fails.
+        """
+        if self.is_loaded():
+            logger.debug("Model already loaded, skipping preload")
+            return
+
+        if self.is_preloading():
+            logger.debug("Model already preloading")
+            if wait:
+                self._wait_for_preload(timeout)
+            return
+
+        def _preload_worker() -> None:
+            """Background worker to load the model."""
+            try:
+                self.load()
+                logger.info("Background preload completed for %s", self.config.display_name)
+            except Exception as e:
+                self._preload_error = e
+                logger.error("Background preload failed: %s", e)
+
+        self._preload_error = None
+        self._preload_thread = threading.Thread(
+            target=_preload_worker,
+            name="model-preload",
+            daemon=True,
+        )
+        self._preload_thread.start()
+        logger.info("Started background preload for %s", self.config.display_name)
+
+        if wait:
+            self._wait_for_preload(timeout)
+
+    def _wait_for_preload(self, timeout: float | None = None) -> None:
+        """Wait for preload to complete, raising any error that occurred.
+
+        Args:
+            timeout: Maximum seconds to wait (None = no timeout).
+
+        Raises:
+            ModelLoadError: If preload failed.
+        """
+        if self._preload_thread is not None:
+            self._preload_thread.join(timeout=timeout)
+            if self._preload_thread.is_alive():
+                logger.warning("Preload still in progress after timeout")
+            elif self._preload_error is not None:
+                raise self._preload_error
+
+    def wait_for_ready(self, timeout: float | None = None) -> bool:
+        """Wait for model to be ready (loaded or preload complete).
+
+        Args:
+            timeout: Maximum seconds to wait (None = no timeout).
+
+        Returns:
+            True if model is loaded and ready.
+
+        Raises:
+            ModelLoadError: If preload failed.
+        """
+        if self.is_loaded():
+            return True
+
+        if self.is_preloading():
+            self._wait_for_preload(timeout)
+            return self.is_loaded()
+
+        # Not loaded and not preloading - load synchronously
+        self.load()
+        return self.is_loaded()
 
     def _can_load_model(self) -> tuple[bool, int, int]:
         """Check if sufficient memory is available for loading.
@@ -461,29 +552,35 @@ class MLXModelLoader:
                 cause=e,
             ) from e
 
-    async def generate_stream(
+    def generate_stream(
         self,
         prompt: str,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        repetition_penalty: float | None = None,
         stop_sequences: list[str] | None = None,
-        timeout_seconds: float | None = None,
     ) -> Any:
-        """Generate text with streaming output (yields tokens).
+        """Generate text with true streaming output (yields tokens as generated).
+
+        Uses mlx_lm.stream_generate for real token-by-token streaming.
 
         Args:
             prompt: Input prompt text
             max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
+            temperature: Sampling temperature (LFM optimal: 0.1)
+            top_p: Nucleus sampling threshold (LFM optimal: 0.1)
+            top_k: Top-k sampling limit (LFM optimal: 50)
+            repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
             stop_sequences: Strings that stop generation
-            timeout_seconds: Timeout for generation (overrides config if provided)
 
         Yields:
-            StreamToken objects with individual tokens
+            StreamToken objects with individual tokens as they're generated
 
         Raises:
             ModelGenerationError: If model is not loaded, prompt is invalid,
-                generation fails, or timeout is exceeded.
+                or generation fails.
         """
         if not prompt or not prompt.strip():
             raise ModelGenerationError(
@@ -501,106 +598,71 @@ class MLXModelLoader:
 
         max_tokens = max_tokens or self.config.default_max_tokens
         temperature = temperature if temperature is not None else self.config.default_temperature
-        effective_timeout: float | None
-        if timeout_seconds is not None:
-            effective_timeout = timeout_seconds
-        else:
-            effective_timeout = self.config.generation_timeout_seconds
+        # LFM2.5-1.2B-Instruct optimal defaults
+        top_p = top_p if top_p is not None else 0.1
+        top_k = top_k if top_k is not None else 50
+        repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
 
         try:
-            # Format prompt for Qwen2.5-Instruct chat template
+            # Format prompt for chat template
             messages = [{"role": "user", "content": prompt}]
             formatted_prompt = self._tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
 
-            # Create sampler with temperature
-            sampler = make_sampler(temp=temperature)
+            # Create sampler with LFM-optimal parameters
+            sampler = make_sampler(temp=temperature, top_p=top_p, top_k=top_k)
 
-            # For streaming, we generate one token at a time
-            # MLX generate doesn't have native streaming, so we simulate it
-            # by generating incrementally
+            # Create logits processors for repetition penalty
+            logits_processors = None
+            if repetition_penalty > 1.0:
+                logits_processors = [make_repetition_penalty(repetition_penalty)]
+
+            # Use real streaming with mlx_lm.stream_generate
+            accumulated_text = ""
             token_index = 0
 
-            def _do_generate() -> str:
-                """Inner function for generation to run with timeout."""
-                return generate(
-                    model=self._model,
-                    tokenizer=self._tokenizer,
-                    prompt=formatted_prompt,
-                    max_tokens=max_tokens,
-                    sampler=sampler,
-                    verbose=False,
-                )
+            for response in stream_generate(
+                model=self._model,
+                tokenizer=self._tokenizer,
+                prompt=formatted_prompt,
+                max_tokens=max_tokens,
+                sampler=sampler,
+                logits_processors=logits_processors,
+            ):
+                # response.text contains the full text so far
+                # Extract just the new part
+                new_text = response.text[len(accumulated_text) :]
+                accumulated_text = response.text
 
-            # Generate full response first (MLX limitation) with timeout
-            if effective_timeout is not None and effective_timeout > 0:
-                executor = ThreadPoolExecutor(max_workers=1)
-                try:
-                    future = executor.submit(_do_generate)
-                    try:
-                        response = future.result(timeout=effective_timeout)
-                    except FuturesTimeoutError:
-                        future.cancel()
-                        # Don't wait for potentially stuck thread
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        logger.warning(
-                            "Streaming generation timed out after %.1f seconds for model %s",
-                            effective_timeout,
-                            self.config.display_name,
-                        )
-                        raise model_generation_timeout(
-                            self.config.display_name,
-                            effective_timeout,
-                            prompt=prompt,
-                        )
-                    # Success - normal cleanup
-                    executor.shutdown(wait=True)
-                except Exception:
-                    # Ensure cleanup on any exception
-                    if not executor._shutdown:
-                        executor.shutdown(wait=False, cancel_futures=True)
-                    raise
-            else:
-                response = _do_generate()
-
-            # Strip the prompt from response
-            if response.startswith(formatted_prompt):
-                response = response[len(formatted_prompt) :].strip()
-
-            # Apply stop sequences
-            if stop_sequences:
-                for stop_seq in stop_sequences:
-                    if stop_seq in response:
-                        response = response[: response.index(stop_seq)]
-
-            response = response.strip()
-
-            # Tokenize and yield each token
-            # Since MLX doesn't support true streaming, we simulate it
-            # by yielding words/tokens from the complete response
-            tokens = self._tokenizer.encode(response)
-            decoded_so_far = ""
-
-            for i, _token in enumerate(tokens):
-                # Decode up to current token
-                partial_tokens = tokens[: i + 1]
-                try:
-                    current_decoded = self._tokenizer.decode(partial_tokens)
-                except Exception:
-                    continue
-
-                # Get the new part
-                new_text = current_decoded[len(decoded_so_far) :]
-                decoded_so_far = current_decoded
+                # Check for stop sequences
+                should_stop = False
+                if stop_sequences and new_text:
+                    for stop_seq in stop_sequences:
+                        if stop_seq in accumulated_text:
+                            # Trim to stop sequence
+                            stop_idx = accumulated_text.index(stop_seq)
+                            new_text = accumulated_text[
+                                len(accumulated_text) - len(new_text) : stop_idx
+                            ]
+                            should_stop = True
+                            break
 
                 if new_text:
+                    is_final = response.finish_reason is not None or should_stop
                     yield StreamToken(
                         token=new_text,
                         token_index=token_index,
-                        is_final=(i == len(tokens) - 1),
+                        is_final=is_final,
                     )
                     token_index += 1
+
+                if should_stop:
+                    break
+
+                # Yield on finish
+                if response.finish_reason is not None:
+                    break
 
         except ModelGenerationError:
             raise
@@ -655,3 +717,41 @@ class MLXModelLoader:
             "memory_usage_mb": self.get_memory_usage_mb(),
             "quality_tier": getattr(self.config.spec, "quality_tier", None),
         }
+
+
+# Singleton model loader for convenience
+_model_loader: MLXModelLoader | None = None
+_model_loader_lock = threading.Lock()
+
+
+def get_model() -> MLXModelLoader:
+    """Get or create singleton model loader instance.
+
+    Thread-safe using double-check locking pattern.
+    The model is loaded lazily on first generation call.
+
+    Returns:
+        The shared MLXModelLoader instance
+    """
+    global _model_loader
+
+    if _model_loader is None:
+        with _model_loader_lock:
+            if _model_loader is None:
+                _model_loader = MLXModelLoader()
+    return _model_loader
+
+
+def reset_model() -> None:
+    """Reset the singleton model loader and unload any loaded model.
+
+    Use this to:
+    - Clear state between tests
+    - Switch to a different model configuration
+    - Force complete reinitialization
+    """
+    global _model_loader
+    with _model_loader_lock:
+        if _model_loader is not None:
+            _model_loader.unload()
+        _model_loader = None

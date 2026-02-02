@@ -11,6 +11,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
 from api.schemas import ErrorResponse, MessageResponse
@@ -271,7 +272,7 @@ class CacheStatsResponse(BaseModel):
         },
     },
 )
-def semantic_search(
+async def semantic_search(
     request: SemanticSearchRequestWithFilters,
     reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> SemanticSearchResponse:
@@ -323,19 +324,21 @@ def semantic_search(
             has_attachments=request.filters.has_attachments,
         )
 
-    # Create searcher with custom threshold
-    searcher = SemanticSearcher(
-        reader=reader,
-        similarity_threshold=request.threshold,
-    )
+    def _do_search() -> list:
+        """Perform blocking search operation in thread pool."""
+        searcher = SemanticSearcher(
+            reader=reader,
+            similarity_threshold=request.threshold,
+        )
+        return searcher.search(
+            query=request.query,
+            filters=search_filters,
+            limit=request.limit,
+            index_limit=request.index_limit,
+        )
 
-    # Perform search
-    results = searcher.search(
-        query=request.query,
-        filters=search_filters,
-        limit=request.limit,
-        index_limit=request.index_limit,
-    )
+    # Run blocking search in thread pool
+    results = await run_in_threadpool(_do_search)
 
     # Convert to response format
     result_items = [
@@ -361,7 +364,7 @@ def semantic_search(
     summary="Get embedding cache statistics",
     response_description="Cache statistics including size and count",
 )
-def get_cache_stats() -> CacheStatsResponse:
+async def get_cache_stats() -> CacheStatsResponse:
     """Get statistics about the semantic search embedding cache.
 
     Returns information about the cached message embeddings including
@@ -374,16 +377,20 @@ def get_cache_stats() -> CacheStatsResponse:
     """
     from jarvis.semantic_search import EmbeddingCache
 
-    cache = EmbeddingCache()
-    try:
-        stats = cache.stats()
-        return CacheStatsResponse(
-            embedding_count=int(stats["embedding_count"]),
-            size_bytes=int(stats["size_bytes"]),
-            size_mb=stats["size_mb"],
-        )
-    finally:
-        cache.close()
+    def _get_stats() -> dict:
+        """Get cache stats in thread pool (file I/O)."""
+        cache = EmbeddingCache()
+        try:
+            return cache.stats()
+        finally:
+            cache.close()
+
+    stats = await run_in_threadpool(_get_stats)
+    return CacheStatsResponse(
+        embedding_count=int(stats["embedding_count"]),
+        size_bytes=int(stats["size_bytes"]),
+        size_mb=stats["size_mb"],
+    )
 
 
 @router.delete(
@@ -391,7 +398,7 @@ def get_cache_stats() -> CacheStatsResponse:
     summary="Clear embedding cache",
     response_description="Confirmation of cache clear",
 )
-def clear_cache() -> dict[str, str]:
+async def clear_cache() -> dict[str, str]:
     """Clear the semantic search embedding cache.
 
     This removes all cached message embeddings. The next semantic search
@@ -408,14 +415,19 @@ def clear_cache() -> dict[str, str]:
     """
     from jarvis.semantic_search import EmbeddingCache
 
-    cache = EmbeddingCache()
-    try:
-        stats_before = cache.stats()
-        cache.clear()
-        return {
-            "status": "success",
-            "message": f"Cleared {stats_before['embedding_count']} cached embeddings "
-            f"({stats_before['size_mb']} MB)",
-        }
-    finally:
-        cache.close()
+    def _clear_cache() -> dict:
+        """Clear cache in thread pool (file I/O)."""
+        cache = EmbeddingCache()
+        try:
+            stats_before = cache.stats()
+            cache.clear()
+            return stats_before
+        finally:
+            cache.close()
+
+    stats_before = await run_in_threadpool(_clear_cache)
+    return {
+        "status": "success",
+        "message": f"Cleared {stats_before['embedding_count']} cached embeddings "
+        f"({stats_before['size_mb']} MB)",
+    }

@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from jarvis.config import get_config
+
 if TYPE_CHECKING:
     pass
 
@@ -51,10 +53,22 @@ class IntentResult:
     extracted_params: dict[str, str] = field(default_factory=dict)
 
 
-# Intent training examples - at least 15 per intent for good semantic coverage
-# Based on research: diverse phrasing helps the model generalize better
-INTENT_EXAMPLES: dict[IntentType, list[str]] = {
-    IntentType.REPLY: [
+# Intent training examples are now lazy-loaded via IntentClassifier._get_intent_examples()
+# to avoid memory overhead when intent classification isn't used.
+
+
+def _build_intent_examples() -> dict[IntentType, list[str]]:
+    """Build the intent examples dictionary.
+
+    This function is called lazily to avoid loading 5-10KB of data on every import.
+    At least 15 examples per intent for good semantic coverage.
+    Based on research: diverse phrasing helps the model generalize better.
+
+    Returns:
+        Dictionary mapping intent types to lists of example phrases
+    """
+    return {
+        IntentType.REPLY: [
         # Direct help requests
         "help me reply to this",
         "help me reply to this message",
@@ -371,7 +385,7 @@ INTENT_EXAMPLES: dict[IntentType, list[str]] = {
         "you all are the best",
         "love this group",
     ],
-}
+    }
 
 
 # Regex patterns for parameter extraction
@@ -409,18 +423,39 @@ class IntentClassifier:
     and intent examples. Implements lazy loading and thread-safe initialization.
 
     Attributes:
-        CONFIDENCE_THRESHOLD: Minimum confidence to return a specific intent (0.6)
-        QUICK_REPLY_THRESHOLD: Higher threshold for quick reply intent (0.8)
+        Thresholds are loaded from centralized config:
+        - intent_confidence: Minimum confidence to return a specific intent
+        - intent_quick_reply: Higher threshold for quick reply intent
     """
 
-    CONFIDENCE_THRESHOLD = 0.6
-    QUICK_REPLY_THRESHOLD = 0.8
+    # Class-level cache for intent examples (lazy-loaded)
+    _intent_examples: dict[IntentType, list[str]] | None = None
+    _examples_lock = threading.Lock()
+
+    @property
+    def QUICK_REPLY_THRESHOLD(self) -> float:  # noqa: N802
+        """Get the quick reply confidence threshold from config."""
+        config = get_config()
+        return config.classifier_thresholds.intent_quick_reply
 
     def __init__(self) -> None:
         """Initialize the intent classifier with lazy-loaded embeddings."""
         self._intent_embeddings: dict[IntentType, np.ndarray] | None = None
         self._intent_centroids: dict[IntentType, np.ndarray] | None = None
         self._lock = threading.Lock()
+
+    @classmethod
+    def _get_intent_examples(cls) -> dict[IntentType, list[str]]:
+        """Get intent examples (lazy-loaded).
+
+        Returns:
+            Dictionary mapping intent types to lists of example phrases
+        """
+        if cls._intent_examples is None:
+            with cls._examples_lock:
+                if cls._intent_examples is None:
+                    cls._intent_examples = _build_intent_examples()
+        return cls._intent_examples
 
     def _get_embedder(self) -> Any:
         """Get the embedder for intent classification.
@@ -463,12 +498,13 @@ class IntentClassifier:
                 return
 
             embedder = self._get_embedder()
+            intent_examples = self._get_intent_examples()
 
             # Compute embeddings for each intent
             intent_embeddings: dict[IntentType, np.ndarray] = {}
             intent_centroids: dict[IntentType, np.ndarray] = {}
 
-            for intent_type, examples in INTENT_EXAMPLES.items():
+            for intent_type, examples in intent_examples.items():
                 # Compute embeddings in batch for efficiency (normalized)
                 embeddings = embedder.encode(examples, normalize=True)
                 intent_embeddings[intent_type] = embeddings
@@ -484,10 +520,10 @@ class IntentClassifier:
             self._intent_embeddings = intent_embeddings
             self._intent_centroids = intent_centroids
 
-            total_examples = sum(len(ex) for ex in INTENT_EXAMPLES.values())
+            total_examples = sum(len(ex) for ex in intent_examples.values())
             logger.info(
                 "Computed intent embeddings for %d intents (%d examples)",
-                len(INTENT_EXAMPLES),
+                len(intent_examples),
                 total_examples,
             )
 
@@ -553,23 +589,24 @@ class IntentClassifier:
             best_intent = max(similarities, key=lambda k: similarities[k])
             best_confidence = similarities[best_intent]
 
-            # Apply thresholds
+            # Apply thresholds from centralized config
+            thresholds = get_config().classifier_thresholds
             if best_intent == IntentType.QUICK_REPLY:
                 # Higher threshold for quick replies to avoid false positives
-                if best_confidence < self.QUICK_REPLY_THRESHOLD:
+                if best_confidence < thresholds.intent_quick_reply:
                     # Check if any other intent meets the standard threshold
                     for intent, conf in sorted(
                         similarities.items(), key=lambda x: x[1], reverse=True
                     ):
                         if intent != IntentType.QUICK_REPLY:
-                            if conf >= self.CONFIDENCE_THRESHOLD:
+                            if conf >= thresholds.intent_confidence:
                                 best_intent = intent
                                 best_confidence = conf
                                 break
                     else:
                         best_intent = IntentType.GENERAL
                         best_confidence = similarities[IntentType.GENERAL]
-            elif best_confidence < self.CONFIDENCE_THRESHOLD:
+            elif best_confidence < thresholds.intent_confidence:
                 # Below threshold, return GENERAL
                 best_intent = IntentType.GENERAL
                 best_confidence = similarities[IntentType.GENERAL]
@@ -820,3 +857,15 @@ def reset_intent_classifier() -> None:
     with _classifier_lock:
         _classifier = None
     logger.debug("Intent classifier singleton reset")
+
+
+def get_intent_examples() -> dict[IntentType, list[str]]:
+    """Get intent examples (lazy-loaded).
+
+    Public function to access the intent examples dictionary.
+    This is primarily for testing and debugging purposes.
+
+    Returns:
+        Dictionary mapping intent types to lists of example phrases
+    """
+    return IntentClassifier._get_intent_examples()

@@ -90,3 +90,138 @@ requires_sentence_transformers = pytest.mark.skipif(
     not SENTENCE_TRANSFORMERS_AVAILABLE,
     reason="sentence_transformers not available (requires macOS Apple Silicon with MLX)",
 )
+
+
+# =============================================================================
+# Mock Embedder for Tests
+# =============================================================================
+
+import numpy as np
+
+
+class MockEmbedder:
+    """Mock embedder for tests that don't need actual MLX service."""
+
+    def __init__(self):
+        self._model_name = "bge-small"
+
+    @property
+    def backend(self) -> str:
+        return "mock"
+
+    @property
+    def embedding_dim(self) -> int:
+        return 384
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    def is_available(self) -> bool:
+        return True
+
+    def encode(
+        self,
+        texts: list | str,
+        normalize: bool = True,
+        convert_to_numpy: bool = True,
+        normalize_embeddings: bool | None = None,
+    ) -> np.ndarray:
+        """Generate deterministic mock embeddings based on text hash."""
+        if isinstance(texts, str):
+            texts = [texts]
+
+        if not texts:
+            return np.array([], dtype=np.float32).reshape(0, 384)
+
+        embeddings = []
+        for text in texts:
+            # Deterministic embedding based on text hash
+            np.random.seed(hash(text) % 2**32)
+            emb = np.random.randn(384).astype(np.float32)
+            if normalize:
+                emb = emb / np.linalg.norm(emb)
+            embeddings.append(emb)
+
+        return np.array(embeddings, dtype=np.float32)
+
+    def unload(self) -> None:
+        pass
+
+
+@pytest.fixture
+def mock_embedder():
+    """Provide a mock embedder for tests."""
+    return MockEmbedder()
+
+
+# Check if real MLX embedding service is available
+def _check_mlx_service_available():
+    """Check if MLX embedding service is running."""
+    try:
+        from jarvis.embedding_adapter import get_embedder
+
+        embedder = get_embedder()
+        return embedder.is_available() and embedder.backend == "mlx"
+    except Exception:
+        return False
+
+
+# Lazy evaluation - only check once
+_MLX_SERVICE_AVAILABLE = None
+
+
+def is_mlx_service_available():
+    """Check if MLX service is available (cached)."""
+    global _MLX_SERVICE_AVAILABLE
+    if _MLX_SERVICE_AVAILABLE is None:
+        _MLX_SERVICE_AVAILABLE = _check_mlx_service_available()
+    return _MLX_SERVICE_AVAILABLE
+
+
+# Marker for tests that require real embeddings (not mocks)
+requires_real_embeddings = pytest.mark.skipif(
+    not is_mlx_service_available(),
+    reason="Test requires real MLX embedding service (not mocks)",
+)
+
+
+@pytest.fixture(autouse=True)
+def auto_mock_embedder(monkeypatch, request):
+    """Auto-mock get_embedder() for all tests unless MLX service is running.
+
+    This allows tests to run without the MLX service while still testing
+    the business logic. Tests marked with @pytest.mark.requires_real_embeddings
+    will be skipped if the service isn't available.
+    """
+    # Skip mocking if real service is available
+    if is_mlx_service_available():
+        return
+
+    mock = MockEmbedder()
+
+    def mock_get_embedder():
+        return mock
+
+    def mock_is_available():
+        return True
+
+    # Patch at module level
+    monkeypatch.setattr("jarvis.embedding_adapter.get_embedder", mock_get_embedder)
+    monkeypatch.setattr("jarvis.embedding_adapter.is_embedder_available", mock_is_available)
+
+    # Also patch where it might be imported directly
+    try:
+        monkeypatch.setattr("jarvis.router.get_embedder", mock_get_embedder)
+    except AttributeError:
+        pass
+
+    try:
+        monkeypatch.setattr("jarvis.index.get_embedder", mock_get_embedder)
+    except AttributeError:
+        pass
+
+    try:
+        monkeypatch.setattr("jarvis.semantic_search.get_embedder", mock_get_embedder)
+    except AttributeError:
+        pass

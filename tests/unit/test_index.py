@@ -150,7 +150,7 @@ class TestIndexConfig:
     def test_default_values(self) -> None:
         """Test default configuration values."""
         config = IndexConfig()
-        assert config.batch_size == 32
+        assert config.batch_size == 256  # Optimized for Apple Silicon MLX
         assert config.normalize is True
         assert "indexes" in str(config.indexes_dir)
 
@@ -202,7 +202,7 @@ class TestTriggerIndexBuilder:
         """Test builder with default config."""
         builder = TriggerIndexBuilder()
         assert builder.config is not None
-        assert builder.config.batch_size == 32
+        assert builder.config.batch_size == 256  # Optimized for Apple Silicon MLX
 
     def test_generate_version_id(self, index_config: IndexConfig) -> None:
         """Test version ID generation."""
@@ -533,19 +533,17 @@ class TestTriggerIndexSearcher:
             is_active=True,
         )
         mock_jarvis_db.get_active_index.return_value = mock_active_index
-        # Mock batch methods used by search_with_pairs
-        mock_jarvis_db.get_pairs_by_faiss_ids.return_value = {
-            i: sample_pairs[i] for i in range(len(sample_pairs))
-        }
-        mock_jarvis_db.get_embeddings_by_pair_ids.return_value = {
-            p.id: PairEmbedding(
-                pair_id=p.id, faiss_id=i, cluster_id=1, index_version="test-version"
-            )
-            for i, p in enumerate(sample_pairs)
-        }
-        mock_jarvis_db.get_clusters_batch.return_value = {
-            1: Cluster(id=1, name="DINNER", description="Dinner plans")
-        }
+        # Mock consolidated query method used by search_with_pairs
+        mock_jarvis_db.get_pairs_with_clusters_by_faiss_ids.return_value = [
+            {
+                "pair": sample_pairs[i],
+                "faiss_id": i,
+                "cluster_id": 1,
+                "cluster_name": "DINNER",
+                "cluster_description": "Dinner plans",
+            }
+            for i in range(2)  # Only first 2 pairs for k=2
+        ]
 
         (temp_jarvis_dir / "test.faiss").write_bytes(b"fake")
 
@@ -615,13 +613,23 @@ class TestTriggerIndexSearcher:
             is_active=True,
         )
         mock_jarvis_db.get_active_index.return_value = mock_active_index
-        # Mock batch methods used by search_with_pairs
-        mock_jarvis_db.get_pairs_by_faiss_ids.return_value = {
-            0: old_pair,
-            1: new_pair,
-        }
-        mock_jarvis_db.get_embeddings_by_pair_ids.return_value = {}
-        mock_jarvis_db.get_clusters_batch.return_value = {}
+        # Mock consolidated query method used by search_with_pairs
+        mock_jarvis_db.get_pairs_with_clusters_by_faiss_ids.return_value = [
+            {
+                "pair": old_pair,
+                "faiss_id": 0,
+                "cluster_id": None,
+                "cluster_name": None,
+                "cluster_description": None,
+            },
+            {
+                "pair": new_pair,
+                "faiss_id": 1,
+                "cluster_id": None,
+                "cluster_name": None,
+                "cluster_description": None,
+            },
+        ]
 
         (temp_jarvis_dir / "test.faiss").write_bytes(b"fake")
 

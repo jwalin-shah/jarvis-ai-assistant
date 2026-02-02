@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -47,16 +48,45 @@ INDEXES_DIR = JARVIS_DIR / "indexes" / "triggers"
 
 @dataclass
 class IndexConfig:
-    """Configuration for FAISS index building."""
+    """Configuration for FAISS index building.
+
+    Supports multiple index types with different memory/recall tradeoffs.
+    Benchmarks from docs/improvements.md Appendix A (148K real messages):
+
+    Index Types:
+        - "flat": IndexFlatIP brute force. 100% recall, ~217MB/148K.
+        - "ivf": IndexIVFFlat. 93% recall, same size as flat (clustering overhead).
+        - "ivfpq_4x": IVFPQ 384x8. 92% recall, 3.8x compression (~57MB/148K). DEFAULT.
+        - "ivfpq_8x": IVFPQ 192x8. 88% recall, 7.2x compression (~30MB/148K).
+
+    Why IVFPQ 4x is default:
+        - 4x vs 8x is only 74MB difference (~0.9% of 8GB) but gives 4% better recall
+        - Search time is NOT the bottleneck (all indexes <2ms, embedding ~100ms)
+        - Training is one-time cost (~10-20s)
+    """
 
     # Base directory for indexes
     indexes_dir: Path = INDEXES_DIR
 
-    # Batch size for encoding
-    batch_size: int = 32
+    # Batch size for encoding (optimized for Apple Silicon MLX)
+    batch_size: int = 256
 
     # Whether to normalize embeddings (required for cosine similarity via IP)
     normalize: bool = True
+
+    # Index type: "flat", "ivf", "ivfpq_4x", "ivfpq_8x"
+    # Default to ivfpq_4x for best memory/recall tradeoff
+    index_type: str = "ivfpq_4x"
+
+    # Minimum vectors before using compressed index (below this, use flat)
+    min_vectors_for_compression: int = 1000
+
+    # IVF Configuration
+    ivf_nlist: int | None = None  # Number of clusters. None = auto (sqrt(n))
+    ivf_nprobe: int = 128  # Number of clusters to search (higher = more accurate)
+
+    # PQ training ratio (fraction of vectors to train on, 1.0 = all)
+    pq_training_ratio: float = 1.0
 
 
 @dataclass
@@ -114,6 +144,141 @@ class TriggerIndexBuilder:
         model_dir = self._get_model_dir_name()
         return self.config.indexes_dir / model_dir / version_id / "index.faiss"
 
+    def _create_faiss_index(
+        self,
+        dimension: int,
+        num_vectors: int,
+        embeddings: np.ndarray,
+        progress_callback: Any | None = None,
+    ) -> Any:
+        """Create FAISS index based on configuration.
+
+        Supports multiple index types with different memory/recall tradeoffs:
+        - flat: Brute force, 100% recall, highest memory
+        - ivf: IVFFlat, 93% recall, no compression
+        - ivfpq_4x: IVFPQ 384x8, 92% recall, 3.8x compression (DEFAULT)
+        - ivfpq_8x: IVFPQ 192x8, 88% recall, 7.2x compression
+
+        Args:
+            dimension: Embedding dimension (e.g., 384 for bge-small).
+            num_vectors: Number of vectors to index.
+            embeddings: The embedding vectors for training (required for IVF/PQ).
+            progress_callback: Optional progress callback.
+
+        Returns:
+            Configured FAISS index ready for adding vectors.
+        """
+        import faiss
+
+        index_type = self.config.index_type
+
+        # For small datasets, always use flat index regardless of config
+        if num_vectors < self.config.min_vectors_for_compression:
+            index = faiss.IndexFlatIP(dimension)
+            logger.info(
+                "Created flat index for %d vectors (below compression threshold %d)",
+                num_vectors,
+                self.config.min_vectors_for_compression,
+            )
+            return index
+
+        # Calculate number of IVF clusters (used by all non-flat indexes)
+        # sqrt(n) is FAISS recommendation, bounded to ensure enough training data
+        nlist = self.config.ivf_nlist or int(np.sqrt(num_vectors))
+        nlist = max(1, min(nlist, num_vectors // 39))  # Need 39 vectors per cluster
+
+        if index_type == "flat":
+            index = faiss.IndexFlatIP(dimension)
+            logger.info("Created flat index for %d vectors (100%% recall)", num_vectors)
+
+        elif index_type == "ivf":
+            if progress_callback:
+                progress_callback("indexing", 0.65, f"Training IVF index ({nlist} clusters)...")
+
+            quantizer = faiss.IndexFlatIP(dimension)
+            index = faiss.IndexIVFFlat(quantizer, dimension, nlist, faiss.METRIC_INNER_PRODUCT)
+            index.train(embeddings)
+            index.nprobe = self.config.ivf_nprobe
+
+            logger.info(
+                "Created IVFFlat index: nlist=%d, nprobe=%d (~93%% recall)",
+                nlist,
+                index.nprobe,
+            )
+
+        elif index_type == "ivfpq_4x":
+            # IVFPQ with 384 sub-quantizers, 8 bits each = 4x compression
+            # For 384-dim vectors: M=48 (8 dims per sub-quantizer), nbits=8
+            # This gives 48 bytes per vector instead of 384*4=1536 bytes
+            if progress_callback:
+                progress_callback("indexing", 0.65, f"Training IVFPQ 4x ({nlist} clusters)...")
+
+            # M = number of sub-quantizers (must divide dimension evenly)
+            # For 384-dim: M=48 gives 8 dimensions per sub-quantizer
+            m = 48  # 384 / 48 = 8 dims per sub-quantizer
+            nbits = 8  # 8 bits per sub-quantizer = 256 centroids
+
+            quantizer = faiss.IndexFlatIP(dimension)
+            index = faiss.IndexIVFPQ(
+                quantizer, dimension, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT
+            )
+
+            # Train on subset if configured (faster training)
+            train_vectors = embeddings
+            if self.config.pq_training_ratio < 1.0:
+                train_size = max(nlist * 39, int(num_vectors * self.config.pq_training_ratio))
+                train_size = min(train_size, num_vectors)
+                indices = np.random.choice(num_vectors, train_size, replace=False)
+                train_vectors = embeddings[indices]
+
+            index.train(train_vectors)
+            index.nprobe = self.config.ivf_nprobe
+
+            logger.info(
+                "Created IVFPQ 4x: nlist=%d, M=%d, nprobe=%d (~92%% recall, 3.8x compression)",
+                nlist,
+                m,
+                index.nprobe,
+            )
+
+        elif index_type == "ivfpq_8x":
+            # IVFPQ with higher compression: M=24 gives 8x compression
+            # For 384-dim: M=24 gives 16 dimensions per sub-quantizer
+            if progress_callback:
+                progress_callback("indexing", 0.65, f"Training IVFPQ 8x ({nlist} clusters)...")
+
+            m = 24  # 384 / 24 = 16 dims per sub-quantizer
+            nbits = 8
+
+            quantizer = faiss.IndexFlatIP(dimension)
+            index = faiss.IndexIVFPQ(
+                quantizer, dimension, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT
+            )
+
+            train_vectors = embeddings
+            if self.config.pq_training_ratio < 1.0:
+                train_size = max(nlist * 39, int(num_vectors * self.config.pq_training_ratio))
+                train_size = min(train_size, num_vectors)
+                indices = np.random.choice(num_vectors, train_size, replace=False)
+                train_vectors = embeddings[indices]
+
+            index.train(train_vectors)
+            index.nprobe = self.config.ivf_nprobe
+
+            logger.info(
+                "Created IVFPQ 8x: nlist=%d, M=%d, nprobe=%d (~88%% recall, 7.2x compression)",
+                nlist,
+                m,
+                index.nprobe,
+            )
+
+        else:
+            # Unknown index type, fall back to flat
+            logger.warning("Unknown index type '%s', falling back to flat", index_type)
+            index = faiss.IndexFlatIP(dimension)
+
+        return index
+
     def build_index(
         self,
         pairs: list[Any],
@@ -163,8 +328,12 @@ class TriggerIndexBuilder:
         if progress_callback:
             progress_callback("indexing", 0.6, "Creating FAISS index...")
 
-        # Use IndexFlatIP (Inner Product) for cosine similarity with normalized vectors
-        index = faiss.IndexFlatIP(dimension)
+        num_vectors = len(embeddings)
+        index = self._create_faiss_index(
+            dimension, num_vectors, embeddings, progress_callback
+        )
+
+        # Add vectors to index
         index.add(embeddings)
 
         # Stage 4: Save index to disk
@@ -241,6 +410,10 @@ class TriggerIndexSearcher:
         self._index = None
         self._embedder = None
         self._active_version: str | None = None
+        # Version caching to avoid DB query on every index access
+        self._version_cache_time: float = 0.0
+        self._cached_active_version: str | None = None
+        self._version_cache_ttl: float = 5.0  # seconds
 
     @property
     def embedder(self) -> Any:
@@ -251,13 +424,46 @@ class TriggerIndexSearcher:
             self._embedder = get_embedder()
         return self._embedder
 
+    def _get_active_index_cached(self) -> Any:
+        """Get active index with TTL caching to avoid DB query on every access."""
+        now = time.monotonic()
+        if (
+            self._cached_active_version is not None
+            and now - self._version_cache_time < self._version_cache_ttl
+        ):
+            # Return cached - but we still need to return the index object
+            # If cache is valid, we know the version hasn't changed
+            return None  # Signal to use cached version
+
+        active_index = self.jarvis_db.get_active_index()
+        if active_index is not None:
+            self._cached_active_version = active_index.version_id
+            self._version_cache_time = now
+        return active_index
+
+    def invalidate_version_cache(self) -> None:
+        """Force re-check of active version on next access.
+
+        Call this after rebuilding the index to ensure the new version is loaded.
+        """
+        self._cached_active_version = None
+        self._version_cache_time = 0.0
+
     @property
     def index(self) -> Any:
         """Get or load the active FAISS index."""
         import faiss
 
-        # Check if we need to reload (new active version)
-        active_index = self.jarvis_db.get_active_index()
+        # Check if we need to reload (new active version) with TTL caching
+        active_index = self._get_active_index_cached()
+
+        # If cache hit (returned None), check if we already have an index loaded
+        if active_index is None:
+            if self._index is not None:
+                return self._index
+            # Cache says version is same but no index loaded - need to fetch
+            active_index = self.jarvis_db.get_active_index()
+
         if active_index is None:
             raise FileNotFoundError("No active FAISS index. Run 'jarvis db build-index' first.")
 
@@ -342,28 +548,27 @@ class TriggerIndexSearcher:
         if not matches:
             return []
 
-        # Batch fetch all data in 3 queries instead of 3*k queries
+        # Consolidated single query: fetch pairs, embeddings, and clusters together
+        # Replaces 3 sequential queries with 1 JOIN query for better performance
         faiss_ids = [faiss_id for faiss_id, _ in matches]
+        combined_data = self.jarvis_db.get_pairs_with_clusters_by_faiss_ids(
+            faiss_ids, active_index.version_id, limit=k * 3  # Safety limit
+        )
 
-        # Query 1: Get all pairs by FAISS IDs
-        pairs_by_faiss = self.jarvis_db.get_pairs_by_faiss_ids(faiss_ids, active_index.version_id)
-        if not pairs_by_faiss:
+        if not combined_data:
             return []
 
-        # Query 2: Get all embeddings for found pairs
-        pair_ids = [p.id for p in pairs_by_faiss.values()]
-        embeddings_by_pair = self.jarvis_db.get_embeddings_by_pair_ids(pair_ids)
-
-        # Query 3: Get all clusters for embeddings that have cluster_id
-        cluster_ids = [e.cluster_id for e in embeddings_by_pair.values() if e.cluster_id]
-        clusters_by_id = self.jarvis_db.get_clusters_batch(cluster_ids) if cluster_ids else {}
+        # Index by faiss_id for quick lookup
+        data_by_faiss = {item["faiss_id"]: item for item in combined_data}
 
         # Build results using pre-fetched data
         results = []
         for faiss_id, score in matches:
-            pair = pairs_by_faiss.get(faiss_id)
-            if not pair:
+            item = data_by_faiss.get(faiss_id)
+            if not item:
                 continue
+
+            pair = item["pair"]
 
             # Apply freshness weighting if requested
             final_score = score
@@ -372,13 +577,6 @@ class TriggerIndexSearcher:
                 age_days = (datetime.now() - pair.source_timestamp).days
                 decay = max(0.5, 1.0 - (age_days / 365) * 0.1)
                 final_score = score * decay
-
-            embedding = embeddings_by_pair.get(pair.id)
-            cluster = (
-                clusters_by_id.get(embedding.cluster_id)
-                if embedding and embedding.cluster_id
-                else None
-            )
 
             results.append(
                 {
@@ -393,8 +591,8 @@ class TriggerIndexSearcher:
                     "quality_score": pair.quality_score,
                     "response_da_type": pair.response_da_type,
                     "response_da_conf": pair.response_da_conf,
-                    "cluster_id": embedding.cluster_id if embedding else None,
-                    "cluster_name": cluster.name if cluster else None,
+                    "cluster_id": item["cluster_id"],
+                    "cluster_name": item["cluster_name"],
                 }
             )
 
@@ -412,12 +610,18 @@ class IncrementalIndexConfig:
         compact_threshold: Rebuild index when deleted ratio exceeds this (0.0-1.0).
         auto_save: Automatically save after modifications.
         normalize: Normalize embeddings for cosine similarity.
+        index_type: FAISS index type for compact operations ("flat", "ivf", "ivfpq_4x", "ivfpq_8x").
+        min_vectors_for_compression: Minimum vectors before using compressed index.
+        ivf_nprobe: Number of clusters to search during queries.
     """
 
     indexes_dir: Path = field(default_factory=lambda: INDEXES_DIR)
     compact_threshold: float = 0.2  # Rebuild when 20% deleted
     auto_save: bool = True
     normalize: bool = True
+    index_type: str = "ivfpq_4x"  # Default to 4x compression
+    min_vectors_for_compression: int = 1000
+    ivf_nprobe: int = 128
 
 
 @dataclass
@@ -911,6 +1115,99 @@ class IncrementalTriggerIndex:
                 last_modified=self._last_modified,
             )
 
+    def _create_index_for_compact(
+        self,
+        dimension: int,
+        num_vectors: int,
+        embeddings: np.ndarray,
+        progress_callback: Any | None = None,
+    ) -> Any:
+        """Create FAISS index for compact operation based on configuration.
+
+        Args:
+            dimension: Embedding dimension.
+            num_vectors: Number of vectors to index.
+            embeddings: Embedding vectors for training.
+            progress_callback: Optional progress callback.
+
+        Returns:
+            Configured FAISS index (without vectors added yet).
+        """
+        import faiss
+
+        index_type = self.config.index_type
+
+        # For small datasets, use flat index
+        if num_vectors < self.config.min_vectors_for_compression:
+            logger.info(
+                "Created flat index for compact (%d vectors < %d threshold)",
+                num_vectors,
+                self.config.min_vectors_for_compression,
+            )
+            return faiss.IndexFlatIP(dimension)
+
+        # Calculate IVF clusters
+        nlist = int(np.sqrt(num_vectors))
+        nlist = max(1, min(nlist, num_vectors // 39))
+
+        if index_type == "flat":
+            return faiss.IndexFlatIP(dimension)
+
+        elif index_type == "ivf":
+            if progress_callback:
+                progress_callback("rebuilding", 0.65, f"Training IVF index ({nlist} clusters)...")
+
+            quantizer = faiss.IndexFlatIP(dimension)
+            index = faiss.IndexIVFFlat(quantizer, dimension, nlist, faiss.METRIC_INNER_PRODUCT)
+            index.train(embeddings)
+            index.nprobe = self.config.ivf_nprobe
+            logger.info("Created IVFFlat index during compact: nlist=%d", nlist)
+            return index
+
+        elif index_type == "ivfpq_4x":
+            if progress_callback:
+                progress_callback("rebuilding", 0.65, f"Training IVFPQ 4x ({nlist} clusters)...")
+
+            m = 48  # 384 / 48 = 8 dims per sub-quantizer
+            nbits = 8
+
+            quantizer = faiss.IndexFlatIP(dimension)
+            index = faiss.IndexIVFPQ(
+                quantizer, dimension, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT
+            )
+            index.train(embeddings)
+            index.nprobe = self.config.ivf_nprobe
+            logger.info(
+                "Created IVFPQ 4x index during compact: nlist=%d, M=%d (~92%% recall)",
+                nlist,
+                m,
+            )
+            return index
+
+        elif index_type == "ivfpq_8x":
+            if progress_callback:
+                progress_callback("rebuilding", 0.65, f"Training IVFPQ 8x ({nlist} clusters)...")
+
+            m = 24  # 384 / 24 = 16 dims per sub-quantizer
+            nbits = 8
+
+            quantizer = faiss.IndexFlatIP(dimension)
+            index = faiss.IndexIVFPQ(
+                quantizer, dimension, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT
+            )
+            index.train(embeddings)
+            index.nprobe = self.config.ivf_nprobe
+            logger.info(
+                "Created IVFPQ 8x index during compact: nlist=%d, M=%d (~88%% recall)",
+                nlist,
+                m,
+            )
+            return index
+
+        else:
+            logger.warning("Unknown index type '%s', using flat", index_type)
+            return faiss.IndexFlatIP(dimension)
+
     def compact(
         self,
         progress_callback: Any | None = None,
@@ -927,8 +1224,6 @@ class IncrementalTriggerIndex:
         Returns:
             IncrementalIndexStats after compaction.
         """
-        import faiss
-
         self._ensure_loaded()
 
         with self._lock:
@@ -955,17 +1250,49 @@ class IncrementalTriggerIndex:
             if progress_callback:
                 progress_callback("encoding", 0.3, f"Re-encoding {len(active_pairs)} triggers...")
 
-            # Re-encode all active triggers
+            # Re-encode triggers in batches to avoid memory issues with large indices
+            # Batch size of 1000 balances memory usage vs encoding efficiency
+            batch_size = 1000
             triggers = [p.trigger_text for p in active_pairs]
-            embeddings = self.embedder.encode(triggers, normalize=self.config.normalize)
-            embeddings = embeddings.astype(np.float32)
-            dimension = embeddings.shape[1]
+            all_embeddings = []
+            dimension = None
+
+            for batch_start in range(0, len(triggers), batch_size):
+                batch_end = min(batch_start + batch_size, len(triggers))
+                batch_triggers = triggers[batch_start:batch_end]
+
+                batch_embeddings = self.embedder.encode(
+                    batch_triggers, normalize=self.config.normalize
+                )
+                batch_embeddings = batch_embeddings.astype(np.float32)
+
+                if dimension is None:
+                    dimension = batch_embeddings.shape[1]
+
+                all_embeddings.append(batch_embeddings)
+
+                # Update progress for encoding phase (0.3 to 0.6)
+                if progress_callback:
+                    encoding_progress = 0.3 + (0.3 * batch_end / len(triggers))
+                    progress_callback(
+                        "encoding",
+                        encoding_progress,
+                        f"Re-encoding triggers... ({batch_end}/{len(triggers)})",
+                    )
+
+            # Concatenate all batches
+            embeddings = np.vstack(all_embeddings) if len(all_embeddings) > 1 else all_embeddings[0]
 
             if progress_callback:
                 progress_callback("rebuilding", 0.6, "Rebuilding FAISS index...")
 
-            # Create new index
-            new_index = faiss.IndexFlatIP(dimension)
+            num_vectors = len(embeddings)
+
+            # Create index using configured type
+            new_index = self._create_index_for_compact(
+                dimension, num_vectors, embeddings, progress_callback
+            )
+
             new_index.add(embeddings)
 
             # Update version and mappings
@@ -1054,6 +1381,24 @@ _incremental_index: IncrementalTriggerIndex | None = None
 _incremental_index_lock = threading.Lock()
 
 
+def _get_incremental_config_from_jarvis_config() -> IncrementalIndexConfig:
+    """Create IncrementalIndexConfig from JarvisConfig settings.
+
+    Returns:
+        IncrementalIndexConfig with settings from JarvisConfig.
+    """
+    from jarvis.config import get_config
+
+    jarvis_config = get_config()
+    faiss_config = jarvis_config.faiss_index
+
+    return IncrementalIndexConfig(
+        index_type=faiss_config.index_type,
+        min_vectors_for_compression=faiss_config.min_vectors_for_compression,
+        ivf_nprobe=faiss_config.ivf_nprobe,
+    )
+
+
 def get_incremental_index(jarvis_db: Any) -> IncrementalTriggerIndex:
     """Get or create singleton incremental index.
 
@@ -1067,7 +1412,8 @@ def get_incremental_index(jarvis_db: Any) -> IncrementalTriggerIndex:
     if _incremental_index is None:
         with _incremental_index_lock:
             if _incremental_index is None:
-                _incremental_index = IncrementalTriggerIndex(jarvis_db)
+                config = _get_incremental_config_from_jarvis_config()
+                _incremental_index = IncrementalTriggerIndex(jarvis_db, config)
     return _incremental_index
 
 
@@ -1081,6 +1427,28 @@ def reset_incremental_index() -> None:
         _incremental_index = None
 
 
+def _get_index_config_from_jarvis_config() -> IndexConfig:
+    """Create IndexConfig from JarvisConfig settings.
+
+    Reads the FAISS index configuration from the centralized JarvisConfig
+    and creates an IndexConfig with those settings.
+
+    Returns:
+        IndexConfig with settings from JarvisConfig.
+    """
+    from jarvis.config import get_config
+
+    jarvis_config = get_config()
+    faiss_config = jarvis_config.faiss_index
+
+    return IndexConfig(
+        index_type=faiss_config.index_type,
+        min_vectors_for_compression=faiss_config.min_vectors_for_compression,
+        ivf_nprobe=faiss_config.ivf_nprobe,
+        pq_training_ratio=faiss_config.pq_training_ratio,
+    )
+
+
 def build_index_from_db(
     jarvis_db: Any,
     config: IndexConfig | None = None,
@@ -1092,7 +1460,7 @@ def build_index_from_db(
 
     Args:
         jarvis_db: JarvisDB instance.
-        config: Index configuration.
+        config: Index configuration. If None, loads from JarvisConfig.
         progress_callback: Optional progress callback.
         min_quality: Minimum quality score for pairs to include.
         include_holdout: If False (default), exclude holdout pairs from index.
@@ -1114,6 +1482,10 @@ def build_index_from_db(
             "pairs_indexed": 0,
         }
 
+    # Use config from JarvisConfig if not explicitly provided
+    if config is None:
+        config = _get_index_config_from_jarvis_config()
+
     # Build index
     builder = TriggerIndexBuilder(config)
     stats = builder.build_index(pairs, jarvis_db, progress_callback)
@@ -1126,7 +1498,35 @@ def build_index_from_db(
         "version_id": stats.version_id,
         "index_path": stats.index_path,
         "model_name": builder._get_model_name(),
+        "index_type": config.index_type,
     }
+
+
+def _detect_index_type(index: Any) -> str:
+    """Detect the type of a FAISS index.
+
+    Args:
+        index: A FAISS index object.
+
+    Returns:
+        String describing the index type.
+    """
+    # Check for IVFPQ first (most specific)
+    if hasattr(index, "pq") and hasattr(index, "nlist"):
+        m = index.pq.M if hasattr(index.pq, "M") else 0
+        if m == 48:
+            return "ivfpq_4x"
+        elif m == 24:
+            return "ivfpq_8x"
+        else:
+            return f"ivfpq_custom (M={m})"
+
+    # Check for IVFFlat
+    if hasattr(index, "nlist") and not hasattr(index, "pq"):
+        return "ivf"
+
+    # Default to flat
+    return "flat"
 
 
 def get_index_stats(jarvis_db: Any = None) -> dict[str, Any] | None:
@@ -1138,12 +1538,12 @@ def get_index_stats(jarvis_db: Any = None) -> dict[str, Any] | None:
     Returns:
         Statistics dict or None if no active index.
     """
+    import faiss
+
     if jarvis_db is None:
         # Legacy path check
         legacy_path = JARVIS_DIR / "triggers.index"
         if legacy_path.exists():
-            import faiss
-
             index = faiss.read_index(str(legacy_path))
             return {
                 "exists": True,
@@ -1153,6 +1553,7 @@ def get_index_stats(jarvis_db: Any = None) -> dict[str, Any] | None:
                 "dimension": index.d,
                 "is_trained": index.is_trained,
                 "version_id": "legacy",
+                "index_type": _detect_index_type(index),
             }
         return None
 
@@ -1169,16 +1570,33 @@ def get_index_stats(jarvis_db: Any = None) -> dict[str, Any] | None:
             "error": f"Index file missing: {index_path}",
         }
 
+    actual_size = index_path.stat().st_size
+
+    # Try to load index to detect type and calculate compression
+    index_type = "unknown"
+    compression_ratio = 1.0
+    try:
+        index = faiss.read_index(str(index_path))
+        index_type = _detect_index_type(index)
+
+        # Calculate compression ratio
+        raw_size = active_index.num_vectors * active_index.embedding_dim * 4  # float32
+        compression_ratio = raw_size / actual_size if actual_size > 0 else 1.0
+    except (RuntimeError, OSError) as e:
+        logger.debug("Could not read index to detect type: %s", e)
+
     return {
         "exists": True,
         "path": str(index_path),
-        "size_bytes": index_path.stat().st_size,
+        "size_bytes": actual_size,
         "num_vectors": active_index.num_vectors,
         "dimension": active_index.embedding_dim,
         "model_name": active_index.model_name,
         "version_id": active_index.version_id,
         "is_active": active_index.is_active,
         "created_at": active_index.created_at,
+        "index_type": index_type,
+        "compression_ratio": round(compression_ratio, 2),
     }
 
 

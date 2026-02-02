@@ -12,16 +12,16 @@ behavior but are allowed to fail if the model outputs differ.
 import pytest
 
 from jarvis.intent import (
-    INTENT_EXAMPLES,
     IntentClassifier,
     IntentResult,
     IntentType,
     get_intent_classifier,
+    get_intent_examples,
     reset_intent_classifier,
 )
 
-# Import the marker for tests that require sentence_transformers
-from tests.conftest import requires_sentence_transformers
+# Import markers for tests that require real embeddings
+from tests.conftest import requires_real_embeddings
 
 # Marker for tests that depend on specific model outputs (may vary)
 model_dependent = pytest.mark.xfail(
@@ -30,7 +30,7 @@ model_dependent = pytest.mark.xfail(
 )
 
 
-@requires_sentence_transformers
+@requires_real_embeddings
 class TestIntentClassifier:
     """Tests for IntentClassifier class.
 
@@ -265,7 +265,7 @@ class TestIntentClassifier:
         assert result.intent == IntentType.SEARCH
 
 
-@requires_sentence_transformers
+@requires_real_embeddings
 class TestParameterExtraction:
     """Tests for parameter extraction from queries.
 
@@ -402,25 +402,28 @@ class TestIntentType:
 
 
 class TestIntentExamples:
-    """Tests for INTENT_EXAMPLES data.
+    """Tests for intent examples data (lazy-loaded via get_intent_examples).
 
     These tests do NOT require sentence_transformers.
     """
 
     def test_all_intents_have_examples(self) -> None:
         """Test that all intent types have example phrases."""
+        intent_examples = get_intent_examples()
         for intent_type in IntentType:
-            assert intent_type in INTENT_EXAMPLES
-            assert len(INTENT_EXAMPLES[intent_type]) > 0
+            assert intent_type in intent_examples
+            assert len(intent_examples[intent_type]) > 0
 
     def test_minimum_examples_per_intent(self) -> None:
         """Test that each intent has at least 10 examples for good coverage."""
-        for intent_type, examples in INTENT_EXAMPLES.items():
+        intent_examples = get_intent_examples()
+        for intent_type, examples in intent_examples.items():
             assert len(examples) >= 10, f"{intent_type.value} has only {len(examples)} examples"
 
     def test_no_duplicate_examples(self) -> None:
         """Test that there are no duplicate examples within an intent."""
-        for intent_type, examples in INTENT_EXAMPLES.items():
+        intent_examples = get_intent_examples()
+        for intent_type, examples in intent_examples.items():
             unique_examples = set(examples)
             assert len(unique_examples) == len(examples), (
                 f"{intent_type.value} has duplicate examples"
@@ -488,13 +491,19 @@ class TestClassifierBasics:
         assert isinstance(result.confidence, float)
 
     def test_confidence_threshold_value(self, classifier: IntentClassifier) -> None:
-        """Test default confidence threshold."""
-        assert classifier.CONFIDENCE_THRESHOLD == 0.6
+        """Test default confidence threshold from centralized config."""
+        from jarvis.config import get_config
+
+        thresholds = get_config().classifier_thresholds
+        assert thresholds.intent_confidence == 0.6
 
     def test_quick_reply_threshold_value(self, classifier: IntentClassifier) -> None:
-        """Test quick reply threshold is higher."""
-        assert classifier.QUICK_REPLY_THRESHOLD == 0.8
-        assert classifier.QUICK_REPLY_THRESHOLD > classifier.CONFIDENCE_THRESHOLD
+        """Test quick reply threshold is higher (from centralized config)."""
+        from jarvis.config import get_config
+
+        thresholds = get_config().classifier_thresholds
+        assert thresholds.intent_quick_reply == 0.8
+        assert thresholds.intent_quick_reply > thresholds.intent_confidence
 
     def test_clear_cache_no_crash(self, classifier: IntentClassifier) -> None:
         """Test that clear_cache doesn't crash on uninitialized classifier."""
@@ -504,7 +513,7 @@ class TestClassifierBasics:
         assert classifier._intent_embeddings is None
 
 
-@requires_sentence_transformers
+@requires_real_embeddings
 class TestClearCache:
     """Tests for cache clearing functionality.
 
@@ -543,7 +552,7 @@ class TestClearCache:
         assert result2.intent == IntentType.REPLY
 
 
-@requires_sentence_transformers
+@requires_real_embeddings
 class TestConfidenceThresholds:
     """Tests for confidence threshold behavior.
 
@@ -563,7 +572,7 @@ class TestConfidenceThresholds:
         assert result.intent == IntentType.GENERAL or result.confidence < 0.6
 
 
-@requires_sentence_transformers
+@requires_real_embeddings
 class TestRobustness:
     """Tests for classifier robustness.
 

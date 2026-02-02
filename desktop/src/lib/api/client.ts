@@ -79,7 +79,7 @@ import type {
   VariantConfig,
 } from "./types";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8742";
 
 /**
  * Custom API error with additional details
@@ -136,8 +136,9 @@ class ApiClient {
     return this.request<HealthResponse>("/health");
   }
 
-  async ping(): Promise<{ status: string; service: string }> {
-    return this.request<{ status: string; service: string }>("/");
+  async ping(): Promise<{ status: string }> {
+    const health = await this.request<HealthResponse>("/health");
+    return { status: health.status };
   }
 
   // Conversation endpoints

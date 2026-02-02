@@ -29,9 +29,11 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -638,6 +640,18 @@ class ReplyRouter:
         latency_ms: dict[str, float] = {}
         cached_embedder = CachedEmbedder(get_embedder())
 
+        # Session-level embedding: compute once at start and reuse for all downstream operations
+        # This avoids recomputing the same embedding in classifiers and FAISS search
+        # The CachedEmbedder will cache this result for subsequent encode() calls
+        if incoming and incoming.strip():
+            embed_start = time.perf_counter()
+            cached_embedder.encode(incoming)  # Warm the cache
+            latency_ms["embedding_precompute"] = (time.perf_counter() - embed_start) * 1000
+
+        # Verbose logging for debugging
+        logger.info("=" * 60)
+        logger.info("ROUTE START | input: %s", incoming[:80] if incoming else "(empty)")
+
         def record_and_return(
             result: dict[str, Any],
             similarity_score: float,
@@ -658,6 +672,12 @@ class ReplyRouter:
                 faiss_candidates=faiss_candidates,
                 model_loaded=model_loaded,
             )
+            # Verbose logging for debugging
+            logger.info("ROUTE END | decision=%s sim=%.3f latency=%s",
+                       routing_decision, similarity_score,
+                       {k: f"{v:.1f}ms" for k, v in latency_ms.items()})
+            logger.info("ROUTE OUTPUT | %s", result.get("response", "")[:100])
+            logger.info("=" * 60)
             return result
 
         if not incoming or not incoming.strip():
@@ -674,40 +694,65 @@ class ReplyRouter:
         elif chat_id:
             contact = self.db.get_contact_by_chat_id(chat_id)
 
-        # Step 1: Classify message type using the new MessageClassifier
-        try:
-            msg_start = time.perf_counter()
-            msg_classification = self.message_classifier.classify(
-                incoming,
-                embedder=cached_embedder,
-            )
-            latency_ms["message_classify"] = (time.perf_counter() - msg_start) * 1000
-            logger.debug(
-                "Message classified as %s (confidence: %.3f, method: %s)",
-                msg_classification.message_type.value,
-                msg_classification.type_confidence,
-                msg_classification.classification_method,
-            )
-        except Exception as e:
-            logger.warning("Message classification failed: %s", e)
-            msg_classification = None
+        # Step 1 & 2: Classify message type and intent IN PARALLEL
+        # These classifiers are independent and can run concurrently
+        msg_classification = None
+        intent_result = None
+        classify_start = time.perf_counter()
 
-        # Step 2: Classify intent (for routing decisions)
-        try:
-            intent_start = time.perf_counter()
-            intent_result = self.intent_classifier.classify(
+        def classify_message() -> tuple[Any, float]:
+            """Run message classification."""
+            start = time.perf_counter()
+            # Note: CachedEmbedder already has the embedding cached from precomputation
+            result = self.message_classifier.classify(
                 incoming,
                 embedder=cached_embedder,
             )
-            latency_ms["intent_classify"] = (time.perf_counter() - intent_start) * 1000
-            logger.debug(
-                "Intent classified as %s (confidence: %.3f)",
-                intent_result.intent.value,
-                intent_result.confidence,
+            return result, (time.perf_counter() - start) * 1000
+
+        def classify_intent() -> tuple[Any, float]:
+            """Run intent classification."""
+            start = time.perf_counter()
+            # Note: CachedEmbedder already has the embedding cached from precomputation
+            result = self.intent_classifier.classify(
+                incoming,
+                embedder=cached_embedder,
             )
-        except Exception as e:
-            logger.warning("Intent classification failed: %s", e)
-            intent_result = None
+            return result, (time.perf_counter() - start) * 1000
+
+        # Run classifiers in parallel using ThreadPoolExecutor
+        # Scale workers based on CPU count for better multi-core utilization
+        with ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 2)) as executor:
+            msg_future = executor.submit(classify_message)
+            intent_future = executor.submit(classify_intent)
+
+            # Collect results
+            try:
+                msg_classification, msg_latency = msg_future.result()
+                latency_ms["message_classify"] = msg_latency
+                logger.debug(
+                    "Message classified as %s (confidence: %.3f, method: %s)",
+                    msg_classification.message_type.value,
+                    msg_classification.type_confidence,
+                    msg_classification.classification_method,
+                )
+            except Exception as e:
+                logger.warning("Message classification failed: %s", e)
+                msg_classification = None
+
+            try:
+                intent_result, intent_latency = intent_future.result()
+                latency_ms["intent_classify"] = intent_latency
+                logger.debug(
+                    "Intent classified as %s (confidence: %.3f)",
+                    intent_result.intent.value,
+                    intent_result.confidence,
+                )
+            except Exception as e:
+                logger.warning("Intent classification failed: %s", e)
+                intent_result = None
+
+        latency_ms["classify_parallel"] = (time.perf_counter() - classify_start) * 1000
 
         # Step 3: Handle acknowledgments and reactions directly (no FAISS search needed)
         if msg_classification:
@@ -792,6 +837,7 @@ class ReplyRouter:
         generate_threshold = thresholds["generate"]
 
         # Step 5: Search FAISS index for similar triggers
+        # Note: CachedEmbedder already has the embedding cached from precomputation
         try:
             search_start = time.perf_counter()
             search_results = self.index_searcher.search_with_pairs(
@@ -1046,22 +1092,21 @@ class ReplyRouter:
 
         # Multiple coherent matches: pick randomly from top responses for variety
         top_matches = scored_matches[:MAX_QUICK_REPLIES]
-        candidate_responses = [m["response_text"] for m, _ in top_matches]
 
-        # Deduplicate similar responses (exact matches)
-        unique_responses = list(dict.fromkeys(candidate_responses))
+        # Build response -> (match, coherence) lookup dict for O(1) access
+        # Keep first occurrence (highest coherence) for each unique response
+        response_to_match: dict[str, tuple[dict[str, Any], float]] = {}
+        for m, c in top_matches:
+            resp_text = m["response_text"]
+            if resp_text not in response_to_match:
+                response_to_match[resp_text] = (m, c)
 
         # Pick randomly from unique responses
+        unique_responses = list(response_to_match.keys())
         selected_response = random.choice(unique_responses)
 
-        # Find which match provided the selected response (for metadata)
-        selected_match = scored_matches[0][0]  # Default to best
-        selected_coherence = scored_matches[0][1]
-        for m, c in scored_matches:
-            if m["response_text"] == selected_response:
-                selected_match = m
-                selected_coherence = c
-                break
+        # O(1) lookup for selected match metadata
+        selected_match, selected_coherence = response_to_match[selected_response]
 
         return {
             "type": "quick_reply",

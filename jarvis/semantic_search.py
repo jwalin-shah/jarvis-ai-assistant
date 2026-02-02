@@ -102,6 +102,9 @@ class EmbeddingCache:
                 timeout=10.0,
             )
             self._conn.row_factory = sqlite3.Row
+            # Enable WAL mode for better concurrent read/write performance
+            self._conn.execute("PRAGMA journal_mode = WAL")
+            self._conn.execute("PRAGMA synchronous = NORMAL")
             self._init_schema()
         return self._conn
 
@@ -533,27 +536,47 @@ class SemanticSearcher:
         if query_norm == 0:
             return []
 
-        # Compute similarities
-        results: list[SemanticSearchResult] = []
+        # Vectorized similarity computation: single matrix operation instead of per-message loop
+        # Build arrays for all messages with embeddings
+        valid_messages = []
+        valid_embeddings = []
         for msg in messages:
-            if msg.id not in embeddings:
-                continue
+            if msg.id in embeddings:
+                emb = embeddings[msg.id]
+                norm = np.linalg.norm(emb)
+                if norm > 0:
+                    valid_messages.append(msg)
+                    valid_embeddings.append(emb / norm)  # Pre-normalize
 
-            msg_embedding = embeddings[msg.id]
-            msg_norm = np.linalg.norm(msg_embedding)
-            if msg_norm == 0:
-                continue
+        if not valid_messages:
+            return []
 
-            # Cosine similarity
-            similarity = float(np.dot(query_embedding, msg_embedding) / (query_norm * msg_norm))
+        # Stack embeddings into matrix (n_messages, embedding_dim)
+        embedding_matrix = np.vstack(valid_embeddings).astype(np.float32)
 
-            if similarity >= self.similarity_threshold:
-                results.append(SemanticSearchResult(message=msg, similarity=similarity))
+        # Compute all similarities in one vectorized operation
+        # query_embedding is already normalized above, so just dot product
+        similarities = np.dot(embedding_matrix, query_embedding / query_norm)
 
-        # Sort by similarity (highest first)
-        results.sort(key=lambda r: r.similarity, reverse=True)
+        # Filter by threshold and build results
+        mask = similarities >= self.similarity_threshold
+        if not np.any(mask):
+            return []
 
-        return results[:limit]
+        # Get indices sorted by similarity (descending)
+        valid_indices = np.where(mask)[0]
+        sorted_indices = valid_indices[np.argsort(similarities[valid_indices])[::-1]]
+
+        # Build results from top matches
+        results = [
+            SemanticSearchResult(
+                message=valid_messages[i],
+                similarity=float(similarities[i]),
+            )
+            for i in sorted_indices[:limit]
+        ]
+
+        return results
 
     def search_similar_to_message(
         self,
