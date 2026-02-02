@@ -79,6 +79,10 @@ jarvis health
 
 ## Commands
 
+> **Note:** The CLI currently supports these commands: `health`, `benchmark`, `version`, `serve`, and `db`.
+> The `chat`, `search-messages`, `reply`, `summarize`, `export`, and `mcp-serve` commands documented below
+> are planned features available through the REST API (`jarvis serve`) or desktop application, not the CLI directly.
+
 ### Global Options
 
 These options apply to all commands:
@@ -496,9 +500,11 @@ jarvis serve --host 0.0.0.0 --port 8080
 
 **API Endpoints:**
 Once running, the API provides endpoints at `http://localhost:8000`:
-- `GET /health` - Health check
+- `GET /health` - System health status
 - `POST /chat` - Send chat messages
-- `GET /messages/search` - Search messages
+- `GET /search` - Search iMessages with filters
+- `GET /conversations` - List recent conversations
+- `GET /messages/{conversation_id}` - Get messages from a conversation
 - `GET /docs` - Interactive API documentation (Swagger UI)
 
 ### `mcp-serve` - Start MCP Server
@@ -614,7 +620,7 @@ JARVIS stores configuration in `~/.jarvis/config.json`. The setup wizard creates
     "show_typing_indicator": true
   },
   "routing": {
-    "template_threshold": 0.9,
+    "quick_reply_threshold": 0.9,
     "context_threshold": 0.7,
     "generate_threshold": 0.5,
     "ab_test_group": "control",
@@ -666,7 +672,7 @@ JARVIS stores configuration in `~/.jarvis/config.json`. The setup wizard creates
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `routing.template_threshold` | Template decision threshold (0-1) | `0.90` |
+| `routing.quick_reply_threshold` | Quick reply decision threshold (0-1) | `0.90` |
 | `routing.context_threshold` | Context threshold (0-1) | `0.70` |
 | `routing.generate_threshold` | Generation threshold (0-1) | `0.50` |
 | `routing.ab_test_group` | A/B group name | `control` |
