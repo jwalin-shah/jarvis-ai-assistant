@@ -29,7 +29,7 @@ APPLE_EPOCH_OFFSET = 978307200
 
 # Check if watchfiles is available
 try:
-    from watchfiles import awatch, Change
+    from watchfiles import Change, awatch
 
     WATCHFILES_AVAILABLE = True
 except ImportError:
@@ -93,14 +93,10 @@ class ChatDBWatcher:
             self._last_mtime = CHAT_DB_PATH.stat().st_mtime
 
         if self._use_fsevents:
-            logger.info(
-                f"Started watching chat.db with FSEvents (last ROWID: {self._last_rowid})"
-            )
+            logger.info(f"Started watching chat.db with FSEvents (last ROWID: {self._last_rowid})")
             self._task = asyncio.create_task(self._watch_fsevents())
         else:
-            logger.info(
-                f"Started watching chat.db with polling (last ROWID: {self._last_rowid})"
-            )
+            logger.info(f"Started watching chat.db with polling (last ROWID: {self._last_rowid})")
             self._task = asyncio.create_task(self._watch_polling())
 
     async def stop(self) -> None:

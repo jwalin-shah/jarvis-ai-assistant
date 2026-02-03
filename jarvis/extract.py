@@ -979,22 +979,22 @@ def extract_all_pairs(
                 aggregate_stats["turns_identified"] += stats.turns_identified
                 aggregate_stats["candidate_pairs"] += stats.candidate_pairs
                 aggregate_stats["dropped_by_reason"]["short_trigger"] += stats.dropped_short_trigger
-                aggregate_stats["dropped_by_reason"][
-                    "short_response"
-                ] += stats.dropped_short_response
+                aggregate_stats["dropped_by_reason"]["short_response"] += (
+                    stats.dropped_short_response
+                )
                 aggregate_stats["dropped_by_reason"]["long_trigger"] += stats.dropped_long_trigger
                 aggregate_stats["dropped_by_reason"]["long_response"] += stats.dropped_long_response
                 aggregate_stats["dropped_by_reason"]["no_text"] += stats.dropped_no_text
                 aggregate_stats["dropped_by_reason"]["time_gap"] += stats.dropped_time_gap
                 # Track quality flags
                 aggregate_stats["flagged_by_reason"]["reaction"] += stats.flagged_reaction
-                aggregate_stats["flagged_by_reason"][
-                    "low_similarity"
-                ] += stats.flagged_low_similarity
+                aggregate_stats["flagged_by_reason"]["low_similarity"] += (
+                    stats.flagged_low_similarity
+                )
                 aggregate_stats["flagged_by_reason"]["topic_shift"] += stats.flagged_topic_shift
-                aggregate_stats["flagged_by_reason"][
-                    "ack_substantive"
-                ] += stats.flagged_ack_substantive
+                aggregate_stats["flagged_by_reason"]["ack_substantive"] += (
+                    stats.flagged_ack_substantive
+                )
 
                 # Convert and add to database
                 pair_dicts = [

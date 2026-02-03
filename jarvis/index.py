@@ -328,9 +328,7 @@ class TriggerIndexBuilder:
             progress_callback("indexing", 0.6, "Creating FAISS index...")
 
         num_vectors = len(embeddings)
-        index = self._create_faiss_index(
-            dimension, num_vectors, embeddings, progress_callback
-        )
+        index = self._create_faiss_index(dimension, num_vectors, embeddings, progress_callback)
 
         # Add vectors to index
         index.add(embeddings)
@@ -551,7 +549,9 @@ class TriggerIndexSearcher:
         # Replaces 3 sequential queries with 1 JOIN query for better performance
         faiss_ids = [faiss_id for faiss_id, _ in matches]
         combined_data = self.jarvis_db.get_pairs_with_clusters_by_faiss_ids(
-            faiss_ids, active_index.version_id, limit=k * 3  # Safety limit
+            faiss_ids,
+            active_index.version_id,
+            limit=k * 3,  # Safety limit
         )
 
         if not combined_data:

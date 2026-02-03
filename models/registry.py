@@ -388,8 +388,7 @@ def ensure_model_available(
 
         except RepositoryNotFoundError:
             logger.error(
-                "Model not found: '%s' does not exist on HuggingFace Hub. "
-                "Check the model path: %s",
+                "Model not found: '%s' does not exist on HuggingFace Hub. Check the model path: %s",
                 model_id,
                 spec.path,
             )
@@ -452,8 +451,7 @@ def ensure_model_available(
             else:
                 # Disk/permission errors - don't retry
                 logger.error(
-                    "Filesystem error downloading model %s: %s. "
-                    "Check disk space and permissions.",
+                    "Filesystem error downloading model %s: %s. Check disk space and permissions.",
                     model_id,
                     e,
                 )

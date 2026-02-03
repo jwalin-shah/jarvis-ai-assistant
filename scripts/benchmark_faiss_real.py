@@ -51,7 +51,9 @@ def get_real_embeddings(limit: int) -> tuple[np.ndarray, list[str]]:
             msgs = reader.get_messages(conv.chat_id, limit=min(5000, limit - len(all_messages)))
             all_messages.extend(msgs)
             if i % 20 == 0:
-                print(f"  Progress: {i+1}/{len(conversations)} convos, {len(all_messages):,} messages...")
+                print(
+                    f"  Progress: {i + 1}/{len(conversations)} convos, {len(all_messages):,} messages..."
+                )
 
     # Filter to messages with meaningful text
     texts = []
@@ -96,11 +98,10 @@ def benchmark_index(
     k: int = 10,
 ) -> dict:
     """Benchmark a FAISS index."""
-    import faiss
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Benchmarking: {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     build_start = time.perf_counter()
 
@@ -227,12 +228,12 @@ def main():
     # For dim=384, valid subquantizers are divisors: 384, 192, 128, 96, 64, 48, 32, 24
     # Compression = 1536 bytes (raw) / subquantizers bytes
     compression_configs = [
-        (384, "4x"),   # 384 bytes/vec, highest quality PQ
-        (192, "8x"),   # 192 bytes/vec
+        (384, "4x"),  # 384 bytes/vec, highest quality PQ
+        (192, "8x"),  # 192 bytes/vec
         (128, "12x"),  # 128 bytes/vec
-        (96, "16x"),   # 96 bytes/vec
-        (64, "24x"),   # 64 bytes/vec
-        (48, "32x"),   # 48 bytes/vec
+        (96, "16x"),  # 96 bytes/vec
+        (64, "24x"),  # 64 bytes/vec
+        (48, "32x"),  # 48 bytes/vec
     ]
 
     nprobe = max(16, n_clusters // 8)

@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from jarvis.db import Cluster, IndexVersion, Pair, PairEmbedding
+from jarvis.db import IndexVersion, Pair
 from jarvis.index import (
     IncrementalIndexConfig,
     IncrementalTriggerIndex,
