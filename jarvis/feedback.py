@@ -873,10 +873,13 @@ class FeedbackStore:
 # ---------------------------------------------------------------------------
 
 _feedback_store: FeedbackStore | None = None
+_feedback_store_lock = threading.Lock()
 
 
 def get_feedback_store(db_path: Path | None = None) -> FeedbackStore:
     """Get the global FeedbackStore instance.
+
+    Uses double-checked locking pattern for thread safety.
 
     Args:
         db_path: Optional path to database. Only used on first call.
@@ -886,7 +889,9 @@ def get_feedback_store(db_path: Path | None = None) -> FeedbackStore:
     """
     global _feedback_store
     if _feedback_store is None:
-        _feedback_store = FeedbackStore(db_path)
+        with _feedback_store_lock:
+            if _feedback_store is None:
+                _feedback_store = FeedbackStore(db_path)
     return _feedback_store
 
 
