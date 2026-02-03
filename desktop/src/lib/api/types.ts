@@ -1011,6 +1011,7 @@ export interface QualityDashboardData {
   recommendations: Recommendation[];
 }
 
+<<<<<<< HEAD
 // =============================================================================
 // Tag System types
 // =============================================================================
@@ -1457,4 +1458,103 @@ export interface TrendingPatterns {
     pattern: string | null;
   };
   time_range: string;
+}
+
+// =============================================================================
+// Scheduler types
+// =============================================================================
+
+export type ScheduledPriority = "urgent" | "normal" | "low";
+
+export type ScheduledStatus =
+  | "pending"
+  | "queued"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export interface SendResult {
+  success: boolean;
+  sent_at: string | null;
+  error: string | null;
+  attempts: number;
+}
+
+export interface TimingSuggestion {
+  suggested_time: string;
+  confidence: number;
+  reason: string;
+  is_optimal: boolean;
+}
+
+export interface ScheduledItem {
+  id: string;
+  draft_id: string;
+  contact_id: number;
+  chat_id: string;
+  message_text: string;
+  send_at: string;
+  priority: ScheduledPriority;
+  status: ScheduledStatus;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  timezone: string | null;
+  depends_on: string | null;
+  retry_count: number;
+  max_retries: number;
+  result: SendResult | null;
+}
+
+export interface ScheduleDraftRequest {
+  draft_id: string;
+  contact_id: number;
+  chat_id: string;
+  message_text: string;
+  send_at: string;
+  priority?: ScheduledPriority;
+  timezone?: string;
+  depends_on?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SmartScheduleRequest {
+  draft_id: string;
+  contact_id: number;
+  chat_id: string;
+  message_text: string;
+  earliest?: string;
+  latest?: string;
+  priority?: ScheduledPriority;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SmartScheduleResponse {
+  item: ScheduledItem;
+  suggestion: TimingSuggestion;
+}
+
+export interface ScheduledListResponse {
+  items: ScheduledItem[];
+  total: number;
+  pending: number;
+  sent: number;
+  failed: number;
+}
+
+export interface TimingSuggestionsResponse {
+  suggestions: TimingSuggestion[];
+  contact_id: number;
+}
+
+export interface SchedulerStatsResponse {
+  running: boolean;
+  total: number;
+  pending: number;
+  sent: number;
+  failed: number;
+  pending_in_undo_window: number;
+  next_due: string | null;
 }

@@ -70,6 +70,11 @@ import type {
   RecordOutcomeResponse,
   RelationshipHealth,
   ResponsePatterns,
+  ScheduleDraftRequest,
+  ScheduledItem,
+  ScheduledListResponse,
+  ScheduledStatus,
+  SchedulerStatsResponse,
   SearchFilters,
   SemanticCacheStats,
   SemanticSearchFilters,
@@ -78,6 +83,8 @@ import type {
   SettingsResponse,
   SettingsUpdateRequest,
   SmartReplySuggestionsResponse,
+  SmartScheduleRequest,
+  SmartScheduleResponse,
   StorageSummary,
   SummaryResponse,
   TemplateAnalyticsDashboard,
@@ -86,6 +93,7 @@ import type {
   ThreadingConfigRequest,
   ThreadResponse,
   TimeRange,
+  TimingSuggestionsResponse,
   TrendingPatterns,
   TopicsResponse,
   UserAction,
@@ -1490,6 +1498,131 @@ class ApiClient {
   async clearAnalyticsCache(): Promise<{ status: string; message: string }> {
     return this.request<{ status: string; message: string }>(
       "/analytics/cache",
+      { method: "DELETE" }
+    );
+  }
+
+  // Scheduler endpoints
+  async scheduleDraft(
+    request: ScheduleDraftRequest
+  ): Promise<ScheduledItem> {
+    return this.request<ScheduledItem>("/scheduler/schedule", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async smartScheduleDraft(
+    request: SmartScheduleRequest
+  ): Promise<SmartScheduleResponse> {
+    return this.request<SmartScheduleResponse>("/scheduler/smart-schedule", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async getScheduledItems(
+    contactId?: number,
+    status?: ScheduledStatus,
+    limit: number = 50
+  ): Promise<ScheduledListResponse> {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    if (contactId !== undefined) {
+      params.set("contact_id", contactId.toString());
+    }
+    if (status) {
+      params.set("status", status);
+    }
+    return this.request<ScheduledListResponse>(
+      `/scheduler?${params.toString()}`
+    );
+  }
+
+  async getScheduledItem(itemId: string): Promise<ScheduledItem> {
+    return this.request<ScheduledItem>(
+      `/scheduler/${encodeURIComponent(itemId)}`
+    );
+  }
+
+  async cancelScheduledItem(
+    itemId: string
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      `/scheduler/${encodeURIComponent(itemId)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  async rescheduleItem(
+    itemId: string,
+    sendAt: string
+  ): Promise<ScheduledItem> {
+    return this.request<ScheduledItem>(
+      `/scheduler/${encodeURIComponent(itemId)}/reschedule`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ send_at: sendAt }),
+      }
+    );
+  }
+
+  async updateScheduledMessage(
+    itemId: string,
+    messageText: string
+  ): Promise<ScheduledItem> {
+    return this.request<ScheduledItem>(
+      `/scheduler/${encodeURIComponent(itemId)}/message`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ message_text: messageText }),
+      }
+    );
+  }
+
+  async getTimingSuggestions(
+    contactId: number,
+    earliest?: string,
+    latest?: string,
+    numSuggestions: number = 3
+  ): Promise<TimingSuggestionsResponse> {
+    const params = new URLSearchParams({
+      num_suggestions: numSuggestions.toString(),
+    });
+    if (earliest) {
+      params.set("earliest", earliest);
+    }
+    if (latest) {
+      params.set("latest", latest);
+    }
+    return this.request<TimingSuggestionsResponse>(
+      `/scheduler/timing/suggest/${contactId}?${params.toString()}`
+    );
+  }
+
+  async getSchedulerStats(): Promise<SchedulerStatsResponse> {
+    return this.request<SchedulerStatsResponse>("/scheduler/stats");
+  }
+
+  async startScheduler(): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      "/scheduler/start",
+      { method: "POST" }
+    );
+  }
+
+  async stopScheduler(): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      "/scheduler/stop",
+      { method: "POST" }
+    );
+  }
+
+  async clearTerminalScheduledItems(): Promise<{
+    success: boolean;
+    items_removed: number;
+  }> {
+    return this.request<{ success: boolean; items_removed: number }>(
+      "/scheduler/terminal/clear",
       { method: "DELETE" }
     );
   }

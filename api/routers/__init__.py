@@ -22,6 +22,7 @@ from .pdf_export import router as pdf_export_router
 from .priority import router as priority_router
 from .quality import router as quality_router
 from .relationships import router as relationships_router
+from .scheduler import router as scheduler_router
 from .search import router as search_router
 from .settings import router as settings_router
 from .stats import router as stats_router
@@ -54,6 +55,7 @@ __all__ = [
     "priority_router",
     "quality_router",
     "relationships_router",
+    "scheduler_router",
     "search_router",
     "settings_router",
     "stats_router",
