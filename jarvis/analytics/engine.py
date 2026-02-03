@@ -7,6 +7,7 @@ pre-computation support for dashboard performance.
 from __future__ import annotations
 
 import re
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -550,11 +551,17 @@ class AnalyticsEngine:
 
 # Global engine instance
 _analytics_engine: AnalyticsEngine | None = None
+_analytics_engine_lock = threading.Lock()
 
 
 def get_analytics_engine() -> AnalyticsEngine:
-    """Get the global analytics engine instance."""
+    """Get the global analytics engine instance.
+
+    Uses double-checked locking pattern for thread safety.
+    """
     global _analytics_engine
     if _analytics_engine is None:
-        _analytics_engine = AnalyticsEngine()
+        with _analytics_engine_lock:
+            if _analytics_engine is None:
+                _analytics_engine = AnalyticsEngine()
     return _analytics_engine

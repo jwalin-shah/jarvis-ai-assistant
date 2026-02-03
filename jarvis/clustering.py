@@ -295,6 +295,7 @@ class ClusterAnalyzer:
             random_state=42,
             n_init=10,
             max_iter=300,
+            n_jobs=-1,  # Use all CPU cores for parallelization
         )
         labels = kmeans.fit_predict(embeddings)
         centroids = kmeans.cluster_centers_

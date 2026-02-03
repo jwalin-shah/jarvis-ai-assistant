@@ -37,8 +37,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Keyword patterns for common tag categories
-KEYWORD_PATTERNS: dict[str, list[str]] = {
+# Pre-compiled keyword patterns for common tag categories (compiled at module load)
+_KEYWORD_PATTERN_STRINGS: dict[str, list[str]] = {
     "Work": [
         r"\b(meeting|deadline|project|client|boss|office|work|presentation|report)\b",
         r"\b(schedule|calendar|monday|tuesday|wednesday|thursday|friday)\b",
@@ -66,25 +66,31 @@ KEYWORD_PATTERNS: dict[str, list[str]] = {
     ],
 }
 
-# Sentiment indicators
-POSITIVE_PATTERNS = [
-    r"\b(thanks|thank you|appreciate|grateful|awesome|great|love|amazing)\b",
-    r"\b(happy|excited|wonderful|fantastic|perfect|excellent)\b",
-    r"[!]+\s*$",
-    r"[:;]-?[)D]",  # Smileys
+# Pre-compiled at module level for efficiency
+KEYWORD_PATTERNS: dict[str, list[re.Pattern[str]]] = {
+    category: [re.compile(p, re.IGNORECASE) for p in patterns]
+    for category, patterns in _KEYWORD_PATTERN_STRINGS.items()
+}
+
+# Pre-compiled sentiment indicators
+POSITIVE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\b(thanks|thank you|appreciate|grateful|awesome|great|love|amazing)\b", re.IGNORECASE),
+    re.compile(r"\b(happy|excited|wonderful|fantastic|perfect|excellent)\b", re.IGNORECASE),
+    re.compile(r"[!]+\s*$", re.IGNORECASE),
+    re.compile(r"[:;]-?[)D]", re.IGNORECASE),  # Smileys
 ]
 
-NEGATIVE_PATTERNS = [
-    r"\b(sorry|apologize|unfortunately|problem|issue|wrong|bad)\b",
-    r"\b(angry|upset|frustrated|disappointed|worried|concerned)\b",
-    r"\b(can't|won't|unable|failed|error)\b",
+NEGATIVE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\b(sorry|apologize|unfortunately|problem|issue|wrong|bad)\b", re.IGNORECASE),
+    re.compile(r"\b(angry|upset|frustrated|disappointed|worried|concerned)\b", re.IGNORECASE),
+    re.compile(r"\b(can't|won't|unable|failed|error)\b", re.IGNORECASE),
 ]
 
-NEEDS_ATTENTION_PATTERNS = [
-    r"\?{2,}",  # Multiple question marks
-    r"\b(help|need|please|waiting|where are you)\b",
-    r"\b(respond|reply|answer|call me)\b",
-    r"^[A-Z\s]{10,}$",  # All caps messages
+NEEDS_ATTENTION_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\?{2,}", re.IGNORECASE),  # Multiple question marks
+    re.compile(r"\b(help|need|please|waiting|where are you)\b", re.IGNORECASE),
+    re.compile(r"\b(respond|reply|answer|call me)\b", re.IGNORECASE),
+    re.compile(r"^[A-Z\s]{10,}$", re.IGNORECASE),  # All caps messages
 ]
 
 
@@ -117,19 +123,11 @@ class AutoTagger:
             tag_manager: TagManager instance for database access.
         """
         self.tag_manager = tag_manager
-        self._compiled_patterns: dict[str, list[re.Pattern]] = {}
-        self._compile_patterns()
-
-    def _compile_patterns(self) -> None:
-        """Compile regex patterns for efficiency."""
-        for category, patterns in KEYWORD_PATTERNS.items():
-            self._compiled_patterns[category] = [
-                re.compile(p, re.IGNORECASE) for p in patterns
-            ]
-
-        self._positive_patterns = [re.compile(p, re.IGNORECASE) for p in POSITIVE_PATTERNS]
-        self._negative_patterns = [re.compile(p, re.IGNORECASE) for p in NEGATIVE_PATTERNS]
-        self._attention_patterns = [re.compile(p, re.IGNORECASE) for p in NEEDS_ATTENTION_PATTERNS]
+        # Use pre-compiled module-level patterns for efficiency
+        self._compiled_patterns = KEYWORD_PATTERNS
+        self._positive_patterns = POSITIVE_PATTERNS
+        self._negative_patterns = NEGATIVE_PATTERNS
+        self._attention_patterns = NEEDS_ATTENTION_PATTERNS
 
     def suggest_tags(
         self,
