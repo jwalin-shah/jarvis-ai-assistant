@@ -1010,3 +1010,304 @@ export interface QualityDashboardData {
   by_conversation_type: Record<string, ConversationTypeQuality>;
   recommendations: Recommendation[];
 }
+
+// =============================================================================
+// Tag System types
+// =============================================================================
+
+// Tag types
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  description: string | null;
+  parent_id: number | null;
+  aliases: string[];
+  sort_order: number;
+  is_system: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TagWithPath extends Tag {
+  path: string;
+}
+
+export interface TagCreateRequest {
+  name: string;
+  color?: string;
+  icon?: string;
+  description?: string | null;
+  parent_id?: number | null;
+  aliases?: string[];
+}
+
+export interface TagUpdateRequest {
+  name?: string;
+  color?: string;
+  icon?: string;
+  description?: string | null;
+  parent_id?: number | null;
+  aliases?: string[];
+  sort_order?: number;
+}
+
+export interface TagListResponse {
+  tags: Tag[];
+  total: number;
+}
+
+// Conversation Tag types
+export interface ConversationTag {
+  chat_id: string;
+  tag: Tag;
+  added_at: string | null;
+  added_by: string;
+  confidence: number;
+}
+
+export interface ConversationTagsResponse {
+  chat_id: string;
+  tags: ConversationTag[];
+}
+
+export interface ConversationTagRequest {
+  tag_id: number;
+}
+
+export interface BulkTagRequest {
+  chat_ids: string[];
+  tag_ids: number[];
+}
+
+export interface BulkTagResponse {
+  affected_count: number;
+  chat_ids: string[];
+}
+
+// Smart Folder types
+export interface RuleCondition {
+  field: string;
+  operator: string;
+  value: string | number | boolean | string[] | null;
+}
+
+export interface SmartFolderRules {
+  match: "all" | "any";
+  conditions: RuleCondition[];
+  sort_by: string;
+  sort_order: "asc" | "desc";
+  limit: number;
+}
+
+export interface SmartFolder {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  rules: SmartFolderRules;
+  sort_order: number;
+  is_default: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SmartFolderCreateRequest {
+  name: string;
+  icon?: string;
+  color?: string;
+  rules: SmartFolderRules;
+}
+
+export interface SmartFolderUpdateRequest {
+  name?: string;
+  icon?: string;
+  color?: string;
+  rules?: SmartFolderRules;
+  sort_order?: number;
+}
+
+export interface SmartFolderListResponse {
+  folders: SmartFolder[];
+  total: number;
+}
+
+export interface SmartFolderPreviewRequest {
+  rules: SmartFolderRules;
+  limit?: number;
+}
+
+export interface SmartFolderPreviewResponse {
+  total_matches: number;
+  preview: Record<string, unknown>[];
+  has_more: boolean;
+}
+
+// Tag Rule types (Auto-tagging)
+export interface TagRule {
+  id: number;
+  name: string;
+  trigger: string;
+  conditions: RuleCondition[];
+  tag_ids: number[];
+  priority: number;
+  is_enabled: boolean;
+  created_at: string | null;
+  last_triggered_at: string | null;
+  trigger_count: number;
+}
+
+export interface TagRuleCreateRequest {
+  name: string;
+  trigger?: string;
+  conditions: RuleCondition[];
+  tag_ids: number[];
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface TagRuleUpdateRequest {
+  name?: string;
+  trigger?: string;
+  conditions?: RuleCondition[];
+  tag_ids?: number[];
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface TagRuleListResponse {
+  rules: TagRule[];
+  total: number;
+}
+
+// Tag Suggestion types
+export interface TagSuggestion {
+  tag_id: number | null;
+  tag_name: string;
+  confidence: number;
+  reason: string | null;
+  source: string;
+}
+
+export interface TagSuggestionsRequest {
+  chat_id: string;
+  limit?: number;
+}
+
+export interface TagSuggestionsResponse {
+  chat_id: string;
+  suggestions: TagSuggestion[];
+}
+
+export interface SuggestionFeedbackRequest {
+  chat_id: string;
+  tag_id: number;
+  accepted: boolean;
+}
+
+// Tag Statistics types
+export interface TagUsageStats {
+  id: number;
+  name: string;
+  count: number;
+}
+
+export interface TagStatisticsResponse {
+  total_tags: number;
+  total_tagged_conversations: number;
+  average_tags_per_conversation: number;
+  most_used_tags: TagUsageStats[];
+}
+
+// Tag color presets
+export const TAG_COLORS = {
+  RED: "#ef4444",
+  ORANGE: "#f97316",
+  AMBER: "#f59e0b",
+  YELLOW: "#eab308",
+  LIME: "#84cc16",
+  GREEN: "#22c55e",
+  EMERALD: "#10b981",
+  TEAL: "#14b8a6",
+  CYAN: "#06b6d4",
+  SKY: "#0ea5e9",
+  BLUE: "#3b82f6",
+  INDIGO: "#6366f1",
+  VIOLET: "#8b5cf6",
+  PURPLE: "#a855f7",
+  FUCHSIA: "#d946ef",
+  PINK: "#ec4899",
+  ROSE: "#f43f5e",
+  SLATE: "#64748b",
+} as const;
+
+// Tag icon options
+export const TAG_ICONS = [
+  "star",
+  "heart",
+  "flag",
+  "bookmark",
+  "folder",
+  "tag",
+  "inbox",
+  "briefcase",
+  "home",
+  "users",
+  "user",
+  "clock",
+  "calendar",
+  "bell",
+  "alert",
+  "check",
+  "circle",
+  "square",
+  "arrow-up",
+  "arrow-down",
+  "message",
+  "mail",
+  "phone",
+  "sparkles",
+  "fire",
+  "zap",
+] as const;
+
+// Rule field options
+export const RULE_FIELDS = [
+  "chat_id",
+  "display_name",
+  "last_message_date",
+  "message_count",
+  "is_group",
+  "unread_count",
+  "is_flagged",
+  "relationship",
+  "contact_name",
+  "last_message_text",
+  "has_attachments",
+  "tags",
+  "sentiment",
+  "priority",
+  "needs_response",
+] as const;
+
+// Rule operator options
+export const RULE_OPERATORS = [
+  "equals",
+  "not_equals",
+  "contains",
+  "not_contains",
+  "starts_with",
+  "ends_with",
+  "is_empty",
+  "is_not_empty",
+  "greater_than",
+  "less_than",
+  "in_last_days",
+  "before",
+  "after",
+  "has_tag",
+  "has_any_tag",
+  "has_all_tags",
+  "has_no_tags",
+] as const;

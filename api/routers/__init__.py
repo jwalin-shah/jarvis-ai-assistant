@@ -25,6 +25,7 @@ from .search import router as search_router
 from .settings import router as settings_router
 from .stats import router as stats_router
 from .suggestions import router as suggestions_router
+from .tags import router as tags_router
 from .tasks import router as tasks_router
 from .template_analytics import router as template_analytics_router
 from .threads import router as threads_router
@@ -55,6 +56,7 @@ __all__ = [
     "settings_router",
     "stats_router",
     "suggestions_router",
+    "tags_router",
     "tasks_router",
     "template_analytics_router",
     "threads_router",
