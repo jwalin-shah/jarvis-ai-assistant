@@ -19,6 +19,21 @@ This documentation has been split into focused files for better context manageme
 | [Decisions](./design/DECISIONS.md) | Rationale, lessons learned | ~130 |
 | [Metrics](./design/METRICS.md) | Benchmarks, future work | ~90 |
 
+## V3 Features
+
+| Feature | Module | Purpose |
+|---------|--------|---------|
+| Analytics | `jarvis/analytics/` | Dashboard metrics, trends, reports |
+| Graph | `jarvis/graph/` | Relationship networks, community detection |
+| Scheduler | `jarvis/scheduler/` | Smart timing, draft scheduling |
+| Tags | `jarvis/tags/` | Auto-tagging, smart folders |
+| Prefetch | `jarvis/prefetch/` | Speculative caching, prediction |
+| Quality | `jarvis/quality/` | Hallucination detection, grounding |
+| Classifier V2 | `jarvis/response_classifier_v2.py` | 10x batch throughput |
+| Index V2 | `jarvis/index_v2.py` | Tiered sharded FAISS |
+| Adaptive Thresholds | `jarvis/adaptive_thresholds.py` | Learns from feedback |
+| Frontend Redesign | [Plan](./FRONTEND_REDESIGN_PLAN.md) | Themes, skeletons, optimistic UI |
+
 ## Usage
 
 Instead of `@docs/DESIGN.md` (was ~1200 lines, ~20k tokens), use:

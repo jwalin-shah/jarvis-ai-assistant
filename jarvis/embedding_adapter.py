@@ -66,9 +66,9 @@ EMBEDDING_MODEL_REGISTRY: dict[str, tuple[str, str]] = {
     # TaylorAI gte-tiny (6 layers, ~50-70ms, MTEB ~57) - good balance of speed/quality
     "gte-tiny": ("TaylorAI/gte-tiny", "gte-tiny"),
     # MiniLM-L6 (6 layers, ~50-70ms, MTEB ~56) - most popular fast model
-    "minilm-l6": ("sentence-transformers/all-MiniLM-L6-v2", "all-MiniLM-L6-v2"),
+    "minilm-l6": ("sentence-transformers/all-MiniLM-L6-v2", "minilm-l6"),
     # bge-micro (3 layers, ~30-40ms, MTEB ~54) - fastest, lowest quality
-    "bge-micro": ("TaylorAI/bge-micro-v2", "bge-micro-v2"),
+    "bge-micro": ("TaylorAI/bge-micro-v2", "bge-micro"),
 }
 
 # Legacy constant for backwards compatibility (do not use directly)

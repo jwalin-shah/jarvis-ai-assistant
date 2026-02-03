@@ -22,6 +22,8 @@ JARVIS is a **privacy-first AI assistant** for iMessage on Apple Silicon. Key in
 
 ## Implementation Status
 
+### Core Components
+
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Contracts/Interfaces | COMPLETE | 9 protocol definitions in `contracts/` |
@@ -53,6 +55,20 @@ JARVIS is a **privacy-first AI assistant** for iMessage on Apple Silicon. Key in
 | Unix Socket Server | COMPLETE | `jarvis/socket_server.py` for desktop IPC (V2) |
 | File Watcher | COMPLETE | `jarvis/watcher.py` for real-time notifications (V2) |
 
+### New Modules (V3)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Analytics Module | COMPLETE | `jarvis/analytics/` - dashboard, trends, reports |
+| Graph Visualization | COMPLETE | `jarvis/graph/` - relationship networks, clustering |
+| Scheduler System | COMPLETE | `jarvis/scheduler/` - smart timing, draft scheduling |
+| Tags & Smart Folders | COMPLETE | `jarvis/tags/` - auto-tagging, rule-based folders |
+| Prefetch System | COMPLETE | `jarvis/prefetch/` - speculative caching, prediction |
+| Quality Assurance | COMPLETE | `jarvis/quality/` - hallucination detection, grounding |
+| Response Classifier V2 | COMPLETE | `jarvis/response_classifier_v2.py` - 10x batch throughput |
+| Sharded FAISS Index V2 | COMPLETE | `jarvis/index_v2.py` - tiered storage, time sharding |
+| Adaptive Thresholds | COMPLETE | `jarvis/adaptive_thresholds.py` - learns from feedback |
+
 ## Contract-Based Design
 
 Python Protocols in `contracts/` enable parallel development:
@@ -70,8 +86,15 @@ Python Protocols in `contracts/` enable parallel development:
 
 | Directory | Purpose |
 |-----------|---------|
-| `jarvis/` | CLI, config, errors, metrics, export, prompts, intent classification, socket server, watcher |
+| `jarvis/` | Core logic: classifiers, router, embeddings, config, prompts |
+| `jarvis/analytics/` | Dashboard metrics, trends, reports, time-series aggregation |
+| `jarvis/graph/` | Relationship networks, clustering, layout, export (JSON/SVG/HTML) |
+| `jarvis/scheduler/` | Draft scheduling, smart timing, priority queue, quiet hours |
+| `jarvis/tags/` | Tags, smart folders, auto-tagging, rule-based filtering |
+| `jarvis/prefetch/` | Multi-tier cache (L1/L2/L3), prediction, invalidation |
+| `jarvis/quality/` | Hallucination detection, factuality, consistency, grounding |
 | `api/` | FastAPI REST layer for CLI and web clients |
+| `api/routers/` | API endpoints (analytics, graph, scheduler, tags, etc.) |
 | `benchmarks/` | Memory, hallucination, latency benchmarks |
 | `core/` | Memory controller, health monitoring |
 | `models/` | MLX model inference, registry, templates |
@@ -124,6 +147,110 @@ Configurable via `~/.jarvis/config.json`:
 
 **Note:** Classifier models are stored per embedding model. Switching embedding models requires retraining classifiers.
 
+**Response Classifier V2** (`jarvis/response_classifier_v2.py`):
+- Batch processing: 32-128 messages at once with vectorized operations
+- Parallel SVM: joblib for multi-core predictions
+- Streaming: Micro-batching with 50ms windows
+- Extended labels: QUESTION subtypes, EMOTIONAL_SUPPORT, SCHEDULING
+- Target: 10x throughput, <5ms p95 latency
+
+### Sharded FAISS Index V2
+
+`jarvis/index_v2.py` provides tiered storage architecture:
+
+| Tier | Description | Access Pattern |
+|------|-------------|----------------|
+| HOT | Frequently accessed | Memory-mapped, always loaded |
+| WARM | Recently accessed | Loaded on demand |
+| COLD | Archived data | Compressed, rarely accessed |
+
+**Features:**
+- Time-based sharding (monthly shards)
+- Cross-shard search with result merging
+- Atomic updates with journaling
+- Corruption detection and auto-repair
+- Background index warming
+
+**Storage:** `~/.jarvis/indexes_v2/<model_name>/shards/`
+
+### Adaptive Thresholds
+
+`jarvis/adaptive_thresholds.py` learns optimal routing thresholds from user feedback:
+
+1. Groups feedback by similarity score buckets (e.g., 0.90-0.95)
+2. Computes acceptance rate per bucket
+3. Adjusts thresholds where acceptance drops below target
+4. Applies learning rate to prevent volatility
+
+```python
+from jarvis.adaptive_thresholds import get_adaptive_threshold_manager
+manager = get_adaptive_threshold_manager()
+thresholds = manager.get_adapted_thresholds()
+# {"quick_reply": 0.92, "context": 0.68, "generate": 0.48}
+```
+
+## V3 Modules
+
+### Analytics (`jarvis/analytics/`)
+
+Conversation analytics and insights:
+- **TimeSeriesAggregator**: Pre-computed daily/hourly aggregates
+- **TrendAnalyzer**: Trend detection, anomalies, seasonality
+- **ReportGenerator**: Export to JSON/CSV
+- **AnalyticsEngine**: Dashboard overview metrics (response time, sentiment)
+
+### Graph (`jarvis/graph/`)
+
+Relationship network visualization:
+- **GraphBuilder**: Build network from message history
+- **LayoutEngine**: Force-directed, hierarchical, radial layouts
+- **detect_communities()**: Louvain clustering with auto-labels
+- **Export**: JSON, GraphML, SVG, interactive HTML (D3.js)
+
+### Scheduler (`jarvis/scheduler/`)
+
+Smart draft scheduling:
+- **DraftScheduler**: Priority queue with exponential backoff
+- **TimingAnalyzer**: Contact history analysis for optimal send times
+- **Quiet hours**: Configurable per-contact time zones
+- Background executor with retry logic
+
+### Tags (`jarvis/tags/`)
+
+Organization system:
+- **TagManager**: Hierarchical tags with colors/icons
+- **SmartFolder**: Rule-based dynamic folders (like mail filters)
+- **AutoTagger**: ML-based tag suggestions from content
+- **RulesEngine**: Field/operator/value conditions
+
+### Prefetch (`jarvis/prefetch/`)
+
+Speculative caching for low latency:
+- **MultiTierCache**: L1 (memory) / L2 (disk) / L3 (compressed)
+- **PrefetchPredictor**: Strategies (contact frequency, time of day, UI focus)
+- **PrefetchExecutor**: Background execution with resource management
+- **CacheInvalidator**: Smart invalidation on new messages
+- Target: 80% cache hit rate, 10x latency improvement
+
+### Quality (`jarvis/quality/`)
+
+Response quality assurance:
+- **EnsembleHallucinationDetector**: Multi-model ensemble
+- **FactChecker**: Claim extraction and verification
+- **ConsistencyChecker**: Self-consistency across generations
+- **GroundingChecker**: Source attribution tracking
+- **QualityGate**: Real-time pass/warn/fail thresholds
+- **QualityDashboard**: Trend tracking, regression alerts
+
+### Frontend Redesign
+
+See [FRONTEND_REDESIGN_PLAN.md](./FRONTEND_REDESIGN_PLAN.md):
+- **Themes**: Light/Dark/System with CSS variables
+- **Skeleton loading**: Shimmer placeholders for perceived speed
+- **Optimistic sending**: Instant message feedback
+- **Glassmorphism**: Frosted glass effects
+- **Command palette**: Keyboard-first navigation (planned)
+
 ### Singleton Pattern
 
 All expensive resources use lazy-loaded singletons:
@@ -158,6 +285,59 @@ All expensive resources use lazy-loaded singletons:
 | G4 | Cold-start latency | <15s | 15-20s | >20s |
 
 Run: `uv run python -m benchmarks.{memory,hallucination,latency}.run`
+
+## API Endpoints (V3)
+
+### Analytics API (`/api/analytics/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/overview` | GET | Dashboard metrics (messages, response time, sentiment) |
+| `/timeline` | GET | Time-series data (hour/day/week/month granularity) |
+| `/heatmap` | GET | Activity heatmap for calendar view |
+| `/contacts/{chat_id}/stats` | GET | Per-contact detailed analytics |
+| `/contacts/leaderboard` | GET | Top contacts by messages/engagement |
+| `/trends` | GET | Trend detection, anomalies, seasonality |
+| `/export` | GET | Export analytics (JSON/CSV) |
+
+### Graph API (`/api/graph/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/network` | GET | Full relationship network graph |
+| `/ego/{contact_id}` | GET | Ego-centric graph centered on contact |
+| `/clusters` | GET | Community detection (Louvain algorithm) |
+| `/evolution` | GET | Temporal graph snapshots |
+| `/export` | POST | Export graph (JSON/GraphML/SVG/HTML) |
+| `/stats` | GET | Network statistics |
+
+### Scheduler API (`/api/scheduler/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/schedule` | POST | Schedule draft for future sending |
+| `/smart-schedule` | POST | Schedule with smart timing analysis |
+| `/{item_id}` | GET | Get scheduled item |
+| `/{item_id}` | DELETE | Cancel scheduled item |
+| `/{item_id}/reschedule` | PUT | Reschedule to new time |
+| `/timing/suggest/{contact_id}` | GET | Get timing suggestions |
+| `/stats` | GET | Scheduler statistics |
+| `/start`, `/stop` | POST | Control background scheduler |
+
+### Tags API (`/api/tags/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET/POST | List/create tags |
+| `/{tag_id}` | GET/PATCH/DELETE | Tag CRUD |
+| `/conversations/{chat_id}` | GET/POST/PUT | Conversation tagging |
+| `/bulk/add`, `/bulk/remove` | POST | Bulk tag operations |
+| `/folders` | GET/POST | Smart folder CRUD |
+| `/folders/{folder_id}/conversations` | GET | Folder contents |
+| `/folders/preview` | POST | Preview folder rules |
+| `/rules` | GET/POST | Auto-tagging rules |
+| `/suggestions` | POST | AI-powered tag suggestions |
+| `/statistics` | GET | Tag usage statistics |
 
 ## Evaluation Scripts
 

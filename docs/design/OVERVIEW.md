@@ -39,6 +39,12 @@ The system learns from **your actual messaging patterns** by extracting (trigger
 | Directory | Purpose |
 |-----------|---------|
 | `jarvis/` | Core logic: classifiers, router, embeddings, config, prompts |
+| `jarvis/analytics/` | Dashboard metrics, trends, time-series aggregation |
+| `jarvis/graph/` | Relationship networks, clustering, layout algorithms |
+| `jarvis/scheduler/` | Smart timing, draft scheduling, priority queue |
+| `jarvis/tags/` | Tags, smart folders, auto-tagging rules |
+| `jarvis/prefetch/` | Multi-tier cache, prediction, invalidation |
+| `jarvis/quality/` | Hallucination detection, factuality, grounding |
 | `api/` | FastAPI REST layer for HTTP clients |
 | `models/` | MLX model inference, registry, templates |
 | `integrations/imessage/` | iMessage database reader |
@@ -50,8 +56,11 @@ The system learns from **your actual messaging patterns** by extracting (trigger
 |------|---------|
 | `jarvis/router.py` | Main routing logic, thresholds, decision flow |
 | `jarvis/response_classifier.py` | 3-layer hybrid response classifier |
+| `jarvis/response_classifier_v2.py` | Optimized batch classifier (10x throughput) |
 | `jarvis/trigger_classifier.py` | Trigger type classifier |
 | `jarvis/embedding_adapter.py` | Unified embedding interface |
+| `jarvis/index_v2.py` | Sharded FAISS with tiered storage |
+| `jarvis/adaptive_thresholds.py` | Learns thresholds from feedback |
 | `jarvis/socket_server.py` | Unix socket JSON-RPC server |
 | `jarvis/watcher.py` | File watcher for new messages |
 | `jarvis/evaluation.py` | Feedback storage and analysis |
@@ -65,3 +74,4 @@ The system learns from **your actual messaging patterns** by extracting (trigger
 - [Feedback System](./FEEDBACK.md) - Learning from user actions
 - [Design Decisions](./DECISIONS.md) - Rationale and lessons learned
 - [Metrics](./METRICS.md) - Performance benchmarks
+- [Frontend Redesign](../FRONTEND_REDESIGN_PLAN.md) - Themes, skeletons, command palette
