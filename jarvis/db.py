@@ -1390,9 +1390,7 @@ class JarvisDB:
         """
 
         with self.connection() as conn:
-            cursor = conn.execute(
-                query, (*uncached_ids, *self._ACK_TRIGGERS, limit_per_contact)
-            )
+            cursor = conn.execute(query, (*uncached_ids, *self._ACK_TRIGGERS, limit_per_contact))
 
             # Group results by contact_id
             for cid in uncached_ids:
@@ -1981,13 +1979,15 @@ class JarvisDB:
             results = []
             for row in cursor:
                 pair = self._row_to_pair(row)
-                results.append({
-                    "pair": pair,
-                    "faiss_id": row["faiss_id"],
-                    "cluster_id": row["embedding_cluster_id"],
-                    "cluster_name": row["cluster_name"],
-                    "cluster_description": row["cluster_description"],
-                })
+                results.append(
+                    {
+                        "pair": pair,
+                        "faiss_id": row["faiss_id"],
+                        "cluster_id": row["embedding_cluster_id"],
+                        "cluster_name": row["cluster_name"],
+                        "cluster_description": row["cluster_description"],
+                    }
+                )
             return results
 
     def clear_embeddings(self, index_version: str | None = None) -> int:

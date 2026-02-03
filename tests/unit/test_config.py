@@ -14,7 +14,6 @@ from jarvis.config import (
     CONFIG_PATH,
     CONFIG_VERSION,
     ChatConfig,
-    EmbeddingConfig,
     JarvisConfig,
     MemoryThresholds,
     SearchConfig,

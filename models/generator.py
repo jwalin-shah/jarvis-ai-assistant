@@ -261,11 +261,13 @@ class MLXGenerator:
                         temperature=request.temperature,
                         stop_sequences=request.stop_sequences,
                     ):
-                        token_queue.put({
-                            "token": stream_token.token,
-                            "token_index": stream_token.token_index,
-                            "is_final": stream_token.is_final,
-                        })
+                        token_queue.put(
+                            {
+                                "token": stream_token.token,
+                                "token_index": stream_token.token_index,
+                                "is_final": stream_token.is_final,
+                            }
+                        )
                     token_queue.put(None)  # Signal completion
                 except Exception as e:
                     generation_error.append(e)

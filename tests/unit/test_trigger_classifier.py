@@ -57,33 +57,23 @@ class TestTriggerClassification:
 
     def test_is_commitment_property(self):
         """is_commitment property works correctly."""
-        commitment = TriggerClassification(
-            TriggerType.COMMITMENT, 0.9, "structural", ["AGREE"]
-        )
-        question = TriggerClassification(
-            TriggerType.QUESTION, 0.9, "structural", ["ANSWER"]
-        )
+        commitment = TriggerClassification(TriggerType.COMMITMENT, 0.9, "structural", ["AGREE"])
+        question = TriggerClassification(TriggerType.QUESTION, 0.9, "structural", ["ANSWER"])
 
         assert commitment.is_commitment is True
         assert question.is_commitment is False
 
     def test_is_question_property(self):
         """is_question property works correctly."""
-        question = TriggerClassification(
-            TriggerType.QUESTION, 0.9, "structural", ["ANSWER"]
-        )
-        statement = TriggerClassification(
-            TriggerType.STATEMENT, 0.9, "structural", ["ACK"]
-        )
+        question = TriggerClassification(TriggerType.QUESTION, 0.9, "structural", ["ANSWER"])
+        statement = TriggerClassification(TriggerType.STATEMENT, 0.9, "structural", ["ACK"])
 
         assert question.is_question is True
         assert statement.is_question is False
 
     def test_is_reaction_property(self):
         """is_reaction property works correctly."""
-        reaction = TriggerClassification(
-            TriggerType.REACTION, 0.9, "structural", ["REACT"]
-        )
+        reaction = TriggerClassification(TriggerType.REACTION, 0.9, "structural", ["REACT"])
         social = TriggerClassification(TriggerType.SOCIAL, 0.9, "structural", ["ACK"])
 
         assert reaction.is_reaction is True
@@ -92,9 +82,7 @@ class TestTriggerClassification:
     def test_is_social_property(self):
         """is_social property works correctly."""
         social = TriggerClassification(TriggerType.SOCIAL, 0.9, "structural", ["ACK"])
-        statement = TriggerClassification(
-            TriggerType.STATEMENT, 0.9, "structural", ["ACK"]
-        )
+        statement = TriggerClassification(TriggerType.STATEMENT, 0.9, "structural", ["ACK"])
 
         assert social.is_social is True
         assert statement.is_social is False
@@ -154,8 +142,7 @@ class TestStructuralPatterns:
         result = classifier.classify(text, use_svm=False)
 
         assert result.trigger_type == expected_type, (
-            f"Expected {expected_type.value} for '{text}', "
-            f"got {result.trigger_type.value}"
+            f"Expected {expected_type.value} for '{text}', got {result.trigger_type.value}"
         )
 
     def test_question_mark_fallback(self):

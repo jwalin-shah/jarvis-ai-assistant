@@ -28,6 +28,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 class TapbackType(Enum):
     """iMessage tapback reaction types."""
 

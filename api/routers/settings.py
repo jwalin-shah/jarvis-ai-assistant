@@ -51,6 +51,7 @@ def _get_enabled_models() -> list[ModelSpec]:
     """Get the list of models enabled for the UI."""
     return [MODEL_REGISTRY[mid] for mid in ENABLED_MODEL_IDS if mid in MODEL_REGISTRY]
 
+
 # Settings file path for generation/behavior settings
 SETTINGS_PATH = Path.home() / ".jarvis" / "settings.json"
 
@@ -347,6 +348,7 @@ async def update_settings(
         if spec is None:
             # Try looking up by path
             from models.registry import get_model_spec_by_path
+
             spec = get_model_spec_by_path(settings_request.model_id)
         if spec is None:
             raise HTTPException(
@@ -565,6 +567,7 @@ async def download_model(model_id: str, request: Request) -> DownloadStatus:
     spec = get_model_spec(model_id)
     if spec is None:
         from models.registry import get_model_spec_by_path
+
         spec = get_model_spec_by_path(model_id)
     if spec is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_id}")
@@ -686,6 +689,7 @@ async def activate_model(model_id: str, request: Request) -> ActivateResponse:
     spec = get_model_spec(model_id)
     if spec is None:
         from models.registry import get_model_spec_by_path
+
         spec = get_model_spec_by_path(model_id)
     if spec is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_id}")
