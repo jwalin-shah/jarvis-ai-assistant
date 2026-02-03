@@ -1311,3 +1311,150 @@ export const RULE_OPERATORS = [
   "has_all_tags",
   "has_no_tags",
 ] as const;
+
+// =============================================================================
+// Analytics Dashboard types
+// =============================================================================
+
+export interface AnalyticsOverview {
+  total_messages: number;
+  sent_messages: number;
+  received_messages: number;
+  active_conversations: number;
+  avg_messages_per_day: number;
+  avg_response_time_minutes: number | null;
+  sentiment: {
+    score: number;
+    label: string;
+  };
+  peak_hour: number | null;
+  peak_day: string | null;
+  date_range: {
+    start: string | null;
+    end: string | null;
+  };
+  period_comparison: {
+    total_change_percent: number;
+    sent_change_percent: number;
+    contacts_change_percent: number;
+  };
+  time_range: string;
+}
+
+export interface TimelineDataPoint {
+  date?: string;
+  hour?: number;
+  total: number;
+  sent: number;
+  received: number;
+}
+
+export interface AnalyticsTimeline {
+  granularity: string;
+  metric: string;
+  time_range: string;
+  data: TimelineDataPoint[];
+  total_points: number;
+}
+
+export interface HeatmapDataPoint {
+  date: string;
+  count: number;
+  level: number; // 0-4 activity level
+}
+
+export interface ActivityHeatmap {
+  data: HeatmapDataPoint[];
+  stats: {
+    total_days: number;
+    active_days: number;
+    max_count: number;
+    avg_count: number;
+  };
+  time_range: string;
+}
+
+export interface ContactStats {
+  contact_id: string;
+  contact_name: string | null;
+  total_messages: number;
+  sent_count: number;
+  received_count: number;
+  avg_response_time_minutes: number | null;
+  sentiment_score: number;
+  engagement_score: number;
+  message_trend: string;
+  last_message_date: string | null;
+  emoji_usage: {
+    total: number;
+    per_message: number;
+    top_emojis: Record<string, number>;
+  };
+  hourly_distribution: Record<number, number>;
+  daily_distribution: Record<string, number>;
+  weekly_counts: Record<string, number>;
+  time_range: string;
+}
+
+export interface LeaderboardContact {
+  rank: number;
+  contact_id: string;
+  contact_name: string | null;
+  total_messages: number;
+  sent_count: number;
+  received_count: number;
+  engagement_score: number;
+  avg_response_time_minutes: number | null;
+  sentiment_score: number;
+  trend: string;
+}
+
+export interface ContactsLeaderboard {
+  contacts: LeaderboardContact[];
+  total_contacts: number;
+  sort_by: string;
+  time_range: string;
+}
+
+export interface TrendInfo {
+  direction: string;
+  percentage_change: number;
+  confidence: number;
+}
+
+export interface TrendingContact {
+  contact_id: string;
+  contact_name: string | null;
+  trend: string;
+  change_percent: number;
+  confidence: number;
+}
+
+export interface Anomaly {
+  date: string;
+  type: string;
+  value: number;
+  expected: number;
+  deviation: number;
+}
+
+export interface PeakPeriod {
+  hour?: number;
+  day?: string;
+  count: number;
+  percentage: number;
+}
+
+export interface TrendingPatterns {
+  overall_trend: TrendInfo;
+  weekly_trend: TrendInfo | null;
+  trending_contacts: TrendingContact[];
+  anomalies: Anomaly[];
+  peak_hours: PeakPeriod[];
+  peak_days: PeakPeriod[];
+  seasonality: {
+    detected: boolean;
+    pattern: string | null;
+  };
+  time_range: string;
+}
