@@ -29,10 +29,13 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
+from jarvis.config import get_config
 from jarvis.db import JarvisDB, get_db
 from jarvis.response_classifier import (
     COMMITMENT_RESPONSE_TYPES,
@@ -47,6 +50,93 @@ if TYPE_CHECKING:
     from jarvis.trigger_classifier import HybridTriggerClassifier
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Scoring Utilities
+# =============================================================================
+
+
+def compute_temporal_decay(
+    source_timestamp: datetime | None,
+    half_life_days: float = 365.0,
+    min_score: float = 0.1,
+) -> float:
+    """Compute exponential temporal decay factor for a message timestamp.
+
+    Uses exponential decay: score = 0.5^(age_days / half_life_days)
+    This means messages lose half their score after half_life_days.
+
+    Args:
+        source_timestamp: Timestamp of the message. If None, returns 1.0 (no decay).
+        half_life_days: Number of days until score is halved. Default 365 (1 year).
+        min_score: Minimum decay factor to prevent very old messages from being
+            completely ignored. Default 0.1 (10% of original score).
+
+    Returns:
+        Decay factor between min_score and 1.0.
+
+    Examples:
+        >>> from datetime import datetime, timedelta
+        >>> now = datetime.now()
+        >>> compute_temporal_decay(now)  # Just now
+        1.0
+        >>> compute_temporal_decay(now - timedelta(days=365))  # 1 year ago
+        0.5
+        >>> compute_temporal_decay(now - timedelta(days=730))  # 2 years ago
+        0.25
+        >>> compute_temporal_decay(now - timedelta(days=3650), min_score=0.1)  # 10 years
+        0.1  # Clamped to min_score
+    """
+    if source_timestamp is None:
+        return 1.0
+
+    age_days = (datetime.now() - source_timestamp).days
+    if age_days <= 0:
+        return 1.0
+
+    # Exponential decay: 0.5^(age/half_life)
+    decay = math.pow(0.5, age_days / half_life_days)
+
+    # Clamp to minimum score
+    return max(min_score, decay)
+
+
+def reciprocal_rank_fusion(
+    rankings: list[list[tuple[Any, float]]],
+    k: int = 60,
+) -> list[tuple[Any, float]]:
+    """Combine multiple rankings using Reciprocal Rank Fusion (RRF).
+
+    RRF is a simple and effective method for combining multiple ranked lists.
+    It's robust to different score scales across rankings.
+
+    Formula: score = sum(1 / (k + rank_i)) for each ranking containing the item
+
+    Args:
+        rankings: List of rankings, where each ranking is a list of (item_id, score) tuples
+            sorted by score descending.
+        k: RRF constant. Higher values give more weight to lower ranks. Default 60.
+
+    Returns:
+        Combined ranking as list of (item_id, fused_score) sorted by score descending.
+
+    Example:
+        >>> r1 = [(1, 0.9), (2, 0.8), (3, 0.7)]  # FAISS ranking
+        >>> r2 = [(2, 0.95), (1, 0.85), (4, 0.6)]  # BM25 ranking
+        >>> reciprocal_rank_fusion([r1, r2])
+        [(2, 0.033), (1, 0.032), (3, 0.016), (4, 0.016)]  # Fused ranking
+    """
+    scores: dict[Any, float] = {}
+
+    for ranking in rankings:
+        for rank_idx, (item_id, _score) in enumerate(ranking):
+            # RRF formula: 1 / (k + rank), where rank starts at 1
+            rrf_score = 1.0 / (k + rank_idx + 1)
+            scores[item_id] = scores.get(item_id, 0.0) + rrf_score
+
+    # Sort by fused score descending
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
 @dataclass
@@ -615,6 +705,336 @@ class TypedRetriever:
 
 
 # =============================================================================
+# BM25 Index Manager
+# =============================================================================
+
+
+class BM25IndexManager:
+    """Manages BM25 index for hybrid retrieval.
+
+    Maintains an in-memory BM25 index of trigger texts for sparse retrieval.
+    Can be combined with FAISS dense retrieval using reciprocal rank fusion.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the BM25 index manager."""
+        self._index: Any | None = None
+        self._pair_ids: list[int] = []
+        self._triggers: list[str] = []
+        self._lock = threading.Lock()
+        self._built = False
+
+    def build_index(self, pairs: list[dict[str, Any]]) -> None:
+        """Build BM25 index from pairs.
+
+        Args:
+            pairs: List of pair dicts with 'pair_id' and 'trigger_text' keys.
+        """
+        from rank_bm25 import BM25Okapi
+
+        with self._lock:
+            if not pairs:
+                logger.warning("No pairs provided for BM25 index")
+                return
+
+            # Extract and tokenize triggers
+            self._pair_ids = [p["pair_id"] for p in pairs]
+            self._triggers = [p["trigger_text"] for p in pairs]
+
+            # Simple whitespace tokenization (can be enhanced later)
+            tokenized = [self._tokenize(t) for t in self._triggers]
+
+            self._index = BM25Okapi(tokenized)
+            self._built = True
+            logger.info("Built BM25 index with %d documents", len(pairs))
+
+    def _tokenize(self, text: str) -> list[str]:
+        """Simple whitespace tokenization with lowercasing.
+
+        Args:
+            text: Text to tokenize.
+
+        Returns:
+            List of tokens.
+        """
+        return text.lower().split()
+
+    def search(
+        self,
+        query: str,
+        k: int = 10,
+    ) -> list[tuple[int, float]]:
+        """Search BM25 index.
+
+        Args:
+            query: Query text.
+            k: Number of results to return.
+
+        Returns:
+            List of (pair_id, score) tuples sorted by score descending.
+        """
+        if not self._built or self._index is None:
+            return []
+
+        with self._lock:
+            tokenized_query = self._tokenize(query)
+            scores = self._index.get_scores(tokenized_query)
+
+            # Get top-k indices
+            top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
+
+            return [(self._pair_ids[i], float(scores[i])) for i in top_indices if scores[i] > 0]
+
+    @property
+    def is_built(self) -> bool:
+        """Check if index is built."""
+        return self._built
+
+    def clear(self) -> None:
+        """Clear the index."""
+        with self._lock:
+            self._index = None
+            self._pair_ids = []
+            self._triggers = []
+            self._built = False
+
+
+# Singleton BM25 index
+_bm25_index: BM25IndexManager | None = None
+_bm25_lock = threading.Lock()
+
+
+def get_bm25_index() -> BM25IndexManager:
+    """Get or create the singleton BM25 index manager."""
+    global _bm25_index
+    if _bm25_index is None:
+        with _bm25_lock:
+            if _bm25_index is None:
+                _bm25_index = BM25IndexManager()
+    return _bm25_index
+
+
+def reset_bm25_index() -> None:
+    """Reset the BM25 index (for testing)."""
+    global _bm25_index
+    with _bm25_lock:
+        if _bm25_index is not None:
+            _bm25_index.clear()
+        _bm25_index = None
+
+
+# =============================================================================
+# Cross-Encoder Reranker
+# =============================================================================
+
+
+class CrossEncoderReranker:
+    """Cross-encoder reranker for improved retrieval accuracy.
+
+    Uses a cross-encoder model to rerank candidates by computing query-document
+    relevance scores. More accurate than bi-encoder (FAISS) but slower.
+    """
+
+    def __init__(self, model_name: str | None = None) -> None:
+        """Initialize the reranker.
+
+        Args:
+            model_name: Cross-encoder model name. If None, uses config default.
+        """
+        config = get_config()
+        self._model_name = model_name or config.retrieval.rerank_model
+        self._model: Any | None = None
+        self._lock = threading.Lock()
+
+    def _load_model(self) -> Any:
+        """Lazy load the cross-encoder model."""
+        if self._model is None:
+            with self._lock:
+                if self._model is None:
+                    try:
+                        from sentence_transformers import CrossEncoder
+
+                        self._model = CrossEncoder(self._model_name)
+                        logger.info("Loaded cross-encoder model: %s", self._model_name)
+                    except Exception as e:
+                        logger.warning("Failed to load cross-encoder: %s", e)
+                        raise
+        return self._model
+
+    def rerank(
+        self,
+        query: str,
+        candidates: list[dict[str, Any]],
+        text_key: str = "trigger_text",
+        top_k: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Rerank candidates using cross-encoder.
+
+        Args:
+            query: Query text.
+            candidates: List of candidate dicts.
+            text_key: Key in candidate dict containing text to compare.
+            top_k: Number of top results to return. If None, returns all.
+
+        Returns:
+            Reranked list of candidates with 'rerank_score' added.
+        """
+        if not candidates:
+            return []
+
+        try:
+            model = self._load_model()
+        except Exception:
+            # Return candidates as-is if model fails to load
+            return candidates[:top_k] if top_k else candidates
+
+        # Create query-document pairs
+        pairs = [(query, c.get(text_key, "")) for c in candidates]
+
+        # Get cross-encoder scores
+        scores = model.predict(pairs)
+
+        # Add scores to candidates
+        for i, candidate in enumerate(candidates):
+            candidate["rerank_score"] = float(scores[i])
+
+        # Sort by rerank score descending
+        reranked = sorted(candidates, key=lambda x: x.get("rerank_score", 0), reverse=True)
+
+        return reranked[:top_k] if top_k else reranked
+
+
+# Singleton reranker
+_reranker: CrossEncoderReranker | None = None
+_reranker_lock = threading.Lock()
+
+
+def get_reranker() -> CrossEncoderReranker:
+    """Get or create the singleton reranker."""
+    global _reranker
+    if _reranker is None:
+        with _reranker_lock:
+            if _reranker is None:
+                _reranker = CrossEncoderReranker()
+    return _reranker
+
+
+def reset_reranker() -> None:
+    """Reset the reranker (for testing)."""
+    global _reranker
+    with _reranker_lock:
+        _reranker = None
+
+
+# =============================================================================
+# Enhanced Retrieval Functions
+# =============================================================================
+
+
+def apply_temporal_decay_to_results(
+    results: list[dict[str, Any]],
+    half_life_days: float | None = None,
+    min_score: float | None = None,
+    score_key: str = "similarity",
+    timestamp_key: str = "source_timestamp",
+) -> list[dict[str, Any]]:
+    """Apply temporal decay to search results.
+
+    Modifies results in place, adding 'temporal_score' key.
+
+    Args:
+        results: List of result dicts.
+        half_life_days: Days until score is halved. If None, uses config default.
+        min_score: Minimum decay factor. If None, uses config default.
+        score_key: Key containing the base score.
+        timestamp_key: Key containing the timestamp.
+
+    Returns:
+        Results with 'temporal_score' added, sorted by temporal_score descending.
+    """
+    config = get_config()
+    retrieval_config = config.retrieval
+
+    if not retrieval_config.temporal_decay_enabled:
+        # Return as-is if disabled
+        for r in results:
+            r["temporal_score"] = r.get(score_key, 0.0)
+        return results
+
+    half_life = half_life_days or retrieval_config.temporal_half_life_days
+    min_s = min_score or retrieval_config.temporal_min_score
+
+    for result in results:
+        base_score = result.get(score_key, 0.0)
+        timestamp = result.get(timestamp_key)
+
+        decay = compute_temporal_decay(timestamp, half_life, min_s)
+        result["temporal_score"] = base_score * decay
+        result["temporal_decay"] = decay
+
+    # Sort by temporal score
+    results.sort(key=lambda x: x.get("temporal_score", 0), reverse=True)
+    return results
+
+
+def hybrid_search_with_bm25(
+    query: str,
+    faiss_results: list[dict[str, Any]],
+    bm25_index: BM25IndexManager,
+    k: int = 10,
+    rrf_k: int | None = None,
+) -> list[dict[str, Any]]:
+    """Combine FAISS and BM25 results using reciprocal rank fusion.
+
+    Args:
+        query: Query text.
+        faiss_results: Results from FAISS search (must have 'pair_id' key).
+        bm25_index: BM25 index manager to search.
+        k: Number of results to return.
+        rrf_k: RRF constant. If None, uses config default.
+
+    Returns:
+        Fused results sorted by RRF score.
+    """
+    config = get_config()
+    retrieval_config = config.retrieval
+
+    if not retrieval_config.bm25_enabled or not bm25_index.is_built:
+        return faiss_results[:k]
+
+    rrf_constant = rrf_k or retrieval_config.rrf_k
+
+    # Create FAISS ranking as (pair_id, score) tuples
+    faiss_ranking = [
+        (r["pair_id"], r.get("similarity", 0.0)) for r in faiss_results if r.get("pair_id")
+    ]
+
+    # Get BM25 ranking
+    bm25_ranking = bm25_index.search(query, k=k * 2)
+
+    # Apply RRF
+    fused = reciprocal_rank_fusion([faiss_ranking, bm25_ranking], k=rrf_constant)
+
+    # Build result dict for fused pairs
+    faiss_by_pair = {r["pair_id"]: r for r in faiss_results if r.get("pair_id")}
+
+    # Keep all FAISS results, update with RRF scores
+    result_map: dict[int, dict[str, Any]] = {}
+    for pair_id, rrf_score in fused:
+        if pair_id in faiss_by_pair:
+            result_map[pair_id] = {
+                **faiss_by_pair[pair_id],
+                "rrf_score": rrf_score,
+                "in_bm25": pair_id in dict(bm25_ranking),
+            }
+        # Skip pairs only in BM25 (no FAISS data to include)
+
+    # Sort by RRF score and return top k
+    sorted_results = sorted(result_map.values(), key=lambda x: x.get("rrf_score", 0), reverse=True)
+    return sorted_results[:k]
+
+
+# =============================================================================
 # Singleton Access
 # =============================================================================
 
@@ -647,9 +1067,23 @@ def reset_typed_retriever() -> None:
 # =============================================================================
 
 __all__ = [
+    # Core types
     "TypedExample",
     "MultiTypeExamples",
     "TypedRetriever",
     "get_typed_retriever",
     "reset_typed_retriever",
+    # Scoring utilities
+    "compute_temporal_decay",
+    "reciprocal_rank_fusion",
+    "apply_temporal_decay_to_results",
+    # BM25 hybrid retrieval
+    "BM25IndexManager",
+    "get_bm25_index",
+    "reset_bm25_index",
+    "hybrid_search_with_bm25",
+    # Cross-encoder reranking
+    "CrossEncoderReranker",
+    "get_reranker",
+    "reset_reranker",
 ]
