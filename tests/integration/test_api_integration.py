@@ -1007,14 +1007,16 @@ class TestErrorHandlerIntegration:
         # For direct testing, we'd need to add a test endpoint
         pass  # Covered by unit tests in test_errors.py
 
-    def test_validation_error_returns_400(self, client):
-        """Pydantic validation errors return 400 Bad Request."""
+    def test_validation_error_returns_422(self, client):
+        """Pydantic validation errors return 422 Unprocessable Entity."""
         # Send invalid JSON to an endpoint that expects specific schema
+        # Use /tasks endpoint which accepts POST and validates request body
         response = client.post(
-            "/drafts/reply",
-            json={"invalid_field": "value"},  # Missing required chat_id
+            "/tasks",
+            json={"invalid_field": "value"},  # Missing required task_type field
         )
-        assert response.status_code == 422  # FastAPI validation error
+        # FastAPI returns 422 for validation errors
+        assert response.status_code == 422
 
     def test_404_for_nonexistent_endpoint(self, client):
         """Nonexistent endpoints return 404 Not Found."""
