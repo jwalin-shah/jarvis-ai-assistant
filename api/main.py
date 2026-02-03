@@ -24,6 +24,7 @@ from slowapi.errors import RateLimitExceeded
 from api.errors import register_exception_handlers
 from api.ratelimit import limiter, rate_limit_exceeded_handler
 from api.routers import (
+    analytics_router,
     attachments_router,
     batch_router,
     calendar_router,
@@ -396,6 +397,7 @@ app.include_router(experiments_router)
 app.include_router(relationships_router)
 app.include_router(quality_router)
 app.include_router(tags_router)
+app.include_router(analytics_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)
