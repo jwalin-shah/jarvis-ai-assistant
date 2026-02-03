@@ -1210,6 +1210,7 @@ class TestThresholdConfiguration:
             mock_routing.generate_threshold = 0.50
             mock_routing.ab_test_group = None
             mock_routing.ab_test_thresholds = {}
+            mock_routing.adaptive.enabled = False  # Disable adaptive thresholds
             mock_config.return_value.routing = mock_routing
 
             thresholds = router._get_thresholds()
@@ -1236,6 +1237,7 @@ class TestThresholdConfiguration:
                     "generate": 0.40,
                 }
             }
+            mock_routing.adaptive.enabled = False  # Disable adaptive thresholds
             mock_config.return_value.routing = mock_routing
 
             thresholds = router._get_thresholds()
