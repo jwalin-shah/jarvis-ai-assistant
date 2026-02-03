@@ -22,7 +22,7 @@
 
 | Operation | P50 | P95 | P99 |
 |-----------|-----|-----|-----|
-| Message classification | 12ms | 25ms | 45ms |
+| Intent classification | 12ms | 25ms | 45ms |
 | FAISS search (10K vectors) | 3ms | 8ms | 15ms |
 | LLM generation (50 tokens) | 180ms | 320ms | 500ms |
 | **Full pipeline** | **250ms** | **450ms** | **700ms** |

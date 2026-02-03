@@ -183,11 +183,6 @@ class ClassifierThresholds(BaseModel):
         trigger_centroid_margin: Centroid margin for trigger classification.
     """
 
-    # Message classifier thresholds (from message_classifier.py)
-    message_rule_confidence: float = Field(default=0.95, ge=0.0, le=1.0)
-    message_embedding_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
-    message_rule_fallback: float = Field(default=0.70, ge=0.0, le=1.0)
-
     # Intent classifier thresholds (from intent.py)
     intent_confidence: float = Field(default=0.60, ge=0.0, le=1.0)
     intent_quick_reply: float = Field(default=0.80, ge=0.0, le=1.0)

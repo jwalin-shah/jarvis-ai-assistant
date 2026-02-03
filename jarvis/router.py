@@ -42,12 +42,6 @@ from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.errors import ErrorCode, JarvisError
 from jarvis.intent import IntentClassifier, IntentType, get_intent_classifier
-from jarvis.message_classifier import (
-    ContextRequirement,
-    MessageClassifier,
-    MessageType,
-    get_message_classifier,
-)
 from jarvis.metrics_router import RoutingMetrics, get_routing_metrics_store, hash_query
 from jarvis.metrics_validation import get_audit_logger, get_sampling_validator
 from jarvis.quality_metrics import score_response_coherence
@@ -237,7 +231,6 @@ class ReplyRouter:
         index_searcher: TriggerIndexSearcher | None = None,
         generator: MLXGenerator | None = None,
         intent_classifier: IntentClassifier | None = None,
-        message_classifier: MessageClassifier | None = None,
         imessage_reader: ChatDBReader | None = None,
     ) -> None:
         """Initialize the router.
@@ -247,8 +240,6 @@ class ReplyRouter:
             index_searcher: FAISS index searcher. Created lazily if None.
             generator: MLX generator for LLM responses. Created lazily if None.
             intent_classifier: Intent classifier for routing decisions. Created lazily if None.
-            message_classifier: Message classifier for type/context analysis.
-                Created lazily if None.
             imessage_reader: iMessage reader for fetching conversation history.
                 Created lazily if None.
         """
@@ -256,7 +247,6 @@ class ReplyRouter:
         self._index_searcher = index_searcher
         self._generator = generator
         self._intent_classifier = intent_classifier
-        self._message_classifier = message_classifier
         self._imessage_reader = imessage_reader
         self._lock = threading.Lock()
 
@@ -298,15 +288,6 @@ class ReplyRouter:
                 if self._intent_classifier is None:
                     self._intent_classifier = get_intent_classifier()
         return self._intent_classifier
-
-    @property
-    def message_classifier(self) -> MessageClassifier:
-        """Get or create the message classifier."""
-        if self._message_classifier is None:
-            with self._lock:
-                if self._message_classifier is None:
-                    self._message_classifier = get_message_classifier()
-        return self._message_classifier
 
     @property
     def imessage_reader(self) -> ChatDBReader | None:
@@ -696,139 +677,52 @@ class ReplyRouter:
 
         # Step 1 & 2: Classify message type and intent IN PARALLEL
         # These classifiers are independent and can run concurrently
-        msg_classification = None
+        # Step 1: Classify intent
         intent_result = None
         classify_start = time.perf_counter()
 
-        def classify_message() -> tuple[Any, float]:
-            """Run message classification."""
-            start = time.perf_counter()
+        try:
             # Note: CachedEmbedder already has the embedding cached from precomputation
-            result = self.message_classifier.classify(
+            intent_result = self.intent_classifier.classify(
                 incoming,
                 embedder=cached_embedder,
             )
-            return result, (time.perf_counter() - start) * 1000
-
-        def classify_intent() -> tuple[Any, float]:
-            """Run intent classification."""
-            start = time.perf_counter()
-            # Note: CachedEmbedder already has the embedding cached from precomputation
-            result = self.intent_classifier.classify(
-                incoming,
-                embedder=cached_embedder,
+            latency_ms["intent_classify"] = (time.perf_counter() - classify_start) * 1000
+            logger.debug(
+                "Intent classified as %s (confidence: %.3f)",
+                intent_result.intent.value,
+                intent_result.confidence,
             )
-            return result, (time.perf_counter() - start) * 1000
+        except Exception as e:
+            logger.warning("Intent classification failed: %s", e)
+            intent_result = None
 
-        # Run classifiers in parallel using ThreadPoolExecutor
-        # Scale workers based on CPU count for better multi-core utilization
-        with ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 2)) as executor:
-            msg_future = executor.submit(classify_message)
-            intent_future = executor.submit(classify_intent)
-
-            # Collect results
-            try:
-                msg_classification, msg_latency = msg_future.result()
-                latency_ms["message_classify"] = msg_latency
-                logger.debug(
-                    "Message classified as %s (confidence: %.3f, method: %s)",
-                    msg_classification.message_type.value,
-                    msg_classification.type_confidence,
-                    msg_classification.classification_method,
-                )
-            except Exception as e:
-                logger.warning("Message classification failed: %s", e)
-                msg_classification = None
-
-            try:
-                intent_result, intent_latency = intent_future.result()
-                latency_ms["intent_classify"] = intent_latency
-                logger.debug(
-                    "Intent classified as %s (confidence: %.3f)",
-                    intent_result.intent.value,
-                    intent_result.confidence,
-                )
-            except Exception as e:
-                logger.warning("Intent classification failed: %s", e)
-                intent_result = None
-
-        latency_ms["classify_parallel"] = (time.perf_counter() - classify_start) * 1000
-
-        # Step 3: Handle acknowledgments and reactions directly (no FAISS search needed)
-        if msg_classification:
-            # Acknowledgments - check if we should generate instead
-            if msg_classification.message_type == MessageType.ACKNOWLEDGMENT:
-                # Check if user typically follows acks with substantive info
-                if self._should_generate_after_acknowledgment(incoming, contact, thread):
-                    logger.debug("Acknowledgment but context suggests generation needed")
-                    # Fall through to FAISS search and generation
-                else:
-                    result = self._generic_acknowledgment_response(incoming, contact)
-                    return record_and_return(
-                        result,
-                        similarity_score=result.get("similarity_score", 0.0),
-                        decision="clarify",
-                    )
-
-            # Reactions typically don't need responses
-            if msg_classification.message_type == MessageType.REACTION:
+        # Step 2: Handle simple acknowledgments directly (no FAISS search needed)
+        if self._is_simple_acknowledgment(incoming):
+            # Check if user typically follows acks with substantive info
+            if self._should_generate_after_acknowledgment(incoming, contact, thread):
+                logger.debug("Acknowledgment but context suggests generation needed")
+                # Fall through to FAISS search and generation
+            else:
                 result = self._generic_acknowledgment_response(incoming, contact)
                 return record_and_return(
                     result,
                     similarity_score=result.get("similarity_score", 0.0),
-                    decision="clarify",
+                    decision="acknowledgment",
                 )
 
-            # Greetings get quick responses
-            if msg_classification.message_type == MessageType.GREETING:
-                result = self._generic_acknowledgment_response(incoming, contact)
-                return record_and_return(
-                    result,
-                    similarity_score=result.get("similarity_score", 0.0),
-                    decision="clarify",
-                )
-
-            # Farewells get quick responses
-            if msg_classification.message_type == MessageType.FAREWELL:
-                result = self._generic_acknowledgment_response(incoming, contact)
-                return record_and_return(
-                    result,
-                    similarity_score=result.get("similarity_score", 0.0),
-                    decision="clarify",
-                )
-
-            # If context is vague and we need clarification, ask for it
-            if msg_classification.context_requirement == ContextRequirement.VAGUE:
-                if not thread or len(thread) < 2:
-                    result = self._ask_for_clarification(incoming, thread)
-                    return record_and_return(
-                        result,
-                        similarity_score=result.get("similarity_score", 0.0),
-                        decision="clarify",
-                    )
-
-        # Legacy fallback: Handle simple acknowledgments using old method
-        elif self._is_simple_acknowledgment(incoming):
-            result = self._generic_acknowledgment_response(incoming, contact)
-            return record_and_return(
-                result,
-                similarity_score=result.get("similarity_score", 0.0),
-                decision="clarify",
-            )
-
-        # Step 4: For QUICK_REPLY intents with high confidence, handle as acknowledgment
+        # Step 3: For QUICK_REPLY intents with high confidence, handle as acknowledgment
         if (
             intent_result
             and intent_result.intent == IntentType.QUICK_REPLY
             and intent_result.confidence >= 0.8
         ):
-            # Even if not in our exact list, high-confidence quick replies
-            # should be handled with generic responses
+            # High-confidence quick replies should be handled with generic responses
             result = self._generic_acknowledgment_response(incoming, contact)
             return record_and_return(
                 result,
                 similarity_score=result.get("similarity_score", 0.0),
-                decision="clarify",
+                decision="quick_reply",
             )
 
         thresholds = self._get_thresholds()

@@ -16,12 +16,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from jarvis.db import Contact, Pair
-from jarvis.message_classifier import (
-    ContextRequirement,
-    MessageClassification,
-    MessageType,
-    ReplyRequirement,
-)
 from jarvis.router import (
     CONTEXT_DEPENDENT_PATTERNS,
     GENERATE_THRESHOLD,
@@ -90,28 +84,11 @@ def mock_intent_classifier() -> MagicMock:
 
 
 @pytest.fixture
-def mock_message_classifier() -> MagicMock:
-    """Create a mock MessageClassifier."""
-    classifier = MagicMock()
-    classifier.classify = MagicMock(
-        return_value=MessageClassification(
-            message_type=MessageType.STATEMENT,
-            type_confidence=0.9,
-            context_requirement=ContextRequirement.SELF_CONTAINED,
-            reply_requirement=ReplyRequirement.INFO_RESPONSE,
-            classification_method="rule",
-        )
-    )
-    return classifier
-
-
-@pytest.fixture
 def router(
     mock_db: MagicMock,
     mock_index_searcher: MagicMock,
     mock_generator: MagicMock,
     mock_intent_classifier: MagicMock,
-    mock_message_classifier: MagicMock,
 ) -> ReplyRouter:
     """Create a ReplyRouter with all mocked dependencies."""
     return ReplyRouter(
@@ -119,7 +96,6 @@ def router(
         index_searcher=mock_index_searcher,
         generator=mock_generator,
         intent_classifier=mock_intent_classifier,
-        message_classifier=mock_message_classifier,
     )
 
 
@@ -167,7 +143,6 @@ class TestReplyRouterInit:
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
         mock_intent_classifier: MagicMock,
-        mock_message_classifier: MagicMock,
     ) -> None:
         """Test initialization with all dependencies provided."""
         router = ReplyRouter(
@@ -175,13 +150,11 @@ class TestReplyRouterInit:
             index_searcher=mock_index_searcher,
             generator=mock_generator,
             intent_classifier=mock_intent_classifier,
-            message_classifier=mock_message_classifier,
         )
         assert router._db is mock_db
         assert router._index_searcher is mock_index_searcher
         assert router._generator is mock_generator
         assert router._intent_classifier is mock_intent_classifier
-        assert router._message_classifier is mock_message_classifier
 
     def test_init_with_no_dependencies(self) -> None:
         """Test initialization with no dependencies (lazy loading)."""
@@ -190,7 +163,6 @@ class TestReplyRouterInit:
         assert router._index_searcher is None
         assert router._generator is None
         assert router._intent_classifier is None
-        assert router._message_classifier is None
 
     def test_db_property_creates_default(self) -> None:
         """Test db property creates default instance when None."""
@@ -540,24 +512,6 @@ class TestAcknowledgmentHandling:
 
         assert result["type"] == "acknowledgment"
         assert result["response"] in ["Bye!", "Talk later!", "See you!", "👋"]
-
-    def test_acknowledgment_with_message_classifier(
-        self,
-        router: ReplyRouter,
-        mock_message_classifier: MagicMock,
-    ) -> None:
-        """Test that message classifier handles acknowledgments."""
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.ACKNOWLEDGMENT,
-            type_confidence=0.95,
-            context_requirement=ContextRequirement.SELF_CONTAINED,
-            reply_requirement=ReplyRequirement.QUICK_ACK,
-            classification_method="rule",
-        )
-
-        result = router.route("ok")
-
-        assert result["type"] == "acknowledgment"
 
 
 # =============================================================================
@@ -1109,7 +1063,6 @@ class TestIMessageReaderProperty:
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
         mock_intent_classifier: MagicMock,
-        mock_message_classifier: MagicMock,
     ) -> None:
         """Test imessage_reader returns None when initialization fails."""
         router = ReplyRouter(
@@ -1117,7 +1070,6 @@ class TestIMessageReaderProperty:
             index_searcher=mock_index_searcher,
             generator=mock_generator,
             intent_classifier=mock_intent_classifier,
-            message_classifier=mock_message_classifier,
         )
         # Don't set _imessage_reader, let it try to create
         router._imessage_reader = None
@@ -1378,128 +1330,6 @@ class TestShouldGenerateAfterAcknowledgment:
 
 
 # =============================================================================
-# Greeting and Farewell Handling Tests
-# =============================================================================
-
-
-class TestGreetingFarewellHandling:
-    """Tests for greeting and farewell message handling."""
-
-    def test_greeting_returns_acknowledgment(
-        self,
-        router: ReplyRouter,
-        mock_message_classifier: MagicMock,
-    ) -> None:
-        """Test greetings are handled with acknowledgment response."""
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.GREETING,
-            type_confidence=0.95,
-            context_requirement=ContextRequirement.SELF_CONTAINED,
-            reply_requirement=ReplyRequirement.QUICK_ACK,
-            classification_method="rule",
-        )
-
-        result = router.route("hello")
-
-        assert result["type"] == "acknowledgment"
-
-    def test_farewell_returns_acknowledgment(
-        self,
-        router: ReplyRouter,
-        mock_message_classifier: MagicMock,
-    ) -> None:
-        """Test farewells are handled with acknowledgment response."""
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.FAREWELL,
-            type_confidence=0.95,
-            context_requirement=ContextRequirement.SELF_CONTAINED,
-            reply_requirement=ReplyRequirement.QUICK_ACK,
-            classification_method="rule",
-        )
-
-        result = router.route("goodbye")
-
-        assert result["type"] == "acknowledgment"
-
-
-# =============================================================================
-# Reaction Handling Tests
-# =============================================================================
-
-
-class TestReactionHandling:
-    """Tests for reaction message handling."""
-
-    def test_reaction_returns_acknowledgment(
-        self,
-        router: ReplyRouter,
-        mock_message_classifier: MagicMock,
-    ) -> None:
-        """Test reactions are handled with acknowledgment response."""
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.REACTION,
-            type_confidence=0.99,
-            context_requirement=ContextRequirement.SELF_CONTAINED,
-            reply_requirement=ReplyRequirement.NO_REPLY,
-            classification_method="rule",
-        )
-
-        result = router.route("Loved an image")
-
-        assert result["type"] == "acknowledgment"
-
-
-# =============================================================================
-# Vague Context Requirement Tests
-# =============================================================================
-
-
-class TestVagueContextRequirement:
-    """Tests for handling messages with vague context requirement."""
-
-    def test_vague_message_without_thread_clarifies(
-        self,
-        router: ReplyRouter,
-        mock_message_classifier: MagicMock,
-    ) -> None:
-        """Test vague messages without thread context request clarification."""
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.QUESTION_INFO,
-            type_confidence=0.85,
-            context_requirement=ContextRequirement.VAGUE,
-            reply_requirement=ReplyRequirement.INFO_RESPONSE,
-            classification_method="semantic",
-        )
-
-        result = router.route("what about that?", thread=None)
-
-        assert result["type"] == "clarify"
-
-    def test_vague_message_with_thread_processes(
-        self,
-        router: ReplyRouter,
-        mock_message_classifier: MagicMock,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test vague messages with thread context proceed to processing."""
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.QUESTION_INFO,
-            type_confidence=0.85,
-            context_requirement=ContextRequirement.VAGUE,
-            reply_requirement=ReplyRequirement.INFO_RESPONSE,
-            classification_method="semantic",
-        )
-        mock_index_searcher.search_with_pairs.return_value = []
-
-        result = router.route("what about that?", thread=["Let's go hiking", "Sure!"])
-
-        # Should proceed (not clarify) because we have thread context
-        # Result depends on whether it generates or clarifies based on other logic
-        assert result["type"] in ["generated", "clarify"]
-
-
-# =============================================================================
 # Quick Reply Intent Tests
 # =============================================================================
 
@@ -1510,19 +1340,11 @@ class TestQuickReplyIntent:
     def test_high_confidence_quick_reply_returns_acknowledgment(
         self,
         router: ReplyRouter,
-        mock_message_classifier: MagicMock,
         mock_intent_classifier: MagicMock,
     ) -> None:
         """Test high confidence quick reply intent returns acknowledgment."""
         from jarvis.intent import IntentResult, IntentType
 
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.STATEMENT,
-            type_confidence=0.7,
-            context_requirement=ContextRequirement.SELF_CONTAINED,
-            reply_requirement=ReplyRequirement.QUICK_ACK,
-            classification_method="rule",
-        )
         mock_intent_classifier.classify.return_value = IntentResult(
             intent=IntentType.QUICK_REPLY,
             confidence=0.85,
@@ -1556,28 +1378,6 @@ class TestIntentClassifierProperty:
 
 
 # =============================================================================
-# Message Classifier Property Tests
-# =============================================================================
-
-
-class TestMessageClassifierProperty:
-    """Tests for message_classifier lazy initialization."""
-
-    def test_message_classifier_property_creates_default(self) -> None:
-        """Test message_classifier property creates default instance."""
-        with patch("jarvis.router.get_message_classifier") as mock_get_classifier:
-            mock_classifier = MagicMock()
-            mock_get_classifier.return_value = mock_classifier
-
-            router = ReplyRouter()
-            router._message_classifier = None
-            result = router.message_classifier
-
-            mock_get_classifier.assert_called_once()
-            assert result is mock_classifier
-
-
-# =============================================================================
 # Classification Failure Tests
 # =============================================================================
 
@@ -1585,39 +1385,15 @@ class TestMessageClassifierProperty:
 class TestClassificationFailures:
     """Tests for handling classification failures."""
 
-    def test_message_classification_failure_falls_back(
-        self,
-        router: ReplyRouter,
-        mock_message_classifier: MagicMock,
-        mock_index_searcher: MagicMock,
-    ) -> None:
-        """Test message classification failure falls back to legacy handling."""
-        mock_message_classifier.classify.side_effect = Exception("Classification failed")
-        mock_index_searcher.search_with_pairs.return_value = []
-
-        # Should still process using legacy path
-        result = router.route("ok")
-
-        # "ok" is a simple acknowledgment, so should be handled
-        assert result["type"] == "acknowledgment"
-
     def test_intent_classification_failure_continues(
         self,
         router: ReplyRouter,
         mock_intent_classifier: MagicMock,
-        mock_message_classifier: MagicMock,
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test intent classification failure allows processing to continue."""
         mock_intent_classifier.classify.side_effect = Exception("Intent failed")
-        mock_message_classifier.classify.return_value = MessageClassification(
-            message_type=MessageType.STATEMENT,
-            type_confidence=0.9,
-            context_requirement=ContextRequirement.SELF_CONTAINED,
-            reply_requirement=ReplyRequirement.INFO_RESPONSE,
-            classification_method="rule",
-        )
         mock_index_searcher.search_with_pairs.return_value = [
             {"trigger_text": "test", "response_text": "response", "similarity": 0.75}
         ]

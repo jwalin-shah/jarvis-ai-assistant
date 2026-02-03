@@ -21,7 +21,7 @@ Status: Done
 
 Deliverables:
 - `CachedEmbedder` per-request cache in `jarvis/embedding_adapter.py`
-- Router uses cached embedder across intent, message classification, and FAISS
+- Router uses cached embedder across intent classification and FAISS search
 
 Success criteria:
 - Multiple embedding calls per request collapse to one compute per unique text

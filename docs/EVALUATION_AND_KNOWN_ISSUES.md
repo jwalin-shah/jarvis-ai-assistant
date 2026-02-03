@@ -559,7 +559,6 @@ Only 1 template match out of 200 (0.5%) suggests the template threshold (0.90) i
 
 - [ ] Update quality scores: `python -m scripts.score_pair_quality --update --commit`
 - [ ] Rebuild index with min_quality=0.6: Update `build_index_from_db()` call
-- [ ] Tune acknowledgment classifier in `jarvis/message_classifier.py`
 - [ ] Re-run evaluation to measure improvement
 
 ---
