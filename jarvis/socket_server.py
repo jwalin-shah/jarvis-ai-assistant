@@ -17,7 +17,6 @@ import json
 import logging
 import os
 import signal
-import sys
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
@@ -204,9 +203,7 @@ class JarvisSocketServer:
             # Optionally wait for preload to complete before accepting connections
             # This eliminates cold-start latency for the first request
             if self._wait_for_preload:
-                logger.info(
-                    f"Waiting up to {self._preload_timeout}s for models to preload..."
-                )
+                logger.info(f"Waiting up to {self._preload_timeout}s for models to preload...")
                 ready = await self.wait_for_models()
                 if ready:
                     logger.info("Models ready, accepting connections")
@@ -262,7 +259,7 @@ class JarvisSocketServer:
         try:
             await asyncio.wait_for(self._models_ready_event.wait(), timeout=wait_timeout)
             return self._models_ready
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Model preload wait timed out after {wait_timeout}s")
             return False
 
@@ -441,9 +438,7 @@ class JarvisSocketServer:
                         break  # Client disconnected
 
                     if len(line) > MAX_MESSAGE_SIZE:
-                        response = self._error_response(
-                            None, INVALID_REQUEST, "Message too large"
-                        )
+                        response = self._error_response(None, INVALID_REQUEST, "Message too large")
                         writer.write(response.encode() + b"\n")
                         await writer.drain()
                     else:
@@ -453,7 +448,7 @@ class JarvisSocketServer:
                             writer.write(response.encode() + b"\n")
                             await writer.drain()
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break  # Client idle timeout
 
         except Exception as e:
@@ -483,9 +478,7 @@ class JarvisSocketServer:
                     break
 
                 if len(message) > MAX_MESSAGE_SIZE:
-                    response = self._error_response(
-                        None, INVALID_REQUEST, "Message too large"
-                    )
+                    response = self._error_response(None, INVALID_REQUEST, "Message too large")
                     await websocket.send(response)
                 else:
                     # Create a WebSocket writer wrapper for streaming
@@ -533,9 +526,7 @@ class JarvisSocketServer:
         # Look up handler
         handler = self._methods.get(method)
         if not handler:
-            return self._error_response(
-                request_id, METHOD_NOT_FOUND, f"Method not found: {method}"
-            )
+            return self._error_response(request_id, METHOD_NOT_FOUND, f"Method not found: {method}")
 
         # Check if streaming is requested and supported
         stream_requested = isinstance(params, dict) and params.pop("stream", False)
@@ -546,13 +537,9 @@ class JarvisSocketServer:
             if stream_requested and supports_streaming and writer:
                 # Streaming mode: pass writer and request_id to handler
                 if isinstance(params, dict):
-                    result = await handler(
-                        _writer=writer, _request_id=request_id, **params
-                    )
+                    result = await handler(_writer=writer, _request_id=request_id, **params)
                 else:
-                    result = await handler(
-                        _writer=writer, _request_id=request_id
-                    )
+                    result = await handler(_writer=writer, _request_id=request_id)
                 # For streaming, the handler sends the final response
                 return None
             else:
@@ -573,9 +560,7 @@ class JarvisSocketServer:
             return self._error_response(request_id, e.code, e.message, e.data)
 
         except TypeError as e:
-            return self._error_response(
-                request_id, INVALID_PARAMS, f"Invalid params: {e}"
-            )
+            return self._error_response(request_id, INVALID_PARAMS, f"Invalid params: {e}")
 
         except Exception as e:
             logger.exception(f"Error handling {method}")
@@ -626,15 +611,17 @@ class JarvisSocketServer:
             token_index: Index of this token in the stream
             is_final: Whether this is the last token
         """
-        notification = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "stream.token",
-            "params": {
-                "token": token,
-                "index": token_index,
-                "final": is_final,
-            },
-        })
+        notification = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "stream.token",
+                "params": {
+                    "token": token,
+                    "index": token_index,
+                    "final": is_final,
+                },
+            }
+        )
         writer.write(notification.encode() + b"\n")
         await writer.drain()
 
@@ -651,11 +638,13 @@ class JarvisSocketServer:
             request_id: Original request ID
             result: Final result data
         """
-        response = json.dumps({
-            "jsonrpc": "2.0",
-            "result": result,
-            "id": request_id,
-        })
+        response = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "result": result,
+                "id": request_id,
+            }
+        )
         writer.write(response.encode() + b"\n")
         await writer.drain()
 
@@ -817,11 +806,13 @@ Write a brief, helpful reply:"""
             """Run in thread: generate tokens and put in queue."""
             try:
                 for stream_token in model.generate_stream(prompt, max_tokens=150):
-                    token_queue.put((
-                        stream_token.token,
-                        stream_token.token_index,
-                        stream_token.is_final,
-                    ))
+                    token_queue.put(
+                        (
+                            stream_token.token,
+                            stream_token.token_index,
+                            stream_token.is_final,
+                        )
+                    )
                 token_queue.put(None)  # Signal completion
             except Exception as e:
                 generation_error.append(e)
@@ -993,11 +984,13 @@ Summary:"""
         def producer():
             try:
                 for stream_token in model.generate_stream(prompt, max_tokens=300):
-                    token_queue.put((
-                        stream_token.token,
-                        stream_token.token_index,
-                        stream_token.is_final,
-                    ))
+                    token_queue.put(
+                        (
+                            stream_token.token,
+                            stream_token.token_index,
+                            stream_token.is_final,
+                        )
+                    )
                 token_queue.put(None)
             except Exception as e:
                 generation_error.append(e)
@@ -1079,10 +1072,12 @@ Summary:"""
 
             suggestions = []
             if response_text:
-                suggestions.append({
-                    "text": response_text,
-                    "score": 0.9 if result.get("confidence") == "high" else 0.7,
-                })
+                suggestions.append(
+                    {
+                        "text": response_text,
+                        "score": 0.9 if result.get("confidence") == "high" else 0.7,
+                    }
+                )
 
             # For additional suggestions, we could generate variations
             # For now, just return the single best response
@@ -1160,7 +1155,9 @@ Summary:"""
             result = classifier.classify(text)
 
             return {
-                "intent": result.intent.value if hasattr(result.intent, "value") else str(result.intent),
+                "intent": result.intent.value
+                if hasattr(result.intent, "value")
+                else str(result.intent),
                 "confidence": result.confidence,
                 "requires_response": result.requires_response,
             }
