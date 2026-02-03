@@ -47,6 +47,7 @@ from api.routers import (
     settings_router,
     stats_router,
     suggestions_router,
+    tags_router,
     tasks_router,
     template_analytics_router,
     threads_router,
@@ -239,6 +240,12 @@ API_TAGS_METADATA = [
         "Track template hit rates, HHEM scores, user acceptance, edit distance, and latency. "
         "View metrics by contact, time of day, conversation type, and intent.",
     },
+    {
+        "name": "tags",
+        "description": "Conversation tagging and smart folders. "
+        "Create hierarchical tags, organize conversations into smart folders with dynamic rules, "
+        "and get AI-powered tag suggestions based on content analysis.",
+    },
 ]
 
 API_CONTACT = {
@@ -388,6 +395,7 @@ app.include_router(feedback_router)
 app.include_router(experiments_router)
 app.include_router(relationships_router)
 app.include_router(quality_router)
+app.include_router(tags_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)
