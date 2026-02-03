@@ -11,12 +11,16 @@ Provides endpoints for:
 from __future__ import annotations
 
 import base64
+import threading
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
+
+from api.ratelimit import RATE_LIMIT_READ, limiter
 
 from api.dependencies import get_imessage_reader
 from api.schemas.stats import TimeRangeEnum
@@ -37,13 +41,19 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 # Cache for analytics data with 5-minute TTL
 _analytics_cache: TTLCache | None = None
+_analytics_cache_lock = threading.Lock()
 
 
 def get_analytics_cache() -> TTLCache:
-    """Get analytics cache with 5-minute TTL."""
+    """Get analytics cache with 5-minute TTL.
+
+    Uses double-checked locking pattern for thread safety.
+    """
     global _analytics_cache
     if _analytics_cache is None:
-        _analytics_cache = TTLCache(ttl_seconds=300.0, maxsize=100)
+        with _analytics_cache_lock:
+            if _analytics_cache is None:
+                _analytics_cache = TTLCache(ttl_seconds=300.0, maxsize=100)
     return _analytics_cache
 
 
@@ -59,12 +69,72 @@ def _get_time_range_start(time_range: TimeRangeEnum) -> datetime | None:
     return None  # all_time
 
 
+def _fetch_overview_data(
+    reader: ChatDBReader,
+    time_range: TimeRangeEnum,
+    time_range_start: datetime | None,
+) -> dict[str, Any]:
+    """Fetch and compute overview analytics data (blocking I/O).
+
+    This is run in a threadpool to avoid blocking the event loop.
+    """
+    # Fetch all conversations and messages in batches to limit memory
+    conversations = reader.get_conversations(limit=200)
+    all_messages = []
+
+    for conv in conversations:
+        messages = reader.get_messages(conv.chat_id, limit=500)
+        if time_range_start:
+            messages = [m for m in messages if m.date >= time_range_start]
+        all_messages.extend(messages)
+
+    # Compute analytics
+    engine = get_analytics_engine()
+    overview = engine.compute_overview(all_messages)
+
+    # Trend comparison
+    trend_analyzer = get_trend_analyzer()
+    days = 7 if time_range == TimeRangeEnum.WEEK else 30
+    comparison = trend_analyzer.compare_periods(all_messages, days, days)
+
+    return {
+        "total_messages": overview.total_messages,
+        "sent_messages": overview.total_sent,
+        "received_messages": overview.total_received,
+        "active_conversations": overview.active_conversations,
+        "avg_messages_per_day": overview.avg_messages_per_day,
+        "avg_response_time_minutes": overview.avg_response_time_minutes,
+        "sentiment": {
+            "score": overview.sentiment_score,
+            "label": overview.sentiment_label,
+        },
+        "peak_hour": overview.peak_hour,
+        "peak_day": overview.peak_day,
+        "date_range": {
+            "start": overview.date_range_start.isoformat()
+            if overview.date_range_start
+            else None,
+            "end": overview.date_range_end.isoformat()
+            if overview.date_range_end
+            else None,
+        },
+        "period_comparison": {
+            "total_change_percent": comparison.get("total_messages_change", 0),
+            "sent_change_percent": comparison.get("sent_messages_change", 0),
+            "contacts_change_percent": comparison.get("active_contacts_change", 0),
+        },
+        "time_range": time_range.value,
+    }
+
+
 @router.get(
     "/overview",
     summary="Get analytics dashboard overview",
     response_description="Dashboard overview metrics",
 )
-def get_analytics_overview(
+@limiter.limit(RATE_LIMIT_READ)
+async def get_analytics_overview(
+    request: Request,
     time_range: TimeRangeEnum = Query(
         default=TimeRangeEnum.MONTH,
         description="Time range for analytics",
@@ -112,56 +182,46 @@ def get_analytics_overview(
     # Get time range filter
     time_range_start = _get_time_range_start(time_range)
 
-    # Fetch all conversations and messages
+    # Run blocking I/O in threadpool
+    result = await run_in_threadpool(
+        _fetch_overview_data, reader, time_range, time_range_start
+    )
+
+    cache.set(cache_key, result)
+    return result
+
+
+def _fetch_timeline_data(
+    reader: ChatDBReader,
+    granularity: str,
+    metric: str,
+    time_range: TimeRangeEnum,
+    time_range_start: datetime | None,
+) -> dict[str, Any]:
+    """Fetch and compute timeline data (blocking I/O)."""
+    # Fetch messages
     conversations = reader.get_conversations(limit=200)
     all_messages = []
-
     for conv in conversations:
         messages = reader.get_messages(conv.chat_id, limit=500)
         if time_range_start:
             messages = [m for m in messages if m.date >= time_range_start]
         all_messages.extend(messages)
 
-    # Compute analytics
-    engine = get_analytics_engine()
-    overview = engine.compute_overview(all_messages)
+    # Get aggregator for timeline data
+    aggregator = get_aggregator()
+    timeline_data = aggregator.get_timeline_data(
+        granularity=granularity,
+        messages=all_messages,
+    )
 
-    # Trend comparison
-    trend_analyzer = get_trend_analyzer()
-    days = 7 if time_range == TimeRangeEnum.WEEK else 30
-    comparison = trend_analyzer.compare_periods(all_messages, days, days)
-
-    result = {
-        "total_messages": overview.total_messages,
-        "sent_messages": overview.total_sent,
-        "received_messages": overview.total_received,
-        "active_conversations": overview.active_conversations,
-        "avg_messages_per_day": overview.avg_messages_per_day,
-        "avg_response_time_minutes": overview.avg_response_time_minutes,
-        "sentiment": {
-            "score": overview.sentiment_score,
-            "label": overview.sentiment_label,
-        },
-        "peak_hour": overview.peak_hour,
-        "peak_day": overview.peak_day,
-        "date_range": {
-            "start": overview.date_range_start.isoformat()
-            if overview.date_range_start
-            else None,
-            "end": overview.date_range_end.isoformat()
-            if overview.date_range_end
-            else None,
-        },
-        "period_comparison": {
-            "total_change_percent": comparison.get("total_messages_change", 0),
-            "sent_change_percent": comparison.get("sent_messages_change", 0),
-            "contacts_change_percent": comparison.get("active_contacts_change", 0),
-        },
+    return {
+        "granularity": granularity,
+        "metric": metric,
         "time_range": time_range.value,
+        "data": timeline_data,
+        "total_points": len(timeline_data),
     }
-
-    cache.set(cache_key, result)
-    return result
 
 
 @router.get(
@@ -169,7 +229,9 @@ def get_analytics_overview(
     summary="Get time-series data for charts",
     response_description="Time-series data points",
 )
-def get_analytics_timeline(
+@limiter.limit(RATE_LIMIT_READ)
+async def get_analytics_timeline(
+    request: Request,
     granularity: str = Query(
         default="day",
         regex="^(hour|day|week|month)$",
@@ -222,32 +284,50 @@ def get_analytics_timeline(
 
     time_range_start = _get_time_range_start(time_range)
 
+    result = await run_in_threadpool(
+        _fetch_timeline_data, reader, granularity, metric, time_range, time_range_start
+    )
+
+    cache.set(cache_key, result)
+    return result
+
+
+def _fetch_heatmap_data(
+    reader: ChatDBReader,
+    time_range: TimeRangeEnum,
+    time_range_start: datetime | None,
+) -> dict[str, Any]:
+    """Fetch and compute heatmap data (blocking I/O)."""
     # Fetch messages
     conversations = reader.get_conversations(limit=200)
     all_messages = []
     for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500)
+        messages = reader.get_messages(conv.chat_id, limit=1000)
         if time_range_start:
             messages = [m for m in messages if m.date >= time_range_start]
         all_messages.extend(messages)
 
-    # Get aggregator for timeline data
+    # Update aggregator and get heatmap data
     aggregator = get_aggregator()
-    timeline_data = aggregator.get_timeline_data(
-        granularity=granularity,
-        messages=all_messages,
-    )
+    aggregator.update_daily_aggregates(all_messages)
 
-    result = {
-        "granularity": granularity,
-        "metric": metric,
+    start_date = time_range_start.strftime("%Y-%m-%d") if time_range_start else None
+    heatmap_data = aggregator.get_activity_heatmap_data(start_date=start_date)
+
+    # Calculate stats
+    counts = [d["count"] for d in heatmap_data]
+    active_days = sum(1 for c in counts if c > 0)
+
+    return {
+        "data": heatmap_data,
+        "stats": {
+            "total_days": len(heatmap_data),
+            "active_days": active_days,
+            "max_count": max(counts) if counts else 0,
+            "avg_count": round(sum(counts) / len(counts), 1) if counts else 0,
+        },
         "time_range": time_range.value,
-        "data": timeline_data,
-        "total_points": len(timeline_data),
     }
-
-    cache.set(cache_key, result)
-    return result
 
 
 @router.get(
@@ -255,7 +335,9 @@ def get_analytics_timeline(
     summary="Get activity heatmap data",
     response_description="Heatmap data for activity calendar",
 )
-def get_activity_heatmap(
+@limiter.limit(RATE_LIMIT_READ)
+async def get_activity_heatmap(
+    request: Request,
     time_range: TimeRangeEnum = Query(
         default=TimeRangeEnum.THREE_MONTHS,
         description="Time range for heatmap",
@@ -298,39 +380,70 @@ def get_activity_heatmap(
 
     time_range_start = _get_time_range_start(time_range)
 
-    # Fetch messages
-    conversations = reader.get_conversations(limit=200)
-    all_messages = []
-    for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=1000)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
-        all_messages.extend(messages)
-
-    # Update aggregator and get heatmap data
-    aggregator = get_aggregator()
-    aggregator.update_daily_aggregates(all_messages)
-
-    start_date = time_range_start.strftime("%Y-%m-%d") if time_range_start else None
-    heatmap_data = aggregator.get_activity_heatmap_data(start_date=start_date)
-
-    # Calculate stats
-    counts = [d["count"] for d in heatmap_data]
-    active_days = sum(1 for c in counts if c > 0)
-
-    result = {
-        "data": heatmap_data,
-        "stats": {
-            "total_days": len(heatmap_data),
-            "active_days": active_days,
-            "max_count": max(counts) if counts else 0,
-            "avg_count": round(sum(counts) / len(counts), 1) if counts else 0,
-        },
-        "time_range": time_range.value,
-    }
+    result = await run_in_threadpool(
+        _fetch_heatmap_data, reader, time_range, time_range_start
+    )
 
     cache.set(cache_key, result)
     return result
+
+
+def _fetch_contact_stats(
+    reader: ChatDBReader,
+    chat_id: str,
+    time_range: TimeRangeEnum,
+    time_range_start: datetime | None,
+) -> dict[str, Any] | None:
+    """Fetch and compute contact statistics (blocking I/O).
+
+    Returns None if no messages found.
+    """
+    # Fetch messages for this contact
+    messages = reader.get_messages(chat_id, limit=1000)
+    if time_range_start:
+        messages = [m for m in messages if m.date >= time_range_start]
+
+    if not messages:
+        return None
+
+    # Get contact name
+    contact_name = None
+    for m in messages:
+        if not m.is_from_me and m.sender_name:
+            contact_name = m.sender_name
+            break
+
+    # Compute analytics
+    engine = get_analytics_engine()
+    contact_analytics = engine.compute_contact_analytics(
+        messages, chat_id, contact_name
+    )
+    emoji_stats = engine.compute_emoji_stats(messages)
+    hourly, daily, weekly, monthly = engine.compute_time_distributions(messages)
+
+    return {
+        "contact_id": chat_id,
+        "contact_name": contact_name,
+        "total_messages": contact_analytics.total_messages,
+        "sent_count": contact_analytics.sent_count,
+        "received_count": contact_analytics.received_count,
+        "avg_response_time_minutes": contact_analytics.avg_response_time_minutes,
+        "sentiment_score": contact_analytics.sentiment_score,
+        "engagement_score": contact_analytics.engagement_score,
+        "message_trend": contact_analytics.message_trend,
+        "last_message_date": contact_analytics.last_message_date.isoformat()
+        if contact_analytics.last_message_date
+        else None,
+        "emoji_usage": {
+            "total": emoji_stats.total_count,
+            "per_message": emoji_stats.emojis_per_message,
+            "top_emojis": emoji_stats.top_emojis,
+        },
+        "hourly_distribution": hourly,
+        "daily_distribution": daily,
+        "weekly_counts": weekly,
+        "time_range": time_range.value,
+    }
 
 
 @router.get(
@@ -338,7 +451,9 @@ def get_activity_heatmap(
     summary="Get per-contact statistics",
     response_description="Contact-specific analytics",
 )
-def get_contact_stats(
+@limiter.limit(RATE_LIMIT_READ)
+async def get_contact_stats(
+    request: Request,
     chat_id: str,
     time_range: TimeRangeEnum = Query(
         default=TimeRangeEnum.MONTH,
@@ -381,58 +496,79 @@ def get_contact_stats(
 
     time_range_start = _get_time_range_start(time_range)
 
-    # Fetch messages for this contact
-    messages = reader.get_messages(chat_id, limit=1000)
-    if time_range_start:
-        messages = [m for m in messages if m.date >= time_range_start]
+    result = await run_in_threadpool(
+        _fetch_contact_stats, reader, chat_id, time_range, time_range_start
+    )
 
-    if not messages:
+    if result is None:
         raise HTTPException(
             status_code=404,
             detail=f"No messages found for contact {chat_id}",
         )
 
-    # Get contact name
-    contact_name = None
-    for m in messages:
-        if not m.is_from_me and m.sender_name:
-            contact_name = m.sender_name
-            break
-
-    # Compute analytics
-    engine = get_analytics_engine()
-    contact_analytics = engine.compute_contact_analytics(
-        messages, chat_id, contact_name
-    )
-    emoji_stats = engine.compute_emoji_stats(messages)
-    hourly, daily, weekly, monthly = engine.compute_time_distributions(messages)
-
-    result = {
-        "contact_id": chat_id,
-        "contact_name": contact_name,
-        "total_messages": contact_analytics.total_messages,
-        "sent_count": contact_analytics.sent_count,
-        "received_count": contact_analytics.received_count,
-        "avg_response_time_minutes": contact_analytics.avg_response_time_minutes,
-        "sentiment_score": contact_analytics.sentiment_score,
-        "engagement_score": contact_analytics.engagement_score,
-        "message_trend": contact_analytics.message_trend,
-        "last_message_date": contact_analytics.last_message_date.isoformat()
-        if contact_analytics.last_message_date
-        else None,
-        "emoji_usage": {
-            "total": emoji_stats.total_count,
-            "per_message": emoji_stats.emojis_per_message,
-            "top_emojis": emoji_stats.top_emojis,
-        },
-        "hourly_distribution": hourly,
-        "daily_distribution": daily,
-        "weekly_counts": weekly,
-        "time_range": time_range.value,
-    }
-
     cache.set(cache_key, result)
     return result
+
+
+def _fetch_leaderboard_data(
+    reader: ChatDBReader,
+    time_range: TimeRangeEnum,
+    time_range_start: datetime | None,
+    result_limit: int,
+    sort_by: str,
+) -> dict[str, Any]:
+    """Fetch and compute leaderboard data (blocking I/O)."""
+    # Fetch all conversations
+    conversations = reader.get_conversations(limit=200)
+    contact_data = []
+
+    engine = get_analytics_engine()
+
+    for conv in conversations:
+        messages = reader.get_messages(conv.chat_id, limit=500)
+        if time_range_start:
+            messages = [m for m in messages if m.date >= time_range_start]
+        if not messages:
+            continue
+
+        analytics = engine.compute_contact_analytics(
+            messages, conv.chat_id, conv.display_name
+        )
+        contact_data.append(analytics)
+
+    # Sort by criteria
+    if sort_by == "messages":
+        contact_data.sort(key=lambda c: c.total_messages, reverse=True)
+    elif sort_by == "engagement":
+        contact_data.sort(key=lambda c: c.engagement_score, reverse=True)
+    elif sort_by == "response_time":
+        # Filter out None values and sort by response time (fastest first)
+        contact_data = [c for c in contact_data if c.avg_response_time_minutes is not None]
+        contact_data.sort(key=lambda c: c.avg_response_time_minutes or float("inf"))
+
+    # Build response
+    contacts = [
+        {
+            "rank": i + 1,
+            "contact_id": c.contact_id,
+            "contact_name": c.contact_name,
+            "total_messages": c.total_messages,
+            "sent_count": c.sent_count,
+            "received_count": c.received_count,
+            "engagement_score": c.engagement_score,
+            "avg_response_time_minutes": c.avg_response_time_minutes,
+            "sentiment_score": c.sentiment_score,
+            "trend": c.message_trend,
+        }
+        for i, c in enumerate(contact_data[:result_limit])
+    ]
+
+    return {
+        "contacts": contacts,
+        "total_contacts": len(contact_data),
+        "sort_by": sort_by,
+        "time_range": time_range.value,
+    }
 
 
 @router.get(
@@ -440,7 +576,9 @@ def get_contact_stats(
     summary="Get top contacts ranking",
     response_description="Ranked list of most active contacts",
 )
-def get_contacts_leaderboard(
+@limiter.limit(RATE_LIMIT_READ)
+async def get_contacts_leaderboard(
+    request: Request,
     time_range: TimeRangeEnum = Query(
         default=TimeRangeEnum.MONTH,
         description="Time range for ranking",
@@ -491,118 +629,20 @@ def get_contacts_leaderboard(
 
     time_range_start = _get_time_range_start(time_range)
 
-    # Fetch all conversations
-    conversations = reader.get_conversations(limit=200)
-    contact_data = []
-
-    engine = get_analytics_engine()
-
-    for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
-        if not messages:
-            continue
-
-        analytics = engine.compute_contact_analytics(
-            messages, conv.chat_id, conv.display_name
-        )
-        contact_data.append(analytics)
-
-    # Sort by criteria
-    if sort_by == "messages":
-        contact_data.sort(key=lambda c: c.total_messages, reverse=True)
-    elif sort_by == "engagement":
-        contact_data.sort(key=lambda c: c.engagement_score, reverse=True)
-    elif sort_by == "response_time":
-        # Filter out None values and sort by response time (fastest first)
-        contact_data = [c for c in contact_data if c.avg_response_time_minutes is not None]
-        contact_data.sort(key=lambda c: c.avg_response_time_minutes or float("inf"))
-
-    # Build response
-    contacts = [
-        {
-            "rank": i + 1,
-            "contact_id": c.contact_id,
-            "contact_name": c.contact_name,
-            "total_messages": c.total_messages,
-            "sent_count": c.sent_count,
-            "received_count": c.received_count,
-            "engagement_score": c.engagement_score,
-            "avg_response_time_minutes": c.avg_response_time_minutes,
-            "sentiment_score": c.sentiment_score,
-            "trend": c.message_trend,
-        }
-        for i, c in enumerate(contact_data[:limit])
-    ]
-
-    result = {
-        "contacts": contacts,
-        "total_contacts": len(contact_data),
-        "sort_by": sort_by,
-        "time_range": time_range.value,
-    }
+    result = await run_in_threadpool(
+        _fetch_leaderboard_data, reader, time_range, time_range_start, limit, sort_by
+    )
 
     cache.set(cache_key, result)
     return result
 
 
-@router.get(
-    "/trends",
-    summary="Get trending patterns",
-    response_description="Detected trends and anomalies",
-)
-def get_trending_patterns(
-    time_range: TimeRangeEnum = Query(
-        default=TimeRangeEnum.MONTH,
-        description="Time range for trend analysis",
-    ),
-    reader: ChatDBReader = Depends(get_imessage_reader),
+def _fetch_trends_data(
+    reader: ChatDBReader,
+    time_range: TimeRangeEnum,
+    time_range_start: datetime | None,
 ) -> dict[str, Any]:
-    """Get detected trends, anomalies, and patterns.
-
-    Returns:
-    - Overall activity trend
-    - Trending contacts (significant changes)
-    - Detected anomalies (unusual activity)
-    - Seasonality patterns
-
-    **Example Response:**
-    ```json
-    {
-        "overall_trend": {
-            "direction": "increasing",
-            "percentage_change": 25.5,
-            "confidence": 0.85
-        },
-        "trending_contacts": [
-            {
-                "contact_id": "chat123",
-                "contact_name": "John",
-                "trend": "increasing",
-                "change_percent": 45.5
-            }
-        ],
-        "anomalies": [
-            {
-                "date": "2024-01-20",
-                "type": "spike",
-                "value": 150,
-                "expected": 45
-            }
-        ]
-    }
-    ```
-    """
-    cache_key = f"trends:{time_range.value}"
-    cache = get_analytics_cache()
-
-    found, cached = cache.get(cache_key)
-    if found:
-        return cached  # type: ignore[return-value]
-
-    time_range_start = _get_time_range_start(time_range)
-
+    """Fetch and compute trends data (blocking I/O)."""
     # Fetch messages
     conversations = reader.get_conversations(limit=200)
     all_messages = []
@@ -617,7 +657,7 @@ def get_trending_patterns(
     analysis = trend_analyzer.analyze_message_trends(all_messages)
     trending_contacts = trend_analyzer.get_trending_contacts(all_messages)
 
-    result = {
+    return {
         "overall_trend": {
             "direction": analysis.overall_trend.direction,
             "percentage_change": analysis.overall_trend.percentage_change,
@@ -673,8 +713,104 @@ def get_trending_patterns(
         "time_range": time_range.value,
     }
 
+
+@router.get(
+    "/trends",
+    summary="Get trending patterns",
+    response_description="Detected trends and anomalies",
+)
+@limiter.limit(RATE_LIMIT_READ)
+async def get_trending_patterns(
+    request: Request,
+    time_range: TimeRangeEnum = Query(
+        default=TimeRangeEnum.MONTH,
+        description="Time range for trend analysis",
+    ),
+    reader: ChatDBReader = Depends(get_imessage_reader),
+) -> dict[str, Any]:
+    """Get detected trends, anomalies, and patterns.
+
+    Returns:
+    - Overall activity trend
+    - Trending contacts (significant changes)
+    - Detected anomalies (unusual activity)
+    - Seasonality patterns
+
+    **Example Response:**
+    ```json
+    {
+        "overall_trend": {
+            "direction": "increasing",
+            "percentage_change": 25.5,
+            "confidence": 0.85
+        },
+        "trending_contacts": [
+            {
+                "contact_id": "chat123",
+                "contact_name": "John",
+                "trend": "increasing",
+                "change_percent": 45.5
+            }
+        ],
+        "anomalies": [
+            {
+                "date": "2024-01-20",
+                "type": "spike",
+                "value": 150,
+                "expected": 45
+            }
+        ]
+    }
+    ```
+    """
+    cache_key = f"trends:{time_range.value}"
+    cache = get_analytics_cache()
+
+    found, cached = cache.get(cache_key)
+    if found:
+        return cached  # type: ignore[return-value]
+
+    time_range_start = _get_time_range_start(time_range)
+
+    result = await run_in_threadpool(
+        _fetch_trends_data, reader, time_range, time_range_start
+    )
+
     cache.set(cache_key, result)
     return result
+
+
+def _fetch_export_data(
+    reader: ChatDBReader,
+    export_format: str,
+    time_range: TimeRangeEnum,
+    time_range_start: datetime | None,
+) -> tuple[str, str, str]:
+    """Fetch and generate export data (blocking I/O).
+
+    Returns tuple of (content, media_type, filename).
+    """
+    # Fetch messages
+    conversations = reader.get_conversations(limit=200)
+    all_messages = []
+    contact_messages: dict[str, list] = defaultdict(list)
+
+    for conv in conversations:
+        messages = reader.get_messages(conv.chat_id, limit=500)
+        if time_range_start:
+            messages = [m for m in messages if m.date >= time_range_start]
+        all_messages.extend(messages)
+        contact_messages[conv.chat_id].extend(messages)
+
+    report_gen = get_report_generator()
+
+    if export_format == "json":
+        content = report_gen.export_to_json(all_messages, contact_messages)
+        return content, "application/json", f"analytics_{time_range.value}.json"
+    else:  # csv
+        csv_exports = report_gen.export_to_csv(all_messages)
+        daily_csv = csv_exports.get("daily_analytics.csv", "")
+        return daily_csv, "text/csv", f"daily_analytics_{time_range.value}.csv"
 
 
 @router.get(
@@ -682,7 +818,9 @@ def get_trending_patterns(
     summary="Export analytics data",
     response_description="Exported analytics in requested format",
 )
-def export_analytics(
+@limiter.limit(RATE_LIMIT_READ)
+async def export_analytics(
+    request: Request,
     format: str = Query(
         default="json",
         regex="^(json|csv)$",
@@ -704,41 +842,15 @@ def export_analytics(
     """
     time_range_start = _get_time_range_start(time_range)
 
-    # Fetch messages
-    conversations = reader.get_conversations(limit=200)
-    all_messages = []
-    contact_messages: dict[str, list] = defaultdict(list)
+    content, media_type, filename = await run_in_threadpool(
+        _fetch_export_data, reader, format, time_range, time_range_start
+    )
 
-    for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
-        all_messages.extend(messages)
-        contact_messages[conv.chat_id].extend(messages)
-
-    report_gen = get_report_generator()
-
-    if format == "json":
-        content = report_gen.export_to_json(all_messages, contact_messages)
-        return Response(
-            content=content,
-            media_type="application/json",
-            headers={
-                "Content-Disposition": f"attachment; filename=analytics_{time_range.value}.json"
-            },
-        )
-    else:  # csv
-        csv_exports = report_gen.export_to_csv(all_messages)
-
-        # For simplicity, return daily CSV (could create zip for multiple)
-        daily_csv = csv_exports.get("daily_analytics.csv", "")
-        return Response(
-            content=daily_csv,
-            media_type="text/csv",
-            headers={
-                "Content-Disposition": f"attachment; filename=daily_analytics_{time_range.value}.csv"
-            },
-        )
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.delete(
@@ -746,7 +858,8 @@ def export_analytics(
     summary="Clear analytics cache",
     response_description="Cache invalidation confirmation",
 )
-def clear_analytics_cache() -> dict[str, str]:
+@limiter.limit(RATE_LIMIT_READ)
+async def clear_analytics_cache(request: Request) -> dict[str, str]:
     """Clear the analytics cache to force fresh computation.
 
     Use this after significant data changes or when troubleshooting

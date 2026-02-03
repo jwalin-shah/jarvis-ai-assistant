@@ -742,12 +742,56 @@ export async function initializeDirectAccess(): Promise<boolean> {
 /**
  * Initialize socket connection for push notifications
  */
+// Socket event handlers (stored for cleanup)
+let socketListenersRegistered = false;
+
+function handleSocketNewMessage(data: {
+  message_id: number;
+  chat_id: string;
+  sender: string;
+  text: string;
+  date: string;
+  is_from_me: boolean;
+}): void {
+  handleNewMessagePush(data);
+}
+
+function handleSocketDisconnected(): void {
+  console.log("[Conversations] Socket disconnected, switching to polling mode");
+  socketPushActive = false;
+  adjustPollingIntervals();
+}
+
+function handleSocketConnected(): void {
+  console.log("[Conversations] Socket connected, reducing poll frequency");
+  socketPushActive = true;
+  adjustPollingIntervals();
+}
+
+/**
+ * Remove all socket event listeners
+ */
+function cleanupSocketListeners(): void {
+  if (socketListenersRegistered) {
+    jarvis.off("new_message", handleSocketNewMessage);
+    jarvis.off("disconnected", handleSocketDisconnected);
+    jarvis.off("connected", handleSocketConnected);
+    socketListenersRegistered = false;
+    console.log("[Conversations] Socket listeners cleaned up");
+  }
+}
+
 async function initializeSocketPush(): Promise<boolean> {
   try {
     const connected = await jarvis.connect();
     if (!connected) {
       console.warn("[Conversations] Socket connection failed, using polling fallback");
       return false;
+    }
+
+    // Avoid duplicate listener registration
+    if (socketListenersRegistered) {
+      return true;
     }
 
     // Register for new message notifications
@@ -758,23 +802,13 @@ async function initializeSocketPush(): Promise<boolean> {
       text: string;
       date: string;
       is_from_me: boolean;
-    }>("new_message", (data) => {
-      handleNewMessagePush(data);
-    });
+    }>("new_message", handleSocketNewMessage);
 
     // Handle socket connection state changes
-    jarvis.on("disconnected", () => {
-      console.log("[Conversations] Socket disconnected, switching to polling mode");
-      socketPushActive = false;
-      adjustPollingIntervals();
-    });
+    jarvis.on("disconnected", handleSocketDisconnected);
+    jarvis.on("connected", handleSocketConnected);
 
-    jarvis.on("connected", () => {
-      console.log("[Conversations] Socket connected, reducing poll frequency");
-      socketPushActive = true;
-      adjustPollingIntervals();
-    });
-
+    socketListenersRegistered = true;
     socketPushActive = true;
     console.log("[Conversations] Socket push notifications enabled");
     return true;
@@ -873,6 +907,7 @@ export function initializePolling(): () => void {
   return () => {
     stopConversationPolling();
     stopMessagePolling();
+    cleanupSocketListeners();
     jarvis.disconnect();
     window.removeEventListener("focus", handleFocus);
     window.removeEventListener("blur", handleBlur);
