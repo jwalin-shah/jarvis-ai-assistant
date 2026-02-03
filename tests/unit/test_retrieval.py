@@ -120,12 +120,8 @@ class TestMultiTypeExamples:
             query_trigger="Test?",
             trigger_da="commitment",
             examples_by_type={
-                ResponseType.AGREE: [
-                    TypedExample("Q?", "Yes!", ResponseType.AGREE, 0.9, 0.8)
-                ],
-                ResponseType.DECLINE: [
-                    TypedExample("Q?", "No", ResponseType.DECLINE, 0.8, 0.7)
-                ],
+                ResponseType.AGREE: [TypedExample("Q?", "Yes!", ResponseType.AGREE, 0.9, 0.8)],
+                ResponseType.DECLINE: [TypedExample("Q?", "No", ResponseType.DECLINE, 0.8, 0.7)],
                 ResponseType.DEFER: [],  # Empty - shouldn't be included
             },
         )

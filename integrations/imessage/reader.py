@@ -142,9 +142,7 @@ class ConnectionPool:
         self.db_path = db_path
         self.max_connections = min(max_connections, MAX_POOL_SIZE)
         self.timeout = timeout
-        self._pool: queue.Queue[sqlite3.Connection] = queue.Queue(
-            maxsize=self.max_connections
-        )
+        self._pool: queue.Queue[sqlite3.Connection] = queue.Queue(maxsize=self.max_connections)
         self._created_count = 0
         self._lock = threading.Lock()
         self._closed = False

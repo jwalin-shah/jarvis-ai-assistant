@@ -95,9 +95,7 @@ def get_model_info(model_name: str | None = None) -> tuple[str, str]:
 
     if model_name not in EMBEDDING_MODEL_REGISTRY:
         valid_models = ", ".join(EMBEDDING_MODEL_REGISTRY.keys())
-        raise ValueError(
-            f"Unknown embedding model '{model_name}'. " f"Valid options: {valid_models}"
-        )
+        raise ValueError(f"Unknown embedding model '{model_name}'. Valid options: {valid_models}")
 
     return EMBEDDING_MODEL_REGISTRY[model_name]
 

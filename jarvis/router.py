@@ -29,11 +29,9 @@ Usage:
 from __future__ import annotations
 
 import logging
-import os
 import random
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -654,9 +652,12 @@ class ReplyRouter:
                 model_loaded=model_loaded,
             )
             # Verbose logging for debugging
-            logger.info("ROUTE END | decision=%s sim=%.3f latency=%s",
-                       routing_decision, similarity_score,
-                       {k: f"{v:.1f}ms" for k, v in latency_ms.items()})
+            logger.info(
+                "ROUTE END | decision=%s sim=%.3f latency=%s",
+                routing_decision,
+                similarity_score,
+                {k: f"{v:.1f}ms" for k, v in latency_ms.items()},
+            )
             logger.info("ROUTE OUTPUT | %s", result.get("response", "")[:100])
             logger.info("=" * 60)
             return result

@@ -9,7 +9,6 @@ Usage:
 """
 
 import gc
-import os
 import sys
 import time
 from pathlib import Path
@@ -22,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def get_index_size_mb(index) -> float:
     """Get FAISS index size in MB by serializing it."""
+
     import faiss
-    import io
 
     # Serialize index to bytes to measure actual size
     writer = faiss.VectorIOWriter()
@@ -62,16 +61,15 @@ def benchmark_index(
     Returns:
         Dictionary with benchmark results
     """
-    import faiss
 
     # Build index
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Benchmarking: {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     build_start = time.perf_counter()
 
-    if hasattr(index, 'train') and not index.is_trained:
+    if hasattr(index, "train") and not index.is_trained:
         print("  Training index...")
         # IVF indexes need training on a sample
         train_size = min(len(embeddings), 50000)
@@ -163,14 +161,16 @@ def main():
     # 1. IndexFlatIP (brute force baseline)
     print("\n" + "=" * 60)
     index_flat = faiss.IndexFlatIP(dim)
-    results.append(benchmark_index(
-        "IndexFlatIP (brute force)",
-        index_flat,
-        embeddings.copy(),
-        queries,
-        ground_truth,
-        k,
-    ))
+    results.append(
+        benchmark_index(
+            "IndexFlatIP (brute force)",
+            index_flat,
+            embeddings.copy(),
+            queries,
+            ground_truth,
+            k,
+        )
+    )
     del index_flat
     gc.collect()
 
@@ -178,14 +178,16 @@ def main():
     quantizer = faiss.IndexFlatIP(dim)
     index_ivf = faiss.IndexIVFFlat(quantizer, dim, n_clusters, faiss.METRIC_INNER_PRODUCT)
     index_ivf.nprobe = 128  # Higher nprobe = better recall (search more clusters)
-    results.append(benchmark_index(
-        f"IndexIVFFlat (nprobe=128, {n_clusters} clusters)",
-        index_ivf,
-        embeddings.copy(),
-        queries,
-        ground_truth,
-        k,
-    ))
+    results.append(
+        benchmark_index(
+            f"IndexIVFFlat (nprobe=128, {n_clusters} clusters)",
+            index_ivf,
+            embeddings.copy(),
+            queries,
+            ground_truth,
+            k,
+        )
+    )
     del index_ivf, quantizer
     gc.collect()
 
@@ -195,31 +197,40 @@ def main():
         quantizer, dim, n_clusters, n_subquantizers, n_bits, faiss.METRIC_INNER_PRODUCT
     )
     index_ivfpq.nprobe = 128
-    results.append(benchmark_index(
-        f"IndexIVFPQ (nprobe=128, {n_subquantizers}x{n_bits}bit)",
-        index_ivfpq,
-        embeddings.copy(),
-        queries,
-        ground_truth,
-        k,
-    ))
+    results.append(
+        benchmark_index(
+            f"IndexIVFPQ (nprobe=128, {n_subquantizers}x{n_bits}bit)",
+            index_ivfpq,
+            embeddings.copy(),
+            queries,
+            ground_truth,
+            k,
+        )
+    )
     del index_ivfpq, quantizer
     gc.collect()
 
     # 4. IndexIVFPQ with more aggressive compression
     quantizer = faiss.IndexFlatIP(dim)
     index_ivfpq_small = faiss.IndexIVFPQ(
-        quantizer, dim, n_clusters, 24, n_bits, faiss.METRIC_INNER_PRODUCT  # 24 subquantizers
+        quantizer,
+        dim,
+        n_clusters,
+        24,
+        n_bits,
+        faiss.METRIC_INNER_PRODUCT,  # 24 subquantizers
     )
     index_ivfpq_small.nprobe = 128
-    results.append(benchmark_index(
-        f"IndexIVFPQ (nprobe=128, 24x{n_bits}bit, more compressed)",
-        index_ivfpq_small,
-        embeddings.copy(),
-        queries,
-        ground_truth,
-        k,
-    ))
+    results.append(
+        benchmark_index(
+            f"IndexIVFPQ (nprobe=128, 24x{n_bits}bit, more compressed)",
+            index_ivfpq_small,
+            embeddings.copy(),
+            queries,
+            ground_truth,
+            k,
+        )
+    )
     del index_ivfpq_small, quantizer
     gc.collect()
 
@@ -230,7 +241,9 @@ def main():
     print(f"{'Index':<45} {'Memory':>10} {'Search':>10} {'Recall':>10}")
     print("-" * 75)
     for r in results:
-        print(f"{r['name']:<45} {r['memory_mb']:>8.1f}MB {r['search_time_ms']:>8.2f}ms {r['recall_at_k']:>8.1f}%")
+        print(
+            f"{r['name']:<45} {r['memory_mb']:>8.1f}MB {r['search_time_ms']:>8.2f}ms {r['recall_at_k']:>8.1f}%"
+        )
 
     # Recommendation
     print("\n" + "=" * 60)
@@ -244,8 +257,12 @@ def main():
     recall_lost = flat["recall_at_k"] - ivfpq["recall_at_k"]
     speedup = flat["search_time_ms"] / ivfpq["search_time_ms"]
 
-    print(f"IndexIVFPQ saves {memory_saved:.0f}MB ({memory_saved/flat['memory_mb']*100:.0f}% reduction)")
-    print(f"Recall drops by {recall_lost:.1f}% (from {flat['recall_at_k']:.1f}% to {ivfpq['recall_at_k']:.1f}%)")
+    print(
+        f"IndexIVFPQ saves {memory_saved:.0f}MB ({memory_saved / flat['memory_mb'] * 100:.0f}% reduction)"
+    )
+    print(
+        f"Recall drops by {recall_lost:.1f}% (from {flat['recall_at_k']:.1f}% to {ivfpq['recall_at_k']:.1f}%)"
+    )
     print(f"Search is {speedup:.1f}x faster")
 
     if ivfpq["recall_at_k"] >= 90:
