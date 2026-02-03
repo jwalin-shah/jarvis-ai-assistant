@@ -1,0 +1,788 @@
+"""Background prefetch executor with resource management.
+
+Executes prefetch predictions in the background with:
+- Priority-based scheduling
+- Resource awareness (CPU, memory, battery)
+- Rate limiting and backpressure
+- Metrics and monitoring
+
+Usage:
+    executor = PrefetchExecutor(cache=cache)
+    executor.start()
+    executor.schedule(prediction)
+    executor.stop()
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+import threading
+import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from enum import Enum
+from queue import PriorityQueue
+from typing import Any
+
+from jarvis.prefetch.cache import CacheEntry, CacheTier, MultiTierCache, get_cache
+from jarvis.prefetch.predictor import Prediction, PredictionPriority, PredictionType
+
+logger = logging.getLogger(__name__)
+
+
+class ExecutorState(str, Enum):
+    """Executor states."""
+
+    STOPPED = "stopped"
+    STARTING = "starting"
+    RUNNING = "running"
+    PAUSED = "paused"
+    STOPPING = "stopping"
+
+
+@dataclass
+class ExecutorStats:
+    """Statistics for the executor."""
+
+    predictions_scheduled: int = 0
+    predictions_executed: int = 0
+    predictions_cached: int = 0
+    predictions_skipped: int = 0
+    predictions_failed: int = 0
+    cache_hits: int = 0
+    total_cost_ms: int = 0
+    avg_latency_ms: float = 0.0
+    queue_size: int = 0
+    workers_active: int = 0
+
+    def record_execution(self, cost_ms: int, cached: bool) -> None:
+        """Record an execution result."""
+        self.predictions_executed += 1
+        self.total_cost_ms += cost_ms
+        if cached:
+            self.predictions_cached += 1
+        n = self.predictions_executed
+        self.avg_latency_ms = (self.avg_latency_ms * (n - 1) + cost_ms) / n
+
+
+@dataclass(order=True)
+class PrefetchTask:
+    """A task to be executed by the prefetch executor."""
+
+    priority: int  # Lower = higher priority (for PriorityQueue)
+    created_at: float = field(compare=False)
+    prediction: Prediction = field(compare=False)
+    retries: int = field(default=0, compare=False)
+    max_retries: int = field(default=2, compare=False)
+
+
+# Type alias for prefetch handlers
+PrefetchHandler = Callable[[Prediction], dict[str, Any] | None]
+
+
+class ResourceManager:
+    """Manages system resources for prefetching.
+
+    Monitors CPU, memory, and battery to ensure prefetching
+    doesn't impact user experience.
+    """
+
+    def __init__(
+        self,
+        memory_threshold_mb: int = 500,  # Min available memory
+        cpu_threshold_percent: float = 80.0,  # Max CPU before throttling
+        battery_threshold: float = 0.2,  # Min battery for prefetch
+    ) -> None:
+        self._memory_threshold = memory_threshold_mb * 1024 * 1024
+        self._cpu_threshold = cpu_threshold_percent
+        self._battery_threshold = battery_threshold
+        self._is_plugged_in = True
+        self._battery_level = 1.0
+        self._available_memory = 8 * 1024 * 1024 * 1024  # Default 8GB
+        self._cpu_usage = 0.0
+        self._last_update = 0.0
+        self._update_interval = 5.0  # Update every 5 seconds
+
+    def update(self) -> None:
+        """Update resource metrics."""
+        now = time.time()
+        if now - self._last_update < self._update_interval:
+            return
+
+        self._last_update = now
+
+        # Try to get memory info
+        try:
+            import psutil
+
+            mem = psutil.virtual_memory()
+            self._available_memory = mem.available
+            self._cpu_usage = psutil.cpu_percent(interval=0)
+
+            # Battery info
+            battery = psutil.sensors_battery()
+            if battery:
+                self._battery_level = battery.percent / 100
+                self._is_plugged_in = battery.power_plugged
+            else:
+                self._is_plugged_in = True
+                self._battery_level = 1.0
+        except ImportError:
+            # psutil not available, use defaults
+            pass
+        except Exception as e:
+            logger.debug(f"Error getting resource info: {e}")
+
+    def can_prefetch(self) -> bool:
+        """Check if prefetching is allowed.
+
+        Returns:
+            True if resources allow prefetching.
+        """
+        self.update()
+
+        # Check memory
+        if self._available_memory < self._memory_threshold:
+            logger.debug("Prefetch blocked: low memory")
+            return False
+
+        # Check CPU
+        if self._cpu_usage > self._cpu_threshold:
+            logger.debug("Prefetch blocked: high CPU")
+            return False
+
+        # Check battery (only if not plugged in)
+        if not self._is_plugged_in and self._battery_level < self._battery_threshold:
+            logger.debug("Prefetch blocked: low battery")
+            return False
+
+        return True
+
+    def get_concurrency_limit(self) -> int:
+        """Get recommended concurrency based on resources.
+
+        Returns:
+            Maximum concurrent prefetch tasks.
+        """
+        self.update()
+
+        # Base concurrency on CPU and memory
+        cpu_cores = os.cpu_count() or 4
+        base_concurrency = max(1, cpu_cores // 2)
+
+        # Reduce if resources are constrained
+        if self._cpu_usage > 50:
+            base_concurrency = max(1, base_concurrency // 2)
+
+        if self._available_memory < self._memory_threshold * 2:
+            base_concurrency = max(1, base_concurrency // 2)
+
+        # Battery mode: single worker
+        if not self._is_plugged_in and self._battery_level < 0.5:
+            base_concurrency = 1
+
+        return base_concurrency
+
+    @property
+    def battery_level(self) -> float:
+        """Current battery level (0-1)."""
+        return self._battery_level
+
+    @property
+    def available_memory_mb(self) -> int:
+        """Available memory in MB."""
+        return self._available_memory // (1024 * 1024)
+
+
+class PrefetchExecutor:
+    """Background executor for prefetch tasks.
+
+    Features:
+    - Priority queue for task scheduling
+    - Resource-aware execution
+    - Extensible handler system
+    - Metrics and monitoring
+    """
+
+    def __init__(
+        self,
+        cache: MultiTierCache | None = None,
+        max_workers: int | None = None,
+        max_queue_size: int = 100,
+        tick_interval: float = 0.1,
+    ) -> None:
+        """Initialize the executor.
+
+        Args:
+            cache: Multi-tier cache for storing prefetched data.
+            max_workers: Maximum worker threads (auto-detected if None).
+            max_queue_size: Maximum pending tasks.
+            tick_interval: How often to check for tasks (seconds).
+        """
+        self._cache = cache or get_cache()
+        self._max_workers = max_workers or (os.cpu_count() or 4)
+        self._max_queue_size = max_queue_size
+        self._tick_interval = tick_interval
+
+        self._queue: PriorityQueue[PrefetchTask] = PriorityQueue(maxsize=max_queue_size)
+        self._state = ExecutorState.STOPPED
+        self._stats = ExecutorStats()
+        self._resource_manager = ResourceManager()
+
+        self._handlers: dict[PredictionType, PrefetchHandler] = {}
+        self._executor: ThreadPoolExecutor | None = None
+        self._worker_thread: threading.Thread | None = None
+        self._shutdown_event = threading.Event()
+        self._lock = threading.RLock()
+
+        # Active tasks tracking
+        self._active_tasks: set[str] = set()
+        self._active_lock = threading.Lock()
+
+        # Register default handlers
+        self._register_default_handlers()
+
+    def _register_default_handlers(self) -> None:
+        """Register default prefetch handlers."""
+        self.register_handler(PredictionType.DRAFT_REPLY, self._handle_draft_reply)
+        self.register_handler(PredictionType.EMBEDDING, self._handle_embedding)
+        self.register_handler(PredictionType.CONTACT_PROFILE, self._handle_contact_profile)
+        self.register_handler(PredictionType.MODEL_WARM, self._handle_model_warm)
+        self.register_handler(PredictionType.SEARCH_RESULTS, self._handle_search_results)
+        self.register_handler(PredictionType.FAISS_INDEX, self._handle_faiss_index)
+
+    def register_handler(self, pred_type: PredictionType, handler: PrefetchHandler) -> None:
+        """Register a handler for a prediction type.
+
+        Args:
+            pred_type: Prediction type to handle.
+            handler: Handler function that returns data to cache or None.
+        """
+        with self._lock:
+            self._handlers[pred_type] = handler
+
+    def start(self) -> None:
+        """Start the executor."""
+        with self._lock:
+            if self._state != ExecutorState.STOPPED:
+                return
+
+            self._state = ExecutorState.STARTING
+            self._shutdown_event.clear()
+
+            # Create thread pool
+            self._executor = ThreadPoolExecutor(
+                max_workers=self._max_workers,
+                thread_name_prefix="prefetch-",
+            )
+
+            # Start worker thread
+            self._worker_thread = threading.Thread(
+                target=self._worker_loop,
+                name="prefetch-scheduler",
+                daemon=True,
+            )
+            self._worker_thread.start()
+
+            self._state = ExecutorState.RUNNING
+            logger.info(f"Prefetch executor started with {self._max_workers} workers")
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop the executor.
+
+        Args:
+            timeout: Maximum seconds to wait for shutdown.
+        """
+        with self._lock:
+            if self._state == ExecutorState.STOPPED:
+                return
+
+            self._state = ExecutorState.STOPPING
+            self._shutdown_event.set()
+
+        # Wait for worker thread
+        if self._worker_thread:
+            self._worker_thread.join(timeout=timeout)
+            self._worker_thread = None
+
+        # Shutdown thread pool
+        if self._executor:
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            self._executor = None
+
+        with self._lock:
+            self._state = ExecutorState.STOPPED
+            # Clear queue
+            while not self._queue.empty():
+                try:
+                    self._queue.get_nowait()
+                except Exception:
+                    break
+
+        logger.info("Prefetch executor stopped")
+
+    def pause(self) -> None:
+        """Pause execution (tasks remain in queue)."""
+        with self._lock:
+            if self._state == ExecutorState.RUNNING:
+                self._state = ExecutorState.PAUSED
+                logger.info("Prefetch executor paused")
+
+    def resume(self) -> None:
+        """Resume execution."""
+        with self._lock:
+            if self._state == ExecutorState.PAUSED:
+                self._state = ExecutorState.RUNNING
+                logger.info("Prefetch executor resumed")
+
+    def schedule(self, prediction: Prediction) -> bool:
+        """Schedule a prediction for prefetching.
+
+        Args:
+            prediction: Prediction to prefetch.
+
+        Returns:
+            True if scheduled, False if rejected (queue full, duplicate, etc.).
+        """
+        with self._lock:
+            if self._state not in (ExecutorState.RUNNING, ExecutorState.PAUSED):
+                return False
+
+            # Check if already in cache
+            if self._cache.get(prediction.key) is not None:
+                self._stats.cache_hits += 1
+                return False
+
+            # Check if already being processed
+            with self._active_lock:
+                if prediction.key in self._active_tasks:
+                    return False
+
+        # Create task with inverted priority (lower = higher priority)
+        task = PrefetchTask(
+            priority=-prediction.priority.value,  # Negate for min-heap
+            created_at=time.time(),
+            prediction=prediction,
+        )
+
+        try:
+            self._queue.put_nowait(task)
+            self._stats.predictions_scheduled += 1
+            self._stats.queue_size = self._queue.qsize()
+            return True
+        except Exception:
+            self._stats.predictions_skipped += 1
+            return False
+
+    def schedule_batch(self, predictions: list[Prediction]) -> int:
+        """Schedule multiple predictions.
+
+        Args:
+            predictions: List of predictions to schedule.
+
+        Returns:
+            Number of predictions scheduled.
+        """
+        count = 0
+        for pred in predictions:
+            if self.schedule(pred):
+                count += 1
+        return count
+
+    def stats(self) -> dict[str, Any]:
+        """Get executor statistics."""
+        with self._lock:
+            return {
+                "state": self._state.value,
+                "scheduled": self._stats.predictions_scheduled,
+                "executed": self._stats.predictions_executed,
+                "cached": self._stats.predictions_cached,
+                "skipped": self._stats.predictions_skipped,
+                "failed": self._stats.predictions_failed,
+                "cache_hits": self._stats.cache_hits,
+                "total_cost_ms": self._stats.total_cost_ms,
+                "avg_latency_ms": self._stats.avg_latency_ms,
+                "queue_size": self._queue.qsize(),
+                "active_tasks": len(self._active_tasks),
+                "workers": self._max_workers,
+                "resource_manager": {
+                    "can_prefetch": self._resource_manager.can_prefetch(),
+                    "battery": self._resource_manager.battery_level,
+                    "memory_available_mb": self._resource_manager.available_memory_mb,
+                },
+            }
+
+    def _worker_loop(self) -> None:
+        """Main worker loop that processes tasks."""
+        while not self._shutdown_event.is_set():
+            try:
+                # Check state
+                if self._state != ExecutorState.RUNNING:
+                    time.sleep(self._tick_interval)
+                    continue
+
+                # Check resources
+                if not self._resource_manager.can_prefetch():
+                    time.sleep(self._tick_interval * 5)  # Back off
+                    continue
+
+                # Get task from queue
+                try:
+                    task = self._queue.get(timeout=self._tick_interval)
+                except Exception:
+                    continue
+
+                # Check if prediction is still valid
+                prediction = task.prediction
+                age = time.time() - task.created_at
+                if age > prediction.ttl_seconds / 2:
+                    # Too old, skip
+                    self._stats.predictions_skipped += 1
+                    continue
+
+                # Execute task
+                if self._executor:
+                    self._executor.submit(self._execute_task, task)
+
+            except Exception as e:
+                logger.warning(f"Worker loop error: {e}")
+                time.sleep(self._tick_interval)
+
+    def _execute_task(self, task: PrefetchTask) -> None:
+        """Execute a single prefetch task.
+
+        Args:
+            task: Task to execute.
+        """
+        prediction = task.prediction
+        start_time = time.time()
+
+        # Mark as active
+        with self._active_lock:
+            if prediction.key in self._active_tasks:
+                return  # Already being processed
+            self._active_tasks.add(prediction.key)
+
+        try:
+            # Get handler
+            handler = self._handlers.get(prediction.type)
+            if not handler:
+                logger.warning(f"No handler for prediction type: {prediction.type}")
+                self._stats.predictions_skipped += 1
+                return
+
+            # Execute handler
+            try:
+                result = handler(prediction)
+            except Exception as e:
+                logger.debug(f"Handler failed for {prediction.key}: {e}")
+                # Retry if possible
+                if task.retries < task.max_retries:
+                    task.retries += 1
+                    task.priority -= 10  # Lower priority on retry
+                    try:
+                        self._queue.put_nowait(task)
+                    except Exception:
+                        pass
+                else:
+                    self._stats.predictions_failed += 1
+                return
+
+            # Cache result if any
+            if result is not None:
+                tier = self._get_cache_tier(prediction)
+                self._cache.set(
+                    key=prediction.key,
+                    value=result,
+                    tier=tier,
+                    ttl_seconds=prediction.ttl_seconds,
+                    tags=prediction.tags,
+                )
+                cost_ms = int((time.time() - start_time) * 1000)
+                self._stats.record_execution(cost_ms, cached=True)
+            else:
+                self._stats.predictions_skipped += 1
+
+        finally:
+            # Mark as inactive
+            with self._active_lock:
+                self._active_tasks.discard(prediction.key)
+            self._stats.queue_size = self._queue.qsize()
+
+    def _get_cache_tier(self, prediction: Prediction) -> CacheTier:
+        """Determine cache tier based on prediction.
+
+        Args:
+            prediction: Prediction to cache.
+
+        Returns:
+            Appropriate cache tier.
+        """
+        # High priority items go to L1
+        if prediction.priority >= PredictionPriority.HIGH:
+            return CacheTier.L1
+
+        # Medium priority to L2
+        if prediction.priority >= PredictionPriority.MEDIUM:
+            return CacheTier.L2
+
+        # Low priority to L3
+        return CacheTier.L3
+
+    # ========== Default Handlers ==========
+
+    def _handle_draft_reply(self, prediction: Prediction) -> dict[str, Any] | None:
+        """Generate and cache a draft reply.
+
+        Args:
+            prediction: Prediction with chat_id in params.
+
+        Returns:
+            Draft reply data or None.
+        """
+        chat_id = prediction.params.get("chat_id")
+        if not chat_id:
+            return None
+
+        try:
+            # Import router lazily to avoid circular imports
+            from jarvis.router import get_reply_router
+
+            router = get_reply_router()
+
+            # Get recent messages from chat.db
+            from integrations.imessage import ChatDBReader
+
+            with ChatDBReader() as reader:
+                messages = reader.get_messages(chat_id, limit=10)
+
+            if not messages:
+                return None
+
+            # Find last incoming message
+            last_incoming = None
+            for msg in messages:
+                if not msg.is_from_me and msg.text:
+                    last_incoming = msg.text
+                    break
+
+            if not last_incoming:
+                return None
+
+            # Build thread context
+            thread = []
+            for msg in reversed(messages):
+                prefix = "Me" if msg.is_from_me else msg.sender_name or msg.sender
+                if msg.text:
+                    thread.append(f"{prefix}: {msg.text}")
+
+            # Route and generate
+            result = router.route(
+                incoming=last_incoming,
+                thread=thread[-10:] if thread else None,
+                chat_id=chat_id,
+            )
+
+            return {
+                "suggestions": [
+                    {
+                        "text": result.get("response", ""),
+                        "confidence": 0.8 if result.get("confidence") == "high" else 0.6,
+                    }
+                ],
+                "prefetched": True,
+                "prefetch_time": time.time(),
+            }
+
+        except Exception as e:
+            logger.debug(f"Draft reply prefetch failed for {chat_id}: {e}")
+            return None
+
+    def _handle_embedding(self, prediction: Prediction) -> dict[str, Any] | None:
+        """Pre-compute embeddings.
+
+        Args:
+            prediction: Prediction with texts in params.
+
+        Returns:
+            Embedding data or None.
+        """
+        texts = prediction.params.get("texts", [])
+        if not texts:
+            return None
+
+        try:
+            from jarvis.embedding_adapter import get_embedder
+
+            embedder = get_embedder()
+            embeddings = embedder.encode(texts)
+
+            return {
+                "embeddings": embeddings,
+                "texts": texts,
+                "prefetched": True,
+                "prefetch_time": time.time(),
+            }
+
+        except Exception as e:
+            logger.debug(f"Embedding prefetch failed: {e}")
+            return None
+
+    def _handle_contact_profile(self, prediction: Prediction) -> dict[str, Any] | None:
+        """Pre-load contact profile.
+
+        Args:
+            prediction: Prediction with chat_id in params.
+
+        Returns:
+            Contact data or None.
+        """
+        chat_id = prediction.params.get("chat_id")
+        if not chat_id:
+            return None
+
+        try:
+            from jarvis.db import get_db
+
+            db = get_db()
+            contact = db.get_contact_by_chat_id(chat_id)
+
+            if contact:
+                return {
+                    "contact": {
+                        "id": contact.id,
+                        "display_name": contact.display_name,
+                        "relationship": contact.relationship,
+                        "style_notes": contact.style_notes,
+                    },
+                    "prefetched": True,
+                    "prefetch_time": time.time(),
+                }
+            return None
+
+        except Exception as e:
+            logger.debug(f"Contact profile prefetch failed for {chat_id}: {e}")
+            return None
+
+    def _handle_model_warm(self, prediction: Prediction) -> dict[str, Any] | None:
+        """Warm up model weights.
+
+        Args:
+            prediction: Prediction with model_type in params.
+
+        Returns:
+            Warming status or None.
+        """
+        model_type = prediction.params.get("model_type")
+        if not model_type:
+            return None
+
+        try:
+            if model_type == "llm":
+                from models.loader import get_model
+
+                model = get_model()
+                if model and not model.is_loaded():
+                    model.load()
+                return {"model": "llm", "warm": True, "prefetch_time": time.time()}
+
+            elif model_type == "embeddings":
+                from jarvis.embedding_adapter import get_embedder
+
+                embedder = get_embedder()
+                # Warm up with a test embedding
+                embedder.encode(["warmup test"])
+                return {"model": "embeddings", "warm": True, "prefetch_time": time.time()}
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Model warming failed for {model_type}: {e}")
+            return None
+
+    def _handle_search_results(self, prediction: Prediction) -> dict[str, Any] | None:
+        """Pre-compute search results.
+
+        Args:
+            prediction: Prediction with query in params.
+
+        Returns:
+            Search results or None.
+        """
+        query = prediction.params.get("query")
+        if not query:
+            return None
+
+        try:
+            from jarvis.index import semantic_search
+
+            results = semantic_search(query, limit=10)
+
+            return {
+                "query": query,
+                "results": results,
+                "prefetched": True,
+                "prefetch_time": time.time(),
+            }
+
+        except Exception as e:
+            logger.debug(f"Search prefetch failed for '{query}': {e}")
+            return None
+
+    def _handle_faiss_index(self, prediction: Prediction) -> dict[str, Any] | None:
+        """Pre-load FAISS index.
+
+        Args:
+            prediction: Prediction for index loading.
+
+        Returns:
+            Index status or None.
+        """
+        try:
+            from jarvis.db import get_db
+            from jarvis.index import TriggerIndexSearcher
+
+            db = get_db()
+            active_index = db.get_active_index()
+
+            if active_index:
+                searcher = TriggerIndexSearcher(db)
+                # Access index to trigger loading
+                _ = searcher.index
+                return {
+                    "index_version": active_index.version_id,
+                    "loaded": True,
+                    "prefetch_time": time.time(),
+                }
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"FAISS index prefetch failed: {e}")
+            return None
+
+
+# Singleton instance
+_executor: PrefetchExecutor | None = None
+_executor_lock = threading.Lock()
+
+
+def get_executor() -> PrefetchExecutor:
+    """Get or create singleton executor instance."""
+    global _executor
+    with _executor_lock:
+        if _executor is None:
+            _executor = PrefetchExecutor()
+        return _executor
+
+
+def reset_executor() -> None:
+    """Reset singleton executor (stops if running)."""
+    global _executor
+    with _executor_lock:
+        if _executor is not None:
+            _executor.stop()
+        _executor = None
