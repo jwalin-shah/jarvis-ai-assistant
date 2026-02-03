@@ -261,12 +261,12 @@ class GraphBuilder:
         since: datetime | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Get message statistics per contact."""
-        from integrations.imessage import iMessageReader
+        from integrations.imessage import ChatDBReader
 
         stats: dict[str, dict[str, Any]] = {}
 
         try:
-            reader = iMessageReader()
+            reader = ChatDBReader()
             conversations = reader.get_conversations(limit=500)
 
             for conv in conversations:

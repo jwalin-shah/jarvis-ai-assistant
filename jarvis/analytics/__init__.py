@@ -22,6 +22,7 @@ from jarvis.analytics.engine import (
     AnalyticsResult,
     ContactAnalytics,
     OverviewMetrics,
+    get_analytics_engine,
 )
 from jarvis.analytics.reports import (
     AnalyticsReport,
@@ -42,6 +43,7 @@ __all__ = [
     "AnalyticsResult",
     "ContactAnalytics",
     "OverviewMetrics",
+    "get_analytics_engine",
     # Aggregator
     "DailyAggregate",
     "TimeSeriesAggregator",

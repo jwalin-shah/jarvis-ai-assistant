@@ -458,7 +458,7 @@ class TestGraphBuilder:
     """Test GraphBuilder class."""
 
     @patch("jarvis.db.JarvisDB")
-    @patch("integrations.imessage.iMessageReader")
+    @patch("integrations.imessage.ChatDBReader")
     def test_build_network_empty(
         self, mock_reader: MagicMock, mock_db: MagicMock
     ) -> None:
