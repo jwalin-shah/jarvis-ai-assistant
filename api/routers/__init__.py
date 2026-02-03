@@ -1,5 +1,6 @@
 """API routers for JARVIS endpoints."""
 
+from .analytics import router as analytics_router
 from .attachments import router as attachments_router
 from .batch import router as batch_router
 from .calendar import router as calendar_router
@@ -32,6 +33,7 @@ from .topics import router as topics_router
 from .websocket import router as websocket_router
 
 __all__ = [
+    "analytics_router",
     "attachments_router",
     "batch_router",
     "calendar_router",
