@@ -82,6 +82,56 @@ class ChatConfig(BaseModel):
     show_typing_indicator: bool = True
 
 
+class AdaptiveThresholdConfig(BaseModel):
+    """Configuration for adaptive threshold adjustment based on feedback.
+
+    Adaptive thresholds learn from user feedback (acceptance/rejection patterns)
+    to optimize routing decisions. When enabled, the system analyzes feedback
+    at different similarity score ranges to find optimal threshold boundaries.
+
+    Attributes:
+        enabled: Whether adaptive threshold adjustment is enabled.
+        min_feedback_samples: Minimum feedback samples required before adaptation starts.
+            Prevents premature adaptation with insufficient data.
+        adaptation_window_hours: Hours of feedback history to consider for adaptation.
+            Older feedback is weighted less. Use 0 for all-time.
+        learning_rate: How quickly thresholds adapt to new feedback (0.0-1.0).
+            Higher values = faster adaptation but more volatility.
+        update_interval_minutes: How often to recompute adaptive thresholds.
+            Lower values = more responsive but more CPU overhead.
+        min_threshold_bounds: Minimum allowed values for each threshold.
+            Prevents thresholds from dropping too low.
+        max_threshold_bounds: Maximum allowed values for each threshold.
+            Prevents thresholds from going too high.
+        similarity_bucket_size: Size of similarity score buckets for analysis (e.g., 0.05 = 5%).
+            Smaller buckets = finer granularity but need more data.
+        acceptance_target: Target acceptance rate for adaptive optimization.
+            System will try to find thresholds achieving this rate.
+    """
+
+    enabled: bool = False
+    min_feedback_samples: int = Field(default=50, ge=10, le=1000)
+    adaptation_window_hours: int = Field(default=168, ge=0, le=8760)  # 0 = all-time, max 1 year
+    learning_rate: float = Field(default=0.2, ge=0.01, le=1.0)
+    update_interval_minutes: int = Field(default=60, ge=5, le=1440)
+    min_threshold_bounds: dict[str, float] = Field(
+        default_factory=lambda: {
+            "quick_reply": 0.80,
+            "context": 0.50,
+            "generate": 0.30,
+        }
+    )
+    max_threshold_bounds: dict[str, float] = Field(
+        default_factory=lambda: {
+            "quick_reply": 0.99,
+            "context": 0.85,
+            "generate": 0.65,
+        }
+    )
+    similarity_bucket_size: float = Field(default=0.05, ge=0.01, le=0.2)
+    acceptance_target: float = Field(default=0.70, ge=0.3, le=0.95)
+
+
 class RoutingConfig(BaseModel):
     """Routing thresholds and A/B testing configuration."""
 
@@ -90,6 +140,7 @@ class RoutingConfig(BaseModel):
     generate_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     ab_test_group: str = Field(default="control")
     ab_test_thresholds: dict[str, dict[str, float]] = Field(default_factory=dict)
+    adaptive: AdaptiveThresholdConfig = Field(default_factory=AdaptiveThresholdConfig)
     # DEPRECATED: Use quick_reply_threshold instead (renamed for clarity)
     template_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
 
