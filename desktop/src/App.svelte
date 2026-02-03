@@ -9,10 +9,12 @@
   import TemplateBuilder from "./lib/components/TemplateBuilder.svelte";
   import GlobalSearch from "./lib/components/GlobalSearch.svelte";
   import KeyboardShortcuts from "./lib/components/KeyboardShortcuts.svelte";
+  import CommandPalette from "./lib/components/CommandPalette.svelte";
   import Toast from "./lib/components/Toast.svelte";
   import { checkApiConnection } from "./lib/stores/health";
   import { clearSelection } from "./lib/stores/conversations";
   import { initializeTheme } from "./lib/stores/theme";
+  import { initAnnouncer } from "./lib/stores/keyboard";
 
   // Check if running in Tauri context
   const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -20,10 +22,18 @@
   let currentView = $state<"messages" | "dashboard" | "health" | "settings" | "templates">("messages");
   let showSearch = $state(false);
   let showShortcuts = $state(false);
+  let showCommandPalette = $state(false);
   let sidebarCollapsed = $state(false);
 
   function handleKeydown(event: KeyboardEvent) {
     const isMod = event.metaKey || event.ctrlKey;
+
+    // Cmd+Shift+P to open command palette
+    if (isMod && event.shiftKey && event.key.toLowerCase() === "p" && !showCommandPalette) {
+      event.preventDefault();
+      showCommandPalette = true;
+      return;
+    }
 
     // Cmd+K or Cmd+F to open search (when search is not open)
     if (isMod && (event.key === "k" || event.key === "f") && !showSearch) {
@@ -67,6 +77,9 @@
   onMount(async () => {
     // Initialize theme system
     const cleanupTheme = initializeTheme();
+
+    // Initialize ARIA announcer for keyboard navigation
+    initAnnouncer();
 
     // Check API connection on start
     await checkApiConnection();
@@ -119,6 +132,14 @@
   function closeShortcuts() {
     showShortcuts = false;
   }
+
+  function openCommandPalette() {
+    showCommandPalette = true;
+  }
+
+  function closeCommandPalette() {
+    showCommandPalette = false;
+  }
 </script>
 
 <main class="app">
@@ -158,6 +179,15 @@
 
 {#if showShortcuts}
   <KeyboardShortcuts onClose={closeShortcuts} />
+{/if}
+
+{#if showCommandPalette}
+  <CommandPalette
+    onClose={closeCommandPalette}
+    onNavigate={(view) => currentView = view}
+    onOpenSearch={openSearch}
+    onOpenShortcuts={() => showShortcuts = true}
+  />
 {/if}
 
 <!-- Global toast notifications -->
@@ -239,6 +269,19 @@
 
   :global(::-webkit-scrollbar-thumb:hover) {
     background: var(--text-tertiary);
+  }
+
+  /* Screen reader only - visually hidden but accessible */
+  :global(.sr-only) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   :global(:root) {

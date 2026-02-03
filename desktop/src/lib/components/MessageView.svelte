@@ -15,6 +15,13 @@
     removeOptimisticMessage,
     clearOptimisticMessages,
   } from "../stores/conversations";
+  import {
+    activeZone,
+    setActiveZone,
+    messageIndex,
+    setMessageIndex,
+    announce,
+  } from "../stores/keyboard";
   import { WS_HTTP_BASE } from "../api/websocket";
   import AIDraftPanel from "./AIDraftPanel.svelte";
   import SummaryModal from "./SummaryModal.svelte";
@@ -30,6 +37,15 @@
   let showStatsModal = $state(false);
   let showPDFExportModal = $state(false);
   let messageViewFocused = $state(true);
+
+  // Keyboard navigation state
+  let focusedMessageIndex = $state(-1);
+  let composeInputRef = $state<HTMLTextAreaElement | null>(null);
+
+  // Sync with keyboard store
+  $effect(() => {
+    focusedMessageIndex = $messageIndex;
+  });
 
   // Compose message state
   let composeText = $state("");
@@ -568,27 +584,159 @@
     scrollToBottom();
   }
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts and navigation
   function handleKeydown(event: KeyboardEvent) {
     // Check for Cmd (Mac) or Ctrl (Windows/Linux)
     const isMod = event.metaKey || event.ctrlKey;
 
+    // Skip navigation if typing in input
+    const isTyping = event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement;
+
+    // Mod shortcuts always work
     if (isMod && event.key === "d") {
       event.preventDefault();
       if ($selectedConversation) {
         showDraftPanel = true;
       }
+      return;
     } else if (isMod && event.key === "s") {
       event.preventDefault();
       if ($selectedConversation) {
         showSummaryModal = true;
       }
+      return;
     } else if (isMod && event.key === "e") {
       event.preventDefault();
       if ($selectedConversation) {
         showPDFExportModal = true;
       }
+      return;
     }
+
+    // Skip message navigation if in wrong zone, typing, or no conversation
+    if ($activeZone !== "messages" && $activeZone !== null) return;
+    if (isTyping) {
+      // Only Escape escapes from input
+      if (event.key === "Escape") {
+        event.preventDefault();
+        (event.target as HTMLElement).blur();
+        setActiveZone("messages");
+      }
+      return;
+    }
+    if (!$selectedConversation) return;
+
+    const messages = $conversationsStore.messages;
+    if (messages.length === 0) return;
+
+    const maxIndex = messages.length - 1;
+
+    switch (event.key) {
+      case "j":
+      case "ArrowDown":
+        event.preventDefault();
+        setActiveZone("messages");
+        if (focusedMessageIndex < maxIndex) {
+          const newIndex = focusedMessageIndex + 1;
+          setMessageIndex(newIndex);
+          focusedMessageIndex = newIndex;
+          scrollToMessageByIndex(newIndex);
+          announceMessage(messages[newIndex]);
+        }
+        break;
+
+      case "k":
+      case "ArrowUp":
+        event.preventDefault();
+        setActiveZone("messages");
+        if (focusedMessageIndex > 0) {
+          const newIndex = focusedMessageIndex - 1;
+          setMessageIndex(newIndex);
+          focusedMessageIndex = newIndex;
+          scrollToMessageByIndex(newIndex);
+          announceMessage(messages[newIndex]);
+        } else if (focusedMessageIndex === -1 && messages.length > 0) {
+          // Start at last message if nothing selected
+          const lastIndex = maxIndex;
+          setMessageIndex(lastIndex);
+          focusedMessageIndex = lastIndex;
+          scrollToMessageByIndex(lastIndex);
+          announceMessage(messages[lastIndex]);
+        }
+        break;
+
+      case "r":
+        // Reply - focus compose input
+        event.preventDefault();
+        setActiveZone("compose");
+        composeInputRef?.focus();
+        announce("Composing reply");
+        break;
+
+      case "g":
+        // Go to first message
+        if (!event.shiftKey && messages.length > 0) {
+          event.preventDefault();
+          setActiveZone("messages");
+          setMessageIndex(0);
+          focusedMessageIndex = 0;
+          scrollToMessageByIndex(0);
+          announceMessage(messages[0]);
+        }
+        break;
+
+      case "G":
+        // Go to last message
+        if (event.shiftKey && messages.length > 0) {
+          event.preventDefault();
+          setActiveZone("messages");
+          setMessageIndex(maxIndex);
+          focusedMessageIndex = maxIndex;
+          scrollToMessageByIndex(maxIndex);
+          announceMessage(messages[maxIndex]);
+        }
+        break;
+
+      case "ArrowLeft":
+      case "h":
+        // Go back to conversation list
+        event.preventDefault();
+        setActiveZone("conversations");
+        setMessageIndex(-1);
+        focusedMessageIndex = -1;
+        announce("Returned to conversations list");
+        break;
+
+      case "Escape":
+        // Clear message selection
+        setMessageIndex(-1);
+        focusedMessageIndex = -1;
+        setActiveZone(null);
+        break;
+    }
+  }
+
+  // Scroll to a message by its index in the messages array
+  function scrollToMessageByIndex(index: number) {
+    const messages = $conversationsStore.messages;
+    if (index < 0 || index >= messages.length) return;
+
+    const messageId = messages[index].id;
+    tick().then(() => {
+      const element = document.querySelector(`[data-message-id="${messageId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }
+
+  // Announce message content for screen readers
+  function announceMessage(message: typeof $conversationsStore.messages[0]) {
+    const sender = message.is_from_me ? "You" : (message.sender_name || message.sender || "Contact");
+    const time = formatTime(message.date);
+    const text = message.text || "Attachment";
+    announce(`${sender} at ${time}: ${text.slice(0, 100)}${text.length > 100 ? "..." : ""}`);
   }
 
   // Handle draft panel selection
@@ -822,15 +970,21 @@
               {@const optimisticStatus = getOptimisticStatus(message)}
               {@const optimisticError = getOptimisticError(message)}
               {@const optimisticId = getOptimisticId(message)}
+              {@const actualIndex = visibleStartIndex + visibleIndex}
+              {@const isMessageFocused = focusedMessageIndex === actualIndex}
               <div
                 class="message"
                 class:from-me={message.is_from_me}
                 class:new-message={isNewMessage(message.id)}
                 class:highlighted={$highlightedMessageId === message.id}
+                class:keyboard-focused={isMessageFocused}
                 class:optimistic={isOptimisticMessage(message)}
                 class:optimistic-sending={optimisticStatus === "sending"}
                 class:optimistic-failed={optimisticStatus === "failed"}
                 data-message-id={message.id}
+                tabindex={isMessageFocused ? 0 : -1}
+                role="article"
+                aria-label={`Message from ${message.is_from_me ? "you" : message.sender_name || message.sender}`}
               >
                 <div class="bubble" class:from-me={message.is_from_me}>
                   {#if !message.is_from_me && $selectedConversation.is_group}
@@ -928,12 +1082,14 @@
     <div class="compose-area">
       <div class="compose-input-wrapper">
         <textarea
+          bind:this={composeInputRef}
           class="compose-input"
           bind:value={composeText}
           placeholder="iMessage"
           rows="1"
           onkeydown={handleComposeKeydown}
           oninput={autoResizeTextarea}
+          onfocus={() => setActiveZone("compose")}
         ></textarea>
         <button
           class="send-button"
@@ -1194,6 +1350,12 @@
 
   .message.highlighted {
     animation: highlightPulse 3s ease-out;
+  }
+
+  .message.keyboard-focused {
+    outline: 2px solid var(--color-primary, #007aff);
+    outline-offset: 2px;
+    border-radius: var(--radius-lg, 12px);
   }
 
   @keyframes highlightPulse {

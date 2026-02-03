@@ -23,7 +23,7 @@
     {#if !collapsed}
       <span class="logo-text">JARVIS</span>
     {/if}
-    <button class="collapse-btn" on:click={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+    <button class="collapse-btn" onclick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         {#if collapsed}
           <polyline points="9 18 15 12 9 6"></polyline>
@@ -38,7 +38,7 @@
     <button
       class="nav-item"
       class:active={currentView === "dashboard"}
-      on:click={() => navigate("dashboard")}
+      onclick={() => navigate("dashboard")}
       title="Dashboard"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -53,7 +53,7 @@
     <button
       class="nav-item"
       class:active={currentView === "messages"}
-      on:click={() => navigate("messages")}
+      onclick={() => navigate("messages")}
       title="Messages"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -67,7 +67,7 @@
     <button
       class="nav-item"
       class:active={currentView === "templates"}
-      on:click={() => navigate("templates")}
+      onclick={() => navigate("templates")}
       title="Template Builder"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -83,7 +83,7 @@
     <button
       class="nav-item"
       class:active={currentView === "health"}
-      on:click={() => navigate("health")}
+      onclick={() => navigate("health")}
       title="Health Status"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -97,7 +97,7 @@
     <button
       class="nav-item"
       class:active={currentView === "settings"}
-      on:click={() => navigate("settings")}
+      onclick={() => navigate("settings")}
       title="Settings"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -112,10 +112,10 @@
 
   <div class="status">
     {#if $healthStore.connected}
-      <span class="status-dot connected" />
+      <span class="status-dot connected"></span>
       {#if !collapsed}<span class="status-text">Connected</span>{/if}
     {:else}
-      <span class="status-dot disconnected" />
+      <span class="status-dot disconnected"></span>
       {#if !collapsed}<span class="status-text">Disconnected</span>{/if}
     {/if}
   </div>

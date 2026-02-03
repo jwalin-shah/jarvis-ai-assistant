@@ -11,6 +11,7 @@
     {
       category: "Navigation",
       items: [
+        { keys: ["⌘", "⇧", "P"], description: "Command Palette" },
         { keys: ["⌘", "K"], description: "Open search" },
         { keys: ["⌘", "1"], description: "Go to Dashboard" },
         { keys: ["⌘", "2"], description: "Go to Messages" },
@@ -19,22 +20,25 @@
       ],
     },
     {
-      category: "Messages",
+      category: "List Navigation",
       items: [
-        { keys: ["⌘", "D"], description: "Open AI Draft" },
-        { keys: ["⌘", "S"], description: "Show Summary" },
-        { keys: ["⌘", "E"], description: "Export to PDF" },
-        { keys: ["⌘", "↵"], description: "Send message" },
-        { keys: ["⇧", "↵"], description: "New line" },
+        { keys: ["j", "/", "↓"], description: "Next item" },
+        { keys: ["k", "/", "↑"], description: "Previous item" },
+        { keys: ["g"], description: "Go to first item" },
+        { keys: ["G"], description: "Go to last item" },
+        { keys: ["↵"], description: "Select item" },
+        { keys: ["h", "/", "←"], description: "Go back" },
       ],
     },
     {
-      category: "Quick Actions",
+      category: "Messages",
       items: [
-        { keys: ["1"], description: "Select first suggestion" },
-        { keys: ["2"], description: "Select second suggestion" },
-        { keys: ["3"], description: "Select third suggestion" },
-        { keys: ["Esc"], description: "Close panel/modal" },
+        { keys: ["r"], description: "Reply to message" },
+        { keys: ["⌘", "D"], description: "Open AI Draft" },
+        { keys: ["⌘", "S"], description: "Show Summary" },
+        { keys: ["⌘", "E"], description: "Export to PDF" },
+        { keys: ["↵"], description: "Send message" },
+        { keys: ["⇧", "↵"], description: "New line" },
       ],
     },
     {
@@ -42,6 +46,7 @@
       items: [
         { keys: ["⌘", "/"], description: "Show shortcuts" },
         { keys: ["⌘", "R"], description: "Refresh" },
+        { keys: ["Esc"], description: "Close / Clear selection" },
       ],
     },
   ];

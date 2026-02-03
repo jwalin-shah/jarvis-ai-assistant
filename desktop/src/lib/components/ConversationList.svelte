@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import {
     conversationsStore,
     selectConversation,
@@ -9,6 +9,133 @@
   import { api } from "../api/client";
   import type { Topic } from "../api/types";
   import ConversationSkeleton from "./ConversationSkeleton.svelte";
+  import {
+    activeZone,
+    setActiveZone,
+    conversationIndex,
+    setConversationIndex,
+    announce,
+  } from "../stores/keyboard";
+
+  // Track focused conversation for keyboard navigation
+  let focusedIndex = $state(-1);
+  let listRef = $state<HTMLElement | null>(null);
+  let itemRefs = $state<HTMLButtonElement[]>([]);
+
+  // Sync focusedIndex with store
+  $effect(() => {
+    focusedIndex = $conversationIndex;
+  });
+
+  // Handle keyboard navigation
+  function handleKeydown(event: KeyboardEvent) {
+    // Only handle if this zone is active or no zone is active
+    if ($activeZone !== "conversations" && $activeZone !== null) return;
+
+    // Ignore if typing in an input
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement
+    ) {
+      return;
+    }
+
+    const conversations = $conversationsStore.conversations;
+    if (conversations.length === 0) return;
+
+    const maxIndex = conversations.length - 1;
+
+    switch (event.key) {
+      case "j":
+      case "ArrowDown":
+        event.preventDefault();
+        setActiveZone("conversations");
+        if (focusedIndex < maxIndex) {
+          const newIndex = focusedIndex + 1;
+          setConversationIndex(newIndex);
+          focusedIndex = newIndex;
+          scrollToItem(newIndex);
+          announce(`${getDisplayName(conversations[newIndex])}, ${newIndex + 1} of ${conversations.length}`);
+        }
+        break;
+
+      case "k":
+      case "ArrowUp":
+        event.preventDefault();
+        setActiveZone("conversations");
+        if (focusedIndex > 0) {
+          const newIndex = focusedIndex - 1;
+          setConversationIndex(newIndex);
+          focusedIndex = newIndex;
+          scrollToItem(newIndex);
+          announce(`${getDisplayName(conversations[newIndex])}, ${newIndex + 1} of ${conversations.length}`);
+        } else if (focusedIndex === -1 && conversations.length > 0) {
+          // Start at first item if nothing selected
+          setConversationIndex(0);
+          focusedIndex = 0;
+          scrollToItem(0);
+          announce(`${getDisplayName(conversations[0])}, 1 of ${conversations.length}`);
+        }
+        break;
+
+      case "Enter":
+      case " ":
+        if (focusedIndex >= 0 && focusedIndex <= maxIndex) {
+          event.preventDefault();
+          const conv = conversations[focusedIndex];
+          selectConversation(conv.chat_id);
+          setActiveZone("messages");
+          announce(`Opened conversation with ${getDisplayName(conv)}`);
+        }
+        break;
+
+      case "g":
+        // Go to first conversation
+        if (!event.shiftKey && conversations.length > 0) {
+          event.preventDefault();
+          setActiveZone("conversations");
+          setConversationIndex(0);
+          focusedIndex = 0;
+          scrollToItem(0);
+          announce(`${getDisplayName(conversations[0])}, 1 of ${conversations.length}`);
+        }
+        break;
+
+      case "G":
+        // Go to last conversation
+        if (event.shiftKey && conversations.length > 0) {
+          event.preventDefault();
+          setActiveZone("conversations");
+          setConversationIndex(maxIndex);
+          focusedIndex = maxIndex;
+          scrollToItem(maxIndex);
+          announce(`${getDisplayName(conversations[maxIndex])}, ${maxIndex + 1} of ${conversations.length}`);
+        }
+        break;
+
+      case "Escape":
+        // Clear selection
+        setConversationIndex(-1);
+        focusedIndex = -1;
+        setActiveZone(null);
+        break;
+    }
+  }
+
+  function scrollToItem(index: number) {
+    tick().then(() => {
+      const item = itemRefs[index];
+      if (item) {
+        item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    });
+  }
+
+  function setItemRef(el: HTMLButtonElement | null, index: number) {
+    if (el) {
+      itemRefs[index] = el;
+    }
+  }
 
   // Store for conversation topics
   let topicsMap: Map<string, Topic[]> = new Map();
@@ -30,6 +157,9 @@
 
   onMount(() => {
     cleanup = initializePolling();
+
+    // Add keyboard listener
+    window.addEventListener("keydown", handleKeydown);
 
     // Create intersection observer for lazy loading avatars
     observer = new IntersectionObserver(
@@ -58,6 +188,7 @@
     if (observer) {
       observer.disconnect();
     }
+    window.removeEventListener("keydown", handleKeydown);
     // Revoke any object URLs to prevent memory leaks
     avatarUrls.forEach((url) => {
       if (url.startsWith("blob:")) {
@@ -67,9 +198,11 @@
   });
 
   // Fetch topics when conversations are loaded
-  $: if ($conversationsStore.conversations.length > 0) {
-    fetchTopicsForConversations();
-  }
+  $effect(() => {
+    if ($conversationsStore.conversations.length > 0) {
+      fetchTopicsForConversations();
+    }
+  });
 
   async function fetchTopicsForConversations() {
     // Fetch topics for visible conversations (first 20)
@@ -269,17 +402,23 @@
   {:else if $conversationsStore.conversations.length === 0}
     <div class="empty">No conversations found</div>
   {:else}
-    <div class="list">
-      {#each $conversationsStore.conversations as conv (conv.chat_id)}
+    <div class="list" bind:this={listRef} role="listbox" aria-label="Conversations">
+      {#each $conversationsStore.conversations as conv, index (conv.chat_id)}
         {@const identifier = getPrimaryIdentifier(conv)}
         {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
         {@const avatarState = identifier ? avatarStates.get(identifier) : null}
+        {@const isFocused = focusedIndex === index}
         <button
+          bind:this={itemRefs[index]}
           class="conversation"
           class:active={$conversationsStore.selectedChatId === conv.chat_id}
+          class:focused={isFocused}
           class:group={conv.is_group}
           class:has-new={hasNewMessages(conv.chat_id)}
-          on:click={() => selectConversation(conv.chat_id)}
+          onclick={() => { selectConversation(conv.chat_id); setConversationIndex(index); }}
+          role="option"
+          aria-selected={$conversationsStore.selectedChatId === conv.chat_id}
+          tabindex={isFocused ? 0 : -1}
         >
           <div class="avatar-container">
             <div
@@ -411,6 +550,15 @@
 
   .conversation.active {
     background: var(--bg-active);
+  }
+
+  .conversation.focused {
+    outline: 2px solid var(--color-primary, #007aff);
+    outline-offset: -2px;
+  }
+
+  .conversation.focused:not(.active) {
+    background: var(--bg-hover);
   }
 
   .avatar-container {
