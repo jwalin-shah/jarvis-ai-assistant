@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path.home() / ".jarvis" / "config.json"
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 9
+CONFIG_VERSION = 10
 
 
 class MemoryThresholds(BaseModel):
@@ -291,6 +291,55 @@ class FAISSIndexConfig(BaseModel):
     min_vectors_for_compression: int = Field(default=1000, ge=100, le=50000)
 
 
+class RetrievalConfig(BaseModel):
+    """Retrieval configuration for enhanced search capabilities.
+
+    Controls temporal weighting, hybrid BM25+FAISS retrieval, and cross-encoder reranking.
+
+    Temporal Weighting:
+        Uses exponential decay to prefer recent messages. Score is multiplied by
+        decay factor: 0.5^(age_days / half_life_days). Half-life of 365 means
+        messages lose half their score after 1 year.
+
+    Hybrid Retrieval (BM25 + FAISS):
+        Combines sparse (BM25) and dense (FAISS) retrieval using reciprocal rank fusion.
+        BM25 captures exact keyword matches while FAISS captures semantic similarity.
+
+    Cross-Encoder Reranking:
+        After initial retrieval, uses a cross-encoder model to rerank top-k candidates
+        for more accurate final ranking. More expensive but more accurate.
+
+    Attributes:
+        temporal_decay_enabled: Enable exponential decay based on message age.
+        temporal_half_life_days: Days until score is halved (default 365 = 1 year).
+        temporal_min_score: Minimum decay multiplier to prevent very old messages
+            from being completely ignored (default 0.1 = 10% of original score).
+
+        bm25_enabled: Enable hybrid BM25+FAISS retrieval.
+        bm25_weight: Weight for BM25 scores in fusion (0-1). FAISS weight = 1 - bm25_weight.
+        rrf_k: Reciprocal rank fusion constant (higher = more weight to lower ranks).
+
+        rerank_enabled: Enable cross-encoder reranking after initial retrieval.
+        rerank_model: Cross-encoder model name for reranking.
+        rerank_top_k: Number of candidates to rerank (balance accuracy vs speed).
+    """
+
+    # Temporal weighting
+    temporal_decay_enabled: bool = True
+    temporal_half_life_days: float = Field(default=365.0, ge=1.0, le=3650.0)
+    temporal_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
+
+    # BM25 hybrid retrieval
+    bm25_enabled: bool = False
+    bm25_weight: float = Field(default=0.3, ge=0.0, le=1.0)
+    rrf_k: int = Field(default=60, ge=1, le=1000)
+
+    # Cross-encoder reranking
+    rerank_enabled: bool = False
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_top_k: int = Field(default=20, ge=5, le=100)
+
+
 class JarvisConfig(BaseModel):
     """JARVIS configuration schema.
 
@@ -331,6 +380,7 @@ class JarvisConfig(BaseModel):
     classifier_thresholds: ClassifierThresholds = Field(default_factory=ClassifierThresholds)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     faiss_index: FAISSIndexConfig = Field(default_factory=FAISSIndexConfig)
+    retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
 
 
 # Module-level singleton with thread safety
@@ -462,6 +512,15 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
             del embedding["mlx_service_url"]
 
         version = 9
+
+    if version < 10:
+        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
+
+        # Add retrieval section if missing
+        if "retrieval" not in data:
+            data["retrieval"] = {}
+
+        version = 10
 
     # Update version
     data["config_version"] = CONFIG_VERSION
