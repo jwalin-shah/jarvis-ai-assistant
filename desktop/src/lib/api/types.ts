@@ -1011,7 +1011,6 @@ export interface QualityDashboardData {
   recommendations: Recommendation[];
 }
 
-<<<<<<< HEAD
 // =============================================================================
 // Tag System types
 // =============================================================================
@@ -1557,4 +1556,82 @@ export interface SchedulerStatsResponse {
   failed: number;
   pending_in_undo_window: number;
   next_due: string | null;
+}
+
+// =============================================================================
+// Graph Visualization types
+// =============================================================================
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  size: number;
+  color: string;
+  relationship_type: string;
+  message_count: number;
+  last_contact: string | null;
+  sentiment_score: number;
+  response_time_avg: number | null;
+  x: number | null;
+  y: number | null;
+  cluster_id: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  weight: number;
+  message_count: number;
+  sentiment: number;
+  last_interaction: string | null;
+  bidirectional: boolean;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ClusterResult {
+  clusters: Record<string, number>;
+  modularity: number;
+  num_clusters: number;
+  cluster_sizes: Record<number, number>;
+  cluster_labels: Record<number, string>;
+}
+
+export type LayoutType = "force" | "hierarchical" | "radial";
+
+export interface GraphEvolutionSnapshot {
+  timestamp: string;
+  graph: GraphData;
+  metrics: Record<string, unknown>;
+}
+
+export interface GraphEvolutionResponse {
+  from_date: string;
+  to_date: string;
+  interval: string;
+  snapshots: GraphEvolutionSnapshot[];
+  total_snapshots: number;
+}
+
+export interface GraphExportResponse {
+  format: string;
+  filename: string;
+  data: string;
+  size_bytes: number;
+}
+
+export interface GraphStats {
+  total_contacts: number;
+  total_messages: number;
+  avg_messages_per_contact: number;
+  relationship_distribution: Record<string, number>;
+  cluster_count: number;
+  most_active_contact: string | null;
+  most_active_messages: number;
+  generated_at: string;
 }
