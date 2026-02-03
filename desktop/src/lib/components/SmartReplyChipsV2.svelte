@@ -113,7 +113,7 @@
   });
 </script>
 
-<div class="smart-reply-container">
+<div class="smart-reply-container glass">
   {#if loading}
     <div class="loading-state">
       <div class="spinner"></div>

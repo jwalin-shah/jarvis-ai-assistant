@@ -453,7 +453,9 @@ def main():
         # Save to versioned path based on configured embedding model
         model_path = get_trigger_classifier_path()
         model_path.mkdir(parents=True, exist_ok=True)
-        print(f"Saving model to: {model_path} (embedding model: {get_config().embedding.model_name})")
+        print(
+            f"Saving model to: {model_path} (embedding model: {get_config().embedding.model_name})"
+        )
 
         with open(model_path / "svm.pkl", "wb") as f:
             pickle.dump(final_clf, f)

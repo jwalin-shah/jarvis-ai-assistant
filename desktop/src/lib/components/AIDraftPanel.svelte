@@ -1,6 +1,7 @@
 <script lang="ts">
   import { apiClient, APIError } from "../api/client";
   import type { DraftReplyResponse } from "../api/types";
+  import Icon from "./Icon.svelte";
 
   interface Props {
     chatId: string;
@@ -97,10 +98,10 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="panel-overlay" onclick={handleClose} role="presentation">
   <!-- svelte-ignore a11y_interactive_supports_focus -->
-  <div class="panel" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="AI Draft Panel">
+  <div class="panel glass" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="AI Draft Panel">
     <header class="panel-header">
       <div class="panel-title">
-        <span class="ai-icon">✨</span>
+        <span class="ai-icon"><Icon name="sparkles" size={20} /></span>
         <h2>AI Draft</h2>
       </div>
       <button class="close-btn" onclick={handleClose} aria-label="Close">
@@ -213,7 +214,7 @@
 
       {#if panelState === "error"}
         <div class="error-section">
-          <div class="error-icon">❌</div>
+          <div class="error-icon"><Icon name="x-circle" size={40} /></div>
           <p class="error-message">{errorMessage}</p>
           <button class="retry-btn" onclick={generateReplies}>
             Try Again
@@ -287,7 +288,9 @@
   }
 
   .ai-icon {
-    font-size: 20px;
+    display: flex;
+    align-items: center;
+    color: var(--accent-color);
   }
 
   .panel-title h2 {
@@ -575,8 +578,10 @@
   }
 
   .error-icon {
-    font-size: 40px;
+    display: flex;
+    justify-content: center;
     margin-bottom: 12px;
+    color: var(--error-color);
   }
 
   .error-message {

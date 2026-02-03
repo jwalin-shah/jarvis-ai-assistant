@@ -1,8 +1,6 @@
 """Tests for the chat.db file watcher."""
 
-import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -110,9 +108,30 @@ class TestChatDBWatcher:
         watcher._last_rowid = 100
 
         mock_messages = [
-            {"id": 101, "chat_id": "c1", "sender": "s", "text": "a", "date": "d", "is_from_me": False},
-            {"id": 105, "chat_id": "c2", "sender": "s", "text": "b", "date": "d", "is_from_me": False},
-            {"id": 103, "chat_id": "c3", "sender": "s", "text": "c", "date": "d", "is_from_me": False},
+            {
+                "id": 101,
+                "chat_id": "c1",
+                "sender": "s",
+                "text": "a",
+                "date": "d",
+                "is_from_me": False,
+            },
+            {
+                "id": 105,
+                "chat_id": "c2",
+                "sender": "s",
+                "text": "b",
+                "date": "d",
+                "is_from_me": False,
+            },
+            {
+                "id": 103,
+                "chat_id": "c3",
+                "sender": "s",
+                "text": "c",
+                "date": "d",
+                "is_from_me": False,
+            },
         ]
 
         with patch.object(watcher, "_get_new_messages", return_value=mock_messages):

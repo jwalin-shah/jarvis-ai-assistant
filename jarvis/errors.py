@@ -88,6 +88,11 @@ class ErrorCode(str, Enum):
     EXP_VARIANT_NOT_FOUND = "EXP_VARIANT_NOT_FOUND"
     EXP_ALREADY_EXISTS = "EXP_ALREADY_EXISTS"
 
+    # Feedback errors (FBK_*)
+    FBK_NOT_FOUND = "FBK_NOT_FOUND"
+    FBK_INVALID_ACTION = "FBK_INVALID_ACTION"
+    FBK_STORE_ERROR = "FBK_STORE_ERROR"
+
     # Generic errors
     UNKNOWN = "UNKNOWN"
 
@@ -882,6 +887,69 @@ class ExperimentConfigError(ExperimentError):
     default_code = ErrorCode.EXP_INVALID_CONFIG
 
 
+# Feedback Errors
+
+
+class FeedbackError(JarvisError):
+    """Base class for feedback-related errors.
+
+    Raised when feedback tracking operations fail.
+    """
+
+    default_message = "Feedback error"
+    default_code = ErrorCode.FBK_STORE_ERROR
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        feedback_id: int | None = None,
+        suggestion_id: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize a feedback error.
+
+        Args:
+            message: Human-readable error message.
+            feedback_id: ID of the feedback record.
+            suggestion_id: ID of the suggestion.
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if feedback_id is not None:
+            details["feedback_id"] = feedback_id
+        if suggestion_id:
+            details["suggestion_id"] = suggestion_id
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
+class FeedbackNotFoundError(FeedbackError):
+    """Raised when a feedback record is not found.
+
+    Examples:
+        - Feedback ID does not exist
+        - Feedback was deleted
+    """
+
+    default_message = "Feedback not found"
+    default_code = ErrorCode.FBK_NOT_FOUND
+
+
+class FeedbackInvalidActionError(FeedbackError):
+    """Raised when an invalid feedback action is provided.
+
+    Examples:
+        - Action not in accepted/rejected/edited
+    """
+
+    default_message = "Invalid feedback action"
+    default_code = ErrorCode.FBK_INVALID_ACTION
+
+
 # Convenience functions for common error scenarios
 
 
@@ -1099,6 +1167,10 @@ __all__ = [
     "ExperimentError",
     "ExperimentNotFoundError",
     "ExperimentConfigError",
+    # Feedback errors
+    "FeedbackError",
+    "FeedbackNotFoundError",
+    "FeedbackInvalidActionError",
     # Convenience functions
     "model_not_found",
     "model_out_of_memory",

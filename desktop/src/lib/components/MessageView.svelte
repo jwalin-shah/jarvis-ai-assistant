@@ -9,7 +9,19 @@
     highlightedMessageId,
     scrollToMessageId,
     clearScrollTarget,
+    messagesWithOptimistic,
+    addOptimisticMessage,
+    updateOptimisticMessage,
+    removeOptimisticMessage,
+    clearOptimisticMessages,
   } from "../stores/conversations";
+  import {
+    activeZone,
+    setActiveZone,
+    messageIndex,
+    setMessageIndex,
+    announce,
+  } from "../stores/keyboard";
   import { WS_HTTP_BASE } from "../api/websocket";
   import AIDraftPanel from "./AIDraftPanel.svelte";
   import SummaryModal from "./SummaryModal.svelte";
@@ -17,6 +29,7 @@
   import SmartReplyChipsV2 from "./SmartReplyChipsV2.svelte";
   import ConversationStats from "./ConversationStats.svelte";
   import PDFExportModal from "./PDFExportModal.svelte";
+  import MessageSkeleton from "./MessageSkeleton.svelte";
 
   // Panel visibility state
   let showDraftPanel = $state(false);
@@ -24,6 +37,15 @@
   let showStatsModal = $state(false);
   let showPDFExportModal = $state(false);
   let messageViewFocused = $state(true);
+
+  // Keyboard navigation state
+  let focusedMessageIndex = $state(-1);
+  let composeInputRef = $state<HTMLTextAreaElement | null>(null);
+
+  // Sync with keyboard store
+  $effect(() => {
+    focusedMessageIndex = $messageIndex;
+  });
 
   // Compose message state
   let composeText = $state("");
@@ -180,9 +202,9 @@
     virtualBottomPadding = bottomPadding;
   }
 
-  // Get the slice of messages to render
-  function getVisibleMessages(): typeof $conversationsStore.messages {
-    return $conversationsStore.messages.slice(visibleStartIndex, visibleEndIndex);
+  // Get the slice of messages to render (including optimistic messages)
+  function getVisibleMessages(): typeof $messagesWithOptimistic {
+    return $messagesWithOptimistic.slice(visibleStartIndex, visibleEndIndex);
   }
 
   // Update visible range when scroll or messages change
@@ -255,12 +277,40 @@
     }
   }
 
-  // Send the message
-  async function handleSendMessage() {
-    if (!composeText.trim() || sendingMessage || !$selectedConversation) return;
+  // Track current optimistic message for retry
+  let currentOptimisticId = $state<string | null>(null);
+
+  // Send the message with optimistic UI update
+  async function handleSendMessage(retryId?: string) {
+    const textToSend = retryId
+      ? $conversationsStore.optimisticMessages.find(m => m.id === retryId)?.text
+      : composeText.trim();
+
+    if (!textToSend || sendingMessage || !$selectedConversation) return;
+
+    // Clear input immediately for better UX
+    if (!retryId) {
+      composeText = "";
+      const textarea = document.querySelector(".compose-input") as HTMLTextAreaElement;
+      if (textarea) textarea.style.height = "auto";
+    }
 
     sendingMessage = true;
     sendError = null;
+
+    // Add optimistic message (or update existing for retry)
+    let optimisticId: string;
+    if (retryId) {
+      optimisticId = retryId;
+      updateOptimisticMessage(optimisticId, { status: "sending", error: undefined });
+    } else {
+      optimisticId = addOptimisticMessage(textToSend);
+    }
+    currentOptimisticId = optimisticId;
+
+    // Scroll to bottom to show optimistic message
+    await tick();
+    scrollToBottom();
 
     try {
       const chatId = $selectedConversation.chat_id;
@@ -273,7 +323,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: composeText.trim(),
+          text: textToSend,
           recipient: recipient,
           is_group: isGroup,
         }),
@@ -281,28 +331,48 @@
 
       if (!response.ok) {
         const errorText = await response.text();
-        sendError = `Send failed: ${response.status} - ${errorText}`;
+        updateOptimisticMessage(optimisticId, {
+          status: "failed",
+          error: `Send failed: ${response.status}`
+        });
         return;
       }
 
       const result = await response.json();
 
       if (result.success) {
-        composeText = "";
-        // Reset textarea height
-        const textarea = document.querySelector(".compose-input") as HTMLTextAreaElement;
-        if (textarea) textarea.style.height = "auto";
-        // Refresh messages in background - don't await to prevent blocking
-        pollMessages().catch(err => console.error("Poll error:", err));
+        // Mark as sent briefly, then remove once real message appears
+        updateOptimisticMessage(optimisticId, { status: "sent" });
+        // Refresh messages and remove optimistic message once real one appears
+        pollMessages().then(() => {
+          removeOptimisticMessage(optimisticId);
+        }).catch(err => console.error("Poll error:", err));
       } else {
-        sendError = result.error || "Failed to send message";
+        updateOptimisticMessage(optimisticId, {
+          status: "failed",
+          error: result.error || "Failed to send message"
+        });
       }
     } catch (err) {
-      sendError = "Failed to send message. Check if Messages app has permissions.";
+      updateOptimisticMessage(optimisticId, {
+        status: "failed",
+        error: "Failed to send. Check Messages app permissions."
+      });
       console.error("Send error:", err);
     } finally {
       sendingMessage = false;
+      currentOptimisticId = null;
     }
+  }
+
+  // Retry sending a failed message
+  function handleRetry(optimisticId: string) {
+    handleSendMessage(optimisticId);
+  }
+
+  // Dismiss a failed message
+  function handleDismissFailedMessage(optimisticId: string) {
+    removeOptimisticMessage(optimisticId);
   }
 
   // Compute the last received message (for smart reply chips)
@@ -425,7 +495,7 @@
       // Clear new message highlight after animation
       setTimeout(() => {
         newMessageIds = new Set();
-      }, 2000);
+      }, 1000);
     }
     previousMessageCount = currentCount;
   });
@@ -480,6 +550,8 @@
       visibleEndIndex = MIN_VISIBLE_MESSAGES;
       virtualTopPadding = 0;
       virtualBottomPadding = 0;
+      // Clear optimistic messages when switching conversations
+      clearOptimisticMessages();
     }
   });
 
@@ -512,27 +584,159 @@
     scrollToBottom();
   }
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts and navigation
   function handleKeydown(event: KeyboardEvent) {
     // Check for Cmd (Mac) or Ctrl (Windows/Linux)
     const isMod = event.metaKey || event.ctrlKey;
 
+    // Skip navigation if typing in input
+    const isTyping = event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement;
+
+    // Mod shortcuts always work
     if (isMod && event.key === "d") {
       event.preventDefault();
       if ($selectedConversation) {
         showDraftPanel = true;
       }
+      return;
     } else if (isMod && event.key === "s") {
       event.preventDefault();
       if ($selectedConversation) {
         showSummaryModal = true;
       }
+      return;
     } else if (isMod && event.key === "e") {
       event.preventDefault();
       if ($selectedConversation) {
         showPDFExportModal = true;
       }
+      return;
     }
+
+    // Skip message navigation if in wrong zone, typing, or no conversation
+    if ($activeZone !== "messages" && $activeZone !== null) return;
+    if (isTyping) {
+      // Only Escape escapes from input
+      if (event.key === "Escape") {
+        event.preventDefault();
+        (event.target as HTMLElement).blur();
+        setActiveZone("messages");
+      }
+      return;
+    }
+    if (!$selectedConversation) return;
+
+    const messages = $conversationsStore.messages;
+    if (messages.length === 0) return;
+
+    const maxIndex = messages.length - 1;
+
+    switch (event.key) {
+      case "j":
+      case "ArrowDown":
+        event.preventDefault();
+        setActiveZone("messages");
+        if (focusedMessageIndex < maxIndex) {
+          const newIndex = focusedMessageIndex + 1;
+          setMessageIndex(newIndex);
+          focusedMessageIndex = newIndex;
+          scrollToMessageByIndex(newIndex);
+          announceMessage(messages[newIndex]);
+        }
+        break;
+
+      case "k":
+      case "ArrowUp":
+        event.preventDefault();
+        setActiveZone("messages");
+        if (focusedMessageIndex > 0) {
+          const newIndex = focusedMessageIndex - 1;
+          setMessageIndex(newIndex);
+          focusedMessageIndex = newIndex;
+          scrollToMessageByIndex(newIndex);
+          announceMessage(messages[newIndex]);
+        } else if (focusedMessageIndex === -1 && messages.length > 0) {
+          // Start at last message if nothing selected
+          const lastIndex = maxIndex;
+          setMessageIndex(lastIndex);
+          focusedMessageIndex = lastIndex;
+          scrollToMessageByIndex(lastIndex);
+          announceMessage(messages[lastIndex]);
+        }
+        break;
+
+      case "r":
+        // Reply - focus compose input
+        event.preventDefault();
+        setActiveZone("compose");
+        composeInputRef?.focus();
+        announce("Composing reply");
+        break;
+
+      case "g":
+        // Go to first message
+        if (!event.shiftKey && messages.length > 0) {
+          event.preventDefault();
+          setActiveZone("messages");
+          setMessageIndex(0);
+          focusedMessageIndex = 0;
+          scrollToMessageByIndex(0);
+          announceMessage(messages[0]);
+        }
+        break;
+
+      case "G":
+        // Go to last message
+        if (event.shiftKey && messages.length > 0) {
+          event.preventDefault();
+          setActiveZone("messages");
+          setMessageIndex(maxIndex);
+          focusedMessageIndex = maxIndex;
+          scrollToMessageByIndex(maxIndex);
+          announceMessage(messages[maxIndex]);
+        }
+        break;
+
+      case "ArrowLeft":
+      case "h":
+        // Go back to conversation list
+        event.preventDefault();
+        setActiveZone("conversations");
+        setMessageIndex(-1);
+        focusedMessageIndex = -1;
+        announce("Returned to conversations list");
+        break;
+
+      case "Escape":
+        // Clear message selection
+        setMessageIndex(-1);
+        focusedMessageIndex = -1;
+        setActiveZone(null);
+        break;
+    }
+  }
+
+  // Scroll to a message by its index in the messages array
+  function scrollToMessageByIndex(index: number) {
+    const messages = $conversationsStore.messages;
+    if (index < 0 || index >= messages.length) return;
+
+    const messageId = messages[index].id;
+    tick().then(() => {
+      const element = document.querySelector(`[data-message-id="${messageId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }
+
+  // Announce message content for screen readers
+  function announceMessage(message: typeof $conversationsStore.messages[0]) {
+    const sender = message.is_from_me ? "You" : (message.sender_name || message.sender || "Contact");
+    const time = formatTime(message.date);
+    const text = message.text || "Attachment";
+    announce(`${sender} at ${time}: ${text.slice(0, 100)}${text.length > 100 ? "..." : ""}`);
   }
 
   // Handle draft panel selection
@@ -611,8 +815,31 @@
     return newMessageIds.has(messageId);
   }
 
-  // Reactive visible messages
+  // Reactive visible messages (including optimistic)
   let visibleMessages = $derived(getVisibleMessages());
+
+  // Helper to check if a message is optimistic
+  function isOptimisticMessage(message: typeof visibleMessages[0]): boolean {
+    return '_optimistic' in message && message._optimistic === true;
+  }
+
+  // Helper to get optimistic status
+  function getOptimisticStatus(message: typeof visibleMessages[0]): "sending" | "sent" | "failed" | null {
+    if (!isOptimisticMessage(message)) return null;
+    return (message as any)._optimisticStatus;
+  }
+
+  // Helper to get optimistic error
+  function getOptimisticError(message: typeof visibleMessages[0]): string | undefined {
+    if (!isOptimisticMessage(message)) return undefined;
+    return (message as any)._optimisticError;
+  }
+
+  // Helper to get optimistic ID
+  function getOptimisticId(message: typeof visibleMessages[0]): string | undefined {
+    if (!isOptimisticMessage(message)) return undefined;
+    return (message as any)._optimisticId;
+  }
 </script>
 
 <div
@@ -693,7 +920,7 @@
       onscroll={handleScroll}
     >
       {#if $conversationsStore.loadingMessages}
-        <div class="loading">Loading messages...</div>
+        <MessageSkeleton />
       {:else if $conversationsStore.messages.length === 0}
         <div class="empty">No messages in this conversation</div>
       {:else}
@@ -740,12 +967,24 @@
                 {message.text}
               </div>
             {:else}
+              {@const optimisticStatus = getOptimisticStatus(message)}
+              {@const optimisticError = getOptimisticError(message)}
+              {@const optimisticId = getOptimisticId(message)}
+              {@const actualIndex = visibleStartIndex + visibleIndex}
+              {@const isMessageFocused = focusedMessageIndex === actualIndex}
               <div
                 class="message"
                 class:from-me={message.is_from_me}
                 class:new-message={isNewMessage(message.id)}
                 class:highlighted={$highlightedMessageId === message.id}
+                class:keyboard-focused={isMessageFocused}
+                class:optimistic={isOptimisticMessage(message)}
+                class:optimistic-sending={optimisticStatus === "sending"}
+                class:optimistic-failed={optimisticStatus === "failed"}
                 data-message-id={message.id}
+                tabindex={isMessageFocused ? 0 : -1}
+                role="article"
+                aria-label={`Message from ${message.is_from_me ? "you" : message.sender_name || message.sender}`}
               >
                 <div class="bubble" class:from-me={message.is_from_me}>
                   {#if !message.is_from_me && $selectedConversation.is_group}
@@ -764,8 +1003,44 @@
                       {/each}
                     </div>
                   {/if}
-                  <span class="time">{formatTime(message.date)}</span>
+                  {#if optimisticStatus === "sending"}
+                    <span class="optimistic-status sending">
+                      <span class="sending-dot"></span>
+                      Sending...
+                    </span>
+                  {:else if optimisticStatus === "failed"}
+                    <span class="optimistic-status failed">
+                      Failed to send
+                    </span>
+                  {:else}
+                    <span class="time">{formatTime(message.date)}</span>
+                  {/if}
                 </div>
+                {#if optimisticStatus === "failed" && optimisticId}
+                  <div class="optimistic-actions">
+                    <button
+                      class="retry-btn"
+                      onclick={() => handleRetry(optimisticId)}
+                      title="Retry sending"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                      </svg>
+                      Retry
+                    </button>
+                    <button
+                      class="dismiss-btn"
+                      onclick={() => handleDismissFailedMessage(optimisticId)}
+                      title="Dismiss"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                {/if}
                 {#if message.reactions.length > 0}
                   <div class="reactions">
                     {#each message.reactions as reaction}
@@ -807,12 +1082,14 @@
     <div class="compose-area">
       <div class="compose-input-wrapper">
         <textarea
+          bind:this={composeInputRef}
           class="compose-input"
           bind:value={composeText}
           placeholder="iMessage"
           rows="1"
           onkeydown={handleComposeKeydown}
           oninput={autoResizeTextarea}
+          onfocus={() => setActiveZone("compose")}
         ></textarea>
         <button
           class="send-button"
@@ -1046,17 +1323,15 @@
   }
 
   .message.new-message {
-    animation: slideIn 0.3s ease-out, highlight 2s ease-out;
+    animation: fadeIn 0.15s ease-out, highlight 1s ease-out;
   }
 
-  @keyframes slideIn {
+  @keyframes fadeIn {
     from {
       opacity: 0;
-      transform: translateY(20px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
 
@@ -1077,6 +1352,12 @@
     animation: highlightPulse 3s ease-out;
   }
 
+  .message.keyboard-focused {
+    outline: 2px solid var(--color-primary, #007aff);
+    outline-offset: 2px;
+    border-radius: var(--radius-lg, 12px);
+  }
+
   @keyframes highlightPulse {
     0% {
       background: rgba(251, 191, 36, 0.4);
@@ -1091,13 +1372,17 @@
   }
 
   .bubble {
-    padding: 10px 14px;
-    border-radius: 18px;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-xl);
+    border-bottom-left-radius: var(--radius-sm);
     background: var(--bg-bubble-other);
+    box-shadow: var(--shadow-sm);
   }
 
   .bubble.from-me {
-    background: var(--bg-bubble-me);
+    background: linear-gradient(135deg, var(--color-primary) 0%, #0056b3 100%);
+    border-bottom-left-radius: var(--radius-xl);
+    border-bottom-right-radius: var(--radius-sm);
   }
 
   .bubble .sender {
@@ -1259,8 +1544,8 @@
     font-weight: 500;
     cursor: pointer;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    transition: all 0.2s ease;
-    animation: bounceIn 0.3s ease-out;
+    transition: all 0.15s ease;
+    animation: fadeInUp 0.15s ease-out;
     z-index: 10;
   }
 
@@ -1274,15 +1559,12 @@
     height: 16px;
   }
 
-  @keyframes bounceIn {
-    0% {
+  @keyframes fadeInUp {
+    from {
       opacity: 0;
-      transform: translateX(-50%) translateY(20px);
+      transform: translateX(-50%) translateY(10px);
     }
-    60% {
-      transform: translateX(-50%) translateY(-5px);
-    }
-    100% {
+    to {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
@@ -1374,5 +1656,103 @@
     border-radius: 8px;
     color: #ff3b30;
     font-size: 13px;
+  }
+
+  /* Optimistic message styles */
+  .message.optimistic {
+    opacity: 0.9;
+  }
+
+  .message.optimistic-sending .bubble {
+    background: rgba(11, 147, 246, 0.7);
+  }
+
+  .message.optimistic-failed .bubble {
+    background: rgba(255, 59, 48, 0.2);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+  }
+
+  .optimistic-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-top: 4px;
+  }
+
+  .optimistic-status.sending {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .optimistic-status.failed {
+    color: #ff3b30;
+  }
+
+  .sending-dot {
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    border-radius: 50%;
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .optimistic-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    justify-content: flex-end;
+  }
+
+  .retry-btn,
+  .dismiss-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .retry-btn {
+    background: var(--accent-color);
+    border: none;
+    color: white;
+  }
+
+  .retry-btn:hover {
+    background: #0a82e0;
+  }
+
+  .retry-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .dismiss-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 4px 8px;
+  }
+
+  .dismiss-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .dismiss-btn svg {
+    width: 14px;
+    height: 14px;
   }
 </style>

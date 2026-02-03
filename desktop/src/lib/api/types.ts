@@ -1010,3 +1010,628 @@ export interface QualityDashboardData {
   by_conversation_type: Record<string, ConversationTypeQuality>;
   recommendations: Recommendation[];
 }
+
+// =============================================================================
+// Tag System types
+// =============================================================================
+
+// Tag types
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  description: string | null;
+  parent_id: number | null;
+  aliases: string[];
+  sort_order: number;
+  is_system: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TagWithPath extends Tag {
+  path: string;
+}
+
+export interface TagCreateRequest {
+  name: string;
+  color?: string;
+  icon?: string;
+  description?: string | null;
+  parent_id?: number | null;
+  aliases?: string[];
+}
+
+export interface TagUpdateRequest {
+  name?: string;
+  color?: string;
+  icon?: string;
+  description?: string | null;
+  parent_id?: number | null;
+  aliases?: string[];
+  sort_order?: number;
+}
+
+export interface TagListResponse {
+  tags: Tag[];
+  total: number;
+}
+
+// Conversation Tag types
+export interface ConversationTag {
+  chat_id: string;
+  tag: Tag;
+  added_at: string | null;
+  added_by: string;
+  confidence: number;
+}
+
+export interface ConversationTagsResponse {
+  chat_id: string;
+  tags: ConversationTag[];
+}
+
+export interface ConversationTagRequest {
+  tag_id: number;
+}
+
+export interface BulkTagRequest {
+  chat_ids: string[];
+  tag_ids: number[];
+}
+
+export interface BulkTagResponse {
+  affected_count: number;
+  chat_ids: string[];
+}
+
+// Smart Folder types
+export interface RuleCondition {
+  field: string;
+  operator: string;
+  value: string | number | boolean | string[] | null;
+}
+
+export interface SmartFolderRules {
+  match: "all" | "any";
+  conditions: RuleCondition[];
+  sort_by: string;
+  sort_order: "asc" | "desc";
+  limit: number;
+}
+
+export interface SmartFolder {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  rules: SmartFolderRules;
+  sort_order: number;
+  is_default: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SmartFolderCreateRequest {
+  name: string;
+  icon?: string;
+  color?: string;
+  rules: SmartFolderRules;
+}
+
+export interface SmartFolderUpdateRequest {
+  name?: string;
+  icon?: string;
+  color?: string;
+  rules?: SmartFolderRules;
+  sort_order?: number;
+}
+
+export interface SmartFolderListResponse {
+  folders: SmartFolder[];
+  total: number;
+}
+
+export interface SmartFolderPreviewRequest {
+  rules: SmartFolderRules;
+  limit?: number;
+}
+
+export interface SmartFolderPreviewResponse {
+  total_matches: number;
+  preview: Record<string, unknown>[];
+  has_more: boolean;
+}
+
+// Tag Rule types (Auto-tagging)
+export interface TagRule {
+  id: number;
+  name: string;
+  trigger: string;
+  conditions: RuleCondition[];
+  tag_ids: number[];
+  priority: number;
+  is_enabled: boolean;
+  created_at: string | null;
+  last_triggered_at: string | null;
+  trigger_count: number;
+}
+
+export interface TagRuleCreateRequest {
+  name: string;
+  trigger?: string;
+  conditions: RuleCondition[];
+  tag_ids: number[];
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface TagRuleUpdateRequest {
+  name?: string;
+  trigger?: string;
+  conditions?: RuleCondition[];
+  tag_ids?: number[];
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface TagRuleListResponse {
+  rules: TagRule[];
+  total: number;
+}
+
+// Tag Suggestion types
+export interface TagSuggestion {
+  tag_id: number | null;
+  tag_name: string;
+  confidence: number;
+  reason: string | null;
+  source: string;
+}
+
+export interface TagSuggestionsRequest {
+  chat_id: string;
+  limit?: number;
+}
+
+export interface TagSuggestionsResponse {
+  chat_id: string;
+  suggestions: TagSuggestion[];
+}
+
+export interface SuggestionFeedbackRequest {
+  chat_id: string;
+  tag_id: number;
+  accepted: boolean;
+}
+
+// Tag Statistics types
+export interface TagUsageStats {
+  id: number;
+  name: string;
+  count: number;
+}
+
+export interface TagStatisticsResponse {
+  total_tags: number;
+  total_tagged_conversations: number;
+  average_tags_per_conversation: number;
+  most_used_tags: TagUsageStats[];
+}
+
+// Tag color presets
+export const TAG_COLORS = {
+  RED: "#ef4444",
+  ORANGE: "#f97316",
+  AMBER: "#f59e0b",
+  YELLOW: "#eab308",
+  LIME: "#84cc16",
+  GREEN: "#22c55e",
+  EMERALD: "#10b981",
+  TEAL: "#14b8a6",
+  CYAN: "#06b6d4",
+  SKY: "#0ea5e9",
+  BLUE: "#3b82f6",
+  INDIGO: "#6366f1",
+  VIOLET: "#8b5cf6",
+  PURPLE: "#a855f7",
+  FUCHSIA: "#d946ef",
+  PINK: "#ec4899",
+  ROSE: "#f43f5e",
+  SLATE: "#64748b",
+} as const;
+
+// Tag icon options
+export const TAG_ICONS = [
+  "star",
+  "heart",
+  "flag",
+  "bookmark",
+  "folder",
+  "tag",
+  "inbox",
+  "briefcase",
+  "home",
+  "users",
+  "user",
+  "clock",
+  "calendar",
+  "bell",
+  "alert",
+  "check",
+  "circle",
+  "square",
+  "arrow-up",
+  "arrow-down",
+  "message",
+  "mail",
+  "phone",
+  "sparkles",
+  "fire",
+  "zap",
+] as const;
+
+// Rule field options
+export const RULE_FIELDS = [
+  "chat_id",
+  "display_name",
+  "last_message_date",
+  "message_count",
+  "is_group",
+  "unread_count",
+  "is_flagged",
+  "relationship",
+  "contact_name",
+  "last_message_text",
+  "has_attachments",
+  "tags",
+  "sentiment",
+  "priority",
+  "needs_response",
+] as const;
+
+// Rule operator options
+export const RULE_OPERATORS = [
+  "equals",
+  "not_equals",
+  "contains",
+  "not_contains",
+  "starts_with",
+  "ends_with",
+  "is_empty",
+  "is_not_empty",
+  "greater_than",
+  "less_than",
+  "in_last_days",
+  "before",
+  "after",
+  "has_tag",
+  "has_any_tag",
+  "has_all_tags",
+  "has_no_tags",
+] as const;
+
+// =============================================================================
+// Analytics Dashboard types
+// =============================================================================
+
+export interface AnalyticsOverview {
+  total_messages: number;
+  sent_messages: number;
+  received_messages: number;
+  active_conversations: number;
+  avg_messages_per_day: number;
+  avg_response_time_minutes: number | null;
+  sentiment: {
+    score: number;
+    label: string;
+  };
+  peak_hour: number | null;
+  peak_day: string | null;
+  date_range: {
+    start: string | null;
+    end: string | null;
+  };
+  period_comparison: {
+    total_change_percent: number;
+    sent_change_percent: number;
+    contacts_change_percent: number;
+  };
+  time_range: string;
+}
+
+export interface TimelineDataPoint {
+  date?: string;
+  hour?: number;
+  total: number;
+  sent: number;
+  received: number;
+}
+
+export interface AnalyticsTimeline {
+  granularity: string;
+  metric: string;
+  time_range: string;
+  data: TimelineDataPoint[];
+  total_points: number;
+}
+
+export interface HeatmapDataPoint {
+  date: string;
+  count: number;
+  level: number; // 0-4 activity level
+}
+
+export interface ActivityHeatmap {
+  data: HeatmapDataPoint[];
+  stats: {
+    total_days: number;
+    active_days: number;
+    max_count: number;
+    avg_count: number;
+  };
+  time_range: string;
+}
+
+export interface ContactStats {
+  contact_id: string;
+  contact_name: string | null;
+  total_messages: number;
+  sent_count: number;
+  received_count: number;
+  avg_response_time_minutes: number | null;
+  sentiment_score: number;
+  engagement_score: number;
+  message_trend: string;
+  last_message_date: string | null;
+  emoji_usage: {
+    total: number;
+    per_message: number;
+    top_emojis: Record<string, number>;
+  };
+  hourly_distribution: Record<number, number>;
+  daily_distribution: Record<string, number>;
+  weekly_counts: Record<string, number>;
+  time_range: string;
+}
+
+export interface LeaderboardContact {
+  rank: number;
+  contact_id: string;
+  contact_name: string | null;
+  total_messages: number;
+  sent_count: number;
+  received_count: number;
+  engagement_score: number;
+  avg_response_time_minutes: number | null;
+  sentiment_score: number;
+  trend: string;
+}
+
+export interface ContactsLeaderboard {
+  contacts: LeaderboardContact[];
+  total_contacts: number;
+  sort_by: string;
+  time_range: string;
+}
+
+export interface TrendInfo {
+  direction: string;
+  percentage_change: number;
+  confidence: number;
+}
+
+export interface TrendingContact {
+  contact_id: string;
+  contact_name: string | null;
+  trend: string;
+  change_percent: number;
+  confidence: number;
+}
+
+export interface Anomaly {
+  date: string;
+  type: string;
+  value: number;
+  expected: number;
+  deviation: number;
+}
+
+export interface PeakPeriod {
+  hour?: number;
+  day?: string;
+  count: number;
+  percentage: number;
+}
+
+export interface TrendingPatterns {
+  overall_trend: TrendInfo;
+  weekly_trend: TrendInfo | null;
+  trending_contacts: TrendingContact[];
+  anomalies: Anomaly[];
+  peak_hours: PeakPeriod[];
+  peak_days: PeakPeriod[];
+  seasonality: {
+    detected: boolean;
+    pattern: string | null;
+  };
+  time_range: string;
+}
+
+// =============================================================================
+// Scheduler types
+// =============================================================================
+
+export type ScheduledPriority = "urgent" | "normal" | "low";
+
+export type ScheduledStatus =
+  | "pending"
+  | "queued"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export interface SendResult {
+  success: boolean;
+  sent_at: string | null;
+  error: string | null;
+  attempts: number;
+}
+
+export interface TimingSuggestion {
+  suggested_time: string;
+  confidence: number;
+  reason: string;
+  is_optimal: boolean;
+}
+
+export interface ScheduledItem {
+  id: string;
+  draft_id: string;
+  contact_id: number;
+  chat_id: string;
+  message_text: string;
+  send_at: string;
+  priority: ScheduledPriority;
+  status: ScheduledStatus;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  timezone: string | null;
+  depends_on: string | null;
+  retry_count: number;
+  max_retries: number;
+  result: SendResult | null;
+}
+
+export interface ScheduleDraftRequest {
+  draft_id: string;
+  contact_id: number;
+  chat_id: string;
+  message_text: string;
+  send_at: string;
+  priority?: ScheduledPriority;
+  timezone?: string;
+  depends_on?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SmartScheduleRequest {
+  draft_id: string;
+  contact_id: number;
+  chat_id: string;
+  message_text: string;
+  earliest?: string;
+  latest?: string;
+  priority?: ScheduledPriority;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SmartScheduleResponse {
+  item: ScheduledItem;
+  suggestion: TimingSuggestion;
+}
+
+export interface ScheduledListResponse {
+  items: ScheduledItem[];
+  total: number;
+  pending: number;
+  sent: number;
+  failed: number;
+}
+
+export interface TimingSuggestionsResponse {
+  suggestions: TimingSuggestion[];
+  contact_id: number;
+}
+
+export interface SchedulerStatsResponse {
+  running: boolean;
+  total: number;
+  pending: number;
+  sent: number;
+  failed: number;
+  pending_in_undo_window: number;
+  next_due: string | null;
+}
+
+// =============================================================================
+// Graph Visualization types
+// =============================================================================
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  size: number;
+  color: string;
+  relationship_type: string;
+  message_count: number;
+  last_contact: string | null;
+  sentiment_score: number;
+  response_time_avg: number | null;
+  x: number | null;
+  y: number | null;
+  cluster_id: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  weight: number;
+  message_count: number;
+  sentiment: number;
+  last_interaction: string | null;
+  bidirectional: boolean;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ClusterResult {
+  clusters: Record<string, number>;
+  modularity: number;
+  num_clusters: number;
+  cluster_sizes: Record<number, number>;
+  cluster_labels: Record<number, string>;
+}
+
+export type LayoutType = "force" | "hierarchical" | "radial";
+
+export interface GraphEvolutionSnapshot {
+  timestamp: string;
+  graph: GraphData;
+  metrics: Record<string, unknown>;
+}
+
+export interface GraphEvolutionResponse {
+  from_date: string;
+  to_date: string;
+  interval: string;
+  snapshots: GraphEvolutionSnapshot[];
+  total_snapshots: number;
+}
+
+export interface GraphExportResponse {
+  format: string;
+  filename: string;
+  data: string;
+  size_bytes: number;
+}
+
+export interface GraphStats {
+  total_contacts: number;
+  total_messages: number;
+  avg_messages_per_contact: number;
+  relationship_distribution: Record<string, number>;
+  cluster_count: number;
+  most_active_contact: string | null;
+  most_active_messages: number;
+  generated_at: string;
+}

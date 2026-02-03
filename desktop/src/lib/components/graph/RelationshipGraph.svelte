@@ -1,0 +1,472 @@
+<script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+  import * as d3 from "d3";
+  import { api } from "../../api/client";
+  import type { GraphData, GraphNode, GraphEdge, LayoutType } from "../../api/types";
+  import GraphControls from "./GraphControls.svelte";
+  import NodeTooltip from "./NodeTooltip.svelte";
+  import ClusterLegend from "./ClusterLegend.svelte";
+
+  // Props
+  export let width: number = 800;
+  export let height: number = 600;
+  export let onNodeClick: ((node: GraphNode) => void) | null = null;
+  export let onNodeDoubleClick: ((node: GraphNode) => void) | null = null;
+
+  // State
+  let loading = true;
+  let error: string | null = null;
+  let graphData: GraphData | null = null;
+  let svgElement: SVGSVGElement;
+  let containerElement: HTMLDivElement;
+  let showLabels = true;
+  let currentLayout: LayoutType = "force";
+  let selectedNode: GraphNode | null = null;
+  let tooltipNode: GraphNode | null = null;
+  let tooltipX = 0;
+  let tooltipY = 0;
+
+  // D3 references
+  let simulation: d3.Simulation<d3.SimulationNodeDatum, undefined> | null = null;
+  let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null;
+  let g: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
+  let zoom: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null;
+
+  // Relationship colors for legend
+  const relationshipColors: Record<string, string> = {
+    family: "#FF6B6B",
+    friend: "#4ECDC4",
+    work: "#45B7D1",
+    acquaintance: "#96CEB4",
+    romantic: "#DDA0DD",
+    professional: "#6495ED",
+    unknown: "#8E8E93",
+    self: "#007AFF",
+  };
+
+  async function loadGraph() {
+    loading = true;
+    error = null;
+
+    try {
+      graphData = await api.getNetworkGraph({
+        layout: currentLayout,
+        maxNodes: 100,
+        includeClusters: true,
+        width,
+        height,
+      });
+      renderGraph();
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to load graph";
+    } finally {
+      loading = false;
+    }
+  }
+
+  function renderGraph() {
+    if (!graphData || !svgElement) return;
+
+    // Clear existing
+    d3.select(svgElement).selectAll("*").remove();
+
+    svg = d3.select(svgElement)
+      .attr("viewBox", [0, 0, width, height])
+      .attr("width", "100%")
+      .attr("height", "100%");
+
+    g = svg.append("g");
+
+    // Setup zoom
+    zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.2, 5])
+      .on("zoom", (event) => {
+        g!.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
+
+    // Prepare data for D3
+    const nodes = graphData.nodes.map(n => ({
+      ...n,
+      x: n.x ?? width / 2,
+      y: n.y ?? height / 2,
+    }));
+
+    const links = graphData.edges.map(e => ({
+      ...e,
+      source: e.source,
+      target: e.target,
+    }));
+
+    // Create simulation
+    simulation = d3.forceSimulation(nodes as d3.SimulationNodeDatum[])
+      .force("link", d3.forceLink(links)
+        .id((d: any) => d.id)
+        .distance((d: any) => 100 / (d.weight + 0.1))
+        .strength((d: any) => d.weight * 0.3))
+      .force("charge", d3.forceManyBody()
+        .strength((d: any) => -200 - d.size * 5))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collision", d3.forceCollide()
+        .radius((d: any) => d.size + 5));
+
+    // Draw links
+    const link = g!.append("g")
+      .attr("class", "links")
+      .selectAll("line")
+      .data(links)
+      .join("line")
+      .attr("stroke", "#666")
+      .attr("stroke-opacity", 0.6)
+      .attr("stroke-width", (d: any) => Math.max(1, d.weight * 3));
+
+    // Draw nodes
+    const node = g!.append("g")
+      .attr("class", "nodes")
+      .selectAll("circle")
+      .data(nodes)
+      .join("circle")
+      .attr("r", (d: any) => d.size)
+      .attr("fill", (d: any) => d.color)
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 2)
+      .attr("cursor", "pointer")
+      .call(drag(simulation) as any);
+
+    // Draw labels
+    const label = g!.append("g")
+      .attr("class", "labels")
+      .selectAll("text")
+      .data(nodes)
+      .join("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", (d: any) => d.size + 14)
+      .attr("font-size", "11px")
+      .attr("fill", "#fff")
+      .attr("pointer-events", "none")
+      .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+      .style("display", showLabels ? "block" : "none")
+      .text((d: any) => d.label);
+
+    // Event handlers
+    node.on("mouseover", (event: MouseEvent, d: any) => {
+      tooltipNode = d as GraphNode;
+      tooltipX = event.pageX;
+      tooltipY = event.pageY;
+    })
+    .on("mousemove", (event: MouseEvent) => {
+      tooltipX = event.pageX;
+      tooltipY = event.pageY;
+    })
+    .on("mouseout", () => {
+      tooltipNode = null;
+    })
+    .on("click", (event: MouseEvent, d: any) => {
+      selectedNode = d as GraphNode;
+      highlightNode(d.id);
+      if (onNodeClick) onNodeClick(d as GraphNode);
+    })
+    .on("dblclick", (event: MouseEvent, d: any) => {
+      if (onNodeDoubleClick) onNodeDoubleClick(d as GraphNode);
+      zoomToNode(d);
+    });
+
+    // Update positions on tick
+    simulation.on("tick", () => {
+      link
+        .attr("x1", (d: any) => d.source.x)
+        .attr("y1", (d: any) => d.source.y)
+        .attr("x2", (d: any) => d.target.x)
+        .attr("y2", (d: any) => d.target.y);
+
+      node
+        .attr("cx", (d: any) => d.x)
+        .attr("cy", (d: any) => d.y);
+
+      label
+        .attr("x", (d: any) => d.x)
+        .attr("y", (d: any) => d.y);
+    });
+  }
+
+  function drag(simulation: d3.Simulation<d3.SimulationNodeDatum, undefined>) {
+    return d3.drag()
+      .on("start", (event: any, d: any) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      })
+      .on("drag", (event: any, d: any) => {
+        d.fx = event.x;
+        d.fy = event.y;
+      })
+      .on("end", (event: any, d: any) => {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+      });
+  }
+
+  function highlightNode(nodeId: string) {
+    if (!g) return;
+
+    // Reset all nodes
+    g.selectAll("circle")
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 2)
+      .attr("opacity", 1);
+
+    // Reset all links
+    g.selectAll("line")
+      .attr("opacity", 0.6);
+
+    // Highlight selected node
+    g.selectAll("circle")
+      .filter((d: any) => d.id === nodeId)
+      .attr("stroke", "#FFD700")
+      .attr("stroke-width", 4);
+
+    // Highlight connected edges
+    g.selectAll("line")
+      .attr("opacity", (d: any) =>
+        d.source.id === nodeId || d.target.id === nodeId ? 1 : 0.2
+      );
+
+    // Dim unconnected nodes
+    const connectedIds = new Set<string>();
+    graphData?.edges.forEach(e => {
+      if (e.source === nodeId) connectedIds.add(e.target);
+      if (e.target === nodeId) connectedIds.add(e.source);
+    });
+    connectedIds.add(nodeId);
+
+    g.selectAll("circle")
+      .attr("opacity", (d: any) => connectedIds.has(d.id) ? 1 : 0.3);
+  }
+
+  function clearHighlight() {
+    selectedNode = null;
+    if (!g) return;
+
+    g.selectAll("circle")
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 2)
+      .attr("opacity", 1);
+
+    g.selectAll("line")
+      .attr("opacity", 0.6);
+  }
+
+  function zoomToNode(node: any) {
+    if (!svg || !zoom) return;
+
+    const scale = 2;
+    const x = width / 2 - node.x * scale;
+    const y = height / 2 - node.y * scale;
+
+    svg.transition()
+      .duration(500)
+      .call(
+        zoom.transform,
+        d3.zoomIdentity.translate(x, y).scale(scale)
+      );
+  }
+
+  function resetZoom() {
+    if (!svg || !zoom) return;
+    svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+  }
+
+  function toggleLabels() {
+    showLabels = !showLabels;
+    if (g) {
+      g.selectAll(".labels text")
+        .style("display", showLabels ? "block" : "none");
+    }
+  }
+
+  function reheat() {
+    if (simulation) {
+      simulation.alpha(1).restart();
+    }
+  }
+
+  async function changeLayout(layout: LayoutType) {
+    currentLayout = layout;
+    await loadGraph();
+  }
+
+  function filterByRelationship(types: string[]) {
+    if (!g || !graphData) return;
+
+    const typeSet = new Set(types);
+
+    g.selectAll("circle")
+      .attr("opacity", (d: any) =>
+        types.length === 0 || typeSet.has(d.relationship_type) ? 1 : 0.2
+      );
+
+    g.selectAll("line")
+      .attr("opacity", (d: any) => {
+        const sourceNode = graphData!.nodes.find(n => n.id === d.source.id || n.id === d.source);
+        const targetNode = graphData!.nodes.find(n => n.id === d.target.id || n.id === d.target);
+        if (types.length === 0) return 0.6;
+        const sourceMatch = sourceNode && typeSet.has(sourceNode.relationship_type);
+        const targetMatch = targetNode && typeSet.has(targetNode.relationship_type);
+        return sourceMatch && targetMatch ? 0.6 : 0.1;
+      });
+  }
+
+  function searchNodes(query: string) {
+    if (!g || !graphData) return;
+
+    if (!query) {
+      g.selectAll("circle").attr("opacity", 1);
+      g.selectAll("line").attr("opacity", 0.6);
+      return;
+    }
+
+    const lowerQuery = query.toLowerCase();
+    const matchingIds = new Set(
+      graphData.nodes
+        .filter(n => n.label.toLowerCase().includes(lowerQuery))
+        .map(n => n.id)
+    );
+
+    g.selectAll("circle")
+      .attr("opacity", (d: any) => matchingIds.has(d.id) ? 1 : 0.2);
+  }
+
+  onMount(() => {
+    loadGraph();
+  });
+
+  onDestroy(() => {
+    if (simulation) {
+      simulation.stop();
+    }
+  });
+</script>
+
+<div class="graph-container" bind:this={containerElement}>
+  <GraphControls
+    {showLabels}
+    {currentLayout}
+    on:resetZoom={resetZoom}
+    on:toggleLabels={toggleLabels}
+    on:reheat={reheat}
+    on:changeLayout={(e) => changeLayout(e.detail)}
+    on:search={(e) => searchNodes(e.detail)}
+    on:filterRelationships={(e) => filterByRelationship(e.detail)}
+  />
+
+  <div class="graph-wrapper">
+    {#if loading}
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading relationship graph...</p>
+      </div>
+    {:else if error}
+      <div class="error-state">
+        <p class="error-message">{error}</p>
+        <button class="retry-btn" on:click={loadGraph}>Try Again</button>
+      </div>
+    {:else}
+      <svg bind:this={svgElement}></svg>
+
+      {#if graphData}
+        <ClusterLegend
+          nodes={graphData.nodes}
+          colors={relationshipColors}
+          on:filter={(e) => filterByRelationship(e.detail)}
+        />
+      {/if}
+    {/if}
+  </div>
+
+  {#if tooltipNode}
+    <NodeTooltip
+      node={tooltipNode}
+      x={tooltipX}
+      y={tooltipY}
+    />
+  {/if}
+</div>
+
+<style>
+  .graph-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-primary);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .graph-wrapper {
+    width: 100%;
+    height: calc(100% - 50px);
+    position: relative;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    color: var(--text-secondary);
+  }
+
+  .loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .error-message {
+    color: var(--error-color);
+    font-size: 14px;
+  }
+
+  .retry-btn {
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .retry-btn:hover {
+    background: var(--bg-active);
+  }
+</style>

@@ -286,6 +286,7 @@ async def get_system_status(request: Request) -> dict[str, Any]:
     model_loaded = False
     try:
         from models import get_generator
+
         gen = get_generator()
         model_loaded = gen.is_loaded()
     except Exception:
@@ -295,6 +296,7 @@ async def get_system_status(request: Request) -> dict[str, Any]:
     embedding_available = False
     try:
         from models.embeddings import is_mlx_available
+
         embedding_available = is_mlx_available()
     except Exception:
         pass

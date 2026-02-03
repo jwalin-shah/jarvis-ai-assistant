@@ -7,6 +7,17 @@
     GenerationSettings,
     BehaviorSettings,
   } from "../api/types";
+  import {
+    themeMode,
+    setTheme,
+    accentColor,
+    setAccentColor,
+    reducedMotion,
+    setReducedMotion,
+    accentColors,
+    type ThemeMode,
+    type AccentColorKey,
+  } from "../stores/theme";
 
   let settings: SettingsResponse | null = null;
   let models: ModelInfo[] = [];
@@ -172,7 +183,7 @@
         <line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
       <span>{error}</span>
-      <button class="dismiss" on:click={() => (error = null)}>Dismiss</button>
+      <button class="dismiss" onclick={() => (error = null)}>Dismiss</button>
     </div>
   {/if}
 
@@ -236,7 +247,7 @@
               {#if !model.is_downloaded}
                 <button
                   class="btn-secondary"
-                  on:click|stopPropagation={() => downloadModel(model.model_id)}
+                  onclick={() => downloadModel(model.model_id)}
                   disabled={downloadingModel === model.model_id}
                 >
                   {downloadingModel === model.model_id ? "Downloading..." : "Download"}
@@ -244,7 +255,7 @@
               {:else if !model.is_loaded && selectedModelId === model.model_id}
                 <button
                   class="btn-secondary"
-                  on:click|stopPropagation={() => activateModel(model.model_id)}
+                  onclick={() => activateModel(model.model_id)}
                   disabled={activatingModel === model.model_id}
                 >
                   {activatingModel === model.model_id ? "Activating..." : "Activate"}
@@ -318,11 +329,11 @@
         <button
           class="toggle-btn"
           class:on={autoSuggestReplies}
-          on:click={() => (autoSuggestReplies = !autoSuggestReplies)}
+          onclick={() => (autoSuggestReplies = !autoSuggestReplies)}
           role="switch"
           aria-checked={autoSuggestReplies}
         >
-          <span class="toggle-slider" />
+          <span class="toggle-slider"></span>
         </button>
       </div>
 
@@ -378,6 +389,115 @@
     </section>
 
     <section class="section">
+      <h2>Appearance</h2>
+      <p class="section-desc">Customize the look and feel</p>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Theme</h3>
+        <div class="theme-selector">
+          <label class="theme-option" class:selected={$themeMode === "dark"}>
+            <input
+              type="radio"
+              name="theme"
+              value="dark"
+              checked={$themeMode === "dark"}
+              onchange={() => setTheme("dark")}
+            />
+            <div class="theme-icon dark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </div>
+            <span>Dark</span>
+          </label>
+
+          <label class="theme-option" class:selected={$themeMode === "light"}>
+            <input
+              type="radio"
+              name="theme"
+              value="light"
+              checked={$themeMode === "light"}
+              onchange={() => setTheme("light")}
+            />
+            <div class="theme-icon light">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            </div>
+            <span>Light</span>
+          </label>
+
+          <label class="theme-option" class:selected={$themeMode === "system"}>
+            <input
+              type="radio"
+              name="theme"
+              value="system"
+              checked={$themeMode === "system"}
+              onchange={() => setTheme("system")}
+            />
+            <div class="theme-icon system">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+            </div>
+            <span>System</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Accent Color</h3>
+        <div class="color-picker">
+          {#each Object.entries(accentColors) as [key, color]}
+            <button
+              class="color-option"
+              class:selected={$accentColor === key}
+              style="--color: {color.value}"
+              onclick={() => setAccentColor(key as AccentColorKey)}
+              title={color.name}
+              aria-label={color.name}
+            >
+              {#if $accentColor === key}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Accessibility</h3>
+        <div class="form-group toggle">
+          <div class="toggle-info">
+            <label for="reducedMotion">Reduce motion</label>
+            <p class="help">Minimizes animations throughout the interface</p>
+          </div>
+          <button
+            class="toggle-btn"
+            class:on={$reducedMotion}
+            onclick={() => setReducedMotion(!$reducedMotion)}
+            role="switch"
+            aria-checked={$reducedMotion}
+          >
+            <span class="toggle-slider"></span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
       <h2>System</h2>
       <p class="section-desc">System information (read-only)</p>
 
@@ -410,10 +530,10 @@
     </section>
 
     <div class="actions">
-      <button class="btn-primary" on:click={saveSettings} disabled={saving}>
+      <button class="btn-primary" onclick={saveSettings} disabled={saving}>
         {saving ? "Saving..." : "Save Settings"}
       </button>
-      <button class="btn-secondary" on:click={resetToDefaults} disabled={saving}>
+      <button class="btn-secondary" onclick={resetToDefaults} disabled={saving}>
         Reset to Defaults
       </button>
     </div>
@@ -797,5 +917,132 @@
   .btn-secondary:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  /* Theme selector */
+  .theme-selector {
+    display: flex;
+    gap: 12px;
+  }
+
+  .theme-option {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: var(--bg-primary);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .theme-option:hover {
+    border-color: var(--accent-color);
+  }
+
+  .theme-option.selected {
+    border-color: var(--accent-color);
+    background: rgba(11, 147, 246, 0.1);
+  }
+
+  .theme-option input[type="radio"] {
+    display: none;
+  }
+
+  .theme-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+  }
+
+  .theme-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .theme-option span {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Subsections */
+  .subsection {
+    margin-bottom: 24px;
+  }
+
+  .subsection:last-child {
+    margin-bottom: 0;
+  }
+
+  .subsection-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+
+  /* Color picker */
+  .color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .color-option {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--color);
+    border: 3px solid transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .color-option:hover {
+    transform: scale(1.1);
+  }
+
+  .color-option.selected {
+    border-color: var(--text-primary);
+    transform: scale(1.1);
+  }
+
+  .color-option svg {
+    width: 20px;
+    height: 20px;
+    color: white;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  }
+
+  /* Toggle with info */
+  .toggle-info {
+    flex: 1;
+  }
+
+  .toggle-info label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .toggle-info .help {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
   }
 </style>

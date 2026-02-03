@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -946,7 +947,8 @@ def extract_all_pairs(
         return aggregate_stats
 
     # Use ThreadPoolExecutor for parallel extraction
-    max_workers = min(4, total)  # Don't over-parallelize
+    # Scale to available CPUs (capped at 8 for I/O-bound tasks)
+    max_workers = min(8, os.cpu_count() or 2, total)  # Scale with CPU count
     completed = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -979,22 +981,22 @@ def extract_all_pairs(
                 aggregate_stats["turns_identified"] += stats.turns_identified
                 aggregate_stats["candidate_pairs"] += stats.candidate_pairs
                 aggregate_stats["dropped_by_reason"]["short_trigger"] += stats.dropped_short_trigger
-                aggregate_stats["dropped_by_reason"][
-                    "short_response"
-                ] += stats.dropped_short_response
+                aggregate_stats["dropped_by_reason"]["short_response"] += (
+                    stats.dropped_short_response
+                )
                 aggregate_stats["dropped_by_reason"]["long_trigger"] += stats.dropped_long_trigger
                 aggregate_stats["dropped_by_reason"]["long_response"] += stats.dropped_long_response
                 aggregate_stats["dropped_by_reason"]["no_text"] += stats.dropped_no_text
                 aggregate_stats["dropped_by_reason"]["time_gap"] += stats.dropped_time_gap
                 # Track quality flags
                 aggregate_stats["flagged_by_reason"]["reaction"] += stats.flagged_reaction
-                aggregate_stats["flagged_by_reason"][
-                    "low_similarity"
-                ] += stats.flagged_low_similarity
+                aggregate_stats["flagged_by_reason"]["low_similarity"] += (
+                    stats.flagged_low_similarity
+                )
                 aggregate_stats["flagged_by_reason"]["topic_shift"] += stats.flagged_topic_shift
-                aggregate_stats["flagged_by_reason"][
-                    "ack_substantive"
-                ] += stats.flagged_ack_substantive
+                aggregate_stats["flagged_by_reason"]["ack_substantive"] += (
+                    stats.flagged_ack_substantive
+                )
 
                 # Convert and add to database
                 pair_dicts = [

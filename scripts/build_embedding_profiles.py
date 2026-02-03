@@ -232,11 +232,11 @@ def main():
     print("=" * 60)
     print(f"Chats processed:    {stats['chats_processed']}")
     print(f"Profiles created:   {stats['profiles_created']}")
-    direct_chats = stats['profiles_created'] - stats.get('group_profiles_created', 0)
+    direct_chats = stats["profiles_created"] - stats.get("group_profiles_created", 0)
     print(f"  - Direct chats:   {direct_chats}")
     print(f"  - Group chats:    {stats.get('group_profiles_created', 0)}")
     print(f"Profiles skipped:   {stats['profiles_skipped']} (< {args.min_messages} messages)")
-    if stats.get('profiles_skipped_existing', 0) > 0:
+    if stats.get("profiles_skipped_existing", 0) > 0:
         print(f"Already existed:    {stats['profiles_skipped_existing']} (use --force to rebuild)")
     print(f"Messages analyzed:  {stats['total_messages_analyzed']}")
     print(f"Relationships:      {stats['relationships_classified']} (1:1 chats only)")

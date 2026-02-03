@@ -231,9 +231,7 @@ class TestInfoStatementPatterns:
         """Non-INFO_STATEMENT patterns don't match."""
         from jarvis.multi_option import _is_info_statement
 
-        assert (
-            _is_info_statement(text) is False
-        ), f"'{text}' should NOT match INFO_STATEMENT"
+        assert _is_info_statement(text) is False, f"'{text}' should NOT match INFO_STATEMENT"
 
 
 class TestWhQuestionPatterns:
@@ -337,9 +335,7 @@ class TestGenerateOptions:
     @patch.object(MultiOptionGenerator, "_generate_llm_option", return_value=None)
     @patch("jarvis.embedding_adapter.get_embedder")
     @patch("jarvis.multi_option.get_typed_retriever")
-    def test_commitment_returns_options(
-        self, mock_retriever, mock_embedder, mock_llm_option
-    ):
+    def test_commitment_returns_options(self, mock_retriever, mock_embedder, mock_llm_option):
         """Commitment triggers return multiple options (fallback templates)."""
         # Mock retriever
         mock_ret = MagicMock()
@@ -365,9 +361,7 @@ class TestGenerateOptions:
     @patch.object(MultiOptionGenerator, "_generate_llm_option", return_value=None)
     @patch("jarvis.embedding_adapter.get_embedder")
     @patch("jarvis.multi_option.get_typed_retriever")
-    def test_force_commitment_flag(
-        self, mock_retriever, mock_embedder, mock_llm_option
-    ):
+    def test_force_commitment_flag(self, mock_retriever, mock_embedder, mock_llm_option):
         """force_commitment=True treats any trigger as commitment."""
         mock_ret = MagicMock()
         mock_ret.classify_trigger.return_value = ("statement", 0.9)

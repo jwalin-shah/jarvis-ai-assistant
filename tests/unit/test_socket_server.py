@@ -1,6 +1,5 @@
 """Tests for the JARVIS socket server."""
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -100,9 +99,7 @@ class TestJarvisSocketServer:
     @pytest.mark.asyncio
     async def test_process_unknown_method(self, server: JarvisSocketServer) -> None:
         """Unknown method returns method not found."""
-        message = json.dumps(
-            {"jsonrpc": "2.0", "method": "unknown_method", "params": {}, "id": 1}
-        )
+        message = json.dumps({"jsonrpc": "2.0", "method": "unknown_method", "params": {}, "id": 1})
         response = await server._process_message(message)
         data = json.loads(response)
 
@@ -118,9 +115,7 @@ class TestJarvisSocketServer:
 
         server.register("requires_arg", requires_arg)
 
-        message = json.dumps(
-            {"jsonrpc": "2.0", "method": "requires_arg", "params": {}, "id": 1}
-        )
+        message = json.dumps({"jsonrpc": "2.0", "method": "requires_arg", "params": {}, "id": 1})
         response = await server._process_message(message)
         data = json.loads(response)
 
@@ -148,9 +143,7 @@ class TestJarvisSocketServer:
         assert notification["params"] == {"text": "hello"}
 
     @pytest.mark.asyncio
-    async def test_broadcast_removes_disconnected_clients(
-        self, server: JarvisSocketServer
-    ) -> None:
+    async def test_broadcast_removes_disconnected_clients(self, server: JarvisSocketServer) -> None:
         """Broadcast removes clients that fail to receive."""
         writer1 = AsyncMock()
         writer2 = AsyncMock()

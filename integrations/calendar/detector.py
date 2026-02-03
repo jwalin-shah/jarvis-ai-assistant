@@ -96,6 +96,13 @@ LOCATION_PATTERNS = [
     r"@\s*(?P<location>[^\s,.\n]+)",
 ]
 
+# Pre-compiled patterns at module level (avoids recompilation per instance)
+_COMPILED_EVENT_PATTERN = re.compile(
+    r"\b(" + "|".join(EVENT_INDICATORS) + r")\b",
+    re.IGNORECASE,
+)
+_COMPILED_LOCATION_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in LOCATION_PATTERNS)
+
 
 @dataclass
 class DateTimeMatch:
@@ -123,11 +130,9 @@ class EventDetectorImpl:
             default_event_duration_minutes: Default duration for detected events.
         """
         self.default_duration = timedelta(minutes=default_event_duration_minutes)
-        self._event_pattern = re.compile(
-            r"\b(" + "|".join(EVENT_INDICATORS) + r")\b",
-            re.IGNORECASE,
-        )
-        self._location_patterns = [re.compile(p, re.IGNORECASE) for p in LOCATION_PATTERNS]
+        # Use pre-compiled module-level patterns (avoids recompilation per instance)
+        self._event_pattern = _COMPILED_EVENT_PATTERN
+        self._location_patterns = _COMPILED_LOCATION_PATTERNS
 
     def detect_events(
         self,

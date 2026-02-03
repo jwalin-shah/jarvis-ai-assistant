@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path.home() / ".jarvis" / "config.json"
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 9
+CONFIG_VERSION = 10
 
 
 class MemoryThresholds(BaseModel):
@@ -82,6 +82,56 @@ class ChatConfig(BaseModel):
     show_typing_indicator: bool = True
 
 
+class AdaptiveThresholdConfig(BaseModel):
+    """Configuration for adaptive threshold adjustment based on feedback.
+
+    Adaptive thresholds learn from user feedback (acceptance/rejection patterns)
+    to optimize routing decisions. When enabled, the system analyzes feedback
+    at different similarity score ranges to find optimal threshold boundaries.
+
+    Attributes:
+        enabled: Whether adaptive threshold adjustment is enabled.
+        min_feedback_samples: Minimum feedback samples required before adaptation starts.
+            Prevents premature adaptation with insufficient data.
+        adaptation_window_hours: Hours of feedback history to consider for adaptation.
+            Older feedback is weighted less. Use 0 for all-time.
+        learning_rate: How quickly thresholds adapt to new feedback (0.0-1.0).
+            Higher values = faster adaptation but more volatility.
+        update_interval_minutes: How often to recompute adaptive thresholds.
+            Lower values = more responsive but more CPU overhead.
+        min_threshold_bounds: Minimum allowed values for each threshold.
+            Prevents thresholds from dropping too low.
+        max_threshold_bounds: Maximum allowed values for each threshold.
+            Prevents thresholds from going too high.
+        similarity_bucket_size: Size of similarity score buckets for analysis (e.g., 0.05 = 5%).
+            Smaller buckets = finer granularity but need more data.
+        acceptance_target: Target acceptance rate for adaptive optimization.
+            System will try to find thresholds achieving this rate.
+    """
+
+    enabled: bool = False
+    min_feedback_samples: int = Field(default=50, ge=10, le=1000)
+    adaptation_window_hours: int = Field(default=168, ge=0, le=8760)  # 0 = all-time, max 1 year
+    learning_rate: float = Field(default=0.2, ge=0.01, le=1.0)
+    update_interval_minutes: int = Field(default=60, ge=5, le=1440)
+    min_threshold_bounds: dict[str, float] = Field(
+        default_factory=lambda: {
+            "quick_reply": 0.80,
+            "context": 0.50,
+            "generate": 0.30,
+        }
+    )
+    max_threshold_bounds: dict[str, float] = Field(
+        default_factory=lambda: {
+            "quick_reply": 0.99,
+            "context": 0.85,
+            "generate": 0.65,
+        }
+    )
+    similarity_bucket_size: float = Field(default=0.05, ge=0.01, le=0.2)
+    acceptance_target: float = Field(default=0.70, ge=0.3, le=0.95)
+
+
 class RoutingConfig(BaseModel):
     """Routing thresholds and A/B testing configuration."""
 
@@ -90,6 +140,7 @@ class RoutingConfig(BaseModel):
     generate_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     ab_test_group: str = Field(default="control")
     ab_test_thresholds: dict[str, dict[str, float]] = Field(default_factory=dict)
+    adaptive: AdaptiveThresholdConfig = Field(default_factory=AdaptiveThresholdConfig)
     # DEPRECATED: Use quick_reply_threshold instead (renamed for clarity)
     template_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
 
@@ -291,6 +342,55 @@ class FAISSIndexConfig(BaseModel):
     min_vectors_for_compression: int = Field(default=1000, ge=100, le=50000)
 
 
+class RetrievalConfig(BaseModel):
+    """Retrieval configuration for enhanced search capabilities.
+
+    Controls temporal weighting, hybrid BM25+FAISS retrieval, and cross-encoder reranking.
+
+    Temporal Weighting:
+        Uses exponential decay to prefer recent messages. Score is multiplied by
+        decay factor: 0.5^(age_days / half_life_days). Half-life of 365 means
+        messages lose half their score after 1 year.
+
+    Hybrid Retrieval (BM25 + FAISS):
+        Combines sparse (BM25) and dense (FAISS) retrieval using reciprocal rank fusion.
+        BM25 captures exact keyword matches while FAISS captures semantic similarity.
+
+    Cross-Encoder Reranking:
+        After initial retrieval, uses a cross-encoder model to rerank top-k candidates
+        for more accurate final ranking. More expensive but more accurate.
+
+    Attributes:
+        temporal_decay_enabled: Enable exponential decay based on message age.
+        temporal_half_life_days: Days until score is halved (default 365 = 1 year).
+        temporal_min_score: Minimum decay multiplier to prevent very old messages
+            from being completely ignored (default 0.1 = 10% of original score).
+
+        bm25_enabled: Enable hybrid BM25+FAISS retrieval.
+        bm25_weight: Weight for BM25 scores in fusion (0-1). FAISS weight = 1 - bm25_weight.
+        rrf_k: Reciprocal rank fusion constant (higher = more weight to lower ranks).
+
+        rerank_enabled: Enable cross-encoder reranking after initial retrieval.
+        rerank_model: Cross-encoder model name for reranking.
+        rerank_top_k: Number of candidates to rerank (balance accuracy vs speed).
+    """
+
+    # Temporal weighting
+    temporal_decay_enabled: bool = True
+    temporal_half_life_days: float = Field(default=365.0, ge=1.0, le=3650.0)
+    temporal_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
+
+    # BM25 hybrid retrieval
+    bm25_enabled: bool = False
+    bm25_weight: float = Field(default=0.3, ge=0.0, le=1.0)
+    rrf_k: int = Field(default=60, ge=1, le=1000)
+
+    # Cross-encoder reranking
+    rerank_enabled: bool = False
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_top_k: int = Field(default=20, ge=5, le=100)
+
+
 class JarvisConfig(BaseModel):
     """JARVIS configuration schema.
 
@@ -331,6 +431,7 @@ class JarvisConfig(BaseModel):
     classifier_thresholds: ClassifierThresholds = Field(default_factory=ClassifierThresholds)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     faiss_index: FAISSIndexConfig = Field(default_factory=FAISSIndexConfig)
+    retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
 
 
 # Module-level singleton with thread safety
@@ -462,6 +563,15 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
             del embedding["mlx_service_url"]
 
         version = 9
+
+    if version < 10:
+        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
+
+        # Add retrieval section if missing
+        if "retrieval" not in data:
+            data["retrieval"] = {}
+
+        version = 10
 
     # Update version
     data["config_version"] = CONFIG_VERSION
