@@ -157,6 +157,13 @@ URGENCY_KEYWORDS = {
     "hurry",
 }
 
+# Pre-compiled regex patterns at module level (avoids recompilation per instance)
+_COMPILED_QUESTION_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in QUESTION_PATTERNS)
+_COMPILED_ACTION_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in ACTION_PATTERNS)
+_COMPILED_TIME_SENSITIVE_PATTERNS = tuple(
+    re.compile(p, re.IGNORECASE) for p in TIME_SENSITIVE_PATTERNS
+)
+
 
 class MessagePriorityScorer:
     """Scores messages by importance using ML and heuristics.
@@ -199,12 +206,10 @@ class MessagePriorityScorer:
         # Handled items tracking
         self._handled_items: set[tuple[str, int]] = set()  # (chat_id, message_id)
 
-        # Compiled regex patterns for performance
-        self._question_patterns = [re.compile(p, re.IGNORECASE) for p in QUESTION_PATTERNS]
-        self._action_patterns = [re.compile(p, re.IGNORECASE) for p in ACTION_PATTERNS]
-        self._time_sensitive_patterns = [
-            re.compile(p, re.IGNORECASE) for p in TIME_SENSITIVE_PATTERNS
-        ]
+        # Use pre-compiled module-level regex patterns (avoids recompilation per instance)
+        self._question_patterns = _COMPILED_QUESTION_PATTERNS
+        self._action_patterns = _COMPILED_ACTION_PATTERNS
+        self._time_sensitive_patterns = _COMPILED_TIME_SENSITIVE_PATTERNS
 
     def _get_sentence_model(self) -> Any:
         """Get the sentence transformer model for semantic similarity.

@@ -24,12 +24,19 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+# Cache TTL for classification results (5 minutes)
+_CLASSIFICATION_CACHE_TTL_SECONDS = 300
+_classification_cache: dict[str, tuple[float, "ClassificationResult"]] = {}
+_CLASSIFICATION_CACHE_MAX_SIZE = 500
 
 if TYPE_CHECKING:
     pass
@@ -637,6 +644,8 @@ class RelationshipClassifier:
     def classify_contact(self, chat_id: str, display_name: str = "") -> ClassificationResult:
         """Classify a specific contact by chat_id.
 
+        Uses TTL-based caching to avoid recomputing classification for the same contact.
+
         Args:
             chat_id: The chat identifier (phone/email).
             display_name: Optional display name.
@@ -644,8 +653,25 @@ class RelationshipClassifier:
         Returns:
             ClassificationResult with relationship type and confidence.
         """
+        # Check cache first
+        now = time.time()
+        if chat_id in _classification_cache:
+            cached_time, cached_result = _classification_cache[chat_id]
+            if now - cached_time < _CLASSIFICATION_CACHE_TTL_SECONDS:
+                logger.debug("Classification cache hit for %s", chat_id)
+                return cached_result
+
         messages = self._get_messages_for_chat(chat_id)
-        return self.classify_messages(messages, chat_id, display_name)
+        result = self.classify_messages(messages, chat_id, display_name)
+
+        # Update cache (evict oldest if at capacity)
+        if len(_classification_cache) >= _CLASSIFICATION_CACHE_MAX_SIZE:
+            # Evict oldest entry
+            oldest_key = min(_classification_cache, key=lambda k: _classification_cache[k][0])
+            del _classification_cache[oldest_key]
+        _classification_cache[chat_id] = (now, result)
+
+        return result
 
     def classify_all_contacts(
         self,
@@ -723,6 +749,14 @@ class RelationshipClassifier:
 # =============================================================================
 # Convenience Functions
 # =============================================================================
+
+
+def clear_classification_cache() -> None:
+    """Clear the classification result cache.
+
+    Useful for testing or when message history changes significantly.
+    """
+    _classification_cache.clear()
 
 
 def suggest_relationship(chat_id: str) -> str:
