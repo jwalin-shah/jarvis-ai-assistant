@@ -17,7 +17,7 @@
   }
 </script>
 
-<aside class="sidebar" class:collapsed>
+<aside class="sidebar glass" class:collapsed>
   <div class="logo">
     <span class="logo-icon">J</span>
     {#if !collapsed}

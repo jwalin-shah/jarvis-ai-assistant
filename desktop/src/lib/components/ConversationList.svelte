@@ -8,6 +8,7 @@
   } from "../stores/conversations";
   import { api } from "../api/client";
   import type { Topic } from "../api/types";
+  import ConversationSkeleton from "./ConversationSkeleton.svelte";
 
   // Store for conversation topics
   let topicsMap: Map<string, Topic[]> = new Map();
@@ -262,7 +263,7 @@
   </div>
 
   {#if $conversationsStore.loading}
-    <div class="loading">Loading conversations...</div>
+    <ConversationSkeleton />
   {:else if $conversationsStore.error}
     <div class="error">{$conversationsStore.error}</div>
   {:else if $conversationsStore.conversations.length === 0}
