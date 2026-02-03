@@ -37,6 +37,7 @@ from api.routers import (
     experiments_router,
     export_router,
     feedback_router,
+    graph_router,
     health_router,
     metrics_router,
     pdf_export_router,
@@ -388,6 +389,7 @@ app.include_router(feedback_router)
 app.include_router(experiments_router)
 app.include_router(relationships_router)
 app.include_router(quality_router)
+app.include_router(graph_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)

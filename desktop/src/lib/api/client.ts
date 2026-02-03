@@ -9,6 +9,7 @@ import type {
   AttachmentWithContext,
   Calendar,
   CalendarEvent,
+  ClusterResult,
   Conversation,
   ConversationInsights,
   ConversationStats,
@@ -40,9 +41,14 @@ import type {
   FrequencyTrends,
   FeedbackAction,
   FeedbackStatsResponse,
+  GraphData,
+  GraphEvolutionResponse,
+  GraphExportResponse,
+  GraphStats,
   HealthResponse,
   ImprovementsResponse,
   ImportantContactResponse,
+  LayoutType,
   MarkHandledResponse,
   Message,
   ModelInfo,
@@ -1226,6 +1232,144 @@ class ApiClient {
       "/quality/reset",
       { method: "POST" }
     );
+  }
+
+  // Graph Visualization endpoints
+  async getNetworkGraph(options: {
+    includeRelationships?: string[];
+    minMessages?: number;
+    daysBack?: number;
+    maxNodes?: number;
+    layout?: LayoutType;
+    includeClusters?: boolean;
+    width?: number;
+    height?: number;
+  } = {}): Promise<GraphData> {
+    const params = new URLSearchParams();
+    if (options.includeRelationships) {
+      options.includeRelationships.forEach(r => params.append("include_relationships", r));
+    }
+    if (options.minMessages !== undefined) {
+      params.set("min_messages", options.minMessages.toString());
+    }
+    if (options.daysBack !== undefined) {
+      params.set("days_back", options.daysBack.toString());
+    }
+    if (options.maxNodes !== undefined) {
+      params.set("max_nodes", options.maxNodes.toString());
+    }
+    if (options.layout) {
+      params.set("layout", options.layout);
+    }
+    if (options.includeClusters !== undefined) {
+      params.set("include_clusters", options.includeClusters.toString());
+    }
+    if (options.width !== undefined) {
+      params.set("width", options.width.toString());
+    }
+    if (options.height !== undefined) {
+      params.set("height", options.height.toString());
+    }
+    const queryString = params.toString();
+    return this.request<GraphData>(`/graph/network${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getEgoGraph(
+    contactId: string,
+    options: {
+      depth?: number;
+      maxNeighbors?: number;
+      layout?: "force" | "radial";
+      width?: number;
+      height?: number;
+    } = {}
+  ): Promise<GraphData> {
+    const params = new URLSearchParams();
+    if (options.depth !== undefined) {
+      params.set("depth", options.depth.toString());
+    }
+    if (options.maxNeighbors !== undefined) {
+      params.set("max_neighbors", options.maxNeighbors.toString());
+    }
+    if (options.layout) {
+      params.set("layout", options.layout);
+    }
+    if (options.width !== undefined) {
+      params.set("width", options.width.toString());
+    }
+    if (options.height !== undefined) {
+      params.set("height", options.height.toString());
+    }
+    const queryString = params.toString();
+    return this.request<GraphData>(
+      `/graph/ego/${encodeURIComponent(contactId)}${queryString ? `?${queryString}` : ""}`
+    );
+  }
+
+  async getGraphClusters(options: {
+    maxNodes?: number;
+    resolution?: number;
+  } = {}): Promise<ClusterResult> {
+    const params = new URLSearchParams();
+    if (options.maxNodes !== undefined) {
+      params.set("max_nodes", options.maxNodes.toString());
+    }
+    if (options.resolution !== undefined) {
+      params.set("resolution", options.resolution.toString());
+    }
+    const queryString = params.toString();
+    return this.request<ClusterResult>(`/graph/clusters${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getGraphEvolution(
+    fromDate: string,
+    toDate: string,
+    options: {
+      interval?: "day" | "week" | "month";
+      maxNodes?: number;
+    } = {}
+  ): Promise<GraphEvolutionResponse> {
+    const params = new URLSearchParams({
+      from_date: fromDate,
+      to_date: toDate,
+    });
+    if (options.interval) {
+      params.set("interval", options.interval);
+    }
+    if (options.maxNodes !== undefined) {
+      params.set("max_nodes", options.maxNodes.toString());
+    }
+    return this.request<GraphEvolutionResponse>(`/graph/evolution?${params.toString()}`);
+  }
+
+  async exportGraph(options: {
+    format?: "json" | "graphml" | "svg" | "html";
+    includeLayout?: boolean;
+    width?: number;
+    height?: number;
+    maxNodes?: number;
+  } = {}): Promise<GraphExportResponse> {
+    const params = new URLSearchParams();
+    if (options.maxNodes !== undefined) {
+      params.set("max_nodes", options.maxNodes.toString());
+    }
+    const queryString = params.toString();
+    return this.request<GraphExportResponse>(
+      `/graph/export${queryString ? `?${queryString}` : ""}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          format: options.format ?? "json",
+          include_layout: options.includeLayout ?? true,
+          width: options.width ?? 800,
+          height: options.height ?? 600,
+        }),
+      }
+    );
+  }
+
+  async getGraphStats(maxNodes: number = 200): Promise<GraphStats> {
+    return this.request<GraphStats>(`/graph/stats?max_nodes=${maxNodes}`);
   }
 }
 
