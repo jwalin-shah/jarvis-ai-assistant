@@ -60,9 +60,10 @@ class TestJarvisSocketServer:
 
     @pytest.mark.asyncio
     async def test_ping(self, server: JarvisSocketServer) -> None:
-        """Ping method returns ok status."""
+        """Ping method returns ok status with models_ready flag."""
         result = await server._ping()
-        assert result == {"status": "ok"}
+        assert result["status"] == "ok"
+        assert "models_ready" in result
 
     @pytest.mark.asyncio
     async def test_process_valid_request(self, server: JarvisSocketServer) -> None:
@@ -73,7 +74,8 @@ class TestJarvisSocketServer:
 
         assert data["jsonrpc"] == "2.0"
         assert data["id"] == 1
-        assert data["result"] == {"status": "ok"}
+        assert data["result"]["status"] == "ok"
+        assert "models_ready" in data["result"]
         assert "error" not in data
 
     @pytest.mark.asyncio

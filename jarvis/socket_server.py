@@ -97,7 +97,13 @@ class JarvisSocketServer:
         await server.start()
     """
 
-    def __init__(self, enable_watcher: bool = True, preload_models: bool = True) -> None:
+    def __init__(
+        self,
+        enable_watcher: bool = True,
+        preload_models: bool = True,
+        wait_for_preload: bool = False,
+        preload_timeout: float = 30.0,
+    ) -> None:
         self._server: asyncio.Server | None = None
         self._ws_server: websockets.WebSocketServer | None = None
         self._methods: dict[str, Callable[..., Coroutine[Any, Any, Any]]] = {}
@@ -107,9 +113,12 @@ class JarvisSocketServer:
         self._running = False
         self._enable_watcher = enable_watcher
         self._preload_models = preload_models
+        self._wait_for_preload = wait_for_preload
+        self._preload_timeout = preload_timeout
         self._watcher_task: asyncio.Task[None] | None = None
         self._preload_task: asyncio.Task[None] | None = None
         self._models_ready = False
+        self._models_ready_event = asyncio.Event()
 
         # Register built-in methods
         self._register_methods()
@@ -192,6 +201,18 @@ class JarvisSocketServer:
         if self._preload_models:
             self._preload_task = asyncio.create_task(self._preload_models_async())
 
+            # Optionally wait for preload to complete before accepting connections
+            # This eliminates cold-start latency for the first request
+            if self._wait_for_preload:
+                logger.info(
+                    f"Waiting up to {self._preload_timeout}s for models to preload..."
+                )
+                ready = await self.wait_for_models()
+                if ready:
+                    logger.info("Models ready, accepting connections")
+                else:
+                    logger.warning("Preload timeout, accepting connections anyway")
+
         # Run both servers
         async with self._server:
             await self._server.serve_forever()
@@ -217,10 +238,33 @@ class JarvisSocketServer:
             )
 
             self._models_ready = True
+            self._models_ready_event.set()
             logger.info("Models preloaded and ready")
 
         except Exception as e:
             logger.warning(f"Model preloading failed (will load on demand): {e}")
+            # Still set the event so waiters don't hang forever
+            self._models_ready_event.set()
+
+    async def wait_for_models(self, timeout: float | None = None) -> bool:
+        """Wait for models to finish preloading.
+
+        Args:
+            timeout: Maximum seconds to wait (None = use default preload_timeout)
+
+        Returns:
+            True if models are ready, False if timeout reached
+        """
+        if self._models_ready:
+            return True
+
+        wait_timeout = timeout if timeout is not None else self._preload_timeout
+        try:
+            await asyncio.wait_for(self._models_ready_event.wait(), timeout=wait_timeout)
+            return self._models_ready
+        except asyncio.TimeoutError:
+            logger.warning(f"Model preload wait timed out after {wait_timeout}s")
+            return False
 
     def _preload_llm(self) -> None:
         """Preload the LLM model (sync)."""
@@ -248,20 +292,14 @@ class JarvisSocketServer:
             logger.debug(f"Embeddings preload skipped: {e}")
 
     def _preload_classifiers(self) -> None:
-        """Preload intent and message classifiers (sync)."""
+        """Preload intent classifier (sync)."""
         try:
             from jarvis.intent import get_intent_classifier
-            from jarvis.message_classifier import get_message_classifier
 
             # Load intent classifier (triggers SVM model load)
             intent_clf = get_intent_classifier()
             if intent_clf:
                 logger.debug("Intent classifier preloaded")
-
-            # Load message classifier
-            msg_clf = get_message_classifier()
-            if msg_clf:
-                logger.debug("Message classifier preloaded")
 
         except Exception as e:
             logger.debug(f"Classifier preload skipped: {e}")
@@ -623,9 +661,12 @@ class JarvisSocketServer:
 
     # ========== RPC Method Handlers ==========
 
-    async def _ping(self) -> dict[str, str]:
-        """Health check."""
-        return {"status": "ok"}
+    async def _ping(self) -> dict[str, str | bool]:
+        """Health check with model readiness status."""
+        return {
+            "status": "ok",
+            "models_ready": self._models_ready,
+        }
 
     async def _generate_draft(
         self,
