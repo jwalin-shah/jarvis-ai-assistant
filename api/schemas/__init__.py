@@ -144,6 +144,21 @@ from api.schemas.export import (
     UnansweredConversationResponse,
 )
 
+# Graph visualization models
+from api.schemas.graph import (
+    ClusterResultSchema,
+    EgoGraphRequest,
+    ExportGraphRequest,
+    ExportGraphResponse,
+    GraphDataSchema,
+    GraphEdgeSchema,
+    GraphEvolutionRequest,
+    GraphEvolutionResponse,
+    GraphEvolutionSnapshot,
+    GraphNodeSchema,
+    NetworkGraphRequest,
+)
+
 __all__ = [
     # Messages
     "AttachmentResponse",
@@ -247,4 +262,16 @@ __all__ = [
     "GroupHighlightResponse",
     "MessageStatsResponse",
     "UnansweredConversationResponse",
+    # Graph
+    "ClusterResultSchema",
+    "EgoGraphRequest",
+    "ExportGraphRequest",
+    "ExportGraphResponse",
+    "GraphDataSchema",
+    "GraphEdgeSchema",
+    "GraphEvolutionRequest",
+    "GraphEvolutionResponse",
+    "GraphEvolutionSnapshot",
+    "GraphNodeSchema",
+    "NetworkGraphRequest",
 ]

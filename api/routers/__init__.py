@@ -13,6 +13,7 @@ from .embeddings import router as embeddings_router
 from .experiments import router as experiments_router
 from .export import router as export_router
 from .feedback import router as feedback_router
+from .graph import router as graph_router
 from .health import router as health_router
 
 # Note: insights.py is a consolidation module, not a router
@@ -45,6 +46,7 @@ __all__ = [
     "experiments_router",
     "export_router",
     "feedback_router",
+    "graph_router",
     "health_router",
     "metrics_router",
     "pdf_export_router",
