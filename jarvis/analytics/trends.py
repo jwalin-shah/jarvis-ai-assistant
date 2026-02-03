@@ -9,6 +9,7 @@ Provides statistical analysis for detecting:
 
 from __future__ import annotations
 
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -524,11 +525,17 @@ class TrendAnalyzer:
 
 # Global analyzer instance
 _trend_analyzer: TrendAnalyzer | None = None
+_trend_analyzer_lock = threading.Lock()
 
 
 def get_trend_analyzer() -> TrendAnalyzer:
-    """Get the global trend analyzer instance."""
+    """Get the global trend analyzer instance.
+
+    Uses double-checked locking pattern for thread safety.
+    """
     global _trend_analyzer
     if _trend_analyzer is None:
-        _trend_analyzer = TrendAnalyzer()
+        with _trend_analyzer_lock:
+            if _trend_analyzer is None:
+                _trend_analyzer = TrendAnalyzer()
     return _trend_analyzer

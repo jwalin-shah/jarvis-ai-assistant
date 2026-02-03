@@ -6,6 +6,7 @@ with support for pre-computation and caching.
 
 from __future__ import annotations
 
+import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -555,11 +556,17 @@ class TimeSeriesAggregator:
 
 # Global aggregator instance
 _aggregator: TimeSeriesAggregator | None = None
+_aggregator_lock = threading.Lock()
 
 
 def get_aggregator() -> TimeSeriesAggregator:
-    """Get the global time series aggregator instance."""
+    """Get the global time series aggregator instance.
+
+    Uses double-checked locking pattern for thread safety.
+    """
     global _aggregator
     if _aggregator is None:
-        _aggregator = TimeSeriesAggregator()
+        with _aggregator_lock:
+            if _aggregator is None:
+                _aggregator = TimeSeriesAggregator()
     return _aggregator
