@@ -303,13 +303,31 @@ def build_embedding_profile(
     logger.info("Clustering into %d topic clusters", n_clusters)
     labels, centroids = _cluster_embeddings(embeddings, n_clusters)
 
+    # Log cluster distribution for debugging
+    from collections import Counter
+
+    cluster_distribution = Counter(labels)
+    logger.debug(
+        "Cluster distribution: %s (total centroids: %d)",
+        dict(cluster_distribution.most_common(10)),
+        len(centroids),
+    )
+
     # Build topic clusters
     topic_clusters = []
+    skipped_small_clusters = 0
     for cluster_id in range(len(centroids)):
         cluster_mask = labels == cluster_id
         cluster_count = cluster_mask.sum()
 
         if cluster_count < MIN_CLUSTER_SIZE:
+            skipped_small_clusters += 1
+            logger.debug(
+                "Skipping cluster %d: only %d messages (min: %d)",
+                cluster_id,
+                cluster_count,
+                MIN_CLUSTER_SIZE,
+            )
             continue
 
         # Compute ratio of "from me" messages in this cluster
@@ -328,6 +346,14 @@ def build_embedding_profile(
                 from_me_ratio=round(float(from_me_ratio), 3),
             )
         )
+
+    # Log clustering summary
+    logger.info(
+        "Built %d topic clusters (skipped %d small clusters with < %d messages)",
+        len(topic_clusters),
+        skipped_small_clusters,
+        MIN_CLUSTER_SIZE,
+    )
 
     # Compute communication dynamics
     my_mask = np.array(is_from_me)
