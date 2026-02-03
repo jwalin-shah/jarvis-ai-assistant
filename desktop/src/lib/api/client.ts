@@ -4,11 +4,16 @@
 
 import type {
   ActivateResponse,
+  ActivityHeatmap,
+  AnalyticsOverview,
+  AnalyticsTimeline,
   AttachmentStats,
   AttachmentType,
   AttachmentWithContext,
   Calendar,
   CalendarEvent,
+  ContactsLeaderboard,
+  ContactStats,
   Conversation,
   ConversationInsights,
   ConversationStats,
@@ -74,6 +79,7 @@ import type {
   ThreadingConfigRequest,
   ThreadResponse,
   TimeRange,
+  TrendingPatterns,
   TopicsResponse,
   UserAction,
   VariantConfig,
@@ -1225,6 +1231,86 @@ class ApiClient {
     return this.request<{ status: string; message: string }>(
       "/quality/reset",
       { method: "POST" }
+    );
+  }
+
+  // Analytics Dashboard endpoints
+  async getAnalyticsOverview(
+    timeRange: TimeRange = "month"
+  ): Promise<AnalyticsOverview> {
+    const params = new URLSearchParams({ time_range: timeRange });
+    return this.request<AnalyticsOverview>(`/analytics/overview?${params.toString()}`);
+  }
+
+  async getAnalyticsTimeline(
+    granularity: "hour" | "day" | "week" | "month" = "day",
+    timeRange: TimeRange = "month",
+    metric: "messages" | "sentiment" | "response_time" = "messages"
+  ): Promise<AnalyticsTimeline> {
+    const params = new URLSearchParams({
+      granularity,
+      time_range: timeRange,
+      metric,
+    });
+    return this.request<AnalyticsTimeline>(`/analytics/timeline?${params.toString()}`);
+  }
+
+  async getActivityHeatmap(
+    timeRange: TimeRange = "three_months"
+  ): Promise<ActivityHeatmap> {
+    const params = new URLSearchParams({ time_range: timeRange });
+    return this.request<ActivityHeatmap>(`/analytics/heatmap?${params.toString()}`);
+  }
+
+  async getContactStats(
+    chatId: string,
+    timeRange: TimeRange = "month"
+  ): Promise<ContactStats> {
+    const params = new URLSearchParams({ time_range: timeRange });
+    return this.request<ContactStats>(
+      `/analytics/contacts/${encodeURIComponent(chatId)}/stats?${params.toString()}`
+    );
+  }
+
+  async getContactsLeaderboard(
+    timeRange: TimeRange = "month",
+    limit: number = 10,
+    sortBy: "messages" | "engagement" | "response_time" = "messages"
+  ): Promise<ContactsLeaderboard> {
+    const params = new URLSearchParams({
+      time_range: timeRange,
+      limit: limit.toString(),
+      sort_by: sortBy,
+    });
+    return this.request<ContactsLeaderboard>(`/analytics/contacts/leaderboard?${params.toString()}`);
+  }
+
+  async getTrendingPatterns(
+    timeRange: TimeRange = "month"
+  ): Promise<TrendingPatterns> {
+    const params = new URLSearchParams({ time_range: timeRange });
+    return this.request<TrendingPatterns>(`/analytics/trends?${params.toString()}`);
+  }
+
+  async exportAnalytics(
+    format: "json" | "csv" = "json",
+    timeRange: TimeRange = "month"
+  ): Promise<Blob> {
+    const params = new URLSearchParams({
+      format,
+      time_range: timeRange,
+    });
+    const response = await fetch(`${this.baseUrl}/analytics/export?${params.toString()}`);
+    if (!response.ok) {
+      throw new APIError("Export failed", response.status, null);
+    }
+    return response.blob();
+  }
+
+  async clearAnalyticsCache(): Promise<{ status: string; message: string }> {
+    return this.request<{ status: string; message: string }>(
+      "/analytics/cache",
+      { method: "DELETE" }
     );
   }
 }
