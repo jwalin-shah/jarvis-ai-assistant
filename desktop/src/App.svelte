@@ -8,6 +8,8 @@
   import Settings from "./lib/components/Settings.svelte";
   import TemplateBuilder from "./lib/components/TemplateBuilder.svelte";
   import GlobalSearch from "./lib/components/GlobalSearch.svelte";
+  import KeyboardShortcuts from "./lib/components/KeyboardShortcuts.svelte";
+  import Toast from "./lib/components/Toast.svelte";
   import { checkApiConnection } from "./lib/stores/health";
   import { clearSelection } from "./lib/stores/conversations";
   import { initializeTheme } from "./lib/stores/theme";
@@ -17,14 +19,48 @@
 
   let currentView = $state<"messages" | "dashboard" | "health" | "settings" | "templates">("messages");
   let showSearch = $state(false);
+  let showShortcuts = $state(false);
   let sidebarCollapsed = $state(false);
 
   function handleKeydown(event: KeyboardEvent) {
-    // Cmd+K or Cmd+F to open search (when search is not open)
     const isMod = event.metaKey || event.ctrlKey;
+
+    // Cmd+K or Cmd+F to open search (when search is not open)
     if (isMod && (event.key === "k" || event.key === "f") && !showSearch) {
       event.preventDefault();
       showSearch = true;
+      return;
+    }
+
+    // Cmd+/ to show keyboard shortcuts
+    if (isMod && event.key === "/" && !showShortcuts) {
+      event.preventDefault();
+      showShortcuts = true;
+      return;
+    }
+
+    // Cmd+, to open settings
+    if (isMod && event.key === ",") {
+      event.preventDefault();
+      currentView = "settings";
+      return;
+    }
+
+    // Cmd+1/2/3 for navigation
+    if (isMod && event.key === "1") {
+      event.preventDefault();
+      currentView = "dashboard";
+      return;
+    }
+    if (isMod && event.key === "2") {
+      event.preventDefault();
+      currentView = "messages";
+      return;
+    }
+    if (isMod && event.key === "3") {
+      event.preventDefault();
+      currentView = "templates";
+      return;
     }
   }
 
@@ -79,6 +115,10 @@
   function closeSearch() {
     showSearch = false;
   }
+
+  function closeShortcuts() {
+    showShortcuts = false;
+  }
 </script>
 
 <main class="app">
@@ -115,6 +155,13 @@
 {#if showSearch}
   <GlobalSearch onClose={closeSearch} />
 {/if}
+
+{#if showShortcuts}
+  <KeyboardShortcuts onClose={closeShortcuts} />
+{/if}
+
+<!-- Global toast notifications -->
+<Toast />
 
 <style>
   :global(*) {
@@ -287,6 +334,24 @@
     --bg-bubble-me: var(--bubble-me);
     --bg-bubble-other: var(--bubble-other);
     --border-color: var(--border-default);
+  }
+
+  /* Reduced motion - disable animations and transitions */
+  :global(:root.reduce-motion),
+  :global(:root.reduce-motion *) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(*) {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   .app {
