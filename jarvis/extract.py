@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -946,7 +947,8 @@ def extract_all_pairs(
         return aggregate_stats
 
     # Use ThreadPoolExecutor for parallel extraction
-    max_workers = min(4, total)  # Don't over-parallelize
+    # Scale to available CPUs (capped at 8 for I/O-bound tasks)
+    max_workers = min(8, os.cpu_count() or 2, total)  # Scale with CPU count
     completed = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

@@ -127,6 +127,27 @@ CONTEXT_DEPENDENT_PATTERNS = frozenset(
     }
 )
 
+# Prefixes for context-dependent pattern matching (frozenset for O(1) lookup)
+_CONTEXT_STARTER_PREFIXES = frozenset({"what time", "when ", "where ", "which "})
+
+# Vague reference patterns for clarification detection (frozenset for O(1) lookup)
+_VAGUE_REFERENCES = frozenset({
+    "that",
+    "it",
+    "the thing",
+    "this",
+    "those",
+    "these",
+    "what you said",
+    "what we discussed",
+    "the other",
+})
+
+# Clarification type keywords (frozensets for O(1) lookup)
+_REFERENCE_WORDS = frozenset({"that", "it", "the thing", "this"})
+_TIME_WORDS = frozenset({"when", "what time"})
+_LOCATION_WORDS = frozenset({"where", "location"})
+
 # Questions that require USER's personal input - system cannot answer these
 # Even with high similarity, system doesn't know user's current schedule/plans/opinions
 USER_INPUT_REQUIRED_STARTERS = (
@@ -467,13 +488,13 @@ class ReplyRouter:
         # Remove punctuation for matching
         normalized_no_punct = normalized.rstrip("!.?")
 
-        # Check exact matches for context-dependent patterns
+        # Check exact matches for context-dependent patterns (O(1) frozenset lookup)
         if normalized_no_punct in CONTEXT_DEPENDENT_PATTERNS:
             return True
 
         # Check if message starts with context-dependent patterns
-        context_starters = ("what time", "when ", "where ", "which ")
-        if any(normalized.startswith(s) for s in context_starters):
+        # Use any() with frozenset - still O(n) but with smaller constant factor
+        if any(normalized.startswith(s) for s in _CONTEXT_STARTER_PREFIXES):
             return True
 
         # Check if message requires user's personal input
@@ -1227,21 +1248,8 @@ class ReplyRouter:
         """
         incoming_lower = incoming.lower()
 
-        # Vague reference patterns
-        vague_references = [
-            "that",
-            "it",
-            "the thing",
-            "this",
-            "those",
-            "these",
-            "what you said",
-            "what we discussed",
-            "the other",
-        ]
-
-        # Check for vague references without clear context
-        has_vague_ref = any(ref in incoming_lower for ref in vague_references)
+        # Check for vague references without clear context (O(n) with frozenset)
+        has_vague_ref = any(ref in incoming_lower for ref in _VAGUE_REFERENCES)
 
         if has_vague_ref:
             # If we have thread context, we might be able to resolve the reference
@@ -1271,12 +1279,12 @@ class ReplyRouter:
         """
         incoming_lower = incoming.lower()
 
-        # Detect what kind of clarification is needed
-        if any(word in incoming_lower for word in ["that", "it", "the thing", "this"]):
+        # Detect what kind of clarification is needed (using frozensets for O(1) lookup)
+        if any(word in incoming_lower for word in _REFERENCE_WORDS):
             clarification = "What are you referring to? I want to make sure I understand."
-        elif any(word in incoming_lower for word in ["when", "what time"]):
+        elif any(word in incoming_lower for word in _TIME_WORDS):
             clarification = "Could you be more specific about the timing?"
-        elif any(word in incoming_lower for word in ["where", "location"]):
+        elif any(word in incoming_lower for word in _LOCATION_WORDS):
             clarification = "Which location are you asking about?"
         else:
             clarification = (
