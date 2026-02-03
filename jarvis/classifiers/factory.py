@@ -1,7 +1,7 @@
 """Singleton Factory - Thread-safe singleton pattern for classifiers.
 
 Provides a generic, reusable singleton factory that replaces the duplicate
-pattern found across TriggerClassifier, ResponseClassifier, and MessageClassifier.
+pattern found across TriggerClassifier and ResponseClassifier.
 
 Usage:
     from jarvis.classifiers.factory import SingletonFactory

@@ -139,7 +139,7 @@ All expensive resources use lazy-loaded singletons:
 ### Data Flow for Text Generation
 
 1. Intent classification → route to handler
-2. Message classification → detect type
+2. Simple acknowledgment check → fast-path for "ok", "sounds good", etc.
 3. FAISS similarity search → get score
 4. Route based on thresholds (template/generate/clarify)
 5. Memory check → operating mode

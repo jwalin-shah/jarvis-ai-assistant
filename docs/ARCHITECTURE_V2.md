@@ -663,7 +663,7 @@ These optimizations are independent of V2 and improve base performance:
 | Scale thread pool | `jarvis/router.py` | ✅ Done | `max_workers=min(4, cpu_count)` for multi-core |
 | Batch message indexing | `jarvis/embeddings.py` | ✅ Already had | Uses `executemany` + batch encoding |
 | Embedding result cache | `jarvis/embedding_adapter.py` | ✅ Done | Increased LRU cache to 1000 entries |
-| Parallel classification | `jarvis/router.py` | ✅ Done | Message + intent classifiers run concurrently |
+| Intent classification | `jarvis/router.py` | ✅ Done | Streamlined to single intent classifier |
 | Profile caching | `jarvis/embeddings.py` | ✅ Done | 5-min TTL cache for relationship profiles |
 | Stop words optimization | `jarvis/embeddings.py` | ✅ Done | Module-level frozenset for O(1) lookup |
 | Quick reply O(1) lookup | `jarvis/router.py` | ✅ Done | Dict lookup instead of linear search |
