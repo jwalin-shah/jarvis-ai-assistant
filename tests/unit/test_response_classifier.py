@@ -159,7 +159,7 @@ class TestStructuralPatterns:
         result = classifier.classify(text)
 
         assert result.label == expected_type, (
-            f"Expected {expected_type.value} for '{text}', " f"got {result.label.value}"
+            f"Expected {expected_type.value} for '{text}', got {result.label.value}"
         )
 
 

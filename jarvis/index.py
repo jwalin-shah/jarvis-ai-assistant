@@ -328,9 +328,7 @@ class TriggerIndexBuilder:
             progress_callback("indexing", 0.6, "Creating FAISS index...")
 
         num_vectors = len(embeddings)
-        index = self._create_faiss_index(
-            dimension, num_vectors, embeddings, progress_callback
-        )
+        index = self._create_faiss_index(dimension, num_vectors, embeddings, progress_callback)
 
         # Add vectors to index
         index.add(embeddings)
@@ -551,7 +549,9 @@ class TriggerIndexSearcher:
         # Replaces 3 sequential queries with 1 JOIN query for better performance
         faiss_ids = [faiss_id for faiss_id, _ in matches]
         combined_data = self.jarvis_db.get_pairs_with_clusters_by_faiss_ids(
-            faiss_ids, active_index.version_id, limit=k * 3  # Safety limit
+            faiss_ids,
+            active_index.version_id,
+            limit=k * 3,  # Safety limit
         )
 
         if not combined_data:
@@ -1498,6 +1498,53 @@ def build_index_from_db(
         "index_path": stats.index_path,
         "model_name": builder._get_model_name(),
         "index_type": config.index_type,
+    }
+
+
+def build_bm25_index_from_db(
+    jarvis_db: Any,
+    min_quality: float = 0.5,
+    include_holdout: bool = False,
+) -> dict[str, Any]:
+    """Build BM25 index from training pairs in the database.
+
+    This builds an in-memory BM25 index for hybrid retrieval with FAISS.
+    The index is stored in the BM25IndexManager singleton.
+
+    Args:
+        jarvis_db: JarvisDB instance.
+        min_quality: Minimum quality score for pairs to include.
+        include_holdout: If False (default), exclude holdout pairs from index.
+
+    Returns:
+        Statistics about the index building.
+    """
+    from jarvis.retrieval import get_bm25_index
+
+    # Get pairs meeting quality threshold
+    if include_holdout:
+        pairs = jarvis_db.get_all_pairs(min_quality=min_quality)
+    else:
+        pairs = jarvis_db.get_training_pairs(min_quality=min_quality)
+
+    if not pairs:
+        return {
+            "success": False,
+            "error": "No pairs found in database. Run 'jarvis db extract' first.",
+            "pairs_indexed": 0,
+        }
+
+    # Convert pairs to format expected by BM25IndexManager
+    pair_dicts = [{"pair_id": p.id, "trigger_text": p.trigger_text} for p in pairs]
+
+    # Build BM25 index
+    bm25_index = get_bm25_index()
+    bm25_index.build_index(pair_dicts)
+
+    return {
+        "success": True,
+        "pairs_indexed": len(pairs),
+        "index_type": "bm25",
     }
 
 

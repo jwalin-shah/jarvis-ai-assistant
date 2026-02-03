@@ -277,8 +277,9 @@ def is_question(text: str) -> bool:
     # Ends with question mark
     if stripped.endswith("?"):
         return True
-    # Starts with question word
-    first_word = stripped.split()[0].lower() if stripped.split() else ""
+    # Starts with question word (split once and reuse)
+    words = stripped.split()
+    first_word = words[0].lower() if words else ""
     return first_word in QUESTION_WORDS
 
 

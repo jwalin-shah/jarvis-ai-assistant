@@ -6,12 +6,14 @@ Provides common utilities used across relationship and embedding modules.
 from __future__ import annotations
 
 import hashlib
+from functools import lru_cache
 
 
+@lru_cache(maxsize=1000)
 def hash_contact_id(contact_id: str) -> str:
     """Create a stable hash for contact ID storage.
 
-    Used for creating privacy-preserving filenames for contact profiles.
+    Uses LRU cache for frequently accessed contact IDs.
 
     Args:
         contact_id: Phone number, email, or chat_id.

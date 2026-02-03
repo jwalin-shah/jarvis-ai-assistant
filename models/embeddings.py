@@ -221,7 +221,7 @@ class MLXEmbedder:
                 "MLX embedding service is not running. "
                 "Start it with: cd ~/.jarvis/mlx-embed-service && uv run python server.py"
             )
-        except socket.timeout:
+        except TimeoutError:
             raise MLXEmbeddingError("MLX service request timed out")
         finally:
             sock.close()

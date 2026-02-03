@@ -220,10 +220,12 @@ class TestGateBEmbedding:
 
         # Return identical embeddings for trigger and response (cosine sim = 1.0)
         # encode() is called with [trigger, response] and returns both embeddings
-        mock_embedder.encode.return_value = np.array([
-            [1.0, 0, 0],  # trigger embedding
-            [1.0, 0, 0],  # response embedding (same = high similarity)
-        ])
+        mock_embedder.encode.return_value = np.array(
+            [
+                [1.0, 0, 0],  # trigger embedding
+                [1.0, 0, 0],  # response embedding (same = high similarity)
+            ]
+        )
 
         gate = ValidityGate(embedder=mock_embedder)
         result = gate.validate(exchange)
@@ -244,10 +246,12 @@ class TestGateBEmbedding:
         import numpy as np
 
         # encode() is called with [trigger, response] and returns both embeddings
-        mock_embedder.encode.return_value = np.array([
-            [1.0, 0, 0],  # trigger embedding
-            [0, 1.0, 0],  # response embedding (orthogonal = low similarity)
-        ])
+        mock_embedder.encode.return_value = np.array(
+            [
+                [1.0, 0, 0],  # trigger embedding
+                [0, 1.0, 0],  # response embedding (orthogonal = low similarity)
+            ]
+        )
 
         gate = ValidityGate(embedder=mock_embedder)
         result = gate.validate(exchange)
@@ -362,10 +366,12 @@ class TestValidityGateIntegration:
         import numpy as np
 
         # encode() is called with [trigger, response] and returns both embeddings
-        mock_embedder.encode.return_value = np.array([
-            [1.0, 0, 0],  # trigger embedding
-            [1.0, 0, 0],  # response embedding (same = high similarity)
-        ])
+        mock_embedder.encode.return_value = np.array(
+            [
+                [1.0, 0, 0],  # trigger embedding
+                [1.0, 0, 0],  # response embedding (same = high similarity)
+            ]
+        )
 
         gate = ValidityGate(embedder=mock_embedder)
         result = gate.validate(exchange)

@@ -29,14 +29,13 @@ Usage:
 from __future__ import annotations
 
 import logging
-import os
 import random
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from jarvis.adaptive_thresholds import get_adaptive_threshold_manager
 from jarvis.config import get_config
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
@@ -127,6 +126,27 @@ CONTEXT_DEPENDENT_PATTERNS = frozenset(
         "really?",
     }
 )
+
+# Prefixes for context-dependent pattern matching (frozenset for O(1) lookup)
+_CONTEXT_STARTER_PREFIXES = frozenset({"what time", "when ", "where ", "which "})
+
+# Vague reference patterns for clarification detection (frozenset for O(1) lookup)
+_VAGUE_REFERENCES = frozenset({
+    "that",
+    "it",
+    "the thing",
+    "this",
+    "those",
+    "these",
+    "what you said",
+    "what we discussed",
+    "the other",
+})
+
+# Clarification type keywords (frozensets for O(1) lookup)
+_REFERENCE_WORDS = frozenset({"that", "it", "the thing", "this"})
+_TIME_WORDS = frozenset({"when", "what time"})
+_LOCATION_WORDS = frozenset({"where", "location"})
 
 # Questions that require USER's personal input - system cannot answer these
 # Even with high similarity, system doesn't know user's current schedule/plans/opinions
@@ -337,10 +357,17 @@ class ReplyRouter:
             return []
 
     def _get_thresholds(self) -> dict[str, float]:
-        """Get routing thresholds with optional A/B overrides."""
+        """Get routing thresholds with adaptive adjustment and A/B overrides.
+
+        Priority order:
+        1. A/B test group overrides (if configured)
+        2. Adaptive thresholds (if enabled and sufficient data)
+        3. Base config thresholds (default fallback)
+        """
         config = get_config()
         routing = config.routing
 
+        # A/B test overrides take highest priority
         if routing.ab_test_group in routing.ab_test_thresholds:
             group_thresholds = routing.ab_test_thresholds[routing.ab_test_group]
             return {
@@ -349,6 +376,23 @@ class ReplyRouter:
                 "generate": group_thresholds.get("generate", routing.generate_threshold),
             }
 
+        # Try adaptive thresholds if enabled
+        if routing.adaptive.enabled:
+            try:
+                manager = get_adaptive_threshold_manager()
+                adapted = manager.get_adapted_thresholds()
+                logger.debug(
+                    "Using adaptive thresholds: quick_reply=%.3f, context=%.3f, generate=%.3f",
+                    adapted["quick_reply"],
+                    adapted["context"],
+                    adapted["generate"],
+                )
+                return adapted
+            except Exception as e:
+                logger.warning("Adaptive threshold computation failed, using base config: %s", e)
+                # Fall through to base config
+
+        # Default: use base config thresholds
         return {
             "quick_reply": routing.quick_reply_threshold,
             "context": routing.context_threshold,
@@ -444,13 +488,13 @@ class ReplyRouter:
         # Remove punctuation for matching
         normalized_no_punct = normalized.rstrip("!.?")
 
-        # Check exact matches for context-dependent patterns
+        # Check exact matches for context-dependent patterns (O(1) frozenset lookup)
         if normalized_no_punct in CONTEXT_DEPENDENT_PATTERNS:
             return True
 
         # Check if message starts with context-dependent patterns
-        context_starters = ("what time", "when ", "where ", "which ")
-        if any(normalized.startswith(s) for s in context_starters):
+        # Use any() with frozenset - still O(n) but with smaller constant factor
+        if any(normalized.startswith(s) for s in _CONTEXT_STARTER_PREFIXES):
             return True
 
         # Check if message requires user's personal input
@@ -654,9 +698,12 @@ class ReplyRouter:
                 model_loaded=model_loaded,
             )
             # Verbose logging for debugging
-            logger.info("ROUTE END | decision=%s sim=%.3f latency=%s",
-                       routing_decision, similarity_score,
-                       {k: f"{v:.1f}ms" for k, v in latency_ms.items()})
+            logger.info(
+                "ROUTE END | decision=%s sim=%.3f latency=%s",
+                routing_decision,
+                similarity_score,
+                {k: f"{v:.1f}ms" for k, v in latency_ms.items()},
+            )
             logger.info("ROUTE OUTPUT | %s", result.get("response", "")[:100])
             logger.info("=" * 60)
             return result
@@ -1201,21 +1248,8 @@ class ReplyRouter:
         """
         incoming_lower = incoming.lower()
 
-        # Vague reference patterns
-        vague_references = [
-            "that",
-            "it",
-            "the thing",
-            "this",
-            "those",
-            "these",
-            "what you said",
-            "what we discussed",
-            "the other",
-        ]
-
-        # Check for vague references without clear context
-        has_vague_ref = any(ref in incoming_lower for ref in vague_references)
+        # Check for vague references without clear context (O(n) with frozenset)
+        has_vague_ref = any(ref in incoming_lower for ref in _VAGUE_REFERENCES)
 
         if has_vague_ref:
             # If we have thread context, we might be able to resolve the reference
@@ -1245,12 +1279,12 @@ class ReplyRouter:
         """
         incoming_lower = incoming.lower()
 
-        # Detect what kind of clarification is needed
-        if any(word in incoming_lower for word in ["that", "it", "the thing", "this"]):
+        # Detect what kind of clarification is needed (using frozensets for O(1) lookup)
+        if any(word in incoming_lower for word in _REFERENCE_WORDS):
             clarification = "What are you referring to? I want to make sure I understand."
-        elif any(word in incoming_lower for word in ["when", "what time"]):
+        elif any(word in incoming_lower for word in _TIME_WORDS):
             clarification = "Could you be more specific about the timing?"
-        elif any(word in incoming_lower for word in ["where", "location"]):
+        elif any(word in incoming_lower for word in _LOCATION_WORDS):
             clarification = "Which location are you asking about?"
         else:
             clarification = (

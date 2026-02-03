@@ -35,6 +35,15 @@ interface MessageCacheEntry {
 
 export type ConnectionStatus = "connected" | "disconnected" | "connecting";
 
+/** Optimistic message for immediate UI feedback during send */
+export interface OptimisticMessage {
+  id: string; // Temporary ID (e.g., "optimistic-{timestamp}")
+  text: string;
+  status: "sending" | "sent" | "failed";
+  error?: string;
+  timestamp: number;
+}
+
 // Store for message highlighting (when navigating from search results)
 export const highlightedMessageId = writable<number | null>(null);
 
@@ -54,6 +63,7 @@ export interface ConversationsState {
   conversationsWithNewMessages: Set<string>;
   lastKnownMessageDates: Map<string, string>;
   isWindowFocused: boolean;
+  optimisticMessages: OptimisticMessage[];
 }
 
 /** Message cache keyed by chat_id to avoid re-fetching */
@@ -75,6 +85,7 @@ const initialState: ConversationsState = {
   conversationsWithNewMessages: new Set(),
   lastKnownMessageDates: new Map(),
   isWindowFocused: true,
+  optimisticMessages: [],
 };
 
 export const conversationsStore = writable<ConversationsState>(initialState);
@@ -96,6 +107,31 @@ export const connectionStatus = derived(
 export const hasNewMessages = derived(
   conversationsStore,
   ($state) => (chatId: string) => $state.conversationsWithNewMessages.has(chatId)
+);
+
+// Derived store for messages with optimistic messages appended
+export const messagesWithOptimistic = derived(
+  conversationsStore,
+  ($state) => {
+    // Convert optimistic messages to Message-like objects for display
+    const optimisticAsMessages = $state.optimisticMessages.map((opt) => ({
+      id: -Date.now() - Math.random(), // Negative ID to avoid conflicts
+      text: opt.text,
+      date: new Date(opt.timestamp).toISOString(),
+      sender: "me",
+      sender_name: null,
+      is_from_me: true,
+      is_system_message: false,
+      attachments: [],
+      reactions: [],
+      // Custom fields for optimistic state
+      _optimistic: true,
+      _optimisticId: opt.id,
+      _optimisticStatus: opt.status,
+      _optimisticError: opt.error,
+    }));
+    return [...$state.messages, ...optimisticAsMessages];
+  }
 );
 
 // Polling intervals (in milliseconds)
@@ -150,6 +186,62 @@ export function clearNewMessageIndicator(chatId: string): void {
     newSet.delete(chatId);
     return { ...state, conversationsWithNewMessages: newSet };
   });
+}
+
+/**
+ * Add an optimistic message for immediate UI feedback
+ * Returns the optimistic message ID for tracking
+ */
+export function addOptimisticMessage(text: string): string {
+  const id = `optimistic-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const optimisticMsg: OptimisticMessage = {
+    id,
+    text,
+    status: "sending",
+    timestamp: Date.now(),
+  };
+
+  conversationsStore.update((state) => ({
+    ...state,
+    optimisticMessages: [...state.optimisticMessages, optimisticMsg],
+  }));
+
+  return id;
+}
+
+/**
+ * Update an optimistic message status
+ */
+export function updateOptimisticMessage(
+  id: string,
+  updates: Partial<Pick<OptimisticMessage, "status" | "error">>
+): void {
+  conversationsStore.update((state) => ({
+    ...state,
+    optimisticMessages: state.optimisticMessages.map((msg) =>
+      msg.id === id ? { ...msg, ...updates } : msg
+    ),
+  }));
+}
+
+/**
+ * Remove an optimistic message (e.g., after successful send and real message appears)
+ */
+export function removeOptimisticMessage(id: string): void {
+  conversationsStore.update((state) => ({
+    ...state,
+    optimisticMessages: state.optimisticMessages.filter((msg) => msg.id !== id),
+  }));
+}
+
+/**
+ * Clear all optimistic messages (e.g., when switching conversations)
+ */
+export function clearOptimisticMessages(): void {
+  conversationsStore.update((state) => ({
+    ...state,
+    optimisticMessages: [],
+  }));
 }
 
 /**

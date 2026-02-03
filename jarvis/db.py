@@ -473,6 +473,59 @@ CREATE INDEX IF NOT EXISTS idx_contacts_id ON contacts(id);
 -- Composite indexes for common query patterns (faster filtered queries)
 CREATE INDEX IF NOT EXISTS idx_pairs_chat_timestamp ON pairs(chat_id, trigger_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_pairs_contact_quality ON pairs(contact_id, quality_score DESC);
+
+-- Scheduled drafts for automated sending (v8+)
+CREATE TABLE IF NOT EXISTS scheduled_drafts (
+    id TEXT PRIMARY KEY,                -- UUID
+    draft_id TEXT NOT NULL,             -- Reference to the draft
+    contact_id INTEGER REFERENCES contacts(id),
+    chat_id TEXT NOT NULL,              -- Chat to send to
+    message_text TEXT NOT NULL,         -- The message content
+    send_at TIMESTAMP NOT NULL,         -- Scheduled send time
+    priority TEXT DEFAULT 'normal',     -- urgent/normal/low
+    status TEXT DEFAULT 'pending',      -- pending/queued/sending/sent/failed/cancelled/expired
+    timezone TEXT,                      -- Contact's timezone (IANA format)
+    depends_on TEXT,                    -- ID of item this depends on
+    retry_count INTEGER DEFAULT 0,      -- Number of retry attempts
+    max_retries INTEGER DEFAULT 3,      -- Maximum retries allowed
+    expires_at TIMESTAMP,               -- When this schedule expires
+    result_json TEXT,                   -- JSON with send result details
+    metadata_json TEXT,                 -- Additional metadata (instructions, etc.)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Contact timing preferences for smart scheduling (v8+)
+CREATE TABLE IF NOT EXISTS contact_timing_prefs (
+    contact_id INTEGER PRIMARY KEY REFERENCES contacts(id),
+    timezone TEXT,                      -- Contact's timezone (IANA format)
+    quiet_hours_json TEXT,              -- JSON with quiet hours config
+    preferred_hours_json TEXT,          -- JSON array of preferred hours (0-23)
+    optimal_weekdays_json TEXT,         -- JSON array of preferred weekdays (0-6)
+    avg_response_time_mins REAL,        -- Average response time in minutes
+    last_interaction TIMESTAMP,         -- Last interaction timestamp
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Send queue for tracking message delivery (v8+)
+CREATE TABLE IF NOT EXISTS send_queue (
+    id TEXT PRIMARY KEY,                -- UUID
+    scheduled_draft_id TEXT REFERENCES scheduled_drafts(id),
+    status TEXT DEFAULT 'pending',      -- pending/sending/sent/failed
+    queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP,                  -- When actually sent
+    error TEXT,                         -- Error message if failed
+    attempts INTEGER DEFAULT 0,         -- Number of send attempts
+    next_retry_at TIMESTAMP             -- When to retry next
+);
+
+-- Indexes for scheduling tables
+CREATE INDEX IF NOT EXISTS idx_scheduled_contact ON scheduled_drafts(contact_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_drafts(status);
+CREATE INDEX IF NOT EXISTS idx_scheduled_send_at ON scheduled_drafts(send_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_priority ON scheduled_drafts(priority, send_at);
+CREATE INDEX IF NOT EXISTS idx_send_queue_status ON send_queue(status);
+CREATE INDEX IF NOT EXISTS idx_send_queue_scheduled ON send_queue(scheduled_draft_id);
 """
 
 # Expected indices for verification
@@ -491,9 +544,16 @@ EXPECTED_INDICES = {
     # Composite indexes for faster filtered queries
     "idx_pairs_chat_timestamp",
     "idx_pairs_contact_quality",
+    # Scheduling indexes (v8+)
+    "idx_scheduled_contact",
+    "idx_scheduled_status",
+    "idx_scheduled_send_at",
+    "idx_scheduled_priority",
+    "idx_send_queue_status",
+    "idx_send_queue_scheduled",
 }
 
-CURRENT_SCHEMA_VERSION = 7  # Added DA classification and cluster_id
+CURRENT_SCHEMA_VERSION = 8  # Added scheduling tables
 
 
 class JarvisDB:
@@ -680,6 +740,10 @@ class JarvisDB:
                         logger.info("Added %s column to pairs table", col_name)
                     except sqlite3.OperationalError:
                         pass
+
+            # Migration v7 -> v8: Add scheduling tables
+            # Tables are created by SCHEMA_SQL with CREATE TABLE IF NOT EXISTS
+            # No column migrations needed since these are new tables
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)
@@ -1390,9 +1454,7 @@ class JarvisDB:
         """
 
         with self.connection() as conn:
-            cursor = conn.execute(
-                query, (*uncached_ids, *self._ACK_TRIGGERS, limit_per_contact)
-            )
+            cursor = conn.execute(query, (*uncached_ids, *self._ACK_TRIGGERS, limit_per_contact))
 
             # Group results by contact_id
             for cid in uncached_ids:
@@ -1981,13 +2043,15 @@ class JarvisDB:
             results = []
             for row in cursor:
                 pair = self._row_to_pair(row)
-                results.append({
-                    "pair": pair,
-                    "faiss_id": row["faiss_id"],
-                    "cluster_id": row["embedding_cluster_id"],
-                    "cluster_name": row["cluster_name"],
-                    "cluster_description": row["cluster_description"],
-                })
+                results.append(
+                    {
+                        "pair": pair,
+                        "faiss_id": row["faiss_id"],
+                        "cluster_id": row["embedding_cluster_id"],
+                        "cluster_name": row["cluster_name"],
+                        "cluster_description": row["cluster_description"],
+                    }
+                )
             return results
 
     def clear_embeddings(self, index_version: str | None = None) -> int:
