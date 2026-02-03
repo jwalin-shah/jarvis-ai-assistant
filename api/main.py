@@ -43,6 +43,7 @@ from api.routers import (
     priority_router,
     quality_router,
     relationships_router,
+    scheduler_router,
     search_router,
     settings_router,
     stats_router,
@@ -384,6 +385,7 @@ app.include_router(websocket_router)
 app.include_router(tasks_router)
 app.include_router(batch_router)
 app.include_router(priority_router)
+app.include_router(scheduler_router)
 app.include_router(feedback_router)
 app.include_router(experiments_router)
 app.include_router(relationships_router)
