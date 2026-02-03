@@ -10,6 +10,11 @@ Protocol: JSON-RPC 2.0 over newline-delimited JSON
 Request:  {"jsonrpc": "2.0", "method": "...", "params": {...}, "id": 1}
 Response: {"jsonrpc": "2.0", "result": {...}, "id": 1}
 Error:    {"jsonrpc": "2.0", "error": {"code": -32600, "message": "..."}, "id": 1}
+
+Features speculative prefetching for near-instant responses:
+- Predicts what user needs next based on patterns
+- Multi-tier caching (L1 memory, L2 SQLite, L3 disk)
+- Background prefetch execution with resource awareness
 """
 
 import asyncio
@@ -102,6 +107,7 @@ class JarvisSocketServer:
         preload_models: bool = True,
         wait_for_preload: bool = False,
         preload_timeout: float = 30.0,
+        enable_prefetch: bool = True,
     ) -> None:
         self._server: asyncio.Server | None = None
         self._ws_server: websockets.WebSocketServer | None = None
@@ -114,10 +120,14 @@ class JarvisSocketServer:
         self._preload_models = preload_models
         self._wait_for_preload = wait_for_preload
         self._preload_timeout = preload_timeout
+        self._enable_prefetch = enable_prefetch
         self._watcher_task: asyncio.Task[None] | None = None
         self._preload_task: asyncio.Task[None] | None = None
         self._models_ready = False
         self._models_ready_event = asyncio.Event()
+
+        # Prefetch manager for speculative caching
+        self._prefetch_manager: Any = None
 
         # Register built-in methods
         self._register_methods()
@@ -140,6 +150,12 @@ class JarvisSocketServer:
 
         # Batch operations
         self.register("batch", self._batch)
+
+        # Prefetch/cache operations
+        self.register("prefetch_stats", self._prefetch_stats)
+        self.register("prefetch_invalidate", self._prefetch_invalidate)
+        self.register("prefetch_focus", self._prefetch_focus)
+        self.register("prefetch_hover", self._prefetch_hover)
 
     def register(
         self,
@@ -195,6 +211,18 @@ class JarvisSocketServer:
             watcher = ChatDBWatcher(self)
             self._watcher_task = asyncio.create_task(watcher.start())
             logger.info("Started chat.db watcher for real-time notifications")
+
+        # Start prefetch manager for speculative caching
+        if self._enable_prefetch:
+            try:
+                from jarvis.prefetch import get_prefetch_manager
+
+                self._prefetch_manager = get_prefetch_manager()
+                self._prefetch_manager.start()
+                logger.info("Started prefetch manager for speculative caching")
+            except Exception as e:
+                logger.warning(f"Prefetch manager failed to start: {e}")
+                self._prefetch_manager = None
 
         # Preload models in background for faster first request
         if self._preload_models:
@@ -336,6 +364,14 @@ class JarvisSocketServer:
                 pass
             self._watcher_task = None
 
+        # Stop prefetch manager
+        if self._prefetch_manager:
+            try:
+                self._prefetch_manager.stop()
+            except Exception as e:
+                logger.debug(f"Error stopping prefetch manager: {e}")
+            self._prefetch_manager = None
+
         # Cancel preload if still running
         if self._preload_task:
             self._preload_task.cancel()
@@ -409,6 +445,17 @@ class JarvisSocketServer:
                 await ws.send(notification)
             except Exception:
                 self._ws_clients.discard(ws)
+
+        # Hook into prefetch system for new message events
+        if method == "new_message" and self._prefetch_manager:
+            try:
+                chat_id = params.get("chat_id")
+                text = params.get("text", "")
+                is_from_me = params.get("is_from_me", False)
+                if chat_id:
+                    self._prefetch_manager.on_message(chat_id, text, is_from_me)
+            except Exception as e:
+                logger.debug(f"Prefetch notification failed: {e}")
 
     async def _handle_client(
         self,
@@ -664,10 +711,12 @@ class JarvisSocketServer:
         context_messages: int = 20,
         _writer: asyncio.StreamWriter | None = None,
         _request_id: Any = None,
+        skip_cache: bool = False,
     ) -> dict[str, Any]:
         """Generate draft replies for a conversation.
 
         Supports streaming: if _writer is provided, streams tokens in real-time.
+        Uses prefetch cache for near-instant responses when available.
 
         Args:
             chat_id: Conversation ID
@@ -675,11 +724,20 @@ class JarvisSocketServer:
             context_messages: Number of context messages to include
             _writer: Stream writer for streaming mode (injected by dispatcher)
             _request_id: Request ID for streaming mode (injected by dispatcher)
+            skip_cache: Skip prefetch cache lookup
 
         Returns:
             Dict with suggestions and context_used
         """
         try:
+            # Check prefetch cache first for instant response (non-streaming only)
+            if not skip_cache and _writer is None and self._prefetch_manager:
+                cached_draft = self._prefetch_manager.get_draft(chat_id)
+                if cached_draft and "suggestions" in cached_draft:
+                    logger.debug(f"Serving prefetched draft for {chat_id}")
+                    cached_draft["from_cache"] = True
+                    return cached_draft
+
             # Get context from iMessage
             from integrations.imessage import ChatDBReader
 
@@ -1250,6 +1308,99 @@ Summary:"""
         )
 
         return {"results": list(results)}
+
+    # ========== Prefetch RPC Methods ==========
+
+    async def _prefetch_stats(self) -> dict[str, Any]:
+        """Get prefetch system statistics.
+
+        Returns:
+            Dict with cache, executor, and invalidator stats
+        """
+        if not self._prefetch_manager:
+            return {
+                "enabled": False,
+                "error": "Prefetch system not enabled",
+            }
+
+        try:
+            stats = self._prefetch_manager.stats()
+            stats["enabled"] = True
+            return stats
+        except Exception as e:
+            logger.exception("Error getting prefetch stats")
+            raise JsonRpcError(INTERNAL_ERROR, f"Stats failed: {e}") from e
+
+    async def _prefetch_invalidate(
+        self,
+        chat_id: str | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Invalidate prefetch cache entries.
+
+        Args:
+            chat_id: Chat ID to invalidate
+            tags: Tags to invalidate
+
+        Returns:
+            Dict with count of invalidated entries
+        """
+        if not self._prefetch_manager:
+            return {"invalidated": 0, "error": "Prefetch system not enabled"}
+
+        try:
+            count = self._prefetch_manager.invalidate(chat_id=chat_id, tags=tags)
+            return {"invalidated": count}
+        except Exception as e:
+            logger.exception("Error invalidating cache")
+            raise JsonRpcError(INTERNAL_ERROR, f"Invalidation failed: {e}") from e
+
+    async def _prefetch_focus(self, chat_id: str) -> dict[str, Any]:
+        """Signal that user focused on a chat (triggers high-priority prefetch).
+
+        Args:
+            chat_id: Chat ID that was focused
+
+        Returns:
+            Dict with status and any prefetched data
+        """
+        if not self._prefetch_manager:
+            return {"status": "disabled"}
+
+        try:
+            self._prefetch_manager.on_focus(chat_id)
+
+            # Check if we have a prefetched draft
+            draft = self._prefetch_manager.get_draft(chat_id)
+            if draft:
+                return {
+                    "status": "ok",
+                    "prefetched": True,
+                    "draft": draft,
+                }
+            return {"status": "ok", "prefetched": False}
+        except Exception as e:
+            logger.debug(f"Prefetch focus error: {e}")
+            return {"status": "error", "error": str(e)}
+
+    async def _prefetch_hover(self, chat_id: str) -> dict[str, Any]:
+        """Signal that user hovered over a chat (triggers low-priority prefetch).
+
+        Args:
+            chat_id: Chat ID that was hovered
+
+        Returns:
+            Dict with status
+        """
+        if not self._prefetch_manager:
+            return {"status": "disabled"}
+
+        try:
+            self._prefetch_manager.on_hover(chat_id)
+            return {"status": "ok"}
+        except Exception as e:
+            logger.debug(f"Prefetch hover error: {e}")
+            return {"status": "error", "error": str(e)}
 
 
 async def main() -> None:
