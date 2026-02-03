@@ -29,14 +29,13 @@ Usage:
 from __future__ import annotations
 
 import logging
-import os
 import random
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from jarvis.adaptive_thresholds import get_adaptive_threshold_manager
 from jarvis.config import get_config
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
@@ -337,10 +336,17 @@ class ReplyRouter:
             return []
 
     def _get_thresholds(self) -> dict[str, float]:
-        """Get routing thresholds with optional A/B overrides."""
+        """Get routing thresholds with adaptive adjustment and A/B overrides.
+
+        Priority order:
+        1. A/B test group overrides (if configured)
+        2. Adaptive thresholds (if enabled and sufficient data)
+        3. Base config thresholds (default fallback)
+        """
         config = get_config()
         routing = config.routing
 
+        # A/B test overrides take highest priority
         if routing.ab_test_group in routing.ab_test_thresholds:
             group_thresholds = routing.ab_test_thresholds[routing.ab_test_group]
             return {
@@ -349,6 +355,23 @@ class ReplyRouter:
                 "generate": group_thresholds.get("generate", routing.generate_threshold),
             }
 
+        # Try adaptive thresholds if enabled
+        if routing.adaptive.enabled:
+            try:
+                manager = get_adaptive_threshold_manager()
+                adapted = manager.get_adapted_thresholds()
+                logger.debug(
+                    "Using adaptive thresholds: quick_reply=%.3f, context=%.3f, generate=%.3f",
+                    adapted["quick_reply"],
+                    adapted["context"],
+                    adapted["generate"],
+                )
+                return adapted
+            except Exception as e:
+                logger.warning("Adaptive threshold computation failed, using base config: %s", e)
+                # Fall through to base config
+
+        # Default: use base config thresholds
         return {
             "quick_reply": routing.quick_reply_threshold,
             "context": routing.context_threshold,
