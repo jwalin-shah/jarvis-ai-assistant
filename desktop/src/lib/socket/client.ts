@@ -11,6 +11,15 @@ const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
 // WebSocket configuration for browser mode
 const WEBSOCKET_URL = "ws://127.0.0.1:8743";
 
+// Request timeout configuration (ms)
+const REQUEST_TIMEOUT = 30000; // 30s for normal requests
+const STREAMING_TIMEOUT = 120000; // 120s for streaming requests
+const STALE_REQUEST_CLEANUP_INTERVAL = 60000; // Clean up stale requests every 60s
+
+// Request batching configuration
+const BATCH_WINDOW_MS = 15; // Collect requests for 15ms before sending batch
+const MAX_BATCH_SIZE = 10; // Maximum requests per batch
+
 // Dynamic imports for Tauri APIs - only available in Tauri context
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let invoke: ((cmd: string, args?: object) => Promise<any>) | null = null;
@@ -127,8 +136,11 @@ class JarvisSocket {
       resolve: (value: unknown) => void;
       reject: (error: Error) => void;
       onToken?: (token: string, index: number) => void;
+      createdAt: number; // Timestamp for cleanup
+      isStreaming: boolean; // Track streaming vs normal requests
     }
   > = new Map();
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   // Active streaming requests
   private streamingRequests: Map<
@@ -139,6 +151,15 @@ class JarvisSocket {
       onComplete: () => void;
     }
   > = new Map();
+
+  // Request batching state (WebSocket mode only)
+  private batchQueue: Array<{
+    method: string;
+    params: object;
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  private batchTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Get current connection state
@@ -213,6 +234,35 @@ class JarvisSocket {
       unlisten();
     }
     this.unlistenFns = [];
+  }
+
+  /**
+   * Start periodic cleanup of stale pending requests (WebSocket mode)
+   */
+  private startStaleRequestCleanup(): void {
+    if (this.cleanupInterval) return;
+
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [requestId, pending] of this.wsPendingRequests) {
+        const timeout = pending.isStreaming ? STREAMING_TIMEOUT : REQUEST_TIMEOUT;
+        if (now - pending.createdAt > timeout) {
+          console.warn(`[JarvisSocket] Cleaning up stale request ${requestId}`);
+          pending.reject(new Error("Request timed out (cleanup)"));
+          this.wsPendingRequests.delete(requestId);
+        }
+      }
+    }, STALE_REQUEST_CLEANUP_INTERVAL);
+  }
+
+  /**
+   * Stop stale request cleanup
+   */
+  private stopStaleRequestCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
   }
 
   /**
@@ -296,6 +346,7 @@ class JarvisSocket {
           console.log("[JarvisSocket] WebSocket connected");
           this.state = "connected";
           this.reconnectAttempts = 0;
+          this.startStaleRequestCleanup();
           this.emit("connected", {});
           resolve(true);
         };
@@ -304,6 +355,12 @@ class JarvisSocket {
           console.log("[JarvisSocket] WebSocket disconnected");
           this.state = "disconnected";
           this.ws = null;
+          this.stopStaleRequestCleanup();
+          // Reject all pending requests on disconnect
+          for (const [requestId, pending] of this.wsPendingRequests) {
+            pending.reject(new Error("WebSocket disconnected"));
+          }
+          this.wsPendingRequests.clear();
           this.emit("disconnected", {});
           this.scheduleReconnect();
         };
@@ -393,12 +450,24 @@ class JarvisSocket {
     }
 
     await this.cleanupEventListeners();
+    this.stopStaleRequestCleanup();
+
+    // Clear batch timer and reject pending batched requests
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+    this.batchQueue.forEach((req) => req.reject(new Error("Disconnected")));
+    this.batchQueue = [];
 
     // Close WebSocket if open
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
+
+    // Clear any pending requests
+    this.wsPendingRequests.clear();
 
     if (isTauri && invoke) {
       try {
@@ -479,23 +548,135 @@ class JarvisSocket {
         id: requestId,
       };
 
-      // Store pending request
+      // Store pending request with metadata for cleanup
       this.wsPendingRequests.set(requestId, {
         resolve: resolve as (value: unknown) => void,
         reject,
+        createdAt: Date.now(),
+        isStreaming: false,
       });
 
       // Send request
       this.ws.send(JSON.stringify(request));
 
-      // Timeout after 30 seconds
+      // Timeout after configured duration
       setTimeout(() => {
         if (this.wsPendingRequests.has(requestId)) {
           this.wsPendingRequests.delete(requestId);
           reject(new Error("Request timeout"));
         }
-      }, 30000);
+      }, REQUEST_TIMEOUT);
     });
+  }
+
+  /**
+   * Call a method with automatic batching (WebSocket mode only)
+   * Collects rapid sequential calls and sends them as a single batch request.
+   * This reduces round-trip overhead when making multiple calls in quick succession.
+   *
+   * @example
+   * // These 3 calls made within 15ms will be batched into 1 request
+   * const [result1, result2, result3] = await Promise.all([
+   *   client.callBatched("ping", {}),
+   *   client.callBatched("classify_intent", { text: "hello" }),
+   *   client.callBatched("ping", {}),
+   * ]);
+   */
+  async callBatched<T>(method: string, params: object = {}): Promise<T> {
+    // In Tauri mode, just use regular call (batching handled differently)
+    if (isTauri) {
+      return this.call<T>(method, params);
+    }
+
+    // Ensure connected
+    if (this.state !== "connected") {
+      const connected = await this.connect();
+      if (!connected) {
+        throw new Error("Not connected to socket server");
+      }
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      // Add to batch queue
+      this.batchQueue.push({
+        method,
+        params,
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      });
+
+      // If batch is full, send immediately
+      if (this.batchQueue.length >= MAX_BATCH_SIZE) {
+        this.flushBatch();
+        return;
+      }
+
+      // Start batch timer if not already running
+      if (!this.batchTimer) {
+        this.batchTimer = setTimeout(() => {
+          this.flushBatch();
+        }, BATCH_WINDOW_MS);
+      }
+    });
+  }
+
+  /**
+   * Flush the current batch queue, sending all queued requests
+   */
+  private flushBatch(): void {
+    // Clear timer
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+
+    // Nothing to flush
+    if (this.batchQueue.length === 0) {
+      return;
+    }
+
+    // Take all queued requests
+    const batch = this.batchQueue.splice(0);
+
+    // If only one request, send it directly (no batching overhead)
+    if (batch.length === 1) {
+      const { method, params, resolve, reject } = batch[0];
+      this.callWebSocket(method, params)
+        .then(resolve)
+        .catch(reject);
+      return;
+    }
+
+    // Build batch request
+    const requests = batch.map((req, index) => ({
+      method: req.method,
+      params: req.params,
+      _batch_index: index, // Track position for response mapping
+    }));
+
+    console.log(`[JarvisSocket] Sending batch of ${batch.length} requests`);
+
+    // Send batch request
+    this.callWebSocket<{ results: Array<{ result?: unknown; error?: { message: string } }> }>(
+      "batch",
+      { requests }
+    )
+      .then((response) => {
+        // Map results back to individual promises
+        const results = response.results || [];
+        batch.forEach((req, index) => {
+          const result = results[index];
+          if (result?.error) {
+            req.reject(new Error(result.error.message));
+          } else {
+            req.resolve(result?.result);
+          }
+        });
+      })
+      .catch((error) => {
+        // Reject all requests on batch failure
+        batch.forEach((req) => req.reject(error));
+      });
   }
 
   /**
@@ -617,7 +798,7 @@ class JarvisSocket {
     let completed = false;
     let error: Error | null = null;
 
-    // Store pending request with streaming handler
+    // Store pending request with streaming handler and metadata
     this.wsPendingRequests.set(requestId, {
       resolve: () => {
         completed = true;
@@ -644,6 +825,8 @@ class JarvisSocket {
           tokenBuffer.push(token);
         }
       },
+      createdAt: Date.now(),
+      isStreaming: true, // Streaming requests get longer timeout
     });
 
     // Send request

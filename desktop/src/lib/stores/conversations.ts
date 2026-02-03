@@ -59,6 +59,9 @@ export interface ConversationsState {
 /** Message cache keyed by chat_id to avoid re-fetching */
 const messageCache = new Map<string, MessageCacheEntry>();
 
+/** Track the last known global message ROWID for delta detection */
+let lastKnownGlobalRowid = 0;
+
 const initialState: ConversationsState = {
   conversations: [],
   selectedChatId: null,
@@ -259,6 +262,9 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
 /**
  * Poll for new messages in the currently selected conversation
  * Returns newly added messages (if any) for animation purposes
+ *
+ * OPTIMIZATION: Uses delta detection - checks if global ROWID changed before
+ * fetching all messages. This avoids unnecessary DB reads when nothing changed.
  */
 export async function pollMessages(): Promise<Message[]> {
   const state = get(conversationsStore);
@@ -275,6 +281,18 @@ export async function pollMessages(): Promise<Message[]> {
   const signal = messageFetchController.signal;
 
   try {
+    // DELTA OPTIMIZATION: Check if any new messages exist globally before fetching
+    // This avoids expensive full message fetches when nothing has changed
+    if (isDirectAccessAvailable()) {
+      const currentGlobalRowid = await getLastMessageRowid();
+      if (currentGlobalRowid > 0 && currentGlobalRowid === lastKnownGlobalRowid) {
+        // No new messages globally, skip the full fetch
+        return [];
+      }
+      // Update tracking for next poll
+      lastKnownGlobalRowid = currentGlobalRowid;
+    }
+
     const freshMessages = await fetchMessages(state.selectedChatId);
 
     // Check if request was aborted
@@ -615,6 +633,13 @@ export async function initializeDirectAccess(): Promise<boolean> {
   try {
     await initDatabases();
     console.log("[Conversations] Direct database access initialized");
+
+    // Initialize the global ROWID tracker for delta polling
+    if (isDirectAccessAvailable()) {
+      lastKnownGlobalRowid = await getLastMessageRowid();
+      console.log(`[Conversations] Initial global ROWID: ${lastKnownGlobalRowid}`);
+    }
+
     return true;
   } catch (error) {
     console.warn("[Conversations] Direct database access unavailable, using HTTP fallback:", error);

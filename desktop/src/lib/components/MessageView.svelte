@@ -43,6 +43,23 @@
   let virtualBottomPadding = $state(0);
   let pendingScrollToMessageId = $state<number | null>(null);
 
+  // Debounce utility - wait for activity to stop before executing
+  function debounce<T extends (...args: unknown[]) => void>(
+    fn: T,
+    delay: number
+  ): (...args: Parameters<T>) => void {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    return (...args: Parameters<T>) => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  // Debounced height measurement - only measure after scrolling stops for 150ms
+  const debouncedMeasureHeights = debounce(() => {
+    measureVisibleMessages();
+  }, 150);
+
   // Get estimated height for a message (use measured if available)
   function getMessageHeight(messageId: number): number {
     return messageHeights.get(messageId) ?? ESTIMATED_MESSAGE_HEIGHT;
@@ -328,8 +345,9 @@
     // Update virtual scroll range
     updateVirtualScroll();
 
-    // Measure visible messages after scroll for more accurate heights
-    requestAnimationFrame(() => measureVisibleMessages());
+    // Debounced height measurement - only measure after scrolling settles
+    // This prevents expensive DOM queries on every scroll frame
+    debouncedMeasureHeights();
 
     // Check if user scrolled near the top (for loading older messages)
     if (
