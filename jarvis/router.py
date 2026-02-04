@@ -135,6 +135,7 @@ CONTEXT_DEPENDENT_PATTERNS = frozenset(
 _CONTEXT_STARTER_PREFIXES = frozenset({"what time", "when ", "where ", "which "})
 
 # Vague reference patterns for clarification detection (frozenset for O(1) lookup)
+# Note: Previously duplicated in _REFERENCE_WORDS, now consolidated here
 _VAGUE_REFERENCES = frozenset(
     {
         "that",
@@ -149,8 +150,6 @@ _VAGUE_REFERENCES = frozenset(
     }
 )
 
-# Clarification type keywords (frozensets for O(1) lookup)
-_REFERENCE_WORDS = frozenset({"that", "it", "the thing", "this"})
 _TIME_WORDS = frozenset({"when", "what time"})
 _LOCATION_WORDS = frozenset({"where", "location"})
 
@@ -533,11 +532,10 @@ class ReplyRouter:
         # If we have active thread context, likely mid-conversation
         if thread and len(thread) >= 2:
             # Check if previous message was a question - if so, definitely generate
-            if thread:
-                last_thread_msg = thread[-1] if thread else ""
-                if "?" in last_thread_msg:
-                    logger.debug("Acknowledgment follows question, generating substantive response")
-                    return True
+            last_thread_msg = thread[-1]
+            if "?" in last_thread_msg:
+                logger.debug("Acknowledgment follows question, generating substantive response")
+                return True
             return True
 
         # Check contact's historical pattern
@@ -782,28 +780,30 @@ class ReplyRouter:
         quick_reply_threshold = thresholds["quick_reply"]
         context_threshold = thresholds["context"]
         generate_threshold = thresholds["generate"]
+        search_results = []  # Initialize early for context-dependent path
 
-        # Step 5: Search FAISS index for similar triggers
-        # Note: CachedEmbedder already has the embedding cached from precomputation
-        try:
-            search_start = time.perf_counter()
-            search_results = self.index_searcher.search_with_pairs(
-                query=incoming,
-                k=5,
-                threshold=generate_threshold,
-                prefer_recent=True,
-                embedder=cached_embedder,
-            )
-            latency_ms["faiss_search"] = (time.perf_counter() - search_start) * 1000
-        except FileNotFoundError:
-            # Index not built yet - fall back to generation
-            logger.warning("FAISS index not found, falling back to generation")
-            search_results = []
-        except Exception as e:
-            logger.exception("Error searching index: %s", e)
-            search_results = []
+        # Step 4b: Adjust thresholds based on intent classification
+        # Different intents warrant different routing strategies
+        intent_strategy = None
+        if intent_result and intent_result.confidence >= 0.7:
+            if intent_result.intent == IntentType.REPLY:
+                # User wants help composing - favor generation over quick_reply
+                quick_reply_threshold += 0.10
+                intent_strategy = "favor_generation"
+                logger.debug("REPLY intent (conf=%.2f), raising quick_reply threshold", intent_result.confidence)
+            elif intent_result.intent == IntentType.SUMMARIZE:
+                # User wants summarization - skip quick_reply entirely
+                quick_reply_threshold = 2.0  # Effectively disable
+                intent_strategy = "summarize"
+                logger.debug("SUMMARIZE intent (conf=%.2f), forcing generation path", intent_result.confidence)
+            elif intent_result.intent == IntentType.SEARCH:
+                # User searching for info - favor example retrieval, no quick_reply
+                quick_reply_threshold += 0.15
+                intent_strategy = "search_synthesis"
+                logger.debug("SEARCH intent (conf=%.2f), favoring retrieval", intent_result.confidence)
 
-        # Step 6: Check if message is context-dependent (needs current info)
+        # Step 5: Check if message is context-dependent BEFORE FAISS search
+        # This avoids wasted latency when we know we'll need generation anyway
         is_context_dependent = self._is_context_dependent(incoming)
         if is_context_dependent:
             logger.debug("Message is context-dependent, skipping quick_reply matching")
@@ -837,16 +837,48 @@ class ReplyRouter:
                 decision="generate",
             )
 
-        # Step 7: Route based on best similarity score
+        # Step 6: Search FAISS index for similar triggers
+        # Note: CachedEmbedder already has the embedding cached from precomputation
+        try:
+            search_start = time.perf_counter()
+            search_results = self.index_searcher.search_with_pairs(
+                query=incoming,
+                k=5,
+                threshold=generate_threshold,
+                prefer_recent=True,
+                embedder=cached_embedder,
+            )
+            latency_ms["faiss_search"] = (time.perf_counter() - search_start) * 1000
+        except FileNotFoundError:
+            # Index not built yet - fall back to generation
+            logger.warning("FAISS index not found, falling back to generation")
+            search_results = []
+        except Exception as e:
+            logger.exception("Error searching index: %s", e)
+            search_results = []
+
+        # Step 7: Filter coherent results early to avoid quick_reply churn
+        # This prevents selecting responses that don't fit the context
+        coherent_results = []
+        for match in search_results:
+            coherence = score_response_coherence(
+                match.get("trigger_text", incoming),
+                match["response_text"],
+            )
+            if coherence >= COHERENCE_THRESHOLD:
+                coherent_results.append(match)
+
+        # Step 8: Route based on best similarity score
         if search_results:
             best_result = search_results[0]
             best_score = best_result["similarity"]
 
             # High confidence -> quick_reply response with top-K variety
-            if best_score >= quick_reply_threshold:
-                # Get all high-confidence matches for variety
+            # Use coherent_results to ensure quality
+            if coherent_results and coherent_results[0]["similarity"] >= quick_reply_threshold:
+                # Get all high-confidence coherent matches for variety
                 high_confidence_matches = [
-                    r for r in search_results if r["similarity"] >= quick_reply_threshold
+                    r for r in coherent_results if r["similarity"] >= quick_reply_threshold
                 ]
                 quick_reply_start = time.perf_counter()
                 result = self._quick_reply_response(high_confidence_matches, contact, incoming)

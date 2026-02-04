@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any
 
 from jarvis.config import get_config
 from jarvis.db import JarvisDB, get_db
-from jarvis.response_classifier import (
+from jarvis.response_classifier_v2 import (
     COMMITMENT_RESPONSE_TYPES,
     TRIGGER_TO_VALID_RESPONSES,
     ResponseType,
@@ -290,10 +290,11 @@ class TypedRetriever:
                 return []
 
         # Search FAISS for similar triggers (get extra to account for filtering)
+        # Use k*20 to improve recall for rare response types like DECLINE
         try:
             search_results = self.index_searcher.search_with_pairs(
                 query=trigger,
-                k=k * 5,  # Get extra for filtering
+                k=k * 20,  # Increased oversampling for rare types
                 threshold=min_similarity,
                 embedder=embedder,
             )
@@ -301,8 +302,9 @@ class TypedRetriever:
             logger.warning("FAISS search failed: %s", e)
             search_results = []
 
-        # Filter to target response type
+        # Filter to target response type with diversity filtering
         typed_examples = []
+        seen_responses: set[str] = set()  # Track seen responses for diversity
         for result in search_results:
             # search_with_pairs returns flattened dict with all fields
             pair_id = result.get("pair_id")
@@ -317,6 +319,12 @@ class TypedRetriever:
             quality = result.get("quality_score", 0.0)
             if quality < min_quality:
                 continue
+
+            # Diversity check: Skip duplicate/near-duplicate responses
+            response_normalized = result["response_text"].strip().lower()
+            if response_normalized in seen_responses:
+                continue
+            seen_responses.add(response_normalized)
 
             typed_examples.append(
                 TypedExample(

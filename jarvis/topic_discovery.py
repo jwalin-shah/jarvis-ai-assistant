@@ -469,6 +469,28 @@ class TopicDiscovery:
         self.max_topics = max_topics
         self.noise_threshold = noise_threshold
 
+    def _compute_adaptive_cluster_size(self, n_messages: int) -> int:
+        """Compute adaptive min_cluster_size based on message count.
+
+        Larger conversations need larger minimum clusters to avoid
+        over-fragmentation, while smaller conversations need smaller
+        clusters to capture subtopics.
+
+        Args:
+            n_messages: Number of messages for the contact.
+
+        Returns:
+            Adapted min_cluster_size.
+        """
+        if n_messages < 50:
+            return 3
+        elif n_messages < 200:
+            return 5
+        elif n_messages < 500:
+            return 8
+        else:
+            return min(15, n_messages // 50)
+
     def discover_topics(
         self,
         contact_id: str,
@@ -488,10 +510,14 @@ class TopicDiscovery:
         Returns:
             ContactTopics with discovered topics and centroids
         """
-        if len(embeddings) < self.min_cluster_size:
+        # Use adaptive cluster size based on conversation volume
+        adaptive_min_cluster = self._compute_adaptive_cluster_size(len(embeddings))
+        effective_min_cluster = min(self.min_cluster_size, adaptive_min_cluster)
+
+        if len(embeddings) < effective_min_cluster:
             logger.debug(
                 f"Contact {contact_id}: only {len(embeddings)} messages, "
-                f"need {self.min_cluster_size} for clustering"
+                f"need {effective_min_cluster} for clustering"
             )
             return ContactTopics(contact_id=contact_id, noise_count=len(embeddings))
 
