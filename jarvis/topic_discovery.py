@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Default weights for hybrid similarity scoring
+DEFAULT_COSINE_WEIGHT: float = 0.7
+DEFAULT_ENTITY_WEIGHT: float = 0.3
+
+
 @dataclass
 class DiscoveredTopic:
     """A topic discovered from a contact's conversation history."""
@@ -98,8 +103,8 @@ class ContactTopics:
         self,
         embedding: NDArray[np.float32],
         entities: list[Entity] | None = None,
-        cosine_weight: float = 0.7,
-        entity_weight: float = 0.3,
+        cosine_weight: float = DEFAULT_COSINE_WEIGHT,
+        entity_weight: float = DEFAULT_ENTITY_WEIGHT,
     ) -> TopicAssignment | None:
         """Classify a single message embedding to a topic.
 
@@ -109,8 +114,8 @@ class ContactTopics:
         Args:
             embedding: Message embedding (384-dim).
             entities: Optional list of entities extracted from the message.
-            cosine_weight: Weight for cosine similarity (default 0.7).
-            entity_weight: Weight for entity overlap (default 0.3).
+            cosine_weight: Weight for cosine similarity (default DEFAULT_COSINE_WEIGHT).
+            entity_weight: Weight for entity overlap (default DEFAULT_ENTITY_WEIGHT).
 
         Returns:
             TopicAssignment with topic and confidence.
@@ -136,17 +141,20 @@ class ContactTopics:
 
             for i, topic in enumerate(self.topics):
                 if topic.top_entities and message_entity_set:
-                    # Build topic entity set from top_entities
+                    # Build topic entity set from top_entities (with token expansion)
                     topic_entity_set: set[str] = set()
                     for label, texts in topic.top_entities.items():
                         for text in texts:
                             topic_entity_set.add(f"{label}:{text}")
+                            # Also add tokens for partial matching
+                            for token in text.split():
+                                if len(token) > 2:
+                                    topic_entity_set.add(f"{label}:{token}")
 
-                    # Jaccard similarity
-                    intersection = len(message_entity_set & topic_entity_set)
-                    union = len(message_entity_set | topic_entity_set)
-                    if union > 0:
-                        entity_overlaps[i] = intersection / union
+                    # Overlap coefficient (better than Jaccard for size differences)
+                    entity_overlaps[i] = _compute_overlap_coefficient(
+                        message_entity_set, topic_entity_set
+                    )
 
             # Combined score
             combined_scores = (
@@ -170,22 +178,60 @@ class ContactTopics:
 
 
 def _entities_to_label_set(entities: list[Entity]) -> set[str]:
-    """Convert entities to normalized label set for Jaccard similarity.
+    """Convert entities to normalized label set for overlap similarity.
+
+    Includes both full entity text and individual tokens (>2 chars) for
+    fuzzy matching. This helps match "Jake Smith" with "Jake".
 
     Args:
         entities: List of Entity objects.
 
     Returns:
-        Set of strings like {"PERSON:jake", "ORG:google"}.
+        Set of strings like {"PERSON:jake", "PERSON:jake smith", "ORG:google"}.
     """
-    return {f"{e.label}:{e.text.lower()}" for e in entities}
+    result: set[str] = set()
+    for e in entities:
+        # Add full name
+        result.add(f"{e.label}:{e.text.lower()}")
+        # Also add individual tokens for partial matching
+        for token in e.text.lower().split():
+            if len(token) > 2:
+                result.add(f"{e.label}:{token}")
+    return result
 
 
-def _compute_entity_jaccard_matrix(
+def _compute_overlap_coefficient(set_a: set[str], set_b: set[str]) -> float:
+    """Compute overlap coefficient between two sets.
+
+    overlap = |A ∩ B| / min(|A|, |B|)
+
+    This is better than Jaccard when one set is a subset of another
+    (e.g., message has 2 entities, topic has 10).
+
+    Args:
+        set_a: First set.
+        set_b: Second set.
+
+    Returns:
+        Overlap coefficient (0.0 to 1.0).
+    """
+    if not set_a or not set_b:
+        return 0.0
+    intersection = len(set_a & set_b)
+    min_size = min(len(set_a), len(set_b))
+    return intersection / min_size if min_size > 0 else 0.0
+
+
+def _compute_entity_overlap_matrix(
     entity_sets: list[set[str]],
     n: int,
 ) -> NDArray[np.float32]:
-    """Compute NxN Jaccard similarity matrix from entity sets.
+    """Compute NxN overlap coefficient matrix from entity sets.
+
+    Uses overlap coefficient (intersection / min size) instead of Jaccard
+    because it handles size differences better.
+
+    Optimized with early termination for empty sets.
 
     Args:
         entity_sets: List of entity label sets per message.
@@ -196,37 +242,104 @@ def _compute_entity_jaccard_matrix(
     """
     matrix = np.zeros((n, n), dtype=np.float32)
 
-    for i in range(n):
+    # Pre-compute set sizes for early termination
+    sizes = np.array([len(s) for s in entity_sets], dtype=np.int32)
+
+    # Find indices of non-empty sets for efficient iteration
+    non_empty_indices = np.where(sizes > 0)[0]
+
+    # Only iterate over non-empty sets
+    for idx_i, i in enumerate(non_empty_indices):
         set_i = entity_sets[i]
+        size_i = sizes[i]
+        for j in non_empty_indices[idx_i + 1:]:
+            set_j = entity_sets[j]
+            intersection = len(set_i & set_j)
+            if intersection > 0:
+                min_size = min(size_i, sizes[j])
+                overlap = intersection / min_size
+                matrix[i, j] = overlap
+                matrix[j, i] = overlap
+
+    return matrix
+
+
+def _compute_entity_overlap_chunk(
+    entity_sets: list[set[str]],
+    i_start: int,
+    i_end: int,
+    j_start: int,
+    j_end: int,
+) -> NDArray[np.float32]:
+    """Compute a chunk of the overlap matrix without pre-computing the full matrix.
+
+    Args:
+        entity_sets: Full list of entity label sets per message.
+        i_start: Row start index.
+        i_end: Row end index.
+        j_start: Column start index.
+        j_end: Column end index.
+
+    Returns:
+        Chunk of the similarity matrix (i_end - i_start, j_end - j_start).
+    """
+    chunk_rows = i_end - i_start
+    chunk_cols = j_end - j_start
+    chunk = np.zeros((chunk_rows, chunk_cols), dtype=np.float32)
+
+    for local_i, global_i in enumerate(range(i_start, i_end)):
+        set_i = entity_sets[global_i]
         if not set_i:
             continue
-        for j in range(i + 1, n):
-            set_j = entity_sets[j]
+        size_i = len(set_i)
+        for local_j, global_j in enumerate(range(j_start, j_end)):
+            if global_i == global_j:
+                continue  # Skip diagonal
+            set_j = entity_sets[global_j]
             if not set_j:
                 continue
             intersection = len(set_i & set_j)
-            union = len(set_i | set_j)
-            if union > 0:
-                jaccard = intersection / union
-                matrix[i, j] = jaccard
-                matrix[j, i] = jaccard
+            if intersection > 0:
+                min_size = min(size_i, len(set_j))
+                chunk[local_i, local_j] = intersection / min_size
 
-    return matrix
+    return chunk
+
+
+# Keep old name as alias for backward compatibility with tests
+def _compute_entity_jaccard_matrix(
+    entity_sets: list[set[str]],
+    n: int,
+) -> NDArray[np.float32]:
+    """Compute NxN overlap coefficient matrix from entity sets.
+
+    Note: This function now uses overlap coefficient instead of Jaccard
+    for better handling of size differences. The name is kept for
+    backward compatibility.
+
+    Args:
+        entity_sets: List of entity label sets per message.
+        n: Number of messages.
+
+    Returns:
+        NxN similarity matrix (float32).
+    """
+    return _compute_entity_overlap_matrix(entity_sets, n)
 
 
 def _compute_combined_distance_matrix(
     embeddings_norm: NDArray[np.float32],
     entity_sets: list[set[str]],
-    cosine_weight: float = 0.7,
-    entity_weight: float = 0.3,
+    cosine_weight: float = DEFAULT_COSINE_WEIGHT,
+    entity_weight: float = DEFAULT_ENTITY_WEIGHT,
 ) -> NDArray[np.float32]:
-    """Compute combined distance matrix: 1 - (cosine_weight*cosine + entity_weight*jaccard).
+    """Compute combined distance matrix: 1 - (cosine_weight*cosine + entity_weight*overlap).
 
     Args:
         embeddings_norm: Normalized embeddings (N, D).
         entity_sets: Entity label sets per message.
-        cosine_weight: Weight for cosine similarity (default 0.7).
-        entity_weight: Weight for entity Jaccard similarity (default 0.3).
+        cosine_weight: Weight for cosine similarity (default DEFAULT_COSINE_WEIGHT).
+        entity_weight: Weight for entity overlap similarity (default DEFAULT_ENTITY_WEIGHT).
 
     Returns:
         NxN distance matrix for HDBSCAN precomputed metric.
@@ -236,11 +349,11 @@ def _compute_combined_distance_matrix(
     # Cosine similarity matrix
     cosine_sim = embeddings_norm @ embeddings_norm.T
 
-    # Entity Jaccard similarity matrix
-    jaccard_sim = _compute_entity_jaccard_matrix(entity_sets, n)
+    # Entity overlap similarity matrix
+    overlap_sim = _compute_entity_overlap_matrix(entity_sets, n)
 
     # Combined similarity and convert to distance
-    combined_sim = cosine_weight * cosine_sim + entity_weight * jaccard_sim
+    combined_sim = cosine_weight * cosine_sim + entity_weight * overlap_sim
     distance_matrix = 1.0 - combined_sim
 
     # Ensure diagonal is 0 and matrix is non-negative
@@ -253,30 +366,26 @@ def _compute_combined_distance_matrix(
 def _compute_distance_matrix_chunked(
     embeddings_norm: NDArray[np.float32],
     entity_sets: list[set[str]],
-    cosine_weight: float = 0.7,
-    entity_weight: float = 0.3,
+    cosine_weight: float = DEFAULT_COSINE_WEIGHT,
+    entity_weight: float = DEFAULT_ENTITY_WEIGHT,
     chunk_size: int = 2000,
 ) -> NDArray[np.float32]:
     """Compute combined distance matrix in chunks for memory efficiency.
 
-    For n > 5000, full NxN matrix can exceed 400MB. This computes in chunks.
+    For n > 5000, full NxN matrix can exceed 400MB. This computes both
+    cosine and overlap similarity per-chunk to avoid pre-computing full matrices.
 
     Args:
         embeddings_norm: Normalized embeddings (N, D).
         entity_sets: Entity label sets per message.
-        cosine_weight: Weight for cosine similarity.
-        entity_weight: Weight for entity Jaccard similarity.
+        cosine_weight: Weight for cosine similarity (default DEFAULT_COSINE_WEIGHT).
+        entity_weight: Weight for entity overlap similarity (default DEFAULT_ENTITY_WEIGHT).
         chunk_size: Size of chunks to process.
 
     Returns:
         NxN distance matrix for HDBSCAN precomputed metric.
     """
     n = len(embeddings_norm)
-
-    # Pre-compute the full Jaccard matrix (it's sparse-ish and O(n^2) anyway)
-    jaccard_sim = _compute_entity_jaccard_matrix(entity_sets, n)
-
-    # Compute cosine and combine in chunks to reduce peak memory for cosine part
     distance_matrix = np.zeros((n, n), dtype=np.float32)
 
     for i_start in range(0, n, chunk_size):
@@ -287,11 +396,13 @@ def _compute_distance_matrix_chunked(
             # Cosine similarity for chunk
             cosine_chunk = embeddings_norm[i_start:i_end] @ embeddings_norm[j_start:j_end].T
 
-            # Get corresponding Jaccard chunk
-            jaccard_chunk = jaccard_sim[i_start:i_end, j_start:j_end]
+            # Compute overlap similarity for this chunk only (not full matrix)
+            overlap_chunk = _compute_entity_overlap_chunk(
+                entity_sets, i_start, i_end, j_start, j_end
+            )
 
             # Combined distance
-            combined_sim = cosine_weight * cosine_chunk + entity_weight * jaccard_chunk
+            combined_sim = cosine_weight * cosine_chunk + entity_weight * overlap_chunk
             distance_matrix[i_start:i_end, j_start:j_end] = 1.0 - combined_sim
 
     # Ensure diagonal is 0 and matrix is non-negative
@@ -594,6 +705,7 @@ class TopicDiscovery:
         contact_topics: ContactTopics,
         embeddings: NDArray[np.float32],
         min_confidence: float = 0.3,
+        entities_list: list[list[Entity]] | None = None,
     ) -> list[TopicAssignment]:
         """Classify a sequence of messages and detect chunk boundaries.
 
@@ -601,6 +713,8 @@ class TopicDiscovery:
             contact_topics: The contact's discovered topics
             embeddings: (N, 384) array of message embeddings
             min_confidence: Minimum confidence to assign a topic
+            entities_list: Optional list of entities per message for hybrid scoring.
+                           Must have same length as embeddings if provided.
 
         Returns:
             List of TopicAssignments with chunk boundaries marked
@@ -608,12 +722,21 @@ class TopicDiscovery:
         if not contact_topics.topics or len(embeddings) == 0:
             return []
 
+        # Validate entities_list length if provided
+        if entities_list is not None and len(entities_list) != len(embeddings):
+            logger.warning(
+                f"entities_list length ({len(entities_list)}) != embeddings length "
+                f"({len(embeddings)}), ignoring entities"
+            )
+            entities_list = None
+
         assignments = []
         previous_topic_id: int | None = None
 
         for i, emb in enumerate(embeddings):
+            entities = entities_list[i] if entities_list is not None else None
             assignment = self.classify_message(
-                contact_topics, emb, entities=None, previous_topic_id=previous_topic_id
+                contact_topics, emb, entities=entities, previous_topic_id=previous_topic_id
             )
 
             if assignment is None:
