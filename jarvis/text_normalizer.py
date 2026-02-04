@@ -248,6 +248,13 @@ QUESTION_WORDS = {"who", "what", "when", "where", "why", "how", "which", "whose"
 
 # Pre-compiled patterns for hot path functions (avoid recompiling in loops)
 _WHITESPACE_PATTERN = re.compile(r"[ \t]+")
+
+# Zero-width and control characters to strip (invisible Unicode that breaks matching)
+# - \u200b-\u200f: zero-width space, non-joiner, joiner, LTR/RTL marks
+# - \uFEFF: byte order mark (BOM)
+# - \u00ad: soft hyphen
+# - \x00-\x08, \x0b-\x0c, \x0e-\x1f: control chars (except \t\n\r)
+_INVISIBLE_CHARS_PATTERN = re.compile(r"[\u200b-\u200f\uFEFF\u00ad\x00-\x08\x0b\x0c\x0e-\x1f]")
 _TRAILING_PUNCT_PATTERN = re.compile(r"[.!?,;]+$")
 
 # Request patterns - triggers that expect substantive responses
@@ -285,6 +292,51 @@ TEMPORAL_PATTERNS = [
 ]
 TEMPORAL_REGEX = re.compile("|".join(TEMPORAL_PATTERNS), re.IGNORECASE)
 
+# Spell checker singleton (lazy loaded)
+_SPELL_CHECKER = None
+
+
+def _get_spell_checker():
+    """Get or initialize the SymSpell spell checker."""
+    global _SPELL_CHECKER
+    if _SPELL_CHECKER is None:
+        try:
+            from symspellpy import SymSpell
+            import importlib.resources
+
+            _SPELL_CHECKER = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
+            # Load the built-in frequency dictionary
+            dict_path = importlib.resources.files("symspellpy").joinpath(
+                "frequency_dictionary_en_82_765.txt"
+            )
+            _SPELL_CHECKER.load_dictionary(str(dict_path), term_index=0, count_index=1)
+        except Exception:
+            # If SymSpell fails to load, return None
+            return None
+    return _SPELL_CHECKER
+
+
+def _spell_correct(text: str) -> str:
+    """Correct spelling errors using SymSpell.
+
+    Note: Run AFTER slang expansion to avoid breaking abbreviations.
+    """
+    if not text:
+        return text
+
+    checker = _get_spell_checker()
+    if checker is None:
+        return text
+
+    try:
+        # Use lookup_compound for multi-word correction
+        suggestions = checker.lookup_compound(text, max_edit_distance=2)
+        if suggestions:
+            return suggestions[0].term
+        return text
+    except Exception:
+        return text
+
 
 def normalize_text(
     text: str,
@@ -300,6 +352,7 @@ def normalize_text(
     ner_enabled: bool = False,
     ner_model: str = "en_core_web_sm",
     expand_slang: bool = False,
+    spell_check: bool = False,
 ) -> str:
     """Canonical text cleaning used everywhere in the pipeline.
 
@@ -333,6 +386,9 @@ def normalize_text(
         return ""
 
     cleaned = text
+
+    # 1c. Remove invisible/control characters (zero-width space, BOM, etc.)
+    cleaned = _INVISIBLE_CHARS_PATTERN.sub("", cleaned)
 
     # 2. Strip auto-signatures
     if strip_signatures:
@@ -373,6 +429,10 @@ def normalize_text(
         from jarvis.slang import expand_slang as _expand_slang
 
         cleaned = _expand_slang(cleaned)
+
+    # 4d. Spelling correction (AFTER slang expansion to avoid breaking slang)
+    if spell_check:
+        cleaned = _spell_correct(cleaned)
 
     # 5. Final strip
     cleaned = cleaned.strip()
@@ -502,11 +562,15 @@ def _replace_codes_with_placeholder(text: str) -> str:
     return text
 
 
-_NER_MODEL = None
+def _mask_entities(text: str, use_ner: bool = False, ner_model: str = "en_core_web_trf") -> str:
+    """Mask common entity types with placeholders (NER server + heuristics fallback).
 
+    Uses the spaCy NER server (via Unix socket) for accurate entity detection,
+    falling back to regex-based heuristics if the server is unavailable.
 
-def _mask_entities(text: str, use_ner: bool = False, ner_model: str = "en_core_web_sm") -> str:
-    """Mask common entity types with placeholders (NER + heuristics fallback)."""
+    Note: For best NER results, expand slang BEFORE calling this function.
+    The normalize_text() function handles this ordering correctly.
+    """
     if not text:
         return text
 
@@ -514,38 +578,40 @@ def _mask_entities(text: str, use_ner: bool = False, ner_model: str = "en_core_w
 
     if use_ner:
         try:
-            global _NER_MODEL
-            if _NER_MODEL is None:
-                import spacy
+            from jarvis.ner_client import get_entities, is_service_running
 
-                _NER_MODEL = spacy.load(ner_model)
-
-            doc = _NER_MODEL(masked)
-            # Replace entities from back to front to keep offsets valid
-            for ent in sorted(doc.ents, key=lambda e: e.start_char, reverse=True):
-                label = ent.label_
-                token = None
-                if label in ("PERSON",):
-                    token = "<PERSON>"
-                elif label in ("GPE", "LOC"):
-                    token = "<CITY>"
-                elif label in ("ORG",):
-                    token = "<ORG>"
-                if token:
-                    masked = masked[: ent.start_char] + token + masked[ent.end_char :]
+            if is_service_running():
+                entities = get_entities(masked)
+                # Replace entities from back to front to keep offsets valid
+                for ent in sorted(entities, key=lambda e: e.start, reverse=True):
+                    label = ent.label
+                    token = None
+                    if label == "PERSON":
+                        token = "<PERSON>"
+                    elif label in ("GPE", "LOC"):
+                        token = "<CITY>"
+                    elif label == "ORG":
+                        token = "<ORG>"
+                    elif label == "TIME":
+                        token = "<TIME>"
+                    elif label == "DATE":
+                        token = "<DATE>"
+                    if token:
+                        masked = masked[: ent.start] + token + masked[ent.end :]
         except Exception:
             # Fall back to regex masking if NER unavailable
             pass
 
-    # Regex-based masking (always apply)
+    # Regex-based masking (always apply for things NER might miss)
     masked = EMAIL_REGEX.sub("<EMAIL>", masked)
     masked = PHONE_REGEX.sub("<PHONE>", masked)
     masked = HANDLE_REGEX.sub("<PERSON>", masked)
 
-    # Heuristic context-based masking
-    masked = CITY_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <CITY>", masked)
-    masked = TEAM_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <TEAM>", masked)
-    masked = PERSON_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <PERSON>", masked)
+    # Heuristic context-based masking (only if NER didn't run or missed things)
+    if not use_ner:
+        masked = CITY_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <CITY>", masked)
+        masked = TEAM_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <TEAM>", masked)
+        masked = PERSON_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <PERSON>", masked)
 
     return masked
 
@@ -573,6 +639,7 @@ def normalize_for_task(text: str, task: str) -> str:
         ner_enabled=profile.ner_enabled,
         ner_model=profile.ner_model,
         expand_slang=profile.expand_slang,
+        spell_check=profile.spell_check,
     )
 
     if not cleaned:

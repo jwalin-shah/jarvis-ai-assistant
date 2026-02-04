@@ -18,6 +18,7 @@ This documentation has been split into focused files for better context manageme
 | [Feedback](./design/FEEDBACK.md) | Learning from user actions | ~120 |
 | [Decisions](./design/DECISIONS.md) | Rationale, lessons learned | ~130 |
 | [Metrics](./design/METRICS.md) | Benchmarks, future work | ~90 |
+| [Contact Profiles](./design/CONTACT_PROFILES.md) | Per-contact style + topics | ~200 |
 
 ## V3 Features
 
