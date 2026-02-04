@@ -86,7 +86,13 @@ token.json
 # Models (large files)
 *.gguf
 *.bin
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.pkl
 models/cache/
+checkpoints/
 
 # Embeddings cache (large, regeneratable)
 *.npz
