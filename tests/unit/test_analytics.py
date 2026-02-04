@@ -3,14 +3,14 @@
 Tests analytics engine, aggregator, trends detection, and report generation.
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 from contracts.imessage import Message
 from jarvis.analytics import (
     AnalyticsEngine,
+    ReportGenerator,
     TimeSeriesAggregator,
     TrendAnalyzer,
-    ReportGenerator,
     aggregate_by_day,
     aggregate_by_hour,
     aggregate_by_month,
@@ -106,8 +106,12 @@ class TestAnalyticsEngine:
         messages = []
         # Balanced conversation
         for i in range(10):
-            messages.append(create_message(f"them{i}", is_from_me=False, date=now + timedelta(hours=i*2)))
-            messages.append(create_message(f"me{i}", is_from_me=True, date=now + timedelta(hours=i*2+1)))
+            messages.append(
+                create_message(f"them{i}", is_from_me=False, date=now + timedelta(hours=i * 2))
+            )
+            messages.append(
+                create_message(f"me{i}", is_from_me=True, date=now + timedelta(hours=i * 2 + 1))
+            )
         result = engine.compute_contact_analytics(messages, "test_contact")
         assert result.engagement_score > 50
 
@@ -193,7 +197,8 @@ class TestAggregator:
 
     def test_aggregate_by_day_multiple_days(self):
         """Multiple days are aggregated correctly."""
-        now = datetime.now(UTC)
+        # Use noon to avoid date boundary issues when running near midnight
+        now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
         messages = [
             create_message("Day1", date=now),
             create_message("Day1_2", date=now + timedelta(hours=1)),
@@ -221,7 +226,8 @@ class TestTimeSeriesAggregator:
     def test_update_and_retrieve_daily(self):
         """Daily aggregates can be updated and retrieved."""
         aggregator = TimeSeriesAggregator()
-        now = datetime.now(UTC)
+        # Use noon to avoid date boundary issues when running near midnight
+        now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
         messages = [
             create_message("Day1", date=now),
             create_message("Day2", date=now + timedelta(days=1)),
@@ -233,7 +239,8 @@ class TestTimeSeriesAggregator:
     def test_get_activity_heatmap_data(self):
         """Activity heatmap data is correctly formatted."""
         aggregator = TimeSeriesAggregator()
-        now = datetime.now(UTC)
+        # Use noon to avoid date boundary issues when running near midnight
+        now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
         messages = [
             create_message("Day1", date=now),
             create_message("Day1_2", date=now + timedelta(hours=1)),
@@ -248,7 +255,8 @@ class TestTimeSeriesAggregator:
     def test_get_timeline_data_with_messages(self):
         """Timeline data is computed from messages."""
         aggregator = TimeSeriesAggregator()
-        now = datetime.now(UTC)
+        # Use noon to avoid date boundary issues when running near midnight
+        now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
         messages = [
             create_message("Msg1", is_from_me=True, date=now),
             create_message("Msg2", is_from_me=False, date=now + timedelta(hours=1)),
@@ -331,7 +339,9 @@ class TestTrendDetection:
         messages = []
         # Add more messages at 2pm
         for i in range(5):
-            messages.append(create_message(f"msg{i}", date=now.replace(hour=14) + timedelta(days=i)))
+            messages.append(
+                create_message(f"msg{i}", date=now.replace(hour=14) + timedelta(days=i))
+            )
         # Add fewer at 9am
         messages.append(create_message("morning", date=now.replace(hour=9)))
         hours, days = detect_peak_periods(messages, top_n=3)

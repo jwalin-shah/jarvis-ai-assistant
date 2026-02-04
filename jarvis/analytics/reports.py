@@ -9,7 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -55,15 +55,9 @@ class AnalyticsReport:
             "description": self.description,
             "generated_at": self.generated_at.isoformat(),
             "date_range_start": (
-                self.date_range_start.isoformat()
-                if self.date_range_start
-                else None
+                self.date_range_start.isoformat() if self.date_range_start else None
             ),
-            "date_range_end": (
-                self.date_range_end.isoformat()
-                if self.date_range_end
-                else None
-            ),
+            "date_range_end": (self.date_range_end.isoformat() if self.date_range_end else None),
             "sections": [
                 {
                     "title": s.title,
@@ -130,9 +124,7 @@ class ReportGenerator:
         overview = self._engine.compute_overview(messages)
         emoji_stats = self._engine.compute_emoji_stats(messages)
         length_stats = self._engine.compute_message_length_stats(messages)
-        hourly, daily, weekly, monthly = self._engine.compute_time_distributions(
-            messages
-        )
+        hourly, daily, weekly, monthly = self._engine.compute_time_distributions(messages)
 
         # Trend analysis
         trend_analysis = self._trend_analyzer.analyze_message_trends(messages)
@@ -292,10 +284,8 @@ class ReportGenerator:
         contact_analytics = self._engine.compute_contact_analytics(
             messages, contact_id, contact_name
         )
-        emoji_stats = self._engine.compute_emoji_stats(messages)
-        hourly, daily, weekly, monthly = self._engine.compute_time_distributions(
-            messages
-        )
+        self._engine.compute_emoji_stats(messages)
+        hourly, daily, weekly, monthly = self._engine.compute_time_distributions(messages)
 
         sections = [
             ReportSection(
@@ -368,9 +358,7 @@ class ReportGenerator:
         Returns:
             AnalyticsReport comparing two time periods
         """
-        comparison = self._trend_analyzer.compare_periods(
-            messages, current_days, previous_days
-        )
+        comparison = self._trend_analyzer.compare_periods(messages, current_days, previous_days)
 
         sections = [
             ReportSection(
@@ -389,7 +377,7 @@ class ReportGenerator:
 
         return AnalyticsReport(
             title="Period Comparison Report",
-            description=f"Comparing messaging activity between periods",
+            description="Comparing messaging activity between periods",
             generated_at=datetime.now(UTC),
             date_range_start=None,
             date_range_end=datetime.now(UTC),
@@ -517,9 +505,7 @@ class ReportGenerator:
         Returns:
             JSON string with complete analytics
         """
-        result = self._engine.compute_full_analytics(
-            messages, contact_messages
-        )
+        result = self._engine.compute_full_analytics(messages, contact_messages)
 
         # Convert dataclasses to dicts for JSON serialization
         export_data = {

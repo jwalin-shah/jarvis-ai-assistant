@@ -10,10 +10,6 @@ Test Coverage:
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import shutil
 import struct
 import tempfile
 import threading
@@ -21,7 +17,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -31,7 +26,6 @@ from jarvis.index_v2 import (
     DEFAULT_BATCH_SIZE,
     JOURNAL_MAGIC,
     JOURNAL_VERSION,
-    SHARD_FORMAT,
     JournalOp,
     JournalWriter,
     MigrationHelper,
@@ -108,10 +102,9 @@ def mock_embedder():
 
     def encode_func(texts, normalize=True):
         """Generate deterministic embeddings based on text."""
-        embeddings = np.array([
-            np.random.RandomState(hash(t) % (2**31)).randn(384)
-            for t in texts
-        ], dtype=np.float32)
+        embeddings = np.array(
+            [np.random.RandomState(hash(t) % (2**31)).randn(384) for t in texts], dtype=np.float32
+        )
         if normalize:
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             embeddings = embeddings / (norms + 1e-8)
@@ -390,7 +383,7 @@ class TestShard:
         assert stats.total_vectors == 3
         assert stats.active_vectors == 2
         assert stats.deleted_vectors == 1
-        assert stats.deletion_ratio == pytest.approx(1/3, rel=0.01)
+        assert stats.deletion_ratio == pytest.approx(1 / 3, rel=0.01)
 
     def test_checksum_computation(self, shard, mock_embedder):
         """Test checksum computation."""
@@ -428,7 +421,7 @@ class TestJournalWriter:
     def test_journal_initialization(self, temp_dir):
         """Test journal initialization."""
         journal_dir = temp_dir / "journal"
-        journal = JournalWriter(journal_dir)
+        JournalWriter(journal_dir)
 
         assert journal_dir.exists()
 
@@ -737,8 +730,7 @@ class TestBackupRestore:
         sharded_index.add_pairs(mock_pairs[:10])
 
         sharded_index.backup(
-            "test-backup",
-            progress_callback=lambda s, p, m: progress_calls.append((s, p, m))
+            "test-backup", progress_callback=lambda s, p, m: progress_calls.append((s, p, m))
         )
 
         assert len(progress_calls) > 0
@@ -835,7 +827,7 @@ class TestIntegrityVerification:
         new_shard._checksum = shard._checksum
 
         # This should fail checksum verification
-        loaded = new_shard.load()
+        new_shard.load()
         # May succeed or fail depending on auto-repair
 
 
@@ -864,10 +856,7 @@ class TestConcurrentAccess:
 
         # Run concurrent searches
         with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [
-                executor.submit(search_task, f"Test message {i}")
-                for i in range(20)
-            ]
+            futures = [executor.submit(search_task, f"Test message {i}") for i in range(20)]
             for future in as_completed(futures):
                 future.result()
 
@@ -918,7 +907,7 @@ class TestConcurrentAccess:
             futures = []
             for i in range(10):
                 futures.append(executor.submit(search_task, f"Test message {i}"))
-                futures.append(executor.submit(add_task, extra_pairs[i*2:(i+1)*2]))
+                futures.append(executor.submit(add_task, extra_pairs[i * 2 : (i + 1) * 2]))
 
             for future in as_completed(futures):
                 future.result()
@@ -1013,7 +1002,7 @@ class TestStress:
         # Run many searches
         start_time = time.time()
         for i in range(100):
-            results = sharded_index.search(f"Test message {i}", k=10)
+            sharded_index.search(f"Test message {i}", k=10)
         elapsed = time.time() - start_time
 
         # Should complete in reasonable time
@@ -1064,10 +1053,7 @@ class TestMigration:
 
     def test_check_v1_index_not_found(self, mock_db, temp_dir):
         """Test checking for v1 index when none exists."""
-        helper = MigrationHelper(
-            mock_db,
-            v1_indexes_dir=temp_dir / "nonexistent"
-        )
+        helper = MigrationHelper(mock_db, v1_indexes_dir=temp_dir / "nonexistent")
         result = helper.check_v1_index()
         assert result is None
 
@@ -1079,10 +1065,7 @@ class TestMigration:
         (v1_dir / "index.faiss").write_bytes(b"fake_index")
         (v1_dir / "metadata.json").write_text("{}")
 
-        helper = MigrationHelper(
-            mock_db,
-            v1_indexes_dir=temp_dir / "indexes" / "triggers"
-        )
+        helper = MigrationHelper(mock_db, v1_indexes_dir=temp_dir / "indexes" / "triggers")
         result = helper.check_v1_index()
 
         assert result is not None
@@ -1091,10 +1074,7 @@ class TestMigration:
 
     def test_migrate_no_v1_index(self, mock_db, temp_dir):
         """Test migration when no v1 index exists."""
-        helper = MigrationHelper(
-            mock_db,
-            v1_indexes_dir=temp_dir / "nonexistent"
-        )
+        helper = MigrationHelper(mock_db, v1_indexes_dir=temp_dir / "nonexistent")
         result = helper.migrate()
 
         assert result["success"] is False
@@ -1352,12 +1332,15 @@ class TestEdgeCases:
 class TestIndexTypes:
     """Tests for different FAISS index types."""
 
-    @pytest.mark.parametrize("index_type,min_vectors", [
-        ("flat", 50),
-        ("ivf", 100),
-        ("ivfpq_4x", 500),  # PQ needs more training data
-        ("ivfpq_8x", 500),
-    ])
+    @pytest.mark.parametrize(
+        "index_type,min_vectors",
+        [
+            ("flat", 50),
+            ("ivf", 100),
+            ("ivfpq_4x", 500),  # PQ needs more training data
+            ("ivfpq_8x", 500),
+        ],
+    )
     def test_index_type_creation(self, temp_dir, mock_embedder, index_type, min_vectors):
         """Test creating shards with different index types."""
         config = ShardedIndexConfig(

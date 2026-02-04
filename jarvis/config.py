@@ -135,9 +135,12 @@ class AdaptiveThresholdConfig(BaseModel):
 class RoutingConfig(BaseModel):
     """Routing thresholds and A/B testing configuration."""
 
-    quick_reply_threshold: float = Field(default=0.90, ge=0.0, le=1.0)
-    context_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
-    generate_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
+    quick_reply_threshold: float = Field(default=0.95, ge=0.0, le=1.0)
+    context_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    generate_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
+    coherence_threshold: float = Field(default=0.60, ge=0.0, le=1.0)
+    max_quick_replies: int = Field(default=5, ge=1, le=20)
+    min_response_similarity: float = Field(default=0.60, ge=0.0, le=1.0)
     ab_test_group: str = Field(default="control")
     ab_test_thresholds: dict[str, dict[str, float]] = Field(default_factory=dict)
     adaptive: AdaptiveThresholdConfig = Field(default_factory=AdaptiveThresholdConfig)
@@ -391,6 +394,68 @@ class RetrievalConfig(BaseModel):
     rerank_top_k: int = Field(default=20, ge=5, le=100)
 
 
+class NormalizationProfile(BaseModel):
+    """Text normalization settings for a specific task pipeline."""
+
+    filter_garbage: bool = False
+    filter_attributed_artifacts: bool = False
+    drop_url_only: bool = False
+    mask_entities: bool = False
+    normalize_emojis: bool = False
+    preserve_url_domain: bool = False
+    replace_codes: bool = False
+    ner_enabled: bool = False
+    ner_model: str = "en_core_web_sm"
+    expand_slang: bool = False
+    filter_non_english: bool = False
+    min_length: int = Field(default=3, ge=0, le=1000)
+    max_length: int = Field(default=500, ge=1, le=5000)
+
+
+class NormalizationConfig(BaseModel):
+    """Normalization profiles for different tasks."""
+
+    extraction: NormalizationProfile = Field(
+        default_factory=lambda: NormalizationProfile(
+            filter_garbage=True,
+            filter_attributed_artifacts=True,
+            drop_url_only=True,
+            mask_entities=True,
+            normalize_emojis=True,
+            preserve_url_domain=True,
+            replace_codes=True,
+            ner_enabled=False,
+            min_length=1,
+            max_length=2000,
+        )
+    )
+    classification: NormalizationProfile = Field(
+        default_factory=lambda: NormalizationProfile(
+            mask_entities=True,
+            normalize_emojis=True,
+            preserve_url_domain=True,
+            replace_codes=True,
+            ner_enabled=False,
+            min_length=1,
+            max_length=1000,
+        )
+    )
+    topic_modeling: NormalizationProfile = Field(
+        default_factory=lambda: NormalizationProfile(
+            filter_garbage=True,
+            filter_attributed_artifacts=True,
+            drop_url_only=True,
+            mask_entities=True,
+            normalize_emojis=True,
+            preserve_url_domain=True,
+            replace_codes=True,
+            ner_enabled=False,
+            min_length=3,
+            max_length=1000,
+        )
+    )
+
+
 class JarvisConfig(BaseModel):
     """JARVIS configuration schema.
 
@@ -432,6 +497,7 @@ class JarvisConfig(BaseModel):
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     faiss_index: FAISSIndexConfig = Field(default_factory=FAISSIndexConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+    normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
 
 
 # Module-level singleton with thread safety

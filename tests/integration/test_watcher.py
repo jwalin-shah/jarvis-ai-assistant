@@ -202,16 +202,28 @@ class TestNewMessageDetection:
 
         mock_messages = [
             {
-                "id": 101, "chat_id": "chat1", "sender": "a",
-                "text": "a", "date": None, "is_from_me": False,
+                "id": 101,
+                "chat_id": "chat1",
+                "sender": "a",
+                "text": "a",
+                "date": None,
+                "is_from_me": False,
             },
             {
-                "id": 105, "chat_id": "chat2", "sender": "b",
-                "text": "b", "date": None, "is_from_me": False,
+                "id": 105,
+                "chat_id": "chat2",
+                "sender": "b",
+                "text": "b",
+                "date": None,
+                "is_from_me": False,
             },
             {
-                "id": 103, "chat_id": "chat3", "sender": "c",
-                "text": "c", "date": None, "is_from_me": False,
+                "id": 103,
+                "chat_id": "chat3",
+                "sender": "c",
+                "text": "c",
+                "date": None,
+                "is_from_me": False,
             },
         ]
 
@@ -364,16 +376,28 @@ class TestMultipleMessages:
 
         mock_messages = [
             {
-                "id": 101, "chat_id": "chat1", "sender": "Alice",
-                "text": "Hi", "date": None, "is_from_me": False,
+                "id": 101,
+                "chat_id": "chat1",
+                "sender": "Alice",
+                "text": "Hi",
+                "date": None,
+                "is_from_me": False,
             },
             {
-                "id": 102, "chat_id": "chat2", "sender": "Bob",
-                "text": "Hey", "date": None, "is_from_me": False,
+                "id": 102,
+                "chat_id": "chat2",
+                "sender": "Bob",
+                "text": "Hey",
+                "date": None,
+                "is_from_me": False,
             },
             {
-                "id": 103, "chat_id": "chat1", "sender": "Alice",
-                "text": "Hello", "date": None, "is_from_me": False,
+                "id": 103,
+                "chat_id": "chat1",
+                "sender": "Alice",
+                "text": "Hello",
+                "date": None,
+                "is_from_me": False,
             },
         ]
 
@@ -396,8 +420,12 @@ class TestMultipleMessages:
 
         mock_messages = [
             {
-                "id": 101, "chat_id": "chat1", "sender": "me",
-                "text": "My message", "date": None, "is_from_me": True,
+                "id": 101,
+                "chat_id": "chat1",
+                "sender": "me",
+                "text": "My message",
+                "date": None,
+                "is_from_me": True,
             },
         ]
 

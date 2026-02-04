@@ -567,9 +567,9 @@ class TestConfigMigration:
 
         config = load_config(config_file)
 
-        # Default not migrated - routing uses its own default (0.90)
+        # Default not migrated - routing uses its own default (0.95)
         assert config.template_similarity_threshold == 0.7
-        assert config.routing.quick_reply_threshold == 0.90
+        assert config.routing.quick_reply_threshold == 0.95
         assert config.config_version == CONFIG_VERSION
 
     def test_migrate_v7_to_v8_existing_routing_threshold_not_overwritten(self, tmp_path):

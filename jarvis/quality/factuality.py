@@ -392,9 +392,7 @@ class FactChecker:
                     import numpy as np
 
                     dot_product = np.dot(claim_embedding, ctx_embedding)
-                    norm_product = (
-                        np.linalg.norm(claim_embedding) * np.linalg.norm(ctx_embedding)
-                    )
+                    norm_product = np.linalg.norm(claim_embedding) * np.linalg.norm(ctx_embedding)
 
                     if norm_product > 0:
                         similarity = float(dot_product / norm_product)
@@ -459,9 +457,7 @@ class FactChecker:
 
         return best_score
 
-    def _find_best_keyword_match(
-        self, claim: Claim, context_list: list[str]
-    ) -> str | None:
+    def _find_best_keyword_match(self, claim: Claim, context_list: list[str]) -> str | None:
         """Find the context string that best matches the claim by keywords."""
         claim_words = set(claim.text.lower().split())
         best_ctx: str | None = None

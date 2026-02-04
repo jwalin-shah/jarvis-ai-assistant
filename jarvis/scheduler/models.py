@@ -258,7 +258,7 @@ class ScheduledItem:
         self.status = ScheduledStatus.PENDING
         self.updated_at = datetime.now(UTC)
         # Set new send time with exponential backoff
-        backoff_minutes = 2 ** self.retry_count
+        backoff_minutes = 2**self.retry_count
         self.send_at = datetime.now(UTC) + timedelta(minutes=backoff_minutes)
 
     def to_dict(self) -> dict[str, Any]:

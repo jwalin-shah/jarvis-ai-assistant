@@ -22,52 +22,58 @@ JARVIS is a **privacy-first AI assistant** for iMessage on Apple Silicon. Key in
 
 ## Implementation Status
 
+**Legend:**
+- ✅ **OPERATIONAL** - Code implemented, tested, and working in production
+- 🟡 **IMPLEMENTED** - Code exists but has known issues or limitations
+- 📝 **PLANNED** - Design complete, implementation pending
+
 ### Core Components
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Contracts/Interfaces | COMPLETE | 9 protocol definitions in `contracts/` |
-| Model Generator (WS8) | COMPLETE | MLX loader, template fallback, RAG support |
-| iMessage Reader (WS10) | COMPLETE | Schema detection, attachments, reactions |
-| Memory Profiler (WS1) | COMPLETE | MLX memory profiling with model unload |
-| HHEM Benchmark (WS2) | COMPLETE | Vectara HHEM model evaluation |
-| Latency Benchmark (WS4) | COMPLETE | Cold/warm/hot start scenarios |
-| Memory Controller (WS5) | COMPLETE | Three-tier modes (FULL/LITE/MINIMAL) |
-| Degradation Controller (WS6) | COMPLETE | Circuit breaker pattern |
-| Setup Wizard | COMPLETE | Environment validation, config init, health report |
-| CLI Entry Point | COMPLETE | `jarvis/_cli_main.py` with chat, search, reply, summarize, export, serve |
-| FastAPI Layer | COMPLETE | `api/` module for Tauri frontend integration |
-| Config System | COMPLETE | `jarvis/config.py` with nested sections and migration |
-| Model Registry | COMPLETE | `models/registry.py` with multi-model support |
-| Intent Classification | COMPLETE | `jarvis/intent.py` with semantic similarity routing |
-| Metrics System | COMPLETE | `jarvis/metrics.py` for performance monitoring |
-| Export System | COMPLETE | `jarvis/export.py` for JSON/CSV/TXT export |
-| Error Handling | COMPLETE | `jarvis/errors.py` unified exception hierarchy |
-| Prompts Registry | COMPLETE | `jarvis/prompts.py` centralized prompt templates |
-| MLX Embeddings | COMPLETE | `models/embeddings.py` + `jarvis/embedding_adapter.py` multi-model support |
-| Reply Router | COMPLETE | `jarvis/router.py` with template/generate/clarify routing |
-| FAISS Index | COMPLETE | `jarvis/index.py` for trigger similarity search |
-| JARVIS Database | COMPLETE | `jarvis/db.py` with contacts, pairs, clusters |
-| Response Classifier | COMPLETE | `jarvis/response_classifier.py` hybrid 3-layer (81.9% F1) |
-| Trigger Classifier | COMPLETE | `jarvis/trigger_classifier.py` hybrid structural+SVM (82.0% F1) |
-| Multi-Option Generation | COMPLETE | `jarvis/multi_option.py` for AGREE/DECLINE/DEFER |
-| Typed Retrieval | COMPLETE | `jarvis/retrieval.py` for DA-filtered FAISS |
-| Unix Socket Server | COMPLETE | `jarvis/socket_server.py` for desktop IPC (V2) |
-| File Watcher | COMPLETE | `jarvis/watcher.py` for real-time notifications (V2) |
+| Contracts/Interfaces | ✅ OPERATIONAL | 9 protocol definitions in `contracts/` |
+| Model Generator (WS8) | ✅ OPERATIONAL | MLX loader, template fallback, RAG support |
+| iMessage Reader (WS10) | ✅ OPERATIONAL | Schema detection, attachments, reactions |
+| Memory Profiler (WS1) | ✅ OPERATIONAL | MLX memory profiling with model unload |
+| HHEM Benchmark (WS2) | ✅ OPERATIONAL | Vectara HHEM model evaluation |
+| Latency Benchmark (WS4) | ✅ OPERATIONAL | Cold/warm/hot start scenarios |
+| Memory Controller (WS5) | ✅ OPERATIONAL | Three-tier modes (FULL/LITE/MINIMAL) |
+| Degradation Controller (WS6) | ✅ OPERATIONAL | Circuit breaker pattern |
+| Setup Wizard | ✅ OPERATIONAL | Environment validation, config init, health report |
+| CLI Entry Point | ✅ OPERATIONAL | `jarvis/_cli_main.py` with db, health, benchmark, serve |
+| FastAPI Layer | ✅ OPERATIONAL | `api/` module for Tauri frontend integration |
+| Config System | ✅ OPERATIONAL | `jarvis/config.py` with nested sections and migration |
+| Model Registry | ✅ OPERATIONAL | `models/registry.py` with multi-model support |
+| Intent Classification | 🟡 IMPLEMENTED | `jarvis/intent.py` - Under active development |
+| Metrics System | ✅ OPERATIONAL | `jarvis/metrics.py` for performance monitoring |
+| Export System | ✅ OPERATIONAL | `jarvis/export.py` for JSON/CSV/TXT export |
+| Error Handling | ✅ OPERATIONAL | `jarvis/errors.py` unified exception hierarchy |
+| Prompts Registry | ✅ OPERATIONAL | `jarvis/prompts.py` centralized prompt templates |
+| MLX Embeddings | ✅ OPERATIONAL | `models/embeddings.py` + `jarvis/embedding_adapter.py` multi-model support |
+| Reply Router | ✅ OPERATIONAL | `jarvis/router.py` with template/generate/clarify routing |
+| FAISS Index | ✅ OPERATIONAL | `jarvis/index.py` for trigger similarity search |
+| JARVIS Database | ✅ OPERATIONAL | `jarvis/db.py` with contacts, pairs, clusters |
+| Cluster Analysis | 🟡 IMPLEMENTED | `jarvis/clustering.py` - code exists, CLI command planned |
+| Response Classifier | 🟡 IMPLEMENTED | `jarvis/response_classifier.py` - Under active refinement |
+| Trigger Classifier | ✅ OPERATIONAL | `jarvis/trigger_classifier.py` hybrid structural+SVM (82.0% F1) |
+| Multi-Option Generation | ✅ OPERATIONAL | `jarvis/multi_option.py` for AGREE/DECLINE/DEFER |
+| Typed Retrieval | ✅ OPERATIONAL | `jarvis/retrieval.py` for DA-filtered FAISS |
+| Unix Socket Server | ✅ OPERATIONAL | `jarvis/socket_server.py` for desktop IPC (V2) |
+| File Watcher | ✅ OPERATIONAL | `jarvis/watcher.py` for real-time notifications (V2) |
 
 ### New Modules (V3)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Analytics Module | COMPLETE | `jarvis/analytics/` - dashboard, trends, reports |
-| Graph Visualization | COMPLETE | `jarvis/graph/` - relationship networks, clustering |
-| Scheduler System | COMPLETE | `jarvis/scheduler/` - smart timing, draft scheduling |
-| Tags & Smart Folders | COMPLETE | `jarvis/tags/` - auto-tagging, rule-based folders |
-| Prefetch System | COMPLETE | `jarvis/prefetch/` - speculative caching, prediction |
-| Quality Assurance | COMPLETE | `jarvis/quality/` - hallucination detection, grounding |
-| Response Classifier V2 | COMPLETE | `jarvis/response_classifier_v2.py` - 10x batch throughput |
-| Sharded FAISS Index V2 | COMPLETE | `jarvis/index_v2.py` - tiered storage, time sharding |
-| Adaptive Thresholds | COMPLETE | `jarvis/adaptive_thresholds.py` - learns from feedback |
+| Analytics Module | ✅ OPERATIONAL | `jarvis/analytics/` - dashboard, trends, reports |
+| Graph Visualization | 🟡 IMPLEMENTED | `jarvis/graph/` - API ready, frontend integration planned |
+| Scheduler System | ✅ OPERATIONAL | `jarvis/scheduler/` - smart timing, draft scheduling |
+| Tags & Smart Folders | ✅ OPERATIONAL | `jarvis/tags/` - auto-tagging, rule-based folders |
+| Prefetch System | ✅ OPERATIONAL | `jarvis/prefetch/` - speculative caching, prediction |
+| Quality Assurance | ✅ OPERATIONAL | `jarvis/quality/` - hallucination detection, grounding |
+| Response Classifier V2 | 🟡 IMPLEMENTED | `jarvis/response_classifier_v2.py` - Batch processing, under testing |
+| Sharded FAISS Index V2 | 🟡 IMPLEMENTED | `jarvis/index_v2.py` - Tiered storage, time sharding |
+| Adaptive Thresholds | 🟡 IMPLEMENTED | `jarvis/adaptive_thresholds.py` - Learns from user feedback |
 
 ## Contract-Based Design
 

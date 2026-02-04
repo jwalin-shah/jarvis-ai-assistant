@@ -1,12 +1,11 @@
 """Tests for cache invalidation."""
 
-import tempfile
 import time
 from pathlib import Path
 
 import pytest
 
-from jarvis.prefetch.cache import CacheTier, MultiTierCache
+from jarvis.prefetch.cache import MultiTierCache
 from jarvis.prefetch.invalidation import (
     CacheInvalidator,
     DependencyTracker,
@@ -161,7 +160,9 @@ class TestCacheInvalidator:
 
         assert count >= 1
 
-    def test_manual_invalidate_keys(self, invalidator: CacheInvalidator, cache: MultiTierCache) -> None:
+    def test_manual_invalidate_keys(
+        self, invalidator: CacheInvalidator, cache: MultiTierCache
+    ) -> None:
         """Test manual invalidation by keys."""
         cache.set("key1", "value1")
         cache.set("key2", "value2")
@@ -172,7 +173,9 @@ class TestCacheInvalidator:
         assert cache.get("key1") is None
         assert cache.get("key2") is None
 
-    def test_manual_invalidate_pattern(self, invalidator: CacheInvalidator, cache: MultiTierCache) -> None:
+    def test_manual_invalidate_pattern(
+        self, invalidator: CacheInvalidator, cache: MultiTierCache
+    ) -> None:
         """Test manual invalidation by pattern."""
         cache.set("prefix:key1", "value1")
         cache.set("prefix:key2", "value2")
@@ -185,7 +188,9 @@ class TestCacheInvalidator:
         assert cache.get("prefix:key2") is None
         assert cache.get("other:key3") == "value3"
 
-    def test_cascade_invalidation(self, invalidator: CacheInvalidator, cache: MultiTierCache) -> None:
+    def test_cascade_invalidation(
+        self, invalidator: CacheInvalidator, cache: MultiTierCache
+    ) -> None:
         """Test cascading invalidation."""
         cache.set("parent", "parent_value")
         cache.set("child", "child_value")
@@ -197,7 +202,7 @@ class TestCacheInvalidator:
             keys=["parent"],
             tags=[],
         )
-        count = invalidator.invalidate(event)
+        invalidator.invalidate(event)
 
         # Should invalidate both parent and child
         assert cache.get("parent") is None

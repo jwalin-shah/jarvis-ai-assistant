@@ -83,6 +83,21 @@ from api.schemas.export import (
     UnansweredConversationResponse,
 )
 
+# Graph visualization models
+from api.schemas.graph import (
+    ClusterResultSchema,
+    EgoGraphRequest,
+    ExportGraphRequest,
+    ExportGraphResponse,
+    GraphDataSchema,
+    GraphEdgeSchema,
+    GraphEvolutionRequest,
+    GraphEvolutionResponse,
+    GraphEvolutionSnapshot,
+    GraphNodeSchema,
+    NetworkGraphRequest,
+)
+
 # Core iMessage models
 from api.schemas.messages import (
     AttachmentResponse,
@@ -142,21 +157,6 @@ from api.schemas.threads import (
     ThreadedViewResponse,
     ThreadingConfigRequest,
     ThreadResponse,
-)
-
-# Graph visualization models
-from api.schemas.graph import (
-    ClusterResultSchema,
-    EgoGraphRequest,
-    ExportGraphRequest,
-    ExportGraphResponse,
-    GraphDataSchema,
-    GraphEdgeSchema,
-    GraphEvolutionRequest,
-    GraphEvolutionResponse,
-    GraphEvolutionSnapshot,
-    GraphNodeSchema,
-    NetworkGraphRequest,
 )
 
 __all__ = [

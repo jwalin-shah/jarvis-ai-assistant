@@ -6,26 +6,21 @@ ego-centric views, cluster analysis, and temporal evolution.
 
 from __future__ import annotations
 
-import base64
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import Response
 
 from api.schemas.graph import (
     ClusterResultSchema,
-    EgoGraphRequest,
     ExportGraphRequest,
     ExportGraphResponse,
     GraphDataSchema,
     GraphEdgeSchema,
-    GraphEvolutionRequest,
     GraphEvolutionResponse,
     GraphEvolutionSnapshot,
     GraphNodeSchema,
-    NetworkGraphRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,11 +144,9 @@ def get_network_graph(
     try:
         from jarvis.graph import (
             build_network_graph,
-            compute_force_layout,
-            compute_hierarchical_layout,
             detect_communities,
         )
-        from jarvis.graph.layout import LayoutEngine, LayoutConfig
+        from jarvis.graph.layout import LayoutConfig, LayoutEngine
 
         # Calculate since date
         since = None
@@ -221,7 +214,7 @@ def get_ego_graph(
     """
     try:
         from jarvis.graph import build_ego_graph
-        from jarvis.graph.layout import LayoutEngine, LayoutConfig
+        from jarvis.graph.layout import LayoutConfig, LayoutEngine
 
         # Build ego graph
         graph = build_ego_graph(
@@ -242,6 +235,7 @@ def get_ego_graph(
             ego_id = graph.metadata.get("center")
             if ego_id:
                 from jarvis.graph.builder import _hash_id
+
                 center_id = _hash_id(ego_id)
             else:
                 center_id = None
@@ -399,7 +393,8 @@ def get_graph_evolution(
                     "edge_count": graph.edge_count,
                     "avg_messages": (
                         sum(n.message_count for n in graph.nodes) / len(graph.nodes)
-                        if graph.nodes else 0
+                        if graph.nodes
+                        else 0
                     ),
                 },
             )
@@ -445,10 +440,10 @@ def export_graph(
         from jarvis.graph import (
             build_network_graph,
             compute_force_layout,
-            export_to_json,
             export_to_graphml,
-            export_to_svg,
             export_to_html,
+            export_to_json,
+            export_to_svg,
         )
 
         # Build graph

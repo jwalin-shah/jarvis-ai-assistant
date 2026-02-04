@@ -11,10 +11,9 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 from xml.etree import ElementTree as ET
 
-from jarvis.graph.builder import GraphData, GraphNode, GraphEdge
+from jarvis.graph.builder import GraphData
 
 logger = logging.getLogger(__name__)
 
@@ -182,12 +181,12 @@ def export_to_svg(
     svg_parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}">',
-        '<style>',
-        '  .node { stroke: #fff; stroke-width: 2; cursor: pointer; }',
-        '  .edge { stroke: #999; stroke-opacity: 0.6; }',
-        '  .label { font-family: -apple-system, BlinkMacSystemFont, sans-serif; '
-        'font-size: 10px; fill: #333; pointer-events: none; }',
-        '</style>',
+        "<style>",
+        "  .node { stroke: #fff; stroke-width: 2; cursor: pointer; }",
+        "  .edge { stroke: #999; stroke-opacity: 0.6; }",
+        "  .label { font-family: -apple-system, BlinkMacSystemFont, sans-serif; "
+        "font-size: 10px; fill: #333; pointer-events: none; }",
+        "</style>",
         '<g class="edges">',
     ]
 
@@ -196,7 +195,14 @@ def export_to_svg(
         source_node = next((n for n in graph.nodes if n.id == edge.source), None)
         target_node = next((n for n in graph.nodes if n.id == edge.target), None)
 
-        if source_node and target_node and source_node.x and source_node.y and target_node.x and target_node.y:
+        if (
+            source_node
+            and target_node
+            and source_node.x is not None
+            and source_node.y is not None
+            and target_node.x is not None
+            and target_node.y is not None
+        ):
             stroke_width = max(1, edge.weight * 4)
             opacity = 0.3 + edge.weight * 0.5
             svg_parts.append(
@@ -205,7 +211,7 @@ def export_to_svg(
                 f'stroke-width="{stroke_width}" stroke-opacity="{opacity}"/>'
             )
 
-    svg_parts.append('</g>')
+    svg_parts.append("</g>")
     svg_parts.append('<g class="nodes">')
 
     # Draw nodes
@@ -217,10 +223,10 @@ def export_to_svg(
             f'  <circle class="node" cx="{node.x}" cy="{node.y}" r="{node.size}" '
             f'fill="{node.color}">'
         )
-        svg_parts.append(f'    <title>{html.escape(node.label)}</title>')
-        svg_parts.append('  </circle>')
+        svg_parts.append(f"    <title>{html.escape(node.label)}</title>")
+        svg_parts.append("  </circle>")
 
-    svg_parts.append('</g>')
+    svg_parts.append("</g>")
 
     # Draw labels
     if include_labels:
@@ -234,11 +240,11 @@ def export_to_svg(
                 f'  <text class="label" x="{node.x}" y="{label_y}" '
                 f'text-anchor="middle">{html.escape(node.label)}</text>'
             )
-        svg_parts.append('</g>')
+        svg_parts.append("</g>")
 
-    svg_parts.append('</svg>')
+    svg_parts.append("</svg>")
 
-    svg_str = '\n'.join(svg_parts)
+    svg_str = "\n".join(svg_parts)
 
     if path:
         path = Path(path)
@@ -273,7 +279,7 @@ def export_to_html(
     # Prepare graph data as JSON
     graph_json = json.dumps(graph.to_dict())
 
-    html_template = f'''<!DOCTYPE html>
+    html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -528,7 +534,7 @@ def export_to_html(
             .html(t => `<div class="legend-dot" style="background: ${{typeColors[t]}}"></div>${{t}}`);
     </script>
 </body>
-</html>'''
+</html>"""
 
     if path:
         path = Path(path)

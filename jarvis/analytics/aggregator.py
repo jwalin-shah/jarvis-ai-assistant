@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from jarvis.insights import analyze_sentiment
@@ -161,9 +161,7 @@ def aggregate_by_day(
         # Sentiment (optional, expensive)
         avg_sentiment = 0.0
         if include_sentiment and msgs:
-            sentiments = [
-                analyze_sentiment(m.text).score for m in msgs if m.text
-            ]
+            sentiments = [analyze_sentiment(m.text).score for m in msgs if m.text]
             if sentiments:
                 avg_sentiment = sum(sentiments) / len(sentiments)
 
@@ -230,9 +228,7 @@ def aggregate_by_week(
         # Sentiment
         avg_sentiment = 0.0
         if include_sentiment and msgs:
-            sentiments = [
-                analyze_sentiment(m.text).score for m in msgs if m.text
-            ]
+            sentiments = [analyze_sentiment(m.text).score for m in msgs if m.text]
             if sentiments:
                 avg_sentiment = sum(sentiments) / len(sentiments)
 
@@ -304,9 +300,7 @@ def aggregate_by_month(
         # Sentiment
         avg_sentiment = 0.0
         if include_sentiment and msgs:
-            sentiments = [
-                analyze_sentiment(m.text).score for m in msgs if m.text
-            ]
+            sentiments = [analyze_sentiment(m.text).score for m in msgs if m.text]
             if sentiments:
                 avg_sentiment = sum(sentiments) / len(sentiments)
 
@@ -450,9 +444,7 @@ class TimeSeriesAggregator:
                     weekly[week_key]["total"] += agg.total_messages
                     weekly[week_key]["sent"] += agg.sent_count
                     weekly[week_key]["received"] += agg.received_count
-                return [
-                    {"date": k, **v} for k, v in sorted(weekly.items())
-                ]
+                return [{"date": k, **v} for k, v in sorted(weekly.items())]
             elif granularity == "month":
                 monthly: dict[str, dict[str, int]] = defaultdict(
                     lambda: {"total": 0, "sent": 0, "received": 0}
@@ -462,9 +454,7 @@ class TimeSeriesAggregator:
                     monthly[month_key]["total"] += agg.total_messages
                     monthly[month_key]["sent"] += agg.sent_count
                     monthly[month_key]["received"] += agg.received_count
-                return [
-                    {"date": k, **v} for k, v in sorted(monthly.items())
-                ]
+                return [{"date": k, **v} for k, v in sorted(monthly.items())]
             else:
                 # hour not supported from daily cache
                 return []

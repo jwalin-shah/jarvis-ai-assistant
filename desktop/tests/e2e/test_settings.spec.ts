@@ -19,8 +19,8 @@ test.describe("Settings Page", () => {
   });
 
   test("displays model selection section", async ({ mockedPage: page }) => {
-    // Model section should be visible
-    const modelSection = page.locator(".section", { hasText: "Model" });
+    // Model section should be visible (use h2 for more specific matching)
+    const modelSection = page.locator(".section").filter({ has: page.locator("h2", { hasText: "Model" }) });
     await expect(modelSection).toBeVisible();
 
     // Should show model cards
@@ -72,9 +72,7 @@ test.describe("Settings Page", () => {
   });
 
   test("displays generation settings section", async ({ mockedPage: page }) => {
-    const generationSection = page.locator(".section", {
-      hasText: "Generation",
-    });
+    const generationSection = page.locator(".section").filter({ has: page.locator("h2", { hasText: "Generation" }) });
     await expect(generationSection).toBeVisible();
   });
 
@@ -109,37 +107,40 @@ test.describe("Settings Page", () => {
   test("displays suggestions settings section", async ({
     mockedPage: page,
   }) => {
-    const suggestionsSection = page.locator(".section", {
-      hasText: "Suggestions",
-    });
+    const suggestionsSection = page.locator(".section").filter({ has: page.locator("h2", { hasText: "Suggestions" }) });
     await expect(suggestionsSection).toBeVisible();
   });
 
   test("shows auto-suggest toggle", async ({ mockedPage: page }) => {
-    const toggleLabel = page.locator("label", {
+    // Find the Suggestions section first
+    const suggestionsSection = page.locator(".section").filter({ has: page.locator("h2", { hasText: "Suggestions" }) });
+    
+    const toggleLabel = suggestionsSection.locator("label", {
       hasText: "Auto-suggest replies",
     });
     await expect(toggleLabel).toBeVisible();
 
-    // Toggle button should be present and "on" by default
-    const toggle = page.locator(".toggle-btn");
+    // Toggle button should be present and "on" by default (within Suggestions section)
+    const toggle = suggestionsSection.locator(".toggle-btn");
     await expect(toggle).toBeVisible();
-    await expect(toggle).toHaveClass(/on/);
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 
   test("can toggle auto-suggest off and on", async ({ mockedPage: page }) => {
-    const toggle = page.locator(".toggle-btn");
+    // Find the Suggestions section first
+    const suggestionsSection = page.locator(".section").filter({ has: page.locator("h2", { hasText: "Suggestions" }) });
+    const toggle = suggestionsSection.locator(".toggle-btn");
 
-    // Initially on
-    await expect(toggle).toHaveClass(/on/);
+    // Initially on (check aria-checked attribute instead of class)
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
 
     // Click to turn off
     await toggle.click();
-    await expect(toggle).not.toHaveClass(/on/);
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
 
     // Click to turn back on
     await toggle.click();
-    await expect(toggle).toHaveClass(/on/);
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 
   test("shows conditional settings when auto-suggest is on", async ({
@@ -160,8 +161,11 @@ test.describe("Settings Page", () => {
   test("hides conditional settings when auto-suggest is off", async ({
     mockedPage: page,
   }) => {
+    // Find the Suggestions section first
+    const suggestionsSection = page.locator(".section").filter({ has: page.locator("h2", { hasText: "Suggestions" }) });
+    
     // Turn off auto-suggest
-    await page.locator(".toggle-btn").click();
+    await suggestionsSection.locator(".toggle-btn").click();
 
     // Conditional settings should be hidden
     await expect(
@@ -170,7 +174,7 @@ test.describe("Settings Page", () => {
   });
 
   test("displays system information section", async ({ mockedPage: page }) => {
-    const systemSection = page.locator(".section", { hasText: "System" });
+    const systemSection = page.locator(".section").filter({ has: page.locator("h2", { hasText: "System" }) });
     await expect(systemSection).toBeVisible();
     await expect(systemSection).toContainText("System information (read-only)");
   });

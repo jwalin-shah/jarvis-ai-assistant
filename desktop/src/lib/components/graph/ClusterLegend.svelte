@@ -1,27 +1,27 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
   import type { GraphNode } from "../../api/types";
 
-  export let nodes: GraphNode[];
-  export let colors: Record<string, string>;
+  interface Props {
+    nodes: GraphNode[];
+    colors: Record<string, string>;
+    onfilter?: (types: string[]) => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    filter: string[];
-  }>();
+  let { nodes, colors, onfilter }: Props = $props();
 
-  let expanded = true;
-  let selectedTypes: Set<string> = new Set();
+  let expanded = $state(true);
+  let selectedTypes: Set<string> = $state(new Set());
 
   // Calculate relationship type distribution
-  $: relationshipCounts = nodes.reduce((acc, node) => {
+  let relationshipCounts = $derived(nodes.reduce((acc, node) => {
     const type = node.relationship_type;
     acc[type] = (acc[type] || 0) + 1;
     return acc;
-  }, {} as Record<string, number>);
+  }, {} as Record<string, number>));
 
-  $: sortedTypes = Object.entries(relationshipCounts)
+  let sortedTypes = $derived(Object.entries(relationshipCounts)
     .sort((a, b) => b[1] - a[1])
-    .map(([type, count]) => ({ type, count, color: colors[type] || colors.unknown }));
+    .map(([type, count]) => ({ type, count, color: colors[type] || colors.unknown })));
 
   function toggleType(type: string) {
     if (selectedTypes.has(type)) {
@@ -30,22 +30,22 @@
       selectedTypes.add(type);
     }
     selectedTypes = selectedTypes;
-    dispatch("filter", Array.from(selectedTypes));
+    onfilter?.(Array.from(selectedTypes));
   }
 
   function selectAll() {
     selectedTypes = new Set(sortedTypes.map(t => t.type));
-    dispatch("filter", Array.from(selectedTypes));
+    onfilter?.(Array.from(selectedTypes));
   }
 
   function clearSelection() {
     selectedTypes = new Set();
-    dispatch("filter", []);
+    onfilter?.([]);
   }
 </script>
 
 <div class="legend" class:collapsed={!expanded}>
-  <button class="legend-toggle" on:click={() => expanded = !expanded}>
+  <button class="legend-toggle" onclick={() => expanded = !expanded}>
     <span class="toggle-icon">{expanded ? "v" : ">"}</span>
     <span class="toggle-text">Legend</span>
   </button>
@@ -56,10 +56,10 @@
         <span class="legend-title">Relationship Types</span>
         <div class="legend-actions">
           {#if selectedTypes.size > 0 && selectedTypes.size < sortedTypes.length}
-            <button class="action-btn" on:click={selectAll}>All</button>
+            <button class="action-btn" onclick={selectAll}>All</button>
           {/if}
           {#if selectedTypes.size > 0}
-            <button class="action-btn" on:click={clearSelection}>Clear</button>
+            <button class="action-btn" onclick={clearSelection}>Clear</button>
           {/if}
         </div>
       </div>
@@ -70,7 +70,7 @@
             class="legend-item"
             class:selected={selectedTypes.has(type)}
             class:dimmed={selectedTypes.size > 0 && !selectedTypes.has(type)}
-            on:click={() => toggleType(type)}
+            onclick={() => toggleType(type)}
           >
             <span class="color-dot" style="background: {color}"></span>
             <span class="type-name">{type}</span>

@@ -48,15 +48,14 @@ import mmap
 import os
 import shutil
 import struct
-import tempfile
 import threading
-import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -65,7 +64,7 @@ if TYPE_CHECKING:
 
 # Module-level imports for mocking in tests
 from jarvis.config import get_config
-from jarvis.embedding_adapter import get_embedder, get_configured_model_name
+from jarvis.embedding_adapter import get_configured_model_name, get_embedder
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +79,15 @@ SHARD_FORMAT = "%Y-%m"  # Monthly shards
 
 class TierLevel(Enum):
     """Index tier levels based on access patterns."""
-    HOT = "hot"       # Frequently accessed, kept in memory
-    WARM = "warm"     # Recently accessed, loaded on demand
-    COLD = "cold"     # Rarely accessed, compressed archive
+
+    HOT = "hot"  # Frequently accessed, kept in memory
+    WARM = "warm"  # Recently accessed, loaded on demand
+    COLD = "cold"  # Rarely accessed, compressed archive
 
 
 class JournalOp(Enum):
     """Journal operation types for atomic updates."""
+
     ADD = "add"
     DELETE = "delete"
     COMPACT = "compact"
@@ -96,15 +97,16 @@ class JournalOp(Enum):
 @dataclass
 class ShardConfig:
     """Configuration for a single shard."""
-    shard_id: str                    # e.g., "2024-01"
+
+    shard_id: str  # e.g., "2024-01"
     tier: TierLevel = TierLevel.WARM
     index_type: str = "ivfpq_4x"
     num_vectors: int = 0
     last_accessed: datetime | None = None
     last_modified: datetime | None = None
     access_count: int = 0
-    checksum: str | None = None      # SHA256 of index file
-    is_mmap: bool = False            # Memory-mapped for hot tier
+    checksum: str | None = None  # SHA256 of index file
+    is_mmap: bool = False  # Memory-mapped for hot tier
 
 
 @dataclass
@@ -139,6 +141,7 @@ class ShardedIndexConfig:
         use_mmap: Use memory-mapped files for hot shards.
         max_parallel_searches: Max parallel shard searches.
     """
+
     indexes_dir: Path = field(default_factory=lambda: INDEXES_V2_DIR)
     batch_size: int = DEFAULT_BATCH_SIZE
     normalize: bool = True
@@ -170,6 +173,7 @@ class ShardedIndexConfig:
 @dataclass
 class ShardStats:
     """Statistics for a single shard."""
+
     shard_id: str
     tier: TierLevel
     total_vectors: int
@@ -186,6 +190,7 @@ class ShardStats:
 @dataclass
 class ShardedIndexStats:
     """Overall statistics for the sharded index."""
+
     total_shards: int
     hot_shards: int
     warm_shards: int
@@ -203,6 +208,7 @@ class ShardedIndexStats:
 @dataclass
 class SearchResult:
     """Single search result with metadata."""
+
     faiss_id: int
     pair_id: int
     shard_id: str
@@ -306,7 +312,9 @@ class Shard:
                     if actual_checksum != self._checksum:
                         logger.error(
                             "Shard %s checksum mismatch: expected %s, got %s",
-                            self.shard_id, self._checksum, actual_checksum
+                            self.shard_id,
+                            self._checksum,
+                            actual_checksum,
                         )
                         if self.config.auto_repair:
                             return self._attempt_repair()
@@ -361,22 +369,14 @@ class Shard:
 
             self._tier = TierLevel(data.get("tier", "warm"))
             self._deleted_faiss_ids = set(data.get("deleted_faiss_ids", []))
-            self._pair_to_faiss = {
-                int(k): v for k, v in data.get("pair_to_faiss", {}).items()
-            }
-            self._faiss_to_pair = {
-                int(k): v for k, v in data.get("faiss_to_pair", {}).items()
-            }
+            self._pair_to_faiss = {int(k): v for k, v in data.get("pair_to_faiss", {}).items()}
+            self._faiss_to_pair = {int(k): v for k, v in data.get("faiss_to_pair", {}).items()}
 
             last_accessed = data.get("last_accessed")
-            self._last_accessed = (
-                datetime.fromisoformat(last_accessed) if last_accessed else None
-            )
+            self._last_accessed = datetime.fromisoformat(last_accessed) if last_accessed else None
 
             last_modified = data.get("last_modified")
-            self._last_modified = (
-                datetime.fromisoformat(last_modified) if last_modified else None
-            )
+            self._last_modified = datetime.fromisoformat(last_modified) if last_modified else None
 
             self._access_count = data.get("access_count", 0)
             self._checksum = data.get("checksum")
@@ -394,12 +394,8 @@ class Shard:
             "deleted_faiss_ids": list(self._deleted_faiss_ids),
             "pair_to_faiss": self._pair_to_faiss,
             "faiss_to_pair": self._faiss_to_pair,
-            "last_accessed": (
-                self._last_accessed.isoformat() if self._last_accessed else None
-            ),
-            "last_modified": (
-                self._last_modified.isoformat() if self._last_modified else None
-            ),
+            "last_accessed": (self._last_accessed.isoformat() if self._last_accessed else None),
+            "last_modified": (self._last_modified.isoformat() if self._last_modified else None),
             "access_count": self._access_count,
             "checksum": self._checksum,
         }
@@ -431,6 +427,7 @@ class Shard:
         if backup_path.exists():
             try:
                 import faiss
+
                 self._index = faiss.read_index(str(backup_path))
                 # Restore from backup
                 shutil.copy(backup_path, self.index_path)
@@ -480,7 +477,6 @@ class Shard:
         Returns:
             Number of vectors added.
         """
-        import faiss
 
         with self._lock:
             # Skip pairs already in shard
@@ -551,9 +547,7 @@ class Shard:
 
         elif index_type == "ivf":
             quantizer = faiss.IndexFlatIP(dimension)
-            index = faiss.IndexIVFFlat(
-                quantizer, dimension, nlist, faiss.METRIC_INNER_PRODUCT
-            )
+            index = faiss.IndexIVFFlat(quantizer, dimension, nlist, faiss.METRIC_INNER_PRODUCT)
             if embeddings is not None:
                 index.train(embeddings)
             index.nprobe = self.config.ivf_nprobe
@@ -835,43 +829,42 @@ class JournalWriter:
                 offset = 0
 
                 # Header
-                magic = content[offset:offset+4]
+                magic = content[offset : offset + 4]
                 offset += 4
                 if magic != JOURNAL_MAGIC:
                     logger.warning("Invalid journal magic in %s", journal_path)
                     continue
 
-                version = struct.unpack("B", content[offset:offset+1])[0]
+                version = struct.unpack("B", content[offset : offset + 1])[0]
                 offset += 1
                 if version != JOURNAL_VERSION:
                     logger.warning("Unknown journal version %d in %s", version, journal_path)
                     continue
 
-                entry_count = struct.unpack("<I", content[offset:offset+4])[0]
+                entry_count = struct.unpack("<I", content[offset : offset + 4])[0]
                 offset += 4
 
                 # Read entries
                 entries = []
                 for _ in range(entry_count):
-                    op_idx = struct.unpack("B", content[offset:offset+1])[0]
+                    op_idx = struct.unpack("B", content[offset : offset + 1])[0]
                     offset += 1
                     op = list(JournalOp)[op_idx]
 
-                    shard_len = struct.unpack("<H", content[offset:offset+2])[0]
+                    shard_len = struct.unpack("<H", content[offset : offset + 2])[0]
                     offset += 2
-                    shard_id = content[offset:offset+shard_len].decode("utf-8")
+                    shard_id = content[offset : offset + shard_len].decode("utf-8")
                     offset += shard_len
 
-                    data_len = struct.unpack("<I", content[offset:offset+4])[0]
+                    data_len = struct.unpack("<I", content[offset : offset + 4])[0]
                     offset += 4
-                    data = json.loads(content[offset:offset+data_len].decode("utf-8"))
+                    data = json.loads(content[offset : offset + data_len].decode("utf-8"))
                     offset += data_len
 
                     entries.append((op, shard_id, data))
 
                 # Yield entries for replay
-                for entry in entries:
-                    yield entry
+                yield from entries
 
                 # Mark as processed
                 journal_path.unlink()
@@ -1042,9 +1035,7 @@ class ShardedTriggerIndex:
             Shard instance.
         """
         if shard_id not in self._shards:
-            self._shards[shard_id] = Shard(
-                shard_id, self._get_base_dir(), self.config
-            )
+            self._shards[shard_id] = Shard(shard_id, self._get_base_dir(), self.config)
         return self._shards[shard_id]
 
     def _get_shard_for_timestamp(self, timestamp: datetime | None) -> str:
@@ -1068,8 +1059,7 @@ class ShardedTriggerIndex:
 
         # Identify hot shards to warm
         hot_shards = [
-            shard_id for shard_id, shard in self._shards.items()
-            if shard.tier == TierLevel.HOT
+            shard_id for shard_id, shard in self._shards.items() if shard.tier == TierLevel.HOT
         ]
 
         # Also warm recent shards
@@ -1081,7 +1071,7 @@ class ShardedTriggerIndex:
                 hot_shards.append(shard_id)
 
         # Submit warming tasks
-        for shard_id in hot_shards[:self.config.max_hot_shards]:
+        for shard_id in hot_shards[: self.config.max_hot_shards]:
             self._warming_executor.submit(self._warm_shard, shard_id)
 
     def _warm_shard(self, shard_id: str) -> None:
@@ -1102,14 +1092,9 @@ class ShardedTriggerIndex:
         now = datetime.now()
 
         # Promote to hot if frequently accessed
-        if (
-            shard.tier != TierLevel.HOT
-            and shard._access_count >= self.config.hot_access_threshold
-        ):
+        if shard.tier != TierLevel.HOT and shard._access_count >= self.config.hot_access_threshold:
             # Check if we have room for another hot shard
-            hot_count = sum(
-                1 for s in self._shards.values() if s.tier == TierLevel.HOT
-            )
+            hot_count = sum(1 for s in self._shards.values() if s.tier == TierLevel.HOT)
             if hot_count < self.config.max_hot_shards:
                 shard.tier = TierLevel.HOT
                 logger.info("Promoted shard %s to HOT tier", shard.shard_id)
@@ -1161,16 +1146,14 @@ class ShardedTriggerIndex:
                     progress_callback(
                         "adding",
                         progress,
-                        f"Adding to shard {shard_id} ({len(shard_pairs)} pairs)..."
+                        f"Adding to shard {shard_id} ({len(shard_pairs)} pairs)...",
                     )
 
                 # Log to journal
                 if self._journal:
                     self._journal.begin()
                     self._journal.log(
-                        JournalOp.ADD,
-                        shard_id,
-                        {"pair_ids": [p.id for p in shard_pairs]}
+                        JournalOp.ADD, shard_id, {"pair_ids": [p.id for p in shard_pairs]}
                     )
 
                 try:
@@ -1233,11 +1216,7 @@ class ShardedTriggerIndex:
             # Try each shard (we don't know which shard has each pair)
             for shard in self._shards.values():
                 if self._journal:
-                    self._journal.log(
-                        JournalOp.DELETE,
-                        shard.shard_id,
-                        {"pair_ids": pair_ids}
-                    )
+                    self._journal.log(JournalOp.DELETE, shard.shard_id, {"pair_ids": pair_ids})
 
                 removed = shard.remove_pairs(pair_ids)
                 if removed > 0:
@@ -1277,24 +1256,19 @@ class ShardedTriggerIndex:
 
         # Update contact access count for prefetching
         if chat_id:
-            self._contact_access_counts[chat_id] = (
-                self._contact_access_counts.get(chat_id, 0) + 1
-            )
+            self._contact_access_counts[chat_id] = self._contact_access_counts.get(chat_id, 0) + 1
 
         # Encode query
         query_embedder = embedder or self.embedder
-        query_embedding = query_embedder.encode(
-            [query], normalize=True
-        ).astype(np.float32)
+        query_embedding = query_embedder.encode([query], normalize=True).astype(np.float32)
 
         # Determine shard search order (hot first, then warm, then cold)
         shards_to_search = sorted(
             self._shards.values(),
             key=lambda s: (
-                0 if s.tier == TierLevel.HOT else
-                1 if s.tier == TierLevel.WARM else 2,
+                0 if s.tier == TierLevel.HOT else 1 if s.tier == TierLevel.WARM else 2,
                 -s._access_count,  # More accessed first within tier
-            )
+            ),
         )
 
         # Search shards in parallel
@@ -1302,9 +1276,7 @@ class ShardedTriggerIndex:
 
         with ThreadPoolExecutor(max_workers=self.config.max_parallel_searches) as executor:
             futures = {
-                executor.submit(
-                    shard.search, query_embedding, k, threshold
-                ): shard
+                executor.submit(shard.search, query_embedding, k, threshold): shard
                 for shard in shards_to_search
             }
 
@@ -1319,10 +1291,7 @@ class ShardedTriggerIndex:
                     self._update_tier(shard)
 
                 except Exception as e:
-                    logger.warning(
-                        "Search failed for shard %s: %s",
-                        shard.shard_id, e
-                    )
+                    logger.warning("Search failed for shard %s: %s", shard.shard_id, e)
 
         # Sort by score and take top k
         all_results.sort(key=lambda x: x[3], reverse=True)
@@ -1349,18 +1318,20 @@ class ShardedTriggerIndex:
                 decay = max(0.5, 1.0 - (age_days / 365) * 0.1)
                 weighted_score = score * decay
 
-            search_results.append(SearchResult(
-                faiss_id=faiss_id,
-                pair_id=pair_id,
-                shard_id=shard_id,
-                similarity=round(score, 3),
-                weighted_score=round(weighted_score, 3),
-                trigger_text=pair.trigger_text,
-                response_text=pair.response_text,
-                chat_id=pair.chat_id,
-                source_timestamp=pair.source_timestamp,
-                quality_score=pair.quality_score,
-            ))
+            search_results.append(
+                SearchResult(
+                    faiss_id=faiss_id,
+                    pair_id=pair_id,
+                    shard_id=shard_id,
+                    similarity=round(score, 3),
+                    weighted_score=round(weighted_score, 3),
+                    trigger_text=pair.trigger_text,
+                    response_text=pair.response_text,
+                    chat_id=pair.chat_id,
+                    source_timestamp=pair.source_timestamp,
+                    quality_score=pair.quality_score,
+                )
+            )
 
         # Sort by weighted score
         search_results.sort(key=lambda x: x.weighted_score, reverse=True)
@@ -1446,21 +1417,18 @@ class ShardedTriggerIndex:
             active_pairs = list(pairs_by_id.values())
 
             if progress_callback:
-                progress_callback(
-                    "encoding", 0.3, f"Re-encoding {len(active_pairs)} pairs..."
-                )
+                progress_callback("encoding", 0.3, f"Re-encoding {len(active_pairs)} pairs...")
 
             # Re-encode
             triggers = [p.trigger_text for p in active_pairs]
-            embeddings = self.embedder.encode(
-                triggers, normalize=self.config.normalize
-            ).astype(np.float32)
+            embeddings = self.embedder.encode(triggers, normalize=self.config.normalize).astype(
+                np.float32
+            )
 
             if progress_callback:
                 progress_callback("rebuilding", 0.6, "Rebuilding index...")
 
             # Create new index
-            import faiss
             dimension = embeddings.shape[1]
             new_index = shard._create_index(dimension, len(embeddings))
 
@@ -1485,10 +1453,7 @@ class ShardedTriggerIndex:
             if progress_callback:
                 progress_callback("done", 1.0, f"Compacted shard {shard_id}")
 
-            logger.info(
-                "Compacted shard %s: %d active pairs",
-                shard_id, len(active_pairs)
-            )
+            logger.info("Compacted shard %s: %d active pairs", shard_id, len(active_pairs))
 
             return shard.get_stats()
 
@@ -1508,8 +1473,7 @@ class ShardedTriggerIndex:
 
         compacted = []
         shards_needing_compact = [
-            shard_id for shard_id, shard in self._shards.items()
-            if shard.needs_compact()
+            shard_id for shard_id, shard in self._shards.items() if shard.needs_compact()
         ]
 
         for i, shard_id in enumerate(shards_needing_compact):
@@ -1518,7 +1482,7 @@ class ShardedTriggerIndex:
                 progress_callback(
                     "compacting",
                     progress,
-                    f"Compacting shard {i+1}/{len(shards_needing_compact)}..."
+                    f"Compacting shard {i + 1}/{len(shards_needing_compact)}...",
                 )
 
             self.compact_shard(shard_id)
@@ -1568,9 +1532,7 @@ class ShardedTriggerIndex:
         merged_id = f"archive-{cold_shards[0]}-to-{cold_shards[-1]}"
 
         if progress_callback:
-            progress_callback(
-                "merging", 0.1, f"Merging {len(cold_shards)} cold shards..."
-            )
+            progress_callback("merging", 0.1, f"Merging {len(cold_shards)} cold shards...")
 
         # Collect all active pairs from cold shards
         all_pairs: list[Any] = []
@@ -1590,9 +1552,7 @@ class ShardedTriggerIndex:
 
             if progress_callback:
                 progress = 0.1 + (0.3 * (i + 1) / len(cold_shards))
-                progress_callback(
-                    "collecting", progress, f"Collected from {shard_id}..."
-                )
+                progress_callback("collecting", progress, f"Collected from {shard_id}...")
 
         if not all_pairs:
             return None
@@ -1606,9 +1566,9 @@ class ShardedTriggerIndex:
 
         # Encode and add
         triggers = [p.trigger_text for p in all_pairs]
-        embeddings = self.embedder.encode(
-            triggers, normalize=self.config.normalize
-        ).astype(np.float32)
+        embeddings = self.embedder.encode(triggers, normalize=self.config.normalize).astype(
+            np.float32
+        )
 
         pair_ids = [p.id for p in all_pairs]
         merged_shard.add_vectors(embeddings, pair_ids)
@@ -1637,8 +1597,7 @@ class ShardedTriggerIndex:
             progress_callback("done", 1.0, f"Merged into {merged_id}")
 
         logger.info(
-            "Merged %d cold shards into %s (%d pairs)",
-            len(cold_shards), merged_id, len(all_pairs)
+            "Merged %d cold shards into %s (%d pairs)", len(cold_shards), merged_id, len(all_pairs)
         )
 
         return merged_id
@@ -1735,10 +1694,7 @@ class ShardedTriggerIndex:
             # Copy manifest
             backup_manifest = backup_dir / "manifest.json"
             if backup_manifest.exists():
-                shutil.copy2(
-                    backup_manifest,
-                    self._get_base_dir() / "manifest.json"
-                )
+                shutil.copy2(backup_manifest, self._get_base_dir() / "manifest.json")
 
             # Reinitialize
             self._initialized = False
@@ -1770,19 +1726,17 @@ class ShardedTriggerIndex:
             shard_count = len(list(shards_dir.glob("*.faiss"))) if shards_dir.exists() else 0
 
             # Get size
-            total_size = sum(
-                f.stat().st_size
-                for f in backup_path.rglob("*")
-                if f.is_file()
-            )
+            total_size = sum(f.stat().st_size for f in backup_path.rglob("*") if f.is_file())
 
-            backups.append({
-                "name": backup_path.name,
-                "path": str(backup_path),
-                "shard_count": shard_count,
-                "size_bytes": total_size,
-                "created_at": datetime.fromtimestamp(backup_path.stat().st_mtime),
-            })
+            backups.append(
+                {
+                    "name": backup_path.name,
+                    "path": str(backup_path),
+                    "shard_count": shard_count,
+                    "size_bytes": total_size,
+                    "created_at": datetime.fromtimestamp(backup_path.stat().st_mtime),
+                }
+            )
 
         return backups
 
@@ -1895,10 +1849,7 @@ class ShardedTriggerIndex:
                 progress_callback("verifying", progress, f"Verifying {shard_id}...")
 
             if not shard.exists():
-                results["failed"].append({
-                    "shard_id": shard_id,
-                    "error": "Index file missing"
-                })
+                results["failed"].append({"shard_id": shard_id, "error": "Index file missing"})
                 continue
 
             # Verify checksum
@@ -1911,10 +1862,9 @@ class ShardedTriggerIndex:
                         if shard._attempt_repair():
                             results["repaired"].append(shard_id)
                         else:
-                            results["failed"].append({
-                                "shard_id": shard_id,
-                                "error": "Repair failed"
-                            })
+                            results["failed"].append(
+                                {"shard_id": shard_id, "error": "Repair failed"}
+                            )
                     continue
 
             # Try loading
@@ -1922,10 +1872,7 @@ class ShardedTriggerIndex:
                 results["verified"] += 1
                 shard.unload()  # Don't keep in memory
             else:
-                results["failed"].append({
-                    "shard_id": shard_id,
-                    "error": "Failed to load"
-                })
+                results["failed"].append({"shard_id": shard_id, "error": "Failed to load"})
 
         if progress_callback:
             progress_callback("done", 1.0, f"Verified {results['verified']} shards")
@@ -1970,6 +1917,7 @@ def detect_gpu_acceleration() -> dict[str, Any]:
     # Check MLX (Apple Metal)
     try:
         import mlx.core as mx
+
         result["mlx_available"] = True
         # Explicitly convert to bool to handle MagicMock in test environments
         result["metal_available"] = bool(mx.metal.is_available())
@@ -1979,6 +1927,7 @@ def detect_gpu_acceleration() -> dict[str, Any]:
     # Check CUDA
     try:
         import torch
+
         # Explicitly convert to bool
         result["cuda_available"] = bool(torch.cuda.is_available())
     except ImportError:
@@ -1987,6 +1936,7 @@ def detect_gpu_acceleration() -> dict[str, Any]:
     # Check FAISS GPU
     try:
         import faiss
+
         result["faiss_gpu"] = hasattr(faiss, "StandardGpuResources")
     except ImportError:
         pass
@@ -2147,7 +2097,7 @@ class MigrationHelper:
         total_added = 0
 
         for i in range(0, len(all_pairs), batch_size):
-            batch = all_pairs[i:i + batch_size]
+            batch = all_pairs[i : i + batch_size]
             added = v2_index.add_pairs(batch)
             total_added += added
 
@@ -2156,7 +2106,7 @@ class MigrationHelper:
                 progress_callback(
                     "migrating",
                     progress,
-                    f"Migrated {min(i + batch_size, len(all_pairs))}/{len(all_pairs)} pairs..."
+                    f"Migrated {min(i + batch_size, len(all_pairs))}/{len(all_pairs)} pairs...",
                 )
 
         if progress_callback:

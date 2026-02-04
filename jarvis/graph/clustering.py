@@ -7,12 +7,11 @@ contact communities in the relationship network.
 from __future__ import annotations
 
 import logging
-import math
 import random
 from dataclasses import dataclass, field
 from typing import Any
 
-from jarvis.graph.builder import GraphData, GraphNode, GraphEdge
+from jarvis.graph.builder import GraphData
 
 logger = logging.getLogger(__name__)
 
@@ -91,15 +90,15 @@ def get_cluster_colors(num_clusters: int) -> list[str]:
         x = c * (1 - abs((hue * 6) % 2 - 1))
         m = lightness - c / 2
 
-        if hue < 1/6:
+        if hue < 1 / 6:
             r, g, b = c, x, 0
-        elif hue < 2/6:
+        elif hue < 2 / 6:
             r, g, b = x, c, 0
-        elif hue < 3/6:
+        elif hue < 3 / 6:
             r, g, b = 0, c, x
-        elif hue < 4/6:
+        elif hue < 4 / 6:
             r, g, b = 0, x, c
-        elif hue < 5/6:
+        elif hue < 5 / 6:
             r, g, b = x, 0, c
         else:
             r, g, b = c, 0, x
@@ -214,9 +213,7 @@ class LouvainClustering:
                 # Remove node from current community
                 community_weight[current_comm] -= node_degree
                 sum_to_current = sum(
-                    weights.get((node, j), 0)
-                    for j in range(n)
-                    if community[j] == current_comm
+                    weights.get((node, j), 0) for j in range(n) if community[j] == current_comm
                 )
                 community_internal[current_comm] -= sum_to_current
 
@@ -232,16 +229,13 @@ class LouvainClustering:
 
                 for comm in neighbor_comms:
                     sum_to_comm = sum(
-                        weights.get((node, j), 0)
-                        for j in range(n)
-                        if community[j] == comm
+                        weights.get((node, j), 0) for j in range(n) if community[j] == comm
                     )
 
                     # Calculate modularity gain
                     delta_q = (
                         sum_to_comm / total_weight
-                        - self.resolution * node_degree * community_weight[comm]
-                        / (total_weight ** 2)
+                        - self.resolution * node_degree * community_weight[comm] / (total_weight**2)
                     )
 
                     if delta_q > best_gain:
@@ -252,9 +246,7 @@ class LouvainClustering:
                 community[node] = best_comm
                 community_weight[best_comm] += node_degree
                 sum_to_best = sum(
-                    weights.get((node, j), 0)
-                    for j in range(n)
-                    if community[j] == best_comm
+                    weights.get((node, j), 0) for j in range(n) if community[j] == best_comm
                 )
                 community_internal[best_comm] += sum_to_best
 

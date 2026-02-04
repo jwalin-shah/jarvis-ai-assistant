@@ -7,6 +7,7 @@
   import HealthStatus from "./lib/components/HealthStatus.svelte";
   import Settings from "./lib/components/Settings.svelte";
   import TemplateBuilder from "./lib/components/TemplateBuilder.svelte";
+  import RelationshipGraph from "./lib/components/graph/RelationshipGraph.svelte";
   import GlobalSearch from "./lib/components/GlobalSearch.svelte";
   import KeyboardShortcuts from "./lib/components/KeyboardShortcuts.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
@@ -19,7 +20,7 @@
   // Check if running in Tauri context
   const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
 
-  let currentView = $state<"messages" | "dashboard" | "health" | "settings" | "templates">("messages");
+  let currentView = $state<"messages" | "dashboard" | "health" | "settings" | "templates" | "network">("messages");
   let showSearch = $state(false);
   let showShortcuts = $state(false);
   let showCommandPalette = $state(false);
@@ -70,6 +71,11 @@
     if (isMod && event.key === "3") {
       event.preventDefault();
       currentView = "templates";
+      return;
+    }
+    if (isMod && event.key === "4") {
+      event.preventDefault();
+      currentView = "network";
       return;
     }
   }
@@ -153,6 +159,10 @@
     <Settings />
   {:else if currentView === "templates"}
     <TemplateBuilder />
+  {:else if currentView === "network"}
+    <div class="network-container">
+      <RelationshipGraph />
+    </div>
   {:else}
     <div class="messages-container">
       <div class="search-bar">
@@ -461,5 +471,13 @@
     flex: 1;
     display: flex;
     overflow: hidden;
+  }
+
+  .network-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px;
   }
 </style>

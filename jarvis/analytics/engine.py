@@ -6,7 +6,6 @@ pre-computation support for dashboard performance.
 
 from __future__ import annotations
 
-import re
 import threading
 from collections import Counter
 from dataclasses import dataclass, field
@@ -301,9 +300,7 @@ class AnalyticsEngine:
             emojis_per_message=round(emojis_per_msg, 3),
         )
 
-    def compute_message_length_stats(
-        self, messages: list[Message]
-    ) -> MessageLengthStats:
+    def compute_message_length_stats(self, messages: list[Message]) -> MessageLengthStats:
         """Compute message length statistics.
 
         Args:
@@ -414,9 +411,7 @@ class AnalyticsEngine:
                     if not m.is_from_me and m.sender_name:
                         name = m.sender_name
                         break
-                contacts.append(
-                    self.compute_contact_analytics(msgs, contact_id, name)
-                )
+                contacts.append(self.compute_contact_analytics(msgs, contact_id, name))
             # Sort by total messages descending
             contacts.sort(key=lambda c: c.total_messages, reverse=True)
 
@@ -432,8 +427,7 @@ class AnalyticsEngine:
         # Sentiment trends (weekly granularity)
         trends = analyze_sentiment_trends(messages, granularity="week")
         sentiment_trends = [
-            {"date": t.date, "score": t.score, "message_count": t.message_count}
-            for t in trends
+            {"date": t.date, "score": t.score, "message_count": t.message_count} for t in trends
         ]
 
         result = AnalyticsResult(
@@ -454,9 +448,7 @@ class AnalyticsEngine:
 
         return result
 
-    def _compute_avg_response_time(
-        self, messages: list[Message]
-    ) -> float | None:
+    def _compute_avg_response_time(self, messages: list[Message]) -> float | None:
         """Compute average response time in minutes.
 
         Only counts responses within 24 hours.
@@ -523,9 +515,7 @@ class AnalyticsEngine:
             return 0.0
 
         # Balance score: closer to 50/50 is better
-        balance_ratio = min(sent_count, received_count) / max(
-            sent_count, received_count, 1
-        )
+        balance_ratio = min(sent_count, received_count) / max(sent_count, received_count, 1)
         balance_score = balance_ratio * 100
 
         # Frequency score: based on messages per active day

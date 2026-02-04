@@ -67,11 +67,13 @@ class TestJsonRpcProtocol:
     @pytest.mark.asyncio
     async def test_method_not_found(self, server):
         """Unknown method returns method not found error."""
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "nonexistent_method",
-            "id": 1,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "nonexistent_method",
+                "id": 1,
+            }
+        )
         response = await server._process_message(request)
         data = json.loads(response)
 
@@ -82,11 +84,13 @@ class TestJsonRpcProtocol:
     @pytest.mark.asyncio
     async def test_success_response_format(self, server):
         """Successful request returns properly formatted response."""
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "ping",
-            "id": 42,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "ping",
+                "id": 42,
+            }
+        )
         response = await server._process_message(request)
         data = json.loads(response)
 
@@ -98,11 +102,13 @@ class TestJsonRpcProtocol:
     @pytest.mark.asyncio
     async def test_request_id_preserved(self, server):
         """Request ID is preserved in response."""
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "ping",
-            "id": "unique-id-123",
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "ping",
+                "id": "unique-id-123",
+            }
+        )
         response = await server._process_message(request)
         data = json.loads(response)
 
@@ -138,12 +144,14 @@ class TestPingMethod:
     @pytest.mark.asyncio
     async def test_ping_via_rpc(self, server):
         """Ping works via JSON-RPC."""
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "ping",
-            "params": {},
-            "id": 1,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "ping",
+                "params": {},
+                "id": 1,
+            }
+        )
         response = await server._process_message(request)
         data = json.loads(response)
 
@@ -171,11 +179,13 @@ class TestBatchOperations:
     @pytest.mark.asyncio
     async def test_batch_multiple_pings(self, server):
         """Batch multiple ping requests."""
-        result = await server._batch(requests=[
-            {"method": "ping", "id": 1},
-            {"method": "ping", "id": 2},
-            {"method": "ping", "id": 3},
-        ])
+        result = await server._batch(
+            requests=[
+                {"method": "ping", "id": 1},
+                {"method": "ping", "id": 2},
+                {"method": "ping", "id": 3},
+            ]
+        )
 
         assert len(result["results"]) == 3
         for r in result["results"]:
@@ -185,10 +195,12 @@ class TestBatchOperations:
     @pytest.mark.asyncio
     async def test_batch_preserves_ids(self, server):
         """Batch preserves request IDs."""
-        result = await server._batch(requests=[
-            {"method": "ping", "id": "first"},
-            {"method": "ping", "id": "second"},
-        ])
+        result = await server._batch(
+            requests=[
+                {"method": "ping", "id": "first"},
+                {"method": "ping", "id": "second"},
+            ]
+        )
 
         ids = {r["id"] for r in result["results"]}
         assert ids == {"first", "second"}
@@ -196,11 +208,13 @@ class TestBatchOperations:
     @pytest.mark.asyncio
     async def test_batch_handles_errors(self, server):
         """Batch handles individual errors."""
-        result = await server._batch(requests=[
-            {"method": "ping", "id": 1},
-            {"method": "nonexistent", "id": 2},
-            {"method": "ping", "id": 3},
-        ])
+        result = await server._batch(
+            requests=[
+                {"method": "ping", "id": 1},
+                {"method": "nonexistent", "id": 2},
+                {"method": "ping", "id": 3},
+            ]
+        )
 
         assert len(result["results"]) == 3
         # First and third should succeed
@@ -213,9 +227,11 @@ class TestBatchOperations:
     @pytest.mark.asyncio
     async def test_batch_missing_method_error(self, server):
         """Batch returns error for missing method."""
-        result = await server._batch(requests=[
-            {"id": 1},  # Missing method
-        ])
+        result = await server._batch(
+            requests=[
+                {"id": 1},  # Missing method
+            ]
+        )
 
         assert len(result["results"]) == 1
         assert "error" in result["results"][0]
@@ -244,10 +260,12 @@ class TestBatchOperations:
 
         server.register("slow", slow_handler)
 
-        result = await server._batch(requests=[
-            {"method": "slow", "id": 1},
-            {"method": "slow", "id": 2},
-        ])
+        result = await server._batch(
+            requests=[
+                {"method": "slow", "id": 1},
+                {"method": "slow", "id": 2},
+            ]
+        )
 
         assert len(result["results"]) == 2
         # If parallel, we'd see start, start, end, end
@@ -271,17 +289,20 @@ class TestMethodRegistration:
     @pytest.mark.asyncio
     async def test_register_custom_method(self, server):
         """Register and call a custom method."""
+
         async def custom_handler(name: str = "World"):
             return {"greeting": f"Hello, {name}!"}
 
         server.register("greet", custom_handler)
 
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "greet",
-            "params": {"name": "Alice"},
-            "id": 1,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "greet",
+                "params": {"name": "Alice"},
+                "id": 1,
+            }
+        )
         response = await server._process_message(request)
         data = json.loads(response)
 
@@ -290,6 +311,7 @@ class TestMethodRegistration:
     @pytest.mark.asyncio
     async def test_register_streaming_method(self, server):
         """Register a streaming method."""
+
         async def stream_handler(
             data: str,
             _writer: Any = None,
@@ -304,17 +326,20 @@ class TestMethodRegistration:
     @pytest.mark.asyncio
     async def test_method_invalid_params_error(self, server):
         """Invalid params returns appropriate error."""
+
         async def handler(required_param: str):
             return {"value": required_param}
 
         server.register("needs_param", handler)
 
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "needs_param",
-            "params": {},  # Missing required param
-            "id": 1,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "needs_param",
+                "params": {},  # Missing required param
+                "id": 1,
+            }
+        )
         response = await server._process_message(request)
         data = json.loads(response)
 
@@ -323,16 +348,19 @@ class TestMethodRegistration:
     @pytest.mark.asyncio
     async def test_method_internal_error(self, server):
         """Handler exception returns internal error."""
+
         async def failing_handler():
             raise RuntimeError("Something went wrong")
 
         server.register("failing", failing_handler)
 
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "failing",
-            "id": 1,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "failing",
+                "id": 1,
+            }
+        )
         response = await server._process_message(request)
         data = json.loads(response)
 
@@ -473,12 +501,14 @@ class TestStreamingSupport:
 
         server.register("track", tracking_handler)
 
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "track",
-            "params": {"stream": True, "data": "test"},
-            "id": 1,
-        })
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "track",
+                "params": {"stream": True, "data": "test"},
+                "id": 1,
+            }
+        )
         await server._process_message(request)
 
         # stream param should be removed

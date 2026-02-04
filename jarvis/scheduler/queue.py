@@ -344,9 +344,7 @@ class SchedulerQueue:
         logger.info(f"Item marked sent: {item_id}")
         return True
 
-    def mark_failed(
-        self, item_id: str, error: str, retry_after: datetime | None = None
-    ) -> bool:
+    def mark_failed(self, item_id: str, error: str, retry_after: datetime | None = None) -> bool:
         """Mark an item as failed.
 
         Args:
@@ -460,9 +458,7 @@ class SchedulerQueue:
                 self._callbacks[item_id] = []
             self._callbacks[item_id].append(callback)
 
-    def unregister_callback(
-        self, item_id: str, callback: Callable[[ScheduledItem], None]
-    ) -> None:
+    def unregister_callback(self, item_id: str, callback: Callable[[ScheduledItem], None]) -> None:
         """Unregister a callback.
 
         Args:
@@ -571,11 +567,7 @@ class SchedulerQueue:
             Number of items removed.
         """
         with self._lock:
-            to_remove = [
-                item_id
-                for item_id, item in self._items.items()
-                if item.is_terminal
-            ]
+            to_remove = [item_id for item_id, item in self._items.items() if item.is_terminal]
             for item_id in to_remove:
                 del self._items[item_id]
 

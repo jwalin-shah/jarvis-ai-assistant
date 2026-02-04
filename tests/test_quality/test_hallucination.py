@@ -1,6 +1,5 @@
 """Tests for hallucination detection module."""
 
-
 from jarvis.quality.hallucination import (
     EnsembleHallucinationDetector,
     HallucinationResult,

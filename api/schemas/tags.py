@@ -394,9 +394,7 @@ class TagRuleBase(BaseModel):
         default_factory=list, description="Conditions that must be met"
     )
     tag_ids: list[int] = Field(..., description="Tag IDs to apply when rule matches")
-    priority: int = Field(
-        default=0, description="Higher priority rules are evaluated first", ge=0
-    )
+    priority: int = Field(default=0, description="Higher priority rules are evaluated first", ge=0)
     is_enabled: bool = Field(default=True, description="Whether the rule is active")
 
 

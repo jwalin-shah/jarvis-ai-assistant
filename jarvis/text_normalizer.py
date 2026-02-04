@@ -16,6 +16,7 @@ from typing import Any
 
 # Reaction patterns - these are tapbacks in iMessage
 REACTION_PATTERNS = [
+    # Full quoted forms
     r'^Liked\s+".*"$',
     r'^Loved\s+".*"$',
     r'^Disliked\s+".*"$',
@@ -28,6 +29,14 @@ REACTION_PATTERNS = [
     r'^Removed a laugh from\s+".*"$',
     r'^Removed an exclamation from\s+".*"$',
     r'^Removed a question mark from\s+".*"$',
+    # Truncated quote forms (missing closing quote)
+    r'^Liked\s+"',
+    r'^Loved\s+"',
+    r'^Disliked\s+"',
+    r'^Laughed at\s+"',
+    r'^Emphasized\s+"',
+    r'^Questioned\s+"',
+    r'^Removed a .* from\s+"',
 ]
 REACTION_REGEX = re.compile("|".join(REACTION_PATTERNS), re.IGNORECASE | re.DOTALL)
 
@@ -128,6 +137,106 @@ AUTO_SIGNATURE_PATTERNS = [
 ]
 AUTO_SIGNATURE_REGEX = re.compile("|".join(AUTO_SIGNATURE_PATTERNS), re.IGNORECASE | re.DOTALL)
 
+# Garbage patterns to filter out (opt-in)
+GARBAGE_PATTERNS = [
+    r"__kIMFileTransferGUID",  # iMessage file transfer metadata
+    r"\b(verification|security)\s+code\b",  # 2FA codes
+    r"\bRx\s+(is\s+)?ready\b",  # Pharmacy alerts
+    r"\b(has|have)\s+shipped\b",  # Shipping notifications
+    r"\btracking\s+(number|#)\b",  # Tracking numbers
+    r"^\d{4,6}$",  # Pure numeric codes (4-6 digits)
+]
+GARBAGE_REGEX = re.compile("|".join(GARBAGE_PATTERNS), re.IGNORECASE)
+
+# Spam/bot message patterns (notifications, marketing, automated messages)
+SPAM_PATTERNS = [
+    # Opt-out/unsubscribe indicators
+    r"\b(reply\s+)?stop\s+to\s+(cancel|unsubscribe|opt[\s-]?out)\b",
+    r"\btext\s+stop\s+to\b",
+    r"\bstop\s+to\s+end\b",
+    r"\bunsubscribe\b",
+    # Order/shipping notifications
+    r"\byour\s+order\s+(has\s+)?(shipped|been\s+shipped|is\s+on\s+(the\s+)?way)\b",
+    r"\bdelivery\s+(scheduled|expected|arriving)\b",
+    r"\bpackage\s+(delivered|arriving|on\s+the\s+way)\b",
+    r"\bout\s+for\s+delivery\b",
+    r"\btracking\s+(number|#|info|update)\b",
+    r"\border\s+#?\s*\d+\b",
+    # Appointment/reminder bots
+    r"\bappointment\s+(reminder|confirmed|scheduled)\b",
+    r"\breminder:\s*your\s+appointment\b",
+    r"\bconfirm\s+your\s+appointment\b",
+    r"\breply\s+(yes|y)\s+to\s+confirm\b",
+    # Account/verification bots
+    r"\bconfirm\s+your\s+(account|email|phone)\b",
+    r"\bverify\s+your\s+(identity|account|email)\b",
+    r"\byour\s+(one-?time\s+)?code\s+is\b",
+    r"\byour\s+verification\s+code\b",
+    r"\benter\s+code\s*:\s*\d+\b",
+    # Marketing/promotional
+    r"\blimited\s+time\s+offer\b",
+    r"\bexclusive\s+deal\b",
+    r"\bact\s+now\b",
+    r"\bdon'?t\s+miss\s+out\b",
+    r"\b\d+%\s+off\b",
+    r"\bfree\s+shipping\b",
+    r"\buse\s+code\s*:\s*\w+\b",
+    # Bank/financial notifications
+    r"\baccount\s+(balance|statement|alert)\b",
+    r"\btransaction\s+(alert|notification)\b",
+    r"\bpayment\s+(received|processed|due)\b",
+    r"\byour\s+card\s+(ending\s+in\s+\d+|was\s+charged)\b",
+    # Ride/food delivery
+    r"\byour\s+(uber|lyft|doordash|ubereats|grubhub|postmates)\b",
+    r"\bdriver\s+(is\s+)?(on\s+the\s+way|arriving|here)\b",
+    r"\byour\s+ride\s+is\b",
+    r"\bfood\s+is\s+(on\s+the\s+way|ready)\b",
+]
+SPAM_REGEX = re.compile("|".join(SPAM_PATTERNS), re.IGNORECASE)
+URL_ONLY_REGEX = re.compile(r"^https?://\S+$", re.IGNORECASE)
+
+# AttributedBody artifact patterns (NSAttributedString metadata)
+ATTRIBUTED_ARTIFACT_REGEX = re.compile(
+    r"zclassnamex\\$classes|NSAttributedString|NSValue", re.IGNORECASE
+)
+
+# Entity masking patterns (heuristic)
+EMAIL_REGEX = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+PHONE_REGEX = re.compile(r"\b(?:\+?1[\s\-\.]?)?\(?\d{3}\)?[\s\-\.]?\d{3}[\s\-\.]?\d{4}\b")
+HANDLE_REGEX = re.compile(r"@\w+")
+URL_REGEX = re.compile(r"https?://\S+", re.IGNORECASE)
+
+# Code replacement patterns
+CODE_CONTEXT_REGEX = re.compile(r"\b(code|otp|passcode|verification|security)\b", re.IGNORECASE)
+CODE_REGEX = re.compile(r"\b\d{4,8}\b")
+
+# Heuristic entity contexts
+CITY_CONTEXT_REGEX = re.compile(r"\b(in|at|to|from)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b")
+TEAM_CONTEXT_REGEX = re.compile(
+    r"\b(vs\.?|versus|against|beat|lost to|play(?:ing)?|game)\s+([A-Z][a-zA-Z]+)\b"
+)
+PERSON_CONTEXT_REGEX = re.compile(
+    r"\b(with|for|tell|ask|meet|saw|see|call)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b"
+)
+
+# Emoji normalization map (small, high-signal set)
+EMOJI_TOKEN_MAP = {
+    "😭": "<EMOJI_CRY>",
+    "😢": "<EMOJI_CRY>",
+    "😂": "<EMOJI_LAUGH>",
+    "🤣": "<EMOJI_LAUGH>",
+    "😅": "<EMOJI_LAUGH>",
+    "😡": "<EMOJI_ANGRY>",
+    "😠": "<EMOJI_ANGRY>",
+    "❤️": "<EMOJI_LOVE>",
+    "😍": "<EMOJI_LOVE>",
+    "🥳": "<EMOJI_CELEBRATE>",
+    "🎉": "<EMOJI_CELEBRATE>",
+    "🙏": "<EMOJI_PRAY>",
+    "👍": "<EMOJI_THUMBS_UP>",
+    "👎": "<EMOJI_THUMBS_DOWN>",
+}
+
 # Repeated emoji pattern (3+ of same emoji in a row)
 REPEATED_EMOJI_PATTERN = re.compile(
     r"([\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F600-\U0001F64F"
@@ -181,6 +290,16 @@ def normalize_text(
     text: str,
     collapse_emojis: bool = True,
     strip_signatures: bool = True,
+    filter_garbage: bool = False,
+    filter_attributed_artifacts: bool = False,
+    drop_url_only: bool = False,
+    mask_entities: bool = False,
+    normalize_emojis: bool = False,
+    preserve_url_domain: bool = False,
+    replace_codes: bool = False,
+    ner_enabled: bool = False,
+    ner_model: str = "en_core_web_sm",
+    expand_slang: bool = False,
 ) -> str:
     """Canonical text cleaning used everywhere in the pipeline.
 
@@ -202,6 +321,17 @@ def normalize_text(
     if REACTION_REGEX.match(text.strip()):
         return ""
 
+    # 1b. Optional garbage filtering
+    if filter_garbage:
+        if GARBAGE_REGEX.search(text):
+            return ""
+        if drop_url_only and URL_ONLY_REGEX.match(text.strip()):
+            return ""
+
+    # 1c. Optional attributedBody artifact filtering
+    if filter_attributed_artifacts and ATTRIBUTED_ARTIFACT_REGEX.search(text):
+        return ""
+
     cleaned = text
 
     # 2. Strip auto-signatures
@@ -218,14 +348,250 @@ def normalize_text(
             normalized_lines.append(line)
     cleaned = "\n".join(normalized_lines)
 
+    # 3b. URL handling
+    if preserve_url_domain:
+        cleaned = _replace_urls_with_domains(cleaned)
+
+    # 3c. Replace codes (OTP, verification) with placeholder
+    if replace_codes:
+        cleaned = _replace_codes_with_placeholder(cleaned)
+
+    # 3d. Mask entities (email, phone, handles, heuristic person/city/team)
+    if mask_entities:
+        cleaned = _mask_entities(cleaned, use_ner=ner_enabled, ner_model=ner_model)
+
     # 4. Collapse repeated emojis (3+ same emoji -> 2)
     if collapse_emojis:
         cleaned = REPEATED_EMOJI_PATTERN.sub(r"\1\1", cleaned)
+
+    # 4b. Emoji normalization to tokens
+    if normalize_emojis:
+        cleaned = _normalize_emojis(cleaned)
+
+    # 4c. Slang expansion for better embedding alignment
+    if expand_slang:
+        from jarvis.slang import expand_slang as _expand_slang
+
+        cleaned = _expand_slang(cleaned)
 
     # 5. Final strip
     cleaned = cleaned.strip()
 
     return cleaned
+
+
+def is_garbage_message(text: str, drop_url_only: bool = False) -> bool:
+    """Check if text matches known garbage patterns."""
+    if not text:
+        return False
+    if GARBAGE_REGEX.search(text):
+        return True
+    return bool(drop_url_only and URL_ONLY_REGEX.match(text.strip()))
+
+
+def detect_language(text: str) -> str:
+    """Detect the language of text.
+
+    Uses langdetect library for language detection. Falls back to "en" if
+    detection fails (e.g., text too short or ambiguous).
+
+    Args:
+        text: Text to detect language for.
+
+    Returns:
+        ISO 639-1 language code (e.g., "en", "es", "fr") or "en" on failure.
+    """
+    if not text or len(text.strip()) < 3:
+        return "en"  # Too short to detect
+
+    try:
+        from langdetect import detect
+
+        return detect(text)
+    except Exception:
+        return "en"  # Default to English on any error
+
+
+def is_english(text: str, threshold: float = 0.8) -> bool:
+    """Check if text is primarily English.
+
+    Uses langdetect library with probability threshold to determine if
+    text is English. Short texts (< 10 chars) are assumed to be English
+    since langdetect is unreliable on short strings.
+
+    Args:
+        text: Text to check.
+        threshold: Minimum probability for English (default 0.8).
+
+    Returns:
+        True if text is primarily English, False otherwise.
+    """
+    if not text:
+        return True
+
+    # Short texts are often slang/abbreviations - assume English
+    stripped = text.strip()
+    if len(stripped) < 10:
+        return True
+
+    try:
+        from langdetect import detect_langs
+
+        probs = detect_langs(stripped)
+        for lang_prob in probs:
+            if lang_prob.lang == "en" and lang_prob.prob >= threshold:
+                return True
+        # If no English detected with high probability, check if it's the top language
+        if probs and probs[0].lang == "en":
+            return True
+        return False
+    except Exception:
+        return True  # Assume English if detection fails
+
+
+def is_spam_message(text: str) -> bool:
+    """Check if text matches known spam/bot message patterns.
+
+    Detects automated messages from:
+    - Shipping/order notifications
+    - Appointment reminders
+    - Account verification
+    - Marketing/promotional content
+    - Financial alerts
+    - Ride/food delivery apps
+
+    Args:
+        text: Message text to check.
+
+    Returns:
+        True if the message appears to be spam/automated, False otherwise.
+    """
+    if not text:
+        return False
+    return bool(SPAM_REGEX.search(text))
+
+
+def _replace_urls_with_domains(text: str) -> str:
+    """Replace URLs with <URL:domain> tokens."""
+    if not text:
+        return text
+
+    def _repl(match: re.Match) -> str:
+        url = match.group(0)
+        try:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            domain = parsed.netloc or parsed.path.split("/")[0]
+            if domain:
+                return f"<URL:{domain.lower()}>"
+        except Exception:
+            pass
+        return "<URL>"
+
+    return URL_REGEX.sub(_repl, text)
+
+
+def _replace_codes_with_placeholder(text: str) -> str:
+    """Replace likely OTP/verification codes with <CODE> when context is present."""
+    if not text:
+        return text
+
+    if CODE_CONTEXT_REGEX.search(text):
+        return CODE_REGEX.sub("<CODE>", text)
+    return text
+
+
+_NER_MODEL = None
+
+
+def _mask_entities(text: str, use_ner: bool = False, ner_model: str = "en_core_web_sm") -> str:
+    """Mask common entity types with placeholders (NER + heuristics fallback)."""
+    if not text:
+        return text
+
+    masked = text
+
+    if use_ner:
+        try:
+            global _NER_MODEL
+            if _NER_MODEL is None:
+                import spacy
+
+                _NER_MODEL = spacy.load(ner_model)
+
+            doc = _NER_MODEL(masked)
+            # Replace entities from back to front to keep offsets valid
+            for ent in sorted(doc.ents, key=lambda e: e.start_char, reverse=True):
+                label = ent.label_
+                token = None
+                if label in ("PERSON",):
+                    token = "<PERSON>"
+                elif label in ("GPE", "LOC"):
+                    token = "<CITY>"
+                elif label in ("ORG",):
+                    token = "<ORG>"
+                if token:
+                    masked = masked[: ent.start_char] + token + masked[ent.end_char :]
+        except Exception:
+            # Fall back to regex masking if NER unavailable
+            pass
+
+    # Regex-based masking (always apply)
+    masked = EMAIL_REGEX.sub("<EMAIL>", masked)
+    masked = PHONE_REGEX.sub("<PHONE>", masked)
+    masked = HANDLE_REGEX.sub("<PERSON>", masked)
+
+    # Heuristic context-based masking
+    masked = CITY_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <CITY>", masked)
+    masked = TEAM_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <TEAM>", masked)
+    masked = PERSON_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <PERSON>", masked)
+
+    return masked
+
+
+def normalize_for_task(text: str, task: str) -> str:
+    """Normalize text using the configured profile for a task."""
+    from jarvis.config import get_config
+
+    cfg = get_config().normalization
+    profile = getattr(cfg, task, cfg.classification)
+
+    # Filter non-English text if enabled (before normalization to save work)
+    if profile.filter_non_english and not is_english(text):
+        return ""
+
+    cleaned = normalize_text(
+        text,
+        filter_garbage=profile.filter_garbage,
+        filter_attributed_artifacts=profile.filter_attributed_artifacts,
+        drop_url_only=profile.drop_url_only,
+        mask_entities=profile.mask_entities,
+        normalize_emojis=profile.normalize_emojis,
+        preserve_url_domain=profile.preserve_url_domain,
+        replace_codes=profile.replace_codes,
+        ner_enabled=profile.ner_enabled,
+        ner_model=profile.ner_model,
+        expand_slang=profile.expand_slang,
+    )
+
+    if not cleaned:
+        return ""
+
+    if len(cleaned) < profile.min_length or len(cleaned) > profile.max_length:
+        return ""
+
+    return cleaned
+
+
+def _normalize_emojis(text: str) -> str:
+    """Replace common emojis with semantic tokens."""
+    if not text:
+        return text
+    normalized = text
+    for emoji, token in EMOJI_TOKEN_MAP.items():
+        normalized = normalized.replace(emoji, token)
+    return normalized
 
 
 def is_reaction(text: str) -> bool:
@@ -336,6 +702,7 @@ class TextFeatures:
     starts_new_topic: bool = False
     is_question: bool = False
     temporal_refs: list[str] | None = None
+    is_short: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -349,6 +716,7 @@ class TextFeatures:
             "starts_new_topic": self.starts_new_topic,
             "is_question": self.is_question,
             "temporal_refs": self.temporal_refs or [],
+            "is_short": self.is_short,
         }
 
 
@@ -374,6 +742,7 @@ def extract_text_features(text: str) -> TextFeatures:
         starts_new_topic=starts_new_topic(text),
         is_question=is_question(text),
         temporal_refs=extract_temporal_refs(text),
+        is_short=len(text.split()) <= 3,
     )
 
 

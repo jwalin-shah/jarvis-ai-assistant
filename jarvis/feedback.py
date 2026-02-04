@@ -262,9 +262,7 @@ class FeedbackStore:
                 if cursor.fetchone():
                     return 1  # v1 schema exists
                 return 0  # No schema
-            cursor = conn.execute(
-                "SELECT MAX(version) FROM feedback_schema_version"
-            )
+            cursor = conn.execute("SELECT MAX(version) FROM feedback_schema_version")
             row = cursor.fetchone()
             return row[0] if row and row[0] else 0
         except sqlite3.Error:

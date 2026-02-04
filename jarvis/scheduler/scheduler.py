@@ -282,10 +282,14 @@ class DraftScheduler:
             num_suggestions=1,
         )
 
-        suggestion = suggestions[0] if suggestions else TimingSuggestion(
-            suggested_time=earliest or datetime.now(UTC),
-            confidence=0.1,
-            reason="no data available",
+        suggestion = (
+            suggestions[0]
+            if suggestions
+            else TimingSuggestion(
+                suggested_time=earliest or datetime.now(UTC),
+                confidence=0.1,
+                reason="no data available",
+            )
         )
 
         # Schedule at suggested time

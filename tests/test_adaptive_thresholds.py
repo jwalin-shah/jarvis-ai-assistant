@@ -227,9 +227,7 @@ class TestAdaptiveThresholdManager:
         assert len(bucket_stats) > 0
 
         # Find the 0.9 bucket (use tolerance for floating point comparison)
-        high_bucket = next(
-            (b for b in bucket_stats if abs(b.bucket_start - 0.9) < 0.01), None
-        )
+        high_bucket = next((b for b in bucket_stats if abs(b.bucket_start - 0.9) < 0.01), None)
         assert high_bucket is not None
         assert high_bucket.total_count == 4
         assert high_bucket.sent_count == 2
@@ -418,13 +416,15 @@ class TestAdaptiveThresholdManager:
         )
 
         # Add varied feedback
-        temp_feedback_store._entries.extend([
-            self._create_feedback_entry(FeedbackAction.SENT, 0.90),
-            self._create_feedback_entry(FeedbackAction.EDITED, 0.85),
-            self._create_feedback_entry(FeedbackAction.DISMISSED, 0.70),
-            self._create_feedback_entry(FeedbackAction.SENT, 0.80),
-            self._create_feedback_entry(FeedbackAction.WROTE_FROM_SCRATCH, 0.60),
-        ])
+        temp_feedback_store._entries.extend(
+            [
+                self._create_feedback_entry(FeedbackAction.SENT, 0.90),
+                self._create_feedback_entry(FeedbackAction.EDITED, 0.85),
+                self._create_feedback_entry(FeedbackAction.DISMISSED, 0.70),
+                self._create_feedback_entry(FeedbackAction.SENT, 0.80),
+                self._create_feedback_entry(FeedbackAction.WROTE_FROM_SCRATCH, 0.60),
+            ]
+        )
 
         stats = manager.get_adaptation_stats()
 

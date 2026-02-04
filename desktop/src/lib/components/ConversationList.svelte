@@ -138,9 +138,9 @@
   }
 
   // Store for conversation topics
-  let topicsMap: Map<string, Topic[]> = new Map();
-  let allTopicsMap: Map<string, Topic[]> = new Map();
-  let loadingTopics: Set<string> = new Set();
+  let topicsMap: Map<string, Topic[]> = $state(new Map());
+  let allTopicsMap: Map<string, Topic[]> = $state(new Map());
+  let loadingTopics: Set<string> = $state(new Set());
 
   let cleanup: (() => void) | null = null;
 
@@ -148,12 +148,12 @@
   const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8742";
 
   // Track loaded avatars and their states
-  let avatarStates: Map<string, "loading" | "loaded" | "error"> = new Map();
-  let avatarUrls: Map<string, string> = new Map();
+  let avatarStates: Map<string, "loading" | "loaded" | "error"> = $state(new Map());
+  let avatarUrls: Map<string, string> = $state(new Map());
 
   // Intersection Observer for lazy loading
   let observer: IntersectionObserver | null = null;
-  let observedElements: Map<string, HTMLElement> = new Map();
+  let observedElements: Map<string, HTMLElement> = $state(new Map());
 
   onMount(() => {
     cleanup = initializePolling();
