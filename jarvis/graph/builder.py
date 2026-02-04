@@ -10,9 +10,9 @@ import hashlib
 import logging
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -239,17 +239,19 @@ class GraphBuilder:
                     ORDER BY display_name
                 """)
                 for row in cursor.fetchall():
-                    contacts.append({
-                        "id": row[0],
-                        "chat_id": row[1],
-                        "display_name": row[2],
-                        "phone_or_email": row[3],
-                        "relationship": row[4] or "unknown",
-                        "style_notes": row[5],
-                        "handles_json": row[6],
-                        "created_at": row[7],
-                        "updated_at": row[8],
-                    })
+                    contacts.append(
+                        {
+                            "id": row[0],
+                            "chat_id": row[1],
+                            "display_name": row[2],
+                            "phone_or_email": row[3],
+                            "relationship": row[4] or "unknown",
+                            "style_notes": row[5],
+                            "handles_json": row[6],
+                            "created_at": row[7],
+                            "updated_at": row[8],
+                        }
+                    )
         except Exception as e:
             logger.warning(f"Error fetching contacts: {e}")
 
@@ -290,12 +292,10 @@ class GraphBuilder:
                         # Simple sentiment heuristic
                         text = msg.text.lower()
                         positive = sum(
-                            1 for w in ["thanks", "love", "great", "awesome", "happy"]
-                            if w in text
+                            1 for w in ["thanks", "love", "great", "awesome", "happy"] if w in text
                         )
                         negative = sum(
-                            1 for w in ["sorry", "sad", "angry", "hate", "bad"]
-                            if w in text
+                            1 for w in ["sorry", "sad", "angry", "hate", "bad"] if w in text
                         )
                         if positive + negative > 0:
                             sentiment_sum += (positive - negative) / (positive + negative)
@@ -478,7 +478,7 @@ class GraphBuilder:
             edges.append(edge)
             edge_set.add(("me", node.id))
 
-        # TODO: Add edges between contacts who appear in same group chats
+        # Future enhancement: Add edges between contacts who appear in same group chats
 
         return GraphData(
             nodes=nodes,
@@ -567,13 +567,12 @@ class GraphBuilder:
             included_nodes.values(),
             key=lambda n: n.message_count,
             reverse=True,
-        )[:max_neighbors + 1]
+        )[: max_neighbors + 1]
         node_ids = {n.id for n in nodes_list}
 
         # Filter edges to only included nodes
         filtered_edges = [
-            e for e in included_edges
-            if e.source in node_ids and e.target in node_ids
+            e for e in included_edges if e.source in node_ids and e.target in node_ids
         ]
 
         return GraphData(

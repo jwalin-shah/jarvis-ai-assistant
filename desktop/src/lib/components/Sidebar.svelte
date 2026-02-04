@@ -1,7 +1,7 @@
 <script lang="ts">
   import { healthStore } from "../stores/health";
 
-  type ViewType = "messages" | "dashboard" | "health" | "settings" | "templates";
+  type ViewType = "messages" | "dashboard" | "health" | "settings" | "templates" | "network";
 
   let { currentView = $bindable<ViewType>("messages"), collapsed = $bindable(false) } = $props<{
     currentView?: ViewType;
@@ -78,6 +78,23 @@
         <polyline points="10 9 9 9 8 9" />
       </svg>
       {#if !collapsed}<span>Templates</span>{/if}
+    </button>
+
+    <button
+      class="nav-item"
+      class:active={currentView === "network"}
+      onclick={() => navigate("network")}
+      title="Network"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="5" r="3" />
+        <circle cx="5" cy="19" r="3" />
+        <circle cx="19" cy="19" r="3" />
+        <line x1="12" y1="8" x2="12" y2="8.01" />
+        <path d="M12 8a5 5 0 0 0-5 5v2" />
+        <path d="M12 8a5 5 0 0 1 5 5v2" />
+      </svg>
+      {#if !collapsed}<span>Network</span>{/if}
     </button>
 
     <button

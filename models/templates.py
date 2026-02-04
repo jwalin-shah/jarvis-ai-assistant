@@ -1901,6 +1901,8 @@ class TemplateMatcher:
     - Optimized dot product for cosine similarity (O(n) instead of O(n*d))
     """
 
+    # NOTE: These thresholds can be customized via ~/.jarvis/config.json
+    # See jarvis/config.py for configuration options
     SIMILARITY_THRESHOLD = 0.7
     QUERY_CACHE_SIZE = 500
 

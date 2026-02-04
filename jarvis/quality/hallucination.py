@@ -88,9 +88,7 @@ class HallucinationDetector(Protocol):
         """
         ...
 
-    def detect_batch(
-        self, pairs: list[tuple[str, str]]
-    ) -> list[HallucinationResult]:
+    def detect_batch(self, pairs: list[tuple[str, str]]) -> list[HallucinationResult]:
         """Batch detect hallucinations for multiple source/response pairs.
 
         Args:
@@ -286,9 +284,7 @@ class HHEMScorer:
                     try:
                         from sentence_transformers import CrossEncoder
 
-                        self._model = CrossEncoder(
-                            "vectara/hallucination_evaluation_model"
-                        )
+                        self._model = CrossEncoder("vectara/hallucination_evaluation_model")
                     except Exception as e:
                         logger.warning("Failed to load HHEM model: %s", e)
                         self._model = None
@@ -444,9 +440,7 @@ class EnsembleHallucinationDetector:
                 issues.append("Response not entailed by source")
 
         if self._enable_similarity:
-            scores["similarity"] = self._get_similarity().compute_similarity(
-                source, response
-            )
+            scores["similarity"] = self._get_similarity().compute_similarity(source, response)
             if scores["similarity"] is not None and scores["similarity"] < 0.3:
                 issues.append("Low semantic similarity to source")
 
@@ -479,9 +473,7 @@ class EnsembleHallucinationDetector:
             issues=issues,
         )
 
-    def detect_batch(
-        self, pairs: list[tuple[str, str]]
-    ) -> list[HallucinationResult]:
+    def detect_batch(self, pairs: list[tuple[str, str]]) -> list[HallucinationResult]:
         """Batch detect hallucinations for efficiency.
 
         Args:
@@ -518,16 +510,12 @@ class EnsembleHallucinationDetector:
                     issues.append("Response not entailed by source")
 
             if self._enable_similarity:
-                scores["similarity"] = self._get_similarity().compute_similarity(
-                    source, response
-                )
+                scores["similarity"] = self._get_similarity().compute_similarity(source, response)
                 if scores["similarity"] is not None and scores["similarity"] < 0.3:
                     issues.append("Low semantic similarity to source")
 
             if self._enable_overlap:
-                scores["overlap"] = self._get_overlap().compute_overlap(
-                    source, response
-                )
+                scores["overlap"] = self._get_overlap().compute_overlap(source, response)
                 if scores["overlap"] is not None and scores["overlap"] < 0.1:
                     issues.append("Minimal token overlap with source")
 
@@ -561,9 +549,7 @@ class EnsembleHallucinationDetector:
 
         return results
 
-    def _compute_ensemble_score(
-        self, scores: dict[str, float | None]
-    ) -> tuple[float, float]:
+    def _compute_ensemble_score(self, scores: dict[str, float | None]) -> tuple[float, float]:
         """Compute weighted ensemble hallucination score.
 
         Args:

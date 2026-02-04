@@ -10,9 +10,9 @@ import logging
 import math
 import random
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
-from jarvis.graph.builder import GraphData, GraphNode, GraphEdge
+from jarvis.graph.builder import GraphData
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ class LayoutEngine:
 
             # Repulsion forces (all pairs)
             for i, node1 in enumerate(graph.nodes):
-                for node2 in graph.nodes[i + 1:]:
+                for node2 in graph.nodes[i + 1 :]:
                     x1, y1 = positions[node1.id]
                     x2, y2 = positions[node2.id]
 

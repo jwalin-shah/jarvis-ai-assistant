@@ -81,9 +81,7 @@ class TimingAnalyzer:
         with self._lock:
             return self._contact_prefs.get(contact_id)
 
-    def cache_interactions(
-        self, contact_id: int, interactions: list[dict[str, Any]]
-    ) -> None:
+    def cache_interactions(self, contact_id: int, interactions: list[dict[str, Any]]) -> None:
         """Cache interaction history for a contact.
 
         Each interaction should have:
@@ -208,8 +206,7 @@ class TimingAnalyzer:
         prefs = self.get_contact_prefs(contact_id)
         timezone = prefs.timezone if prefs else self._default_timezone
         quiet_hours = (
-            prefs.quiet_hours if prefs and prefs.quiet_hours
-            else self._default_quiet_hours
+            prefs.quiet_hours if prefs and prefs.quiet_hours else self._default_quiet_hours
         )
 
         # Get pattern analysis
@@ -371,8 +368,7 @@ class TimingAnalyzer:
         prefs = self.get_contact_prefs(contact_id)
         timezone = prefs.timezone if prefs else self._default_timezone
         quiet_hours = (
-            prefs.quiet_hours if prefs and prefs.quiet_hours
-            else self._default_quiet_hours
+            prefs.quiet_hours if prefs and prefs.quiet_hours else self._default_quiet_hours
         )
 
         try:
@@ -462,10 +458,14 @@ def suggest_send_time(
     """
     analyzer = get_timing_analyzer()
     suggestions = analyzer.suggest_time(contact_id, earliest, latest, num_suggestions=1)
-    return suggestions[0] if suggestions else TimingSuggestion(
-        suggested_time=earliest or datetime.now(UTC),
-        confidence=0.1,
-        reason="no data available",
+    return (
+        suggestions[0]
+        if suggestions
+        else TimingSuggestion(
+            suggested_time=earliest or datetime.now(UTC),
+            confidence=0.1,
+            reason="no data available",
+        )
     )
 
 

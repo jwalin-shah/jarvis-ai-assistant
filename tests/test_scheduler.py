@@ -590,9 +590,7 @@ class TestSendExecutor:
 
     def test_rate_limit_check(self) -> None:
         """Test rate limit checking."""
-        executor = SendExecutor(
-            rate_limit=RateLimitConfig(per_minute=2, per_hour=10, per_day=50)
-        )
+        executor = SendExecutor(rate_limit=RateLimitConfig(per_minute=2, per_hour=10, per_day=50))
 
         # First two should be allowed
         # Create item (unused, but demonstrates ScheduledItem structure)
@@ -642,9 +640,7 @@ class TestSendExecutor:
 
     def test_get_rate_limit_status(self) -> None:
         """Test getting rate limit status."""
-        executor = SendExecutor(
-            rate_limit=RateLimitConfig(per_minute=5, per_hour=30, per_day=100)
-        )
+        executor = SendExecutor(rate_limit=RateLimitConfig(per_minute=5, per_hour=30, per_day=100))
 
         executor._record_send(1)
         executor._record_send(1)

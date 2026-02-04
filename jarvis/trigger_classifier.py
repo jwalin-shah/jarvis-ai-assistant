@@ -38,6 +38,7 @@ from jarvis.classifiers import (
     SVMModelMixin,
 )
 from jarvis.config import get_config, get_trigger_classifier_path
+from jarvis.text_normalizer import normalize_for_task
 
 logger = logging.getLogger(__name__)
 
@@ -509,8 +510,17 @@ class HybridTriggerClassifier(EmbedderMixin, SVMModelMixin, CentroidMixin):
                 valid_response_types=TRIGGER_TO_RESPONSE_TYPES[TriggerType.UNKNOWN],
             )
 
+        normalized = normalize_for_task(text, "classification")
+        if not normalized:
+            return TriggerClassification(
+                trigger_type=TriggerType.UNKNOWN,
+                confidence=0.0,
+                method="normalized_empty",
+                valid_response_types=TRIGGER_TO_RESPONSE_TYPES[TriggerType.UNKNOWN],
+            )
+
         # Step 1: Try structural patterns (highest precision)
-        struct_type, struct_conf = self._match_structural(text)
+        struct_type, struct_conf = self._match_structural(normalized)
 
         if struct_type is not None and struct_conf >= 0.85:
             # High confidence structural match - use it
@@ -523,7 +533,7 @@ class HybridTriggerClassifier(EmbedderMixin, SVMModelMixin, CentroidMixin):
 
         # Step 2: Try trained SVM classifier (if available)
         if use_svm and self._svm_loaded:
-            svm_type, svm_conf, svm_method = self._match_svm(text)
+            svm_type, svm_conf, svm_method = self._match_svm(normalized)
 
             # _match_svm already applies per-class threshold, so if svm_type is not None,
             # the confidence already passed the threshold check

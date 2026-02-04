@@ -124,9 +124,7 @@ class SelfConsistencyChecker:
         sentences = re.split(r"(?<=[.!?])\s+", text)
         return [s.strip() for s in sentences if s.strip()]
 
-    def _check_contradiction(
-        self, sent1: str, sent2: str
-    ) -> InconsistencyIssue | None:
+    def _check_contradiction(self, sent1: str, sent2: str) -> InconsistencyIssue | None:
         """Check if two sentences contradict each other."""
         s1_lower = sent1.lower()
         s2_lower = sent2.lower()
@@ -167,9 +165,7 @@ class SelfConsistencyChecker:
 
         return None
 
-    def _check_numeric_consistency(
-        self, sentences: list[str]
-    ) -> list[InconsistencyIssue]:
+    def _check_numeric_consistency(self, sentences: list[str]) -> list[InconsistencyIssue]:
         """Check for inconsistent numbers across sentences."""
         issues: list[InconsistencyIssue] = []
 
@@ -209,9 +205,7 @@ class SelfConsistencyChecker:
 
         return issues
 
-    def _check_temporal_consistency(
-        self, sentences: list[str]
-    ) -> list[InconsistencyIssue]:
+    def _check_temporal_consistency(self, sentences: list[str]) -> list[InconsistencyIssue]:
         """Check for temporal inconsistencies."""
         issues: list[InconsistencyIssue] = []
 
@@ -403,9 +397,13 @@ class HistoryConsistencyChecker:
 
         # Analyze formality level
         response_formality = self._measure_formality(response)
-        history_formality = sum(
-            self._measure_formality(h) for h in history[-5:]  # Last 5 messages
-        ) / max(len(history[-5:]), 1)
+        history_formality = (
+            sum(
+                self._measure_formality(h)
+                for h in history[-5:]  # Last 5 messages
+            )
+            / max(len(history[-5:]), 1)
+        )
 
         # Large formality shift is inconsistent
         if abs(response_formality - history_formality) > 0.4:
@@ -425,14 +423,34 @@ class HistoryConsistencyChecker:
 
         # Informal markers
         informal_markers = [
-            "hey", "hi", "gonna", "wanna", "gotta", "lol", "haha",
-            "yeah", "yep", "nope", "cool", "awesome", "!", "?"
+            "hey",
+            "hi",
+            "gonna",
+            "wanna",
+            "gotta",
+            "lol",
+            "haha",
+            "yeah",
+            "yep",
+            "nope",
+            "cool",
+            "awesome",
+            "!",
+            "?",
         ]
 
         # Formal markers
         formal_markers = [
-            "please", "thank you", "would you", "could you", "regards",
-            "sincerely", "appreciate", "furthermore", "however", "therefore"
+            "please",
+            "thank you",
+            "would you",
+            "could you",
+            "regards",
+            "sincerely",
+            "appreciate",
+            "furthermore",
+            "however",
+            "therefore",
         ]
 
         informal_count = sum(1 for m in informal_markers if m in text_lower)
@@ -487,9 +505,7 @@ class ConsistencyChecker:
         # History consistency check
         is_history_consistent = True
         if history:
-            is_history_consistent, history_issues = self._history_checker.check(
-                response, history
-            )
+            is_history_consistent, history_issues = self._history_checker.check(response, history)
             all_issues.extend(history_issues)
 
         # Calculate consistency score

@@ -27,7 +27,6 @@ import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,7 +34,7 @@ import numpy as np
 
 # Cache TTL for classification results (5 minutes)
 _CLASSIFICATION_CACHE_TTL_SECONDS = 300
-_classification_cache: dict[str, tuple[float, "ClassificationResult"]] = {}
+_classification_cache: dict[str, tuple[float, ClassificationResult]] = {}
 _CLASSIFICATION_CACHE_MAX_SIZE = 500
 
 if TYPE_CHECKING:

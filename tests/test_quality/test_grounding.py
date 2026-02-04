@@ -1,6 +1,5 @@
 """Tests for grounding/attribution tracking module."""
 
-
 from jarvis.quality.grounding import (
     Attribution,
     AttributionType,

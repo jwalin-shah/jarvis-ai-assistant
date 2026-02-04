@@ -1,6 +1,5 @@
 """Tests for consistency checking module."""
 
-
 from jarvis.quality.consistency import (
     ConsistencyChecker,
     ConsistencyResult,
@@ -34,9 +33,7 @@ class TestSelfConsistencyChecker:
     def test_detect_contradiction(self):
         """Should detect contradictory statements."""
         checker = SelfConsistencyChecker()
-        is_consistent, issues = checker.check(
-            "The meeting is at 3pm. The meeting is not at 3pm."
-        )
+        is_consistent, issues = checker.check("The meeting is at 3pm. The meeting is not at 3pm.")
         # Should detect the contradiction
         assert isinstance(is_consistent, bool)
         # Even if no contradiction detected, result should be valid

@@ -270,7 +270,9 @@ def cmd_db(args: argparse.Namespace) -> int:
     subcommand = args.db_command
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
-        console.print("Available: init, add-contact, list-contacts, extract, build-index, stats")
+        console.print(
+            "Available: init, add-contact, list-contacts, extract, build-index, stats, cluster"
+        )
         return 1
 
     if subcommand == "init":
@@ -285,9 +287,122 @@ def cmd_db(args: argparse.Namespace) -> int:
         return _cmd_db_build_index(args)
     elif subcommand == "stats":
         return _cmd_db_stats(args)
+    elif subcommand == "cluster":
+        return _cmd_db_cluster(args)
     else:
         console.print(f"[red]Unknown db subcommand: {subcommand}[/red]")
         return 1
+
+
+def cmd_ner(args: argparse.Namespace) -> int:
+    """Handle NER service management."""
+    import os
+    import signal
+    import subprocess
+    from pathlib import Path
+
+    from jarvis.ner_client import PID_FILE, SOCKET_PATH, get_pid, is_service_running
+
+    subcommand = args.ner_command
+    if subcommand is None:
+        console.print("[red]Error: Please specify a ner subcommand[/red]")
+        console.print("Available: start, stop, status, setup")
+        return 1
+
+    ner_venv = Path.home() / ".jarvis" / "ner_venv"
+    setup_script = Path(__file__).parent.parent / "scripts" / "setup_ner_venv.sh"
+    server_script = Path(__file__).parent.parent / "scripts" / "ner_server.py"
+
+    if subcommand == "setup":
+        if not setup_script.exists():
+            console.print(f"[red]Setup script not found: {setup_script}[/red]")
+            return 1
+        console.print("[bold]Setting up NER environment...[/bold]")
+        result = subprocess.run(["bash", str(setup_script)], check=False)
+        return result.returncode
+
+    if subcommand == "status":
+        if is_service_running():
+            pid = get_pid()
+            console.print(f"[green]NER service is running (PID: {pid})[/green]")
+            console.print(f"Socket: {SOCKET_PATH}")
+        else:
+            console.print("[yellow]NER service is not running[/yellow]")
+            if not ner_venv.exists():
+                console.print("[dim]Run 'jarvis ner setup' to install the NER environment[/dim]")
+            else:
+                console.print("[dim]Run 'jarvis ner start' to start the service[/dim]")
+        return 0
+
+    if subcommand == "start":
+        if is_service_running():
+            pid = get_pid()
+            console.print(f"[yellow]NER service is already running (PID: {pid})[/yellow]")
+            return 0
+
+        if not ner_venv.exists():
+            console.print("[red]NER environment not found[/red]")
+            console.print("Run 'jarvis ner setup' first")
+            return 1
+
+        python_path = ner_venv / "bin" / "python"
+        if not python_path.exists():
+            console.print(f"[red]Python not found in NER venv: {python_path}[/red]")
+            return 1
+
+        if not server_script.exists():
+            console.print(f"[red]NER server script not found: {server_script}[/red]")
+            return 1
+
+        console.print("[bold]Starting NER service...[/bold]")
+        # Start in background
+        process = subprocess.Popen(
+            [str(python_path), str(server_script)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+        # Wait briefly and check if it started
+        import time
+
+        time.sleep(1.0)
+
+        if is_service_running():
+            console.print(f"[green]NER service started (PID: {process.pid})[/green]")
+            console.print(f"Socket: {SOCKET_PATH}")
+            return 0
+        else:
+            console.print("[red]Failed to start NER service[/red]")
+            console.print("Check logs or run server manually for debugging")
+            return 1
+
+    if subcommand == "stop":
+        pid = get_pid()
+        if pid is None:
+            console.print("[yellow]NER service is not running[/yellow]")
+            return 0
+
+        console.print(f"[bold]Stopping NER service (PID: {pid})...[/bold]")
+        try:
+            os.kill(pid, signal.SIGTERM)
+            console.print("[green]NER service stopped[/green]")
+        except ProcessLookupError:
+            console.print("[yellow]Process already terminated[/yellow]")
+        except PermissionError:
+            console.print(f"[red]Permission denied stopping PID {pid}[/red]")
+            return 1
+
+        # Clean up PID file
+        if PID_FILE.exists():
+            PID_FILE.unlink()
+        if SOCKET_PATH.exists():
+            SOCKET_PATH.unlink()
+
+        return 0
+
+    console.print(f"[red]Unknown ner subcommand: {subcommand}[/red]")
+    return 1
 
 
 def _cmd_db_init(args: argparse.Namespace) -> int:
@@ -636,6 +751,75 @@ def _cmd_db_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_db_cluster(args: argparse.Namespace) -> int:
+    """Run cluster analysis on message pairs."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from jarvis.clustering import run_cluster_analysis
+
+    db = get_db()
+    if not db.exists():
+        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
+        return 1
+
+    pair_count = db.count_pairs()
+    if pair_count == 0:
+        console.print("[yellow]No pairs found. Run 'jarvis db extract' first.[/yellow]")
+        return 1
+
+    n_clusters = args.n_clusters
+    min_cluster_size = args.min_cluster_size
+
+    console.print(f"[bold]Running cluster analysis on {pair_count} pairs...[/bold]")
+    console.print(f"  Target clusters: {n_clusters}")
+    console.print(f"  Minimum cluster size: {min_cluster_size}\n")
+
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Computing embeddings and clustering...", total=None)
+
+            stats = run_cluster_analysis(
+                n_clusters=n_clusters,
+                min_cluster_size=min_cluster_size,
+            )
+
+            progress.update(task, completed=True)
+
+        if stats.clusters_created == 0:
+            console.print("\n[yellow]No clusters created.[/yellow]")
+            console.print(f"  Total pairs analyzed: {stats.total_pairs}")
+            console.print("  Try reducing --min-cluster-size or increasing --n-clusters")
+            return 0
+
+        console.print("\n[bold green]Cluster analysis complete![/bold green]")
+        console.print(f"  Total pairs analyzed: {stats.total_pairs}")
+        console.print(f"  Pairs clustered: {stats.pairs_clustered}")
+        console.print(f"  Clusters created: {stats.clusters_created}")
+        console.print(f"  Noise (unclustered): {stats.noise_count}")
+        console.print(f"  Largest cluster: {stats.largest_cluster_size} pairs")
+        console.print(f"  Smallest cluster: {stats.smallest_cluster_size} pairs")
+        console.print(f"  Average cluster size: {stats.avg_cluster_size:.1f} pairs")
+
+        # Show cluster details
+        clusters = db.list_clusters()
+        if clusters:
+            console.print("\n[bold]Clusters:[/bold]")
+            for cluster in clusters[:10]:  # Show top 10
+                console.print(f"  • {cluster.name}: {cluster.pair_count} pairs")
+            if len(clusters) > 10:
+                console.print(f"  ... and {len(clusters) - 10} more")
+
+        return 0
+    except Exception as e:
+        console.print(f"\n[red]Error during cluster analysis: {e}[/red]")
+        logger.exception("Cluster analysis failed")
+        return 1
+
+
 # =============================================================================
 # Argument Parser
 # =============================================================================
@@ -769,7 +953,43 @@ def create_parser() -> argparse.ArgumentParser:
     db_stats_parser = db_subparsers.add_parser("stats", help="show database statistics")
     db_stats_parser.add_argument("--gate-breakdown", dest="gate_breakdown", action="store_true")
 
+    # db cluster
+    db_cluster_parser = db_subparsers.add_parser(
+        "cluster", help="run cluster analysis on message pairs (experimental)"
+    )
+    db_cluster_parser.add_argument(
+        "--n-clusters",
+        dest="n_clusters",
+        type=int,
+        default=5,
+        metavar="<n>",
+        help="number of clusters to create (default: 5)",
+    )
+    db_cluster_parser.add_argument(
+        "--min-cluster-size",
+        dest="min_cluster_size",
+        type=int,
+        default=10,
+        metavar="<n>",
+        help="minimum messages per cluster (default: 10)",
+    )
+
     db_parser.set_defaults(func=cmd_db)
+
+    # ner command - manage NER service
+    ner_parser = subparsers.add_parser(
+        "ner",
+        help="manage the NER (named entity recognition) service",
+        description="Manage the spaCy NER service for entity extraction.",
+    )
+    ner_subparsers = ner_parser.add_subparsers(dest="ner_command")
+
+    ner_subparsers.add_parser("start", help="start the NER service")
+    ner_subparsers.add_parser("stop", help="stop the NER service")
+    ner_subparsers.add_parser("status", help="check NER service status")
+    ner_subparsers.add_parser("setup", help="set up NER environment (install spaCy)")
+
+    ner_parser.set_defaults(func=cmd_ner)
 
     return parser
 

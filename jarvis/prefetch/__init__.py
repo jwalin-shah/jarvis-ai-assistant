@@ -33,10 +33,8 @@ Metrics target: 80% cache hit rate, 10x perceived latency improvement.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
-import time
 from typing import Any
 
 from jarvis.prefetch.cache import (
@@ -76,11 +74,11 @@ from jarvis.prefetch.predictor import (
     ContactFrequencyStrategy,
     ConversationContinuationStrategy,
     ModelWarmingStrategy,
+    Prediction,
     PredictionContext,
     PredictionPriority,
     PredictionStrategy,
     PredictionType,
-    Prediction,
     PrefetchPredictor,
     RecentContextStrategy,
     TimeOfDayStrategy,
@@ -270,9 +268,7 @@ class PrefetchManager:
         # Trigger immediate prediction for active conversation
         if not is_from_me:
             predictions = self._predictor.predict()
-            high_priority = [
-                p for p in predictions if p.priority >= PredictionPriority.HIGH
-            ]
+            high_priority = [p for p in predictions if p.priority >= PredictionPriority.HIGH]
             self._executor.schedule_batch(high_priority)
 
     def on_focus(self, chat_id: str) -> None:
@@ -380,13 +376,15 @@ class PrefetchManager:
         all_tags = tags or []
 
         if chat_id:
-            keys.extend([
-                f"draft:{chat_id}",
-                f"draft:cont:{chat_id}",
-                f"draft:focus:{chat_id}",
-                f"embed:ctx:{chat_id}",
-                f"contact:{chat_id}",
-            ])
+            keys.extend(
+                [
+                    f"draft:{chat_id}",
+                    f"draft:cont:{chat_id}",
+                    f"draft:focus:{chat_id}",
+                    f"embed:ctx:{chat_id}",
+                    f"contact:{chat_id}",
+                ]
+            )
             all_tags.append(f"chat:{chat_id}")
 
         return self._invalidator.manual_invalidate(keys=keys, tags=all_tags)

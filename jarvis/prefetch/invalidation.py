@@ -18,9 +18,10 @@ import logging
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from jarvis.prefetch.cache import MultiTierCache, get_cache
 
@@ -193,9 +194,7 @@ class InvalidationRule:
             return False
         return True
 
-    def get_affected_keys(
-        self, event: InvalidationEvent, cache: MultiTierCache
-    ) -> list[str]:
+    def get_affected_keys(self, event: InvalidationEvent, cache: MultiTierCache) -> list[str]:
         """Get keys that should be invalidated.
 
         Args:
@@ -367,9 +366,7 @@ class CacheInvalidator:
                     cascade_keys |= self._dependencies.get_cascade(key)
 
                 if len(cascade_keys) > len(keys_to_invalidate):
-                    self._stats.cascade_invalidations += len(cascade_keys) - len(
-                        keys_to_invalidate
-                    )
+                    self._stats.cascade_invalidations += len(cascade_keys) - len(keys_to_invalidate)
                     keys_to_invalidate |= cascade_keys
 
             # Perform invalidation

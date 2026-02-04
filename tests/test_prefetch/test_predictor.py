@@ -1,9 +1,6 @@
 """Tests for the prediction strategies."""
 
 import time
-from datetime import datetime
-
-import pytest
 
 from jarvis.prefetch.predictor import (
     AccessPattern,
@@ -16,7 +13,6 @@ from jarvis.prefetch.predictor import (
     PredictionType,
     PrefetchPredictor,
     RecentContextStrategy,
-    TimeOfDayStrategy,
     UIFocusStrategy,
 )
 

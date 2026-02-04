@@ -178,8 +178,7 @@ class SendExecutor:
         with self._lock:
             # Clean old hashes (older than 1 hour)
             old_hashes = [
-                h for h, t in self._recent_hashes.items()
-                if (now - t).total_seconds() > 3600
+                h for h, t in self._recent_hashes.items() if (now - t).total_seconds() > 3600
             ]
             for h in old_hashes:
                 del self._recent_hashes[h]
@@ -300,10 +299,7 @@ class SendExecutor:
             # Build AppleScript command
             # Escape the message text for AppleScript
             escaped_text = (
-                item.message_text
-                .replace("\\", "\\\\")
-                .replace('"', '\\"')
-                .replace("\n", "\\n")
+                item.message_text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             )
 
             # Determine if chat_id is a phone number or email
@@ -408,7 +404,7 @@ class SendExecutor:
 
             # Check if we should retry
             if attempt < max_retries:
-                delay = base_delay_seconds * (2 ** attempt)
+                delay = base_delay_seconds * (2**attempt)
                 logger.warning(
                     f"Send attempt {attempts} failed, retrying in {delay}s: {last_error}"
                 )

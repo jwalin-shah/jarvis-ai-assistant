@@ -410,6 +410,8 @@ CREATE TABLE IF NOT EXISTS pairs (
     last_used_at TIMESTAMP,           -- last time pair was used
     last_verified_at TIMESTAMP,       -- for re-indexing workflows
     source_timestamp TIMESTAMP,       -- original message timestamp (for decay)
+    -- Content-based deduplication (v9+)
+    content_hash TEXT,                -- MD5 of normalized trigger|response for dedup
     -- Uniqueness: use primary message IDs
     UNIQUE(trigger_msg_id, response_msg_id)
 );
@@ -473,6 +475,8 @@ CREATE INDEX IF NOT EXISTS idx_contacts_id ON contacts(id);
 -- Composite indexes for common query patterns (faster filtered queries)
 CREATE INDEX IF NOT EXISTS idx_pairs_chat_timestamp ON pairs(chat_id, trigger_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_pairs_contact_quality ON pairs(contact_id, quality_score DESC);
+-- Index for content-based deduplication (v9+)
+CREATE INDEX IF NOT EXISTS idx_pairs_content_hash ON pairs(content_hash);
 
 -- Scheduled drafts for automated sending (v8+)
 CREATE TABLE IF NOT EXISTS scheduled_drafts (
@@ -553,7 +557,7 @@ EXPECTED_INDICES = {
     "idx_send_queue_scheduled",
 }
 
-CURRENT_SCHEMA_VERSION = 8  # Added scheduling tables
+CURRENT_SCHEMA_VERSION = 9  # Added content_hash for text-based deduplication
 
 
 class JarvisDB:
@@ -744,6 +748,14 @@ class JarvisDB:
             # Migration v7 -> v8: Add scheduling tables
             # Tables are created by SCHEMA_SQL with CREATE TABLE IF NOT EXISTS
             # No column migrations needed since these are new tables
+
+            # Migration v8 -> v9: Add content_hash for text-based deduplication
+            if current_version < 9:
+                try:
+                    conn.execute("ALTER TABLE pairs ADD COLUMN content_hash TEXT")
+                    logger.info("Added content_hash column to pairs table")
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)
@@ -1091,15 +1103,23 @@ class JarvisDB:
                 # Duplicate pair
                 return None
 
-    def add_pairs_bulk(self, pairs: list[dict[str, Any]]) -> int:
+    def add_pairs_bulk(
+        self,
+        pairs: list[dict[str, Any]],
+        dedupe_by_content: bool = True,
+    ) -> int:
         """Add multiple pairs in a single transaction.
 
         Args:
             pairs: List of pair dictionaries.
+            dedupe_by_content: If True, skip pairs with duplicate content_hash.
+                This prevents adding semantically identical pairs even if message IDs differ.
 
         Returns:
             Number of pairs successfully added.
         """
+        import hashlib
+
         added = 0
         with self.connection() as conn:
             for pair in pairs:
@@ -1113,6 +1133,21 @@ class JarvisDB:
                 )
                 flags_json = json.dumps(pair.get("flags")) if pair.get("flags") else None
 
+                # Compute content hash for text-based deduplication
+                trigger_normalized = pair["trigger_text"].lower().strip()
+                response_normalized = pair["response_text"].lower().strip()
+                content_str = f"{trigger_normalized}|{response_normalized}"
+                content_hash = hashlib.md5(content_str.encode()).hexdigest()
+
+                # Check for content duplicate if enabled
+                if dedupe_by_content:
+                    existing = conn.execute(
+                        "SELECT 1 FROM pairs WHERE content_hash = ? LIMIT 1",
+                        (content_hash,),
+                    ).fetchone()
+                    if existing:
+                        continue  # Skip content duplicate
+
                 try:
                     conn.execute(
                         """
@@ -1120,8 +1155,8 @@ class JarvisDB:
                         (contact_id, trigger_text, response_text, trigger_timestamp,
                          response_timestamp, chat_id, trigger_msg_id, response_msg_id,
                          trigger_msg_ids_json, response_msg_ids_json, context_text,
-                         quality_score, flags_json, is_group)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         quality_score, flags_json, is_group, content_hash)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             pair.get("contact_id"),
@@ -1138,11 +1173,12 @@ class JarvisDB:
                             pair.get("quality_score", 1.0),
                             flags_json,
                             pair.get("is_group", False),
+                            content_hash,
                         ),
                     )
                     added += 1
                 except sqlite3.IntegrityError:
-                    # Skip duplicates
+                    # Skip duplicates (message ID based)
                     continue
         return added
 

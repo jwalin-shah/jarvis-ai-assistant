@@ -809,10 +809,12 @@ class TestHybridSearchWithBM25:
         ]
 
         bm25_index = BM25IndexManager()
-        bm25_index.build_index([
-            {"pair_id": 1, "trigger_text": "hello world"},
-            {"pair_id": 2, "trigger_text": "goodbye world"},
-        ])
+        bm25_index.build_index(
+            [
+                {"pair_id": 1, "trigger_text": "hello world"},
+                {"pair_id": 2, "trigger_text": "goodbye world"},
+            ]
+        )
 
         result = hybrid_search_with_bm25("hello", faiss_results, bm25_index, k=5)
 
@@ -873,9 +875,7 @@ class TestCrossEncoderReranker:
             mock_config.return_value.retrieval.rerank_model = "test-model"
             reranker = CrossEncoderReranker()
 
-            candidates = [
-                {"trigger_text": f"test{i}", "score": 0.9 - i * 0.1} for i in range(10)
-            ]
+            candidates = [{"trigger_text": f"test{i}", "score": 0.9 - i * 0.1} for i in range(10)]
 
             with patch.object(reranker, "_load_model", side_effect=Exception("Load failed")):
                 result = reranker.rerank("query", candidates, top_k=3)

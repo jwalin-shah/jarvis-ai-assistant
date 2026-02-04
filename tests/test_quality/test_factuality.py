@@ -1,6 +1,5 @@
 """Tests for factuality checking module."""
 
-
 from jarvis.quality.factuality import (
     ClaimExtractor,
     ClaimType,

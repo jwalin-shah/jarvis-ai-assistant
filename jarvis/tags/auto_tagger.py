@@ -74,7 +74,10 @@ KEYWORD_PATTERNS: dict[str, list[re.Pattern[str]]] = {
 
 # Pre-compiled sentiment indicators
 POSITIVE_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"\b(thanks|thank you|appreciate|grateful|awesome|great|love|amazing)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(thanks|thank you|appreciate|grateful|awesome|great|love|amazing)\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\b(happy|excited|wonderful|fantastic|perfect|excellent)\b", re.IGNORECASE),
     re.compile(r"[!]+\s*$", re.IGNORECASE),
     re.compile(r"[:;]-?[)D]", re.IGNORECASE),  # Smileys
@@ -203,15 +206,85 @@ class AutoTagger:
         word_counts = Counter(words)
         # Filter out common words
         common_words = {
-            "the", "and", "for", "are", "but", "not", "you", "all", "can", "her",
-            "was", "one", "our", "out", "day", "had", "has", "his", "how", "its",
-            "may", "new", "now", "old", "see", "way", "who", "boy", "did", "get",
-            "let", "put", "say", "she", "too", "use", "that", "this", "with",
-            "have", "from", "they", "been", "call", "come", "could", "each",
-            "find", "first", "into", "just", "know", "like", "long", "look",
-            "make", "many", "more", "most", "over", "such", "take", "than",
-            "them", "then", "there", "these", "thing", "think", "time", "very",
-            "what", "when", "which", "will", "would", "your", "about", "after",
+            "the",
+            "and",
+            "for",
+            "are",
+            "but",
+            "not",
+            "you",
+            "all",
+            "can",
+            "her",
+            "was",
+            "one",
+            "our",
+            "out",
+            "day",
+            "had",
+            "has",
+            "his",
+            "how",
+            "its",
+            "may",
+            "new",
+            "now",
+            "old",
+            "see",
+            "way",
+            "who",
+            "boy",
+            "did",
+            "get",
+            "let",
+            "put",
+            "say",
+            "she",
+            "too",
+            "use",
+            "that",
+            "this",
+            "with",
+            "have",
+            "from",
+            "they",
+            "been",
+            "call",
+            "come",
+            "could",
+            "each",
+            "find",
+            "first",
+            "into",
+            "just",
+            "know",
+            "like",
+            "long",
+            "look",
+            "make",
+            "many",
+            "more",
+            "most",
+            "over",
+            "such",
+            "take",
+            "than",
+            "them",
+            "then",
+            "there",
+            "these",
+            "thing",
+            "think",
+            "time",
+            "very",
+            "what",
+            "when",
+            "which",
+            "will",
+            "would",
+            "your",
+            "about",
+            "after",
         }
         keywords = [w for w, c in word_counts.most_common(20) if w not in common_words][:10]
 
@@ -225,12 +298,16 @@ class AutoTagger:
 
         # Analyze sentiment
         positive_count = sum(
-            1 for p in self._positive_patterns
-            for m in recent_messages if p.search(m.get("text", "") or "")
+            1
+            for p in self._positive_patterns
+            for m in recent_messages
+            if p.search(m.get("text", "") or "")
         )
         negative_count = sum(
-            1 for p in self._negative_patterns
-            for m in recent_messages if p.search(m.get("text", "") or "")
+            1
+            for p in self._negative_patterns
+            for m in recent_messages
+            if p.search(m.get("text", "") or "")
         )
 
         if positive_count > negative_count + 2:
@@ -253,7 +330,8 @@ class AutoTagger:
 
         # Count questions
         question_count = sum(
-            1 for m in messages
+            1
+            for m in messages
             if "?" in (m.get("text", "") or "") and not m.get("is_from_me", False)
         )
 
@@ -346,9 +424,8 @@ class AutoTagger:
         suggestions = []
 
         # Suggest "Needs Response" if there are unanswered questions
-        if (
-            analysis.needs_attention
-            or (analysis.question_count > 0 and not analysis.last_message_from_me)
+        if analysis.needs_attention or (
+            analysis.question_count > 0 and not analysis.last_message_from_me
         ):
             if "needs response" not in existing_names:
                 suggestions.append(

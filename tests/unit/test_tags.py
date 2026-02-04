@@ -397,9 +397,7 @@ class TestSmartFolders(TestTagManager):
         """Test creating a smart folder."""
         rules = SmartFolderRules(
             match="all",
-            conditions=[
-                RuleCondition(field="unread_count", operator="greater_than", value=0)
-            ],
+            conditions=[RuleCondition(field="unread_count", operator="greater_than", value=0)],
         )
         folder = manager.create_smart_folder("Unread Messages", rules)
 
@@ -480,10 +478,9 @@ class TestTagRules(TestTagManager):
     def test_create_tag_rule(self, manager: TagManager) -> None:
         """Test creating an auto-tagging rule."""
         import json
+
         tag = manager.create_tag("Urgent")
-        conditions = [
-            {"field": "last_message_text", "operator": "contains", "value": "urgent"}
-        ]
+        conditions = [{"field": "last_message_text", "operator": "contains", "value": "urgent"}]
         rule = TagRule(
             name="Mark Urgent Messages",
             trigger="on_new_message",
@@ -499,6 +496,7 @@ class TestTagRules(TestTagManager):
     def test_get_tag_rule(self, manager: TagManager) -> None:
         """Test retrieving a tag rule by ID."""
         import json
+
         tag = manager.create_tag("Test")
         rule = TagRule(
             name="Test Rule", trigger="on_new_message", tag_ids_json=json.dumps([tag.id])
@@ -513,6 +511,7 @@ class TestTagRules(TestTagManager):
     def test_list_tag_rules(self, manager: TagManager) -> None:
         """Test listing tag rules."""
         import json
+
         tag = manager.create_tag("Test")
         rule1 = TagRule(name="Rule1", trigger="on_new_message", tag_ids_json=json.dumps([tag.id]))
         rule2 = TagRule(name="Rule2", trigger="manual", tag_ids_json=json.dumps([tag.id]))
@@ -532,6 +531,7 @@ class TestTagRules(TestTagManager):
     def test_update_tag_rule(self, manager: TagManager) -> None:
         """Test updating a tag rule."""
         import json
+
         tag = manager.create_tag("Test")
         rule = TagRule(name="Old Name", trigger="on_new_message", tag_ids_json=json.dumps([tag.id]))
         created = manager.create_tag_rule(rule)
@@ -547,6 +547,7 @@ class TestTagRules(TestTagManager):
     def test_delete_tag_rule(self, manager: TagManager) -> None:
         """Test deleting a tag rule."""
         import json
+
         tag = manager.create_tag("Test")
         rule = TagRule(
             name="To Delete", trigger="on_new_message", tag_ids_json=json.dumps([tag.id])
@@ -790,9 +791,7 @@ class TestRulesEngine:
         self, engine: RulesEngine, manager: TagManager
     ) -> None:
         """Test greater_than operator."""
-        rules = build_rules([
-            {"field": "unread_count", "operator": "greater_than", "value": 0}
-        ])
+        rules = build_rules([{"field": "unread_count", "operator": "greater_than", "value": 0}])
         folder = manager.create_smart_folder("Unread", rules)
 
         conversations = [
@@ -824,9 +823,9 @@ class TestRulesEngine:
         self, engine: RulesEngine, manager: TagManager
     ) -> None:
         """Test in_last_days operator for date fields."""
-        rules = build_rules([
-            {"field": "last_message_date", "operator": "in_last_days", "value": 7}
-        ])
+        rules = build_rules(
+            [{"field": "last_message_date", "operator": "in_last_days", "value": 7}]
+        )
         folder = manager.create_smart_folder("Recent", rules)
 
         now = datetime.now(UTC)
@@ -942,9 +941,7 @@ class TestRulesEngine:
         rules = build_rules([], limit=2)
         folder = manager.create_smart_folder("Limited", rules)
 
-        conversations = [
-            {"chat_id": f"chat{i}", "display_name": f"User{i}"} for i in range(10)
-        ]
+        conversations = [{"chat_id": f"chat{i}", "display_name": f"User{i}"} for i in range(10)]
 
         matching = engine.evaluate_folder(folder, conversations)
 
@@ -1026,11 +1023,13 @@ class TestBuildRulesHelper:
 
     def test_build_rules_multiple_conditions(self) -> None:
         """Test building rules with multiple conditions."""
-        rules = build_rules([
-            {"field": "is_group", "operator": "equals", "value": False},
-            {"field": "unread_count", "operator": "greater_than", "value": 0},
-            {"field": "display_name", "operator": "contains", "value": "work"},
-        ])
+        rules = build_rules(
+            [
+                {"field": "is_group", "operator": "equals", "value": False},
+                {"field": "unread_count", "operator": "greater_than", "value": 0},
+                {"field": "display_name", "operator": "contains", "value": "work"},
+            ]
+        )
 
         assert len(rules.conditions) == 3
 
@@ -1062,9 +1061,7 @@ class TestTagModels:
             '{"match": "all", "conditions": [], "sort_by": "display_name", '
             '"sort_order": "asc", "limit": 10}'
         )
-        folder = SmartFolder(
-            id=1, name="Test", icon="folder", color="#000", rules_json=rules_json
-        )
+        folder = SmartFolder(id=1, name="Test", icon="folder", color="#000", rules_json=rules_json)
 
         rules = folder.rules
 

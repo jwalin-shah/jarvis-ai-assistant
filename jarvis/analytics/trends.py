@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -111,12 +111,8 @@ def detect_trend(
 
     # Calculate confidence based on consistency of trend
     # Count how many periods show the same direction
-    increases = sum(
-        1 for i in range(1, len(values)) if values[i] > values[i - 1]
-    )
-    decreases = sum(
-        1 for i in range(1, len(values)) if values[i] < values[i - 1]
-    )
+    increases = sum(1 for i in range(1, len(values)) if values[i] > values[i - 1])
+    decreases = sum(1 for i in range(1, len(values)) if values[i] < values[i - 1])
     total_changes = len(values) - 1
 
     if total_changes == 0:
@@ -127,7 +123,7 @@ def detect_trend(
         confidence = decreases / total_changes
     else:
         # For stable, confidence is based on low variance
-        stable_changes = total_changes - increases - decreases
+        total_changes - increases - decreases
         confidence = max(
             0.5,
             1.0 - (abs(pct_change) / 100),
@@ -166,7 +162,7 @@ def detect_anomalies(
     # Calculate mean and standard deviation
     mean = sum(values) / len(values)
     variance = sum((v - mean) ** 2 for v in values) / len(values)
-    std_dev = variance ** 0.5
+    std_dev = variance**0.5
 
     if std_dev == 0:
         return []
@@ -220,9 +216,7 @@ def detect_peak_periods(
     ]
 
     # Count by day of week
-    day_counts: Counter[str] = Counter(
-        m.date.strftime("%A") for m in messages
-    )
+    day_counts: Counter[str] = Counter(m.date.strftime("%A") for m in messages)
     peak_days = [
         PeakPeriod(
             period_type="day",
@@ -309,9 +303,7 @@ class TrendAnalyzer:
         self.anomaly_threshold = anomaly_threshold
         self.trend_window_size = trend_window_size
 
-    def analyze_message_trends(
-        self, messages: list[Message]
-    ) -> TrendAnalysis:
+    def analyze_message_trends(self, messages: list[Message]) -> TrendAnalysis:
         """Perform comprehensive trend analysis on messages.
 
         Args:
@@ -341,9 +333,7 @@ class TrendAnalyzer:
         sorted_msgs = sorted(messages, key=lambda m: m.date)
 
         # Group by day for daily counts
-        daily_counts: Counter[str] = Counter(
-            m.date.strftime("%Y-%m-%d") for m in sorted_msgs
-        )
+        daily_counts: Counter[str] = Counter(m.date.strftime("%Y-%m-%d") for m in sorted_msgs)
         daily_data = sorted(daily_counts.items())
         daily_values = [v for _, v in daily_data]
 
@@ -351,28 +341,20 @@ class TrendAnalyzer:
         overall_trend = detect_trend(daily_values, self.trend_window_size)
 
         # Weekly trend (aggregate by week)
-        weekly_counts: Counter[str] = Counter(
-            m.date.strftime("%Y-W%W") for m in sorted_msgs
-        )
+        weekly_counts: Counter[str] = Counter(m.date.strftime("%Y-W%W") for m in sorted_msgs)
         weekly_values = [v for _, v in sorted(weekly_counts.items())]
         weekly_trend = (
-            detect_trend(weekly_values, self.trend_window_size)
-            if len(weekly_values) >= 4
-            else None
+            detect_trend(weekly_values, self.trend_window_size) if len(weekly_values) >= 4 else None
         )
 
         # Anomaly detection
-        anomalies = detect_anomalies(
-            list(daily_data), self.anomaly_threshold
-        )
+        anomalies = detect_anomalies(list(daily_data), self.anomaly_threshold)
 
         # Peak periods
         peak_hours, peak_days = detect_peak_periods(sorted_msgs)
 
         # Seasonality
-        seasonality_detected, seasonality_period = detect_seasonality(
-            dict(daily_counts)
-        )
+        seasonality_detected, seasonality_period = detect_seasonality(dict(daily_counts))
 
         return TrendAnalysis(
             overall_trend=overall_trend,
@@ -407,14 +389,10 @@ class TrendAnalyzer:
 
         results: dict[str, TrendResult] = {}
         for contact_id, msgs in contact_messages.items():
-            daily_counts: Counter[str] = Counter(
-                m.date.strftime("%Y-%m-%d") for m in msgs
-            )
+            daily_counts: Counter[str] = Counter(m.date.strftime("%Y-%m-%d") for m in msgs)
             daily_values = [v for _, v in sorted(daily_counts.items())]
             if len(daily_values) >= 4:
-                results[contact_id] = detect_trend(
-                    daily_values, self.trend_window_size
-                )
+                results[contact_id] = detect_trend(daily_values, self.trend_window_size)
 
         return results
 
@@ -444,9 +422,7 @@ class TrendAnalyzer:
         # Analyze trends
         trending: list[tuple[str, str | None, TrendResult]] = []
         for contact_id, (name, msgs) in contact_data.items():
-            daily_counts: Counter[str] = Counter(
-                m.date.strftime("%Y-%m-%d") for m in msgs
-            )
+            daily_counts: Counter[str] = Counter(m.date.strftime("%Y-%m-%d") for m in msgs)
             daily_values = [v for _, v in sorted(daily_counts.items())]
             if len(daily_values) >= 4:
                 trend = detect_trend(daily_values, self.trend_window_size)
@@ -487,11 +463,7 @@ class TrendAnalyzer:
         previous_start = current_start - timedelta(days=previous_days)
 
         current_msgs = [m for m in sorted_msgs if m.date >= current_start]
-        previous_msgs = [
-            m
-            for m in sorted_msgs
-            if previous_start <= m.date < current_start
-        ]
+        previous_msgs = [m for m in sorted_msgs if previous_start <= m.date < current_start]
 
         # Calculate metrics
         def safe_pct_change(curr: float, prev: float) -> float:
@@ -509,15 +481,9 @@ class TrendAnalyzer:
         previous_contacts = len({m.chat_id for m in previous_msgs})
 
         return {
-            "total_messages_change": safe_pct_change(
-                current_total, previous_total
-            ),
-            "sent_messages_change": safe_pct_change(
-                current_sent, previous_sent
-            ),
-            "active_contacts_change": safe_pct_change(
-                current_contacts, previous_contacts
-            ),
+            "total_messages_change": safe_pct_change(current_total, previous_total),
+            "sent_messages_change": safe_pct_change(current_sent, previous_sent),
+            "active_contacts_change": safe_pct_change(current_contacts, previous_contacts),
             "current_period_total": current_total,
             "previous_period_total": previous_total,
         }

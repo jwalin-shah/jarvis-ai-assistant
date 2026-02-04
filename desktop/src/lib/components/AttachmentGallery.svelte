@@ -32,7 +32,7 @@
   let limit = 100;
 
   // Image loading states
-  let imageStates: Map<string, "loading" | "loaded" | "error"> = new Map();
+  let imageStates: Map<string, "loading" | "loaded" | "error"> = $state(new Map());
 
   // Attachment type options
   const typeOptions: { value: AttachmentType; label: string; icon: string }[] = [

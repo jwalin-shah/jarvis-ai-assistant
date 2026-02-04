@@ -139,14 +139,16 @@ class QualityGateConfig:
     min_score_for_rewrite: float = 0.3  # Below this, don't even try
 
     # Gate weights for overall score
-    weights: dict[str, float] = field(default_factory=lambda: {
-        "hallucination": 0.25,
-        "factuality": 0.20,
-        "consistency": 0.15,
-        "grounding": 0.15,
-        "coherence": 0.15,
-        "relevance": 0.10,
-    })
+    weights: dict[str, float] = field(
+        default_factory=lambda: {
+            "hallucination": 0.25,
+            "factuality": 0.20,
+            "consistency": 0.15,
+            "grounding": 0.15,
+            "coherence": 0.15,
+            "relevance": 0.10,
+        }
+    )
 
     @classmethod
     def strict(cls) -> QualityGateConfig:
@@ -315,9 +317,7 @@ class QualityGate:
         all_suggestions: list[str] = []
 
         # Normalize source to string
-        source_str = (
-            " ".join(source) if isinstance(source, list) else (source or "")
-        )
+        source_str = " ".join(source) if isinstance(source, list) else (source or "")
 
         # Run enabled gates
         if self._config.hallucination_enabled and source_str:
@@ -445,9 +445,7 @@ class QualityGate:
             quality_indicator=quality_indicator,
         )
 
-    def _check_hallucination(
-        self, response: str, source: str
-    ) -> GateCheckResult:
+    def _check_hallucination(self, response: str, source: str) -> GateCheckResult:
         """Check hallucination gate."""
         gate_start = time.perf_counter()
 
@@ -492,9 +490,7 @@ class QualityGate:
                 issues=[f"Check failed: {e}"],
             )
 
-    def _check_hallucination_fast(
-        self, response: str, source: str
-    ) -> GateCheckResult:
+    def _check_hallucination_fast(self, response: str, source: str) -> GateCheckResult:
         """Fast hallucination check using keyword overlap only."""
         import re
 
@@ -531,9 +527,7 @@ class QualityGate:
             issues=issues,
         )
 
-    def _check_factuality(
-        self, response: str, source: str
-    ) -> GateCheckResult:
+    def _check_factuality(self, response: str, source: str) -> GateCheckResult:
         """Check factuality gate."""
         gate_start = time.perf_counter()
 
@@ -577,9 +571,7 @@ class QualityGate:
                 issues=[f"Check failed: {e}"],
             )
 
-    def _check_consistency(
-        self, response: str, history: list[str] | None
-    ) -> GateCheckResult:
+    def _check_consistency(self, response: str, history: list[str] | None) -> GateCheckResult:
         """Check consistency gate."""
         gate_start = time.perf_counter()
 
@@ -625,9 +617,7 @@ class QualityGate:
                 issues=[f"Check failed: {e}"],
             )
 
-    def _check_grounding(
-        self, response: str, source: str
-    ) -> GateCheckResult:
+    def _check_grounding(self, response: str, source: str) -> GateCheckResult:
         """Check grounding gate."""
         gate_start = time.perf_counter()
 
@@ -671,9 +661,7 @@ class QualityGate:
                 issues=[f"Check failed: {e}"],
             )
 
-    def _check_coherence(
-        self, response: str, context: str | None
-    ) -> GateCheckResult:
+    def _check_coherence(self, response: str, context: str | None) -> GateCheckResult:
         """Check coherence gate."""
         gate_start = time.perf_counter()
 
@@ -690,9 +678,7 @@ class QualityGate:
         try:
             from jarvis.quality.dimensions import QualityDimension
 
-            result = scorer.score_dimension(
-                QualityDimension.COHERENCE, response, context
-            )
+            result = scorer.score_dimension(QualityDimension.COHERENCE, response, context)
             score = result.score
 
             if score >= self._config.coherence_threshold:
@@ -722,9 +708,7 @@ class QualityGate:
                 issues=[f"Check failed: {e}"],
             )
 
-    def _check_relevance(
-        self, response: str, source: str
-    ) -> GateCheckResult:
+    def _check_relevance(self, response: str, source: str) -> GateCheckResult:
         """Check relevance gate."""
         gate_start = time.perf_counter()
 
@@ -741,9 +725,7 @@ class QualityGate:
         try:
             from jarvis.quality.dimensions import QualityDimension
 
-            result = scorer.score_dimension(
-                QualityDimension.RELEVANCE, response, source
-            )
+            result = scorer.score_dimension(QualityDimension.RELEVANCE, response, source)
             score = result.score
 
             if score >= self._config.relevance_threshold:
@@ -773,9 +755,7 @@ class QualityGate:
                 issues=[f"Check failed: {e}"],
             )
 
-    def _make_decision(
-        self, results: list[GateCheckResult]
-    ) -> tuple[GateDecision, RewriteAction]:
+    def _make_decision(self, results: list[GateCheckResult]) -> tuple[GateDecision, RewriteAction]:
         """Make overall decision based on gate results."""
         if not results:
             return GateDecision.PASS, RewriteAction.NONE

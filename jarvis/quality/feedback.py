@@ -66,9 +66,7 @@ class FeedbackEntry:
             "edit_type": self.edit_type.value if self.edit_type else None,
             "edit_distance": self.edit_distance,
             "rating": self.rating,
-            "quality_scores": {
-                k: round(v, 4) for k, v in self.quality_scores.items()
-            },
+            "quality_scores": {k: round(v, 4) for k, v in self.quality_scores.items()},
             "contact_id": self.contact_id,
             "model_name": self.model_name,
         }
@@ -139,9 +137,7 @@ class EditAnalyzer:
     MODERATE_EDIT_THRESHOLD = 50  # characters
     MAJOR_EDIT_THRESHOLD = 0.5  # 50% change
 
-    def analyze_edit(
-        self, original: str, edited: str
-    ) -> tuple[EditType, int, list[str]]:
+    def analyze_edit(self, original: str, edited: str) -> tuple[EditType, int, list[str]]:
         """Analyze an edit to classify type and identify patterns.
 
         Args:
@@ -242,9 +238,7 @@ class EditAnalyzer:
             patterns.append("removed_emoji")
 
         # Name usage
-        if re.search(r"\b[A-Z][a-z]+\b", edited) and not re.search(
-            r"\b[A-Z][a-z]+\b", original
-        ):
+        if re.search(r"\b[A-Z][a-z]+\b", edited) and not re.search(r"\b[A-Z][a-z]+\b", original):
             patterns.append("added_name")
 
         return patterns
@@ -283,8 +277,11 @@ class FeedbackCollector:
         # Per-model tracking
         self._model_feedback: dict[str, dict[str, Any]] = defaultdict(
             lambda: {
-                "accepted": 0, "edited": 0, "rejected": 0,
-                "total_rating": 0.0, "rating_count": 0,
+                "accepted": 0,
+                "edited": 0,
+                "rejected": 0,
+                "total_rating": 0.0,
+                "rating_count": 0,
             }
         )
 
@@ -507,9 +504,7 @@ class FeedbackCollector:
             total = self._accepted_count + self._edited_count + self._rejected_count
 
             if total > 0:
-                acceptance_rate = (
-                    self._accepted_count + self._edited_count
-                ) / total
+                acceptance_rate = (self._accepted_count + self._edited_count) / total
             else:
                 acceptance_rate = 0.0
 
@@ -531,9 +526,7 @@ class FeedbackCollector:
             for model, stats in self._model_feedback.items():
                 model_total = stats["accepted"] + stats["edited"] + stats["rejected"]
                 if model_total > 0:
-                    model_acceptance = (
-                        stats["accepted"] + stats["edited"]
-                    ) / model_total
+                    model_acceptance = (stats["accepted"] + stats["edited"]) / model_total
                 else:
                     model_acceptance = 0.0
 
@@ -672,9 +665,7 @@ class FeedbackCollector:
     def _get_top_patterns(self, n: int = 10) -> list[EditPattern]:
         """Get top N most common edit patterns."""
         patterns = []
-        sorted_patterns = sorted(
-            self._pattern_counts.items(), key=lambda x: x[1], reverse=True
-        )[:n]
+        sorted_patterns = sorted(self._pattern_counts.items(), key=lambda x: x[1], reverse=True)[:n]
 
         pattern_descriptions = {
             "shortened": "User shortened the response",
@@ -694,9 +685,7 @@ class FeedbackCollector:
             patterns.append(
                 EditPattern(
                     pattern_type=ptype,
-                    description=pattern_descriptions.get(
-                        pattern_name, f"Pattern: {pattern_name}"
-                    ),
+                    description=pattern_descriptions.get(pattern_name, f"Pattern: {pattern_name}"),
                     frequency=count,
                     example_before="",  # Would need to track examples
                     example_after="",

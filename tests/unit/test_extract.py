@@ -1859,3 +1859,174 @@ class TestModuleLevelFunctions:
         # Under 20 chars without other indicators - not substantive
         assert not extractor._is_substantive_response("short")  # 5 chars
         assert not extractor._is_substantive_response("hi there")  # 8 chars
+
+
+# =============================================================================
+# Phase 1-4 New Feature Tests
+# =============================================================================
+
+
+class TestNullEmptyMessageTracking:
+    """Tests for null/empty message tracking (Phase 1)."""
+
+    def test_stats_have_null_text_field(self) -> None:
+        """ExtractionStats should have dropped_null_text field."""
+        stats = ExtractionStats()
+        assert stats.dropped_null_text == 0
+        stats.dropped_null_text += 1
+        assert stats.dropped_null_text == 1
+
+    def test_stats_have_empty_text_field(self) -> None:
+        """ExtractionStats should have dropped_empty_text field."""
+        stats = ExtractionStats()
+        assert stats.dropped_empty_text == 0
+        stats.dropped_empty_text += 1
+        assert stats.dropped_empty_text == 1
+
+    def test_null_messages_tracked_in_turn_grouping(self, default_config: ExtractionConfig) -> None:
+        """Null text messages should be tracked when grouping turns."""
+        extractor = TurnBasedExtractor(default_config)
+        stats = ExtractionStats()
+        base_time = datetime(2024, 1, 1, 10, 0, 0)
+
+        msgs = [
+            make_message(1, None, False, base_time),  # null text
+            make_message(2, "Hello", False, base_time + timedelta(seconds=30)),
+        ]
+
+        extractor._group_into_turns(msgs, stats=stats)
+        assert stats.dropped_null_text == 1
+
+
+class TestGroupChatQualityPenalty:
+    """Tests for group chat quality penalty (Phase 2)."""
+
+    def test_config_has_group_chat_penalty(self) -> None:
+        """ExtractionConfig should have group_chat_quality_penalty."""
+        config = ExtractionConfig()
+        assert config.group_chat_quality_penalty == 0.7
+
+    def test_config_custom_group_chat_penalty(self) -> None:
+        """ExtractionConfig should accept custom group_chat_quality_penalty."""
+        config = ExtractionConfig(group_chat_quality_penalty=0.5)
+        assert config.group_chat_quality_penalty == 0.5
+
+    def test_stats_have_flagged_group_chat(self) -> None:
+        """ExtractionStats should have flagged_group_chat."""
+        stats = ExtractionStats()
+        assert stats.flagged_group_chat == 0
+
+    def test_group_chat_quality_penalty_applied(self, default_config: ExtractionConfig) -> None:
+        """Group chat pairs should have quality penalty applied."""
+        extractor = TurnBasedExtractor(default_config)
+        base_time = datetime(2024, 1, 1, 10, 0, 0)
+
+        trigger_turn = Turn(is_from_me=False)
+        trigger_turn.add_message(make_message(1, "Hey, want to grab lunch?", False, base_time))
+        response_turn = Turn(is_from_me=True)
+        response_turn.add_message(
+            make_message(2, "Sure, sounds great to me!", True, base_time + timedelta(minutes=1))
+        )
+
+        # Test with is_group=False
+        quality_no_group, flags_no_group = extractor._calculate_quality(
+            trigger_turn.text,
+            response_turn.text,
+            trigger_turn,
+            response_turn,
+            timedelta(minutes=1),
+            is_group=False,
+        )
+
+        # Test with is_group=True
+        quality_group, flags_group = extractor._calculate_quality(
+            trigger_turn.text,
+            response_turn.text,
+            trigger_turn,
+            response_turn,
+            timedelta(minutes=1),
+            is_group=True,
+        )
+
+        assert "group_chat" not in flags_no_group
+        assert flags_group.get("group_chat") is True
+        # Group chat should have lower quality
+        assert quality_group < quality_no_group
+
+
+class TestStaleResponseDetection:
+    """Tests for stale response detection (Phase 3)."""
+
+    def test_config_has_stale_threshold(self) -> None:
+        """ExtractionConfig should have stale_response_threshold_hours."""
+        config = ExtractionConfig()
+        assert config.stale_response_threshold_hours == 24.0
+
+    def test_stats_have_flagged_stale_response(self) -> None:
+        """ExtractionStats should have flagged_stale_response."""
+        stats = ExtractionStats()
+        assert stats.flagged_stale_response == 0
+
+    def test_stale_response_flagged(self, default_config: ExtractionConfig) -> None:
+        """Responses >24h should be flagged as stale."""
+        extractor = TurnBasedExtractor(default_config)
+        base_time = datetime(2024, 1, 1, 10, 0, 0)
+
+        trigger_turn = Turn(is_from_me=False)
+        trigger_turn.add_message(make_message(1, "Hey, want to grab lunch?", False, base_time))
+        response_turn = Turn(is_from_me=True)
+        response_turn.add_message(
+            make_message(2, "Sure, sounds great to me!", True, base_time + timedelta(hours=30))
+        )
+
+        quality, flags = extractor._calculate_quality(
+            trigger_turn.text,
+            response_turn.text,
+            trigger_turn,
+            response_turn,
+            timedelta(hours=30),
+        )
+
+        assert flags.get("stale_response") is True
+        assert flags.get("stale_hours") == 30.0
+        # Stale response should have severe quality penalty
+        assert quality < 0.2
+
+
+class TestSpamDetection:
+    """Tests for spam/bot message detection (Phase 4)."""
+
+    def test_config_has_spam_detection_flag(self) -> None:
+        """ExtractionConfig should have spam_detection_enabled."""
+        config = ExtractionConfig()
+        assert config.spam_detection_enabled is True
+
+    def test_stats_have_dropped_spam(self) -> None:
+        """ExtractionStats should have dropped_spam."""
+        stats = ExtractionStats()
+        assert stats.dropped_spam == 0
+
+    def test_spam_messages_detected(self) -> None:
+        """Spam messages should be detected by is_spam_message."""
+        from jarvis.text_normalizer import is_spam_message
+
+        # Shipping notifications
+        assert is_spam_message("Your order has shipped from Amazon")
+        assert is_spam_message("Your package is out for delivery")
+
+        # Appointment reminders
+        assert is_spam_message("Appointment reminder: your appointment is tomorrow")
+        assert is_spam_message("Reply YES to confirm your appointment")
+
+        # Verification codes
+        assert is_spam_message("Your verification code is 123456")
+        assert is_spam_message("Your one-time code is: 7890")
+
+        # Marketing
+        assert is_spam_message("Limited time offer! Get 50% off now")
+        assert is_spam_message("Use code SAVE20 for free shipping")
+
+        # Normal messages should NOT be spam
+        assert not is_spam_message("Hey, want to grab lunch?")
+        assert not is_spam_message("Sure, sounds good!")
+        assert not is_spam_message("What time works for you?")

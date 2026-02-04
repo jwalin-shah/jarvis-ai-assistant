@@ -79,9 +79,9 @@ jarvis health
 
 ## Commands
 
-> **Note:** The CLI currently supports these commands: `health`, `benchmark`, `version`, `serve`, and `db`.
-> The `chat`, `search-messages`, `reply`, `summarize`, `export`, and `mcp-serve` commands documented below
-> are planned features available through the REST API (`jarvis serve`) or desktop application, not the CLI directly.
+> **Note:** The CLI supports these commands: `health`, `benchmark`, `version`, `serve`, `mcp-serve`, and `db`.
+> The `chat`, `search-messages`, `reply`, `summarize`, and `export` commands documented below
+> are also available via the REST API (`jarvis serve`) or desktop application.
 
 ### Global Options
 
@@ -590,6 +590,166 @@ jarvis --version
 JARVIS AI Assistant v1.0.0
 ```
 
+### `db` - Database Operations
+
+Manage the JARVIS database (contacts, message pairs, FAISS index).
+
+**Usage:**
+```bash
+jarvis db <subcommand> [options]
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `init` | Initialize the database schema |
+| `add-contact` | Add or update a contact |
+| `list-contacts` | List all contacts |
+| `extract` | Extract (trigger, response) pairs from iMessage |
+| `build-index` | Build FAISS index for similarity search |
+| `stats` | Show database statistics |
+| `cluster` | Run cluster analysis on message pairs (experimental) |
+
+#### `db init`
+
+Initialize the JARVIS database schema.
+
+```bash
+jarvis db init [--force]
+```
+
+**Options:**
+- `--force` - Reinitialize even if database already exists
+
+#### `db add-contact`
+
+Add or update a contact with relationship metadata.
+
+```bash
+jarvis db add-contact --name "<name>" [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--name <name>` | Contact display name (required) |
+| `--relationship <type>` | Relationship type (friend, family, work, etc.) |
+| `--style <notes>` | Communication style notes |
+| `--phone <number>` | Phone number or email |
+| `--chat-id <id>` | iMessage chat ID |
+
+**Example:**
+```bash
+jarvis db add-contact --name "Sarah" --relationship "sister" --style "casual, uses emojis"
+```
+
+#### `db list-contacts`
+
+List all contacts in the database.
+
+```bash
+jarvis db list-contacts [-l <n>]
+```
+
+**Options:**
+- `-l, --limit <n>` - Maximum number of contacts to show (default: 100)
+
+#### `db extract`
+
+Extract (trigger, response) pairs from iMessage history.
+
+```bash
+jarvis db extract [options]
+```
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--min-length <n>` | Minimum trigger length | 2 |
+| `--max-delay <hours>` | Maximum response delay | 1.0 |
+| `--v2` | Use v2 extraction with validity gates | - |
+| `--time-gap <min>` | Time gap boundary in minutes (v2) | 30.0 |
+| `--context-size <n>` | Context window size (v2) | 20 |
+| `--skip-nli` | Skip NLI validation (v2) | - |
+
+**Example:**
+```bash
+# Standard extraction
+jarvis db extract
+
+# V2 extraction with custom settings
+jarvis db extract --v2 --time-gap 60 --context-size 30
+```
+
+#### `db build-index`
+
+Build FAISS index for fast similarity search.
+
+```bash
+jarvis db build-index
+```
+
+**Prerequisites:**
+- Database must be initialized (`jarvis db init`)
+- Pairs must be extracted (`jarvis db extract`)
+
+#### `db stats`
+
+Show database statistics including pair counts, index status, and more.
+
+```bash
+jarvis db stats [--gate-breakdown]
+```
+
+**Options:**
+- `--gate-breakdown` - Show validity gate statistics (v2 extraction only)
+
+**Output:**
+```
+JARVIS Database Statistics
+
+Overview
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┓
+┃ Metric              ┃ Count  ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━┩
+│ Contacts            │ 15     │
+│ Pairs (total)       │ 40,061 │
+│ Pairs (quality >= 0.5) │ 38,245 │
+│ Embeddings          │ 40,061 │
+└─────────────────────┴────────┘
+
+FAISS Index:
+  Version: 20260202-151659
+  Vectors: 40,061
+  Dimension: 384
+```
+
+#### `db cluster`
+
+Run cluster analysis on message pairs to discover conversation patterns and group similar interactions. This is an experimental feature for analyzing your messaging behavior.
+
+```bash
+jarvis db cluster [options]
+```
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--n-clusters <n>` | Number of clusters to create | 5 |
+| `--min-cluster-size <n>` | Minimum messages per cluster | 10 |
+
+**Example:**
+```bash
+# Run with default settings
+jarvis db cluster
+
+# Create more granular clusters
+jarvis db cluster --n-clusters 10 --min-cluster-size 5
+```
+
+**Note:** This command runs analysis on existing message pairs in the JARVIS database. Run `jarvis db extract` first to populate pairs from iMessage history.
+
 ## Configuration
 
 JARVIS stores configuration in `~/.jarvis/config.json`. The setup wizard creates this file automatically.
@@ -599,7 +759,7 @@ JARVIS stores configuration in `~/.jarvis/config.json`. The setup wizard creates
 ```json
 {
   "config_version": 7,
-  "model_path": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+  "model_path": "mlx-community/LFM2.5-1.2B-Instruct-MLX-4bit",
   "template_similarity_threshold": 0.7,
   "memory_thresholds": {
     "full_mode_mb": 8000,
@@ -642,7 +802,7 @@ JARVIS stores configuration in `~/.jarvis/config.json`. The setup wizard creates
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `model.model_id` | Model identifier (`qwen-0.5b`, `qwen-1.5b`, `qwen-3b`) | `qwen-1.5b` |
+| `model.model_id` | Model identifier (`lfm-1.2b`, `qwen-0.5b`, `qwen-1.5b`, `qwen-3b`) | `lfm-1.2b` |
 | `model.auto_select` | Auto-select model based on available RAM | `true` |
 | `model.max_tokens_reply` | Maximum tokens for reply generation | `150` |
 | `model.max_tokens_summary` | Maximum tokens for summarization | `500` |
@@ -756,7 +916,7 @@ In chat mode, you can also type these commands:
 1. Verify you're on Apple Silicon: `uname -m` should show `arm64`
 2. Check available memory: `jarvis health`
 3. Ensure MLX is installed: `pip install mlx mlx-lm`
-4. Try a smaller model in config: set `model.model_id` to `qwen-0.5b`
+4. Try a smaller model in config: set `model.model_id` to `lfm-1.2b` (default) or `qwen-0.5b`
 
 #### "Could not find conversation with 'Name'"
 

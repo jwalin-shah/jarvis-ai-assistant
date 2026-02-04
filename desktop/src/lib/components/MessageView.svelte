@@ -1450,7 +1450,6 @@
     cursor: default;
   }
 
-  .loading,
   .empty {
     text-align: center;
     color: var(--text-secondary);

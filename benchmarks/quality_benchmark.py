@@ -316,9 +316,7 @@ class QualityBenchmark:
         latencies: list[float] = []
         dimension_scores: dict[str, list[float]] = {}
 
-        logger.info(
-            "Running benchmark '%s' with %d samples", benchmark_name, len(samples)
-        )
+        logger.info("Running benchmark '%s' with %d samples", benchmark_name, len(samples))
 
         for sample in samples:
             start_time = time.perf_counter()
@@ -351,9 +349,7 @@ class QualityBenchmark:
                     latency_ms=latency_ms,
                     passed=gate_result.should_send,
                     human_score=(
-                        sample.expected_quality.get("overall")
-                        if sample.expected_quality
-                        else None
+                        sample.expected_quality.get("overall") if sample.expected_quality else None
                     ),
                 )
             )
@@ -362,12 +358,8 @@ class QualityBenchmark:
         passed_count = sum(1 for r in results if r.passed)
         pass_rate = passed_count / len(results) if results else 0.0
 
-        mean_scores = {
-            dim: mean(scores) for dim, scores in dimension_scores.items()
-        }
-        median_scores = {
-            dim: median(scores) for dim, scores in dimension_scores.items()
-        }
+        mean_scores = {dim: mean(scores) for dim, scores in dimension_scores.items()}
+        median_scores = {dim: median(scores) for dim, scores in dimension_scores.items()}
         std_scores = {
             dim: stdev(scores) if len(scores) > 1 else 0.0
             for dim, scores in dimension_scores.items()
@@ -382,14 +374,10 @@ class QualityBenchmark:
         # Compute latency percentiles (handle empty case)
         p50_latency = sorted_latencies[p50_idx] if sorted_latencies else 0.0
         p95_latency = (
-            sorted_latencies[min(p95_idx, len(sorted_latencies) - 1)]
-            if sorted_latencies
-            else 0.0
+            sorted_latencies[min(p95_idx, len(sorted_latencies) - 1)] if sorted_latencies else 0.0
         )
         p99_latency = (
-            sorted_latencies[min(p99_idx, len(sorted_latencies) - 1)]
-            if sorted_latencies
-            else 0.0
+            sorted_latencies[min(p99_idx, len(sorted_latencies) - 1)] if sorted_latencies else 0.0
         )
 
         return BenchmarkReport(
@@ -554,9 +542,7 @@ class ABTestFramework:
             p_value=p_value,
         )
 
-    def _compute_p_value(
-        self, scores_a: list[float], scores_b: list[float]
-    ) -> float | None:
+    def _compute_p_value(self, scores_a: list[float], scores_b: list[float]) -> float | None:
         """Compute p-value for paired comparison."""
         if len(scores_a) != len(scores_b) or len(scores_a) < 3:
             return None
@@ -572,7 +558,7 @@ class ABTestFramework:
 
             # T-statistic
             n = len(differences)
-            t_stat = mean_diff / (std_diff / (n ** 0.5))
+            t_stat = mean_diff / (std_diff / (n**0.5))
 
             # Approximate p-value (two-tailed)
             # Using normal approximation for simplicity
@@ -642,9 +628,7 @@ class HumanEvaluationIntegration:
 
         return output_path
 
-    def import_human_evaluations(
-        self, evaluation_file: Path
-    ) -> list[tuple[str, dict[str, float]]]:
+    def import_human_evaluations(self, evaluation_file: Path) -> list[tuple[str, dict[str, float]]]:
         """Import human evaluations from a completed file.
 
         Args:
@@ -715,9 +699,7 @@ def main() -> None:
         help="Dataset to use",
     )
     run_parser.add_argument("--model", default="default", help="Model name")
-    run_parser.add_argument(
-        "--output", type=Path, help="Output file for report"
-    )
+    run_parser.add_argument("--output", type=Path, help="Output file for report")
 
     # Compare models
     compare_parser = subparsers.add_parser("compare", help="Compare two models")

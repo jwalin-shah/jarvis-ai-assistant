@@ -50,7 +50,17 @@ class TestErrorCode:
             # Should have a prefix like CFG_, MDL_, MSG_, VAL_, RES_, TSK_, CAL_, EXP_, FBK_
             assert any(
                 code.value.startswith(prefix)
-                for prefix in ["CFG_", "MDL_", "MSG_", "VAL_", "RES_", "TSK_", "CAL_", "EXP_", "FBK_"]
+                for prefix in [
+                    "CFG_",
+                    "MDL_",
+                    "MSG_",
+                    "VAL_",
+                    "RES_",
+                    "TSK_",
+                    "CAL_",
+                    "EXP_",
+                    "FBK_",
+                ]
             )
 
 

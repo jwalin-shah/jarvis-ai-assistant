@@ -93,7 +93,7 @@ class JarvisSocketServer:
     Streaming Protocol:
         For streaming methods (e.g., generate_draft with stream=true):
         1. Client sends request with "stream": true in params
-        2. Server sends token notifications: {"jsonrpc": "2.0", "method": "stream.token", "params": {...}}
+        2. Server sends token notifications:
         3. Server sends final response: {"jsonrpc": "2.0", "result": {...}, "id": <request_id>}
 
     Example:

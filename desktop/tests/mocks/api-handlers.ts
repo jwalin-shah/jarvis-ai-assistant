@@ -57,7 +57,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(mockConversations),
+        body: JSON.stringify({ conversations: mockConversations, total: mockConversations.length }),
       });
     } else {
       await route.continue();
@@ -80,10 +80,15 @@ export async function setupApiMocks(page: Page): Promise<void> {
               ? mockMessagesChat3
               : [];
 
+        // Return correct response format: { messages, chat_id, total }
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify(messages),
+          body: JSON.stringify({
+            messages,
+            chat_id: chatId,
+            total: messages.length,
+          }),
         });
       } else {
         // It's a conversation detail request

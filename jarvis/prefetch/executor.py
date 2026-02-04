@@ -15,7 +15,6 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import threading
@@ -27,7 +26,7 @@ from enum import Enum
 from queue import PriorityQueue
 from typing import Any
 
-from jarvis.prefetch.cache import CacheEntry, CacheTier, MultiTierCache, get_cache
+from jarvis.prefetch.cache import CacheTier, MultiTierCache, get_cache
 from jarvis.prefetch.predictor import Prediction, PredictionPriority, PredictionType
 
 logger = logging.getLogger(__name__)

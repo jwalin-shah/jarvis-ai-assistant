@@ -1042,8 +1042,7 @@ class TagManager:
                 "total_tagged_conversations": len(tag_counts),
                 "average_tags_per_conversation": round(avg_tags, 2),
                 "most_used_tags": [
-                    {"id": r["id"], "name": r["name"], "count": r["usage_count"]}
-                    for r in most_used
+                    {"id": r["id"], "name": r["name"], "count": r["usage_count"]} for r in most_used
                 ],
             }
 

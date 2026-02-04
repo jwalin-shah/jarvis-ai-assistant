@@ -115,7 +115,6 @@ class PredictionStrategy(ABC):
     @abstractmethod
     def name(self) -> str:
         """Strategy name."""
-        pass
 
     @abstractmethod
     def predict(self, context: PredictionContext) -> list[Prediction]:
@@ -127,7 +126,6 @@ class PredictionStrategy(ABC):
         Returns:
             List of predictions sorted by score (highest first).
         """
-        pass
 
 
 @dataclass
@@ -437,7 +435,7 @@ class ConversationContinuationStrategy(PredictionStrategy):
             # More messages = higher score
             frequency_score = min(len(recent) / 10, 1.0)
 
-            confidence = (recency_score * 0.7 + frequency_score * 0.3)
+            confidence = recency_score * 0.7 + frequency_score * 0.3
 
             if confidence < self._threshold:
                 continue
@@ -501,8 +499,7 @@ class RecentContextStrategy(PredictionStrategy):
         if context.active_chat_id and context.active_chat_id in self._recent_contexts:
             recent_texts = self._recent_contexts[context.active_chat_id]
             if recent_texts:
-                # Predict embedding for combined context
-                combined = " ".join(recent_texts[-3:])  # Last 3 messages
+                # Predict embedding for combined context (last 3 messages)
                 predictions.append(
                     Prediction(
                         type=PredictionType.EMBEDDING,

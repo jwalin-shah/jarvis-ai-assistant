@@ -84,9 +84,7 @@ class MultiDimensionResult:
             "passes_gate": self.passes_gate,
             "failed_dimensions": [d.value for d in self.failed_dimensions],
             "latency_ms": round(self.latency_ms, 2),
-            "dimensions": {
-                dim.value: result.to_dict() for dim, result in self.results.items()
-            },
+            "dimensions": {dim.value: result.to_dict() for dim, result in self.results.items()},
         }
 
 
@@ -242,10 +240,28 @@ class CoherenceScorer(QualityDimensionScorer):
 
     # Transition words that indicate good flow
     TRANSITION_WORDS = {
-        "however", "therefore", "furthermore", "additionally", "moreover",
-        "consequently", "nevertheless", "although", "because", "since",
-        "thus", "hence", "accordingly", "also", "finally", "first",
-        "second", "third", "next", "then", "meanwhile", "similarly",
+        "however",
+        "therefore",
+        "furthermore",
+        "additionally",
+        "moreover",
+        "consequently",
+        "nevertheless",
+        "although",
+        "because",
+        "since",
+        "thus",
+        "hence",
+        "accordingly",
+        "also",
+        "finally",
+        "first",
+        "second",
+        "third",
+        "next",
+        "then",
+        "meanwhile",
+        "similarly",
     }
 
     def score(
@@ -392,7 +408,7 @@ class CoherenceScorer(QualityDimensionScorer):
             return 0.5
 
         variance = sum((l - mean_length) ** 2 for l in lengths) / len(lengths)
-        std_dev = variance ** 0.5
+        std_dev = variance**0.5
 
         # Ideal coefficient of variation: 0.3-0.5
         cv = std_dev / mean_length if mean_length > 0 else 0
@@ -548,8 +564,17 @@ class RelevanceScorer(QualityDimensionScorer):
             if any(
                 pattern in a_lower
                 for pattern in [
-                    r"\d", "today", "tomorrow", "yesterday", "am", "pm",
-                    "morning", "evening", "night", "soon", "later"
+                    r"\d",
+                    "today",
+                    "tomorrow",
+                    "yesterday",
+                    "am",
+                    "pm",
+                    "morning",
+                    "evening",
+                    "night",
+                    "soon",
+                    "later",
                 ]
             ):
                 return 0.9
@@ -581,16 +606,47 @@ class ToneScorer(QualityDimensionScorer):
 
     # Markers for different tones
     FORMAL_MARKERS = {
-        "please", "thank you", "kindly", "would", "could", "appreciate",
-        "regards", "sincerely", "furthermore", "however", "therefore"
+        "please",
+        "thank you",
+        "kindly",
+        "would",
+        "could",
+        "appreciate",
+        "regards",
+        "sincerely",
+        "furthermore",
+        "however",
+        "therefore",
     }
     CASUAL_MARKERS = {
-        "hey", "hi", "yeah", "yep", "nope", "cool", "awesome", "lol",
-        "haha", "gonna", "wanna", "gotta", "sup", "btw", "tbh"
+        "hey",
+        "hi",
+        "yeah",
+        "yep",
+        "nope",
+        "cool",
+        "awesome",
+        "lol",
+        "haha",
+        "gonna",
+        "wanna",
+        "gotta",
+        "sup",
+        "btw",
+        "tbh",
     }
     EMPATHETIC_MARKERS = {
-        "sorry", "understand", "feel", "hope", "care", "concern",
-        "difficult", "hard", "tough", "support", "help"
+        "sorry",
+        "understand",
+        "feel",
+        "hope",
+        "care",
+        "concern",
+        "difficult",
+        "hard",
+        "tough",
+        "support",
+        "help",
     }
 
     def score(
@@ -692,9 +748,23 @@ class ToneScorer(QualityDimensionScorer):
     def _context_needs_empathy(self, context: str) -> bool:
         """Check if context suggests need for empathy."""
         empathy_triggers = [
-            "sorry", "sad", "upset", "difficult", "hard", "struggle",
-            "problem", "issue", "worried", "anxious", "stress", "lost",
-            "miss", "hurt", "pain", "sick", "ill"
+            "sorry",
+            "sad",
+            "upset",
+            "difficult",
+            "hard",
+            "struggle",
+            "problem",
+            "issue",
+            "worried",
+            "anxious",
+            "stress",
+            "lost",
+            "miss",
+            "hurt",
+            "pain",
+            "sick",
+            "ill",
         ]
         context_lower = context.lower()
         return any(trigger in context_lower for trigger in empathy_triggers)
@@ -827,9 +897,7 @@ class PersonalizationScorer(QualityDimensionScorer):
 
         # Check preferences alignment
         if contact_preferences:
-            pref_score = self._score_preference_alignment(
-                response, contact_preferences
-            )
+            pref_score = self._score_preference_alignment(response, contact_preferences)
             scores.append(pref_score)
 
         # Compute overall score
@@ -847,9 +915,7 @@ class PersonalizationScorer(QualityDimensionScorer):
             suggestions=suggestions,
         )
 
-    def _score_name_usage(
-        self, response: str, name: str, context: str | None
-    ) -> float:
+    def _score_name_usage(self, response: str, name: str, context: str | None) -> float:
         """Score appropriate use of contact's name."""
         response_lower = response.lower()
         name_lower = name.lower()
@@ -862,10 +928,7 @@ class PersonalizationScorer(QualityDimensionScorer):
         should_use_name = False
         if context:
             context_lower = context.lower()
-            if any(
-                pattern in context_lower
-                for pattern in ["?", "hi", "hey", "hello", "thank"]
-            ):
+            if any(pattern in context_lower for pattern in ["?", "hi", "hey", "hello", "thank"]):
                 should_use_name = True
 
         if should_use_name and name_in_response:
@@ -901,9 +964,7 @@ class PersonalizationScorer(QualityDimensionScorer):
         else:
             return 0.8  # Good balance
 
-    def _score_preference_alignment(
-        self, response: str, preferences: dict[str, Any]
-    ) -> float:
+    def _score_preference_alignment(self, response: str, preferences: dict[str, Any]) -> float:
         """Score alignment with contact preferences."""
         score = 1.0
 
@@ -1020,10 +1081,7 @@ class MultiDimensionScorer:
                 failed_dimensions.append(dimension)
 
         # Calculate weighted overall score
-        weighted_sum = sum(
-            results[dim].score * self._weights[dim]
-            for dim in results
-        )
+        weighted_sum = sum(results[dim].score * self._weights[dim] for dim in results)
         total_weight = sum(self._weights[dim] for dim in results)
         overall_score = weighted_sum / total_weight if total_weight > 0 else 0.0
 

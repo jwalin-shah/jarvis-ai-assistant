@@ -603,7 +603,7 @@ class TestEmbeddingStoreSingleton:
         reset_embedding_store()
         db_path = tmp_path / "reset_test.db"
 
-        _store1 = get_embedding_store(db_path)
+        get_embedding_store(db_path)
         reset_embedding_store()
         store2 = get_embedding_store(db_path)
 

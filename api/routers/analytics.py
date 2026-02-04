@@ -10,9 +10,9 @@ Provides endpoints for:
 
 from __future__ import annotations
 
-import base64
 import threading
-from collections import defaultdict
+from collections import Counter, defaultdict
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,21 +20,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 
-from api.ratelimit import RATE_LIMIT_READ, limiter
-
 from api.dependencies import get_imessage_reader
+from api.ratelimit import RATE_LIMIT_READ, limiter
 from api.schemas.stats import TimeRangeEnum
 from integrations.imessage import ChatDBReader
 from jarvis.analytics import (
-    AnalyticsEngine,
-    ReportGenerator,
-    TimeSeriesAggregator,
-    TrendAnalyzer,
     get_analytics_engine,
 )
-from jarvis.analytics.aggregator import get_aggregator
 from jarvis.analytics.reports import get_report_generator
-from jarvis.analytics.trends import get_trend_analyzer
+from jarvis.analytics.trends import (
+    PeakPeriod,
+    detect_anomalies,
+    detect_seasonality,
+    detect_trend,
+    get_trend_analyzer,
+)
 from jarvis.metrics import TTLCache
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -67,6 +67,85 @@ def _get_time_range_start(time_range: TimeRangeEnum) -> datetime | None:
     elif time_range == TimeRangeEnum.THREE_MONTHS:
         return now - timedelta(days=90)
     return None  # all_time
+
+
+def _iter_filtered_messages(
+    reader: ChatDBReader,
+    time_range_start: datetime | None,
+    per_conversation_limit: int,
+) -> Iterator[tuple[Any, list[Any]]]:
+    conversations = reader.get_conversations(limit=200)
+    for conv in conversations:
+        messages = reader.get_messages(conv.chat_id, limit=per_conversation_limit)
+        if time_range_start:
+            messages = [m for m in messages if m.date >= time_range_start]
+        if messages:
+            yield conv, messages
+
+
+def _get_activity_level(count: int) -> int:
+    if count == 0:
+        return 0
+    if count <= 5:
+        return 1
+    if count <= 15:
+        return 2
+    if count <= 30:
+        return 3
+    return 4
+
+
+def _build_timeline_from_counts(
+    granularity: str,
+    daily_counts: dict[str, dict[str, int]],
+    hourly_counts: dict[int, dict[str, int]],
+) -> list[dict[str, object]]:
+    if granularity == "hour":
+        return [
+            {
+                "hour": hour,
+                "total": counts["total"],
+                "sent": counts["sent"],
+                "received": counts["received"],
+            }
+            for hour, counts in sorted(hourly_counts.items())
+        ]
+
+    if granularity == "day":
+        return [
+            {
+                "date": date_key,
+                "total": counts["total"],
+                "sent": counts["sent"],
+                "received": counts["received"],
+            }
+            for date_key, counts in sorted(daily_counts.items())
+        ]
+
+    if granularity == "week":
+        weekly: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"total": 0, "sent": 0, "received": 0}
+        )
+        for date_key, counts in daily_counts.items():
+            dt = datetime.strptime(date_key, "%Y-%m-%d")
+            week_key = dt.strftime("%Y-W%W")
+            weekly[week_key]["total"] += counts["total"]
+            weekly[week_key]["sent"] += counts["sent"]
+            weekly[week_key]["received"] += counts["received"]
+        return [{"date": week_key, **counts} for week_key, counts in sorted(weekly.items())]
+
+    if granularity == "month":
+        monthly: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"total": 0, "sent": 0, "received": 0}
+        )
+        for date_key, counts in daily_counts.items():
+            month_key = date_key[:7]
+            monthly[month_key]["total"] += counts["total"]
+            monthly[month_key]["sent"] += counts["sent"]
+            monthly[month_key]["received"] += counts["received"]
+        return [{"date": month_key, **counts} for month_key, counts in sorted(monthly.items())]
+
+    return []
 
 
 def _fetch_overview_data(
@@ -111,12 +190,8 @@ def _fetch_overview_data(
         "peak_hour": overview.peak_hour,
         "peak_day": overview.peak_day,
         "date_range": {
-            "start": overview.date_range_start.isoformat()
-            if overview.date_range_start
-            else None,
-            "end": overview.date_range_end.isoformat()
-            if overview.date_range_end
-            else None,
+            "start": overview.date_range_start.isoformat() if overview.date_range_start else None,
+            "end": overview.date_range_end.isoformat() if overview.date_range_end else None,
         },
         "period_comparison": {
             "total_change_percent": comparison.get("total_messages_change", 0),
@@ -183,9 +258,7 @@ async def get_analytics_overview(
     time_range_start = _get_time_range_start(time_range)
 
     # Run blocking I/O in threadpool
-    result = await run_in_threadpool(
-        _fetch_overview_data, reader, time_range, time_range_start
-    )
+    result = await run_in_threadpool(_fetch_overview_data, reader, time_range, time_range_start)
 
     cache.set(cache_key, result)
     return result
@@ -199,20 +272,35 @@ def _fetch_timeline_data(
     time_range_start: datetime | None,
 ) -> dict[str, Any]:
     """Fetch and compute timeline data (blocking I/O)."""
-    # Fetch messages
-    conversations = reader.get_conversations(limit=200)
-    all_messages = []
-    for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
-        all_messages.extend(messages)
+    daily_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"total": 0, "sent": 0, "received": 0}
+    )
+    hourly_counts: dict[int, dict[str, int]] = defaultdict(
+        lambda: {"total": 0, "sent": 0, "received": 0}
+    )
 
-    # Get aggregator for timeline data
-    aggregator = get_aggregator()
-    timeline_data = aggregator.get_timeline_data(
+    for _, messages in _iter_filtered_messages(
+        reader, time_range_start, per_conversation_limit=500
+    ):
+        for msg in messages:
+            date_key = msg.date.strftime("%Y-%m-%d")
+            daily_counts[date_key]["total"] += 1
+            if msg.is_from_me:
+                daily_counts[date_key]["sent"] += 1
+            else:
+                daily_counts[date_key]["received"] += 1
+
+            hour = msg.date.hour
+            hourly_counts[hour]["total"] += 1
+            if msg.is_from_me:
+                hourly_counts[hour]["sent"] += 1
+            else:
+                hourly_counts[hour]["received"] += 1
+
+    timeline_data = _build_timeline_from_counts(
         granularity=granularity,
-        messages=all_messages,
+        daily_counts=daily_counts,
+        hourly_counts=hourly_counts,
     )
 
     return {
@@ -234,7 +322,7 @@ async def get_analytics_timeline(
     request: Request,
     granularity: str = Query(
         default="day",
-        regex="^(hour|day|week|month)$",
+        pattern="^(hour|day|week|month)$",
         description="Time granularity (hour, day, week, month)",
     ),
     time_range: TimeRangeEnum = Query(
@@ -243,7 +331,7 @@ async def get_analytics_timeline(
     ),
     metric: str = Query(
         default="messages",
-        regex="^(messages|sentiment|response_time)$",
+        pattern="^(messages|sentiment|response_time)$",
         description="Metric to track",
     ),
     reader: ChatDBReader = Depends(get_imessage_reader),
@@ -298,24 +386,32 @@ def _fetch_heatmap_data(
     time_range_start: datetime | None,
 ) -> dict[str, Any]:
     """Fetch and compute heatmap data (blocking I/O)."""
-    # Fetch messages
-    conversations = reader.get_conversations(limit=200)
-    all_messages = []
-    for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=1000)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
-        all_messages.extend(messages)
+    daily_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"total": 0, "sent": 0, "received": 0}
+    )
 
-    # Update aggregator and get heatmap data
-    aggregator = get_aggregator()
-    aggregator.update_daily_aggregates(all_messages)
+    for _, messages in _iter_filtered_messages(
+        reader, time_range_start, per_conversation_limit=1000
+    ):
+        for msg in messages:
+            date_key = msg.date.strftime("%Y-%m-%d")
+            daily_counts[date_key]["total"] += 1
+            if msg.is_from_me:
+                daily_counts[date_key]["sent"] += 1
+            else:
+                daily_counts[date_key]["received"] += 1
 
-    start_date = time_range_start.strftime("%Y-%m-%d") if time_range_start else None
-    heatmap_data = aggregator.get_activity_heatmap_data(start_date=start_date)
+    heatmap_data = [
+        {
+            "date": date_key,
+            "count": counts["total"],
+            "level": _get_activity_level(counts["total"]),
+        }
+        for date_key, counts in sorted(daily_counts.items())
+    ]
 
     # Calculate stats
-    counts = [d["count"] for d in heatmap_data]
+    counts: list[int] = [int(d["count"]) for d in heatmap_data]
     active_days = sum(1 for c in counts if c > 0)
 
     return {
@@ -380,9 +476,7 @@ async def get_activity_heatmap(
 
     time_range_start = _get_time_range_start(time_range)
 
-    result = await run_in_threadpool(
-        _fetch_heatmap_data, reader, time_range, time_range_start
-    )
+    result = await run_in_threadpool(_fetch_heatmap_data, reader, time_range, time_range_start)
 
     cache.set(cache_key, result)
     return result
@@ -415,9 +509,7 @@ def _fetch_contact_stats(
 
     # Compute analytics
     engine = get_analytics_engine()
-    contact_analytics = engine.compute_contact_analytics(
-        messages, chat_id, contact_name
-    )
+    contact_analytics = engine.compute_contact_analytics(messages, chat_id, contact_name)
     emoji_stats = engine.compute_emoji_stats(messages)
     hourly, daily, weekly, monthly = engine.compute_time_distributions(messages)
 
@@ -531,9 +623,7 @@ def _fetch_leaderboard_data(
         if not messages:
             continue
 
-        analytics = engine.compute_contact_analytics(
-            messages, conv.chat_id, conv.display_name
-        )
+        analytics = engine.compute_contact_analytics(messages, conv.chat_id, conv.display_name)
         contact_data.append(analytics)
 
     # Sort by criteria
@@ -591,7 +681,7 @@ async def get_contacts_leaderboard(
     ),
     sort_by: str = Query(
         default="messages",
-        regex="^(messages|engagement|response_time)$",
+        pattern="^(messages|engagement|response_time)$",
         description="Sort criteria",
     ),
     reader: ChatDBReader = Depends(get_imessage_reader),
@@ -643,32 +733,96 @@ def _fetch_trends_data(
     time_range_start: datetime | None,
 ) -> dict[str, Any]:
     """Fetch and compute trends data (blocking I/O)."""
-    # Fetch messages
-    conversations = reader.get_conversations(limit=200)
-    all_messages = []
-    for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
-        all_messages.extend(messages)
-
-    # Analyze trends
     trend_analyzer = get_trend_analyzer()
-    analysis = trend_analyzer.analyze_message_trends(all_messages)
-    trending_contacts = trend_analyzer.get_trending_contacts(all_messages)
+    daily_counts: Counter[str] = Counter()
+    weekly_counts: Counter[str] = Counter()
+    hour_counts: Counter[int] = Counter()
+    day_counts: Counter[str] = Counter()
+    contact_daily_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    contact_names: dict[str, str | None] = {}
+
+    total_messages = 0
+
+    for _, messages in _iter_filtered_messages(
+        reader, time_range_start, per_conversation_limit=500
+    ):
+        for msg in messages:
+            total_messages += 1
+            date_key = msg.date.strftime("%Y-%m-%d")
+            daily_counts[date_key] += 1
+            week_key = msg.date.strftime("%Y-W%W")
+            weekly_counts[week_key] += 1
+            hour_counts[msg.date.hour] += 1
+            day_counts[msg.date.strftime("%A")] += 1
+
+            chat_id = msg.chat_id
+            contact_daily_counts[chat_id][date_key] += 1
+            if chat_id not in contact_names and not msg.is_from_me:
+                contact_names[chat_id] = msg.sender_name
+
+    daily_data = sorted(daily_counts.items())
+    daily_data_float = [(k, float(v)) for k, v in daily_data]
+    daily_values = [v for _, v in daily_data_float]
+    overall_trend = detect_trend(daily_values, trend_analyzer.trend_window_size)
+
+    weekly_values = [float(v) for _, v in sorted(weekly_counts.items())]
+    weekly_trend = (
+        detect_trend(weekly_values, trend_analyzer.trend_window_size)
+        if len(weekly_values) >= 4
+        else None
+    )
+
+    anomalies = detect_anomalies(daily_data_float, trend_analyzer.anomaly_threshold)
+
+    peak_hours = [
+        PeakPeriod(
+            period_type="hour",
+            period_value=hour,
+            count=count,
+            percentage_of_total=(
+                round((count / total_messages) * 100, 1) if total_messages else 0.0
+            ),
+        )
+        for hour, count in hour_counts.most_common(3)
+    ]
+
+    peak_days = [
+        PeakPeriod(
+            period_type="day",
+            period_value=day,
+            count=count,
+            percentage_of_total=(
+                round((count / total_messages) * 100, 1) if total_messages else 0.0
+            ),
+        )
+        for day, count in day_counts.most_common(3)
+    ]
+
+    seasonality_detected, seasonality_period = detect_seasonality(dict(daily_counts))
+
+    trending_contacts: list[tuple[str, str | None, Any]] = []
+    for contact_id, counts in contact_daily_counts.items():
+        contact_values = [float(v) for _, v in sorted(counts.items())]
+        if len(contact_values) < 4:
+            continue
+        trend = detect_trend(contact_values, trend_analyzer.trend_window_size)
+        if abs(trend.percentage_change) > 15 and trend.confidence > 0.5:
+            trending_contacts.append((contact_id, contact_names.get(contact_id), trend))
+    trending_contacts.sort(key=lambda x: abs(x[2].percentage_change), reverse=True)
+    trending_contacts = trending_contacts[:5]
 
     return {
         "overall_trend": {
-            "direction": analysis.overall_trend.direction,
-            "percentage_change": analysis.overall_trend.percentage_change,
-            "confidence": analysis.overall_trend.confidence,
+            "direction": overall_trend.direction,
+            "percentage_change": overall_trend.percentage_change,
+            "confidence": overall_trend.confidence,
         },
         "weekly_trend": {
-            "direction": analysis.weekly_trend.direction,
-            "percentage_change": analysis.weekly_trend.percentage_change,
-            "confidence": analysis.weekly_trend.confidence,
+            "direction": weekly_trend.direction,
+            "percentage_change": weekly_trend.percentage_change,
+            "confidence": weekly_trend.confidence,
         }
-        if analysis.weekly_trend
+        if weekly_trend
         else None,
         "trending_contacts": [
             {
@@ -688,7 +842,7 @@ def _fetch_trends_data(
                 "expected": a.expected_value,
                 "deviation": a.deviation,
             }
-            for a in analysis.anomalies
+            for a in anomalies
         ],
         "peak_hours": [
             {
@@ -696,7 +850,7 @@ def _fetch_trends_data(
                 "count": p.count,
                 "percentage": p.percentage_of_total,
             }
-            for p in analysis.peak_hours
+            for p in peak_hours
         ],
         "peak_days": [
             {
@@ -704,11 +858,11 @@ def _fetch_trends_data(
                 "count": p.count,
                 "percentage": p.percentage_of_total,
             }
-            for p in analysis.peak_days
+            for p in peak_days
         ],
         "seasonality": {
-            "detected": analysis.seasonality_detected,
-            "pattern": analysis.seasonality_period,
+            "detected": seasonality_detected,
+            "pattern": seasonality_period,
         },
         "time_range": time_range.value,
     }
@@ -772,9 +926,7 @@ async def get_trending_patterns(
 
     time_range_start = _get_time_range_start(time_range)
 
-    result = await run_in_threadpool(
-        _fetch_trends_data, reader, time_range, time_range_start
-    )
+    result = await run_in_threadpool(_fetch_trends_data, reader, time_range, time_range_start)
 
     cache.set(cache_key, result)
     return result
@@ -823,7 +975,7 @@ async def export_analytics(
     request: Request,
     format: str = Query(
         default="json",
-        regex="^(json|csv)$",
+        pattern="^(json|csv)$",
         description="Export format",
     ),
     time_range: TimeRangeEnum = Query(

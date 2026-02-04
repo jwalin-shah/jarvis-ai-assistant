@@ -92,6 +92,18 @@ class ExtractionConfig:
     # Threshold for borderline pairs (between reject and this = lower quality)
     semantic_borderline_threshold: float = 0.55
 
+    # Quality penalty for group chat pairs (0.7 = 70% of original quality)
+    # Group chats have more noise, off-topic responses, and cross-talk
+    group_chat_quality_penalty: float = 0.7
+
+    # Stale response threshold - responses after this are considered stale (new conversation)
+    # >24h delay likely means the response is to something else entirely
+    stale_response_threshold_hours: float = 24.0
+
+    # Enable spam/bot message detection during extraction
+    # Drops messages that look like automated notifications, marketing, etc.
+    spam_detection_enabled: bool = True
+
 
 @dataclass(slots=True)
 class Turn:
@@ -171,11 +183,18 @@ class ExtractionStats:
     dropped_long_response: int = 0
     dropped_no_text: int = 0
     dropped_time_gap: int = 0
+    # Null/empty message tracking (Phase 1: data quality observability)
+    dropped_null_text: int = 0
+    dropped_empty_text: int = 0
+    # Spam/bot message tracking (Phase 4)
+    dropped_spam: int = 0
     # Quality breakdown (pairs are still kept but marked with flags)
     flagged_reaction: int = 0
     flagged_low_similarity: int = 0
     flagged_topic_shift: int = 0
     flagged_ack_substantive: int = 0
+    flagged_group_chat: int = 0
+    flagged_stale_response: int = 0
 
 
 class TurnBasedExtractor:
@@ -316,8 +335,8 @@ class TurnBasedExtractor:
         sorted_messages = sorted(messages, key=lambda m: m.date)
         stats.total_messages_scanned = len(sorted_messages)
 
-        # Step 1: Group messages into turns
-        turns = self._group_into_turns(sorted_messages)
+        # Step 1: Group messages into turns (pass stats for null/empty tracking)
+        turns = self._group_into_turns(sorted_messages, stats=stats)
         stats.turns_identified = len(turns)
 
         # Step 2: Pair incoming turns with outgoing response turns
@@ -364,12 +383,18 @@ class TurnBasedExtractor:
 
         return pairs, stats
 
-    def _group_into_turns(self, messages: list[Message]) -> list[Turn]:
+    def _group_into_turns(
+        self, messages: list[Message], stats: ExtractionStats | None = None
+    ) -> list[Turn]:
         """Group consecutive messages from same speaker into turns.
 
         Messages are bundled if:
         - Same speaker (is_from_me matches)
         - Within turn_bundle_minutes of previous message in turn
+
+        Args:
+            messages: List of messages to group.
+            stats: Optional stats object to track null/empty messages.
         """
         if not messages:
             return []
@@ -384,9 +409,32 @@ class TurnBasedExtractor:
             if self.config.skip_system_messages and msg.is_system_message:
                 continue
 
+            # Track null/empty text for data quality observability
+            if msg.text is None:
+                if stats is not None:
+                    stats.dropped_null_text += 1
+                # Skip null text messages (but allow attachment-only to fall through)
+                if not msg.attachments:
+                    continue
+            elif msg.text.strip() == "":
+                if stats is not None:
+                    stats.dropped_empty_text += 1
+                # Skip empty text messages (but allow attachment-only to fall through)
+                if not msg.attachments:
+                    continue
+
             # Skip attachment-only messages
             if self.config.skip_attachment_only and not msg.text and msg.attachments:
                 continue
+
+            # Skip spam/bot messages if detection is enabled
+            if self.config.spam_detection_enabled and msg.text:
+                from jarvis.text_normalizer import is_spam_message
+
+                if is_spam_message(msg.text):
+                    if stats is not None:
+                        stats.dropped_spam += 1
+                    continue
 
             # Check if this message continues the current turn
             if current_turn is not None:
@@ -486,6 +534,7 @@ class TurnBasedExtractor:
             response_turn,
             time_delta,
             semantic_similarity=semantic_similarity,
+            is_group=is_group,
         )
 
         # Track quality flag stats (pairs are still kept but flagged)
@@ -497,6 +546,10 @@ class TurnBasedExtractor:
             stats.flagged_topic_shift += 1
         if flags.get("ack_trigger_substantive_response"):
             stats.flagged_ack_substantive += 1
+        if flags.get("group_chat"):
+            stats.flagged_group_chat += 1
+        if flags.get("stale_response"):
+            stats.flagged_stale_response += 1
 
         return ExtractedPair(
             trigger_text=trigger_text,
@@ -661,10 +714,13 @@ class TurnBasedExtractor:
         response_turn: Turn,
         time_delta: timedelta,
         semantic_similarity: float | None = None,
+        is_group: bool = False,
     ) -> tuple[float, dict[str, Any]]:
         """Calculate quality score and flags for a pair.
 
         Quality factors:
+        - Group chat penalty (group chats have more noise)
+        - Stale response detection (>24h = likely new conversation)
         - Semantic similarity between trigger and response (if provided)
         - Response is not a tapback reaction
         - Response doesn't start a new topic
@@ -680,6 +736,7 @@ class TurnBasedExtractor:
         Args:
             semantic_similarity: Pre-computed similarity between trigger and response.
                 If None, semantic checks are skipped (for backward compatibility).
+            is_group: Whether this is from a group chat.
 
         Returns:
             Tuple of (quality_score 0.0-1.0, flags dict).
@@ -690,7 +747,22 @@ class TurnBasedExtractor:
         trigger_words = len(trigger_text.split())
         response_words = len(response_text.split())
 
-        # === CRITICAL QUALITY FILTERS (new) ===
+        # === GROUP CHAT AND STALE RESPONSE FILTERS ===
+
+        # 0a. Group chat penalty - group chats have more noise, cross-talk
+        if is_group:
+            flags["group_chat"] = True
+            quality *= self.config.group_chat_quality_penalty
+
+        # 0b. Stale response detection - responses >24h are likely new conversations
+        hours = time_delta.total_seconds() / 3600
+        if hours > self.config.stale_response_threshold_hours:
+            flags["stale_response"] = True
+            flags["stale_hours"] = round(hours, 1)
+            # Severe penalty - this is almost certainly not a direct response
+            quality *= 0.1
+
+        # === CRITICAL QUALITY FILTERS ===
 
         # 1. Reaction filter - tapback reactions are NOT real responses
         if self._is_reaction(response_text):
@@ -929,12 +1001,17 @@ def extract_all_pairs(
             "long_response": 0,
             "no_text": 0,
             "time_gap": 0,
+            "null_text": 0,
+            "empty_text": 0,
+            "spam": 0,
         },
         "flagged_by_reason": {
             "reaction": 0,
             "low_similarity": 0,
             "topic_shift": 0,
             "ack_substantive": 0,
+            "group_chat": 0,
+            "stale_response": 0,
         },
         "errors": [],
     }
@@ -988,6 +1065,9 @@ def extract_all_pairs(
                 aggregate_stats["dropped_by_reason"]["long_response"] += stats.dropped_long_response
                 aggregate_stats["dropped_by_reason"]["no_text"] += stats.dropped_no_text
                 aggregate_stats["dropped_by_reason"]["time_gap"] += stats.dropped_time_gap
+                aggregate_stats["dropped_by_reason"]["null_text"] += stats.dropped_null_text
+                aggregate_stats["dropped_by_reason"]["empty_text"] += stats.dropped_empty_text
+                aggregate_stats["dropped_by_reason"]["spam"] += stats.dropped_spam
                 # Track quality flags
                 aggregate_stats["flagged_by_reason"]["reaction"] += stats.flagged_reaction
                 aggregate_stats["flagged_by_reason"]["low_similarity"] += (
@@ -996,6 +1076,10 @@ def extract_all_pairs(
                 aggregate_stats["flagged_by_reason"]["topic_shift"] += stats.flagged_topic_shift
                 aggregate_stats["flagged_by_reason"]["ack_substantive"] += (
                     stats.flagged_ack_substantive
+                )
+                aggregate_stats["flagged_by_reason"]["group_chat"] += stats.flagged_group_chat
+                aggregate_stats["flagged_by_reason"]["stale_response"] += (
+                    stats.flagged_stale_response
                 )
 
                 # Convert and add to database
@@ -1030,6 +1114,22 @@ def extract_all_pairs(
             except Exception as e:
                 logger.warning("Error extracting from %s: %s", conv.chat_id, e)
                 aggregate_stats["errors"].append({"chat_id": conv.chat_id, "error": str(e)})
+
+    # Log warning if null/empty message rate is high (data quality issue)
+    total_msgs = aggregate_stats["total_messages_scanned"]
+    if total_msgs > 0:
+        null_count = aggregate_stats["dropped_by_reason"]["null_text"]
+        empty_count = aggregate_stats["dropped_by_reason"]["empty_text"]
+        null_pct = (null_count + empty_count) / total_msgs * 100
+        if null_pct > 5.0:
+            logger.warning(
+                "High null/empty message rate: %.1f%% (%d null, %d empty out of %d total). "
+                "This may indicate data corruption or iMessage sync issues.",
+                null_pct,
+                null_count,
+                empty_count,
+                total_msgs,
+            )
 
     return aggregate_stats
 
@@ -1118,7 +1218,7 @@ class ExchangeBuilder:
             List of CandidateExchange objects.
         """
         from jarvis.exchange import CandidateExchange, ContextMessage
-        from jarvis.text_normalizer import get_attachment_token, is_reaction, normalize_text
+        from jarvis.text_normalizer import get_attachment_token, is_reaction, normalize_for_task
 
         if not messages:
             return []
@@ -1141,7 +1241,7 @@ class ExchangeBuilder:
                 flags.add("reaction")
                 normalized = ""
             else:
-                normalized = normalize_text(raw_text)
+                normalized = normalize_for_task(raw_text, "extraction")
 
             # Handle attachment-only
             if not normalized and msg.attachments:

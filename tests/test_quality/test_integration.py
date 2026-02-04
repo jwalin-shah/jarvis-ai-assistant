@@ -3,7 +3,6 @@
 Tests end-to-end quality flow including gates, dashboard, and feedback.
 """
 
-
 from jarvis.quality.dashboard import (
     get_quality_dashboard,
     reset_quality_dashboard,
@@ -344,9 +343,7 @@ class TestEndToEndQualityFlow:
 
         # Record to dashboard
         dashboard.record_quality_check(
-            dimension_scores={
-                gr.gate_name: gr.score for gr in result.gate_results
-            },
+            dimension_scores={gr.gate_name: gr.score for gr in result.gate_results},
             overall_score=result.quality_score,
         )
 

@@ -46,6 +46,7 @@ from jarvis.classifiers import (
     SVMModelMixin,
 )
 from jarvis.config import get_config, get_response_classifier_path
+from jarvis.text_normalizer import normalize_for_task
 
 if TYPE_CHECKING:
     from jarvis.embedding_adapter import Embedder
@@ -823,18 +824,26 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
                     structural_match=True,
                 )
 
+        normalized = normalize_for_task(text, "classification")
+        if not normalized:
+            return ClassificationResult(
+                label=ResponseType.STATEMENT,
+                confidence=0.0,
+                method="normalized_empty",
+            )
+
         # =================================================================
         # THREE-LAYER CLASSIFICATION PIPELINE
         # =================================================================
 
         # LAYER 1: Structural hint (fast regex patterns)
-        structural_type, structural_conf = self._match_structural(text)
+        structural_type, structural_conf = self._match_structural(normalized)
 
         if structural_type is not None:
             # LAYER 2: Centroid verification (semantic check)
             if self._use_centroid_verification and self.centroids:
                 verified_type, verified_conf, was_verified = self._verify_with_centroid(
-                    text, structural_type, embedder
+                    normalized, structural_type, embedder
                 )
 
                 if was_verified:
@@ -863,7 +872,7 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
                 )
 
         # LAYER 3: No structural hint - use SVM classifier
-        svm_type, svm_conf = self._classify_with_svm(text, embedder)
+        svm_type, svm_conf = self._classify_with_svm(normalized, embedder)
         classifier_used = "svm"
 
         if svm_type is not None:
@@ -966,9 +975,18 @@ class HybridResponseClassifier(EmbedderMixin, SVMModelMixin):
                     )
                 continue
 
+            normalized = normalize_for_task(text, "classification")
+            if not normalized:
+                results[i] = ClassificationResult(
+                    label=ResponseType.STATEMENT,
+                    confidence=0.0,
+                    method="normalized_empty",
+                )
+                continue
+
             # This text needs embedding for full classification
             needs_embedding_indices.append(i)
-            needs_embedding_texts.append(text)
+            needs_embedding_texts.append(normalized)
 
         # If all texts were handled by fast path, return early
         if not needs_embedding_texts:

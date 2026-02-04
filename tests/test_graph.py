@@ -4,9 +4,7 @@ Tests graph building, layout algorithms, clustering, and export.
 """
 
 import json
-import math
 import tempfile
-from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,7 +20,6 @@ from jarvis.graph.builder import (
     _hash_id,
 )
 from jarvis.graph.clustering import (
-    ClusterResult,
     LouvainClustering,
     cluster_by_relationship,
     detect_communities,
@@ -459,9 +456,7 @@ class TestGraphBuilder:
 
     @patch("jarvis.db.JarvisDB")
     @patch("integrations.imessage.ChatDBReader")
-    def test_build_network_empty(
-        self, mock_reader: MagicMock, mock_db: MagicMock
-    ) -> None:
+    def test_build_network_empty(self, mock_reader: MagicMock, mock_db: MagicMock) -> None:
         """Test building network with no data."""
         # Mock database connection context manager
         mock_conn = MagicMock()

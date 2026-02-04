@@ -21,7 +21,9 @@ class GraphNodeSchema(BaseModel):
     message_count: int = Field(default=0, description="Total messages exchanged")
     last_contact: str | None = Field(default=None, description="ISO timestamp of last message")
     sentiment_score: float = Field(default=0.0, description="Average sentiment (-1 to 1)")
-    response_time_avg: float | None = Field(default=None, description="Average response time in minutes")
+    response_time_avg: float | None = Field(
+        default=None, description="Average response time in minutes"
+    )
     x: float | None = Field(default=None, description="X position from layout")
     y: float | None = Field(default=None, description="Y position from layout")
     cluster_id: int | None = Field(default=None, description="Community cluster assignment")
@@ -36,7 +38,9 @@ class GraphEdgeSchema(BaseModel):
     weight: float = Field(default=0.5, description="Edge weight (0-1)")
     message_count: int = Field(default=0, description="Messages between nodes")
     sentiment: float = Field(default=0.0, description="Average sentiment")
-    last_interaction: str | None = Field(default=None, description="ISO timestamp of last interaction")
+    last_interaction: str | None = Field(
+        default=None, description="ISO timestamp of last interaction"
+    )
     bidirectional: bool = Field(default=True, description="Two-way communication")
 
 
@@ -62,15 +66,13 @@ class NetworkGraphRequest(BaseModel):
     """Request parameters for network graph."""
 
     include_relationships: list[str] | None = Field(
-        default=None,
-        description="Filter by relationship types (family, friend, work, etc.)"
+        default=None, description="Filter by relationship types (family, friend, work, etc.)"
     )
     min_messages: int = Field(default=1, ge=0, description="Minimum message count to include")
     days_back: int | None = Field(default=None, ge=1, description="Only include recent messages")
     max_nodes: int = Field(default=100, ge=1, le=500, description="Maximum nodes to return")
     layout: Literal["force", "hierarchical", "radial"] = Field(
-        default="force",
-        description="Layout algorithm to apply"
+        default="force", description="Layout algorithm to apply"
     )
     include_clusters: bool = Field(default=True, description="Run community detection")
     width: int = Field(default=800, ge=100, le=4000, description="Layout width in pixels")
@@ -93,8 +95,7 @@ class GraphEvolutionRequest(BaseModel):
     from_date: str = Field(description="Start date (ISO format)")
     to_date: str = Field(description="End date (ISO format)")
     interval: Literal["day", "week", "month"] = Field(
-        default="week",
-        description="Time interval for snapshots"
+        default="week", description="Time interval for snapshots"
     )
     max_nodes: int = Field(default=50, ge=1, le=200, description="Maximum nodes per snapshot")
 
@@ -121,8 +122,7 @@ class ExportGraphRequest(BaseModel):
     """Request parameters for graph export."""
 
     format: Literal["json", "graphml", "svg", "html"] = Field(
-        default="json",
-        description="Export format"
+        default="json", description="Export format"
     )
     include_layout: bool = Field(default=True, description="Apply layout before export")
     width: int = Field(default=800, ge=100, le=4000, description="Export width")

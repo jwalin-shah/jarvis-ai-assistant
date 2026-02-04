@@ -1,11 +1,9 @@
 """Tests for the background prefetch executor."""
 
-import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -157,7 +155,9 @@ class TestPrefetchExecutor:
 
         executor.stop()
 
-    def test_schedule_duplicate_rejected(self, executor: PrefetchExecutor, cache: MultiTierCache) -> None:
+    def test_schedule_duplicate_rejected(
+        self, executor: PrefetchExecutor, cache: MultiTierCache
+    ) -> None:
         """Test that duplicate predictions are rejected."""
         executor.start()
 
@@ -293,6 +293,7 @@ class TestPrefetchExecutor:
 
     def test_executor_handles_handler_errors(self, executor: PrefetchExecutor) -> None:
         """Test executor handles handler errors gracefully."""
+
         def failing_handler(pred: Prediction) -> dict[str, Any]:
             raise ValueError("Handler error")
 

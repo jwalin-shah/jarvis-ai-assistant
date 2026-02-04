@@ -46,6 +46,7 @@ dependencies = [
     "lightgbm>=4.6.0",
     "setfit>=1.1.0",
     "einops>=0.8.2",
+    "langdetect>=1.0.9",
 ]
 
 [project.optional-dependencies]
@@ -78,6 +79,9 @@ training = [
     "optuna>=4.0.0",
     "xgboost>=2.1.0",
     "lightgbm>=4.5.0",
+]
+experiments = [
+    "bertopic>=0.17.4",
 ]
 
 [project.scripts]

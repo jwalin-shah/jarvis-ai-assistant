@@ -74,6 +74,10 @@ logger = logging.getLogger(__name__)
 # - High similarity → more confident examples for LLM
 # - Low similarity → fewer/no examples, more cautious generation
 #
+# NOTE: These thresholds are also defined in jarvis/config.py RoutingConfig.
+# For customization, update ~/.jarvis/config.json routing section.
+# These module-level constants are kept for backwards compatibility.
+# The actual routing uses _get_thresholds() which reads from config.
 QUICK_REPLY_THRESHOLD = 0.95  # Extremely high - only near-exact matches (rare)
 CONTEXT_THRESHOLD = 0.65  # Good examples available for LLM
 GENERATE_THRESHOLD = 0.45  # Some examples available
@@ -131,17 +135,19 @@ CONTEXT_DEPENDENT_PATTERNS = frozenset(
 _CONTEXT_STARTER_PREFIXES = frozenset({"what time", "when ", "where ", "which "})
 
 # Vague reference patterns for clarification detection (frozenset for O(1) lookup)
-_VAGUE_REFERENCES = frozenset({
-    "that",
-    "it",
-    "the thing",
-    "this",
-    "those",
-    "these",
-    "what you said",
-    "what we discussed",
-    "the other",
-})
+_VAGUE_REFERENCES = frozenset(
+    {
+        "that",
+        "it",
+        "the thing",
+        "this",
+        "those",
+        "these",
+        "what you said",
+        "what we discussed",
+        "the other",
+    }
+)
 
 # Clarification type keywords (frozensets for O(1) lookup)
 _REFERENCE_WORDS = frozenset({"that", "it", "the thing", "this"})

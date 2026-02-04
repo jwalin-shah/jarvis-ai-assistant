@@ -467,9 +467,7 @@ def get_scheduler_stats() -> SchedulerStatsResponse:
         sent=stats.get("by_status", {}).get("sent", 0),
         failed=stats.get("by_status", {}).get("failed", 0),
         pending_in_undo_window=stats.get("pending_in_undo_window", 0),
-        next_due=(
-            datetime.fromisoformat(stats["next_due"]) if stats.get("next_due") else None
-        ),
+        next_due=(datetime.fromisoformat(stats["next_due"]) if stats.get("next_due") else None),
     )
 
 
@@ -549,9 +547,7 @@ def reschedule_item(item_id: str, request: RescheduleRequest) -> ScheduledItemRe
 
 
 @router.put("/{item_id}/message", response_model=ScheduledItemResponse)
-def update_scheduled_message(
-    item_id: str, request: UpdateMessageRequest
-) -> ScheduledItemResponse:
+def update_scheduled_message(item_id: str, request: UpdateMessageRequest) -> ScheduledItemResponse:
     """Update the message text of a scheduled item.
 
     Args:

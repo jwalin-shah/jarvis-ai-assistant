@@ -274,9 +274,7 @@ class AdaptiveThresholdManager:
             relevant = [e for e in entries if e.timestamp >= cutoff]
 
         # Only include entries with similarity scores in metadata
-        with_similarity = [
-            e for e in relevant if e.metadata.get("similarity_score") is not None
-        ]
+        with_similarity = [e for e in relevant if e.metadata.get("similarity_score") is not None]
 
         return with_similarity
 
@@ -321,9 +319,8 @@ class AdaptiveThresholdManager:
             bucket = buckets[bucket_key]
             bucket.total_count += 1
             bucket.avg_similarity = (
-                (bucket.avg_similarity * (bucket.total_count - 1) + similarity)
-                / bucket.total_count
-            )
+                bucket.avg_similarity * (bucket.total_count - 1) + similarity
+            ) / bucket.total_count
 
             if entry.action == FeedbackAction.SENT:
                 bucket.sent_count += 1
@@ -502,7 +499,8 @@ class AdaptiveThresholdManager:
         total_sent = sum(1 for e in entries if e.action == FeedbackAction.SENT)
         total_edited = sum(1 for e in entries if e.action == FeedbackAction.EDITED)
         total_dismissed = sum(
-            1 for e in entries
+            1
+            for e in entries
             if e.action in (FeedbackAction.DISMISSED, FeedbackAction.WROTE_FROM_SCRATCH)
         )
 
@@ -526,9 +524,7 @@ class AdaptiveThresholdManager:
             "bucket_count": len(bucket_stats),
             "non_empty_buckets": len([b for b in bucket_stats if b.total_count > 0]),
             "is_using_fallback": (
-                self._cached_thresholds.is_fallback
-                if self._cached_thresholds
-                else True
+                self._cached_thresholds.is_fallback if self._cached_thresholds else True
             ),
         }
 

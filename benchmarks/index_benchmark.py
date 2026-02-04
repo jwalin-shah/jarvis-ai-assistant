@@ -18,11 +18,8 @@ from __future__ import annotations
 import argparse
 import gc
 import json
-import os
 import resource
-import shutil
 import statistics
-import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
@@ -99,10 +96,20 @@ def create_mock_pairs(num_pairs: int, seed: int = 42) -> list[Any]:
     ]
 
     topics = [
-        "python programming", "machine learning", "data science",
-        "web development", "API design", "database optimization",
-        "cloud computing", "DevOps", "testing", "debugging",
-        "performance tuning", "security", "scalability", "architecture",
+        "python programming",
+        "machine learning",
+        "data science",
+        "web development",
+        "API design",
+        "database optimization",
+        "cloud computing",
+        "DevOps",
+        "testing",
+        "debugging",
+        "performance tuning",
+        "security",
+        "scalability",
+        "architecture",
     ]
 
     pairs = []
@@ -154,10 +161,10 @@ def create_mock_embedder(dimension: int = 384) -> MagicMock:
     embedder = MagicMock()
 
     def encode_func(texts: list[str], normalize: bool = True) -> np.ndarray:
-        embeddings = np.array([
-            np.random.RandomState(hash(t) % (2**31)).randn(dimension)
-            for t in texts
-        ], dtype=np.float32)
+        embeddings = np.array(
+            [np.random.RandomState(hash(t) % (2**31)).randn(dimension) for t in texts],
+            dtype=np.float32,
+        )
         if normalize:
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             embeddings = embeddings / (norms + 1e-8)
@@ -233,7 +240,7 @@ def benchmark_v1_index(
     with patch("jarvis.index.get_embedder", return_value=mock_embedder):
         for query in queries:
             start_time = time.perf_counter()
-            results = index.search(query, k=10, threshold=0.0)
+            index.search(query, k=10, threshold=0.0)
             latency_ms = (time.perf_counter() - start_time) * 1000
             query_latencies.append(latency_ms)
 
@@ -337,7 +344,7 @@ def benchmark_v2_index(
     with patch("jarvis.index_v2.get_embedder", return_value=mock_embedder):
         for query in queries:
             start_time = time.perf_counter()
-            results = index.search(query, k=10, threshold=0.0)
+            index.search(query, k=10, threshold=0.0)
             latency_ms = (time.perf_counter() - start_time) * 1000
             query_latencies.append(latency_ms)
 
@@ -391,10 +398,18 @@ def print_results(v1_result: BenchmarkResult, v2_result: BenchmarkResult) -> Non
     print("-" * 75)
 
     insert_speedup = v2_result.insert_throughput_vps / v1_result.insert_throughput_vps
-    print(f"{'Total time (s)':<30} {v1_result.insert_total_time_s:>15.2f} {v2_result.insert_total_time_s:>15.2f} {(v2_result.insert_total_time_s/v1_result.insert_total_time_s - 1)*100:>14.1f}%")
-    print(f"{'Throughput (vectors/s)':<30} {v1_result.insert_throughput_vps:>15.0f} {v2_result.insert_throughput_vps:>15.0f} {(insert_speedup - 1)*100:>14.1f}%")
-    print(f"{'Memory (MB)':<30} {v1_result.insert_memory_mb:>15.1f} {v2_result.insert_memory_mb:>15.1f} {(v2_result.insert_memory_mb/v1_result.insert_memory_mb - 1)*100:>14.1f}%")
-    print(f"{'Index size (MB)':<30} {v1_result.index_size_bytes/1024/1024:>15.2f} {v2_result.index_size_bytes/1024/1024:>15.2f} {(v2_result.index_size_bytes/v1_result.index_size_bytes - 1)*100:>14.1f}%")
+    print(
+        f"{'Total time (s)':<30} {v1_result.insert_total_time_s:>15.2f} {v2_result.insert_total_time_s:>15.2f} {(v2_result.insert_total_time_s / v1_result.insert_total_time_s - 1) * 100:>14.1f}%"
+    )
+    print(
+        f"{'Throughput (vectors/s)':<30} {v1_result.insert_throughput_vps:>15.0f} {v2_result.insert_throughput_vps:>15.0f} {(insert_speedup - 1) * 100:>14.1f}%"
+    )
+    print(
+        f"{'Memory (MB)':<30} {v1_result.insert_memory_mb:>15.1f} {v2_result.insert_memory_mb:>15.1f} {(v2_result.insert_memory_mb / v1_result.insert_memory_mb - 1) * 100:>14.1f}%"
+    )
+    print(
+        f"{'Index size (MB)':<30} {v1_result.index_size_bytes / 1024 / 1024:>15.2f} {v2_result.index_size_bytes / 1024 / 1024:>15.2f} {(v2_result.index_size_bytes / v1_result.index_size_bytes - 1) * 100:>14.1f}%"
+    )
 
     print("\n" + "-" * 40)
     print("QUERY PERFORMANCE")
@@ -403,11 +418,21 @@ def print_results(v1_result: BenchmarkResult, v2_result: BenchmarkResult) -> Non
     print("-" * 75)
 
     query_speedup = v1_result.query_mean_ms / v2_result.query_mean_ms
-    print(f"{'Mean latency (ms)':<30} {v1_result.query_mean_ms:>15.2f} {v2_result.query_mean_ms:>15.2f} {(1 - query_speedup)*100:>14.1f}%")
-    print(f"{'P50 latency (ms)':<30} {v1_result.query_p50_ms:>15.2f} {v2_result.query_p50_ms:>15.2f} {(v2_result.query_p50_ms/v1_result.query_p50_ms - 1)*100:>14.1f}%")
-    print(f"{'P95 latency (ms)':<30} {v1_result.query_p95_ms:>15.2f} {v2_result.query_p95_ms:>15.2f} {(v2_result.query_p95_ms/v1_result.query_p95_ms - 1)*100:>14.1f}%")
-    print(f"{'P99 latency (ms)':<30} {v1_result.query_p99_ms:>15.2f} {v2_result.query_p99_ms:>15.2f} {(v2_result.query_p99_ms/v1_result.query_p99_ms - 1)*100:>14.1f}%")
-    print(f"{'Throughput (queries/s)':<30} {v1_result.query_throughput_qps:>15.0f} {v2_result.query_throughput_qps:>15.0f} {(v2_result.query_throughput_qps/v1_result.query_throughput_qps - 1)*100:>14.1f}%")
+    print(
+        f"{'Mean latency (ms)':<30} {v1_result.query_mean_ms:>15.2f} {v2_result.query_mean_ms:>15.2f} {(1 - query_speedup) * 100:>14.1f}%"
+    )
+    print(
+        f"{'P50 latency (ms)':<30} {v1_result.query_p50_ms:>15.2f} {v2_result.query_p50_ms:>15.2f} {(v2_result.query_p50_ms / v1_result.query_p50_ms - 1) * 100:>14.1f}%"
+    )
+    print(
+        f"{'P95 latency (ms)':<30} {v1_result.query_p95_ms:>15.2f} {v2_result.query_p95_ms:>15.2f} {(v2_result.query_p95_ms / v1_result.query_p95_ms - 1) * 100:>14.1f}%"
+    )
+    print(
+        f"{'P99 latency (ms)':<30} {v1_result.query_p99_ms:>15.2f} {v2_result.query_p99_ms:>15.2f} {(v2_result.query_p99_ms / v1_result.query_p99_ms - 1) * 100:>14.1f}%"
+    )
+    print(
+        f"{'Throughput (queries/s)':<30} {v1_result.query_throughput_qps:>15.0f} {v2_result.query_throughput_qps:>15.0f} {(v2_result.query_throughput_qps / v1_result.query_throughput_qps - 1) * 100:>14.1f}%"
+    )
 
     print("\n" + "-" * 40)
     print("INDEX STRUCTURE")
@@ -422,12 +447,12 @@ def print_results(v1_result: BenchmarkResult, v2_result: BenchmarkResult) -> Non
     if insert_speedup > 1:
         print(f"Insert throughput: V2 is {insert_speedup:.1f}x faster")
     else:
-        print(f"Insert throughput: V1 is {1/insert_speedup:.1f}x faster")
+        print(f"Insert throughput: V1 is {1 / insert_speedup:.1f}x faster")
 
     if query_speedup > 1:
         print(f"Query latency: V2 is {query_speedup:.1f}x faster")
     else:
-        print(f"Query latency: V1 is {1/query_speedup:.1f}x faster")
+        print(f"Query latency: V1 is {1 / query_speedup:.1f}x faster")
 
     print("=" * 80)
 
@@ -456,17 +481,13 @@ def run_benchmark(
         temp_path = Path(temp_dir)
 
         print("\nRunning V1 benchmark...")
-        v1_result = benchmark_v1_index(
-            pairs, mock_db, mock_embedder, temp_path, num_queries
-        )
+        v1_result = benchmark_v1_index(pairs, mock_db, mock_embedder, temp_path, num_queries)
 
         # Clean up between benchmarks
         gc.collect()
 
         print("Running V2 benchmark...")
-        v2_result = benchmark_v2_index(
-            pairs, mock_db, mock_embedder, temp_path, num_queries
-        )
+        v2_result = benchmark_v2_index(pairs, mock_db, mock_embedder, temp_path, num_queries)
 
     print_results(v1_result, v2_result)
 
@@ -508,7 +529,7 @@ def run_scaling_benchmark(
     }
 
     for count in vector_counts:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Running benchmark with {count:,} vectors")
         print("=" * 60)
 
@@ -517,16 +538,18 @@ def run_scaling_benchmark(
             num_queries=min(100, count // 10),
         )
 
-        results["scaling"].append({
-            "num_vectors": count,
-            "v1_insert_throughput": v1_result.insert_throughput_vps,
-            "v2_insert_throughput": v2_result.insert_throughput_vps,
-            "v1_query_latency_ms": v1_result.query_mean_ms,
-            "v2_query_latency_ms": v2_result.query_mean_ms,
-            "v1_index_size_mb": v1_result.index_size_bytes / 1024 / 1024,
-            "v2_index_size_mb": v2_result.index_size_bytes / 1024 / 1024,
-            "v2_num_shards": v2_result.num_shards,
-        })
+        results["scaling"].append(
+            {
+                "num_vectors": count,
+                "v1_insert_throughput": v1_result.insert_throughput_vps,
+                "v2_insert_throughput": v2_result.insert_throughput_vps,
+                "v1_query_latency_ms": v1_result.query_mean_ms,
+                "v2_query_latency_ms": v2_result.query_mean_ms,
+                "v1_index_size_mb": v1_result.index_size_bytes / 1024 / 1024,
+                "v2_index_size_mb": v2_result.index_size_bytes / 1024 / 1024,
+                "v2_num_shards": v2_result.num_shards,
+            }
+        )
 
     if output_file:
         with open(output_file, "w") as f:
@@ -538,9 +561,7 @@ def run_scaling_benchmark(
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Benchmark FAISS Index V1 vs V2 Performance"
-    )
+    parser = argparse.ArgumentParser(description="Benchmark FAISS Index V1 vs V2 Performance")
     parser.add_argument(
         "--vectors",
         type=int,

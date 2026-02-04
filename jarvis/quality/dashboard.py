@@ -120,9 +120,7 @@ class ModelQualityComparison:
         return {
             "model_name": self.model_name,
             "overall_score": round(self.overall_score, 4),
-            "dimension_scores": {
-                k: round(v, 4) for k, v in self.dimension_scores.items()
-            },
+            "dimension_scores": {k: round(v, 4) for k, v in self.dimension_scores.items()},
             "sample_count": self.sample_count,
             "avg_latency_ms": round(self.avg_latency_ms, 2),
             "ranking": self.ranking,
@@ -275,9 +273,7 @@ class QualityDashboard:
                     recent = list(self._metrics[dim])[-100:]
                     if recent:
                         recent_avg = mean(p.value for p in recent)
-                        summary["dimensions"][dim]["recent_average"] = round(
-                            recent_avg, 4
-                        )
+                        summary["dimensions"][dim]["recent_average"] = round(recent_avg, 4)
 
             return summary
 
@@ -492,9 +488,7 @@ class QualityDashboard:
         cutoff = datetime.now(UTC) - timedelta(hours=hours)
 
         with self._lock:
-            points = [
-                p for p in self._metrics.get(dimension, []) if p.timestamp >= cutoff
-            ]
+            points = [p for p in self._metrics.get(dimension, []) if p.timestamp >= cutoff]
 
         if not points:
             return []
@@ -554,9 +548,7 @@ class QualityDashboard:
             points = list(self._metrics["overall"])[-100:]
             recent_avg = mean(p.value for p in points)
 
-            all_avg = (
-                self._dimension_totals["overall"] / self._dimension_counts["overall"]
-            )
+            all_avg = self._dimension_totals["overall"] / self._dimension_counts["overall"]
 
             if all_avg > 0:
                 change = (recent_avg - all_avg) / all_avg
