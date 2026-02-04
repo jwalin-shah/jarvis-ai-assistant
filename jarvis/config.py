@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path.home() / ".jarvis" / "config.json"
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 10
+CONFIG_VERSION = 11
 
 
 class MemoryThresholds(BaseModel):
@@ -413,6 +413,48 @@ class NormalizationProfile(BaseModel):
     max_length: int = Field(default=500, ge=1, le=5000)
 
 
+class SegmentationConfig(BaseModel):
+    """Configuration for semantic topic segmentation.
+
+    Controls how conversations are segmented into topic-coherent chunks
+    using embedding similarity, entity continuity, and text features.
+
+    Attributes:
+        enabled: Whether semantic segmentation is enabled. If False, falls back
+            to time-based bundling.
+        window_size: Size of sliding window for computing embedding centroids.
+        similarity_threshold: Cosine similarity below this indicates topic drift.
+        entity_weight: Weight for entity continuity in boundary score (0-1).
+        entity_jaccard_threshold: Jaccard similarity below this indicates
+            entity discontinuity between adjacent messages.
+        time_gap_minutes: Hard boundary if time gap exceeds this (minutes).
+        soft_gap_minutes: Contributes to boundary score if gap exceeds this.
+        coreference_enabled: Whether to resolve pronouns before embedding.
+            Requires fastcoref package.
+        coreference_model: FastCoref model name (default: biu-nlp/f-coref).
+        use_topic_shift_markers: Whether to use text markers like "btw", "anyway".
+        topic_shift_weight: Weight for topic shift markers in boundary score.
+        min_segment_messages: Minimum messages per segment (smaller merged).
+        max_segment_messages: Maximum messages per segment (larger split).
+        boundary_threshold: Score threshold for creating a boundary (0-1).
+    """
+
+    enabled: bool = True
+    window_size: int = Field(default=3, ge=1, le=10)
+    similarity_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
+    entity_weight: float = Field(default=0.3, ge=0.0, le=1.0)
+    entity_jaccard_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
+    time_gap_minutes: float = Field(default=30.0, ge=1.0, le=1440.0)
+    soft_gap_minutes: float = Field(default=10.0, ge=0.0, le=1440.0)
+    coreference_enabled: bool = False
+    coreference_model: str = "biu-nlp/f-coref"
+    use_topic_shift_markers: bool = True
+    topic_shift_weight: float = Field(default=0.4, ge=0.0, le=1.0)
+    min_segment_messages: int = Field(default=1, ge=1, le=100)
+    max_segment_messages: int = Field(default=50, ge=5, le=500)
+    boundary_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
 class NormalizationConfig(BaseModel):
     """Normalization profiles for different tasks."""
 
@@ -510,6 +552,7 @@ class JarvisConfig(BaseModel):
     faiss_index: FAISSIndexConfig = Field(default_factory=FAISSIndexConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
+    segmentation: SegmentationConfig = Field(default_factory=SegmentationConfig)
 
 
 # Module-level singleton with thread safety
@@ -650,6 +693,15 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
             data["retrieval"] = {}
 
         version = 10
+
+    if version < 11:
+        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
+
+        # Add segmentation section if missing
+        if "segmentation" not in data:
+            data["segmentation"] = {}
+
+        version = 11
 
     # Update version
     data["config_version"] = CONFIG_VERSION
