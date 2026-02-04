@@ -111,7 +111,7 @@ class StyleProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "StyleProfile":
+    def from_dict(cls, data: dict) -> StyleProfile:
         return cls(
             avg_length=data.get("avg_length", 30.0),
             min_length=data.get("min_length", 1),
@@ -161,7 +161,7 @@ class ContactProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ContactProfile":
+    def from_dict(cls, data: dict) -> ContactProfile:
         """Deserialize from storage."""
         topics_data = data.get("topics")
         topics = None
@@ -172,12 +172,14 @@ class ContactProfile:
                 noise_count=topics_data.get("noise_count", 0),
             )
 
+        created = data.get("created_at")
+        updated = data.get("updated_at")
         return cls(
             contact_id=data["contact_id"],
             style=StyleProfile.from_dict(data.get("style", {})),
             topics=topics,
-            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(),
-            updated_at=datetime.fromisoformat(data["updated_at"]) if "updated_at" in data else datetime.now(),
+            created_at=datetime.fromisoformat(created) if created else datetime.now(),
+            updated_at=datetime.fromisoformat(updated) if updated else datetime.now(),
             version=data.get("version", 1),
         )
 

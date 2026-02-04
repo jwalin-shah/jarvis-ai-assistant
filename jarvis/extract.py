@@ -971,6 +971,7 @@ def extract_all_pairs(
     config: ExtractionConfig | None = None,
     progress_callback: Any | None = None,
     embedder: UnifiedEmbedder | None = None,
+    build_profiles: bool = False,
 ) -> dict[str, Any]:
     """Extract turn-based pairs from all conversations with contacts.
 
@@ -980,6 +981,7 @@ def extract_all_pairs(
         config: Extraction configuration.
         progress_callback: Optional callback(current, total, chat_id) for progress.
         embedder: Optional embedder for semantic similarity filtering.
+        build_profiles: If True, build contact profiles after extraction.
 
     Returns:
         Dictionary with extraction statistics.
@@ -1131,7 +1133,123 @@ def extract_all_pairs(
                 total_msgs,
             )
 
+    # Build contact profiles if requested
+    if build_profiles:
+        logger.info("Building contact profiles...")
+        profile_stats = build_profiles_for_contacts(
+            chat_db_reader=chat_db_reader,
+            jarvis_db=jarvis_db,
+            embedder=embedder,
+        )
+        aggregate_stats["profile_stats"] = profile_stats
+        logger.info(
+            "Profiled %d contacts (%d messages analyzed)",
+            profile_stats["contacts_profiled"],
+            profile_stats["total_messages_analyzed"],
+        )
+
     return aggregate_stats
+
+
+# =============================================================================
+# Contact Profile Building
+# =============================================================================
+
+
+def build_profiles_for_contacts(
+    chat_db_reader: Any,
+    jarvis_db: Any,
+    contact_ids: list[int] | None = None,
+    embedder: UnifiedEmbedder | None = None,
+    progress_callback: Any | None = None,
+) -> dict[str, Any]:
+    """Build style/topic profiles for contacts based on their message history.
+
+    This extracts writing style and discovers topics for each contact.
+    Should be called after extraction to build profiles from the contact's
+    messages (the messages they sent, not your replies).
+
+    Args:
+        chat_db_reader: An open ChatDBReader instance.
+        jarvis_db: JarvisDB instance for looking up contacts and chats.
+        contact_ids: Optional list of contact IDs to profile. If None, profiles all.
+        embedder: Optional embedder for topic discovery. If None, only style is analyzed.
+        progress_callback: Optional callback(current, total, contact_name) for progress.
+
+    Returns:
+        Dictionary with profiling statistics.
+    """
+    from jarvis.contact_profile import ContactProfiler
+
+    profiler = ContactProfiler()
+
+    stats = {
+        "contacts_profiled": 0,
+        "total_messages_analyzed": 0,
+        "profiles_with_topics": 0,
+        "errors": [],
+    }
+
+    # Get contacts to profile
+    if contact_ids is None:
+        contacts = jarvis_db.get_all_contacts()
+    else:
+        contacts = [jarvis_db.get_contact(cid) for cid in contact_ids]
+        contacts = [c for c in contacts if c is not None]
+
+    total = len(contacts)
+    if total == 0:
+        return stats
+
+    for idx, contact in enumerate(contacts):
+        if progress_callback:
+            progress_callback(idx, total, contact.name or contact.identifier)
+
+        try:
+            # Get all conversations for this contact
+            chat_ids = jarvis_db.get_chat_ids_for_contact(contact.id)
+            if not chat_ids:
+                continue
+
+            # Collect all messages FROM this contact (not from_me)
+            all_messages: list[str] = []
+            for chat_id in chat_ids:
+                messages = chat_db_reader.get_messages(chat_id, limit=10000)
+                # Filter to messages from them (not from_me)
+                their_messages = [
+                    m.text for m in messages
+                    if not m.is_from_me and m.text and m.text.strip()
+                ]
+                all_messages.extend(their_messages)
+
+            if not all_messages:
+                continue
+
+            # Compute embeddings if embedder provided (for topic discovery)
+            embeddings = None
+            if embedder is not None and len(all_messages) >= 10:
+                try:
+                    embeddings = embedder.encode(all_messages, normalize=True)
+                except Exception as e:
+                    logger.warning("Failed to embed messages for %s: %s", contact.id, e)
+
+            # Build profile
+            profile = profiler.build_profile(
+                contact_id=str(contact.id),
+                messages=all_messages,
+                embeddings=embeddings,
+            )
+
+            stats["contacts_profiled"] += 1
+            stats["total_messages_analyzed"] += len(all_messages)
+            if profile.topics is not None:
+                stats["profiles_with_topics"] += 1
+
+        except Exception as e:
+            logger.warning("Error profiling contact %s: %s", contact.id, e)
+            stats["errors"].append({"contact_id": contact.id, "error": str(e)})
+
+    return stats
 
 
 # =============================================================================
