@@ -47,6 +47,7 @@ dependencies = [
     "setfit>=1.1.0",
     "einops>=0.8.2",
     "langdetect>=1.0.9",
+    "spacy>=3.7.0",
 ]
 
 [project.optional-dependencies]
@@ -82,6 +83,9 @@ training = [
 ]
 experiments = [
     "bertopic>=0.17.4",
+]
+coref = [
+    "fastcoref>=0.2.0",
 ]
 
 [project.scripts]

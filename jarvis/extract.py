@@ -388,9 +388,13 @@ class TurnBasedExtractor:
     ) -> list[Turn]:
         """Group consecutive messages from same speaker into turns.
 
+        If semantic segmentation is enabled in config, uses topic-based
+        segmentation to group messages. Otherwise, uses time-based bundling.
+
         Messages are bundled if:
         - Same speaker (is_from_me matches)
         - Within turn_bundle_minutes of previous message in turn
+        - (If semantic) Within same topic segment
 
         Args:
             messages: List of messages to group.
@@ -398,6 +402,13 @@ class TurnBasedExtractor:
         """
         if not messages:
             return []
+
+        # Check if semantic segmentation is enabled
+        from jarvis.config import get_config
+
+        config = get_config()
+        if hasattr(config, "segmentation") and config.segmentation.enabled:
+            return self._group_into_turns_semantic(messages, stats)
 
         turns: list[Turn] = []
         bundle_window = timedelta(minutes=self.config.turn_bundle_minutes)
@@ -455,6 +466,137 @@ class TurnBasedExtractor:
             current_turn.add_message(msg)
 
         # Don't forget the last turn
+        if current_turn is not None and current_turn.text:
+            turns.append(current_turn)
+
+        return turns
+
+    def _group_into_turns_semantic(
+        self, messages: list[Message], stats: ExtractionStats | None = None
+    ) -> list[Turn]:
+        """Group messages into turns using semantic topic segmentation.
+
+        Uses topic_segmenter to detect topic boundaries, then groups by
+        speaker within each topic segment.
+
+        Args:
+            messages: List of messages to group.
+            stats: Optional stats object to track null/empty messages.
+        """
+        from jarvis.topic_segmenter import segment_for_extraction
+
+        if not messages:
+            return []
+
+        # Pre-filter messages (null/empty/spam)
+        filtered_messages: list[Message] = []
+        for msg in messages:
+            # Skip system messages
+            if self.config.skip_system_messages and msg.is_system_message:
+                continue
+
+            # Track null/empty text for data quality observability
+            if msg.text is None:
+                if stats is not None:
+                    stats.dropped_null_text += 1
+                if not msg.attachments:
+                    continue
+            elif msg.text.strip() == "":
+                if stats is not None:
+                    stats.dropped_empty_text += 1
+                if not msg.attachments:
+                    continue
+
+            # Skip attachment-only messages
+            if self.config.skip_attachment_only and not msg.text and msg.attachments:
+                continue
+
+            # Skip spam/bot messages if detection is enabled
+            if self.config.spam_detection_enabled and msg.text:
+                from jarvis.text_normalizer import is_spam_message
+
+                if is_spam_message(msg.text):
+                    if stats is not None:
+                        stats.dropped_spam += 1
+                    continue
+
+            filtered_messages.append(msg)
+
+        if not filtered_messages:
+            return []
+
+        # Get topic segments
+        try:
+            message_groups = segment_for_extraction(filtered_messages)
+        except Exception as e:
+            logger.warning("Semantic segmentation failed, falling back to time-based: %s", e)
+            # Fall back to time-based bundling
+            return self._group_into_turns_time_based(filtered_messages, stats)
+
+        # Within each segment, group by speaker (same as time-based but no time window)
+        turns: list[Turn] = []
+        bundle_window = timedelta(minutes=self.config.turn_bundle_minutes)
+
+        for segment_messages in message_groups:
+            current_turn: Turn | None = None
+
+            for msg in segment_messages:
+                # Check if this message continues the current turn
+                if current_turn is not None:
+                    # Same speaker?
+                    if msg.is_from_me == current_turn.is_from_me:
+                        # Within time window? (still use time bundling within segments)
+                        time_since_last = msg.date - current_turn.last_timestamp
+                        if time_since_last <= bundle_window:
+                            current_turn.add_message(msg)
+                            continue
+
+                    # Different speaker or too much time - save current turn
+                    if current_turn.text:
+                        turns.append(current_turn)
+
+                # Start new turn
+                current_turn = Turn(is_from_me=msg.is_from_me)
+                current_turn.add_message(msg)
+
+            # Save the last turn in this segment
+            if current_turn is not None and current_turn.text:
+                turns.append(current_turn)
+
+        return turns
+
+    def _group_into_turns_time_based(
+        self, messages: list[Message], stats: ExtractionStats | None = None
+    ) -> list[Turn]:
+        """Group messages into turns using pure time-based bundling.
+
+        This is the fallback method when semantic segmentation fails.
+
+        Args:
+            messages: List of pre-filtered messages to group.
+            stats: Optional stats object (not used here, filtering already done).
+        """
+        if not messages:
+            return []
+
+        turns: list[Turn] = []
+        bundle_window = timedelta(minutes=self.config.turn_bundle_minutes)
+        current_turn: Turn | None = None
+
+        for msg in messages:
+            if current_turn is not None:
+                if msg.is_from_me == current_turn.is_from_me:
+                    time_since_last = msg.date - current_turn.last_timestamp
+                    if time_since_last <= bundle_window:
+                        current_turn.add_message(msg)
+                        continue
+
+                if current_turn.text:
+                    turns.append(current_turn)
+
+            current_turn = Turn(is_from_me=msg.is_from_me)
+            current_turn.add_message(msg)
+
         if current_turn is not None and current_turn.text:
             turns.append(current_turn)
 
