@@ -404,9 +404,10 @@ class NormalizationProfile(BaseModel):
     normalize_emojis: bool = False
     preserve_url_domain: bool = False
     replace_codes: bool = False
-    ner_enabled: bool = False
-    ner_model: str = "en_core_web_sm"
+    ner_enabled: bool = True
+    ner_model: str = "en_core_web_trf"
     expand_slang: bool = False
+    spell_check: bool = False
     filter_non_english: bool = False
     min_length: int = Field(default=3, ge=0, le=1000)
     max_length: int = Field(default=500, ge=1, le=5000)
@@ -420,22 +421,31 @@ class NormalizationConfig(BaseModel):
             filter_garbage=True,
             filter_attributed_artifacts=True,
             drop_url_only=True,
-            mask_entities=True,
-            normalize_emojis=True,
+            mask_entities=False,  # Not needed - running locally
+            normalize_emojis=False,  # Keep original emojis (LLM understands them)
             preserve_url_domain=True,
             replace_codes=True,
-            ner_enabled=False,
+            ner_enabled=False,  # Don't need NER for storage
+            expand_slang=False,  # Keep original slang for LLM style
+            spell_check=True,  # Fix typos (mistakes, not style)
+            filter_non_english=False,
             min_length=1,
             max_length=2000,
         )
     )
     classification: NormalizationProfile = Field(
         default_factory=lambda: NormalizationProfile(
-            mask_entities=True,
+            filter_garbage=True,
+            filter_attributed_artifacts=True,
+            drop_url_only=True,
+            mask_entities=False,  # Not needed - running locally
             normalize_emojis=True,
             preserve_url_domain=True,
             replace_codes=True,
-            ner_enabled=False,
+            ner_enabled=True,  # For entity extraction, not masking
+            expand_slang=True,
+            spell_check=True,  # Correct typos (runs after slang expansion)
+            filter_non_english=False,  # Breaks slang detection
             min_length=1,
             max_length=1000,
         )
@@ -445,11 +455,13 @@ class NormalizationConfig(BaseModel):
             filter_garbage=True,
             filter_attributed_artifacts=True,
             drop_url_only=True,
-            mask_entities=True,
+            mask_entities=False,  # Not needed - running locally
             normalize_emojis=True,
             preserve_url_domain=True,
             replace_codes=True,
-            ner_enabled=False,
+            ner_enabled=True,
+            expand_slang=True,
+            filter_non_english=False,  # Breaks slang detection
             min_length=3,
             max_length=1000,
         )
