@@ -88,9 +88,9 @@ class DefaultMemoryController:
     def get_mode(self) -> MemoryMode:
         """Determine appropriate mode based on available memory.
 
-        Mode thresholds:
+        Mode thresholds (default):
         - FULL: available_mb > 8000 (8GB+ available)
-        - LITE: available_mb > 4000 (4-8GB available)
+        - LITE: 4000 < available_mb <= 8000 (4-8GB available)
         - MINIMAL: available_mb <= 4000 (<4GB available)
 
         Returns:
@@ -100,10 +100,9 @@ class DefaultMemoryController:
 
         if available_mb > self._thresholds.full_mode_mb:
             return MemoryMode.FULL
-        elif available_mb > self._thresholds.lite_mode_mb:
+        if available_mb > self._thresholds.lite_mode_mb:
             return MemoryMode.LITE
-        else:
-            return MemoryMode.MINIMAL
+        return MemoryMode.MINIMAL
 
     def can_load_model(self, required_mb: float) -> bool:
         """Check if we have enough memory to load a model.
@@ -139,7 +138,7 @@ class DefaultMemoryController:
         callbacks if memory is tight. It does NOT directly unload anything.
 
         Args:
-            required_mb: Amount of memory needed.
+            required_mb: Amount of memory needed (MB).
             priority: Priority level (higher = more important).
 
         Returns:
@@ -148,8 +147,10 @@ class DefaultMemoryController:
         available_mb = self._monitor.get_available_mb()
         pressure = self._monitor.get_pressure_level()
 
-        # If we have enough memory, grant the request
-        if available_mb >= required_mb:
+        # Check if we have enough memory
+        can_satisfy = available_mb >= required_mb
+
+        if can_satisfy:
             logger.debug(
                 "Memory request granted: %.0fMB requested, %.0fMB available",
                 required_mb,
@@ -157,10 +158,10 @@ class DefaultMemoryController:
             )
             return True
 
-        # If in critical pressure and can't satisfy, notify callbacks
+        # Cannot satisfy request - handle based on pressure level
         if pressure in ("red", "critical"):
             logger.warning(
-                "Memory request cannot be satisfied: %.0fMB requested, %.0fMB available, "
+                "Memory request denied: %.0fMB requested, %.0fMB available, "
                 "pressure=%s, priority=%d",
                 required_mb,
                 available_mb,
@@ -170,26 +171,27 @@ class DefaultMemoryController:
             self._notify_callbacks(pressure)
             return False
 
-        # Yellow pressure - try to proceed but warn
+        # Yellow pressure - log warning but allow caller to decide
         if pressure == "yellow":
             logger.info(
-                "Memory request proceeding under yellow pressure: %.0fMB requested, "
+                "Memory request under yellow pressure: %.0fMB requested, "
                 "%.0fMB available, priority=%d",
                 required_mb,
                 available_mb,
                 priority,
             )
 
-        return available_mb >= required_mb
+        return False
 
     def register_pressure_callback(self, callback: Callable[[str], None]) -> None:
         """Register callback for memory pressure events.
 
         Callbacks are invoked when pressure level changes or when
-        memory requests cannot be satisfied under pressure.
+        memory requests cannot be satisfied under high pressure.
 
         Args:
-            callback: Function to call with pressure level string.
+            callback: Function to call with pressure level string
+                     ("green", "yellow", "red", or "critical").
         """
         with self._callback_lock:
             if callback not in self._callbacks:

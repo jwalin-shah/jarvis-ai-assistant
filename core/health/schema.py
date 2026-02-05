@@ -37,6 +37,9 @@ KNOWN_SCHEMAS = {
 # Tables that must exist in any valid chat.db
 REQUIRED_CORE_TABLES = ["message", "chat", "handle"]
 
+# Database connection timeout (seconds)
+DB_CONNECTION_TIMEOUT_SECONDS = 5.0
+
 
 class ChatDBSchemaDetector:
     """Detects iMessage chat.db schema version.
@@ -85,7 +88,9 @@ class ChatDBSchemaDetector:
             try:
                 # Open in read-only mode
                 uri = f"file:{db_path}?mode=ro"
-                conn = sqlite3.connect(uri, uri=True, timeout=5.0)
+                conn = sqlite3.connect(
+                    uri, uri=True, timeout=DB_CONNECTION_TIMEOUT_SECONDS
+                )
                 conn.row_factory = sqlite3.Row
 
                 try:
@@ -169,10 +174,12 @@ class ChatDBSchemaDetector:
             conn: SQLite connection
 
         Returns:
-            List of table names
+            List of table names sorted alphabetically
         """
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        )
         return [row[0] for row in cursor.fetchall()]
 
     def _detect_version(self, conn: sqlite3.Connection) -> str:

@@ -284,8 +284,7 @@ class CircuitBreaker:
         """
         can_exec, slot_acquired = self._try_acquire_execution_slot()
         if not can_exec:
-            msg = f"Circuit breaker '{self.name}' is open"
-            raise CircuitOpenError(msg)
+            raise CircuitOpenError(f"Circuit breaker '{self.name}' is open")
 
         try:
             result = func(*args, **kwargs)

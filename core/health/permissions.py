@@ -18,8 +18,13 @@ logger = logging.getLogger(__name__)
 
 # Default paths for permission checks
 CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
-CONTACTS_DB_PATH = Path.home() / "Library" / "Application Support" / "AddressBook" / "Sources"
+CONTACTS_DB_PATH = (
+    Path.home() / "Library" / "Application Support" / "AddressBook" / "Sources"
+)
 CALENDAR_DB_PATH = Path.home() / "Library" / "Calendars"
+
+# Cache TTL for permission checks (seconds)
+DEFAULT_CACHE_TTL_SECONDS = 5.0
 
 # Fix instructions for each permission type
 FIX_INSTRUCTIONS = {
@@ -86,7 +91,7 @@ class TCCPermissionMonitor:
         self._calendar_path = calendar_path or CALENDAR_DB_PATH
         self._lock = threading.Lock()
         self._cache: dict[Permission, PermissionStatus] = {}
-        self._cache_ttl_seconds = 5.0  # Cache validity period
+        self._cache_ttl_seconds = DEFAULT_CACHE_TTL_SECONDS
         self._cache_timestamps: dict[Permission, float] = {}
         logger.info("TCCPermissionMonitor initialized")
 
@@ -138,32 +143,32 @@ class TCCPermissionMonitor:
         Returns:
             True if permission is granted, False otherwise
         """
-        if permission == Permission.FULL_DISK_ACCESS:
-            return self._check_full_disk_access()
-        elif permission == Permission.CONTACTS:
-            return self._check_contacts_access()
-        elif permission == Permission.CALENDAR:
-            return self._check_calendar_access()
-        elif permission == Permission.AUTOMATION:
-            return self._check_automation_access()
-        else:
-            logger.warning("Unknown permission type: %s", permission)
-            return False
+        # Use match/case for better performance and type safety
+        match permission:
+            case Permission.FULL_DISK_ACCESS:
+                return self._check_full_disk_access()
+            case Permission.CONTACTS:
+                return self._check_contacts_access()
+            case Permission.CALENDAR:
+                return self._check_calendar_access()
+            case Permission.AUTOMATION:
+                return self._check_automation_access()
+            case _:
+                logger.warning("Unknown permission type: %s", permission)
+                return False
 
     def _check_full_disk_access(self) -> bool:
         """Check Full Disk Access by testing chat.db readability.
 
         Returns:
-            True if chat.db is readable
+            True if chat.db is readable or doesn't exist, False if access denied
         """
-        try:
-            # First check if file exists
-            if not self._chat_db_path.exists():
-                logger.debug("chat.db not found at %s", self._chat_db_path)
-                # File doesn't exist - not a permission issue
-                # Return True since we can't test without the file
-                return True
+        if not self._chat_db_path.exists():
+            logger.debug("chat.db not found at %s", self._chat_db_path)
+            # File doesn't exist - not a permission issue
+            return True
 
+        try:
             # Try to open and read the file
             with open(self._chat_db_path, "rb") as f:
                 # Read first few bytes to verify actual access
@@ -181,47 +186,48 @@ class TCCPermissionMonitor:
             logger.debug("OS error checking chat.db: %s", e)
             return False
 
+    def _check_directory_access(self, path: Path, resource_name: str) -> bool:
+        """Check directory access for a macOS protected resource.
+
+        Args:
+            path: Path to the directory to check
+            resource_name: Name of the resource for logging (e.g., "Contacts", "Calendar")
+
+        Returns:
+            True if directory is accessible or doesn't exist, False if access denied
+        """
+        if not path.exists():
+            # Directory doesn't exist - not a permission issue
+            return True
+
+        try:
+            # Try to list directory contents
+            list(path.iterdir())
+            return True
+        except PermissionError:
+            logger.debug("Permission denied accessing %s directory", resource_name)
+            return False
+        except OSError as e:
+            if "Operation not permitted" in str(e):
+                logger.debug("TCC denied access to %s directory", resource_name)
+                return False
+            return True
+
     def _check_contacts_access(self) -> bool:
         """Check Contacts access by testing AddressBook directory.
 
         Returns:
-            True if Contacts directory is accessible
+            True if Contacts directory is accessible or doesn't exist
         """
-        try:
-            if not self._contacts_path.exists():
-                # Directory doesn't exist - not a permission issue
-                return True
-
-            # Try to list directory contents
-            list(self._contacts_path.iterdir())
-            return True
-        except PermissionError:
-            return False
-        except OSError as e:
-            if "Operation not permitted" in str(e):
-                return False
-            return True
+        return self._check_directory_access(self._contacts_path, "Contacts")
 
     def _check_calendar_access(self) -> bool:
         """Check Calendar access by testing Calendars directory.
 
         Returns:
-            True if Calendar directory is accessible
+            True if Calendar directory is accessible or doesn't exist
         """
-        try:
-            if not self._calendar_path.exists():
-                # Directory doesn't exist - not a permission issue
-                return True
-
-            # Try to list directory contents
-            list(self._calendar_path.iterdir())
-            return True
-        except PermissionError:
-            return False
-        except OSError as e:
-            if "Operation not permitted" in str(e):
-                return False
-            return True
+        return self._check_directory_access(self._calendar_path, "Calendar")
 
     def _check_automation_access(self) -> bool:
         """Check Automation access.
