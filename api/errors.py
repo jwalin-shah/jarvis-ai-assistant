@@ -52,34 +52,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# HTTP status code mapping for error types
-ERROR_STATUS_CODES: dict[type[JarvisError], int] = {
-    # Configuration errors -> 500 (server configuration issues)
-    ConfigurationError: 500,
-    # Model errors
-    ModelError: 500,
-    ModelLoadError: 503,  # Service Unavailable - model can't be loaded
-    ModelGenerationError: 500,  # Internal Server Error - generation failed
-    # iMessage errors
-    iMessageError: 500,
-    iMessageAccessError: 403,  # Forbidden - permission denied
-    iMessageQueryError: 500,  # Internal Server Error - query failed
-    # Calendar errors
-    CalendarError: 500,
-    CalendarAccessError: 403,  # Forbidden - permission denied
-    CalendarCreateError: 500,  # Internal Server Error - create failed
-    EventParseError: 400,  # Bad Request - invalid input
-    # Validation errors -> 400 (client error)
-    ValidationError: 400,
-    # Resource errors
-    ResourceError: 503,  # Service Unavailable - resources exhausted
-    MemoryResourceError: 503,
-    DiskResourceError: 503,
-    # Base error -> 500
-    JarvisError: 500,
-}
-
-# Map specific error codes to HTTP status codes (overrides class-based mapping)
+# Map error codes to HTTP status codes.
+# This is the single source of truth for error-code -> HTTP status mapping.
+# The get_status_code_for_error() function also checks for a `status_code` class
+# attribute on the exception (via getattr), enabling future migration of status
+# codes onto the exception classes themselves.
 ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     # 400 Bad Request
     ErrorCode.VAL_INVALID_INPUT: 400,
@@ -118,8 +95,10 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
 def get_status_code_for_error(error: JarvisError) -> int:
     """Determine the appropriate HTTP status code for an error.
 
-    First checks if the error's code has a specific status mapping,
-    then falls back to the error class hierarchy.
+    Priority order:
+    1. Error-code-level override in ERROR_CODE_STATUS_CODES
+    2. The exception class's `status_code` attribute (defined on each JarvisError subclass)
+    3. Default 500
 
     Args:
         error: The JARVIS error instance.
@@ -127,17 +106,12 @@ def get_status_code_for_error(error: JarvisError) -> int:
     Returns:
         HTTP status code (400-599).
     """
-    # First, check if the specific error code has a mapping
+    # Check error-code-level overrides first (e.g. MDL_NOT_FOUND -> 404)
     if error.code in ERROR_CODE_STATUS_CODES:
         return ERROR_CODE_STATUS_CODES[error.code]
 
-    # Fall back to class-based mapping, checking most specific first
-    for error_class, status_code in ERROR_STATUS_CODES.items():
-        if isinstance(error, error_class):
-            return status_code
-
-    # Default to 500 Internal Server Error
-    return 500
+    # Use the status_code defined on the exception class
+    return getattr(error, "status_code", 500)
 
 
 def build_error_response(error: JarvisError) -> dict[str, Any]:
@@ -417,6 +391,5 @@ __all__ = [
     "generic_exception_handler",
     "get_status_code_for_error",
     "build_error_response",
-    "ERROR_STATUS_CODES",
     "ERROR_CODE_STATUS_CODES",
 ]

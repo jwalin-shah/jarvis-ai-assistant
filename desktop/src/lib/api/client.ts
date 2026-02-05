@@ -136,11 +136,17 @@ async function ensureSocketConnected(): Promise<boolean> {
     try {
       socketConnected = await jarvis.connect();
       if (socketConnected) {
-        jarvis.on("disconnected", () => { socketConnected = false; });
+        jarvis.on("disconnected", () => {
+          socketConnected = false;
+          // Reset so ensureSocketConnected() can retry after disconnect
+          socketConnectionAttempted = false;
+        });
         jarvis.on("connected", () => { socketConnected = true; });
       }
     } catch {
       socketConnected = false;
+      // Allow retry on failure so transient error doesn't permanently disable socket
+      socketConnectionAttempted = false;
     }
   }
   return socketConnected;
@@ -205,15 +211,15 @@ class ApiClient {
         const result = await jarvis.ping();
         return {
           status: result.status === "ok" ? "healthy" : "degraded",
-          imessage_access: true,
-          memory_available_gb: 0,
-          memory_used_gb: 0,
-          memory_mode: "FULL",
-          model_loaded: (result as { models_ready?: boolean }).models_ready ?? false,
-          permissions_ok: true,
-          details: null,
-          jarvis_rss_mb: 0,
-          jarvis_vms_mb: 0,
+          imessage_access: null,  // Unknown via socket ping
+          memory_available_gb: null,  // Not available via socket
+          memory_used_gb: null,  // Not available via socket
+          memory_mode: null,  // Not available via socket
+          model_loaded: (result as { models_ready?: boolean }).models_ready ?? null,
+          permissions_ok: null,  // Not available via socket
+          details: 'Health details unavailable via socket - use HTTP for full status',
+          jarvis_rss_mb: null,  // Not available via socket
+          jarvis_vms_mb: null,  // Not available via socket
         };
       } catch {
         // Fall through to HTTP

@@ -559,6 +559,26 @@ EXPECTED_INDICES = {
 
 CURRENT_SCHEMA_VERSION = 9  # Added content_hash for text-based deduplication
 
+# Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
+VALID_MIGRATION_COLUMNS = {
+    # v3: context
+    "context_text",
+    # v4: group chat
+    "is_group",
+    # v5: holdout
+    "is_holdout",
+    # v6: validity gates
+    "gate_a_passed", "gate_b_score", "gate_c_verdict", "validity_status",
+    # v7: dialogue acts + clustering
+    "trigger_da_type", "trigger_da_conf", "response_da_type", "response_da_conf", "cluster_id",
+    # v9: content hash
+    "content_hash",
+}
+
+# Allowlist of valid column types for ALTER TABLE migrations
+VALID_COLUMN_TYPES = {"TEXT", "REAL", "INTEGER", "BOOLEAN", "BOOLEAN DEFAULT FALSE"}
+
+
 
 class JarvisDB:
     """Manager for the JARVIS SQLite database.
@@ -688,27 +708,36 @@ class JarvisDB:
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN context_text TEXT")
                     logger.info("Added context_text column to pairs table")
-                except sqlite3.OperationalError:
-                    # Column already exists (e.g., during development)
-                    pass
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" in str(e).lower():
+                        logger.debug("context_text column already exists")
+                    else:
+                        logger.error("Migration v2->v3 failed: %s", e)
+                        raise
 
             if current_version <= 3:
                 # Migration v3 -> v4: Add is_group column to pairs
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN is_group BOOLEAN DEFAULT FALSE")
                     logger.info("Added is_group column to pairs table")
-                except sqlite3.OperationalError:
-                    # Column already exists (e.g., during development)
-                    pass
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" in str(e).lower():
+                        logger.debug("is_group column already exists")
+                    else:
+                        logger.error("Migration v3->v4 failed: %s", e)
+                        raise
 
             if current_version <= 4:
                 # Migration v4 -> v5: Add is_holdout column for train/test split
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN is_holdout BOOLEAN DEFAULT FALSE")
                     logger.info("Added is_holdout column to pairs table")
-                except sqlite3.OperationalError:
-                    # Column already exists (e.g., during development)
-                    pass
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" in str(e).lower():
+                        logger.debug("is_holdout column already exists")
+                    else:
+                        logger.error("Migration v4->v5 failed: %s", e)
+                        raise
 
             if current_version <= 5:
                 # Migration v5 -> v6: Add validity gate columns and split tables
@@ -720,11 +749,19 @@ class JarvisDB:
                     ("validity_status", "TEXT"),
                 ]
                 for col_name, col_type in gate_columns:
+                    if col_name not in VALID_MIGRATION_COLUMNS:
+                        raise ValueError(f"Invalid migration column name: {col_name}")
+                    if col_type not in VALID_COLUMN_TYPES:
+                        raise ValueError(f"Invalid migration column type: {col_type}")
                     try:
                         conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
                         logger.info("Added %s column to pairs table", col_name)
-                    except sqlite3.OperationalError:
-                        pass
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column" in str(e).lower():
+                            logger.debug("%s column already exists", col_name)
+                        else:
+                            logger.error("Migration v5->v6 failed adding %s: %s", col_name, e)
+                            raise
 
                 # Create new tables (handled by SCHEMA_SQL, but ensure they exist)
                 # pair_artifacts and contact_style_targets are created by executescript
@@ -739,11 +776,19 @@ class JarvisDB:
                     ("cluster_id", "INTEGER"),
                 ]
                 for col_name, col_type in da_columns:
+                    if col_name not in VALID_MIGRATION_COLUMNS:
+                        raise ValueError(f"Invalid migration column name: {col_name}")
+                    if col_type not in VALID_COLUMN_TYPES:
+                        raise ValueError(f"Invalid migration column type: {col_type}")
                     try:
                         conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
                         logger.info("Added %s column to pairs table", col_name)
-                    except sqlite3.OperationalError:
-                        pass
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column" in str(e).lower():
+                            logger.debug("%s column already exists", col_name)
+                        else:
+                            logger.error("Migration v6->v7 failed adding %s: %s", col_name, e)
+                            raise
 
             # Migration v7 -> v8: Add scheduling tables
             # Tables are created by SCHEMA_SQL with CREATE TABLE IF NOT EXISTS
@@ -754,8 +799,12 @@ class JarvisDB:
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN content_hash TEXT")
                     logger.info("Added content_hash column to pairs table")
-                except sqlite3.OperationalError:
-                    pass  # Column already exists
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" in str(e).lower():
+                        logger.debug("content_hash column already exists")
+                    else:
+                        logger.error("Migration v8->v9 failed: %s", e)
+                        raise
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)

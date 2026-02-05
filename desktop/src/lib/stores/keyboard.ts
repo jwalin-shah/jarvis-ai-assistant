@@ -233,6 +233,17 @@ export function initAnnouncer(): void {
 }
 
 /**
+ * Clean up the ARIA announcer element
+ * Call this on app unmount to prevent DOM leaks
+ */
+export function destroyAnnouncer(): void {
+  if (announceElement && announceElement.parentNode) {
+    announceElement.parentNode.removeChild(announceElement);
+  }
+  announceElement = null;
+}
+
+/**
  * Announce a message to screen readers
  */
 export function announce(message: string, priority: "polite" | "assertive" = "polite"): void {

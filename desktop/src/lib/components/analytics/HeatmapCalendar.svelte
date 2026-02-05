@@ -92,8 +92,8 @@
       {#each organized.weeks as week, weekIndex}
         <div class="week-column">
           {#each Array(7) as _, dayIndex}
-            {#if week.find(d => getDayOfWeek(d.date) === dayIndex)}
-              {@const point = week.find(d => getDayOfWeek(d.date) === dayIndex)}
+            {@const point = week.find(d => getDayOfWeek(d.date) === dayIndex)}
+            {#if point}
               <div
                 class="day-cell"
                 style="background-color: {getColor(point?.level || 0)}"

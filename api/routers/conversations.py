@@ -18,7 +18,7 @@ from api.dependencies import get_imessage_reader
 from api.ratelimit import (
     RATE_LIMIT_READ,
     RATE_LIMIT_WRITE,
-    TIMEOUT_READ,
+    get_timeout_read,
     limiter,
 )
 from api.schemas import (
@@ -167,7 +167,7 @@ async def list_conversations(
         return cached  # type: ignore[no-any-return]
 
     try:
-        async with asyncio.timeout(TIMEOUT_READ):
+        async with asyncio.timeout(get_timeout_read()):
             conversations = await run_in_threadpool(
                 reader.get_conversations, limit=limit, since=since, before=before
             )
@@ -176,7 +176,7 @@ async def list_conversations(
     except TimeoutError:
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_READ} seconds",
+            detail=f"Request timed out after {get_timeout_read()} seconds",
         ) from None
 
     cache.set(cache_key, result)
@@ -301,7 +301,7 @@ async def get_messages(
         HTTPException 429: Rate limit exceeded
     """
     try:
-        async with asyncio.timeout(TIMEOUT_READ):
+        async with asyncio.timeout(get_timeout_read()):
             messages = await run_in_threadpool(
                 reader.get_messages, chat_id=chat_id, limit=limit, before=before
             )
@@ -310,7 +310,7 @@ async def get_messages(
     except TimeoutError:
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_READ} seconds",
+            detail=f"Request timed out after {get_timeout_read()} seconds",
         ) from None
 
 
@@ -451,7 +451,7 @@ async def search_messages(
         HTTPException 429: Rate limit exceeded
     """
     try:
-        async with asyncio.timeout(TIMEOUT_READ):
+        async with asyncio.timeout(get_timeout_read()):
             messages = await run_in_threadpool(
                 reader.search,
                 query=q,
@@ -466,7 +466,7 @@ async def search_messages(
     except TimeoutError:
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_READ} seconds",
+            detail=f"Request timed out after {get_timeout_read()} seconds",
         ) from None
 
 
@@ -562,7 +562,7 @@ async def send_message(
 
     try:
         try:
-            async with asyncio.timeout(TIMEOUT_READ):
+            async with asyncio.timeout(get_timeout_read()):
                 if message_request.is_group:
                     # For group chats, send to the chat ID directly
                     result = await run_in_threadpool(
@@ -586,7 +586,7 @@ async def send_message(
         except TimeoutError:
             raise HTTPException(
                 status_code=408,
-                detail=f"Request timed out after {TIMEOUT_READ} seconds",
+                detail=f"Request timed out after {get_timeout_read()} seconds",
             ) from None
 
         return SendMessageResponse(success=result.success, error=result.error)
@@ -683,7 +683,7 @@ async def send_attachment(
 
     try:
         try:
-            async with asyncio.timeout(TIMEOUT_READ):
+            async with asyncio.timeout(get_timeout_read()):
                 if attachment_request.is_group:
                     result = await run_in_threadpool(
                         sender.send_attachment,
@@ -705,7 +705,7 @@ async def send_attachment(
         except TimeoutError:
             raise HTTPException(
                 status_code=408,
-                detail=f"Request timed out after {TIMEOUT_READ} seconds",
+                detail=f"Request timed out after {get_timeout_read()} seconds",
             ) from None
 
         return SendMessageResponse(success=result.success, error=result.error)

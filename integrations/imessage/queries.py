@@ -48,49 +48,51 @@ def detect_schema_version(conn: sqlite3.Connection) -> str:
 # Base SQL query templates (shared between v14 and v15 until divergence needed)
 _BASE_QUERIES = {
     "conversations": """
+        WITH chat_participants AS (
+            SELECT
+                chat_handle_join.chat_id,
+                GROUP_CONCAT(handle.id, ', ') as participants
+            FROM chat_handle_join
+            JOIN handle ON chat_handle_join.handle_id = handle.ROWID
+            GROUP BY chat_handle_join.chat_id
+        ),
+        msg_stats AS (
+            SELECT
+                chat_message_join.chat_id,
+                COUNT(*) as message_count,
+                MAX(message.date) as last_message_date
+            FROM chat_message_join
+            JOIN message ON chat_message_join.message_id = message.ROWID
+            GROUP BY chat_message_join.chat_id
+        ),
+        last_msgs AS (
+            SELECT
+                cmj.chat_id,
+                m.text as last_message_text,
+                m.attributedBody as last_message_attributed_body
+            FROM chat_message_join cmj
+            JOIN message m ON cmj.message_id = m.ROWID
+            JOIN msg_stats ms ON cmj.chat_id = ms.chat_id
+                AND m.date = ms.last_message_date
+        )
         SELECT
             chat.ROWID as chat_rowid,
             chat.guid as chat_id,
             chat.display_name,
             chat.chat_identifier,
-            (
-                SELECT GROUP_CONCAT(handle.id, ', ')
-                FROM chat_handle_join
-                JOIN handle ON chat_handle_join.handle_id = handle.ROWID
-                WHERE chat_handle_join.chat_id = chat.ROWID
-            ) as participants,
-            (
-                SELECT COUNT(*)
-                FROM chat_message_join
-                WHERE chat_message_join.chat_id = chat.ROWID
-            ) as message_count,
-            (
-                SELECT MAX(message.date)
-                FROM chat_message_join
-                JOIN message ON chat_message_join.message_id = message.ROWID
-                WHERE chat_message_join.chat_id = chat.ROWID
-            ) as last_message_date,
-            (
-                SELECT message.text
-                FROM chat_message_join
-                JOIN message ON chat_message_join.message_id = message.ROWID
-                WHERE chat_message_join.chat_id = chat.ROWID
-                ORDER BY message.date DESC
-                LIMIT 1
-            ) as last_message_text,
-            (
-                SELECT message.attributedBody
-                FROM chat_message_join
-                JOIN message ON chat_message_join.message_id = message.ROWID
-                WHERE chat_message_join.chat_id = chat.ROWID
-                ORDER BY message.date DESC
-                LIMIT 1
-            ) as last_message_attributed_body
+            cp.participants,
+            COALESCE(ms.message_count, 0) as message_count,
+            ms.last_message_date,
+            lm.last_message_text,
+            lm.last_message_attributed_body
         FROM chat
-        WHERE message_count > 0
+        LEFT JOIN chat_participants cp ON cp.chat_id = chat.ROWID
+        LEFT JOIN msg_stats ms ON ms.chat_id = chat.ROWID
+        LEFT JOIN last_msgs lm ON lm.chat_id = chat.ROWID
+        WHERE COALESCE(ms.message_count, 0) > 0
         {since_filter}
         {before_filter}
-        ORDER BY last_message_date DESC
+        ORDER BY ms.last_message_date DESC
         LIMIT ?
     """,
     "messages": """
@@ -175,6 +177,18 @@ _BASE_QUERIES = {
         FROM attachment
         JOIN message_attachment_join ON attachment.ROWID = message_attachment_join.attachment_id
         WHERE message_attachment_join.message_id = ?
+    """,
+    "attachments_batch": """
+        SELECT
+            attachment.ROWID as attachment_id,
+            attachment.filename,
+            attachment.mime_type,
+            attachment.total_bytes as file_size,
+            attachment.transfer_name,
+            message_attachment_join.message_id
+        FROM attachment
+        JOIN message_attachment_join ON attachment.ROWID = message_attachment_join.attachment_id
+        WHERE message_attachment_join.message_id IN ({placeholders})
     """,
     "attachments_extended": """
         SELECT
@@ -270,6 +284,24 @@ _BASE_QUERIES = {
         LEFT JOIN handle ON message.handle_id = handle.ROWID
         WHERE message.associated_message_guid = ?
           AND message.associated_message_type != 0
+    """,
+    "reactions_batch": """
+        SELECT
+            message.ROWID as id,
+            message.associated_message_type,
+            message.associated_message_guid,
+            message.date,
+            message.is_from_me,
+            COALESCE(handle.id, 'me') as sender
+        FROM message
+        LEFT JOIN handle ON message.handle_id = handle.ROWID
+        WHERE message.associated_message_guid IN ({placeholders})
+          AND message.associated_message_type != 0
+    """,
+    "message_guids_batch": """
+        SELECT message.ROWID as id, message.guid
+        FROM message
+        WHERE message.ROWID IN ({placeholders})
     """,
     "message_by_guid": """
         SELECT message.ROWID as id

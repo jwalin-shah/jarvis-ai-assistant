@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -35,6 +36,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+# Fix OpenMP threading conflict between faiss-cpu and other packages.
+# Without this, faiss.train() crashes with SIGABRT on macOS.
+if "OMP_NUM_THREADS" not in os.environ:
+    os.environ["OMP_NUM_THREADS"] = "1"
 
 if TYPE_CHECKING:
     pass
@@ -184,6 +190,15 @@ class TriggerIndexBuilder:
         # Calculate number of IVF clusters (used by all non-flat indexes)
         # sqrt(n) is FAISS recommendation, bounded to ensure enough training data
         nlist = self.config.ivf_nlist or int(np.sqrt(num_vectors))
+        # FAISS requires at least 39 training vectors per cluster.
+        # If too few vectors, fall back to flat index.
+        if num_vectors < 39:
+            index = faiss.IndexFlatIP(dimension)
+            logger.info(
+                "Only %d vectors (need >= 39 for IVF), using flat index",
+                num_vectors,
+            )
+            return index
         nlist = max(1, min(nlist, num_vectors // 39))  # Need 39 vectors per cluster
 
         if index_type == "flat":
@@ -307,8 +322,14 @@ class TriggerIndexBuilder:
         if progress_callback:
             progress_callback("extracting", 0.0, "Extracting triggers...")
 
-        triggers = [p.trigger_text for p in pairs]
+        from jarvis.text_normalizer import normalize_for_task
+
+        raw_triggers = [p.trigger_text for p in pairs]
         pair_ids = [p.id for p in pairs]
+
+        # Normalize triggers for embedding (expand slang, spell check, filter garbage)
+        # Raw text stays in the DB for LLM style matching
+        triggers = [normalize_for_task(t, "chunk_embedding") or t for t in raw_triggers]
 
         logger.info("Building index version %s for %d triggers", version_id, len(triggers))
 
@@ -495,12 +516,24 @@ class TriggerIndexSearcher:
         Returns:
             List of (faiss_id, similarity_score) tuples, sorted by score descending.
         """
+        # Bounds check: return empty if index has too few vectors
+        idx = self.index
+        if idx.ntotal == 0:
+            return []
+        # Clamp k to available vectors to avoid FAISS errors
+        effective_k = min(k, idx.ntotal)
+
+        # Normalize query to match indexed text (slang expansion, spell check)
+        from jarvis.text_normalizer import normalize_for_task
+
+        normalized_query = normalize_for_task(query, "chunk_embedding") or query
+
         # Encode query
         query_embedder = embedder or self.embedder
-        query_embedding = query_embedder.encode([query], normalize=True).astype(np.float32)
+        query_embedding = query_embedder.encode([normalized_query], normalize=True).astype(np.float32)
 
         # Search index
-        scores, indices = self.index.search(query_embedding, k)
+        scores, indices = idx.search(query_embedding, effective_k)
 
         # Filter by threshold and format results
         results = []
@@ -967,9 +1000,14 @@ class IncrementalTriggerIndex:
             return []
 
         with self._lock:
+            # Normalize query to match indexed text
+            from jarvis.text_normalizer import normalize_for_task
+
+            normalized_query = normalize_for_task(query, "chunk_embedding") or query
+
             # Encode query
             query_embedder = embedder or self.embedder
-            query_embedding = query_embedder.encode([query], normalize=True).astype(np.float32)
+            query_embedding = query_embedder.encode([normalized_query], normalize=True).astype(np.float32)
 
             # Search for more results to account for deleted vectors
             deleted_count = len(self._deleted_faiss_ids)

@@ -498,9 +498,14 @@ class MLXModelLoader:
                         response = future.result(timeout=effective_timeout)
                     except FuturesTimeoutError:
                         # Cancel the future (best effort, may not stop MLX generation)
+                        # TODO: future.cancel() cannot stop a running MLX computation.
+                        # The generation thread may continue running in the background
+                        # until the model completes or hits max_tokens. This is a
+                        # limitation of MLX's synchronous generation API.
                         future.cancel()
                         logger.warning(
-                            "Generation timed out after %.1f seconds for model %s",
+                            "Generation timed out after %.1f seconds for model %s. "
+                            "Note: The generation thread may still be running.",
                             effective_timeout,
                             self.config.display_name,
                         )

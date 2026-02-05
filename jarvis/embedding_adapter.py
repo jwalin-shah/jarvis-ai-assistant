@@ -253,12 +253,44 @@ class MLXEmbedder:
         if len(texts) <= MLX_BATCH_SIZE:
             return self._mlx_embedder.encode(texts, normalize=normalize)
 
+        # For large embedding jobs (>10k texts), use np.memmap to stream to disk
+        # instead of accumulating in RAM. Prevents OOM on 8GB system.
+        # 100k embeddings x 384 dims x 4 bytes = 150MB (ok)
+        # 500k embeddings x 384 dims x 4 bytes = 750MB (risky without memmap)
+        MEMMAP_THRESHOLD = 10000
+        use_memmap = len(texts) > MEMMAP_THRESHOLD
+        memmap_array: np.ndarray | None = None
+        memmap_offset = 0
+        memmap_path: str | None = None
+
+        if use_memmap:
+            import tempfile
+            memmap_path = tempfile.mktemp(suffix=".mmap", prefix="jarvis_embed_")
+            memmap_array = np.memmap(
+                memmap_path,
+                dtype=np.float32,
+                mode="w+",
+                shape=(len(texts), EMBEDDING_DIM),
+            )
+            logger.info(
+                "Using memmap for %d texts (%d MB on disk)",
+                len(texts),
+                len(texts) * EMBEDDING_DIM * 4 // (1024 * 1024),
+            )
+
         # Process in batches
-        all_embeddings = []
+        all_embeddings: list[np.ndarray] = []
         for i in range(0, len(texts), MLX_BATCH_SIZE):
             batch = texts[i : i + MLX_BATCH_SIZE]
             batch_embeddings = self._mlx_embedder.encode(batch, normalize=normalize)
-            all_embeddings.append(batch_embeddings)
+
+            if use_memmap and memmap_array is not None:
+                batch_embeddings = batch_embeddings.astype(np.float32)
+                batch_len = len(batch_embeddings)
+                memmap_array[memmap_offset:memmap_offset + batch_len] = batch_embeddings
+                memmap_offset += batch_len
+            else:
+                all_embeddings.append(batch_embeddings)
 
             # Log progress for large batches
             if len(texts) > 1000 and (i + MLX_BATCH_SIZE) % 1000 == 0:
@@ -269,6 +301,18 @@ class MLXEmbedder:
                     100 * min(i + MLX_BATCH_SIZE, len(texts)) / len(texts),
                 )
 
+        if use_memmap and memmap_array is not None:
+            # Flush memmap and return as regular array, then clean up temp file
+            memmap_array.flush()
+            result = np.array(memmap_array[:memmap_offset])
+            del memmap_array
+            if memmap_path:
+                import os
+                try:
+                    os.unlink(memmap_path)
+                except OSError:
+                    pass
+            return result
         return np.vstack(all_embeddings)
 
     def unload(self) -> None:

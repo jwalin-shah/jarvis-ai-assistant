@@ -1,6 +1,7 @@
 /**
- * JARVIS v2 API Client
- * Simplified client for the v2 backend
+ * @deprecated This client duplicates functionality in the main ApiClient (client.ts).
+ * Only kept because SmartReplyChipsV2.svelte depends on it.
+ * TODO: Migrate SmartReplyChipsV2 to use the main ApiClient, then delete this file.
  */
 
 const V2_API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8742";

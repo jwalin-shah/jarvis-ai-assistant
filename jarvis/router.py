@@ -1318,7 +1318,7 @@ class ReplyRouter:
         incoming_lower = incoming.lower()
 
         # Detect what kind of clarification is needed (using frozensets for O(1) lookup)
-        if any(word in incoming_lower for word in _REFERENCE_WORDS):
+        if any(word in incoming_lower for word in _VAGUE_REFERENCES):
             clarification = "What are you referring to? I want to make sure I understand."
         elif any(word in incoming_lower for word in _TIME_WORDS):
             clarification = "Could you be more specific about the timing?"

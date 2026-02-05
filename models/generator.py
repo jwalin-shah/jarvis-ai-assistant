@@ -40,7 +40,6 @@ class MLXGenerator:
         self,
         loader: MLXModelLoader | None = None,
         template_matcher: TemplateMatcher | None = None,
-        prompt_builder: PromptBuilder | None = None,
         config: ModelConfig | None = None,
         skip_templates: bool = False,
     ) -> None:
@@ -49,7 +48,6 @@ class MLXGenerator:
         Args:
             loader: Model loader instance. Creates default if not provided.
             template_matcher: Template matcher instance. Creates default if not provided.
-            prompt_builder: Prompt builder instance. Creates default if not provided.
             config: Model configuration for the loader.
             skip_templates: If True, skip template matching entirely (saves memory).
         """
@@ -57,7 +55,7 @@ class MLXGenerator:
         self._loader = loader or MLXModelLoader(self.config)
         self._skip_templates = skip_templates
         self._template_matcher = None if skip_templates else (template_matcher or TemplateMatcher())
-        self._prompt_builder = prompt_builder or PromptBuilder()
+        self._prompt_builder = PromptBuilder()
 
     def generate(
         self,

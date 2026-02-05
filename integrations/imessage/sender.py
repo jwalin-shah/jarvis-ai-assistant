@@ -141,13 +141,34 @@ end tell
 '''
         return self._run_applescript(applescript, f"attachment to {chat_id or recipient}")
 
+    @staticmethod
+    def _escape_for_applescript(text: str) -> str:
+        """Escape text for safe embedding in AppleScript strings.
+
+        Handles backslashes, quotes, and control characters that have
+        special meaning in AppleScript.
+
+        Args:
+            text: Raw text to escape
+
+        Returns:
+            Escaped text safe for AppleScript double-quoted strings
+        """
+        # Order matters: escape backslashes first
+        text = text.replace("\\", "\\\\")
+        text = text.replace('"', '\\"')
+        text = text.replace("\r", "\\r")
+        text = text.replace("\n", "\\n")
+        text = text.replace("\t", "\\t")
+        return text
+
     def _send_to_individual(self, text: str, recipient: str | None) -> SendResult:
         """Send a message to an individual recipient."""
         if not recipient:
             return SendResult(success=False, error="Recipient is required")
 
         # Escape special characters for AppleScript
-        escaped_text = text.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_text = self._escape_for_applescript(text)
         escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
 
         applescript = f'''
@@ -165,7 +186,7 @@ end tell
             return SendResult(success=False, error="Chat ID is required for group chats")
 
         # Escape special characters for AppleScript
-        escaped_text = text.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_text = self._escape_for_applescript(text)
         escaped_chat_id = chat_id.replace("\\", "\\\\").replace('"', '\\"')
 
         # For group chats, we find the chat by its ID and send directly to it

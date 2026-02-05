@@ -125,7 +125,6 @@
 
   onMount(() => {
     loadCalendars();
-    detectEvents();
   });
 
   // Re-detect when chatId changes

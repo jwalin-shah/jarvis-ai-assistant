@@ -16,7 +16,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import pickle
 import sqlite3
 import struct
 import threading
@@ -494,8 +493,11 @@ class L2Cache:
         elif isinstance(value, bytes):
             return value, "bytes"
         else:
-            # Fallback to pickle
-            return pickle.dumps(value), "pickle"
+            # Convert to JSON-compatible representation (no pickle for security)
+            try:
+                return json.dumps({"__repr__": repr(value)}).encode(), "json"
+            except (TypeError, ValueError):
+                return json.dumps({"__repr__": str(value)}).encode(), "json"
 
     def _deserialize(self, data: bytes, value_type: str) -> Any:
         """Deserialize bytes to value.
@@ -520,8 +522,13 @@ class L2Cache:
             return data.decode()
         elif value_type == "bytes":
             return data
+        elif value_type == "pickle":
+            # Legacy pickle data: clear entry instead of deserializing (security risk)
+            logger.warning("Refusing to deserialize pickle data (security risk). Returning None.")
+            return None
         else:
-            return pickle.loads(data)
+            logger.warning("Unknown value_type '%s', returning None.", value_type)
+            return None
 
 
 class L3Cache:
@@ -600,8 +607,8 @@ class L3Cache:
             try:
                 with open(file_path, "rb") as f:
                     data = f.read()
-                value = self._deserialize(data, meta.get("value_type", "pickle"))
-            except (OSError, pickle.PickleError) as e:
+                value = self._deserialize(data, meta.get("value_type", "json"))
+            except (OSError, json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"Failed to read L3 cache entry {key}: {e}")
                 self.remove(key)
                 return None
@@ -747,7 +754,11 @@ class L3Cache:
         elif isinstance(value, bytes):
             return value, "bytes"
         else:
-            return pickle.dumps(value), "pickle"
+            # Convert to JSON-compatible representation (no pickle for security)
+            try:
+                return json.dumps({"__repr__": repr(value)}).encode(), "json"
+            except (TypeError, ValueError):
+                return json.dumps({"__repr__": str(value)}).encode(), "json"
 
     def _deserialize(self, data: bytes, value_type: str) -> Any:
         """Deserialize bytes to value."""
@@ -763,8 +774,13 @@ class L3Cache:
             return data.decode()
         elif value_type == "bytes":
             return data
+        elif value_type == "pickle":
+            # Legacy pickle data: clear entry instead of deserializing (security risk)
+            logger.warning("Refusing to deserialize pickle data (security risk). Returning None.")
+            return None
         else:
-            return pickle.loads(data)
+            logger.warning("Unknown value_type '%s', returning None.", value_type)
+            return None
 
 
 class MultiTierCache:
@@ -1064,8 +1080,8 @@ class MultiTierCache:
         else:
             # Rough estimate for other objects
             try:
-                return len(pickle.dumps(value))
-            except (pickle.PickleError, TypeError):
+                return len(json.dumps(str(value)).encode())
+            except (TypeError, ValueError):
                 return 1024  # Default estimate
 
 

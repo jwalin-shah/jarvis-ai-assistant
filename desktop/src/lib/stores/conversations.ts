@@ -79,7 +79,7 @@ const initialState: ConversationsState = {
   loading: false,
   loadingMessages: false,
   loadingMore: false,
-  hasMore: true,
+  hasMore: false,
   error: null,
   connectionStatus: "disconnected",
   conversationsWithNewMessages: new Set(),
@@ -385,11 +385,19 @@ export async function pollMessages(): Promise<Message[]> {
       lastKnownGlobalRowid = currentGlobalRowid;
     }
 
-    const freshMessages = await fetchMessages(state.selectedChatId);
+    const chatIdBeforeFetch = state.selectedChatId;
+    const freshMessages = await fetchMessages(chatIdBeforeFetch);
 
     // Check if request was aborted
     if (signal.aborted) return [];
-    const currentMessages = state.messages;
+
+    // Re-read store state after async gap - conversation may have changed
+    const freshState = get(conversationsStore);
+    if (freshState.selectedChatId !== chatIdBeforeFetch) {
+      // User switched conversations during fetch, discard results
+      return [];
+    }
+    const currentMessages = freshState.messages;
 
     // Find messages that are new (not in current list)
     const currentIds = new Set(currentMessages.map((m) => m.id));
@@ -403,9 +411,9 @@ export async function pollMessages(): Promise<Message[]> {
       }));
 
       // Update cache with new messages
-      const cached = messageCache.get(state.selectedChatId);
+      const cached = messageCache.get(chatIdBeforeFetch);
       if (cached) {
-        messageCache.set(state.selectedChatId, {
+        messageCache.set(chatIdBeforeFetch, {
           ...cached,
           messages: freshMessages,
         });

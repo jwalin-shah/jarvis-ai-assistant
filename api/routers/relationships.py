@@ -493,7 +493,9 @@ async def refresh_relationship_profile(
 
     # Fetch messages
     try:
-        messages = reader.get_messages(chat_id=contact_id, limit=request.message_limit)
+        messages = await run_in_threadpool(
+            reader.get_messages, chat_id=contact_id, limit=request.message_limit
+        )
     except Exception as e:
         return RefreshProfileResponse(
             success=False,

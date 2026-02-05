@@ -481,7 +481,7 @@ def normalize_phone_number(phone: str | None) -> str | None:
     Returns:
         Normalized phone number, None if input is None, or original string if not a phone number
     """
-    if phone is None:
+    if not isinstance(phone, str):
         return None
 
     phone = phone.strip()
