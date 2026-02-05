@@ -875,9 +875,8 @@ def main() -> None:
                     data["test_labels"],
                 )
                 baselines[classifier_type][model_name] = baseline_f1
-                print(
-                    f"    Frozen baseline F1: {baseline_f1:.3f} (LogReg on {len(data['train_texts'])} samples)"
-                )
+                n_samples = len(data["train_texts"])
+                print(f"    Frozen baseline F1: {baseline_f1:.3f} (LogReg on {n_samples} samples)")
 
             train_size = len(data["train_texts"])
             print(f"    Training SetFit on {train_size} samples...")
@@ -934,7 +933,8 @@ def main() -> None:
             delta = r.test_f1 - baseline if baseline else 0
             delta_str = f"+{delta:.3f}" if delta > 0 else f"{delta:.3f}"
             print(
-                f"{model_short:<15} {r.classifier_type:<10} {baseline:>10.3f} {r.test_f1:>10.3f} {delta_str:>8} {r.training_time:>8.1f}s"
+                f"{model_short:<15} {r.classifier_type:<10} {baseline:>10.3f} "
+                f"{r.test_f1:>10.3f} {delta_str:>8} {r.training_time:>8.1f}s"
             )
     else:
         print(f"\n{'Model':<15} {'Type':<10} {'Test F1':>10} {'Accuracy':>10} {'Time':>10}")
@@ -943,7 +943,8 @@ def main() -> None:
         for r in sorted(all_results, key=lambda x: (x.classifier_type, -x.test_f1)):
             model_short = r.base_model.split("/")[-1][:15]
             print(
-                f"{model_short:<15} {r.classifier_type:<10} {r.test_f1:>10.3f} {r.test_accuracy:>10.3f} {r.training_time:>8.1f}s"
+                f"{model_short:<15} {r.classifier_type:<10} {r.test_f1:>10.3f} "
+                f"{r.test_accuracy:>10.3f} {r.training_time:>8.1f}s"
             )
 
     # Show best models per classifier type

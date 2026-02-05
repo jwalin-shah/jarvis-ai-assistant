@@ -114,8 +114,8 @@ def create_trigger_prompt_simple(messages: list[str]) -> str:
     prompt = """Classify each message. Does it NEED A RESPONSE/ACTION or is it just casual chat?
 
 Categories:
-- needs_action: Questions, requests, invitations that need a reply (e.g., "Can you help me?", "Want to hang out?", "What time?")
-- casual: Statements, reactions, small talk - no response needed (e.g., "That's cool", "I'm home", "Haha", "Hey!")
+- needs_action: Questions, requests, invitations that need a reply (e.g., "Can you help me?")
+- casual: Statements, reactions, small talk - no response needed (e.g., "That's cool", "Haha")
 
 Messages:
 """
@@ -131,9 +131,9 @@ def create_response_prompt_simple(messages: list[str]) -> str:
     prompt = """Classify each message as a type of response.
 
 Categories:
-- positive: Agrees, accepts, confirms (e.g., "Sure", "Yes", "Okay", "Sounds good", "I'm down")
-- negative: Declines, refuses, can't do it (e.g., "No", "I can't", "Sorry", "Maybe later", "Not today")
-- neutral: Everything else - questions, reactions, statements (e.g., "What time?", "Haha", "Cool", "I don't know")
+- positive: Agrees, accepts, confirms (e.g., "Sure", "Yes", "Okay", "Sounds good")
+- negative: Declines, refuses, can't do it (e.g., "No", "I can't", "Sorry", "Not today")
+- neutral: Everything else - questions, reactions (e.g., "What time?", "Haha", "Cool")
 
 Messages:
 """

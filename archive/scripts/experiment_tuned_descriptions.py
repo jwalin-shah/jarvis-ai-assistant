@@ -404,9 +404,9 @@ def main():
 
         print("\nTrigger:")
         print(f"  Original:  {trigger_acc_orig:.1%}")
-        print(
-            f"  Tuned:     {trigger_acc_tuned:.1%} ({'+' if trigger_acc_tuned > trigger_acc_orig else ''}{(trigger_acc_tuned - trigger_acc_orig) * 100:.1f}%)"
-        )
+        diff = (trigger_acc_tuned - trigger_acc_orig) * 100
+        sign = "+" if trigger_acc_tuned > trigger_acc_orig else ""
+        print(f"  Tuned:     {trigger_acc_tuned:.1%} ({sign}{diff:.1f}%)")
 
         print("\nResponse:")
         print(f"  Original:  {response_acc_orig:.1%}")
@@ -432,12 +432,14 @@ def main():
     print("SUMMARY")
     print("=" * 70)
     print(
-        f"{'Model':<12} {'RAM':>8} {'Trig Orig':>10} {'Trig Tune':>10} {'Resp Orig':>10} {'Resp V1':>10} {'Resp V2':>10}"
+        f"{'Model':<12} {'RAM':>8} {'Trig Orig':>10} {'Trig Tune':>10} "
+        f"{'Resp Orig':>10} {'Resp V1':>10} {'Resp V2':>10}"
     )
     print("-" * 75)
     for model, res in results.items():
         print(
-            f"{model:<12} {res['ram_delta_mb']:>6.0f}MB {res['trigger_orig']:>10.1%} {res['trigger_tuned']:>10.1%} "
+            f"{model:<12} {res['ram_delta_mb']:>6.0f}MB "
+            f"{res['trigger_orig']:>10.1%} {res['trigger_tuned']:>10.1%} "
             f"{res['response_orig']:>10.1%} {res['response_v1']:>10.1%} {res['response_v2']:>10.1%}"
         )
 
@@ -453,9 +455,8 @@ def main():
     smallest_ram = min(results.items(), key=lambda x: x[1]["ram_delta_mb"])
 
     print(f"Best trigger:  {best_trigger[0]} @ {best_trigger[1]['trigger_tuned']:.1%}")
-    print(
-        f"Best response: {best_response[0]} @ {max(best_response[1]['response_v1'], best_response[1]['response_v2']):.1%}"
-    )
+    best_resp_score = max(best_response[1]["response_v1"], best_response[1]["response_v2"])
+    print(f"Best response: {best_response[0]} @ {best_resp_score:.1%}")
     print(f"Smallest RAM:  {smallest_ram[0]} @ {smallest_ram[1]['ram_delta_mb']:.0f}MB")
 
     # Save

@@ -242,7 +242,8 @@ def main():
     print("-" * 75)
     for r in results:
         print(
-            f"{r['name']:<45} {r['memory_mb']:>8.1f}MB {r['search_time_ms']:>8.2f}ms {r['recall_at_k']:>8.1f}%"
+            f"{r['name']:<45} {r['memory_mb']:>8.1f}MB "
+            f"{r['search_time_ms']:>8.2f}ms {r['recall_at_k']:>8.1f}%"
         )
 
     # Recommendation
@@ -257,12 +258,11 @@ def main():
     recall_lost = flat["recall_at_k"] - ivfpq["recall_at_k"]
     speedup = flat["search_time_ms"] / ivfpq["search_time_ms"]
 
-    print(
-        f"IndexIVFPQ saves {memory_saved:.0f}MB ({memory_saved / flat['memory_mb'] * 100:.0f}% reduction)"
-    )
-    print(
-        f"Recall drops by {recall_lost:.1f}% (from {flat['recall_at_k']:.1f}% to {ivfpq['recall_at_k']:.1f}%)"
-    )
+    reduction_pct = memory_saved / flat["memory_mb"] * 100
+    print(f"IndexIVFPQ saves {memory_saved:.0f}MB ({reduction_pct:.0f}% reduction)")
+    flat_recall = flat["recall_at_k"]
+    ivfpq_recall = ivfpq["recall_at_k"]
+    print(f"Recall drops by {recall_lost:.1f}% (from {flat_recall:.1f}% to {ivfpq_recall:.1f}%)")
     print(f"Search is {speedup:.1f}x faster")
 
     if ivfpq["recall_at_k"] >= 90:

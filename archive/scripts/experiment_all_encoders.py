@@ -260,17 +260,15 @@ def main():
         trigger_res = evaluate(trigger_clf, trigger_sample, TRIGGER_MAP)
         print("\nTrigger (needs_action vs casual):")
         print(f"  Accuracy: {trigger_res['accuracy']:.1%}")
-        print(
-            f"  Time: {trigger_res['time_s']:.2f}s ({trigger_res['time_s'] * 1000 / trigger_res['n_samples']:.1f}ms/msg)"
-        )
+        trigger_ms = trigger_res["time_s"] * 1000 / trigger_res["n_samples"]
+        print(f"  Time: {trigger_res['time_s']:.2f}s ({trigger_ms:.1f}ms/msg)")
 
         # Evaluate response
         response_res = evaluate(response_clf, response_sample, RESPONSE_MAP)
         print("\nResponse (yes/no/no_answer):")
         print(f"  Accuracy: {response_res['accuracy']:.1%}")
-        print(
-            f"  Time: {response_res['time_s']:.2f}s ({response_res['time_s'] * 1000 / response_res['n_samples']:.1f}ms/msg)"
-        )
+        response_ms = response_res["time_s"] * 1000 / response_res["n_samples"]
+        print(f"  Time: {response_res['time_s']:.2f}s ({response_ms:.1f}ms/msg)")
 
         results[model] = {
             "trigger_accuracy": trigger_res["accuracy"],
@@ -287,9 +285,9 @@ def main():
     print("-" * 55)
     for model, res in results.items():
         avg_time = (res["trigger_time_ms"] + res["response_time_ms"]) / 2
-        print(
-            f"{model:<15} {res['trigger_accuracy']:>11.1%} {res['response_accuracy']:>11.1%} {avg_time:>10.1f}ms"
-        )
+        t_acc = res["trigger_accuracy"]
+        r_acc = res["response_accuracy"]
+        print(f"{model:<15} {t_acc:>11.1%} {r_acc:>11.1%} {avg_time:>10.1f}ms")
 
     # Save results
     output = Path("results/encoder_comparison.json")
@@ -306,9 +304,8 @@ def main():
     fastest = min(results.items(), key=lambda x: x[1]["trigger_time_ms"])
 
     print(f"Best trigger accuracy:  {best_trigger[0]} ({best_trigger[1]['trigger_accuracy']:.1%})")
-    print(
-        f"Best response accuracy: {best_response[0]} ({best_response[1]['response_accuracy']:.1%})"
-    )
+    resp_acc = best_response[1]["response_accuracy"]
+    print(f"Best response accuracy: {best_response[0]} ({resp_acc:.1%})")
     print(f"Fastest:                {fastest[0]} ({fastest[1]['trigger_time_ms']:.1f}ms)")
 
 
