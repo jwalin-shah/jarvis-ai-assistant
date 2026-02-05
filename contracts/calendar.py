@@ -3,6 +3,8 @@
 Provides contracts for calendar event detection and macOS Calendar integration.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -14,6 +16,17 @@ class DetectedEvent:
 
     Represents a potential calendar event extracted from a message,
     with parsed date/time information and confidence score.
+
+    Attributes:
+        title: Event title/summary.
+        start: Event start datetime.
+        end: Event end datetime (defaults to start if None).
+        location: Optional location string.
+        description: Optional event description.
+        all_day: Whether this is an all-day event.
+        confidence: Detection confidence score (0.0-1.0).
+        source_text: Original message text that was parsed.
+        message_id: iMessage ID if extracted from a message.
     """
 
     title: str
@@ -23,8 +36,17 @@ class DetectedEvent:
     description: str | None = None
     all_day: bool = False
     confidence: float = 0.0
-    source_text: str = ""  # Original text that was parsed
-    message_id: int | None = None  # iMessage ID if from a message
+    source_text: str = ""
+    message_id: int | None = None
+
+    def __post_init__(self) -> None:
+        """Validate field constraints."""
+        if not 0.0 <= self.confidence <= 1.0:
+            msg = f"Confidence must be between 0.0 and 1.0, got {self.confidence}"
+            raise ValueError(msg)
+        if not self.title.strip():
+            msg = "Event title cannot be empty"
+            raise ValueError(msg)
 
 
 @dataclass
@@ -32,6 +54,20 @@ class CalendarEvent:
     """Calendar event from macOS Calendar.
 
     Represents an event retrieved from or to be added to macOS Calendar.
+
+    Attributes:
+        id: Unique event identifier.
+        calendar_id: ID of the calendar containing this event.
+        calendar_name: Name of the calendar.
+        title: Event title.
+        start: Event start datetime.
+        end: Event end datetime.
+        all_day: Whether this is an all-day event.
+        location: Optional location string.
+        notes: Optional event notes/description.
+        url: Optional URL associated with the event.
+        attendees: List of attendee email addresses or phone numbers.
+        status: Event status (confirmed/tentative/cancelled).
     """
 
     id: str
@@ -45,12 +81,32 @@ class CalendarEvent:
     notes: str | None = None
     url: str | None = None
     attendees: list[str] = field(default_factory=list)
-    status: str = "confirmed"  # confirmed, tentative, cancelled
+    status: str = "confirmed"
+
+    def __post_init__(self) -> None:
+        """Validate field constraints."""
+        valid_statuses = {"confirmed", "tentative", "cancelled"}
+        if self.status not in valid_statuses:
+            msg = f"status must be one of {valid_statuses}, got {self.status}"
+            raise ValueError(msg)
+        if self.end < self.start:
+            msg = f"end time ({self.end}) cannot be before start time ({self.start})"
+            raise ValueError(msg)
+        if not self.title.strip():
+            msg = "Event title cannot be empty"
+            raise ValueError(msg)
 
 
 @dataclass
 class Calendar:
-    """macOS Calendar summary."""
+    """macOS Calendar summary.
+
+    Attributes:
+        id: Unique calendar identifier.
+        name: Calendar name.
+        color: Optional color (hex format or color name).
+        is_editable: Whether this calendar can be modified.
+    """
 
     id: str
     name: str
@@ -60,11 +116,26 @@ class Calendar:
 
 @dataclass
 class CreateEventResult:
-    """Result of creating a calendar event."""
+    """Result of creating a calendar event.
+
+    Attributes:
+        success: Whether event creation succeeded.
+        event_id: ID of created event if successful.
+        error: Error message if creation failed.
+    """
 
     success: bool
     event_id: str | None = None
     error: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate field constraints."""
+        if self.success and not self.event_id:
+            msg = "success=True requires event_id"
+            raise ValueError(msg)
+        if not self.success and not self.error:
+            msg = "success=False requires error message"
+            raise ValueError(msg)
 
 
 class EventDetector(Protocol):
