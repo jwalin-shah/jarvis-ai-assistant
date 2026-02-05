@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from jarvis.response_classifier import COMMITMENT_RESPONSE_TYPES, ResponseType
+from jarvis.response_classifier_v2 import COMMITMENT_RESPONSE_TYPES, ResponseType
 from jarvis.retrieval import (
     BM25IndexManager,
     CrossEncoderReranker,
@@ -301,12 +301,12 @@ class TestGetTypedExamples:
     def test_limits_to_k_results(self):
         """Results are limited to k."""
         with patch.object(TypedRetriever, "index_searcher") as mock_searcher:
-            # Return many results
+            # Return many results with unique response texts (diversity check filters duplicates)
             mock_searcher.search_with_pairs.return_value = [
                 {
                     "pair_id": i,
                     "trigger_text": f"Q{i}?",
-                    "response_text": "Yes",
+                    "response_text": f"Yes response {i}",  # Unique to pass diversity filter
                     "response_da_type": "AGREE",
                     "response_da_conf": 0.9,
                     "similarity": 0.9 - i * 0.01,
