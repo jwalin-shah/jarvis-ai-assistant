@@ -53,41 +53,47 @@ class TestJarvisConfig:
         """Test default configuration values."""
         config = JarvisConfig()
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
         assert config.memory_thresholds.full_mode_mb == 8000
         assert config.memory_thresholds.lite_mode_mb == 4000
         assert config.imessage_default_limit == 50
 
     def test_custom_values(self):
         """Test custom configuration values."""
+        from jarvis.config import RoutingConfig
+
         config = JarvisConfig(
             model_path="custom/model",
-            template_similarity_threshold=0.8,
+            routing=RoutingConfig(quick_reply_threshold=0.8),
             memory_thresholds=MemoryThresholds(full_mode_mb=12000, lite_mode_mb=6000),
             imessage_default_limit=100,
         )
         assert config.model_path == "custom/model"
-        assert config.template_similarity_threshold == 0.8
+        assert config.routing.quick_reply_threshold == 0.8
         assert config.memory_thresholds.full_mode_mb == 12000
         assert config.imessage_default_limit == 100
 
-    def test_threshold_at_boundaries(self):
-        """Test threshold at valid boundary values."""
-        config_min = JarvisConfig(template_similarity_threshold=0.0)
-        assert config_min.template_similarity_threshold == 0.0
+    def test_routing_threshold_at_boundaries(self):
+        """Test routing.quick_reply_threshold at valid boundary values."""
+        from jarvis.config import RoutingConfig
 
-        config_max = JarvisConfig(template_similarity_threshold=1.0)
-        assert config_max.template_similarity_threshold == 1.0
+        config_min = JarvisConfig(routing=RoutingConfig(quick_reply_threshold=0.0))
+        assert config_min.routing.quick_reply_threshold == 0.0
 
-    def test_threshold_out_of_range_raises(self):
-        """Test that threshold outside 0-1 range raises ValidationError."""
+        config_max = JarvisConfig(routing=RoutingConfig(quick_reply_threshold=1.0))
+        assert config_max.routing.quick_reply_threshold == 1.0
+
+    def test_routing_threshold_out_of_range_raises(self):
+        """Test that routing.quick_reply_threshold outside 0-1 range raises ValidationError."""
         from pydantic import ValidationError
 
-        with pytest.raises(ValidationError):
-            JarvisConfig(template_similarity_threshold=-0.1)
+        from jarvis.config import RoutingConfig
 
         with pytest.raises(ValidationError):
-            JarvisConfig(template_similarity_threshold=1.1)
+            RoutingConfig(quick_reply_threshold=-0.1)
+
+        with pytest.raises(ValidationError):
+            RoutingConfig(quick_reply_threshold=1.1)
 
 
 class TestLoadConfig:
@@ -99,7 +105,7 @@ class TestLoadConfig:
         config = load_config(nonexistent_path)
 
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
         assert config.memory_thresholds.full_mode_mb == 8000
         assert config.imessage_default_limit == 50
 
@@ -108,7 +114,7 @@ class TestLoadConfig:
         config_file = tmp_path / "config.json"
         config_data = {
             "model_path": "custom/model-path",
-            "template_similarity_threshold": 0.85,
+            "routing": {"quick_reply_threshold": 0.85},
             "memory_thresholds": {
                 "full_mode_mb": 10000,
                 "lite_mode_mb": 5000,
@@ -121,7 +127,7 @@ class TestLoadConfig:
         config = load_config(config_file)
 
         assert config.model_path == "custom/model-path"
-        assert config.template_similarity_threshold == 0.85
+        assert config.routing.quick_reply_threshold == 0.85
         assert config.memory_thresholds.full_mode_mb == 10000
         assert config.memory_thresholds.lite_mode_mb == 5000
         assert config.imessage_default_limit == 75
@@ -135,29 +141,29 @@ class TestLoadConfig:
 
         # Should return defaults
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
 
-    def test_load_config_validates_threshold_range(self, tmp_path):
-        """Test that load_config returns defaults when threshold is out of range."""
+    def test_load_config_validates_routing_threshold_range(self, tmp_path):
+        """Test that load_config returns defaults when routing threshold is out of range."""
         config_file = tmp_path / "config.json"
 
         # Test threshold too high
-        config_data = {"template_similarity_threshold": 1.5}
+        config_data = {"routing": {"quick_reply_threshold": 1.5}}
         with config_file.open("w") as f:
             json.dump(config_data, f)
 
         config = load_config(config_file)
         # Should return defaults due to validation error
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
 
         # Test threshold too low
-        config_data = {"template_similarity_threshold": -0.5}
+        config_data = {"routing": {"quick_reply_threshold": -0.5}}
         with config_file.open("w") as f:
             json.dump(config_data, f)
 
         config = load_config(config_file)
         # Should return defaults due to validation error
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
 
     def test_load_config_partial_file(self, tmp_path):
         """Test that load_config merges partial config with defaults."""
@@ -172,7 +178,7 @@ class TestLoadConfig:
         config = load_config(config_file)
 
         assert config.model_path == "partial/model"
-        assert config.template_similarity_threshold == 0.7  # default
+        assert config.routing.quick_reply_threshold == 0.95  # default
         assert config.memory_thresholds.full_mode_mb == 8000  # default
         assert config.imessage_default_limit == 50  # default
 
@@ -185,7 +191,7 @@ class TestLoadConfig:
 
         # Should use all defaults
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
 
 
 class TestGetConfig:
@@ -465,6 +471,7 @@ class TestConfigMigration:
         """Test migration from v1 (no version) to v2."""
         config_file = tmp_path / "config.json"
         # V1 config: no version field, no ui/search/chat sections
+        # template_similarity_threshold is migrated to routing.quick_reply_threshold
         v1_config = {
             "model_path": "old/model",
             "template_similarity_threshold": 0.8,
@@ -477,7 +484,6 @@ class TestConfigMigration:
 
         # Old values preserved
         assert config.model_path == "old/model"
-        assert config.template_similarity_threshold == 0.8
         assert config.imessage_default_limit == 75
         # Migrated: imessage_default_limit -> search.default_limit
         assert config.search.default_limit == 75
@@ -546,9 +552,7 @@ class TestConfigMigration:
 
         config = load_config(config_file)
 
-        # Legacy field preserved
-        assert config.template_similarity_threshold == 0.85
-        # Migrated to routing.quick_reply_threshold
+        # Legacy field migrated and removed - check routing.quick_reply_threshold
         assert config.routing.quick_reply_threshold == 0.85
         assert config.config_version == CONFIG_VERSION
 
@@ -559,7 +563,7 @@ class TestConfigMigration:
         v7_config = {
             "config_version": 7,
             "model_path": "test/model",
-            "template_similarity_threshold": 0.7,  # Default value
+            "template_similarity_threshold": 0.7,  # Default value - not migrated
             "routing": {},
         }
         with config_file.open("w") as f:
@@ -568,7 +572,6 @@ class TestConfigMigration:
         config = load_config(config_file)
 
         # Default not migrated - routing uses its own default (0.95)
-        assert config.template_similarity_threshold == 0.7
         assert config.routing.quick_reply_threshold == 0.95
         assert config.config_version == CONFIG_VERSION
 
@@ -590,7 +593,6 @@ class TestConfigMigration:
         config = load_config(config_file)
 
         # Routing threshold preserved, not overwritten by legacy value
-        assert config.template_similarity_threshold == 0.85
         assert config.routing.quick_reply_threshold == 0.95
         assert config.config_version == CONFIG_VERSION
 
@@ -659,10 +661,12 @@ class TestSaveConfig:
 
     def test_save_config_roundtrip(self, tmp_path):
         """Test save then load produces identical config."""
+        from jarvis.config import RoutingConfig
+
         config_file = tmp_path / "config.json"
         original = JarvisConfig(
             model_path="roundtrip/model",
-            template_similarity_threshold=0.85,
+            routing=RoutingConfig(quick_reply_threshold=0.85),
             ui=UIConfig(theme="dark", font_size=16, compact_mode=True),
             search=SearchConfig(default_limit=150, default_date_range_days=30),
             chat=ChatConfig(stream_responses=False, show_typing_indicator=False),
@@ -672,7 +676,7 @@ class TestSaveConfig:
         loaded = load_config(config_file)
 
         assert loaded.model_path == original.model_path
-        assert loaded.template_similarity_threshold == original.template_similarity_threshold
+        assert loaded.routing.quick_reply_threshold == original.routing.quick_reply_threshold
         assert loaded.ui.theme == original.ui.theme
         assert loaded.ui.font_size == original.ui.font_size
         assert loaded.ui.compact_mode == original.ui.compact_mode

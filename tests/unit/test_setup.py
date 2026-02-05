@@ -40,17 +40,19 @@ class TestJarvisConfigInSetup:
         """Test default configuration values."""
         config = JarvisConfig()
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == DEFAULT_QUICK_REPLY_THRESHOLD
+        assert config.routing.quick_reply_threshold == 0.95  # RoutingConfig default
 
     def test_model_dump(self):
         """Test conversion to dictionary via model_dump."""
+        from jarvis.config import RoutingConfig
+
         config = JarvisConfig(
             model_path="custom/model",
-            template_similarity_threshold=0.8,
+            routing=RoutingConfig(quick_reply_threshold=0.8),
         )
         data = config.model_dump()
         assert data["model_path"] == "custom/model"
-        assert data["template_similarity_threshold"] == 0.8
+        assert data["routing"]["quick_reply_threshold"] == 0.8
         assert "ui" in data  # Nested configs should be included
         assert "search" in data
         assert "chat" in data
@@ -59,17 +61,17 @@ class TestJarvisConfigInSetup:
         """Test creation from dictionary via model_validate."""
         data = {
             "model_path": "custom/model",
-            "template_similarity_threshold": 0.6,
+            "routing": {"quick_reply_threshold": 0.6},
         }
         config = JarvisConfig.model_validate(data)
         assert config.model_path == "custom/model"
-        assert config.template_similarity_threshold == 0.6
+        assert config.routing.quick_reply_threshold == 0.6
 
     def test_model_validate_with_defaults(self):
         """Test creation from partial dictionary uses defaults."""
         config = JarvisConfig.model_validate({})
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == DEFAULT_QUICK_REPLY_THRESHOLD
+        assert config.routing.quick_reply_threshold == 0.95  # RoutingConfig default
 
 
 class TestCheckResult:
@@ -402,7 +404,7 @@ class TestSetupWizard:
         with config_file.open() as f:
             config = json.load(f)
         assert config["model_path"] == DEFAULT_MODEL_PATH
-        assert config["template_similarity_threshold"] == DEFAULT_QUICK_REPLY_THRESHOLD
+        assert config["routing"]["quick_reply_threshold"] == 0.95  # RoutingConfig default
         # New config should have nested sections
         assert "ui" in config
         assert "search" in config
@@ -451,7 +453,8 @@ class TestSetupWizard:
         with config_file.open() as f:
             config = json.load(f)
         assert config["model_path"] == "custom/model"
-        assert config["template_similarity_threshold"] == 0.9
+        # template_similarity_threshold is migrated to routing.quick_reply_threshold and removed
+        assert config["routing"]["quick_reply_threshold"] == 0.9
         # Migration should have added new sections
         assert "ui" in config
         assert "search" in config

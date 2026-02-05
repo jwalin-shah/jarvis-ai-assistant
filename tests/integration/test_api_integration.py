@@ -420,13 +420,13 @@ class TestConfigMigrationEdgeCases:
 
         # Old values preserved
         assert config.model_path == "old/model"
-        assert config.template_similarity_threshold == 0.8
         assert config.imessage_default_limit == 75
 
         # New sections added
         assert config.config_version == CONFIG_VERSION
         assert config.ui.theme == "system"
         assert config.search.default_limit == 75  # Migrated from imessage_default_limit
+        assert config.routing.quick_reply_threshold == 0.8  # Migrated from template_similarity_threshold
         assert config.chat.stream_responses is True
         assert config.rate_limit.enabled is True
         assert config.task_queue.max_completed_tasks == 100
@@ -519,7 +519,7 @@ class TestConfigMigrationEdgeCases:
 
         # Should return all defaults
         assert config.model_path == DEFAULT_MODEL_PATH
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
         assert config.config_version == CONFIG_VERSION
 
     def test_empty_json_returns_defaults(self, tmp_path):
@@ -549,13 +549,13 @@ class TestConfigMigrationEdgeCases:
         """Invalid field values cause fallback to defaults."""
         config_file = tmp_path / "config.json"
 
-        # Test invalid threshold (out of range)
-        invalid_config = {"template_similarity_threshold": 5.0}  # Must be 0-1
+        # Test invalid routing threshold (out of range)
+        invalid_config = {"routing": {"quick_reply_threshold": 5.0}}  # Must be 0-1
         with config_file.open("w") as f:
             json.dump(invalid_config, f)
 
         config = load_config(config_file)
-        assert config.template_similarity_threshold == 0.7  # Default
+        assert config.routing.quick_reply_threshold == 0.95  # Default
 
     def test_invalid_nested_field_values_returns_defaults(self, tmp_path):
         """Invalid nested field values cause fallback to defaults."""
@@ -603,7 +603,7 @@ class TestConfigMigrationEdgeCases:
         assert config.model_path == "custom/model"
 
         # Missing values get defaults
-        assert config.template_similarity_threshold == 0.7
+        assert config.routing.quick_reply_threshold == 0.95
         assert config.ui.theme == "system"
         assert config.search.default_limit == 50
         assert config.chat.stream_responses is True
@@ -716,8 +716,8 @@ class TestConfigMigrationEdgeCases:
 
         original = JarvisConfig(
             model_path="roundtrip/model",
-            template_similarity_threshold=0.85,
         )
+        original.routing.quick_reply_threshold = 0.85
         original.ui.theme = "dark"
         original.ui.font_size = 16
         original.search.default_limit = 100
@@ -736,7 +736,7 @@ class TestConfigMigrationEdgeCases:
 
         # Verify all fields match
         assert loaded.model_path == original.model_path
-        assert loaded.template_similarity_threshold == original.template_similarity_threshold
+        assert loaded.routing.quick_reply_threshold == original.routing.quick_reply_threshold
         assert loaded.ui.theme == original.ui.theme
         assert loaded.ui.font_size == original.ui.font_size
         assert loaded.search.default_limit == original.search.default_limit
