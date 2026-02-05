@@ -55,6 +55,18 @@ except (ImportError, OSError):
 if not MLX_AVAILABLE:
     _mock_mlx_modules()
 
+# Fix stub torch namespace package: if torch is a namespace stub (no real
+# __init__.py), scipy's array_api_compat crashes accessing torch.Tensor.
+# Preemptively ensure the stub has a Tensor class if torch resolves to a
+# namespace package.
+try:
+    import torch as _torch_check
+
+    if not hasattr(_torch_check, "Tensor"):
+        _torch_check.Tensor = type("Tensor", (), {})
+except ImportError:
+    pass
+
 # Check if sentence_transformers can load properly (AFTER mocking MLX)
 # Import is deferred to avoid torch circular import issues during pytest collection
 SENTENCE_TRANSFORMERS_AVAILABLE = False

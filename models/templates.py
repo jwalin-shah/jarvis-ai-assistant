@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, runtime_check
 import numpy as np
 
 from jarvis.embedding_adapter import get_embedder, reset_embedder
+from jarvis.errors import ErrorCode, JarvisError
 from jarvis.metrics import get_template_analytics
 
 if TYPE_CHECKING:
@@ -141,8 +142,11 @@ class EmbeddingCache(Generic[K, V]):
             }
 
 
-class SentenceModelError(Exception):
+class SentenceModelError(JarvisError):
     """Raised when sentence transformer model cannot be loaded."""
+
+    default_message = "Sentence transformer model cannot be loaded"
+    default_code = ErrorCode.MDL_LOAD_FAILED
 
 
 def _get_sentence_model() -> Any:
@@ -549,8 +553,9 @@ class CustomTemplateStore:
                     template = CustomTemplate.from_dict(template_data)
 
                     if template.id in self._templates and not overwrite:
-                        # Generate new ID to avoid conflict
-                        template.id = str(uuid.uuid4())
+                        # Skip this template to avoid conflict
+                        skipped += 1
+                        continue
 
                     template.created_at = datetime.now().isoformat()
                     template.updated_at = template.created_at
@@ -1954,10 +1959,8 @@ class TemplateMatcher:
                 embeddings = embedder.encode(all_patterns, normalize=True)
 
                 # Pre-compute norms for faster cosine similarity
-                # Even though embeddings are normalized, we keep this for consistency
-                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-                # Avoid division by zero
-                norms = np.where(norms == 0, 1, norms)
+                # Since embeddings are L2-normalized, all norms should be 1.0
+                norms = np.ones((embeddings.shape[0], 1), dtype=np.float32)
 
                 # Assign atomically
                 self._pattern_to_template = pattern_to_template

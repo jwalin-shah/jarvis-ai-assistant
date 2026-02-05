@@ -20,6 +20,22 @@ const STALE_REQUEST_CLEANUP_INTERVAL = 60000; // Clean up stale requests every 6
 const BATCH_WINDOW_MS = 15; // Collect requests for 15ms before sending batch
 const MAX_BATCH_SIZE = 10; // Maximum requests per batch
 
+/**
+ * Wrap a promise with a timeout.
+ * Rejects with a timeout error if the promise doesn't resolve within the given ms.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
 // Dynamic imports for Tauri APIs - only available in Tauri context
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let invoke: ((cmd: string, args?: object) => Promise<any>) | null = null;
@@ -313,7 +329,11 @@ class JarvisSocket {
       // Set up event listeners before connecting
       await this.setupEventListeners();
 
-      const connected = await invoke<boolean>("connect_socket");
+      const connected = await withTimeout(
+        invoke<boolean>("connect_socket"),
+        REQUEST_TIMEOUT,
+        "connect_socket"
+      );
 
       if (connected) {
         this.state = "connected";
@@ -404,12 +424,19 @@ class JarvisSocket {
         // Handle streaming tokens
         if (message.method === "stream.token") {
           const { token, index, final } = message.params;
-          // Find the pending streaming request and call its token handler
-          for (const [reqId, pending] of this.wsPendingRequests) {
-            if (pending.onToken) {
+          const streamRequestId = (message.params as { request_id?: number }).request_id;
+          if (streamRequestId !== undefined) {
+            // Dispatch token to the specific request that owns this stream
+            const pending = this.wsPendingRequests.get(streamRequestId);
+            if (pending && pending.onToken) {
               pending.onToken(token, index);
-              if (final) {
-                // Wait for the final response
+            }
+          } else {
+            // TODO(server): Server should include request_id with stream tokens.
+            // Fallback: broadcast to all streaming requests (legacy behavior)
+            for (const [, pending] of this.wsPendingRequests) {
+              if (pending.onToken) {
+                pending.onToken(token, index);
               }
             }
           }
@@ -520,7 +547,11 @@ class JarvisSocket {
     }
 
     try {
-      const result = await invoke<T>("send_message", { method, params });
+      const result = await withTimeout(
+        invoke<T>("send_message", { method, params }),
+        REQUEST_TIMEOUT,
+        `send_message(${method})`
+      );
       return result;
     } catch (error) {
       // On error, try to reconnect
@@ -706,10 +737,11 @@ class JarvisSocket {
     }
 
     // Start streaming request
-    const requestId = await invoke<number>("send_streaming_message", {
-      method,
-      params,
-    });
+    const requestId = await withTimeout(
+      invoke<number>("send_streaming_message", { method, params }),
+      STREAMING_TIMEOUT,
+      `send_streaming_message(${method})`
+    );
 
     // Token buffer for async iteration
     const tokenBuffer: string[] = [];

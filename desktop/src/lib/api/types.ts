@@ -47,15 +47,15 @@ export interface Conversation {
 // Health types
 export interface HealthResponse {
   status: "healthy" | "degraded" | "unhealthy";
-  imessage_access: boolean;
-  memory_available_gb: number;
-  memory_used_gb: number;
-  memory_mode: "FULL" | "LITE" | "MINIMAL";
-  model_loaded: boolean;
-  permissions_ok: boolean;
-  details: Record<string, string> | null;
-  jarvis_rss_mb: number;
-  jarvis_vms_mb: number;
+  imessage_access: boolean | null;
+  memory_available_gb: number | null;
+  memory_used_gb: number | null;
+  memory_mode: "FULL" | "LITE" | "MINIMAL" | null;
+  model_loaded: boolean | null;
+  permissions_ok: boolean | null;
+  details: Record<string, string> | string | null;
+  jarvis_rss_mb: number | null;
+  jarvis_vms_mb: number | null;
 }
 
 // Settings types

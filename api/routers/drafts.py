@@ -24,7 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from api.dependencies import get_imessage_reader
 from api.ratelimit import (
     RATE_LIMIT_GENERATION,
-    TIMEOUT_GENERATION,
+    get_timeout_generation,
     limiter,
 )
 from api.schemas import (
@@ -123,37 +123,77 @@ def _build_summary_prompt(context: str, num_messages: int) -> str:
 def _parse_summary_response(response_text: str) -> tuple[str, list[str]]:
     """Parse the LLM summary response into summary and key points.
 
+    Handles variations in LLM output format including:
+    - "Summary: ...", "Here is the summary: ...", "**Summary:** ..."
+    - "Key points:", "Key Points:", "Here are the key points:"
+    - Bullet points with -, *, or numbered lists (1., 2.)
+
     Args:
         response_text: Raw LLM response
 
     Returns:
-        Tuple of (summary, key_points)
+        Tuple of (summary, key_points). Falls back to raw text if parsing fails.
     """
+    import re as _re
+
     lines = response_text.strip().split("\n")
     summary = ""
-    key_points = []
+    key_points: list[str] = []
 
     in_key_points = False
     for line in lines:
-        line = line.strip()
-        if line.lower().startswith("summary:"):
-            summary = line[8:].strip()
-        elif line.lower() == "key points:" or line.lower().startswith("key points"):
-            in_key_points = True
-        elif in_key_points and line.startswith("-"):
-            key_points.append(line[1:].strip())
-        elif in_key_points and line.startswith("•"):
-            key_points.append(line[1:].strip())
+        stripped = line.strip()
+        if not stripped:
+            continue
 
-    # Fallback if parsing fails
+        # Strip markdown bold markers for matching
+        clean = stripped.replace("**", "")
+        lower = clean.lower()
+
+        # Match summary line: "Summary: ...", "Here is the summary: ...", etc.
+        if not summary and not in_key_points:
+            summary_match = _re.match(
+                r"^(?:here\s+is\s+(?:the\s+)?)?summary\s*:\s*(.+)",
+                lower,
+            )
+            if summary_match:
+                # Extract from original line (preserving case) after the colon
+                colon_idx = clean.find(":")
+                if colon_idx >= 0:
+                    summary = clean[colon_idx + 1:].strip()
+                continue
+
+        # Match key points header (case-insensitive, with optional preamble)
+        if _re.match(r"^(?:here\s+are\s+(?:the\s+)?)?key\s+points\s*:?\s*$", lower):
+            in_key_points = True
+            continue
+
+        # Extract bullet points (-, *, bullet char, or numbered)
+        if in_key_points:
+            bullet_match = _re.match(r"^[-*\u2022]\s*(.+)", stripped)
+            if bullet_match:
+                point = bullet_match.group(1).strip()
+                if point:
+                    key_points.append(point)
+                continue
+            numbered_match = _re.match(r"^\d+[.)\-]\s*(.+)", stripped)
+            if numbered_match:
+                point = numbered_match.group(1).strip()
+                if point:
+                    key_points.append(point)
+                continue
+
+    # Fallback: if structured parsing found nothing, use raw text
     if not summary:
-        summary = response_text[:200] if len(response_text) > 200 else response_text
+        raw = response_text.strip()
+        if len(raw) > 200:
+            summary = raw[:200].rsplit(" ", 1)[0] + "..."
+        else:
+            summary = raw
     if not key_points:
         key_points = ["See summary for details"]
 
     return summary, key_points
-
-
 def _generate_single_suggestion(
     generator: object,
     prompt: str,
@@ -352,7 +392,7 @@ async def generate_draft_reply(
     suggestions: list[DraftSuggestion] = []
 
     try:
-        async with asyncio.timeout(TIMEOUT_GENERATION):
+        async with asyncio.timeout(get_timeout_generation()):
             for i in range(draft_request.num_suggestions):
                 prompt = _build_reply_prompt(
                     last_message=last_message or "",
@@ -378,11 +418,11 @@ async def generate_draft_reply(
                         )
                     )
     except TimeoutError:
-        logger.warning("Generation timed out after %s seconds", TIMEOUT_GENERATION)
+        logger.warning("Generation timed out after %s seconds", get_timeout_generation())
         if not suggestions:
             raise HTTPException(
                 status_code=408,
-                detail=f"Request timed out after {TIMEOUT_GENERATION} seconds",
+                detail=f"Request timed out after {get_timeout_generation()} seconds",
             ) from None
 
     if not suggestions:
@@ -579,7 +619,7 @@ async def summarize_conversation(
     prompt = _build_summary_prompt(context_text, len(messages))
 
     try:
-        async with asyncio.timeout(TIMEOUT_GENERATION):
+        async with asyncio.timeout(get_timeout_generation()):
             response_text = await run_in_threadpool(
                 _generate_summary,
                 generator,
@@ -587,10 +627,10 @@ async def summarize_conversation(
             )
             summary, key_points = _parse_summary_response(response_text)
     except TimeoutError:
-        logger.warning("Summary generation timed out after %s seconds", TIMEOUT_GENERATION)
+        logger.warning("Summary generation timed out after %s seconds", get_timeout_generation())
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_GENERATION} seconds",
+            detail=f"Request timed out after {get_timeout_generation()} seconds",
         ) from None
     except Exception as e:
         logger.error("Failed to generate summary: %s", e)
@@ -833,7 +873,7 @@ async def generate_smart_reply(
 
     # Route the reply with timeout
     try:
-        async with asyncio.timeout(TIMEOUT_GENERATION):
+        async with asyncio.timeout(get_timeout_generation()):
             result = await run_in_threadpool(
                 _route_reply_sync,
                 routed_request.chat_id,
@@ -841,10 +881,10 @@ async def generate_smart_reply(
                 thread_context,
             )
     except TimeoutError:
-        logger.warning("Routed reply timed out after %s seconds", TIMEOUT_GENERATION)
+        logger.warning("Routed reply timed out after %s seconds", get_timeout_generation())
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_GENERATION} seconds",
+            detail=f"Request timed out after {get_timeout_generation()} seconds",
         ) from None
     except Exception as e:
         logger.error("Failed to route reply: %s", e)
@@ -1089,7 +1129,7 @@ async def generate_multi_option_reply(
 
     # Route with multi-option
     try:
-        async with asyncio.timeout(TIMEOUT_GENERATION):
+        async with asyncio.timeout(get_timeout_generation()):
             result = await run_in_threadpool(
                 _route_multi_option_sync,
                 multi_request.chat_id,
@@ -1099,7 +1139,7 @@ async def generate_multi_option_reply(
     except TimeoutError:
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_GENERATION} seconds",
+            detail=f"Request timed out after {get_timeout_generation()} seconds",
         ) from None
     except Exception as e:
         logger.error("Failed to generate multi-option reply: %s", e)

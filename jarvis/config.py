@@ -473,6 +473,23 @@ class NormalizationConfig(BaseModel):
             max_length=1000,
         )
     )
+    chunk_embedding: NormalizationProfile = Field(
+        default_factory=lambda: NormalizationProfile(
+            filter_garbage=True,
+            filter_attributed_artifacts=True,
+            drop_url_only=True,
+            mask_entities=False,  # Not needed - running locally
+            normalize_emojis=True,
+            preserve_url_domain=True,
+            replace_codes=True,
+            ner_enabled=False,  # Slows down bulk processing, not needed for matching
+            expand_slang=True,  # "tmrw" → "tomorrow" for better embedding match
+            spell_check=True,
+            filter_non_english=False,  # Breaks slang detection
+            min_length=1,
+            max_length=2000,  # Chunks can be longer than single messages
+        )
+    )
     topic_modeling: NormalizationProfile = Field(
         default_factory=lambda: NormalizationProfile(
             filter_garbage=True,

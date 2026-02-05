@@ -10,8 +10,17 @@
 
 export const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8742";
 
-// HTTP base URL derived from WS_BASE (convert ws:// to http://)
-export const WS_HTTP_BASE = WS_BASE.replace(/^ws/, "http");
+// HTTP base URL derived from WS_BASE (convert ws:// to http://, wss:// to https://)
+export const WS_HTTP_BASE = (() => {
+  try {
+    const url = new URL(WS_BASE);
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    return url.origin;
+  } catch {
+    // Fallback for non-standard URLs
+    return WS_BASE.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
+  }
+})();
 
 /**
  * WebSocket message types (server -> client)
@@ -372,6 +381,18 @@ class JarvisWebSocket {
       console.error("Max reconnection attempts reached");
       this.setState("disconnected");
       this.handlers.onError?.("Connection lost. Please refresh the page.");
+      return;
+    }
+
+    // Don't reconnect when app is backgrounded - saves resources
+    if (typeof document !== "undefined" && document.hidden) {
+      const onVisible = () => {
+        document.removeEventListener("visibilitychange", onVisible);
+        if (this.shouldReconnect && this._state !== "connected") {
+          this.scheduleReconnect();
+        }
+      };
+      document.addEventListener("visibilitychange", onVisible);
       return;
     }
 

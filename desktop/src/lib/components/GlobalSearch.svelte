@@ -83,6 +83,15 @@
     return flat;
   });
 
+  // O(1) lookup map for flatResults index by message ID (avoids O(n^2) findIndex in template)
+  let flatIndexMap: Map<number, number> = $derived.by(() => {
+    const map = new Map<number, number>();
+    flatResults.forEach((entry, index) => {
+      map.set(entry.msg.id, index);
+    });
+    return map;
+  });
+
   // Total results count
   let totalResultsCount = $derived(searchMode === "semantic" ? semanticResults.length : results.length);
 
@@ -242,16 +251,27 @@
     onClose();
   }
 
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function highlightMatch(text: string, searchQuery: string): string {
-    if (!searchQuery.trim() || !text) return text;
+    if (!searchQuery.trim() || !text) return escapeHtml(text);
 
     // For semantic search, don't highlight (no exact matches)
-    if (searchMode === "semantic") return text;
+    if (searchMode === "semantic") return escapeHtml(text);
 
-    // Escape special regex characters in the search query
-    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Escape HTML in user text first to prevent XSS, then highlight
+    const safeText = escapeHtml(text);
+    const safeQuery = escapeHtml(searchQuery);
+    const escaped = safeQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(`(${escaped})`, "gi");
-    return text.replace(regex, '<mark class="highlight">$1</mark>');
+    return safeText.replace(regex, '<mark class="highlight">$1</mark>');
   }
 
   function formatDate(dateStr: string): string {
@@ -512,7 +532,7 @@
                 <span class="message-count">{group.messages.length}</span>
               </div>
               {#each group.messages as message, msgIndex}
-                {@const flatIndex = flatResults.findIndex(f => f.msg.id === message.id)}
+                {@const flatIndex = flatIndexMap.get(message.id) ?? -1}
                 <button
                   class="result-item"
                   class:selected={selectedIndex === flatIndex}

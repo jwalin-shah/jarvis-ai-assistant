@@ -33,7 +33,9 @@ Service Setup:
 
 from __future__ import annotations
 
+import itertools
 import logging
+import socket
 import subprocess
 import threading
 import time
@@ -56,10 +58,20 @@ logger = logging.getLogger(__name__)
 # Embedding dimension is 384 for all supported models
 MLX_EMBEDDING_DIM = 384
 MLX_EMBED_SERVICE_SOCKET = "/tmp/jarvis-embed.sock"
-MLX_EMBED_SERVICE_DIR = Path.home() / ".jarvis" / "mlx-embed-service"
 
 # Legacy constant for backwards compatibility
 DEFAULT_MLX_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+# Service directory path - evaluated lazily to avoid import-time Path.home() call
+_MLX_EMBED_SERVICE_DIR: Path | None = None
+
+
+def _get_mlx_embed_service_dir() -> Path:
+    """Get the MLX embedding service directory path (lazy evaluation)."""
+    global _MLX_EMBED_SERVICE_DIR
+    if _MLX_EMBED_SERVICE_DIR is None:
+        _MLX_EMBED_SERVICE_DIR = Path.home() / ".jarvis" / "mlx-embed-service"
+    return _MLX_EMBED_SERVICE_DIR
 
 
 def _get_mlx_model_name() -> str:
@@ -146,12 +158,11 @@ class MLXEmbedder:
         self._lock = threading.Lock()
         self._service_available: bool | None = None
         self._last_health_check: float = 0
-        self._request_id = 0
+        self._request_id = itertools.count(1)
 
     def _next_request_id(self) -> int:
         """Get next request ID for JSON-RPC."""
-        self._request_id += 1
-        return self._request_id
+        return next(self._request_id)
 
     def _send_request(
         self, method: str, params: dict | None = None, timeout: float | None = None
@@ -189,15 +200,16 @@ class MLXEmbedder:
             sock.sendall(json.dumps(request).encode() + b"\n")
 
             # Read response (newline-delimited)
-            response_data = b""
+            chunks = []
             while True:
                 chunk = sock.recv(4096)
                 if not chunk:
                     break
-                response_data += chunk
-                if b"\n" in response_data:
+                chunks.append(chunk)
+                if b"\n" in chunk:
                     break
 
+            response_data = b"".join(chunks)
             if not response_data:
                 raise MLXServiceNotAvailableError("Empty response from MLX service")
 
@@ -306,11 +318,22 @@ class MLXEmbedder:
                     "texts": texts,
                     "normalize": normalize,
                     "model": self.model_name,
+                    "binary": True,
                 },
             )
 
-            # Convert to numpy array
-            embeddings = np.array(result["embeddings"], dtype=np.float32)
+            # Handle binary or JSON response
+            if "embeddings_b64" in result:
+                # Binary base64-encoded numpy array
+                import base64
+
+                embeddings_bytes = base64.b64decode(result["embeddings_b64"])
+                embeddings = np.frombuffer(embeddings_bytes, dtype=np.float32)
+                # Reshape to (n_texts, embedding_dim)
+                embeddings = embeddings.reshape(len(texts), -1)
+            else:
+                # Fallback to JSON array
+                embeddings = np.array(result["embeddings"], dtype=np.float32)
             return embeddings
 
         except MLXServiceNotAvailableError:
@@ -445,10 +468,11 @@ def start_mlx_service() -> subprocess.Popen[bytes] | None:
         return None
 
     # Check if service directory exists
-    if not MLX_EMBED_SERVICE_DIR.exists():
+    service_dir = _get_mlx_embed_service_dir()
+    if not service_dir.exists():
         logger.warning(
             "MLX embedding service not installed at %s",
-            MLX_EMBED_SERVICE_DIR,
+            service_dir,
         )
         return None
 
@@ -457,7 +481,7 @@ def start_mlx_service() -> subprocess.Popen[bytes] | None:
     try:
         process = subprocess.Popen(
             ["uv", "run", "python", "server.py"],
-            cwd=MLX_EMBED_SERVICE_DIR,
+            cwd=service_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

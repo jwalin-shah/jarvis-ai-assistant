@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.concurrency import run_in_threadpool
 
 from contracts.models import GenerationRequest
 from models import get_generator
@@ -431,9 +432,9 @@ async def _handle_generate(
             # Use streaming generation
             await _stream_generation(client, generator, request, generation_id)
         else:
-            # Use regular generation
+            # Use regular generation - run in threadpool to avoid blocking event loop
             start_time = time.perf_counter()
-            response = generator.generate(request)
+            response = await run_in_threadpool(generator.generate, request)
             generation_time = (time.perf_counter() - start_time) * 1000
 
             await manager.send_message(
@@ -526,7 +527,8 @@ async def _stream_generation(
             )
         else:
             # Fallback: use regular generation and simulate streaming
-            response = generator.generate(request)
+            # Run in threadpool to avoid blocking event loop
+            response = await run_in_threadpool(generator.generate, request)
             generation_time = (time.perf_counter() - start_time) * 1000
 
             # Send tokens one at a time with small delays to simulate streaming

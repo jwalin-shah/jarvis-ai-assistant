@@ -136,7 +136,11 @@ def _query_by_phone(conn: sqlite3.Connection, phone: str) -> ContactAvatarData |
     cursor = conn.cursor()
 
     try:
-        # Query all phone contacts and match normalized phone numbers
+        # Pre-filter by last 10 digits in SQL to avoid loading all contacts.
+        # Full normalization comparison happens in Python on the smaller result set.
+        digits_only = "".join(c for c in phone if c.isdigit())
+        last_digits = digits_only[-10:] if len(digits_only) >= 10 else digits_only
+
         cursor.execute(
             """
             SELECT
@@ -148,7 +152,12 @@ def _query_by_phone(conn: sqlite3.Connection, phone: str) -> ContactAvatarData |
             FROM ZABCDPHONENUMBER
             JOIN ZABCDRECORD ON ZABCDPHONENUMBER.ZOWNER = ZABCDRECORD.Z_PK
             WHERE ZABCDPHONENUMBER.ZFULLNUMBER IS NOT NULL
+              AND REPLACE(REPLACE(REPLACE(REPLACE(
+                  ZABCDPHONENUMBER.ZFULLNUMBER,
+                  ' ', ''), '-', ''), '(', ''), ')', '')
+                  LIKE ?
             """,
+            (f"%{last_digits}",),
         )
 
         for row in cursor.fetchall():

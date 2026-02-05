@@ -16,8 +16,8 @@
   let timeGapMinutes = $state(30);
   let useSemantic = $state(true);
 
-  // Computed: messages grouped by thread
-  function getMessagesByThread(): Map<string, ThreadedMessage[]> {
+  // Computed: messages grouped by thread (cached to avoid rebuilding per-thread in template)
+  let messagesByThread: Map<string, ThreadedMessage[]> = $derived.by(() => {
     const map = new Map<string, ThreadedMessage[]>();
     if (!threadedView) return map;
 
@@ -27,7 +27,7 @@
       map.set(msg.thread_id, existing);
     }
     return map;
-  }
+  });
 
   async function fetchThreadedView() {
     loading = true;
@@ -231,7 +231,7 @@
         <div class="threads-list">
           {#each threadedView.threads as thread, index (thread.thread_id)}
             {@const isExpanded = expandedThreads.has(thread.thread_id)}
-            {@const messages = getMessagesByThread().get(thread.thread_id) || []}
+            {@const messages = messagesByThread.get(thread.thread_id) || []}
             <div
               class="thread-group"
               style="--thread-color: {getThreadColor(index)}"

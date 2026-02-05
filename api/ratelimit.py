@@ -250,13 +250,8 @@ def get_timeout_read() -> float:
         return 10.0  # Default fallback
 
 
-# Timeout constants for different operations (for backward compatibility)
-# IMPORTANT: These constants are evaluated at module import time and will NOT
-# reflect runtime config changes. Always use get_timeout_generation() and
-# get_timeout_read() functions instead to get the current config values.
-# These constants are provided only for backwards compatibility with existing code.
-TIMEOUT_GENERATION = get_timeout_generation()
-TIMEOUT_READ = get_timeout_read()
+# TIMEOUT_GENERATION and TIMEOUT_READ were removed (they froze at import time).
+# Use get_timeout_generation() and get_timeout_read() at call sites instead.
 
 
 # Export all public symbols
@@ -271,6 +266,4 @@ __all__ = [
     "RATE_LIMIT_GENERATION",
     "RATE_LIMIT_READ",
     "RATE_LIMIT_WRITE",
-    "TIMEOUT_GENERATION",
-    "TIMEOUT_READ",
 ]

@@ -143,6 +143,7 @@ class ConnectionPool:
         self.max_connections = min(max_connections, MAX_POOL_SIZE)
         self.timeout = timeout
         self._pool: queue.Queue[sqlite3.Connection] = queue.Queue(maxsize=self.max_connections)
+        self._checked_out: set[sqlite3.Connection] = set()
         self._created_count = 0
         self._lock = threading.Lock()
         self._closed = False
@@ -219,7 +220,10 @@ class ConnectionPool:
 
         # Try to get from pool without blocking first
         try:
-            return self._pool.get_nowait()
+            conn = self._pool.get_nowait()
+            with self._lock:
+                self._checked_out.add(conn)
+            return conn
         except queue.Empty:
             pass
 
@@ -228,14 +232,19 @@ class ConnectionPool:
             if self._created_count < self.max_connections:
                 self._created_count += 1
                 try:
-                    return self._create_connection()
+                    conn = self._create_connection()
+                    self._checked_out.add(conn)
+                    return conn
                 except Exception:
                     self._created_count -= 1
                     raise
 
         # Pool is at capacity, wait for a connection
         try:
-            return self._pool.get(timeout=timeout)
+            conn = self._pool.get(timeout=timeout)
+            with self._lock:
+                self._checked_out.add(conn)
+            return conn
         except queue.Empty:
             raise iMessageAccessError(
                 f"Timeout waiting for database connection (pool size: {self.max_connections})",
@@ -248,6 +257,9 @@ class ConnectionPool:
         Args:
             conn: Connection to release
         """
+        with self._lock:
+            self._checked_out.discard(conn)
+
         if self._closed:
             try:
                 conn.close()
@@ -291,10 +303,10 @@ class ConnectionPool:
         return self._schema_version
 
     def close(self) -> None:
-        """Close all connections in the pool."""
+        """Close all connections in the pool (both queued and checked-out)."""
         self._closed = True
 
-        # Close all connections in the pool
+        # Close all connections in the queue
         while True:
             try:
                 conn = self._pool.get_nowait()
@@ -305,7 +317,19 @@ class ConnectionPool:
             except queue.Empty:
                 break
 
+        # Close checked-out connections and warn if any remain
         with self._lock:
+            if self._checked_out:
+                logger.warning(
+                    "Closing pool with %d checked-out connections",
+                    len(self._checked_out),
+                )
+                for conn in self._checked_out:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                self._checked_out.clear()
             self._created_count = 0
             self._schema_version = None
 
@@ -318,6 +342,7 @@ class ConnectionPool:
         return {
             "created": self._created_count,
             "available": self._pool.qsize(),
+            "checked_out": len(self._checked_out),
             "max_connections": self.max_connections,
             "closed": self._closed,
         }
@@ -1245,8 +1270,125 @@ class ChatDBReader:
 
         return messages
 
+    def _prefetch_attachments(
+        self, message_ids: list[int],
+    ) -> dict[int, list[Attachment]]:
+        """Batch-fetch attachments for multiple messages in one query.
+
+        Args:
+            message_ids: List of message ROWIDs
+
+        Returns:
+            Dict mapping message_id -> list of Attachment objects
+        """
+        if not message_ids:
+            return {}
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        version = self._schema_version or "v14"
+
+        result: dict[int, list[Attachment]] = {}
+        try:
+            placeholders = ",".join("?" * len(message_ids))
+            query = get_query("attachments_batch", version).format(
+                placeholders=placeholders,
+            )
+            cursor.execute(query, message_ids)
+            rows = cursor.fetchall()
+            for row in rows:
+                try:
+                    row_dict = dict(row)
+                    mid = row_dict.pop("message_id")
+                    attachments = parse_attachments([row_dict])
+                    if mid not in result:
+                        result[mid] = []
+                    result[mid].extend(attachments)
+                except (IndexError, TypeError, KeyError):
+                    continue
+        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+            logger.debug(f"Error batch-fetching attachments: {e}")
+
+        return result
+
+    def _prefetch_reactions(
+        self, message_ids: list[int],
+    ) -> dict[int, list[Reaction]]:
+        """Batch-fetch reactions for multiple messages in one query.
+
+        First looks up GUIDs for all message IDs, then fetches reactions
+        for all GUIDs at once.
+
+        Args:
+            message_ids: List of message ROWIDs
+
+        Returns:
+            Dict mapping message_id -> list of Reaction objects
+        """
+        if not message_ids:
+            return {}
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        version = self._schema_version or "v14"
+
+        result: dict[int, list[Reaction]] = {}
+
+        try:
+            # Step 1: Batch-fetch GUIDs for all message IDs
+            placeholders = ",".join("?" * len(message_ids))
+            guid_query = get_query("message_guids_batch", version).format(
+                placeholders=placeholders,
+            )
+            cursor.execute(guid_query, message_ids)
+            guid_rows = cursor.fetchall()
+
+            id_to_guid: dict[int, str] = {}
+            guid_to_id: dict[str, int] = {}
+            for row in guid_rows:
+                mid = row["id"]
+                guid = row["guid"]
+                if guid:
+                    id_to_guid[mid] = guid
+                    guid_to_id[guid] = mid
+
+            if not guid_to_id:
+                return result
+
+            # Step 2: Batch-fetch reactions for all GUIDs
+            guids = list(guid_to_id.keys())
+            placeholders = ",".join("?" * len(guids))
+            rx_query = get_query("reactions_batch", version).format(
+                placeholders=placeholders,
+            )
+            cursor.execute(rx_query, guids)
+            rx_rows = cursor.fetchall()
+
+            for row in rx_rows:
+                row_dict = dict(row)
+                assoc_guid = row_dict.get("associated_message_guid")
+                if assoc_guid and assoc_guid in guid_to_id:
+                    mid = guid_to_id[assoc_guid]
+                    reactions = parse_reactions([row_dict])
+                    # Resolve sender names
+                    for reaction in reactions:
+                        if reaction.sender != "me":
+                            reaction.sender_name = self._resolve_contact_name(
+                                reaction.sender,
+                            )
+                    if mid not in result:
+                        result[mid] = []
+                    result[mid].extend(reactions)
+
+        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+            logger.debug(f"Error batch-fetching reactions: {e}")
+
+        return result
+
     def _rows_to_messages(self, rows: Sequence[sqlite3.Row], chat_id: str) -> list[Message]:
         """Convert database rows to Message objects.
+
+        Pre-fetches attachments and reactions in batch to avoid N+1 queries.
 
         Args:
             rows: Sequence of sqlite3.Row objects
@@ -1255,10 +1397,26 @@ class ChatDBReader:
         Returns:
             List of Message objects
         """
+        # Collect message IDs for batch prefetch
+        message_ids = []
+        for row in rows:
+            try:
+                message_ids.append(row["id"])
+            except (IndexError, KeyError):
+                continue
+
+        # Batch-fetch attachments and reactions (2 queries instead of 2*N)
+        attachments_map = self._prefetch_attachments(message_ids)
+        reactions_map = self._prefetch_reactions(message_ids)
+
         messages = []
         for row in rows:
             try:
-                msg = self._row_to_message(row, chat_id)
+                msg = self._row_to_message(
+                    row, chat_id,
+                    prefetched_attachments=attachments_map,
+                    prefetched_reactions=reactions_map,
+                )
                 if msg:
                     messages.append(msg)
             except (IndexError, KeyError, TypeError) as e:
@@ -1267,12 +1425,20 @@ class ChatDBReader:
                 continue
         return messages
 
-    def _row_to_message(self, row: sqlite3.Row, chat_id: str) -> Message | None:
+    def _row_to_message(
+        self,
+        row: sqlite3.Row,
+        chat_id: str,
+        prefetched_attachments: dict[int, list[Attachment]] | None = None,
+        prefetched_reactions: dict[int, list[Reaction]] | None = None,
+    ) -> Message | None:
         """Convert a database row to a Message object.
 
         Args:
             row: sqlite3.Row object
             chat_id: The conversation ID
+            prefetched_attachments: Pre-fetched attachments keyed by message ID
+            prefetched_reactions: Pre-fetched reactions keyed by message ID
 
         Returns:
             Message object, or None if message has no text and no attachments
@@ -1316,8 +1482,11 @@ class ChatDBReader:
         # Extract text (tries text column, falls back to attributedBody)
         text = extract_text_from_row(row_dict) or ""
 
-        # Fetch attachments for this message
-        attachments = self._get_attachments_for_message(message_id)
+        # Use prefetched attachments if available, otherwise fall back to per-message query
+        if prefetched_attachments is not None:
+            attachments = prefetched_attachments.get(message_id, [])
+        else:
+            attachments = self._get_attachments_for_message(message_id)
 
         # Skip messages with no text AND no attachments (and not a system message)
         if not text and not attachments:
@@ -1329,10 +1498,11 @@ class ChatDBReader:
         if reply_to_guid:
             reply_to_id = self._get_message_rowid_by_guid(reply_to_guid)
 
-        # Fetch reactions for this message
-        # Build the message GUID for reaction lookup (format: p:N/GUID or similar)
-        # We need to query the actual GUID from the database for this message
-        reactions = self._get_reactions_for_message_id(message_id)
+        # Use prefetched reactions if available, otherwise fall back to per-message query
+        if prefetched_reactions is not None:
+            reactions = prefetched_reactions.get(message_id, [])
+        else:
+            reactions = self._get_reactions_for_message_id(message_id)
 
         # Parse delivery/read receipts (only meaningful for messages you sent)
         # These columns may not exist in all databases/test fixtures

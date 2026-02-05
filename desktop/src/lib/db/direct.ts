@@ -56,7 +56,10 @@ const guidToRowidCache = new Map<string, number>();
  */
 export async function initDatabases(): Promise<void> {
   if (isInitialized) return;
-  if (initError) throw initError;
+  // Don't permanently cache errors - allow retry on transient failures
+  if (initError) {
+    initError = null;
+  }
 
   // Only attempt direct DB access in Tauri context
   if (!isTauri) {

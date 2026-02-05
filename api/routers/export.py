@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
-from api.ratelimit import RATE_LIMIT_READ, TIMEOUT_READ, limiter
+from api.ratelimit import RATE_LIMIT_READ, get_timeout_read, limiter
 from api.schemas import (
     ExportBackupRequest,
     ExportConversationRequest,
@@ -64,7 +64,7 @@ async def export_conversation(
         HTTPException 429: Rate limit exceeded
     """
     try:
-        async with asyncio.timeout(TIMEOUT_READ):
+        async with asyncio.timeout(get_timeout_read()):
             # Get conversation metadata
             conversations = await run_in_threadpool(reader.get_conversations, limit=500)
             conversation = None
@@ -125,7 +125,7 @@ async def export_conversation(
     except TimeoutError:
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_READ} seconds",
+            detail=f"Request timed out after {get_timeout_read()} seconds",
         ) from None
     except HTTPException:
         raise
@@ -162,7 +162,7 @@ async def export_search(
         HTTPException 429: Rate limit exceeded
     """
     try:
-        async with asyncio.timeout(TIMEOUT_READ):
+        async with asyncio.timeout(get_timeout_read()):
             # Perform search
             after = search_request.date_range.start if search_request.date_range else None
             before = search_request.date_range.end if search_request.date_range else None
@@ -207,7 +207,7 @@ async def export_search(
     except TimeoutError:
         raise HTTPException(
             status_code=408,
-            detail=f"Request timed out after {TIMEOUT_READ} seconds",
+            detail=f"Request timed out after {get_timeout_read()} seconds",
         ) from None
     except HTTPException:
         raise

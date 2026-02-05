@@ -16,7 +16,8 @@ from threading import Lock
 from typing import Any
 
 import psutil
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
+from starlette.concurrency import run_in_threadpool, Request
 from pydantic import BaseModel, Field
 
 from api.ratelimit import RATE_LIMIT_READ, limiter
@@ -256,7 +257,7 @@ async def get_traces(
 ) -> list[dict[str, Any]]:
     """Get the last N request traces with full step breakdowns."""
     store = get_trace_store()
-    return store.get_traces(limit)
+    return await run_in_threadpool(store.get_traces, limit)
 
 
 @router.get(
@@ -268,7 +269,7 @@ async def get_traces(
 async def get_trace_summary(request: Request) -> dict[str, Any]:
     """Get summary statistics for recent traces."""
     store = get_trace_store()
-    return store.get_summary()
+    return await run_in_threadpool(store.get_summary)
 
 
 @router.get(

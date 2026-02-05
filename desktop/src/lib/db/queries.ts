@@ -275,6 +275,52 @@ export function parseReactionType(type: number): string | null {
  * Parse attributedBody blob to extract text
  * attributedBody is a binary plist containing NSAttributedString data
  */
+/** NSCoding class names and metadata to filter from attributedBody parsing */
+const NS_CODING_ARTIFACTS = [
+  "NSAttributedString",
+  "NSMutableAttributedString",
+  "NSDictionary",
+  "NSMutableDictionary",
+  "NSString",
+  "NSMutableString",
+  "NSArray",
+  "NSMutableArray",
+  "NSNumber",
+  "NSValue",
+  "NSObject",
+  "NSAttributes",
+  "NSParagraphStyle",
+  "NSFont",
+  "NSColor",
+  "NSKern",
+  "NSOriginalFont",
+  "NSParagraphStyleName",
+  "NSWritingDirection",
+  "__kIMMessagePartAttributeName",
+  "__kIMFileTransferGUIDAttributeName",
+  "__kIMDataDetectedAttributeName",
+  "__kIMBaseWritingDirectionAttributeName",
+  "NSAttachment",
+  "streamtyped",
+  "typedstream",
+];
+
+/**
+ * Check if a string looks like binary garbage (high ratio of non-printable chars)
+ */
+function looksLikeBinaryGarbage(text: string): boolean {
+  if (text.length < 2) return true;
+  let nonPrintable = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    // Count chars outside normal text range (excluding common Unicode)
+    if (code < 32 || (code >= 127 && code < 160)) {
+      nonPrintable++;
+    }
+  }
+  return nonPrintable / text.length > 0.3;
+}
+
 export function parseAttributedBody(data: ArrayBuffer | null): string | null {
   if (!data) return null;
 
@@ -307,10 +353,11 @@ export function parseAttributedBody(data: ArrayBuffer | null): string | null {
           const chunk = bytes.slice(i - consecutivePrintable, i);
           try {
             const decoded = decoder.decode(chunk);
-            // Filter out internal markers
-            if (!decoded.includes("NSAttributedString") &&
-                !decoded.includes("NSDictionary") &&
-                !decoded.includes("NSMutableAttributedString")) {
+            // Filter out NSCoding artifacts and metadata
+            const isArtifact = NS_CODING_ARTIFACTS.some(
+              (artifact) => decoded.includes(artifact)
+            );
+            if (!isArtifact && !looksLikeBinaryGarbage(decoded)) {
               text += decoded;
             }
           } catch {
@@ -327,7 +374,10 @@ export function parseAttributedBody(data: ArrayBuffer | null): string | null {
       const chunk = bytes.slice(bytes.length - consecutivePrintable);
       try {
         const decoded = decoder.decode(chunk);
-        if (!decoded.includes("NSAttributedString")) {
+        const isArtifact = NS_CODING_ARTIFACTS.some(
+          (artifact) => decoded.includes(artifact)
+        );
+        if (!isArtifact && !looksLikeBinaryGarbage(decoded)) {
           text += decoded;
         }
       } catch {
@@ -335,7 +385,12 @@ export function parseAttributedBody(data: ArrayBuffer | null): string | null {
       }
     }
 
-    return text.trim() || null;
+    const result = text.trim();
+    // Final sanity check: reject results that are too short or look like garbage
+    if (!result || result.length < 1 || looksLikeBinaryGarbage(result)) {
+      return null;
+    }
+    return result;
   } catch {
     return null;
   }
