@@ -472,7 +472,12 @@ class TestAdaptiveThresholdManager:
 
 
 class TestRouterIntegration:
-    """Tests for router integration with adaptive thresholds."""
+    """Tests for router integration with adaptive thresholds.
+
+    Note: The router no longer uses adaptive thresholds directly (simplified to
+    always-generate path). These tests verify the adaptive threshold system
+    itself still works, independent of the router.
+    """
 
     @pytest.fixture(autouse=True)
     def reset_singletons(self) -> None:
@@ -481,9 +486,8 @@ class TestRouterIntegration:
         reset_evaluation()
         reset_config()
 
-    def test_router_uses_adaptive_when_enabled(self) -> None:
-        """Test that router uses adaptive thresholds when enabled."""
-        # Mock the config to enable adaptive thresholds
+    def test_adaptive_thresholds_compute(self) -> None:
+        """Test that adaptive threshold manager computes thresholds."""
         mock_adaptive_config = AdaptiveThresholdConfig(enabled=True)
         mock_routing_config = RoutingConfig(
             quick_reply_threshold=0.90,
@@ -492,90 +496,17 @@ class TestRouterIntegration:
             adaptive=mock_adaptive_config,
         )
 
-        # Create mock JarvisConfig
-        class MockJarvisConfig:
-            routing = mock_routing_config
+        with patch("jarvis.adaptive_thresholds.get_config") as mock_config:
+            mock_jarvis_config = type("MockConfig", (), {"routing": mock_routing_config})()
+            mock_config.return_value = mock_jarvis_config
 
-        # Mock get_config to return our mock config
-        with patch("jarvis.router.get_config", return_value=MockJarvisConfig()):
-            with patch("jarvis.router.get_adaptive_threshold_manager") as mock_manager:
-                mock_manager.return_value.get_adapted_thresholds.return_value = {
-                    "quick_reply": 0.88,
-                    "context": 0.68,
-                    "generate": 0.48,
-                }
+            manager = AdaptiveThresholdManager()
+            thresholds = manager.get_adapted_thresholds()
 
-                from jarvis.router import ReplyRouter
-
-                router = ReplyRouter()
-                thresholds = router._get_thresholds()
-
-                # Should use adaptive thresholds
-                assert thresholds["quick_reply"] == 0.88
-                assert thresholds["context"] == 0.68
-                assert thresholds["generate"] == 0.48
-
-    def test_router_falls_back_on_error(self) -> None:
-        """Test that router falls back to base config on adaptive error."""
-        mock_adaptive_config = AdaptiveThresholdConfig(enabled=True)
-        mock_routing_config = RoutingConfig(
-            quick_reply_threshold=0.90,
-            context_threshold=0.70,
-            generate_threshold=0.50,
-            adaptive=mock_adaptive_config,
-        )
-
-        class MockJarvisConfig:
-            routing = mock_routing_config
-
-        with patch("jarvis.router.get_config", return_value=MockJarvisConfig()):
-            with patch("jarvis.router.get_adaptive_threshold_manager") as mock_manager:
-                # Simulate an error
-                mock_manager.return_value.get_adapted_thresholds.side_effect = Exception(
-                    "Test error"
-                )
-
-                from jarvis.router import ReplyRouter
-
-                router = ReplyRouter()
-                thresholds = router._get_thresholds()
-
-                # Should fall back to base config
-                assert thresholds["quick_reply"] == 0.90
-                assert thresholds["context"] == 0.70
-                assert thresholds["generate"] == 0.50
-
-    def test_ab_test_overrides_adaptive(self) -> None:
-        """Test that A/B test config takes priority over adaptive."""
-        mock_adaptive_config = AdaptiveThresholdConfig(enabled=True)
-        mock_routing_config = RoutingConfig(
-            quick_reply_threshold=0.90,
-            context_threshold=0.70,
-            generate_threshold=0.50,
-            ab_test_group="test_group",
-            ab_test_thresholds={
-                "test_group": {
-                    "quick_reply": 0.85,
-                    "context": 0.65,
-                    "generate": 0.45,
-                }
-            },
-            adaptive=mock_adaptive_config,
-        )
-
-        class MockJarvisConfig:
-            routing = mock_routing_config
-
-        with patch("jarvis.router.get_config", return_value=MockJarvisConfig()):
-            from jarvis.router import ReplyRouter
-
-            router = ReplyRouter()
-            thresholds = router._get_thresholds()
-
-            # A/B test should take priority
-            assert thresholds["quick_reply"] == 0.85
-            assert thresholds["context"] == 0.65
-            assert thresholds["generate"] == 0.45
+            # Without feedback data, should return base thresholds
+            assert "quick_reply" in thresholds
+            assert "context" in thresholds
+            assert "generate" in thresholds
 
 
 class TestSingletons:

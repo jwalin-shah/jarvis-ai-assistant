@@ -92,104 +92,51 @@ class TestIntentClassification:
         assert result.confidence == 0.0
 
 
-class TestRouterAcknowledgments:
-    """Tests for acknowledgment handling in the router."""
+class TestRouterGeneratesAllMessages:
+    """Tests that the router generates responses for all non-empty messages."""
 
     @pytest.fixture
     def router(self):
         """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
+        mock_db = MagicMock()
+        mock_db.get_contact.return_value = None
+        mock_db.get_contact_by_chat_id.return_value = None
+        mock_db.init_schema.return_value = None
 
-    def test_simple_thanks_returns_acknowledgment(self, router):
-        """Simple 'thanks' returns acknowledgment response."""
-        with patch.object(router, "_generic_acknowledgment_response") as mock_ack:
-            mock_ack.return_value = {
-                "type": "acknowledgment",
-                "response": "You're welcome!",
-                "confidence": "high",
-                "similarity_score": 1.0,
-            }
+        mock_searcher = MagicMock()
+        mock_searcher.search_with_pairs.return_value = []
 
-            result = router.route("thanks")
+        mock_gen = MagicMock()
+        mock_gen.is_loaded.return_value = False
+        mock_response = MagicMock()
+        mock_response.text = "Generated response"
+        mock_gen.generate.return_value = mock_response
 
-            assert result["type"] == "acknowledgment"
-            assert "response" in result
+        return ReplyRouter(
+            db=mock_db,
+            index_searcher=mock_searcher,
+            generator=mock_gen,
+        )
 
-    def test_ok_returns_acknowledgment(self, router):
-        """Simple 'ok' returns acknowledgment response."""
-        with patch.object(router, "_generic_acknowledgment_response") as mock_ack:
-            mock_ack.return_value = {
-                "type": "acknowledgment",
-                "response": "👍",
-                "confidence": "high",
-                "similarity_score": 1.0,
-            }
+    def test_acknowledgment_generates(self, router):
+        """Acknowledgments go through generation instead of canned response."""
+        result = router.route("thanks")
+        assert result["type"] == "generated"
 
-            result = router.route("ok")
+    def test_ok_generates(self, router):
+        """'ok' goes through generation."""
+        result = router.route("ok")
+        assert result["type"] == "generated"
 
-            assert result["type"] == "acknowledgment"
+    def test_question_generates(self, router):
+        """Questions go through generation."""
+        result = router.route("what time is the meeting?")
+        assert result["type"] == "generated"
 
-    def test_acknowledgment_skipped_with_thread_context(self, router):
-        """Acknowledgment handling is skipped when thread has question."""
-        # Patch the router's _generate_response method
-        with patch.object(router, "_generate_response") as mock_gen:
-            mock_gen.return_value = {
-                "type": "generated",
-                "response": "Generated response",
-                "confidence": "medium",
-            }
-
-            result = router.route(
-                "ok",
-                thread=["Hey!", "Can you help me with something?"],  # Question in thread
-            )
-
-            # Should either acknowledge or generate, both are valid
-            assert result.get("type") in ("acknowledgment", "generated", "clarify")
-
-
-class TestRouterContextDependentMessages:
-    """Tests for context-dependent message handling."""
-
-    @pytest.fixture
-    def router(self):
-        """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
-
-    def test_what_time_is_context_dependent(self, router):
-        """'What time?' is recognized as context-dependent."""
-        assert router._is_context_dependent("what time?")
-        assert router._is_context_dependent("What time")
-        assert router._is_context_dependent("what time works?")
-
-    def test_where_is_context_dependent(self, router):
-        """'Where?' is recognized as context-dependent."""
-        assert router._is_context_dependent("where?")
-        assert router._is_context_dependent("Where should we meet?")
-
-    def test_are_you_coming_is_context_dependent(self, router):
-        """User-input-required questions are context-dependent."""
-        assert router._is_context_dependent("are you coming?")
-        assert router._is_context_dependent("can you make it?")
-        assert router._is_context_dependent("will you be there?")
-
-    def test_regular_message_not_context_dependent(self, router):
-        """Regular messages are not context-dependent."""
-        assert not router._is_context_dependent("Hello!")
-        assert not router._is_context_dependent("I had a great day")
-        assert not router._is_context_dependent("The meeting went well")
+    def test_context_dependent_generates(self, router):
+        """Context-dependent messages go through generation."""
+        result = router.route("what time?", thread=["Dinner tonight?", "Sure!"])
+        assert result["type"] == "generated"
 
 
 class TestRouterClarification:
@@ -198,24 +145,25 @@ class TestRouterClarification:
     @pytest.fixture
     def router(self):
         """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
+        mock_db = MagicMock()
+        mock_db.get_contact.return_value = None
+        mock_db.get_contact_by_chat_id.return_value = None
+        mock_db.init_schema.return_value = None
 
-    def test_needs_clarification_for_vague_reference(self, router):
-        """Vague references need clarification."""
-        assert router._needs_clarification("What about that?", thread=None)
-        assert router._needs_clarification("Send it please", thread=None)
-        assert router._needs_clarification("The thing we discussed", thread=None)
+        mock_searcher = MagicMock()
+        mock_searcher.search_with_pairs.return_value = []
 
-    def test_no_clarification_with_thread_context(self, router):
-        """Vague references don't need clarification with thread context."""
-        thread = ["Let's go to the restaurant", "Which one?", "The Italian place"]
-        assert not router._needs_clarification("What about that?", thread=thread)
+        mock_gen = MagicMock()
+        mock_gen.is_loaded.return_value = False
+        mock_response = MagicMock()
+        mock_response.text = "Generated response"
+        mock_gen.generate.return_value = mock_response
+
+        return ReplyRouter(
+            db=mock_db,
+            index_searcher=mock_searcher,
+            generator=mock_gen,
+        )
 
     def test_clarification_response_format(self, router):
         """Clarification response has correct format."""
@@ -236,13 +184,25 @@ class TestRouterEmptyInput:
     @pytest.fixture
     def router(self):
         """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
+        mock_db = MagicMock()
+        mock_db.get_contact.return_value = None
+        mock_db.get_contact_by_chat_id.return_value = None
+        mock_db.init_schema.return_value = None
+
+        mock_searcher = MagicMock()
+        mock_searcher.search_with_pairs.return_value = []
+
+        mock_gen = MagicMock()
+        mock_gen.is_loaded.return_value = False
+        mock_response = MagicMock()
+        mock_response.text = "Generated response"
+        mock_gen.generate.return_value = mock_response
+
+        return ReplyRouter(
+            db=mock_db,
+            index_searcher=mock_searcher,
+            generator=mock_gen,
+        )
 
     def test_empty_string_returns_clarify(self, router):
         """Empty string returns clarification request."""
@@ -287,100 +247,33 @@ class TestEndToEndMessagePipeline:
 
     def test_message_with_context_generates_response(self, mock_messages):
         """Message with conversation context generates appropriate response."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
+        mock_db = MagicMock()
+        mock_db.get_contact.return_value = None
+        mock_db.get_contact_by_chat_id.return_value = None
+        mock_db.init_schema.return_value = None
 
-            router = ReplyRouter(db=mock_db.return_value)
+        router = ReplyRouter(db=mock_db)
 
-            with patch.object(router, "_generate_response") as mock_gen:
-                mock_gen.return_value = {
-                    "type": "generated",
-                    "response": "Sounds great! See you there!",
-                    "confidence": "medium",
-                    "similarity_score": 0.0,
-                }
+        with patch.object(router, "_generate_response") as mock_gen:
+            mock_gen.return_value = {
+                "type": "generated",
+                "response": "Sounds great! See you there!",
+                "confidence": "medium",
+                "similarity_score": 0.0,
+            }
 
-                thread = [
-                    "[Alice]: Hey, are you free for dinner?",
-                    "[You]: Sure, what time?",
-                    "[Alice]: 7pm at the usual place?",
-                ]
+            thread = [
+                "[Alice]: Hey, are you free for dinner?",
+                "[You]: Sure, what time?",
+                "[Alice]: 7pm at the usual place?",
+            ]
 
-                result = router.route(
-                    "7pm at the usual place?",
-                    thread=thread,
-                )
-
-                assert "response" in result
-
-
-class TestRouterQuickReply:
-    """Tests for quick reply selection."""
-
-    @pytest.fixture
-    def router(self):
-        """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
-
-    def test_quick_reply_with_no_matches_returns_clarify(self, router):
-        """Quick reply with no matches falls back to clarify."""
-        result = router._quick_reply_response([], contact=None)
-
-        assert result["type"] == "clarify"
-
-    def test_quick_reply_filters_by_coherence(self, router):
-        """Quick reply filters responses by coherence score."""
-        matches = [
-            {
-                "trigger_text": "Want to grab lunch?",
-                "response_text": "Sure!",
-                "similarity": 0.96,
-            },
-        ]
-
-        with patch("jarvis.router.score_response_coherence", return_value=0.7):
-            result = router._quick_reply_response(
-                matches, contact=None, incoming="Want to grab lunch?"
+            result = router.route(
+                "7pm at the usual place?",
+                thread=thread,
             )
 
-            assert result["type"] == "quick_reply"
-            assert result["response"] == "Sure!"
-
-
-class TestRouterProfessionalFiltering:
-    """Tests for professional/casual filtering."""
-
-    @pytest.fixture
-    def router(self):
-        """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
-
-    def test_professional_response_detection(self, router):
-        """Professional responses are detected correctly."""
-        assert router._is_professional_response("Thank you for the update.")
-        assert router._is_professional_response("I'll follow up on that.")
-        assert router._is_professional_response("Sounds good.")
-
-    def test_unprofessional_response_detection(self, router):
-        """Unprofessional responses are detected correctly."""
-        assert not router._is_professional_response("lol that's hilarious")
-        assert not router._is_professional_response("haha no way!")
-        assert not router._is_professional_response("bruh what 💀")
+            assert "response" in result
 
 
 class TestRouterMultiOption:
@@ -389,38 +282,34 @@ class TestRouterMultiOption:
     @pytest.fixture
     def router(self):
         """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
+        mock_db = MagicMock()
+        mock_db.get_contact.return_value = None
+        mock_db.get_contact_by_chat_id.return_value = None
+        mock_db.init_schema.return_value = None
 
-    def test_multi_option_commitment_question(self, router):
-        """Commitment questions get multi-option responses."""
-        with patch("jarvis.multi_option.get_multi_option_generator") as mock_gen:
-            mock_result = MagicMock()
-            mock_result.is_commitment = True
-            mock_result.has_options = True
-            mock_result.to_dict.return_value = {
-                "is_commitment": True,
-                "options": [
-                    {"type": "agree", "response": "Sure, I can make it!"},
-                    {"type": "decline", "response": "Sorry, I can't make it."},
-                    {"type": "defer", "response": "Let me check and get back to you."},
-                ],
-                "suggestions": ["Sure!", "Can't make it", "Let me check"],
-            }
-            mock_gen.return_value.generate_options.return_value = mock_result
+        mock_searcher = MagicMock()
+        mock_searcher.search_with_pairs.return_value = []
 
-            result = router.route_multi_option(
-                "Are you coming to the party?",
-                force_multi=True,
-            )
+        mock_gen = MagicMock()
+        mock_gen.is_loaded.return_value = False
+        mock_response = MagicMock()
+        mock_response.text = "Sure, I can make it!"
+        mock_gen.generate.return_value = mock_response
 
-            assert result["is_commitment"] is True
-            assert "options" in result
+        return ReplyRouter(
+            db=mock_db,
+            index_searcher=mock_searcher,
+            generator=mock_gen,
+        )
+
+    def test_multi_option_delegates_to_route(self, router):
+        """route_multi_option delegates to route() and adds multi-option keys."""
+        result = router.route_multi_option("Are you coming to the party?")
+
+        assert result["type"] == "generated"
+        assert "is_commitment" in result
+        assert "options" in result
+        assert "suggestions" in result
 
 
 class TestRouterStats:
@@ -429,15 +318,14 @@ class TestRouterStats:
     @pytest.fixture
     def router(self):
         """Create a router with mocked dependencies."""
-        with patch("jarvis.router.get_db") as mock_db:
-            mock_db.return_value = MagicMock()
-            mock_db.return_value.get_contact.return_value = None
-            mock_db.return_value.get_contact_by_chat_id.return_value = None
-            mock_db.return_value.init_schema.return_value = None
-            mock_db.return_value.get_stats.return_value = {"pairs": 100}
-            mock_db.return_value.get_active_index.return_value = None
-            router = ReplyRouter(db=mock_db.return_value)
-            return router
+        mock_db = MagicMock()
+        mock_db.get_contact.return_value = None
+        mock_db.get_contact_by_chat_id.return_value = None
+        mock_db.init_schema.return_value = None
+        mock_db.get_stats.return_value = {"pairs": 100}
+        mock_db.get_active_index.return_value = None
+
+        return ReplyRouter(db=mock_db)
 
     def test_get_routing_stats_returns_db_stats(self, router):
         """Get routing stats returns database statistics."""
@@ -455,7 +343,6 @@ class TestIntentParamExtraction:
         """Person name is extracted from query."""
         classifier = IntentClassifier()
 
-        # Test extraction logic
         params = classifier._extract_params("reply to John's message", IntentType.REPLY)
         assert params.get("person_name") == "John"
 
