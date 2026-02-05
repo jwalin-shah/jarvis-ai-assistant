@@ -1,12 +1,7 @@
-"""Reply Router - Decision logic for quick reply, generation, or clarification routing.
+"""Reply Router - Routes incoming messages to LLM generation with RAG context.
 
-Routes incoming messages to the appropriate response strategy:
-- Quick Reply (high confidence): Cached response when similarity >= QUICK_REPLY_THRESHOLD
-- Generate (medium confidence): LLM generation with context and few-shot examples
-- Clarify (low confidence): Request more information when context is insufficient
-
-The router uses FAISS vector similarity to match incoming messages against
-historical trigger patterns, enabling fast, personalized response selection.
+All non-empty messages go through LLM generation. Response mobilization
+(Stivers & Rossano 2010) informs the prompt, not the routing decision.
 
 Usage:
     from jarvis.router import get_reply_router, ReplyRouter
@@ -18,9 +13,7 @@ Usage:
         thread=["Hey!", "What's up?"],
     )
 
-    if result['type'] == 'quick_reply':
-        print(f"Quick response: {result['response']}")
-    elif result['type'] == 'generated':
+    if result['type'] == 'generated':
         print(f"AI response: {result['response']}")
     else:  # clarify
         print(f"Need more info: {result['response']}")
@@ -29,27 +22,26 @@ Usage:
 from __future__ import annotations
 
 import logging
-import random
 import threading
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from jarvis.adaptive_thresholds import get_adaptive_threshold_manager
-from jarvis.config import get_config
+from jarvis.classifiers.response_mobilization import (
+    MobilizationResult,
+    ResponsePressure,
+    ResponseType,
+    classify_response_pressure,
+)
+from jarvis.contacts.contact_profile import MIN_MESSAGES_FOR_PROFILE, get_contact_profile
+from jarvis.contacts.contact_profile_context import (
+    ContactProfileContext,
+    is_contact_profile_context_enabled,
+)
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.errors import ErrorCode, JarvisError
-from jarvis.intent import IntentClassifier, IntentType, get_intent_classifier
 from jarvis.metrics_router import RoutingMetrics, get_routing_metrics_store, hash_query
-from jarvis.metrics_validation import get_audit_logger, get_sampling_validator
-from jarvis.quality_metrics import score_response_coherence
-from jarvis.relationships import (
-    MIN_MESSAGES_FOR_PROFILE,
-    generate_style_guide,
-    load_profile,
-)
-from jarvis.text_normalizer import is_acknowledgment_only as _is_ack
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
@@ -60,130 +52,15 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Configuration
+# Configuration (kept for backwards compatibility)
 # =============================================================================
 
-# Similarity thresholds for routing decisions
-#
-# IMPORTANT: Evaluation on 26k holdout pairs (2026-01-31) showed:
-# - Trigger similarity does NOT predict response appropriateness
-# - Even at 0.9+ trigger match, response similarity was only 0.56
-# - This means direct quick replies are often inappropriate
-#
-# Strategy: Use retrieval for EXAMPLES, not direct responses
-# - High similarity → more confident examples for LLM
-# - Low similarity → fewer/no examples, more cautious generation
-#
-# NOTE: These thresholds are also defined in jarvis/config.py RoutingConfig.
-# For customization, update ~/.jarvis/config.json routing section.
-# These module-level constants are kept for backwards compatibility.
-# The actual routing uses _get_thresholds() which reads from config.
-QUICK_REPLY_THRESHOLD = 0.95  # Extremely high - only near-exact matches (rare)
-CONTEXT_THRESHOLD = 0.65  # Good examples available for LLM
-GENERATE_THRESHOLD = 0.45  # Some examples available
+QUICK_REPLY_THRESHOLD = 0.95  # Legacy - no longer used for routing
+CONTEXT_THRESHOLD = 0.65  # Legacy - no longer used for routing
+GENERATE_THRESHOLD = 0.45  # Legacy - no longer used for routing
 
-# Coherence threshold for filtering responses
-# Note: Even at 0.5+, response may not fit current context
-COHERENCE_THRESHOLD = 0.6  # Raised from 0.5 based on evaluation
-
-# Response variety
-MAX_QUICK_REPLIES = 5  # Max responses to choose from for variety
-MIN_RESPONSE_SIMILARITY = 0.6  # Responses must be somewhat similar to pick randomly
-
-# Keep this for backwards compatibility during migration
-# All code should use is_acknowledgment_only() from text_normalizer for exact matching
-SIMPLE_ACKNOWLEDGMENTS = frozenset({})
-
-
-def _check_acknowledgment(text: str) -> bool:
-    """Check if text is a simple acknowledgment using centralized logic.
-
-    Uses exact matching from text_normalizer to avoid substring false positives.
-    """
-    return _is_ack(text)
-
-
-# Context-dependent patterns that ALWAYS need clarification
-# These should NEVER use quick_reply responses even with high similarity
-# because the answer depends on current context, not past responses
-CONTEXT_DEPENDENT_PATTERNS = frozenset(
-    {
-        # Time questions - answer depends on WHAT event
-        "what time",
-        "what time?",
-        "when?",
-        "when",
-        "how long",
-        # Location questions - answer depends on WHAT place
-        "where?",
-        "where",
-        "which place",
-        # Reference questions - answer depends on WHAT thing
-        "which one",
-        "which one?",
-        "what?",
-        "what",
-        # Vague confirmations that need context
-        "you sure",
-        "you sure?",
-        "really",
-        "really?",
-    }
-)
-
-# Prefixes for context-dependent pattern matching (frozenset for O(1) lookup)
-_CONTEXT_STARTER_PREFIXES = frozenset({"what time", "when ", "where ", "which "})
-
-# Vague reference patterns for clarification detection (frozenset for O(1) lookup)
-# Note: Previously duplicated in _REFERENCE_WORDS, now consolidated here
-_VAGUE_REFERENCES = frozenset(
-    {
-        "that",
-        "it",
-        "the thing",
-        "this",
-        "those",
-        "these",
-        "what you said",
-        "what we discussed",
-        "the other",
-    }
-)
-
-_TIME_WORDS = frozenset({"when", "what time"})
-_LOCATION_WORDS = frozenset({"where", "location"})
-
-# Questions that require USER's personal input - system cannot answer these
-# Even with high similarity, system doesn't know user's current schedule/plans/opinions
-USER_INPUT_REQUIRED_STARTERS = (
-    # Commitment questions - system can't commit for user
-    "are you coming",
-    "are you going",
-    "are you free",
-    "can you come",
-    "can you make it",
-    "will you be",
-    "will you come",
-    "are you available",
-    "can you do",
-    "could you",
-    "would you",
-    "do you want",
-    # Personal fact questions - system doesn't know user's current state
-    "where are you",
-    "what are you doing",
-    "how are you",
-    "what's your",
-    # Opinion questions - system doesn't know user's opinion
-    "what do you think",
-    "do you like",
-    "how do you feel",
-    "what's your opinion",
-    # Yes/no about user's actions/plans
-    "did you",
-    "have you",
-    "do you have",
-)
+# FAISS search threshold - minimum similarity for retrieving examples
+_SEARCH_THRESHOLD = 0.3
 
 
 # =============================================================================
@@ -215,16 +92,16 @@ class RouteResult:
 
     Attributes:
         response: The response text.
-        type: Response type ('quick_reply', 'generated', 'clarify').
+        type: Response type ('generated', 'clarify').
         confidence: Confidence level ('high', 'medium', 'low').
         similarity_score: Best similarity score from FAISS search.
-        cluster_name: Name of matched cluster (for quick_replies).
+        cluster_name: Name of matched cluster.
         contact_style: Style notes for the contact.
         similar_triggers: List of similar past triggers found.
     """
 
     response: str
-    type: str  # 'quick_reply', 'generated', 'clarify'
+    type: str  # 'generated', 'clarify'
     confidence: str  # 'high', 'medium', 'low'
     similarity_score: float = 0.0
     cluster_name: str | None = None
@@ -238,12 +115,10 @@ class RouteResult:
 
 
 class ReplyRouter:
-    """Routes incoming messages to quick_reply, LLM generation, or clarification.
+    """Routes incoming messages to LLM generation with RAG context.
 
-    Implements a three-tier routing strategy:
-    1. Quick Reply (similarity >= threshold): Return cached response instantly
-    2. Generate (similarity >= generate threshold): Use LLM with similar examples
-    3. Clarify (below thresholds): Ask user for more context
+    All non-empty messages go through generation. Response mobilization
+    informs the prompt (tone/urgency), not the routing decision.
 
     Thread Safety:
         This class is thread-safe for routing operations.
@@ -255,7 +130,6 @@ class ReplyRouter:
         db: JarvisDB | None = None,
         index_searcher: TriggerIndexSearcher | None = None,
         generator: MLXGenerator | None = None,
-        intent_classifier: IntentClassifier | None = None,
         imessage_reader: ChatDBReader | None = None,
     ) -> None:
         """Initialize the router.
@@ -264,14 +138,12 @@ class ReplyRouter:
             db: Database instance for contacts and pairs. Uses default if None.
             index_searcher: FAISS index searcher. Created lazily if None.
             generator: MLX generator for LLM responses. Created lazily if None.
-            intent_classifier: Intent classifier for routing decisions. Created lazily if None.
             imessage_reader: iMessage reader for fetching conversation history.
                 Created lazily if None.
         """
         self._db = db
         self._index_searcher = index_searcher
         self._generator = generator
-        self._intent_classifier = intent_classifier
         self._imessage_reader = imessage_reader
         self._lock = threading.Lock()
 
@@ -304,15 +176,6 @@ class ReplyRouter:
 
                     self._generator = get_generator(skip_templates=True)
         return self._generator
-
-    @property
-    def intent_classifier(self) -> IntentClassifier:
-        """Get or create the intent classifier."""
-        if self._intent_classifier is None:
-            with self._lock:
-                if self._intent_classifier is None:
-                    self._intent_classifier = get_intent_classifier()
-        return self._intent_classifier
 
     @property
     def imessage_reader(self) -> ChatDBReader | None:
@@ -361,56 +224,6 @@ class ReplyRouter:
             logger.warning("Failed to fetch conversation context: %s", e)
             return []
 
-    def _get_thresholds(self) -> dict[str, float]:
-        """Get routing thresholds with adaptive adjustment and A/B overrides.
-
-        Priority order:
-        1. A/B test group overrides (if configured)
-        2. Adaptive thresholds (if enabled and sufficient data)
-        3. Base config thresholds (default fallback)
-        """
-        config = get_config()
-        routing = config.routing
-
-        # A/B test overrides take highest priority
-        if routing.ab_test_group in routing.ab_test_thresholds:
-            group_thresholds = routing.ab_test_thresholds[routing.ab_test_group]
-            return {
-                "quick_reply": group_thresholds.get("quick_reply", routing.quick_reply_threshold),
-                "context": group_thresholds.get("context", routing.context_threshold),
-                "generate": group_thresholds.get("generate", routing.generate_threshold),
-            }
-
-        # Try adaptive thresholds if enabled
-        if routing.adaptive.enabled:
-            try:
-                manager = get_adaptive_threshold_manager()
-                adapted = manager.get_adapted_thresholds()
-                logger.debug(
-                    "Using adaptive thresholds: quick_reply=%.3f, context=%.3f, generate=%.3f",
-                    adapted["quick_reply"],
-                    adapted["context"],
-                    adapted["generate"],
-                )
-                return adapted
-            except Exception as e:
-                logger.warning("Adaptive threshold computation failed, using base config: %s", e)
-                # Fall through to base config
-
-        # Default: use base config thresholds
-        return {
-            "quick_reply": routing.quick_reply_threshold,
-            "context": routing.context_threshold,
-            "generate": routing.generate_threshold,
-        }
-
-    def _normalize_routing_decision(self, result_type: str) -> str:
-        if result_type == "generated":
-            return "generate"
-        if result_type == "quick_reply":
-            return "quick_reply"
-        return "clarify"
-
     def _record_routing_metrics(
         self,
         incoming: str,
@@ -434,207 +247,73 @@ class ReplyRouter:
                 model_loaded=model_loaded,
             )
             get_routing_metrics_store().record(metrics)
-
-            # Validation layer: audit logging
-            try:
-                get_audit_logger().log_request(metrics)
-            except Exception as e:
-                logger.debug("Audit logging failed: %s", e)
-
-            # Validation layer: sampling validator
-            try:
-                validator = get_sampling_validator()
-                if validator.should_sample():
-                    validator.validate_sample(
-                        query=incoming,
-                        decision=decision,
-                        similarity=similarity_score,
-                        latency_ms=latency_ms,
-                        computations=cached_embedder.embedding_computations,
-                        cache_hit=cached_embedder.cache_hit,
-                        model_loaded=model_loaded,
-                    )
-            except Exception as e:
-                logger.debug("Sampling validation failed: %s", e)
-
         except Exception as e:
             logger.debug("Routing metrics write failed: %s", e)
 
-    def _is_simple_acknowledgment(self, text: str) -> bool:
-        """Check if the message is a simple acknowledgment.
+    def _get_contact(self, contact_id: int | None, chat_id: str | None) -> Contact | None:
+        """Look up contact by contact_id or chat_id."""
+        if contact_id:
+            return self.db.get_contact(contact_id)
+        if chat_id:
+            return self.db.get_contact_by_chat_id(chat_id)
+        return None
 
-        Uses centralized exact matching to avoid substring false positives.
-        Simple acknowledgments like "ok", "thanks", "yes" are too
-        context-dependent for quick_reply matching and should be handled
-        directly with generic responses.
-
-        Args:
-            text: The incoming message text.
-
-        Returns:
-            True if the message is a simple acknowledgment.
-        """
-        return _check_acknowledgment(text)
-
-    def _is_context_dependent(self, text: str) -> bool:
-        """Check if the message is context-dependent or requires user input.
-
-        Two categories that should NOT use quick_reply responses:
-        1. Context-dependent: "what time?", "where?" - need to know WHAT we're discussing
-        2. User-input-required: "are you coming?", "can you?" - system can't answer for user
-
-        Args:
-            text: The incoming message text.
-
-        Returns:
-            True if the message requires current context or user's personal input.
-        """
-        normalized = text.lower().strip()
-        # Remove punctuation for matching
-        normalized_no_punct = normalized.rstrip("!.?")
-
-        # Check exact matches for context-dependent patterns (O(1) frozenset lookup)
-        if normalized_no_punct in CONTEXT_DEPENDENT_PATTERNS:
-            return True
-
-        # Check if message starts with context-dependent patterns
-        # Use any() with frozenset - still O(n) but with smaller constant factor
-        if any(normalized.startswith(s) for s in _CONTEXT_STARTER_PREFIXES):
-            return True
-
-        # Check if message requires user's personal input
-        # These are questions only the USER can answer (commitments, opinions, facts)
-        if any(normalized.startswith(s) for s in USER_INPUT_REQUIRED_STARTERS):
-            return True
-
-        return False
-
-    def _should_generate_after_acknowledgment(
+    def _search_examples(
         self,
         incoming: str,
-        contact: Contact | None,
-        thread: list[str] | None,
-    ) -> bool:
-        """Check if user typically provides substantive info after acknowledgments.
+        cached_embedder: CachedEmbedder,
+    ) -> list[dict[str, Any]]:
+        """Search FAISS index for similar triggers with error handling."""
+        try:
+            return self.index_searcher.search_with_pairs(
+                query=incoming,
+                k=5,
+                threshold=_SEARCH_THRESHOLD,
+                prefer_recent=True,
+                embedder=cached_embedder,
+            )
+        except FileNotFoundError:
+            logger.warning("FAISS index not found, generating without examples")
+            return []
+        except Exception as e:
+            logger.exception("Error searching index: %s", e)
+            return []
 
-        Returns True if we should generate instead of using canned acknowledgment.
-        This helps avoid responding with just "Got it!" when the user typically
-        follows acknowledgments with substantive information.
+    def _build_mobilization_hint(self, mobilization: MobilizationResult) -> str:
+        """Build a prompt instruction hint from mobilization classification."""
+        pressure = mobilization.pressure
+        response_type = mobilization.response_type
 
-        Args:
-            incoming: The incoming acknowledgment message.
-            contact: Optional contact for pattern lookup.
-            thread: Optional conversation thread context.
-
-        Returns:
-            True if generation is recommended over canned acknowledgment.
-        """
-        # If we have active thread context, likely mid-conversation
-        if thread and len(thread) >= 2:
-            # Check if previous message was a question - if so, definitely generate
-            last_thread_msg = thread[-1]
-            if "?" in last_thread_msg:
-                logger.debug("Acknowledgment follows question, generating substantive response")
-                return True
-            return True
-
-        # Check contact's historical pattern
-        if contact and contact.id:
-            try:
-                ack_pairs = self.db.get_pairs_by_trigger_pattern(
-                    contact_id=contact.id,
-                    pattern_type="acknowledgment",
-                    limit=10,
+        if pressure == ResponsePressure.HIGH:
+            if response_type == ResponseType.COMMITMENT:
+                return (
+                    "This message is a request or invitation requiring a commitment "
+                    "(accept, decline, or defer). Respond appropriately."
                 )
-                if ack_pairs:
-                    # If user's actual responses were substantive (>15 chars avg, lowered from 30),
-                    # we should generate rather than use canned response
-                    avg_response_len = sum(len(p.response_text) for p in ack_pairs) / len(ack_pairs)
-                    if avg_response_len > 15:
-                        logger.debug(
-                            "Contact %s has avg ack response length %.1f, using generation",
-                            contact.display_name,
-                            avg_response_len,
-                        )
-                        return True
-            except Exception as e:
-                logger.debug("Could not check ack patterns: %s", e)
+            if response_type == ResponseType.ANSWER:
+                return "This is a direct question. Provide a clear, specific answer."
+            if response_type == ResponseType.CONFIRMATION:
+                return "This seeks confirmation. Respond with a clear yes/no."
+            return "This message requires a substantive response."
 
-        return False
+        if pressure == ResponsePressure.MEDIUM:
+            if response_type == ResponseType.EMOTIONAL:
+                return (
+                    "This message shares emotional news or an experience. "
+                    "Respond with appropriate empathy or enthusiasm."
+                )
+            if response_type == ResponseType.ALIGNMENT:
+                return "This expresses an opinion or assessment. Respond naturally."
+            return "This message warrants a thoughtful response."
 
-    def _generic_acknowledgment_response(
-        self,
-        incoming: str,
-        contact: Contact | None,
-    ) -> dict[str, Any]:
-        """Generate a generic acknowledgment response.
+        if pressure == ResponsePressure.NONE:
+            return (
+                "This is a backchannel or closing. Keep response very brief "
+                "(1-3 words or an emoji)."
+            )
 
-        For simple acknowledgments (ok, thanks, yes), we return
-        a simple acknowledgment rather than searching the index.
-
-        Args:
-            incoming: The incoming acknowledgment.
-            contact: Optional contact for personalization.
-
-        Returns:
-            Routing result dict with acknowledgment response.
-        """
-        incoming_lower = incoming.lower().strip()
-
-        # Map acknowledgments to appropriate responses
-        if incoming_lower in ("thanks", "thank you", "thx", "ty"):
-            responses = ["You're welcome!", "No problem!", "Anytime!", "Of course!"]
-        elif incoming_lower in ("ok", "okay", "k", "kk", "got it", "alright"):
-            responses = ["👍", "Sounds good!", "Great!", "Perfect!"]
-        elif incoming_lower in ("yes", "yeah", "yep", "yup", "sure"):
-            responses = ["Great!", "Awesome!", "Perfect!", "👍"]
-        elif incoming_lower in ("no", "nope", "nah"):
-            responses = ["No worries!", "Okay!", "Got it!", "Understood!"]
-        elif incoming_lower in ("bye", "later"):
-            responses = ["Bye!", "Talk later!", "See you!", "👋"]
-        else:
-            responses = ["👍", "Got it!", "Okay!"]
-
-        selected = random.choice(responses)
-
-        return {
-            "type": "acknowledgment",
-            "response": selected,
-            "confidence": "high",
-            "similarity_score": 1.0,
-            "contact_style": contact.style_notes if contact else None,
-            "reason": "simple_acknowledgment",
-        }
-
-    def _is_professional_response(self, response: str) -> bool:
-        """Check if a response is professional in tone.
-
-        Args:
-            response: The response text to check.
-
-        Returns:
-            True if the response appears professional.
-        """
-        response_lower = response.lower()
-
-        # Unprofessional indicators
-        unprofessional = [
-            "lol",
-            "haha",
-            "lmao",
-            "omg",
-            "wtf",
-            "bruh",
-            "dude",
-            "bro",
-            "🤣",
-            "😂",
-            "😝",
-            "🙄",
-            "💀",
-        ]
-
-        return not any(term in response_lower for term in unprofessional)
+        # LOW pressure
+        return "This is a casual statement. Respond naturally and briefly."
 
     def route(
         self,
@@ -643,14 +322,10 @@ class ReplyRouter:
         thread: list[str] | None = None,
         chat_id: str | None = None,
     ) -> dict[str, Any]:
-        """Route an incoming message to the appropriate response strategy.
+        """Route an incoming message to LLM generation with RAG context.
 
-        Uses both intent classification and message classification:
-        - Message classifier determines type (question, statement, acknowledgment, etc.)
-        - Intent classifier determines user intent (reply, summarize, search, etc.)
-        - Simple acknowledgments/reactions are handled directly
-        - Messages needing clarification are flagged appropriately
-        - Other messages go through the quick_reply/generate/clarify pipeline
+        All non-empty messages go through generation. Response mobilization
+        informs the prompt, not the routing decision.
 
         Args:
             incoming: The incoming message text to respond to.
@@ -660,24 +335,21 @@ class ReplyRouter:
 
         Returns:
             Dict with routing result containing:
-            - type: 'quick_reply', 'generated', 'clarify', or 'acknowledgment'
+            - type: 'generated' or 'clarify'
             - response: The response text
             - confidence: 'high', 'medium', or 'low'
-            - Additional metadata (cluster_name, similarity_score, message_type, etc.)
+            - Additional metadata (similarity_score, similar_triggers, etc.)
         """
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
         cached_embedder = CachedEmbedder(get_embedder())
 
-        # Session-level embedding: compute once at start and reuse for all downstream operations
-        # This avoids recomputing the same embedding in classifiers and FAISS search
-        # The CachedEmbedder will cache this result for subsequent encode() calls
+        # Precompute embedding (reused by FAISS search)
         if incoming and incoming.strip():
             embed_start = time.perf_counter()
-            cached_embedder.encode(incoming)  # Warm the cache
+            cached_embedder.encode(incoming)
             latency_ms["embedding_precompute"] = (time.perf_counter() - embed_start) * 1000
 
-        # Verbose logging for debugging
         logger.info("=" * 60)
         logger.info("ROUTE START | input: %s", incoming[:80] if incoming else "(empty)")
 
@@ -689,8 +361,8 @@ class ReplyRouter:
             decision: str | None = None,
         ) -> dict[str, Any]:
             latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-            routing_decision = decision or self._normalize_routing_decision(
-                result.get("type", "clarify")
+            routing_decision = decision or (
+                "generate" if result.get("type") == "generated" else "clarify"
             )
             self._record_routing_metrics(
                 incoming=incoming,
@@ -701,7 +373,6 @@ class ReplyRouter:
                 faiss_candidates=faiss_candidates,
                 model_loaded=model_loaded,
             )
-            # Verbose logging for debugging
             logger.info(
                 "ROUTE END | decision=%s sim=%.3f latency=%s",
                 routing_decision,
@@ -712,6 +383,7 @@ class ReplyRouter:
             logger.info("=" * 60)
             return result
 
+        # Empty message check
         if not incoming or not incoming.strip():
             result = self._clarify_response(
                 "I received an empty message. Could you tell me what you need?",
@@ -719,252 +391,26 @@ class ReplyRouter:
             )
             return record_and_return(result, similarity_score=0.0, decision="clarify")
 
-        # Step 0: Get contact info for personalization (needed early for acknowledgments)
-        contact = None
-        if contact_id:
-            contact = self.db.get_contact(contact_id)
-        elif chat_id:
-            contact = self.db.get_contact_by_chat_id(chat_id)
+        # Get contact
+        contact = self._get_contact(contact_id, chat_id)
 
-        # Step 1 & 2: Classify message type and intent IN PARALLEL
-        # These classifiers are independent and can run concurrently
-        # Step 1: Classify intent
-        intent_result = None
-        classify_start = time.perf_counter()
+        # Classify response pressure
+        mobilization_start = time.perf_counter()
+        mobilization = classify_response_pressure(incoming)
+        latency_ms["mobilization"] = (time.perf_counter() - mobilization_start) * 1000
+        logger.debug(
+            "Mobilization: pressure=%s type=%s conf=%.2f",
+            mobilization.pressure.value,
+            mobilization.response_type.value,
+            mobilization.confidence,
+        )
 
-        try:
-            # Note: CachedEmbedder already has the embedding cached from precomputation
-            intent_result = self.intent_classifier.classify(
-                incoming,
-                embedder=cached_embedder,
-            )
-            latency_ms["intent_classify"] = (time.perf_counter() - classify_start) * 1000
-            logger.debug(
-                "Intent classified as %s (confidence: %.3f)",
-                intent_result.intent.value,
-                intent_result.confidence,
-            )
-        except Exception as e:
-            logger.warning("Intent classification failed: %s", e)
-            intent_result = None
+        # FAISS search for similar examples (always, low threshold)
+        search_start = time.perf_counter()
+        search_results = self._search_examples(incoming, cached_embedder)
+        latency_ms["faiss_search"] = (time.perf_counter() - search_start) * 1000
 
-        # Step 2: Handle simple acknowledgments directly (no FAISS search needed)
-        if self._is_simple_acknowledgment(incoming):
-            # Check if user typically follows acks with substantive info
-            if self._should_generate_after_acknowledgment(incoming, contact, thread):
-                logger.debug("Acknowledgment but context suggests generation needed")
-                # Fall through to FAISS search and generation
-            else:
-                result = self._generic_acknowledgment_response(incoming, contact)
-                return record_and_return(
-                    result,
-                    similarity_score=result.get("similarity_score", 0.0),
-                    decision="acknowledgment",
-                )
-
-        # Step 3: For QUICK_REPLY intents with high confidence, handle as acknowledgment
-        if (
-            intent_result
-            and intent_result.intent == IntentType.QUICK_REPLY
-            and intent_result.confidence >= 0.8
-        ):
-            # High-confidence quick replies should be handled with generic responses
-            result = self._generic_acknowledgment_response(incoming, contact)
-            return record_and_return(
-                result,
-                similarity_score=result.get("similarity_score", 0.0),
-                decision="quick_reply",
-            )
-
-        thresholds = self._get_thresholds()
-        quick_reply_threshold = thresholds["quick_reply"]
-        context_threshold = thresholds["context"]
-        generate_threshold = thresholds["generate"]
-        search_results = []  # Initialize early for context-dependent path
-
-        # Step 4b: Adjust thresholds based on intent classification
-        # Different intents warrant different routing strategies
-        intent_strategy = None
-        if intent_result and intent_result.confidence >= 0.7:
-            if intent_result.intent == IntentType.REPLY:
-                # User wants help composing - favor generation over quick_reply
-                quick_reply_threshold += 0.10
-                intent_strategy = "favor_generation"
-                logger.debug("REPLY intent (conf=%.2f), raising quick_reply threshold", intent_result.confidence)
-            elif intent_result.intent == IntentType.SUMMARIZE:
-                # User wants summarization - skip quick_reply entirely
-                quick_reply_threshold = 2.0  # Effectively disable
-                intent_strategy = "summarize"
-                logger.debug("SUMMARIZE intent (conf=%.2f), forcing generation path", intent_result.confidence)
-            elif intent_result.intent == IntentType.SEARCH:
-                # User searching for info - favor example retrieval, no quick_reply
-                quick_reply_threshold += 0.15
-                intent_strategy = "search_synthesis"
-                logger.debug("SEARCH intent (conf=%.2f), favoring retrieval", intent_result.confidence)
-
-        # Step 5: Check if message is context-dependent BEFORE FAISS search
-        # This avoids wasted latency when we know we'll need generation anyway
-        is_context_dependent = self._is_context_dependent(incoming)
-        if is_context_dependent:
-            logger.debug("Message is context-dependent, skipping quick_reply matching")
-            # Context-dependent questions need clarification or current context
-            if not thread or len(thread) < 2:
-                result = self._ask_for_clarification(incoming, thread)
-                return record_and_return(
-                    result,
-                    similarity_score=0.0,
-                    faiss_candidates=len(search_results),
-                    decision="clarify",
-                )
-            # If we have thread context, generate with it
-            model_loaded = self.generator.is_loaded()
-            generate_start = time.perf_counter()
-            result = self._generate_response(
-                incoming,
-                search_results,
-                contact,
-                thread,
-                chat_id=chat_id,
-                reason="context_dependent",
-            )
-            latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
-            similarity = search_results[0]["similarity"] if search_results else 0.0
-            return record_and_return(
-                result,
-                similarity_score=similarity,
-                faiss_candidates=len(search_results),
-                model_loaded=model_loaded,
-                decision="generate",
-            )
-
-        # Step 6: Search FAISS index for similar triggers
-        # Note: CachedEmbedder already has the embedding cached from precomputation
-        try:
-            search_start = time.perf_counter()
-            search_results = self.index_searcher.search_with_pairs(
-                query=incoming,
-                k=5,
-                threshold=generate_threshold,
-                prefer_recent=True,
-                embedder=cached_embedder,
-            )
-            latency_ms["faiss_search"] = (time.perf_counter() - search_start) * 1000
-        except FileNotFoundError:
-            # Index not built yet - fall back to generation
-            logger.warning("FAISS index not found, falling back to generation")
-            search_results = []
-        except Exception as e:
-            logger.exception("Error searching index: %s", e)
-            search_results = []
-
-        # Step 7: Filter coherent results early to avoid quick_reply churn
-        # This prevents selecting responses that don't fit the context
-        coherent_results = []
-        for match in search_results:
-            coherence = score_response_coherence(
-                match.get("trigger_text", incoming),
-                match["response_text"],
-            )
-            if coherence >= COHERENCE_THRESHOLD:
-                coherent_results.append(match)
-
-        # Step 8: Route based on best similarity score
-        if search_results:
-            best_result = search_results[0]
-            best_score = best_result["similarity"]
-
-            # High confidence -> quick_reply response with top-K variety
-            # Use coherent_results to ensure quality
-            if coherent_results and coherent_results[0]["similarity"] >= quick_reply_threshold:
-                # Get all high-confidence coherent matches for variety
-                high_confidence_matches = [
-                    r for r in coherent_results if r["similarity"] >= quick_reply_threshold
-                ]
-                quick_reply_start = time.perf_counter()
-                result = self._quick_reply_response(high_confidence_matches, contact, incoming)
-                latency_ms["quick_reply_select"] = (time.perf_counter() - quick_reply_start) * 1000
-
-                # Handle fallback if no coherent quick_replies found
-                if result.get("type") == "fallback_to_generation":
-                    logger.debug("Falling back to generation due to no coherent matches")
-                    model_loaded = self.generator.is_loaded()
-                    generate_start = time.perf_counter()
-                    result = self._generate_response(
-                        incoming,
-                        search_results,
-                        contact,
-                        thread,
-                        chat_id=chat_id,
-                        fallback=True,
-                        reason="no_coherent_quick_replies",
-                    )
-                    latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
-                    return record_and_return(
-                        result,
-                        similarity_score=best_score,
-                        faiss_candidates=len(search_results),
-                        model_loaded=model_loaded,
-                        decision="generate",
-                    )
-                return record_and_return(
-                    result,
-                    similarity_score=best_score,
-                    faiss_candidates=len(search_results),
-                    decision="quick_reply",
-                )
-
-            # Medium confidence -> LLM generation with context
-            if best_score >= context_threshold:
-                model_loaded = self.generator.is_loaded()
-                generate_start = time.perf_counter()
-                result = self._generate_response(
-                    incoming,
-                    search_results,
-                    contact,
-                    thread,
-                    chat_id=chat_id,
-                )
-                latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
-                return record_and_return(
-                    result,
-                    similarity_score=best_score,
-                    faiss_candidates=len(search_results),
-                    model_loaded=model_loaded,
-                    decision="generate",
-                )
-
-            # Low but above minimum -> try generation with caution
-            if best_score >= generate_threshold:
-                model_loaded = self.generator.is_loaded()
-                generate_start = time.perf_counter()
-                result = self._generate_response(
-                    incoming,
-                    search_results,
-                    contact,
-                    thread,
-                    chat_id=chat_id,
-                    cautious=True,
-                )
-                latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
-                return record_and_return(
-                    result,
-                    similarity_score=best_score,
-                    faiss_candidates=len(search_results),
-                    model_loaded=model_loaded,
-                    decision="generate",
-                )
-
-        # Very low confidence or no results -> check for vague references
-        if self._needs_clarification(incoming, thread):
-            result = self._ask_for_clarification(incoming, thread)
-            return record_and_return(
-                result,
-                similarity_score=0.0,
-                faiss_candidates=len(search_results),
-                decision="clarify",
-            )
-
-        # No similar patterns found - generate with general context
+        # Generate response
         model_loaded = self.generator.is_loaded()
         generate_start = time.perf_counter()
         result = self._generate_response(
@@ -973,10 +419,18 @@ class ReplyRouter:
             contact,
             thread,
             chat_id=chat_id,
-            fallback=True,
+            mobilization=mobilization,
         )
         latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
+
         similarity = search_results[0]["similarity"] if search_results else 0.0
+
+        # Map mobilization pressure to confidence
+        if mobilization.pressure == ResponsePressure.HIGH:
+            result["confidence"] = "high"
+        else:
+            result["confidence"] = "medium"
+
         return record_and_return(
             result,
             similarity_score=similarity,
@@ -985,121 +439,6 @@ class ReplyRouter:
             decision="generate",
         )
 
-    def _quick_reply_response(
-        self,
-        matches: list[dict[str, Any]],
-        contact: Contact | None,
-        incoming: str = "",
-    ) -> dict[str, Any]:
-        """Return a quick_reply response with variety from top-K matches.
-
-        Uses quality filtering and contact-aware selection:
-        - Filter by coherence score (response appropriateness)
-        - Filter by contact style (professional for boss, casual for friends)
-        - Pick randomly from remaining high-quality responses
-
-        Args:
-            matches: List of high-confidence matches from FAISS search.
-            contact: Optional contact for style adaptation.
-            incoming: The incoming message (for coherence scoring).
-
-        Returns:
-            Routing result dict with quick_reply response.
-        """
-        if not matches:
-            # Shouldn't happen, but handle gracefully
-            return self._clarify_response(
-                "I couldn't find a good match for that message.",
-                reason="no_matches",
-            )
-
-        best_match = matches[0]
-
-        # Step 1: Apply coherence scoring to filter inappropriate responses
-        scored_matches = []
-        for m in matches:
-            coherence = score_response_coherence(
-                m.get("trigger_text", incoming),
-                m["response_text"],
-            )
-            if coherence >= COHERENCE_THRESHOLD:
-                scored_matches.append((m, coherence))
-
-        # Step 2: Filter by contact style if needed
-        if contact and contact.relationship:
-            relationship = contact.relationship.lower()
-
-            # For professional relationships, filter out casual responses
-            if relationship in ("boss", "manager", "coworker", "colleague", "client"):
-                scored_matches = [
-                    (m, c)
-                    for m, c in scored_matches
-                    if self._is_professional_response(m["response_text"])
-                ]
-
-        # Step 3: If no coherent/appropriate responses remain, fall back to generation
-        if not scored_matches:
-            logger.debug(
-                "No coherent quick_reply matches (original: %d), falling back to generation",
-                len(matches),
-            )
-            # Return None to signal caller to use generation instead
-            # But we're already in _quick_reply_response, so return a clarify response
-            # Actually, we should fall back to generation - let's return a special marker
-            return {
-                "type": "fallback_to_generation",
-                "matches": matches,
-                "reason": "no_coherent_matches",
-            }
-
-        # Sort by coherence score (highest first)
-        scored_matches.sort(key=lambda x: x[1], reverse=True)
-
-        # If only one coherent match, use it directly
-        if len(scored_matches) == 1:
-            match, coherence = scored_matches[0]
-            return {
-                "type": "quick_reply",
-                "response": match["response_text"],
-                "confidence": "high",
-                "similarity_score": match["similarity"],
-                "coherence_score": coherence,
-                "cluster_name": match.get("cluster_name"),
-                "contact_style": contact.style_notes if contact else None,
-                "trigger_matched": match["trigger_text"],
-            }
-
-        # Multiple coherent matches: pick randomly from top responses for variety
-        top_matches = scored_matches[:MAX_QUICK_REPLIES]
-
-        # Build response -> (match, coherence) lookup dict for O(1) access
-        # Keep first occurrence (highest coherence) for each unique response
-        response_to_match: dict[str, tuple[dict[str, Any], float]] = {}
-        for m, c in top_matches:
-            resp_text = m["response_text"]
-            if resp_text not in response_to_match:
-                response_to_match[resp_text] = (m, c)
-
-        # Pick randomly from unique responses
-        unique_responses = list(response_to_match.keys())
-        selected_response = random.choice(unique_responses)
-
-        # O(1) lookup for selected match metadata
-        selected_match, selected_coherence = response_to_match[selected_response]
-
-        return {
-            "type": "quick_reply",
-            "response": selected_response,
-            "confidence": "high",
-            "similarity_score": best_match["similarity"],  # Report best score
-            "coherence_score": selected_coherence,
-            "cluster_name": selected_match.get("cluster_name"),
-            "contact_style": contact.style_notes if contact else None,
-            "trigger_matched": selected_match["trigger_text"],
-            "candidates_considered": len(unique_responses),
-            "coherent_matches": len(scored_matches),
-        }
-
     def _generate_response(
         self,
         incoming: str,
@@ -1107,8 +446,7 @@ class ReplyRouter:
         contact: Contact | None,
         thread: list[str] | None,
         chat_id: str | None = None,
-        cautious: bool = False,
-        fallback: bool = False,
+        mobilization: MobilizationResult | None = None,
         reason: str | None = None,
     ) -> dict[str, Any]:
         """Generate an LLM response with context from similar patterns.
@@ -1119,9 +457,8 @@ class ReplyRouter:
             contact: Contact for personalization.
             thread: Recent conversation context (if already available).
             chat_id: Chat ID for fetching conversation history from iMessage.
-            cautious: If True, add hedge language to response.
-            fallback: If True, this is a fallback when no patterns matched.
-            reason: Optional reason why generation was chosen over quick_reply.
+            mobilization: Response mobilization result for prompt guidance.
+            reason: Optional reason why generation was chosen.
 
         Returns:
             Routing result dict with generated response.
@@ -1139,9 +476,8 @@ class ReplyRouter:
         # Build conversation context - prefer passed thread, fetch from iMessage if not available
         context_messages = []
         if thread:
-            context_messages = thread[-10:]  # Use provided thread context
+            context_messages = thread[-10:]
         elif chat_id:
-            # Fetch conversation history from iMessage database
             context_messages = self._fetch_conversation_context(chat_id, limit=10)
             if context_messages:
                 logger.debug("Fetched %d messages from iMessage for context", len(context_messages))
@@ -1154,39 +490,32 @@ class ReplyRouter:
 
         # Get relationship profile for the contact
         relationship_profile = None
-        style_guide = None
+        contact_context: ContactProfileContext | None = None
         if contact:
-            # Try to load the full learned relationship profile
-            full_profile = load_profile(str(contact.id)) if contact.id else None
-
-            if full_profile and full_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
-                # Use learned patterns from message history
-                style_guide = generate_style_guide(full_profile)
-                relationship_profile = {
-                    "tone": (
-                        "professional"
-                        if full_profile.tone_profile.formality_score >= 0.7
-                        else "casual"
-                        if full_profile.tone_profile.formality_score < 0.4
-                        else "balanced"
-                    ),
-                    "avg_message_length": full_profile.tone_profile.avg_message_length,
-                    "emoji_frequency": full_profile.tone_profile.emoji_frequency,
-                    "relationship": contact.relationship or "friend",
-                    "style_guide": style_guide,
-                }
-                logger.debug(
-                    "Using learned relationship profile for %s (formality=%.2f, %d messages)",
-                    contact.display_name,
-                    full_profile.tone_profile.formality_score,
-                    full_profile.message_count,
-                )
-            else:
-                # Fall back to manual style notes
+            profile = None
+            if is_contact_profile_context_enabled():
+                profile = get_contact_profile(chat_id) if chat_id else None
+                if profile is None and contact.id:
+                    profile = get_contact_profile(str(contact.id))
+                if profile and profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
+                    contact_context = ContactProfileContext.from_contact_profile(profile)
+                    relationship_profile = contact_context.to_prompt_payload()
+                    logger.debug(
+                        "Using contact profile context for %s (formality=%.2f, %d messages)",
+                        contact.display_name,
+                        profile.formality_score,
+                        profile.message_count,
+                    )
+            if contact_context is None:
                 relationship_profile = {
                     "tone": contact.style_notes or "casual",
                     "relationship": contact.relationship or "friend",
                 }
+
+        # Build mobilization hint for the prompt
+        instruction = None
+        if mobilization:
+            instruction = self._build_mobilization_hint(mobilization)
 
         # Build the prompt
         prompt = build_rag_reply_prompt(
@@ -1195,16 +524,22 @@ class ReplyRouter:
             contact_name=contact.display_name if contact else "them",
             similar_exchanges=similar_exchanges if similar_exchanges else None,
             relationship_profile=relationship_profile,
+            contact_context=contact_context,
+            instruction=instruction,
         )
 
-        # Generate with the model using LFM-optimal parameters
+        # Determine max_tokens based on mobilization
+        max_tokens = 100
+        if mobilization and mobilization.pressure == ResponsePressure.NONE:
+            max_tokens = 20  # Backchannels should be very brief
+
+        # Generate with the model
         try:
             request = GenerationRequest(
                 prompt=prompt,
                 context_documents=[context] if context else [],
                 few_shot_examples=similar_exchanges,
-                max_tokens=100,  # Text messages should be short
-                # Using LFM defaults: temp=0.1, top_p=0.1, top_k=50, repetition_penalty=1.05
+                max_tokens=max_tokens,
             )
 
             response = self.generator.generate(request)
@@ -1222,18 +557,18 @@ class ReplyRouter:
             for greeting in formal_greetings:
                 if generated_text.lower().startswith(greeting):
                     generated_text = generated_text[len(greeting) :].strip()
-                    # Re-capitalize first letter
                     if generated_text:
                         generated_text = generated_text[0].upper() + generated_text[1:]
                     break
 
-            # Trim overly long responses (>2x expected length)
+            # Trim overly long responses
             avg_msg_len = 50
-            if relationship_profile:
+            if contact_context:
+                avg_msg_len = contact_context.avg_message_length
+            elif relationship_profile:
                 avg_msg_len = relationship_profile.get("avg_message_length", 50)
             expected_length = int(avg_msg_len) * 2
             if len(generated_text) > max(80, expected_length) and ". " in generated_text:
-                # Keep only first sentence(s) up to limit
                 sentences = generated_text.split(". ")
                 trimmed = []
                 current_len = 0
@@ -1247,17 +582,15 @@ class ReplyRouter:
                     if not generated_text.endswith((".", "!", "?")):
                         generated_text += "."
 
-            confidence = "medium" if not cautious else "low"
             similarity = search_results[0]["similarity"] if search_results else 0.0
 
-            result = {
+            result: dict[str, Any] = {
                 "type": "generated",
                 "response": generated_text,
-                "confidence": confidence,
+                "confidence": "medium",
                 "similarity_score": similarity,
                 "contact_style": contact.style_notes if contact else None,
                 "similar_triggers": similar_triggers if similar_triggers else None,
-                "is_fallback": fallback,
             }
             if reason:
                 result["generation_reason"] = reason
@@ -1269,68 +602,6 @@ class ReplyRouter:
                 "I'm having trouble generating a response. Could you give me more details?",
                 reason="generation_error",
             )
-
-    def _needs_clarification(
-        self,
-        incoming: str,
-        thread: list[str] | None,
-    ) -> bool:
-        """Check if the message needs clarification due to vague references.
-
-        Args:
-            incoming: The incoming message.
-            thread: Previous conversation context.
-
-        Returns:
-            True if clarification is needed, False otherwise.
-        """
-        incoming_lower = incoming.lower()
-
-        # Check for vague references without clear context (O(n) with frozenset)
-        has_vague_ref = any(ref in incoming_lower for ref in _VAGUE_REFERENCES)
-
-        if has_vague_ref:
-            # If we have thread context, we might be able to resolve the reference
-            if thread and len(thread) >= 2:
-                return False  # Assume context provides enough info
-            return True
-
-        # Very short messages with no context
-        if len(incoming.split()) <= 2 and not thread:
-            return True
-
-        return False
-
-    def _ask_for_clarification(
-        self,
-        incoming: str,
-        thread: list[str] | None,
-    ) -> dict[str, Any]:
-        """Generate a clarification request.
-
-        Args:
-            incoming: The incoming message.
-            thread: Previous conversation context.
-
-        Returns:
-            Routing result dict with clarification request.
-        """
-        incoming_lower = incoming.lower()
-
-        # Detect what kind of clarification is needed (using frozensets for O(1) lookup)
-        if any(word in incoming_lower for word in _VAGUE_REFERENCES):
-            clarification = "What are you referring to? I want to make sure I understand."
-        elif any(word in incoming_lower for word in _TIME_WORDS):
-            clarification = "Could you be more specific about the timing?"
-        elif any(word in incoming_lower for word in _LOCATION_WORDS):
-            clarification = "Which location are you asking about?"
-        else:
-            clarification = (
-                "Could you give me a bit more context? "
-                "I want to make sure I give you the right response."
-            )
-
-        return self._clarify_response(clarification, reason="vague_reference")
 
     def _clarify_response(
         self,
@@ -1363,8 +634,7 @@ class ReplyRouter:
     ) -> dict[str, Any]:
         """Route with multi-option generation for commitment questions.
 
-        For commitment questions (invitations, requests, yes/no questions),
-        generates multiple response options (AGREE, DECLINE, DEFER).
+        Simplified: delegates to route() and wraps result with multi-option keys.
 
         Args:
             incoming: The incoming message text.
@@ -1379,49 +649,16 @@ class ReplyRouter:
             - suggestions: List of response texts (backward compatible)
             - trigger_da: Classified trigger type
         """
-        from jarvis.multi_option import get_multi_option_generator
-
-        # Get contact info
-        contact = None
-        contact_name = None
-        if contact_id:
-            contact = self.db.get_contact(contact_id)
-        elif chat_id:
-            contact = self.db.get_contact_by_chat_id(chat_id)
-
-        if contact:
-            contact_name = contact.display_name
-
-        # Generate options
-        generator = get_multi_option_generator()
-        result = generator.generate_options(
-            trigger=incoming,
-            contact_name=contact_name,
-            contact=contact,
-            force_commitment=force_multi,
+        result = self.route(
+            incoming=incoming,
+            contact_id=contact_id,
+            chat_id=chat_id,
         )
-
-        # Convert to dict for API
-        response = result.to_dict()
-
-        # If not a commitment question, fall back to single response
-        if not result.is_commitment and not force_multi:
-            # Use regular routing
-            single_result = self.route(
-                incoming=incoming,
-                contact_id=contact_id,
-                chat_id=chat_id,
-            )
-            # Add commitment info
-            single_result["is_commitment"] = False
-            single_result["options"] = []
-            return single_result
-
-        # Add metadata
-        response["type"] = "multi_option"
-        response["confidence"] = "high" if result.has_options else "low"
-
-        return response
+        result["is_commitment"] = False
+        result["options"] = []
+        result["suggestions"] = [result["response"]]
+        result["trigger_da"] = None
+        return result
 
     def get_routing_stats(self) -> dict[str, Any]:
         """Get statistics about the router's index and database.
@@ -1487,7 +724,7 @@ def reset_reply_router() -> None:
 # =============================================================================
 
 __all__ = [
-    # Configuration
+    # Configuration (legacy, kept for backwards compatibility)
     "QUICK_REPLY_THRESHOLD",
     "CONTEXT_THRESHOLD",
     "GENERATE_THRESHOLD",

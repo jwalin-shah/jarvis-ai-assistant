@@ -1,12 +1,10 @@
 """Unit tests for JARVIS Reply Router.
 
-Tests cover routing logic, similarity-based path selection, acknowledgment handling,
-singleton pattern, and edge cases.
+Tests cover routing logic, mobilization-based generation, singleton pattern,
+and edge cases.
 
-The ReplyRouter routes messages through three paths based on similarity:
-- Quick Reply (similarity >= 0.90): Direct cached response
-- Generate (0.50-0.90): LLM generation with context
-- Clarify (< 0.50): Request more information
+The ReplyRouter routes all non-empty messages through LLM generation with RAG context.
+Response mobilization (Stivers & Rossano 2010) informs the prompt, not the routing decision.
 """
 
 from __future__ import annotations
@@ -15,23 +13,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from jarvis.db import Contact, Pair
+from jarvis.db import Contact
 from jarvis.router import (
-    CONTEXT_DEPENDENT_PATTERNS,
+    CONTEXT_THRESHOLD,
     GENERATE_THRESHOLD,
     QUICK_REPLY_THRESHOLD,
-    SIMPLE_ACKNOWLEDGMENTS,
     ReplyRouter,
     RouterError,
     RouteResult,
     get_reply_router,
     reset_reply_router,
 )
-
-# Alias for backwards compatibility with tests
-TEMPLATE_THRESHOLD = QUICK_REPLY_THRESHOLD
-
-# Marker for tests requiring sentence_transformers
 
 # =============================================================================
 # Fixtures
@@ -45,7 +37,6 @@ def mock_db() -> MagicMock:
     db.init_schema = MagicMock()
     db.get_contact = MagicMock(return_value=None)
     db.get_contact_by_chat_id = MagicMock(return_value=None)
-    db.get_pairs_by_trigger_pattern = MagicMock(return_value=[])
     db.get_stats = MagicMock(return_value={"pairs": 100, "contacts": 10})
     db.get_active_index = MagicMock(return_value=None)
     return db
@@ -64,7 +55,6 @@ def mock_generator() -> MagicMock:
     """Create a mock MLXGenerator."""
     generator = MagicMock()
     generator.is_loaded = MagicMock(return_value=False)
-    # Return a mock response with expected attributes
     mock_response = MagicMock()
     mock_response.text = "Generated response"
     generator.generate = MagicMock(return_value=mock_response)
@@ -72,30 +62,16 @@ def mock_generator() -> MagicMock:
 
 
 @pytest.fixture
-def mock_intent_classifier() -> MagicMock:
-    """Create a mock IntentClassifier."""
-    from jarvis.intent import IntentResult, IntentType
-
-    classifier = MagicMock()
-    classifier.classify = MagicMock(
-        return_value=IntentResult(intent=IntentType.REPLY, confidence=0.8)
-    )
-    return classifier
-
-
-@pytest.fixture
 def router(
     mock_db: MagicMock,
     mock_index_searcher: MagicMock,
     mock_generator: MagicMock,
-    mock_intent_classifier: MagicMock,
 ) -> ReplyRouter:
     """Create a ReplyRouter with all mocked dependencies."""
     return ReplyRouter(
         db=mock_db,
         index_searcher=mock_index_searcher,
         generator=mock_generator,
-        intent_classifier=mock_intent_classifier,
     )
 
 
@@ -112,23 +88,6 @@ def sample_contact() -> Contact:
     )
 
 
-@pytest.fixture
-def sample_pair() -> Pair:
-    """Create a sample pair for tests."""
-    from datetime import datetime
-
-    return Pair(
-        id=1,
-        contact_id=1,
-        trigger_text="want to grab lunch?",
-        response_text="Sure! What time?",
-        trigger_timestamp=datetime(2024, 1, 1, 12, 0),
-        response_timestamp=datetime(2024, 1, 1, 12, 5),
-        chat_id="chat123",
-        quality_score=0.9,
-    )
-
-
 # =============================================================================
 # ReplyRouter Initialization Tests
 # =============================================================================
@@ -142,19 +101,16 @@ class TestReplyRouterInit:
         mock_db: MagicMock,
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
-        mock_intent_classifier: MagicMock,
     ) -> None:
         """Test initialization with all dependencies provided."""
         router = ReplyRouter(
             db=mock_db,
             index_searcher=mock_index_searcher,
             generator=mock_generator,
-            intent_classifier=mock_intent_classifier,
         )
         assert router._db is mock_db
         assert router._index_searcher is mock_index_searcher
         assert router._generator is mock_generator
-        assert router._intent_classifier is mock_intent_classifier
 
     def test_init_with_no_dependencies(self) -> None:
         """Test initialization with no dependencies (lazy loading)."""
@@ -162,7 +118,6 @@ class TestReplyRouterInit:
         assert router._db is None
         assert router._index_searcher is None
         assert router._generator is None
-        assert router._intent_classifier is None
 
     def test_db_property_creates_default(self) -> None:
         """Test db property creates default instance when None."""
@@ -187,7 +142,6 @@ class TestReplyRouterInit:
                 mock_searcher_cls.return_value = mock_searcher
 
                 router = ReplyRouter()
-                # Access the property to trigger lazy creation
                 router._index_searcher = None
                 result = router.index_searcher
 
@@ -195,166 +149,128 @@ class TestReplyRouterInit:
 
     def test_generator_property_creates_default(self) -> None:
         """Test generator property creates default instance when None."""
-        # Create router with explicit generator to avoid real model loading
         mock_gen = MagicMock()
         router = ReplyRouter(generator=mock_gen)
-
-        # Access the property - should return the provided generator
         result = router.generator
-
         assert result is mock_gen
 
 
 # =============================================================================
-# Route Method - Template Path Tests
+# Always Generates Tests
 # =============================================================================
 
 
-class TestRouteTemplatePath:
-    """Tests for routing to quick_reply path (high similarity >= 0.95)."""
+class TestAlwaysGenerates:
+    """Tests that all non-empty messages go through LLM generation."""
 
-    @patch("jarvis.router.score_response_coherence", return_value=0.9)
-    def test_template_path_with_high_similarity(
-        self,
-        mock_coherence: MagicMock,
-        mock_db: MagicMock,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test that high similarity scores route to quick_reply path."""
-        from jarvis.intent import IntentResult, IntentType
-
-        # Configure mock to return high similarity result
-        mock_index_searcher.search_with_pairs.return_value = [
-            {
-                "trigger_text": "want to get lunch?",
-                "response_text": "Sounds good! What time?",
-                "similarity": 0.96,  # Above QUICK_REPLY_THRESHOLD (0.95)
-                "cluster_name": "lunch_plans",
-            }
-        ]
-
-        # Use low-confidence intent so threshold isn't adjusted
-        mock_intent = MagicMock()
-        mock_intent.classify = MagicMock(
-            return_value=IntentResult(intent=IntentType.REPLY, confidence=0.5)
-        )
-
-        router = ReplyRouter(
-            db=mock_db,
-            index_searcher=mock_index_searcher,
-            generator=mock_generator,
-            intent_classifier=mock_intent,
-        )
-
-        result = router.route("want to grab lunch?")
-
-        assert result["type"] == "quick_reply"
-        assert result["confidence"] == "high"
-        assert result["similarity_score"] >= TEMPLATE_THRESHOLD
-
-    @patch("jarvis.router.score_response_coherence", return_value=0.9)
-    def test_template_path_selects_from_multiple_matches(
-        self,
-        mock_coherence: MagicMock,
-        mock_db: MagicMock,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test quick_reply selection from multiple high-confidence matches."""
-        from jarvis.intent import IntentResult, IntentType
-
-        mock_index_searcher.search_with_pairs.return_value = [
-            {
-                "trigger_text": "want to get lunch?",
-                "response_text": "Sure! What time?",
-                "similarity": 0.96,  # Above QUICK_REPLY_THRESHOLD (0.95)
-                "cluster_name": "lunch",
-            },
-            {
-                "trigger_text": "want to grab food?",
-                "response_text": "Yes! Where?",
-                "similarity": 0.96,
-                "cluster_name": "lunch",
-            },
-        ]
-
-        # Use low-confidence intent so threshold isn't adjusted
-        mock_intent = MagicMock()
-        mock_intent.classify = MagicMock(
-            return_value=IntentResult(intent=IntentType.REPLY, confidence=0.5)
-        )
-
-        router = ReplyRouter(
-            db=mock_db,
-            index_searcher=mock_index_searcher,
-            generator=mock_generator,
-            intent_classifier=mock_intent,
-        )
-
-        result = router.route("want to grab lunch?")
-
-        assert result["type"] == "quick_reply"
-        # Response should be one of the matched responses
-        assert result["response"] in ["Sure! What time?", "Yes! Where?"]
-
-    def test_template_path_skipped_for_context_dependent(
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "want to grab lunch?",
+            "what time?",
+            "ok",
+            "thanks",
+            "how are you?",
+            "are you coming to the party?",
+            "I'm doing well",
+            "lol",
+            "The weather is nice today",
+            "sounds good to me",
+        ],
+    )
+    def test_all_messages_generate(
         self,
         router: ReplyRouter,
         mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
+        message: str,
     ) -> None:
-        """Test that context-dependent messages skip template path."""
-        # Even with high similarity, context-dependent should not use template
-        mock_index_searcher.search_with_pairs.return_value = [
-            {
-                "trigger_text": "what time?",
-                "response_text": "3pm",
-                "similarity": 0.98,
-            }
-        ]
+        """Test that all non-empty messages route to generation."""
+        mock_index_searcher.search_with_pairs.return_value = []
 
-        result = router.route("what time?")
+        result = router.route(message)
 
-        # Should ask for clarification since no thread context
+        assert result["type"] == "generated"
+        mock_generator.generate.assert_called()
+
+    def test_empty_message_clarifies(self, router: ReplyRouter) -> None:
+        """Test that empty messages return clarify."""
+        result = router.route("")
+        assert result["type"] == "clarify"
+        assert "empty" in result["response"].lower()
+
+    def test_whitespace_only_clarifies(self, router: ReplyRouter) -> None:
+        """Test that whitespace-only messages return clarify."""
+        result = router.route("   ")
         assert result["type"] == "clarify"
 
 
 # =============================================================================
-# Route Method - Generate Path Tests
+# Mobilization Integration Tests
+# =============================================================================
+
+
+class TestMobilizationIntegration:
+    """Tests that mobilization pressure maps to confidence correctly."""
+
+    def test_high_pressure_high_confidence(
+        self,
+        router: ReplyRouter,
+        mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
+    ) -> None:
+        """Test HIGH pressure messages produce high confidence."""
+        mock_index_searcher.search_with_pairs.return_value = []
+
+        result = router.route("Can you pick me up at 5?")
+
+        assert result["type"] == "generated"
+        assert result["confidence"] == "high"
+
+    def test_low_pressure_medium_confidence(
+        self,
+        router: ReplyRouter,
+        mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
+    ) -> None:
+        """Test LOW pressure messages produce medium confidence."""
+        mock_index_searcher.search_with_pairs.return_value = []
+
+        result = router.route("I think the weather is nice")
+
+        assert result["type"] == "generated"
+        assert result["confidence"] == "medium"
+
+    def test_medium_pressure_medium_confidence(
+        self,
+        router: ReplyRouter,
+        mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
+    ) -> None:
+        """Test MEDIUM pressure messages produce medium confidence."""
+        mock_index_searcher.search_with_pairs.return_value = []
+
+        result = router.route("I got the job!!")
+
+        assert result["type"] == "generated"
+        assert result["confidence"] == "medium"
+
+
+# =============================================================================
+# Generate Path Tests
 # =============================================================================
 
 
 class TestRouteGeneratePath:
-    """Tests for routing to generate path (0.50-0.90 similarity)."""
+    """Tests for generation with FAISS context."""
 
-    def test_generate_path_with_medium_similarity(
+    def test_generate_with_similar_examples(
         self,
         router: ReplyRouter,
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
-        """Test that medium similarity scores route to generate path."""
-        mock_index_searcher.search_with_pairs.return_value = [
-            {
-                "trigger_text": "dinner tonight?",
-                "response_text": "Sure, what time?",
-                "similarity": 0.75,
-            }
-        ]
-
-        result = router.route("want to get dinner?")
-
-        assert result["type"] == "generated"
-        assert result["confidence"] == "medium"
-        mock_generator.generate.assert_called_once()
-
-    def test_generate_path_uses_similar_examples(
-        self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test that generate path uses similar patterns as context."""
+        """Test generation uses similar patterns as context."""
         mock_index_searcher.search_with_pairs.return_value = [
             {
                 "trigger_text": "coffee tomorrow?",
@@ -372,237 +288,62 @@ class TestRouteGeneratePath:
 
         assert result["type"] == "generated"
         assert result.get("similar_triggers") is not None
+        assert len(result["similar_triggers"]) == 2
 
-    def test_generate_path_with_low_but_above_threshold(
+    def test_generate_fallback_on_no_index(
         self,
         router: ReplyRouter,
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
-        """Test cautious generation with score just above threshold."""
-        mock_index_searcher.search_with_pairs.return_value = [
-            {
-                "trigger_text": "some message",
-                "response_text": "Some response",
-                "similarity": 0.52,  # Just above GENERATE_THRESHOLD
-            }
-        ]
-
-        result = router.route("a different message")
-
-        assert result["type"] == "generated"
-        assert result["confidence"] == "low"
-
-    def test_generate_path_fallback_on_no_index(
-        self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test that generation falls back when FAISS index not found."""
+        """Test generation works when FAISS index not found."""
         mock_index_searcher.search_with_pairs.side_effect = FileNotFoundError("Index not found")
 
-        # Use a longer message that won't trigger clarification
-        result = router.route("I'm doing well, how about you?")
+        result = router.route("how are you doing?")
 
-        # Should fall through to generation or clarify (depending on vagueness check)
-        assert result["type"] in ["generated", "clarify"]
-        if result["type"] == "generated":
-            assert result.get("is_fallback") is True
+        assert result["type"] == "generated"
+
+    def test_generate_fallback_on_index_error(
+        self,
+        router: ReplyRouter,
+        mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
+    ) -> None:
+        """Test generation works when FAISS search errors."""
+        mock_index_searcher.search_with_pairs.side_effect = Exception("Index error")
+
+        result = router.route("tell me about the project")
+
+        assert result["type"] == "generated"
 
 
 # =============================================================================
-# Route Method - Clarify Path Tests
+# Clarify Path Tests
 # =============================================================================
 
 
 class TestRouteClarifyPath:
-    """Tests for routing to clarify path (low similarity < 0.50)."""
+    """Tests for routing to clarify path (empty messages only)."""
 
-    def test_clarify_path_with_no_results(
+    def test_empty_message_returns_clarify(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
     ) -> None:
-        """Test that no search results with vague message routes to clarify."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
-        # Use a message that would trigger clarification
-        result = router.route("that thing")
+        """Test that empty message returns clarify response."""
+        result = router.route("")
 
         assert result["type"] == "clarify"
-        assert result["confidence"] == "low"
-
-    def test_clarify_path_with_vague_reference(
-        self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
-    ) -> None:
-        """Test clarification for messages with vague references."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
-        result = router.route("it")
-
-        assert result["type"] == "clarify"
-        assert "refer" in result["response"].lower() or "context" in result["response"].lower()
-
-    def test_clarify_path_for_context_dependent_without_thread(
-        self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
-    ) -> None:
-        """Test clarification for context-dependent messages without thread."""
-        mock_index_searcher.search_with_pairs.return_value = [
-            {"trigger_text": "where?", "response_text": "At the office", "similarity": 0.95}
-        ]
-
-        # Context-dependent without thread should clarify
-        result = router.route("where?", thread=None)
-
-        assert result["type"] == "clarify"
+        assert "empty" in result["response"].lower()
 
     def test_clarify_response_includes_reason(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
     ) -> None:
         """Test that clarify responses include a reason."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
         result = router.route("")
 
         assert result["type"] == "clarify"
         assert "reason" in result
-
-
-# =============================================================================
-# Acknowledgment Handling Tests
-# =============================================================================
-
-
-class TestAcknowledgmentHandling:
-    """Tests for simple acknowledgment handling."""
-
-    @pytest.mark.parametrize(
-        "acknowledgment",
-        # Note: "cool", "nice", "lol" removed - these are emotional reactions
-        # that should trigger LLM generation, not canned responses
-        ["ok", "okay", "yes", "yeah", "sure", "thanks", "got it"],
-    )
-    def test_simple_acknowledgments_detected(
-        self,
-        router: ReplyRouter,
-        acknowledgment: str,
-    ) -> None:
-        """Test that simple acknowledgments are detected correctly."""
-        assert router._is_simple_acknowledgment(acknowledgment) is True
-
-    @pytest.mark.parametrize(
-        "non_acknowledgment",
-        ["what time?", "can you help?", "tell me more", "hello there"],
-    )
-    def test_non_acknowledgments_not_detected(
-        self,
-        router: ReplyRouter,
-        non_acknowledgment: str,
-    ) -> None:
-        """Test that non-acknowledgments are not falsely detected."""
-        assert router._is_simple_acknowledgment(non_acknowledgment) is False
-
-    def test_acknowledgment_response_thanks(
-        self,
-        router: ReplyRouter,
-        sample_contact: Contact,
-    ) -> None:
-        """Test acknowledgment response for 'thanks'."""
-        result = router._generic_acknowledgment_response("thanks", sample_contact)
-
-        assert result["type"] == "acknowledgment"
-        assert result["confidence"] == "high"
-        assert result["response"] in [
-            "You're welcome!",
-            "No problem!",
-            "Anytime!",
-            "Of course!",
-        ]
-
-    def test_acknowledgment_response_ok(
-        self,
-        router: ReplyRouter,
-        sample_contact: Contact,
-    ) -> None:
-        """Test acknowledgment response for 'ok'."""
-        result = router._generic_acknowledgment_response("ok", sample_contact)
-
-        assert result["type"] == "acknowledgment"
-        assert result["response"] in ["👍", "Sounds good!", "Great!", "Perfect!"]
-
-    def test_acknowledgment_response_bye(
-        self,
-        router: ReplyRouter,
-        sample_contact: Contact,
-    ) -> None:
-        """Test acknowledgment response for 'bye'."""
-        result = router._generic_acknowledgment_response("bye", sample_contact)
-
-        assert result["type"] == "acknowledgment"
-        assert result["response"] in ["Bye!", "Talk later!", "See you!", "👋"]
-
-
-# =============================================================================
-# Context-Dependent Message Tests
-# =============================================================================
-
-
-class TestContextDependentMessages:
-    """Tests for context-dependent message handling."""
-
-    @pytest.mark.parametrize(
-        "message",
-        list(CONTEXT_DEPENDENT_PATTERNS)[:5],  # Test subset
-    )
-    def test_context_dependent_patterns_detected(
-        self,
-        router: ReplyRouter,
-        message: str,
-    ) -> None:
-        """Test that context-dependent patterns are detected."""
-        assert router._is_context_dependent(message) is True
-
-    def test_user_input_required_detected(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that user-input-required messages are detected."""
-        assert router._is_context_dependent("are you coming?") is True
-        assert router._is_context_dependent("can you make it?") is True
-        assert router._is_context_dependent("do you want to go?") is True
-
-    def test_normal_messages_not_context_dependent(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that normal messages are not marked context-dependent."""
-        assert router._is_context_dependent("Let's meet at 5pm") is False
-        assert router._is_context_dependent("I'll bring the snacks") is False
-
-    def test_context_dependent_with_thread_generates(
-        self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test context-dependent with thread context generates response."""
-        mock_index_searcher.search_with_pairs.return_value = [
-            {"trigger_text": "what time?", "response_text": "5pm", "similarity": 0.95}
-        ]
-
-        result = router.route(
-            "what time?",
-            thread=["Hey, want to grab dinner?", "Sure!"],
-        )
-
-        assert result["type"] == "generated"
 
 
 # =============================================================================
@@ -631,7 +372,6 @@ class TestSingleton:
             router2 = get_reply_router()
 
             assert router1 is router2
-            # Constructor should only be called once
             mock_router_cls.assert_called_once()
 
     def test_reset_reply_router(self) -> None:
@@ -656,25 +396,6 @@ class TestSingleton:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_empty_message_returns_clarify(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that empty message returns clarify response."""
-        result = router.route("")
-
-        assert result["type"] == "clarify"
-        assert "empty" in result["response"].lower()
-
-    def test_whitespace_only_message_returns_clarify(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that whitespace-only message returns clarify."""
-        result = router.route("   ")
-
-        assert result["type"] == "clarify"
-
     def test_route_with_contact_id(
         self,
         router: ReplyRouter,
@@ -686,7 +407,7 @@ class TestEdgeCases:
         mock_db.get_contact.return_value = sample_contact
         mock_index_searcher.search_with_pairs.return_value = []
 
-        router.route("hello", contact_id=1)
+        router.route("hello there!", contact_id=1)
 
         mock_db.get_contact.assert_called_with(1)
 
@@ -702,7 +423,7 @@ class TestEdgeCases:
         mock_db.get_contact_by_chat_id.return_value = sample_contact
         mock_index_searcher.search_with_pairs.return_value = []
 
-        router.route("hello", chat_id="chat123")
+        router.route("hello there!", chat_id="chat123")
 
         mock_db.get_contact_by_chat_id.assert_called_with("chat123")
 
@@ -718,24 +439,10 @@ class TestEdgeCases:
         ]
         mock_generator.generate.side_effect = RuntimeError("Generation failed")
 
-        result = router.route("tell me something")
+        result = router.route("tell me something interesting")
 
         assert result["type"] == "clarify"
         assert "trouble" in result["response"].lower()
-
-    def test_index_search_exception_falls_back_to_generation(
-        self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test that index search errors fall back to generation."""
-        mock_index_searcher.search_with_pairs.side_effect = Exception("Index error")
-
-        result = router.route("how are you?")
-
-        # Should attempt generation
-        assert result["type"] in ["generated", "clarify"]
 
 
 # =============================================================================
@@ -750,12 +457,12 @@ class TestRouteResult:
         """Test basic RouteResult creation."""
         result = RouteResult(
             response="Hello!",
-            type="template",
+            type="generated",
             confidence="high",
             similarity_score=0.95,
         )
         assert result.response == "Hello!"
-        assert result.type == "template"
+        assert result.type == "generated"
         assert result.confidence == "high"
         assert result.similarity_score == 0.95
 
@@ -773,57 +480,22 @@ class TestRouteResult:
 
 
 # =============================================================================
-# Thresholds Tests
+# Legacy Thresholds Tests
 # =============================================================================
 
 
 class TestThresholds:
-    """Tests for routing thresholds."""
+    """Tests for legacy routing thresholds (kept for backwards compatibility)."""
 
-    def test_template_threshold_in_valid_range(self) -> None:
-        """Test TEMPLATE_THRESHOLD is within valid range.
-
-        Template threshold should be high (0.8-1.0) to only match near-exact triggers.
-        Actual value may change based on evaluation results.
-        """
-        assert 0.8 <= TEMPLATE_THRESHOLD <= 1.0, (
-            f"TEMPLATE_THRESHOLD={TEMPLATE_THRESHOLD} should be in [0.8, 1.0]"
-        )
-
-    def test_generate_threshold_in_valid_range(self) -> None:
-        """Test GENERATE_THRESHOLD is within valid range.
-
-        Generate threshold should be moderate (0.3-0.6) to allow LLM generation
-        with some context examples. Actual value may change based on evaluation.
-        """
-        assert 0.3 <= GENERATE_THRESHOLD <= 0.6, (
-            f"GENERATE_THRESHOLD={GENERATE_THRESHOLD} should be in [0.3, 0.6]"
-        )
+    def test_thresholds_exist(self) -> None:
+        """Test that legacy threshold constants still exist."""
+        assert QUICK_REPLY_THRESHOLD == 0.95
+        assert CONTEXT_THRESHOLD == 0.65
+        assert GENERATE_THRESHOLD == 0.45
 
     def test_threshold_ordering(self) -> None:
-        """Test that thresholds are properly ordered.
-
-        TEMPLATE_THRESHOLD > GENERATE_THRESHOLD must hold for routing logic.
-        """
-        assert TEMPLATE_THRESHOLD > GENERATE_THRESHOLD, (
-            f"TEMPLATE_THRESHOLD ({TEMPLATE_THRESHOLD}) must be > "
-            f"GENERATE_THRESHOLD ({GENERATE_THRESHOLD})"
-        )
-
-    def test_simple_acknowledgments_set(self) -> None:
-        """Test SIMPLE_ACKNOWLEDGMENTS is empty (moved to text_normalizer).
-
-        Acknowledgment detection is now centralized in jarvis.text_normalizer.
-        SIMPLE_ACKNOWLEDGMENTS in router.py is kept empty for backwards compatibility.
-        """
-        # SIMPLE_ACKNOWLEDGMENTS is intentionally empty - detection moved to text_normalizer
-        assert SIMPLE_ACKNOWLEDGMENTS == frozenset()
-
-    def test_context_dependent_patterns_set(self) -> None:
-        """Test CONTEXT_DEPENDENT_PATTERNS contains expected values."""
-        assert "what time" in CONTEXT_DEPENDENT_PATTERNS
-        assert "where?" in CONTEXT_DEPENDENT_PATTERNS
-        assert "when?" in CONTEXT_DEPENDENT_PATTERNS
+        """Test that thresholds are properly ordered."""
+        assert QUICK_REPLY_THRESHOLD > CONTEXT_THRESHOLD > GENERATE_THRESHOLD
 
 
 # =============================================================================
@@ -844,6 +516,28 @@ class TestRouterError:
         from jarvis.errors import JarvisError
 
         assert issubclass(RouterError, JarvisError)
+
+
+# =============================================================================
+# IndexNotAvailableError Tests
+# =============================================================================
+
+
+class TestIndexNotAvailableError:
+    """Tests for IndexNotAvailableError exception."""
+
+    def test_index_not_available_error_creation(self) -> None:
+        """Test IndexNotAvailableError can be created."""
+        from jarvis.router import IndexNotAvailableError
+
+        error = IndexNotAvailableError()
+        assert "FAISS index not available" in str(error)
+
+    def test_index_not_available_inherits_from_router_error(self) -> None:
+        """Test IndexNotAvailableError inherits from RouterError."""
+        from jarvis.router import IndexNotAvailableError
+
+        assert issubclass(IndexNotAvailableError, RouterError)
 
 
 # =============================================================================
@@ -888,203 +582,6 @@ class TestGetRoutingStats:
 
 
 # =============================================================================
-# Needs Clarification Tests
-# =============================================================================
-
-
-class TestNeedsClarification:
-    """Tests for _needs_clarification method."""
-
-    def test_vague_reference_needs_clarification(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that vague references need clarification."""
-        assert router._needs_clarification("that thing", None) is True
-        assert router._needs_clarification("what about it", None) is True
-
-    def test_vague_reference_ok_with_thread(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that vague references are ok with thread context."""
-        thread = ["Let's go to the park", "Sounds good!"]
-        assert router._needs_clarification("that sounds fun", thread) is False
-
-    def test_short_message_needs_clarification(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that very short messages without context need clarification."""
-        assert router._needs_clarification("hi", None) is True
-        assert router._needs_clarification("?", None) is True
-
-    def test_normal_message_no_clarification(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that normal messages don't need clarification."""
-        assert router._needs_clarification("Let's meet at 5pm at the coffee shop", None) is False
-
-
-# =============================================================================
-# Professional Response Filter Tests
-# =============================================================================
-
-
-class TestProfessionalResponseFilter:
-    """Tests for _is_professional_response method."""
-
-    def test_professional_responses_pass(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that professional responses pass the filter."""
-        assert router._is_professional_response("Thank you for the update.") is True
-        assert router._is_professional_response("I'll review this shortly.") is True
-        assert router._is_professional_response("Sounds good, let me know.") is True
-
-    def test_unprofessional_responses_fail(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test that unprofessional responses fail the filter."""
-        assert router._is_professional_response("lol that's funny") is False
-        assert router._is_professional_response("haha yeah totally 😂") is False
-        assert router._is_professional_response("bruh what") is False
-
-
-# =============================================================================
-# Ask For Clarification Tests
-# =============================================================================
-
-
-class TestAskForClarification:
-    """Tests for _ask_for_clarification method."""
-
-    def test_ask_clarification_vague_reference(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test clarification request for vague references."""
-        result = router._ask_for_clarification("that thing", None)
-
-        assert result["type"] == "clarify"
-        assert "refer" in result["response"].lower()
-
-    def test_ask_clarification_timing(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test clarification request for timing questions."""
-        result = router._ask_for_clarification("when is it?", None)
-
-        assert result["type"] == "clarify"
-        # The response may vary based on pattern matching in the message
-        assert len(result["response"]) > 0
-
-    def test_ask_clarification_location(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test clarification request for location questions."""
-        result = router._ask_for_clarification("where is the location?", None)
-
-        assert result["type"] == "clarify"
-        assert "location" in result["response"].lower()
-
-    def test_ask_clarification_generic(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test generic clarification request."""
-        result = router._ask_for_clarification("hmm", None)
-
-        assert result["type"] == "clarify"
-        assert "context" in result["response"].lower()
-
-
-# =============================================================================
-# Template Response Tests
-# =============================================================================
-
-
-class TestQuickReplyResponse:
-    """Tests for _quick_reply_response method."""
-
-    def test_quick_reply_response_single_match(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test quick_reply response with single match."""
-        matches = [
-            {
-                "trigger_text": "want lunch?",
-                "response_text": "Sure! When?",
-                "similarity": 0.96,
-                "cluster_name": "lunch",
-            }
-        ]
-
-        result = router._quick_reply_response(matches, None, "want lunch?")
-
-        # May fall back to generation if coherence check fails
-        assert result["type"] in ["quick_reply", "fallback_to_generation"]
-
-    def test_quick_reply_response_no_matches_clarifies(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test quick_reply response with no matches returns clarify."""
-        result = router._quick_reply_response([], None, "test")
-
-        assert result["type"] == "clarify"
-
-    def test_quick_reply_response_with_contact_style(
-        self,
-        router: ReplyRouter,
-        sample_contact: Contact,
-    ) -> None:
-        """Test quick_reply response considers contact style."""
-        sample_contact.relationship = "boss"
-        matches = [
-            {
-                "trigger_text": "update?",
-                "response_text": "I'll have it ready by EOD.",
-                "similarity": 0.96,
-            }
-        ]
-
-        result = router._quick_reply_response(matches, sample_contact, "status update?")
-
-        # Should filter for professional responses when contact is boss
-        if result["type"] == "quick_reply":
-            assert result["contact_style"] == sample_contact.style_notes
-
-
-# =============================================================================
-# IndexNotAvailableError Tests
-# =============================================================================
-
-
-class TestIndexNotAvailableError:
-    """Tests for IndexNotAvailableError exception."""
-
-    def test_index_not_available_error_creation(self) -> None:
-        """Test IndexNotAvailableError can be created."""
-        from jarvis.router import IndexNotAvailableError
-
-        error = IndexNotAvailableError()
-        assert "FAISS index not available" in str(error)
-
-    def test_index_not_available_inherits_from_router_error(self) -> None:
-        """Test IndexNotAvailableError inherits from RouterError."""
-        from jarvis.router import IndexNotAvailableError
-
-        assert issubclass(IndexNotAvailableError, RouterError)
-
-
-# =============================================================================
 # iMessage Reader Property Tests
 # =============================================================================
 
@@ -1097,16 +594,13 @@ class TestIMessageReaderProperty:
         mock_db: MagicMock,
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
-        mock_intent_classifier: MagicMock,
     ) -> None:
         """Test imessage_reader returns None when initialization fails."""
         router = ReplyRouter(
             db=mock_db,
             index_searcher=mock_index_searcher,
             generator=mock_generator,
-            intent_classifier=mock_intent_classifier,
         )
-        # Don't set _imessage_reader, let it try to create
         router._imessage_reader = None
 
         with patch(
@@ -1120,7 +614,6 @@ class TestIMessageReaderProperty:
         mock_reader = MagicMock()
         router = ReplyRouter(imessage_reader=mock_reader)
 
-        # Access twice
         reader1 = router.imessage_reader
         reader2 = router.imessage_reader
 
@@ -1168,7 +661,6 @@ class TestFetchConversationContext:
 
         result = router._fetch_conversation_context("chat123", limit=10)
 
-        # Messages should be reversed (chronological order)
         assert len(result) == 2
         assert "[John]: Hey there!" in result[0]
         assert "[You]: Hello!" in result[1]
@@ -1207,7 +699,7 @@ class TestFetchConversationContext:
         mock_msg1.is_from_me = True
         mock_msg1.sender_name = None
         mock_msg1.sender = None
-        mock_msg1.text = ""  # Empty text
+        mock_msg1.text = ""
 
         mock_msg2 = MagicMock()
         mock_msg2.is_from_me = False
@@ -1220,363 +712,50 @@ class TestFetchConversationContext:
 
         result = router._fetch_conversation_context("chat123")
 
-        # Only non-empty message should be included
         assert len(result) == 1
         assert "[John]: Hello" in result[0]
 
 
 # =============================================================================
-# Threshold Configuration Tests
+# Route Multi-Option Simplified Tests
 # =============================================================================
 
 
-class TestThresholdConfiguration:
-    """Tests for _get_thresholds method and A/B testing."""
+class TestRouteMultiOptionSimplified:
+    """Tests for simplified route_multi_option method."""
 
-    def test_get_thresholds_returns_defaults(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test _get_thresholds returns default values."""
-        with patch("jarvis.router.get_config") as mock_config:
-            mock_routing = MagicMock()
-            mock_routing.quick_reply_threshold = 0.95
-            mock_routing.context_threshold = 0.70
-            mock_routing.generate_threshold = 0.50
-            mock_routing.ab_test_group = None
-            mock_routing.ab_test_thresholds = {}
-            mock_routing.adaptive.enabled = False  # Disable adaptive thresholds
-            mock_config.return_value.routing = mock_routing
-
-            thresholds = router._get_thresholds()
-
-            assert thresholds["quick_reply"] == 0.95
-            assert thresholds["context"] == 0.70
-            assert thresholds["generate"] == 0.50
-
-    def test_get_thresholds_with_ab_test_group(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test _get_thresholds uses A/B test overrides when configured."""
-        with patch("jarvis.router.get_config") as mock_config:
-            mock_routing = MagicMock()
-            mock_routing.quick_reply_threshold = 0.95
-            mock_routing.context_threshold = 0.70
-            mock_routing.generate_threshold = 0.50
-            mock_routing.ab_test_group = "test_group"
-            mock_routing.ab_test_thresholds = {
-                "test_group": {
-                    "quick_reply": 0.90,
-                    "context": 0.60,
-                    "generate": 0.40,
-                }
-            }
-            mock_routing.adaptive.enabled = False  # Disable adaptive thresholds
-            mock_config.return_value.routing = mock_routing
-
-            thresholds = router._get_thresholds()
-
-            assert thresholds["quick_reply"] == 0.90
-            assert thresholds["context"] == 0.60
-            assert thresholds["generate"] == 0.40
-
-
-# =============================================================================
-# Generate After Acknowledgment Tests
-# =============================================================================
-
-
-class TestShouldGenerateAfterAcknowledgment:
-    """Tests for _should_generate_after_acknowledgment method."""
-
-    def test_generate_after_ack_with_active_thread(
-        self,
-        router: ReplyRouter,
-        sample_contact: Contact,
-    ) -> None:
-        """Test returns True when thread has multiple messages."""
-        thread = ["Hey!", "What's up?", "Not much"]
-        result = router._should_generate_after_acknowledgment("ok", sample_contact, thread)
-        assert result is True
-
-    def test_generate_after_ack_short_thread(
-        self,
-        router: ReplyRouter,
-        mock_db: MagicMock,
-        sample_contact: Contact,
-    ) -> None:
-        """Test returns False when thread is short and no patterns found."""
-        mock_db.get_pairs_by_trigger_pattern.return_value = []
-        result = router._should_generate_after_acknowledgment("ok", sample_contact, ["Hey!"])
-        assert result is False
-
-    def test_generate_after_ack_based_on_historical_pattern(
-        self,
-        router: ReplyRouter,
-        mock_db: MagicMock,
-        sample_contact: Contact,
-    ) -> None:
-        """Test returns True when contact historically sends substantive acks."""
-        # Create mock pairs with long responses
-        mock_pair1 = MagicMock()
-        mock_pair1.response_text = "Sure, I was thinking we could meet at the coffee shop"
-        mock_pair2 = MagicMock()
-        mock_pair2.response_text = "Okay, let me check my calendar and get back to you"
-        mock_db.get_pairs_by_trigger_pattern.return_value = [mock_pair1, mock_pair2]
-
-        result = router._should_generate_after_acknowledgment("ok", sample_contact, None)
-        assert result is True
-
-    def test_generate_after_ack_short_historical_responses(
-        self,
-        router: ReplyRouter,
-        mock_db: MagicMock,
-        sample_contact: Contact,
-    ) -> None:
-        """Test returns False when contact historically sends short acks."""
-        # Create mock pairs with short responses
-        mock_pair1 = MagicMock()
-        mock_pair1.response_text = "ok"
-        mock_pair2 = MagicMock()
-        mock_pair2.response_text = "sure"
-        mock_db.get_pairs_by_trigger_pattern.return_value = [mock_pair1, mock_pair2]
-
-        result = router._should_generate_after_acknowledgment("ok", sample_contact, None)
-        assert result is False
-
-    def test_generate_after_ack_handles_db_exception(
-        self,
-        router: ReplyRouter,
-        mock_db: MagicMock,
-        sample_contact: Contact,
-    ) -> None:
-        """Test handles database exceptions gracefully."""
-        mock_db.get_pairs_by_trigger_pattern.side_effect = Exception("DB error")
-
-        result = router._should_generate_after_acknowledgment("ok", sample_contact, None)
-        assert result is False
-
-    def test_generate_after_ack_no_contact(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test returns False when no contact provided."""
-        result = router._should_generate_after_acknowledgment("ok", None, None)
-        assert result is False
-
-
-# =============================================================================
-# Quick Reply Intent Tests
-# =============================================================================
-
-
-class TestQuickReplyIntent:
-    """Tests for QUICK_REPLY intent handling."""
-
-    def test_high_confidence_quick_reply_returns_acknowledgment(
-        self,
-        router: ReplyRouter,
-        mock_intent_classifier: MagicMock,
-    ) -> None:
-        """Test high confidence quick reply intent returns acknowledgment."""
-        from jarvis.intent import IntentResult, IntentType
-
-        mock_intent_classifier.classify.return_value = IntentResult(
-            intent=IntentType.QUICK_REPLY,
-            confidence=0.85,
-        )
-
-        result = router.route("sounds good to me")
-
-        assert result["type"] == "acknowledgment"
-
-
-# =============================================================================
-# Intent Classifier Property Tests
-# =============================================================================
-
-
-class TestIntentClassifierProperty:
-    """Tests for intent_classifier lazy initialization."""
-
-    def test_intent_classifier_property_creates_default(self) -> None:
-        """Test intent_classifier property creates default instance."""
-        with patch("jarvis.router.get_intent_classifier") as mock_get_classifier:
-            mock_classifier = MagicMock()
-            mock_get_classifier.return_value = mock_classifier
-
-            router = ReplyRouter()
-            router._intent_classifier = None
-            result = router.intent_classifier
-
-            mock_get_classifier.assert_called_once()
-            assert result is mock_classifier
-
-
-# =============================================================================
-# Classification Failure Tests
-# =============================================================================
-
-
-class TestClassificationFailures:
-    """Tests for handling classification failures."""
-
-    def test_intent_classification_failure_continues(
-        self,
-        router: ReplyRouter,
-        mock_intent_classifier: MagicMock,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test intent classification failure allows processing to continue."""
-        mock_intent_classifier.classify.side_effect = Exception("Intent failed")
-        mock_index_searcher.search_with_pairs.return_value = [
-            {"trigger_text": "test", "response_text": "response", "similarity": 0.75}
-        ]
-
-        result = router.route("tell me about the project")
-
-        # Should continue processing despite intent classification failure
-        assert result["type"] in ["generated", "clarify"]
-
-
-# =============================================================================
-# CONTEXT_THRESHOLD Tests
-# =============================================================================
-
-
-class TestContextThreshold:
-    """Tests for CONTEXT_THRESHOLD constant."""
-
-    def test_context_threshold_in_valid_range(self) -> None:
-        """Test CONTEXT_THRESHOLD is within valid range.
-
-        Context threshold should be between generate and template thresholds.
-        This determines when good examples are available for LLM generation.
-        """
-        from jarvis.router import CONTEXT_THRESHOLD
-
-        # CONTEXT_THRESHOLD should be between GENERATE and TEMPLATE thresholds
-        assert GENERATE_THRESHOLD < CONTEXT_THRESHOLD < TEMPLATE_THRESHOLD, (
-            f"CONTEXT_THRESHOLD ({CONTEXT_THRESHOLD}) must be between "
-            f"GENERATE_THRESHOLD ({GENERATE_THRESHOLD}) and "
-            f"TEMPLATE_THRESHOLD ({TEMPLATE_THRESHOLD})"
-        )
-
-
-# =============================================================================
-# Normalize Routing Decision Tests
-# =============================================================================
-
-
-class TestNormalizeRoutingDecision:
-    """Tests for _normalize_routing_decision method."""
-
-    def test_normalize_generated_to_generate(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test 'generated' is normalized to 'generate'."""
-        result = router._normalize_routing_decision("generated")
-        assert result == "generate"
-
-    def test_normalize_quick_reply_unchanged(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test 'quick_reply' remains unchanged."""
-        result = router._normalize_routing_decision("quick_reply")
-        assert result == "quick_reply"
-
-    def test_normalize_other_to_clarify(
-        self,
-        router: ReplyRouter,
-    ) -> None:
-        """Test other values normalize to 'clarify'."""
-        result = router._normalize_routing_decision("unknown")
-        assert result == "clarify"
-        result = router._normalize_routing_decision("acknowledgment")
-        assert result == "clarify"
-        # 'template' is no longer a valid type
-        result = router._normalize_routing_decision("template")
-        assert result == "clarify"
-
-
-# =============================================================================
-# Coherence Fallback Tests
-# =============================================================================
-
-
-class TestCoherenceFallback:
-    """Tests for coherence-based fallback to generation."""
-
-    def test_template_fallback_when_no_coherent_matches(
+    def test_delegates_to_route(
         self,
         router: ReplyRouter,
         mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
-        """Test fallback to generation when no coherent templates found."""
-        # Mock high similarity but response that won't pass coherence check
-        mock_index_searcher.search_with_pairs.return_value = [
-            {
-                "trigger_text": "want lunch?",
-                "response_text": "Purple monkey dishwasher",  # Incoherent
-                "similarity": 0.95,
-            }
-        ]
+        """Test route_multi_option delegates to route()."""
+        mock_index_searcher.search_with_pairs.return_value = []
 
-        with patch("jarvis.router.score_response_coherence", return_value=0.1):
-            result = router.route("want to grab lunch?")
+        result = router.route_multi_option("want to grab lunch?")
 
-            # Should fall back to generation due to low coherence
-            assert result["type"] in ["generated", "clarify"]
+        assert result["type"] == "generated"
+        assert result["is_commitment"] is False
+        assert result["options"] == []
+        assert isinstance(result["suggestions"], list)
+        assert len(result["suggestions"]) == 1
+        assert result["trigger_da"] is None
+        mock_generator.generate.assert_called()
 
-
-# =============================================================================
-# User Input Required Tests
-# =============================================================================
-
-
-class TestUserInputRequired:
-    """Tests for USER_INPUT_REQUIRED_STARTERS patterns."""
-
-    @pytest.mark.parametrize(
-        "message",
-        [
-            "are you coming to the party?",
-            "are you free tomorrow?",
-            "can you come over?",
-            "will you be there?",
-            "do you want to join us?",
-            "where are you right now?",
-            "what are you doing tonight?",
-            "how are you feeling?",
-            "did you finish the report?",
-            "have you seen the movie?",
-        ],
-    )
-    def test_user_input_required_detected(
+    def test_preserves_response(
         self,
         router: ReplyRouter,
-        message: str,
+        mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
     ) -> None:
-        """Test that user-input-required messages are context-dependent."""
-        assert router._is_context_dependent(message) is True
+        """Test route_multi_option preserves the generated response."""
+        mock_index_searcher.search_with_pairs.return_value = []
+        mock_response = MagicMock()
+        mock_response.text = "Sounds good!"
+        mock_generator.generate.return_value = mock_response
 
-    @pytest.mark.parametrize(
-        "message",
-        [
-            "The party is at 7pm",
-            "I finished the report",
-            "The weather is nice",
-        ],
-    )
-    def test_normal_statements_not_user_input_required(
-        self,
-        router: ReplyRouter,
-        message: str,
-    ) -> None:
-        """Test that normal statements are not context-dependent."""
-        assert router._is_context_dependent(message) is False
+        result = router.route_multi_option("let's meet up")
+
+        assert result["response"] == "Sounds good!"
+        assert result["suggestions"] == ["Sounds good!"]
