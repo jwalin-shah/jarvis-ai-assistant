@@ -280,6 +280,7 @@ STRUCTURAL_PATTERNS: dict[ResponseType, list[tuple[str, bool]]] = {
         (r"^(well done|good job|killed it)[\s!.]*", True),
         # Laughter expressions (commonly misclassified as DECLINE)
         (r"^(lol|lmao|lmfao|lmfaoo+|rofl)[\s!.]*$", True),
+        (r"^(laughing out loud|laughing my ass off|rolling on the floor)[\s!.]*$", True),  # Expanded slang forms
         (r"^(haha+|hehe+|hihi+|hoho+)[\s!.]*$", True),
         (r"^(ha+|he+)[\s!.]*$", True),  # "haaaaa", "heeee"
         (r"^(dying|dead|i'm dead|im dead)[\s!.]*$", True),  # "dying" as in laughing

@@ -213,13 +213,17 @@ class TestReplyRouterInit:
 class TestRouteTemplatePath:
     """Tests for routing to quick_reply path (high similarity >= 0.95)."""
 
+    @patch("jarvis.router.score_response_coherence", return_value=0.9)
     def test_template_path_with_high_similarity(
         self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
+        mock_coherence: MagicMock,
         mock_db: MagicMock,
+        mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
     ) -> None:
         """Test that high similarity scores route to quick_reply path."""
+        from jarvis.intent import IntentResult, IntentType
+
         # Configure mock to return high similarity result
         mock_index_searcher.search_with_pairs.return_value = [
             {
@@ -230,18 +234,36 @@ class TestRouteTemplatePath:
             }
         ]
 
+        # Use low-confidence intent so threshold isn't adjusted
+        mock_intent = MagicMock()
+        mock_intent.classify = MagicMock(
+            return_value=IntentResult(intent=IntentType.REPLY, confidence=0.5)
+        )
+
+        router = ReplyRouter(
+            db=mock_db,
+            index_searcher=mock_index_searcher,
+            generator=mock_generator,
+            intent_classifier=mock_intent,
+        )
+
         result = router.route("want to grab lunch?")
 
         assert result["type"] == "quick_reply"
         assert result["confidence"] == "high"
         assert result["similarity_score"] >= TEMPLATE_THRESHOLD
 
+    @patch("jarvis.router.score_response_coherence", return_value=0.9)
     def test_template_path_selects_from_multiple_matches(
         self,
-        router: ReplyRouter,
+        mock_coherence: MagicMock,
+        mock_db: MagicMock,
         mock_index_searcher: MagicMock,
+        mock_generator: MagicMock,
     ) -> None:
         """Test quick_reply selection from multiple high-confidence matches."""
+        from jarvis.intent import IntentResult, IntentType
+
         mock_index_searcher.search_with_pairs.return_value = [
             {
                 "trigger_text": "want to get lunch?",
@@ -256,6 +278,19 @@ class TestRouteTemplatePath:
                 "cluster_name": "lunch",
             },
         ]
+
+        # Use low-confidence intent so threshold isn't adjusted
+        mock_intent = MagicMock()
+        mock_intent.classify = MagicMock(
+            return_value=IntentResult(intent=IntentType.REPLY, confidence=0.5)
+        )
+
+        router = ReplyRouter(
+            db=mock_db,
+            index_searcher=mock_index_searcher,
+            generator=mock_generator,
+            intent_classifier=mock_intent,
+        )
 
         result = router.route("want to grab lunch?")
 
