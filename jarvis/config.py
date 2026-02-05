@@ -226,15 +226,6 @@ class ClassifierThresholds(BaseModel):
         response_decline_confidence: Higher threshold for DECLINE (frequently misclassified).
         response_defer_confidence: Higher threshold for DEFER predictions.
         response_agree_confidence: Higher threshold for AGREE predictions.
-
-        trigger_svm_default: Default SVM threshold for trigger classification.
-        trigger_svm_commitment: SVM threshold for COMMITMENT triggers.
-        trigger_svm_question: SVM threshold for QUESTION triggers.
-        trigger_svm_reaction: SVM threshold for REACTION triggers.
-        trigger_svm_social: SVM threshold for SOCIAL triggers.
-        trigger_svm_statement: SVM threshold for STATEMENT triggers.
-        trigger_centroid_verify: Centroid verification threshold for triggers.
-        trigger_centroid_margin: Centroid margin for trigger classification.
     """
 
     # Intent classifier thresholds (from intent.py)
@@ -248,16 +239,6 @@ class ClassifierThresholds(BaseModel):
     response_decline_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
     response_defer_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
     response_agree_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
-
-    # Trigger classifier thresholds (from trigger_classifier.py)
-    trigger_svm_default: float = Field(default=0.35, ge=0.0, le=1.0)
-    trigger_svm_commitment: float = Field(default=0.50, ge=0.0, le=1.0)
-    trigger_svm_question: float = Field(default=0.35, ge=0.0, le=1.0)
-    trigger_svm_reaction: float = Field(default=0.40, ge=0.0, le=1.0)
-    trigger_svm_social: float = Field(default=0.25, ge=0.0, le=1.0)
-    trigger_svm_statement: float = Field(default=0.40, ge=0.0, le=1.0)
-    trigger_centroid_verify: float = Field(default=0.40, ge=0.0, le=1.0)
-    trigger_centroid_margin: float = Field(default=0.15, ge=0.0, le=1.0)
 
 
 class MetricsConfig(BaseModel):
@@ -516,9 +497,6 @@ class JarvisConfig(BaseModel):
     Attributes:
         config_version: Schema version for migration tracking.
         model_path: HuggingFace model path for MLX inference (deprecated, use model.model_id).
-        template_similarity_threshold: DEPRECATED - use routing.quick_reply_threshold instead.
-            Kept for backwards compatibility. Non-default values are migrated to
-            routing.quick_reply_threshold during config load.
         memory_thresholds: Memory thresholds for mode selection.
         imessage_default_limit: Default limit for iMessage search (deprecated).
         ui: UI preferences for the Tauri frontend.
@@ -535,7 +513,6 @@ class JarvisConfig(BaseModel):
 
     config_version: int = CONFIG_VERSION
     model_path: str = "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit"
-    template_similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     memory_thresholds: MemoryThresholds = Field(default_factory=MemoryThresholds)
     imessage_default_limit: int = 50
     ui: UIConfig = Field(default_factory=UIConfig)
@@ -661,6 +638,10 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
                 f"to routing.quick_reply_threshold"
             )
             routing["quick_reply_threshold"] = legacy_threshold
+
+        # Remove deprecated template_similarity_threshold field (no longer in schema)
+        if "template_similarity_threshold" in data:
+            del data["template_similarity_threshold"]
 
         # Also migrate template_threshold to quick_reply_threshold
         if "template_threshold" in routing and "quick_reply_threshold" not in routing:
@@ -829,15 +810,6 @@ def get_embedding_artifacts_dir() -> Path:
     base_dir = Path.home() / ".jarvis" / "embeddings" / config.embedding.model_name
     base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir
-
-
-def get_trigger_classifier_path() -> Path:
-    """Get path to the trigger classifier model directory.
-
-    Returns:
-        Path to trigger_classifier_model/ for the current embedding model.
-    """
-    return get_embedding_artifacts_dir() / "trigger_classifier_model"
 
 
 def get_response_classifier_path() -> Path:
