@@ -344,9 +344,9 @@ def main():
     print("-" * 50)
     print(f"{'LLM 1.2B (fine-grained)':<25} {'38%':>12} {'43%':>12}")
     print(f"{'LLM 1.2B (simplified)':<25} {'56%':>12} {'30%':>12}")
-    print(
-        f"{'Embedding zero-shot':<25} {trigger_res['accuracy']:>11.0%} {response_res['accuracy']:>11.0%}"
-    )
+    t_acc = trigger_res["accuracy"]
+    r_acc = response_res["accuracy"]
+    print(f"{'Embedding zero-shot':<25} {t_acc:>11.0%} {r_acc:>11.0%}")
 
 
 if __name__ == "__main__":

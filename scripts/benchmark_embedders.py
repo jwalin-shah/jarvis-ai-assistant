@@ -58,7 +58,8 @@ print(f"{{e.config['num_hidden_layers']}},{{e.config['hidden_size']}},{{ram:.0f}
 
 def main():
     print(
-        f"{'Model':<12} {'Layers':>6} {'Dim':>5} {'RAM':>7} {'1 text':>8} {'100 texts':>10} {'Throughput':>12}"
+        f"{'Model':<12} {'Layers':>6} {'Dim':>5} {'RAM':>7} "
+        f"{'1 text':>8} {'100 texts':>10} {'Throughput':>12}"
     )
     print("-" * 70)
 
@@ -67,7 +68,8 @@ def main():
         if result:
             layers, dim, ram, single, batch, tput = result.split(",")
             print(
-                f"{name:<12} {layers:>6} {dim:>5} {ram:>5}MB {single:>6}ms {batch:>8}ms {tput:>10}/s"
+                f"{name:<12} {layers:>6} {dim:>5} {ram:>5}MB "
+                f"{single:>6}ms {batch:>8}ms {tput:>10}/s"
             )
         else:
             print(f"{name:<12} FAILED")

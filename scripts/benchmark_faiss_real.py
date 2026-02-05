@@ -51,9 +51,9 @@ def get_real_embeddings(limit: int) -> tuple[np.ndarray, list[str]]:
             msgs = reader.get_messages(conv.chat_id, limit=min(5000, limit - len(all_messages)))
             all_messages.extend(msgs)
             if i % 20 == 0:
-                print(
-                    f"  Progress: {i + 1}/{len(conversations)} convos, {len(all_messages):,} messages..."
-                )
+                n_convos = len(conversations)
+                n_msgs = len(all_messages)
+                print(f"  Progress: {i + 1}/{n_convos} convos, {n_msgs:,} messages...")
 
     # Filter to messages with meaningful text
     texts = []
@@ -265,7 +265,8 @@ def main():
     print("-" * 72)
     for r in results:
         print(
-            f"{r['name']:<40} {r['memory_mb']:>8.1f}MB {r['search_time_ms']:>10.3f}ms {r['recall_at_k']:>9.1f}%"
+            f"{r['name']:<40} {r['memory_mb']:>8.1f}MB "
+            f"{r['search_time_ms']:>10.3f}ms {r['recall_at_k']:>9.1f}%"
         )
 
     # Compression stats

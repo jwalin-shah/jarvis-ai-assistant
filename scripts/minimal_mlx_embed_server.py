@@ -108,21 +108,21 @@ class BertSelfAttention(nn.Module):
         self.value = nn.Linear(hidden_size, hidden_size)
 
     def __call__(self, hidden_states: mx.array, attention_mask: mx.array = None) -> mx.array:
-        B, L, _ = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.shape
 
         q = (
             self.query(hidden_states)
-            .reshape(B, L, self.num_heads, self.head_dim)
+            .reshape(batch_size, seq_len, self.num_heads, self.head_dim)
             .transpose(0, 2, 1, 3)
         )
         k = (
             self.key(hidden_states)
-            .reshape(B, L, self.num_heads, self.head_dim)
+            .reshape(batch_size, seq_len, self.num_heads, self.head_dim)
             .transpose(0, 2, 1, 3)
         )
         v = (
             self.value(hidden_states)
-            .reshape(B, L, self.num_heads, self.head_dim)
+            .reshape(batch_size, seq_len, self.num_heads, self.head_dim)
             .transpose(0, 2, 1, 3)
         )
 
@@ -132,7 +132,7 @@ class BertSelfAttention(nn.Module):
             scores = scores + attention_mask
 
         weights = mx.softmax(scores, axis=-1)
-        output = (weights @ v).transpose(0, 2, 1, 3).reshape(B, L, -1)
+        output = (weights @ v).transpose(0, 2, 1, 3).reshape(batch_size, seq_len, -1)
         return output
 
 
@@ -324,9 +324,9 @@ class MinimalEmbedder:
         has_pooler = self._check_has_pooler(weights_path)
 
         # Create and load model (single load, not double)
-        logger.info(
-            f"Loading {model_name} (hidden={self.config['hidden_size']}, layers={self.config['num_hidden_layers']}, pooler={has_pooler})"
-        )
+        hidden = self.config["hidden_size"]
+        layers = self.config["num_hidden_layers"]
+        logger.info(f"Loading {model_name} (hidden={hidden}, layers={layers}, pooler={has_pooler})")
         start = time.time()
 
         self.model = BertModel(self.config, add_pooler=has_pooler)

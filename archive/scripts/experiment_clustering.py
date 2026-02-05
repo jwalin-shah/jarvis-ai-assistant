@@ -93,6 +93,8 @@ except ImportError:
 
 from sklearn.metrics import silhouette_score
 
+from jarvis.text_normalizer import normalize_for_task
+
 # =============================================================================
 # Constants
 # =============================================================================
@@ -120,8 +122,6 @@ MODELS_QUICK = ["bge-small", "arctic-xs", "arctic-m"]
 
 # Best performers based on silhouette scores (use these for algorithm comparison)
 MODELS_BEST = ["arctic-m", "bge-small"]
-
-from jarvis.text_normalizer import normalize_for_task
 
 # =============================================================================
 # Data Classes
@@ -290,10 +290,12 @@ def embed_texts(
             print(f"      Loaded {len(cached):,} cached embeddings from {cache_file.name}")
             if len(cached) != len(texts):
                 print(
-                    f"      WARNING: Cache has {len(cached)} embeddings but {len(texts)} texts provided"
+                    f"      WARNING: Cache has {len(cached)} embeddings "
+                    f"but {len(texts)} texts provided"
                 )
                 print(
-                    "               Using cached embeddings anyway (text count mismatch is OK for experiments)"
+                    "               Using cached embeddings anyway "
+                    "(text count mismatch is OK for experiments)"
                 )
             return cached
 
@@ -448,7 +450,8 @@ def _embed_texts_socket(
                 eta = (len(texts) - processed) / rate if rate > 0 else 0
                 pct = 100 * processed / len(texts)
                 print(
-                    f"      {processed:,}/{len(texts):,} ({pct:.0f}%) - {rate:,.0f}/s, ETA {eta:.0f}s"
+                    f"      {processed:,}/{len(texts):,} ({pct:.0f}%) - "
+                    f"{rate:,.0f}/s, ETA {eta:.0f}s"
                 )
 
         if cache_dir:
@@ -573,9 +576,8 @@ def cluster_hdbscan(
     n_clusters = len([l for l in unique_labels if l >= 0])
     n_noise = int((labels == -1).sum())
 
-    print(
-        f"      Found {n_clusters} clusters, {n_noise} noise points ({100 * n_noise / len(labels):.1f}%)"
-    )
+    noise_pct = 100 * n_noise / len(labels)
+    print(f"      Found {n_clusters} clusters, {n_noise} noise points ({noise_pct:.1f}%)")
 
     # Silhouette (exclude noise points)
     non_noise_mask = labels >= 0
@@ -898,9 +900,8 @@ def cluster_bertopic(
     n_topics = len([t for t in topic_info["Topic"] if t != -1])  # Exclude outlier topic
     n_outliers = int((labels == -1).sum())
 
-    print(
-        f"      Found {n_topics} topics, {n_outliers} outliers ({100 * n_outliers / len(labels):.1f}%)"
-    )
+    outlier_pct = 100 * n_outliers / len(labels)
+    print(f"      Found {n_topics} topics, {n_outliers} outliers ({outlier_pct:.1f}%)")
 
     # Silhouette score (exclude outliers). Prefer UMAP space if available.
     non_outlier_mask = labels >= 0
@@ -1002,7 +1003,8 @@ def run_clustering_experiment(
         bertopic_balanced: If True, use balanced config (more topics, fewer outliers).
         bertopic_sweep: If True, run multiple BERTopic configs for comparison.
         no_disk_stream: If True, keep embeddings in RAM instead of streaming to disk.
-        use_socket: If True (default), use production socket server (fast). If False, use direct calls.
+        use_socket: If True (default), use production socket server (fast).
+            If False, use direct calls.
 
     Returns:
         List of ClusterResult objects.
@@ -1181,7 +1183,8 @@ def run_clustering_experiment(
                 cfg_min_size = cfg["min_size"]
                 cfg_balanced = cfg["balanced"]
                 print(
-                    f"    BERTopic [{cfg_name}] (min_topic_size={cfg_min_size}, balanced={cfg_balanced})..."
+                    f"    BERTopic [{cfg_name}] "
+                    f"(min_topic_size={cfg_min_size}, balanced={cfg_balanced})..."
                 )
                 start = time.time()
                 sil, sizes, topic_ids, samples, labels, n_topics, topic_words = cluster_bertopic(
@@ -1300,7 +1303,7 @@ def main():
     parser.add_argument(
         "--bertopic-balanced",
         action="store_true",
-        help="Use balanced BERTopic config (UMAP: n_neighbors=50, n_components=25; HDBSCAN: min_samples=3)",
+        help="Use balanced BERTopic config (UMAP: n_neighbors=50, n_components=25)",
     )
     parser.add_argument(
         "--bertopic-sweep",
@@ -1478,14 +1481,16 @@ def main():
     print("SUMMARY")
     print("=" * 70)
     print(
-        f"{'Model':<12} {'Type':<10} {'Algo':<10} {'K':>4} {'Silhouette':>10} {'Embed(s)':>10} {'Cluster(s)':>10}"
+        f"{'Model':<12} {'Type':<10} {'Algo':<10} {'K':>4} "
+        f"{'Silhouette':>10} {'Embed(s)':>10} {'Cluster(s)':>10}"
     )
     print("-" * 80)
     for r in all_results:
         algo = getattr(r, "algorithm", "kmeans")
         ambig = f" ({getattr(r, 'ambiguous_pct', 0):.0f}%amb)" if algo == "gmm" else ""
         print(
-            f"{r.model_name:<12} {r.message_type:<10} {algo:<10} {r.k:>4} {r.silhouette:>10.3f} {r.embedding_time:>10.1f} {r.cluster_time:>10.2f}{ambig}"
+            f"{r.model_name:<12} {r.message_type:<10} {algo:<10} {r.k:>4} "
+            f"{r.silhouette:>10.3f} {r.embedding_time:>10.1f} {r.cluster_time:>10.2f}{ambig}"
         )
 
     # Find best silhouette per type and algorithm
@@ -1512,7 +1517,8 @@ def main():
                     n_topics = len(getattr(best, "topic_words", {}))
                     extra = f", {n_topics} topics discovered"
                 print(
-                    f"  {algo.upper()}: {best.model_name} K={best.k} (silhouette={best.silhouette:.3f}{extra})"
+                    f"  {algo.upper()}: {best.model_name} K={best.k} "
+                    f"(silhouette={best.silhouette:.3f}{extra})"
                 )
 
         # Print samples for overall best

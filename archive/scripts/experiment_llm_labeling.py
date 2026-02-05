@@ -101,10 +101,10 @@ def sample_balanced(data: list[dict], n_per_class: int, seed: int = 42) -> list[
 
 def create_trigger_prompt(messages: list[str]) -> str:
     """Create prompt for trigger classification."""
-    prompt = """Classify each message into ONE category. Output ONLY the number and label, nothing else.
+    prompt = """Classify each message into ONE category. Output ONLY the number and label.
 
 Categories:
-- commitment: Requests, invitations, asks for action (e.g., "Can you pick me up?", "Want to hang out?")
+- commitment: Requests, invitations, asks for action (e.g., "Can you pick me up?")
 - question: Information-seeking questions (e.g., "What time is it?", "How was your day?")
 - reaction: Emotional responses, opinions (e.g., "That's crazy!", "I love it")
 - social: Greetings, small talk (e.g., "Hey!", "What's up")
@@ -121,7 +121,7 @@ Messages:
 
 def create_response_prompt(messages: list[str]) -> str:
     """Create prompt for response classification."""
-    prompt = """Classify each message into ONE category. Output ONLY the number and label, nothing else.
+    prompt = """Classify each message into ONE category. Output ONLY the number and label.
 
 Categories:
 - agree: Acceptance, confirmation (e.g., "Sure", "Okay", "Yes", "Sounds good")
