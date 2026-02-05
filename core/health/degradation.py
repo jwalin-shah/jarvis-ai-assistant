@@ -113,10 +113,10 @@ class GracefulDegradationController:
         Raises:
             KeyError: If feature is not registered
         """
+        # Acquire registration once, outside the critical path
         with self._lock:
             if feature_name not in self._features:
-                msg = f"Feature '{feature_name}' is not registered"
-                raise KeyError(msg)
+                raise KeyError(f"Feature '{feature_name}' is not registered")
             registration = self._features[feature_name]
 
         policy = registration.policy
@@ -144,9 +144,12 @@ class GracefulDegradationController:
                 return result
             except TypeError as e:
                 # TypeError usually indicates a programming error (wrong arguments),
-                # not a transient failure. Re-raise to surface the bug.
+                # not a transient failure. Re-raise signature mismatch errors.
                 error_msg = str(e)
-                if "argument" in error_msg or "positional" in error_msg or "keyword" in error_msg:
+                if any(
+                    keyword in error_msg
+                    for keyword in ("argument", "positional", "keyword")
+                ):
                     logger.error(
                         "Feature '%s' callable signature mismatch: %s",
                         feature_name,
@@ -154,53 +157,68 @@ class GracefulDegradationController:
                     )
                     raise
                 # Other TypeErrors might be from the callable's logic, treat as failure
-                circuit.record_failure()
-                logger.warning(
-                    "Feature '%s' primary execution failed with TypeError: %s",
-                    feature_name,
-                    error_msg,
+                return self._handle_primary_failure(
+                    circuit, policy, feature_name, error_msg, *args, **kwargs
                 )
-                new_state = circuit.state
-                if new_state == CircuitState.OPEN:
-                    return self._execute_fallback(policy, *args, **kwargs)
-                return self._execute_degraded(policy, *args, **kwargs)
             except (RuntimeError, ValueError, OSError, AttributeError) as e:
                 # Common exceptions from user-provided callables (I/O, validation, state errors).
                 # Circuit breaker pattern: record failure and degrade rather than propagate.
-                circuit.record_failure()
-                logger.warning(
-                    "Feature '%s' primary execution failed: %s",
-                    feature_name,
-                    e,
+                return self._handle_primary_failure(
+                    circuit, policy, feature_name, str(e), *args, **kwargs
                 )
-
-                # Check new state after failure
-                new_state = circuit.state
-                if new_state == CircuitState.OPEN:
-                    return self._execute_fallback(policy, *args, **kwargs)
-                return self._execute_degraded(policy, *args, **kwargs)
-            except Exception:
+            except Exception as e:
                 # Last resort catch-all for user-provided callables which may raise
                 # arbitrary exceptions not covered above. This is intentional in the
                 # circuit breaker pattern to handle all failures and trigger
                 # degraded/fallback behavior rather than propagating errors.
-                circuit.record_failure()
                 logger.exception(
                     "Feature '%s' primary execution failed with unexpected error",
                     feature_name,
                 )
-
-                # Check new state after failure
-                new_state = circuit.state
-                if new_state == CircuitState.OPEN:
-                    return self._execute_fallback(policy, *args, **kwargs)
-                return self._execute_degraded(policy, *args, **kwargs)
+                return self._handle_primary_failure(
+                    circuit, policy, feature_name, str(e), *args, **kwargs
+                )
 
         # No primary callable, check health and return appropriate behavior
         if self._check_health(policy):
             # Healthy but no primary - return degraded behavior
             return self._execute_degraded(policy, *args, **kwargs)
         return self._execute_fallback(policy, *args, **kwargs)
+
+    def _handle_primary_failure(
+        self,
+        circuit: CircuitBreaker,
+        policy: DegradationPolicy,
+        feature_name: str,
+        error_msg: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Handle primary callable failure and route to degraded/fallback.
+
+        Args:
+            circuit: Circuit breaker managing this feature
+            policy: Degradation policy for the feature
+            feature_name: Name of the feature
+            error_msg: Error message from the failure
+            *args: Positional arguments to pass to degraded/fallback
+            **kwargs: Keyword arguments to pass to degraded/fallback
+
+        Returns:
+            Result from degraded or fallback behavior
+        """
+        circuit.record_failure()
+        logger.warning(
+            "Feature '%s' primary execution failed: %s",
+            feature_name,
+            error_msg,
+        )
+
+        # Check new state after failure
+        new_state = circuit.state
+        if new_state == CircuitState.OPEN:
+            return self._execute_fallback(policy, *args, **kwargs)
+        return self._execute_degraded(policy, *args, **kwargs)
 
     def _check_health(self, policy: DegradationPolicy) -> bool:
         """Run health check for a feature.
@@ -214,18 +232,9 @@ class GracefulDegradationController:
         try:
             return policy.health_check()
         except (RuntimeError, ValueError, OSError, AttributeError) as e:
-            # Common exceptions from health check callables (I/O, validation, state errors).
-            # Health check failures should return False rather than propagating errors.
-            logger.warning(
-                "Health check for '%s' failed: %s",
-                policy.feature_name,
-                e,
-            )
+            logger.warning("Health check for '%s' failed: %s", policy.feature_name, e)
             return False
         except Exception:
-            # Last resort catch-all for user-provided health check callables which
-            # may raise arbitrary exceptions not covered above. Health check failures
-            # should return False rather than propagating errors to the caller.
             logger.exception(
                 "Health check for '%s' raised unexpected exception",
                 policy.feature_name,
@@ -252,8 +261,6 @@ class GracefulDegradationController:
         try:
             return policy.degraded_behavior(*args, **kwargs)
         except (RuntimeError, ValueError, OSError, AttributeError) as e:
-            # Common exceptions from degraded behavior callables (I/O, validation, state errors).
-            # When degraded behavior fails, fall back to the final fallback behavior.
             logger.warning(
                 "Degraded behavior for '%s' failed (%s), falling back",
                 policy.feature_name,
@@ -261,9 +268,6 @@ class GracefulDegradationController:
             )
             return self._execute_fallback(policy, *args, **kwargs)
         except Exception:
-            # Last resort catch-all for user-provided degraded behavior callables
-            # which may raise arbitrary exceptions not covered above. When degraded
-            # behavior fails, fall back to the final fallback behavior.
             logger.exception(
                 "Degraded behavior for '%s' failed with unexpected error, falling back",
                 policy.feature_name,
@@ -284,17 +288,21 @@ class GracefulDegradationController:
             **kwargs: Keyword arguments
 
         Returns:
-            Result from fallback behavior, or None if fallback fails
+            Result from fallback behavior
 
         Raises:
-            Exception: Re-raises if fallback fails and no graceful handling is possible
+            Exception: Re-raises if fallback fails (last resort behavior failed)
         """
         logger.info("Executing fallback behavior for '%s'", policy.feature_name)
         try:
             return policy.fallback_behavior(*args, **kwargs)
         except Exception as e:
-            logger.error("Fallback failed for '%s': %s", policy.feature_name, e, exc_info=True)
-            # Re-raise to let caller handle critical fallback failures
+            logger.error(
+                "Fallback failed for '%s': %s",
+                policy.feature_name,
+                e,
+                exc_info=True,
+            )
             raise
 
     def get_health(self) -> dict[str, FeatureState]:
@@ -329,8 +337,7 @@ class GracefulDegradationController:
         """
         with self._lock:
             if feature_name not in self._features:
-                msg = f"Feature '{feature_name}' is not registered"
-                raise KeyError(msg)
+                raise KeyError(f"Feature '{feature_name}' is not registered")
 
             registration = self._features[feature_name]
             registration.circuit_breaker.reset()
@@ -348,8 +355,7 @@ class GracefulDegradationController:
         """
         with self._lock:
             if feature_name not in self._features:
-                msg = f"Feature '{feature_name}' is not registered"
-                raise KeyError(msg)
+                raise KeyError(f"Feature '{feature_name}' is not registered")
 
             del self._features[feature_name]
             logger.info("Feature '%s' unregistered", feature_name)
@@ -361,15 +367,23 @@ class GracefulDegradationController:
             feature_name: Name of the feature
 
         Returns:
-            Dictionary with circuit breaker statistics
+            Dictionary with circuit breaker statistics including:
+            - feature_name: str
+            - state: str (circuit breaker state)
+            - failure_count: int
+            - success_count: int
+            - total_executions: int
+            - total_failures: int
+            - total_successes: int
+            - last_failure_time: float | None
+            - last_success_time: float | None
 
         Raises:
             KeyError: If feature is not registered
         """
         with self._lock:
             if feature_name not in self._features:
-                msg = f"Feature '{feature_name}' is not registered"
-                raise KeyError(msg)
+                raise KeyError(f"Feature '{feature_name}' is not registered")
 
             registration = self._features[feature_name]
             stats = registration.circuit_breaker.stats
