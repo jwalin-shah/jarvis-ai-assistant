@@ -4,6 +4,8 @@ This module exports all Protocol interfaces that enable parallel workstream deve
 All implementations should code against these contracts, not concrete implementations.
 """
 
+from __future__ import annotations
+
 from contracts.calendar import (
     Calendar,
     CalendarEvent,
@@ -29,8 +31,11 @@ from contracts.health import (
     SchemaInfo,
 )
 from contracts.imessage import (
+    Attachment,
+    AttachmentSummary,
     Conversation,
     Message,
+    Reaction,
     iMessageReader,
 )
 from contracts.latency import (
@@ -53,38 +58,6 @@ from contracts.models import (
 )
 
 __all__ = [
-    # Memory (WS1, WS5)
-    "MemoryProfile",
-    "MemoryMode",
-    "MemoryState",
-    "MemoryProfiler",
-    "MemoryController",
-    # Hallucination (WS2)
-    "HHEMResult",
-    "HHEMBenchmarkResult",
-    "HallucinationEvaluator",
-    # Latency (WS4)
-    "Scenario",
-    "LatencyResult",
-    "LatencyBenchmarkResult",
-    "LatencyBenchmarker",
-    # Health (WS6, WS7)
-    "FeatureState",
-    "Permission",
-    "PermissionStatus",
-    "SchemaInfo",
-    "DegradationPolicy",
-    "DegradationController",
-    "PermissionMonitor",
-    "SchemaDetector",
-    # Models (WS8)
-    "GenerationRequest",
-    "GenerationResponse",
-    "Generator",
-    # iMessage (WS10)
-    "Message",
-    "Conversation",
-    "iMessageReader",
     # Calendar
     "Calendar",
     "CalendarEvent",
@@ -93,4 +66,39 @@ __all__ = [
     "CreateEventResult",
     "DetectedEvent",
     "EventDetector",
+    # Hallucination (WS2)
+    "HallucinationEvaluator",
+    "HHEMBenchmarkResult",
+    "HHEMResult",
+    # Health (WS6, WS7)
+    "DegradationController",
+    "DegradationPolicy",
+    "FeatureState",
+    "Permission",
+    "PermissionMonitor",
+    "PermissionStatus",
+    "SchemaDetector",
+    "SchemaInfo",
+    # iMessage (WS10)
+    "Attachment",
+    "AttachmentSummary",
+    "Conversation",
+    "Message",
+    "Reaction",
+    "iMessageReader",
+    # Latency (WS4)
+    "LatencyBenchmarker",
+    "LatencyBenchmarkResult",
+    "LatencyResult",
+    "Scenario",
+    # Memory (WS1, WS5)
+    "MemoryController",
+    "MemoryMode",
+    "MemoryProfile",
+    "MemoryProfiler",
+    "MemoryState",
+    # Models (WS8)
+    "GenerationRequest",
+    "GenerationResponse",
+    "Generator",
 ]
