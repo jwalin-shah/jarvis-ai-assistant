@@ -71,8 +71,9 @@ JARVIS is a **privacy-first AI assistant** for iMessage on Apple Silicon. Key in
 | Tags & Smart Folders | ✅ OPERATIONAL | `jarvis/tags/` - auto-tagging, rule-based folders |
 | Prefetch System | ✅ OPERATIONAL | `jarvis/prefetch/` - speculative caching, prediction |
 | Quality Assurance | ✅ OPERATIONAL | `jarvis/quality/` - hallucination detection, grounding |
-| Response Classifier V2 | 🟡 IMPLEMENTED | `jarvis/response_classifier_v2.py` - Batch processing, under testing |
-| Sharded FAISS Index V2 | 🟡 IMPLEMENTED | `jarvis/index_v2.py` - Tiered storage, time sharding |
+| Response Classifier V2 | ✅ OPERATIONAL | `jarvis/response_classifier_v2.py` - 3-layer hybrid, 10 labels |
+| Topic Segmentation | ✅ OPERATIONAL | `jarvis/topic_segmenter.py` - semantic boundary detection |
+| Contact Profiles | ✅ OPERATIONAL | `jarvis/contact_profile.py` - per-contact style analysis |
 | Adaptive Thresholds | 🟡 IMPLEMENTED | `jarvis/adaptive_thresholds.py` - Learns from user feedback |
 
 ## Contract-Based Design
@@ -159,25 +160,6 @@ Configurable via `~/.jarvis/config.json`:
 - Streaming: Micro-batching with 50ms windows
 - Extended labels: QUESTION subtypes, EMOTIONAL_SUPPORT, SCHEDULING
 - Target: 10x throughput, <5ms p95 latency
-
-### Sharded FAISS Index V2
-
-`jarvis/index_v2.py` provides tiered storage architecture:
-
-| Tier | Description | Access Pattern |
-|------|-------------|----------------|
-| HOT | Frequently accessed | Memory-mapped, always loaded |
-| WARM | Recently accessed | Loaded on demand |
-| COLD | Archived data | Compressed, rarely accessed |
-
-**Features:**
-- Time-based sharding (monthly shards)
-- Cross-shard search with result merging
-- Atomic updates with journaling
-- Corruption detection and auto-repair
-- Background index warming
-
-**Storage:** `~/.jarvis/indexes_v2/<model_name>/shards/`
 
 ### Adaptive Thresholds
 
