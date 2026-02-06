@@ -34,6 +34,7 @@ from jarvis.embedding_adapter import get_embedder
 
 if TYPE_CHECKING:
     from contracts.imessage import Message
+    from jarvis.topics.topic_segmenter import TopicSegment
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,113 @@ class VecSearcher:
         # Map [-1, 1] -> [-127, 127]
         quantized = (embedding * 127).astype(np.int8)
         return quantized.tobytes()
+
+    def index_segment(
+        self,
+        segment: TopicSegment,
+        contact_id: int | None = None,
+        chat_id: str | None = None,
+    ) -> bool:
+        """Index a topic segment into vec_chunks.
+
+        Args:
+            segment: TopicSegment with computed centroid and metadata.
+            contact_id: Contact ID for partition key.
+            chat_id: Chat ID for the conversation.
+
+        Returns:
+            True if indexed, False if skipped/failed.
+        """
+        if segment.centroid is None or not segment.messages:
+            return False
+
+        # Collect trigger (them) and response (me) text from the segment
+        trigger_parts = [m.text for m in segment.messages if not m.is_from_me and m.text]
+        response_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
+
+        trigger_text = "\n".join(trigger_parts) if trigger_parts else None
+        response_text = "\n".join(response_parts) if response_parts else None
+
+        # Skip segments with no response text (nothing to learn from)
+        if not response_text:
+            return False
+
+        import json
+
+        try:
+            with self.db.connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO vec_chunks(
+                        embedding,
+                        contact_id,
+                        chat_id,
+                        source_timestamp,
+                        quality_score,
+                        topic_label,
+                        trigger_text,
+                        response_text,
+                        formatted_text,
+                        keywords_json,
+                        message_count,
+                        source_type,
+                        source_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        self._quantize_embedding(segment.centroid),
+                        contact_id or 0,
+                        chat_id,
+                        segment.start_time.timestamp(),
+                        segment.confidence,
+                        segment.topic_label,
+                        trigger_text,
+                        response_text,
+                        segment.text[:500],  # formatted_text preview
+                        json.dumps(segment.keywords) if segment.keywords else None,
+                        segment.message_count,
+                        "chunk",
+                        segment.segment_id,
+                    ),
+                )
+            return True
+        except Exception as e:
+            logger.error("Failed to index segment %s: %s", segment.segment_id, e)
+            return False
+
+    def index_segments(
+        self,
+        segments: list[TopicSegment],
+        contact_id: int | None = None,
+        chat_id: str | None = None,
+    ) -> int:
+        """Index multiple topic segments into vec_chunks.
+
+        Args:
+            segments: List of TopicSegment objects.
+            contact_id: Contact ID for partition key.
+            chat_id: Chat ID for the conversation.
+
+        Returns:
+            Number of segments successfully indexed.
+        """
+        count = 0
+        for segment in segments:
+            if self.index_segment(segment, contact_id, chat_id):
+                count += 1
+        return count
+
+    def delete_chunks_for_chat(self, chat_id: str) -> int:
+        """Delete all chunks for a chat_id. Returns count deleted."""
+        try:
+            with self.db.connection() as conn:
+                cursor = conn.execute(
+                    "DELETE FROM vec_chunks WHERE chat_id = ?", (chat_id,)
+                )
+                return cursor.rowcount
+        except Exception as e:
+            logger.error("Failed to delete chunks for chat %s: %s", chat_id, e)
+            return 0
 
     def search(
         self, query: str, chat_id: str | None = None, limit: int = 10

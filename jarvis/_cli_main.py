@@ -270,7 +270,7 @@ def cmd_db(args: argparse.Namespace) -> int:
     subcommand = args.db_command
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
-        console.print("Available: init, add-contact, list-contacts, extract, stats")
+        console.print("Available: init, add-contact, list-contacts, extract, stats, build-profiles")
         return 1
 
     if subcommand == "init":
@@ -283,6 +283,8 @@ def cmd_db(args: argparse.Namespace) -> int:
         return _cmd_db_extract(args)
     elif subcommand == "stats":
         return _cmd_db_stats(args)
+    elif subcommand == "build-profiles":
+        return _cmd_db_build_profiles(args)
     else:
         console.print(f"[red]Unknown db subcommand: {subcommand}[/red]")
         return 1
@@ -482,7 +484,7 @@ def _cmd_db_list_contacts(args: argparse.Namespace) -> int:
 
 
 def _cmd_db_extract(args: argparse.Namespace) -> int:
-    """Extract (trigger, response) pairs from iMessage history."""
+    """Extract topic segments from iMessage history into vec_chunks."""
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
     if not _check_imessage_access():
@@ -498,38 +500,12 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
         console.print(f"[dim]Created database at {db.db_path}[/dim]")
 
     from integrations.imessage import ChatDBReader
-    from jarvis.extract import ExchangeBuilderConfig, extract_all_pairs
+    from jarvis.search.segment_ingest import extract_segments
+    from jarvis.search.vec_search import get_vec_searcher
 
-    config = ExchangeBuilderConfig(
-        time_gap_boundary_minutes=getattr(args, "time_gap", 30.0),
-        context_window_size=getattr(args, "context_size", 20),
-        max_response_delay_hours=args.max_delay,
-    )
+    vec_searcher = get_vec_searcher(db)
 
-    embedder = None
-    skip_nli = getattr(args, "skip_nli", False)
-    nli_model = None
-
-    try:
-        from jarvis.embedding_adapter import get_embedder
-
-        embedder = get_embedder()
-        console.print(f"[dim]Loaded embedder for Gate B (backend: {embedder.backend})[/dim]")
-    except Exception as e:
-        console.print(f"[yellow]Could not load embedder: {e}[/yellow]")
-        console.print("[yellow]Gate B will be skipped[/yellow]")
-
-    if not skip_nli:
-        try:
-            from jarvis.nlp.validity_gate import load_nli_model
-
-            nli_model = load_nli_model()
-            if nli_model:
-                console.print("[dim]Loaded NLI model for Gate C[/dim]")
-        except Exception as e:
-            console.print(f"[yellow]Could not load NLI model: {e}[/yellow]")
-
-    console.print("[bold]Extracting pairs using high-quality exchange pipeline...[/bold]\n")
+    console.print("[bold]Segmenting conversations and indexing chunks...[/bold]\n")
 
     with ChatDBReader() as reader:
         with Progress(
@@ -545,33 +521,100 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
                     description=f"Processing {current}/{total}: {chat_id[:30]}...",
                 )
 
-            stats = extract_all_pairs(
-                reader, db, config, embedder, nli_model, progress_cb, skip_nli
+            stats = extract_segments(
+                reader, db, vec_searcher, progress_cb
             )
 
     console.print("\n[bold green]Extraction complete![/bold green]")
     console.print(f"  Messages scanned: {stats['total_messages_scanned']}")
-    console.print(f"  Exchanges built: {stats['exchanges_built']}")
     console.print(f"  Conversations processed: {stats['conversations_processed']}")
-    console.print(f"  Pairs added: {stats['pairs_added']}")
-    console.print(f"  Duplicates skipped: {stats['pairs_skipped_duplicate']}")
-
-    console.print("\n[bold]Validity Gate Results:[/bold]")
-    console.print(f"  Gate A rejected: {stats['gate_a_rejected']}")
-    console.print(f"  Gate B rejected: {stats['gate_b_rejected']}")
-    console.print(f"  Gate C rejected: {stats['gate_c_rejected']}")
-    console.print(f"  Final valid: {stats['final_valid']}")
-    console.print(f"  Final invalid: {stats['final_invalid']}")
-    console.print(f"  Final uncertain: {stats['final_uncertain']}")
-
-    gate_a_reasons = stats.get("gate_a_reasons", {})
-    if gate_a_reasons:
-        console.print("\n[dim]Gate A rejection reasons:[/dim]")
-        for reason, count in sorted(gate_a_reasons.items(), key=lambda x: -x[1]):
-            console.print(f"  {reason}: {count}")
+    console.print(f"  Segments created: {stats['segments_created']}")
+    console.print(f"  Segments indexed: {stats['segments_indexed']}")
+    console.print(f"  Skipped (no response): {stats['segments_skipped_no_response']}")
+    console.print(f"  Skipped (too short): {stats['segments_skipped_too_short']}")
 
     if stats.get("errors"):
         console.print(f"\n[yellow]Errors: {len(stats['errors'])}[/yellow]")
+
+    return 0
+
+
+def _cmd_db_build_profiles(args: argparse.Namespace) -> int:
+    """Build contact profiles from conversation history."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    if not _check_imessage_access():
+        console.print(
+            "[red]Cannot access iMessage. Grant Full Disk Access in "
+            "System Settings > Privacy & Security.[/red]"
+        )
+        return 1
+
+    from integrations.imessage import ChatDBReader
+    from jarvis.contacts.contact_profile import (
+        ContactProfileBuilder,
+        load_profile,
+        save_profile,
+    )
+
+    builder = ContactProfileBuilder()
+    built = 0
+    skipped_existing = 0
+    skipped_insufficient = 0
+    errors = 0
+
+    console.print("[bold]Building contact profiles from conversation history...[/bold]\n")
+
+    with ChatDBReader() as reader:
+        conversations = reader.get_conversations(limit=args.limit)
+        console.print(f"Found {len(conversations)} conversations\n")
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Processing...", total=None)
+
+            for i, conv in enumerate(conversations):
+                display = (
+                    conv.display_name
+                    or ", ".join(conv.participants)
+                    or conv.chat_id
+                )
+                progress.update(
+                    task,
+                    description=f"[{i + 1}/{len(conversations)}] {display[:40]}",
+                )
+
+                # Skip if profile exists and --force not set
+                if not args.force and load_profile(conv.chat_id) is not None:
+                    skipped_existing += 1
+                    continue
+
+                try:
+                    messages = reader.get_messages(conv.chat_id, limit=10000)
+                    if len(messages) < builder.min_messages:
+                        skipped_insufficient += 1
+                        continue
+
+                    profile = builder.build_profile(
+                        contact_id=conv.chat_id,
+                        messages=messages,
+                        contact_name=conv.display_name,
+                    )
+                    save_profile(profile)
+                    built += 1
+                except Exception as e:
+                    logger.warning("Error building profile for %s: %s", conv.chat_id, e)
+                    errors += 1
+
+    console.print("\n[bold green]Profile building complete![/bold green]")
+    console.print(f"  Built: {built}")
+    console.print(f"  Skipped (existing): {skipped_existing}")
+    console.print(f"  Skipped (insufficient messages): {skipped_insufficient}")
+    if errors:
+        console.print(f"  [yellow]Errors: {errors}[/yellow]")
 
     return 0
 
@@ -593,47 +636,18 @@ def _cmd_db_stats(args: argparse.Namespace) -> int:
     overview.add_column("Count")
 
     overview.add_row("Contacts", str(stats["contacts"]))
-    overview.add_row("Pairs (total)", str(stats["pairs"]))
-    overview.add_row("Pairs (quality >= 0.5)", str(stats.get("pairs_quality_gte_50", "N/A")))
+    overview.add_row("Chunks (topic segments)", str(stats.get("chunks", 0)))
+    overview.add_row("Legacy pairs", str(stats.get("pairs", 0)))
     overview.add_row("Embeddings", str(stats["embeddings"]))
 
     console.print(overview)
 
-    if stats["pairs_per_contact"]:
-        console.print("\n[bold]Top Contacts by Pairs:[/bold]")
-        for item in stats["pairs_per_contact"][:5]:
+    chunks_per_contact = stats.get("chunks_per_contact", [])
+    if chunks_per_contact:
+        console.print("\n[bold]Top Contacts by Chunks:[/bold]")
+        for item in chunks_per_contact[:5]:
             if item["count"] > 0:
-                console.print(f"  {item['name']}: {item['count']} pairs")
-
-    if getattr(args, "gate_breakdown", False):
-        gate_stats = db.get_gate_stats()
-        if gate_stats.get("total_gated", 0) > 0:
-            console.print("\n[bold]Validity Gate Breakdown:[/bold]")
-            console.print(f"  Total gated pairs: {gate_stats['total_gated']}")
-            console.print(f"  Valid: {gate_stats.get('status_valid', 0)}")
-            console.print(f"  Invalid: {gate_stats.get('status_invalid', 0)}")
-            console.print(f"  Uncertain: {gate_stats.get('status_uncertain', 0)}")
-
-            if gate_stats.get("gate_a_rejected"):
-                console.print(f"\n  Gate A rejected: {gate_stats['gate_a_rejected']}")
-                if gate_stats.get("gate_a_reasons"):
-                    console.print("  [dim]Gate A rejection reasons:[/dim]")
-                    for reason, count in sorted(
-                        gate_stats["gate_a_reasons"].items(), key=lambda x: -x[1]
-                    ):
-                        console.print(f"    {reason}: {count}")
-
-            if gate_stats.get("gate_b_bands"):
-                console.print("\n  [dim]Gate B bands:[/dim]")
-                for band, count in gate_stats["gate_b_bands"].items():
-                    console.print(f"    {band}: {count}")
-
-            if gate_stats.get("gate_c_verdicts"):
-                console.print("\n  [dim]Gate C verdicts:[/dim]")
-                for verdict, count in gate_stats["gate_c_verdicts"].items():
-                    console.print(f"    {verdict}: {count}")
-        else:
-            console.print("\n[dim]No pairs with gate data. Use --v2 extraction.[/dim]")
+                console.print(f"  {item['name']}: {item['count']} chunks")
 
     try:
         with db.connection() as conn:
@@ -732,7 +746,7 @@ def create_parser() -> argparse.ArgumentParser:
     db_parser = subparsers.add_parser(
         "db",
         help="manage JARVIS database",
-        description="Manage the JARVIS database (contacts, pairs, index).",
+        description="Manage the JARVIS database (contacts, chunks, index).",
         formatter_class=HelpFormatter,
     )
     db_subparsers = db_parser.add_subparsers(dest="db_command")
@@ -758,40 +772,26 @@ def create_parser() -> argparse.ArgumentParser:
     db_list_contacts_parser.add_argument("-l", "--limit", type=int, default=100, metavar="<n>")
 
     # db extract
-    db_extract_parser = db_subparsers.add_parser(
-        "extract", help="extract high-quality pairs from iMessage"
-    )
-    db_extract_parser.add_argument(
-        "--max-delay",
-        dest="max_delay",
-        type=float,
-        default=24.0,
-        metavar="<hours>",
-        help="maximum response delay (default: 24h)",
-    )
-    db_extract_parser.add_argument(
-        "--time-gap",
-        dest="time_gap",
-        type=float,
-        default=30.0,
-        metavar="<min>",
-        help="gap that marks a new thread (default: 30m)",
-    )
-    db_extract_parser.add_argument(
-        "--context-size",
-        dest="context_size",
-        type=int,
-        default=20,
-        metavar="<n>",
-        help="context window size (default: 20)",
-    )
-    db_extract_parser.add_argument(
-        "--skip-nli", dest="skip_nli", action="store_true", help="skip NLI validation (Gate C)"
-    )
+    db_subparsers.add_parser("extract", help="segment conversations and index chunks")
 
     # db stats
     db_stats_parser = db_subparsers.add_parser("stats", help="show database statistics")
     db_stats_parser.add_argument("--gate-breakdown", dest="gate_breakdown", action="store_true")
+
+    # db build-profiles
+    db_build_profiles_parser = db_subparsers.add_parser(
+        "build-profiles", help="build contact profiles from conversation history"
+    )
+    db_build_profiles_parser.add_argument(
+        "--limit",
+        type=int,
+        default=1000,
+        metavar="<n>",
+        help="max conversations to process",
+    )
+    db_build_profiles_parser.add_argument(
+        "--force", action="store_true", help="rebuild existing profiles"
+    )
 
     db_parser.set_defaults(func=cmd_db)
 
