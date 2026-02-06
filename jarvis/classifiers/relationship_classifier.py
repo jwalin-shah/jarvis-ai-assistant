@@ -22,9 +22,11 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -36,6 +38,7 @@ import numpy as np
 # Cache TTL for classification results (5 minutes)
 _CLASSIFICATION_CACHE_TTL_SECONDS = 300
 _classification_cache: dict[str, tuple[float, ClassificationResult]] = {}
+_cache_lock = threading.Lock()
 _CLASSIFICATION_CACHE_MAX_SIZE = 500
 
 if TYPE_CHECKING:
@@ -76,10 +79,6 @@ RELATIONSHIP_CATEGORIES = {
             "daughter",
             "kid",
             "kids",
-            "baby",
-            "hubby",
-            "wife",
-            "husband",
         ],
         "anti_keywords": [  # Keywords that suggest NOT this category
             "meeting",
@@ -174,10 +173,8 @@ RELATIONSHIP_CATEGORIES = {
             "deadline",
             "project",
             "office",
-            "work",
             "presentation",
             "client",
-            "email",
             "slack",
             "zoom",
             "standup",
@@ -185,14 +182,11 @@ RELATIONSHIP_CATEGORIES = {
             "manager",
             "boss",
             "team",
-            "monday",
-            "friday",
             "eod",
             "eow",
             "fyi",
             "asap",
             "sync",
-            "call",
             "review",
             "pr",
             "merge",
@@ -214,10 +208,6 @@ RELATIONSHIP_CATEGORIES = {
     "acquaintance": {
         "label": "acquaintance",
         "keywords": [
-            "hey",
-            "hi",
-            "hello",
-            "how are you",
             "long time",
             "nice to meet",
             "good seeing you",
@@ -266,7 +256,6 @@ class MessageFeatures:
     total_messages: int = 0
     date_range_days: int = 0
     my_messages_pct: float = 0.5  # % of messages I sent
-    avg_response_time_hours: float = 0.0
 
 
 @dataclass
@@ -309,7 +298,37 @@ class RelationshipClassifier:
         """
         self.chat_db_path = chat_db_path or Path.home() / "Library/Messages/chat.db"
         self.min_messages = min_messages
-        self._category_embeddings: dict[str, np.ndarray] | None = None
+
+        # Pre-compile keyword/anti-keyword patterns per category (Fix 5)
+        self._keyword_patterns: dict[str, re.Pattern[str] | None] = {}
+        self._anti_keyword_patterns: dict[str, re.Pattern[str] | None] = {}
+        self._emoji_keywords: dict[str, list[str]] = {}
+        self._emoji_anti_keywords: dict[str, list[str]] = {}
+
+        for cat, info in RELATIONSHIP_CATEGORIES.items():
+            text_kws = []
+            emoji_kws = []
+            for kw in info["keywords"]:
+                kw_lower = kw.lower()
+                if any(ord(c) > 0x1F300 for c in kw_lower):
+                    emoji_kws.append(kw_lower)
+                else:
+                    text_kws.append(rf"\b{re.escape(kw_lower)}\b")
+            self._keyword_patterns[cat] = re.compile("|".join(text_kws)) if text_kws else None
+            self._emoji_keywords[cat] = emoji_kws
+
+            text_akws = []
+            emoji_akws = []
+            for kw in info.get("anti_keywords", []):
+                kw_lower = kw.lower()
+                if any(ord(c) > 0x1F300 for c in kw_lower):
+                    emoji_akws.append(kw_lower)
+                else:
+                    text_akws.append(rf"\b{re.escape(kw_lower)}\b")
+            self._anti_keyword_patterns[cat] = (
+                re.compile("|".join(text_akws)) if text_akws else None
+            )
+            self._emoji_anti_keywords[cat] = emoji_akws
 
     def _get_messages_for_chat(
         self,
@@ -331,52 +350,52 @@ class RelationshipClassifier:
 
         messages = []
         try:
-            conn = sqlite3.connect(
-                f"file:{self.chat_db_path}?mode=ro",
-                uri=True,
-                timeout=5.0,
-            )
-            conn.row_factory = sqlite3.Row
-
-            # Query messages for this chat
-            query = """
-                SELECT
-                    m.text,
-                    m.is_from_me,
-                    m.date as date_int,
-                    c.chat_identifier
-                FROM message m
-                JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
-                JOIN chat c ON cmj.chat_id = c.ROWID
-                WHERE c.chat_identifier = ?
-                    AND m.text IS NOT NULL
-                    AND m.text != ''
-                ORDER BY m.date DESC
-                LIMIT ?
-            """
-
-            cursor = conn.execute(query, (chat_id, limit))
-
-            for row in cursor:
-                # Convert macOS timestamp to datetime
-                date_int = row["date_int"]
-                if date_int:
-                    # macOS uses nanoseconds since 2001-01-01
-                    timestamp = date_int / 1_000_000_000 + 978307200
-                    date = datetime.fromtimestamp(timestamp)
-                else:
-                    date = None
-
-                messages.append(
-                    ChatMessage(
-                        text=row["text"] or "",
-                        is_from_me=bool(row["is_from_me"]),
-                        date=date,
-                        chat_id=row["chat_identifier"],
-                    )
+            with contextlib.closing(
+                sqlite3.connect(
+                    f"file:{self.chat_db_path}?mode=ro",
+                    uri=True,
+                    timeout=5.0,
                 )
+            ) as conn:
+                conn.row_factory = sqlite3.Row
 
-            conn.close()
+                # Query messages for this chat
+                query = """
+                    SELECT
+                        m.text,
+                        m.is_from_me,
+                        m.date as date_int,
+                        c.chat_identifier
+                    FROM message m
+                    JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+                    JOIN chat c ON cmj.chat_id = c.ROWID
+                    WHERE c.chat_identifier = ?
+                        AND m.text IS NOT NULL
+                        AND m.text != ''
+                    ORDER BY m.date DESC
+                    LIMIT ?
+                """
+
+                cursor = conn.execute(query, (chat_id, limit))
+
+                for row in cursor:
+                    # Convert macOS timestamp to datetime
+                    date_int = row["date_int"]
+                    if date_int:
+                        # macOS uses nanoseconds since 2001-01-01
+                        timestamp = date_int / 1_000_000_000 + 978307200
+                        date = datetime.fromtimestamp(timestamp)
+                    else:
+                        date = None
+
+                    messages.append(
+                        ChatMessage(
+                            text=row["text"] or "",
+                            is_from_me=bool(row["is_from_me"]),
+                            date=date,
+                            chat_id=row["chat_identifier"],
+                        )
+                    )
 
         except Exception as e:
             logger.error(f"Failed to get messages for chat {chat_id}: {e}")
@@ -394,34 +413,36 @@ class RelationshipClassifier:
 
         chats = []
         try:
-            conn = sqlite3.connect(
-                f"file:{self.chat_db_path}?mode=ro",
-                uri=True,
-                timeout=5.0,
-            )
-            conn.row_factory = sqlite3.Row
+            with contextlib.closing(
+                sqlite3.connect(
+                    f"file:{self.chat_db_path}?mode=ro",
+                    uri=True,
+                    timeout=5.0,
+                )
+            ) as conn:
+                conn.row_factory = sqlite3.Row
 
-            # Get 1:1 chats: phone numbers/emails that aren't group chats
-            # Group chats have identifiers starting with "chat" and multiple handles
-            query = """
-                SELECT
-                    c.chat_identifier,
-                    c.display_name,
-                    (SELECT COUNT(*) FROM chat_handle_join WHERE chat_id = c.ROWID) as handle_count,
-                    (SELECT COUNT(*) FROM chat_message_join WHERE chat_id = c.ROWID) as msg_count
-                FROM chat c
-                WHERE handle_count = 1
-                ORDER BY msg_count DESC
-            """
+                # Get 1:1 chats: phone numbers/emails that aren't group chats
+                # Group chats have identifiers starting with "chat" and multiple handles
+                query = """
+                    SELECT
+                        c.chat_identifier,
+                        c.display_name,
+                        (SELECT COUNT(*) FROM chat_handle_join WHERE chat_id = c.ROWID)
+                            as handle_count,
+                        (SELECT COUNT(*) FROM chat_message_join WHERE chat_id = c.ROWID)
+                            as msg_count
+                    FROM chat c
+                    WHERE handle_count = 1
+                    ORDER BY msg_count DESC
+                """
 
-            cursor = conn.execute(query)
+                cursor = conn.execute(query)
 
-            for row in cursor:
-                chat_id = row["chat_identifier"]
-                display_name = row["display_name"] or chat_id
-                chats.append((chat_id, display_name))
-
-            conn.close()
+                for row in cursor:
+                    chat_id = row["chat_identifier"]
+                    display_name = row["display_name"] or chat_id
+                    chats.append((chat_id, display_name))
 
         except Exception as e:
             logger.error(f"Failed to get chats: {e}")
@@ -482,24 +503,21 @@ class RelationshipClassifier:
             if any(w in text_lower for w in informal_words):
                 informal_indicators += 1
 
-            # Keyword matching (word-boundary for text, substring for emoji)
-            for cat, info in RELATIONSHIP_CATEGORIES.items():
-                for keyword in info["keywords"]:
-                    kw = keyword.lower()
-                    if any(ord(c) > 0x1F300 for c in kw):
-                        if kw in text_lower:
-                            keyword_matches[cat] += 1
-                    else:
-                        if re.search(rf"\b{re.escape(kw)}\b", text_lower):
-                            keyword_matches[cat] += 1
-                for keyword in info.get("anti_keywords", []):
-                    kw = keyword.lower()
-                    if any(ord(c) > 0x1F300 for c in kw):
-                        if kw in text_lower:
-                            anti_keyword_matches[cat] += 1
-                    else:
-                        if re.search(rf"\b{re.escape(kw)}\b", text_lower):
-                            anti_keyword_matches[cat] += 1
+            # Keyword matching using pre-compiled patterns
+            for cat in RELATIONSHIP_CATEGORIES:
+                pat = self._keyword_patterns[cat]
+                if pat:
+                    keyword_matches[cat] += len(pat.findall(text_lower))
+                for ekw in self._emoji_keywords[cat]:
+                    if ekw in text_lower:
+                        keyword_matches[cat] += 1
+
+                anti_pat = self._anti_keyword_patterns[cat]
+                if anti_pat:
+                    anti_keyword_matches[cat] += len(anti_pat.findall(text_lower))
+                for ekw in self._emoji_anti_keywords[cat]:
+                    if ekw in text_lower:
+                        anti_keyword_matches[cat] += 1
 
         # Calculate date range
         dates = [m.date for m in messages if m.date]
@@ -548,8 +566,9 @@ class RelationshipClassifier:
         for cat, info in RELATIONSHIP_CATEGORIES.items():
             score = 0.0
 
-            # Keyword match score (normalized)
-            keyword_score = min(features.keyword_matches.get(cat, 0) / 10, 1.0)
+            # Keyword match score (normalized by message count)
+            kw_divisor = max(features.total_messages / 50, 5)
+            keyword_score = min(features.keyword_matches.get(cat, 0) / kw_divisor, 1.0)
             score += keyword_score * 0.4  # 40% weight
 
             # Anti-keyword penalty
@@ -592,6 +611,16 @@ class RelationshipClassifier:
             if patterns.get("very_high_frequency"):
                 freq_score = min(features.message_frequency_per_day / 5, 1.0)
                 score += freq_score * 0.1
+            elif patterns.get("medium_frequency"):
+                # Score 1.0 when 0.5-3 msgs/day, tapering to 0 outside
+                freq = features.message_frequency_per_day
+                if 0.5 <= freq <= 3.0:
+                    freq_score = 1.0
+                elif freq < 0.5:
+                    freq_score = max(freq / 0.5, 0.0)
+                else:
+                    freq_score = max(1.0 - (freq - 3.0) / 3.0, 0.0)
+                score += freq_score * 0.1
             elif patterns.get("low_frequency"):
                 freq_score = 1.0 if features.message_frequency_per_day < 0.5 else 0.0
                 score += freq_score * 0.1
@@ -599,6 +628,51 @@ class RelationshipClassifier:
             scores[cat] = max(score, 0.0)
 
         return scores
+
+    # Display name -> relationship mappings (checked case-insensitively)
+    _DISPLAY_NAME_SIGNALS: dict[str, list[str]] = {
+        "family": [
+            "mom", "dad", "mother", "father", "mama", "papa",
+            "sis", "bro", "brother", "sister",
+            "grandma", "grandpa", "grandmother", "grandfather",
+            "aunt", "uncle", "cousin",
+            "wife", "husband",
+            # Indian family terms
+            "nana", "nani", "dadi", "dada",
+            "masi", "mausi", "chacha", "bua", "taya",
+        ],
+        "romantic partner": [
+            "babe", "baby", "bae", "love", "honey",
+            "sweetheart", "hubby", "wifey",
+        ],
+    }
+
+    def _score_display_name(self, display_name: str) -> dict[str, float]:
+        """Score relationship categories based on contact display name.
+
+        If the display name contains a known relationship keyword (e.g. "Mom",
+        "Gopal Mama"), returns a bonus score for the matching category.
+
+        Args:
+            display_name: The contact's display name.
+
+        Returns:
+            Dict of category -> bonus score (0.0 if no match).
+        """
+        bonuses: dict[str, float] = {}
+        if not display_name:
+            return bonuses
+
+        name_lower = display_name.lower()
+        name_tokens = set(re.split(r"[\s\-_]+", name_lower))
+
+        for category, keywords in self._DISPLAY_NAME_SIGNALS.items():
+            for kw in keywords:
+                if kw in name_tokens:
+                    bonuses[category] = 0.5
+                    break
+
+        return bonuses
 
     def classify_messages(
         self,
@@ -627,6 +701,12 @@ class RelationshipClassifier:
 
         features = self._extract_features(messages)
         scores = self._compute_scores(features)
+
+        # Apply display name signal as a strong prior
+        name_bonuses = self._score_display_name(display_name)
+        for cat, bonus in name_bonuses.items():
+            if cat in scores:
+                scores[cat] += bonus
 
         # Find best match
         best_category = max(scores, key=scores.get)  # type: ignore
@@ -665,21 +745,25 @@ class RelationshipClassifier:
         """
         # Check cache first
         now = time.time()
-        if chat_id in _classification_cache:
-            cached_time, cached_result = _classification_cache[chat_id]
-            if now - cached_time < _CLASSIFICATION_CACHE_TTL_SECONDS:
-                logger.debug("Classification cache hit for %s", chat_id)
-                return cached_result
+        with _cache_lock:
+            if chat_id in _classification_cache:
+                cached_time, cached_result = _classification_cache[chat_id]
+                if now - cached_time < _CLASSIFICATION_CACHE_TTL_SECONDS:
+                    logger.debug("Classification cache hit for %s", chat_id)
+                    return cached_result
 
         messages = self._get_messages_for_chat(chat_id)
         result = self.classify_messages(messages, chat_id, display_name)
 
         # Update cache (evict oldest if at capacity)
-        if len(_classification_cache) >= _CLASSIFICATION_CACHE_MAX_SIZE:
-            # Evict oldest entry
-            oldest_key = min(_classification_cache, key=lambda k: _classification_cache[k][0])
-            del _classification_cache[oldest_key]
-        _classification_cache[chat_id] = (now, result)
+        with _cache_lock:
+            if len(_classification_cache) >= _CLASSIFICATION_CACHE_MAX_SIZE:
+                # Evict oldest entry
+                oldest_key = min(
+                    _classification_cache, key=lambda k: _classification_cache[k][0]
+                )
+                del _classification_cache[oldest_key]
+            _classification_cache[chat_id] = (now, result)
 
         return result
 
@@ -766,7 +850,8 @@ def clear_classification_cache() -> None:
 
     Useful for testing or when message history changes significantly.
     """
-    _classification_cache.clear()
+    with _cache_lock:
+        _classification_cache.clear()
 
 
 def suggest_relationship(chat_id: str) -> str:

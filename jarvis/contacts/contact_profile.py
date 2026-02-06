@@ -470,7 +470,9 @@ class ContactProfileBuilder:
         analyze_msgs = my_messages if my_messages else messages
 
         # Relationship classification
-        relationship, rel_confidence = self._classify_relationship(contact_id, messages)
+        relationship, rel_confidence = self._classify_relationship(
+            contact_id, messages, contact_name
+        )
 
         # Formality (Laplace-smoothed)
         formality_score = self._compute_formality(analyze_msgs)
@@ -522,7 +524,12 @@ class ContactProfileBuilder:
 
     # --- Relationship ---
 
-    def _classify_relationship(self, contact_id: str, messages: list[Message]) -> tuple[str, float]:
+    def _classify_relationship(
+        self,
+        contact_id: str,
+        messages: list[Message],
+        contact_name: str | None = None,
+    ) -> tuple[str, float]:
         """Classify relationship using RelationshipClassifier."""
         try:
             from jarvis.classifiers.relationship_classifier import (
@@ -541,7 +548,7 @@ class ContactProfileBuilder:
             ]
 
             classifier = RelationshipClassifier(min_messages=self.min_messages)
-            result = classifier.classify_messages(chat_messages, contact_id)
+            result = classifier.classify_messages(chat_messages, contact_id, contact_name or "")
             return result.relationship, result.confidence
         except Exception as e:
             logger.warning("Relationship classification failed: %s", e)
