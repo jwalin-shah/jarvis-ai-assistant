@@ -49,7 +49,7 @@ class MetricsAuditLogger:
                 "cache_hit": metrics.cache_hit,
                 "model_loaded": metrics.model_loaded,
                 "embedding_computations": metrics.embedding_computations,
-                "faiss_candidates": metrics.faiss_candidates,
+                "vec_candidates": metrics.vec_candidates,
             },
         }
         self._logger.info(json.dumps(entry))

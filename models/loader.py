@@ -145,6 +145,7 @@ class GenerationResult:
     text: str
     tokens_generated: int
     generation_time_ms: float
+    tokens_per_second: float = 0.0
 
 
 @dataclass
@@ -154,6 +155,7 @@ class StreamToken:
     token: str
     token_index: int
     is_final: bool = False
+    ttft_ms: float | None = None
 
 
 class MLXModelLoader:
@@ -189,6 +191,7 @@ class MLXModelLoader:
         # KV cache for static prompt prefix reuse
         self._prompt_cache: list[Any] | None = None
         self._cache_prefix_len: int = 0
+        self.last_load_time_ms: float | None = None
 
     def is_loaded(self) -> bool:
         """Check if model is currently loaded in memory."""
@@ -345,6 +348,7 @@ class MLXModelLoader:
                 self._loaded_at = time.perf_counter()
 
                 load_time = (self._loaded_at - start_time) * 1000
+                self.last_load_time_ms = load_time
                 logger.info("Model loaded in %.0fms", load_time)
                 return True
 
@@ -632,10 +636,14 @@ class MLXModelLoader:
                 # Fallback to word count if tokenizer fails
                 tokens_generated = len(response.split())
 
+            generation_time_s = generation_time / 1000
+            tps = tokens_generated / generation_time_s if generation_time_s > 0 else 0.0
+
             return GenerationResult(
                 text=response,
                 tokens_generated=tokens_generated,
                 generation_time_ms=generation_time,
+                tokens_per_second=round(tps, 1),
             )
 
         except ModelGenerationError:
@@ -724,6 +732,7 @@ class MLXModelLoader:
             # concurrent Metal access with embedding encode() or other callers.
             accumulated_text = ""
             token_index = 0
+            stream_start = time.perf_counter()
 
             stream_kwargs: dict[str, Any] = {}
             if prompt_cache is not None:
@@ -764,10 +773,15 @@ class MLXModelLoader:
 
                     if new_text:
                         is_final = response.finish_reason is not None or should_stop
+                        # Track time to first token
+                        ttft = None
+                        if token_index == 0:
+                            ttft = (time.perf_counter() - stream_start) * 1000
                         yield StreamToken(
                             token=new_text,
                             token_index=token_index,
                             is_final=is_final,
+                            ttft_ms=ttft,
                         )
                         token_index += 1
 

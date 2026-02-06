@@ -41,11 +41,13 @@ class RoutingMetrics:
     query_hash: str
     latency_ms: dict[str, float]
     embedding_computations: int
-    faiss_candidates: int
+    vec_candidates: int
     routing_decision: str
     similarity_score: float
     cache_hit: bool
     model_loaded: bool
+    generation_time_ms: float = 0.0
+    tokens_per_second: float = 0.0
 
 
 def hash_query(text: str) -> str:
@@ -126,10 +128,23 @@ class RoutingMetricsStore:
                     model_loaded INTEGER NOT NULL,
                     embedding_computations INTEGER NOT NULL,
                     faiss_candidates INTEGER NOT NULL,
-                    latency_json TEXT NOT NULL
+                    latency_json TEXT NOT NULL,
+                    generation_time_ms REAL NOT NULL DEFAULT 0.0,
+                    tokens_per_second REAL NOT NULL DEFAULT 0.0
                 )
                 """
             )
+            # Add columns for existing databases
+            for col, typ in [
+                ("generation_time_ms", "REAL NOT NULL DEFAULT 0.0"),
+                ("tokens_per_second", "REAL NOT NULL DEFAULT 0.0"),
+            ]:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE routing_metrics ADD COLUMN {col} {typ}"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_routing_metrics_timestamp
@@ -228,8 +243,10 @@ class RoutingMetricsStore:
                         model_loaded,
                         embedding_computations,
                         faiss_candidates,
-                        latency_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        latency_json,
+                        generation_time_ms,
+                        tokens_per_second
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [
                         (
@@ -240,8 +257,10 @@ class RoutingMetricsStore:
                             1 if m.cache_hit else 0,
                             1 if m.model_loaded else 0,
                             m.embedding_computations,
-                            m.faiss_candidates,
+                            m.vec_candidates,
                             json.dumps(m.latency_ms, separators=(",", ":")),
+                            m.generation_time_ms,
+                            m.tokens_per_second,
                         )
                         for m in metrics_to_write
                     ],
@@ -249,9 +268,9 @@ class RoutingMetricsStore:
             logger.debug(f"Flushed {len(metrics_to_write)} routing metrics to database")
         except Exception as e:
             # On failure, put metrics back in buffer for retry
+            # Note: caller already holds self._lock, so mutate directly
             logger.warning(f"Failed to flush metrics: {e}")
-            with self._lock:
-                self._buffer = metrics_to_write + self._buffer
+            self._buffer = metrics_to_write + self._buffer
 
     def record(self, metrics: RoutingMetrics) -> None:
         """Record a routing metric (non-blocking).
@@ -350,7 +369,8 @@ class RoutingMetricsStore:
                     f"""
                     SELECT timestamp, query_hash, routing_decision,
                            similarity_score, cache_hit, model_loaded,
-                           embedding_computations, faiss_candidates, latency_json
+                           embedding_computations, faiss_candidates, latency_json,
+                           generation_time_ms, tokens_per_second
                     FROM routing_metrics
                     {where}
                     ORDER BY timestamp DESC
@@ -384,9 +404,11 @@ class RoutingMetricsStore:
                             "cache_hit": bool(row["cache_hit"]),
                             "model_loaded": bool(row["model_loaded"]),
                             "embedding_computations": row["embedding_computations"],
-                            "faiss_candidates": row["faiss_candidates"],
+                            "vec_candidates": row["faiss_candidates"],
                             "latency": latency,
                             "total_latency_ms": total_ms,
+                            "generation_time_ms": row["generation_time_ms"],
+                            "tokens_per_second": row["tokens_per_second"],
                         }
                     )
 

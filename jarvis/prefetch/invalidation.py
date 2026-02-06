@@ -462,15 +462,15 @@ class CacheInvalidator:
         return self.invalidate(event)
 
     def on_index_rebuild(self) -> int:
-        """Handle FAISS index rebuild event.
+        """Handle vec search index rebuild event.
 
         Returns:
             Number of entries invalidated.
         """
         event = InvalidationEvent(
             reason=InvalidationReason.INDEX_REBUILD,
-            keys=["warm:faiss"],
-            tags=["search", "embedding", "faiss"],
+            keys=["warm:vec"],
+            tags=["search", "embedding", "vec"],
             metadata={},
         )
         return self.invalidate(event)

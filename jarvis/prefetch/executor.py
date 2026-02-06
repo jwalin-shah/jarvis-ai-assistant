@@ -251,7 +251,7 @@ class PrefetchExecutor:
         self.register_handler(PredictionType.CONTACT_PROFILE, self._handle_contact_profile)
         self.register_handler(PredictionType.MODEL_WARM, self._handle_model_warm)
         self.register_handler(PredictionType.SEARCH_RESULTS, self._handle_search_results)
-        self.register_handler(PredictionType.FAISS_INDEX, self._handle_vec_index)
+        self.register_handler(PredictionType.VEC_INDEX, self._handle_vec_index)
 
     def register_handler(self, pred_type: PredictionType, handler: PrefetchHandler) -> None:
         """Register a handler for a prediction type.
@@ -359,6 +359,16 @@ class PrefetchExecutor:
             with self._active_lock:
                 if prediction.key in self._active_tasks:
                     return False
+                # Block duplicate drafts for the same chat
+                if prediction.type == PredictionType.DRAFT_REPLY:
+                    draft_cid = prediction.params.get("chat_id", "")
+                    if draft_cid:
+                        for active_key in self._active_tasks:
+                            if (
+                                active_key.startswith("draft:")
+                                and active_key.endswith(f":{draft_cid}")
+                            ):
+                                return False
 
         # Create task with inverted priority (lower = higher priority)
         task = PrefetchTask(
