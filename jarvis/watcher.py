@@ -81,6 +81,9 @@ class ChatDBWatcher:
         self._monitor_task: asyncio.Task[None] | None = None
         self._pending_check = False
         self._concurrency = asyncio.Semaphore(4)
+        self._chat_msg_counts: dict[str, int] = {}
+        self._segment_threshold = 15
+        self._segment_window = 50
 
     async def start(self) -> None:
         """Start watching chat.db for changes."""
@@ -252,55 +255,108 @@ class ChatDBWatcher:
                     f"{msg['text'][:50] if msg['text'] else '[no text]'}..."
                 )
 
-            # Update last known ROWID
-            if new_messages:
-                self._last_rowid = max(m["id"] for m in new_messages)
-                logger.debug(f"Updated last ROWID to {self._last_rowid}")
+                # Update last known ROWID incrementally per-message to avoid
+                # re-broadcasting already-sent messages if an error occurs mid-loop
+                self._last_rowid = max(self._last_rowid or 0, msg["id"])
+
+            # Track per-chat message counts for incremental re-segmentation
+            chats_to_resegment: list[str] = []
+            for msg in new_messages:
+                cid = msg["chat_id"]
+                self._chat_msg_counts[cid] = self._chat_msg_counts.get(cid, 0) + 1
+                if self._chat_msg_counts[cid] >= self._segment_threshold:
+                    chats_to_resegment.append(cid)
+                    self._chat_msg_counts[cid] = 0
+
+            if chats_to_resegment:
+                asyncio.create_task(self._resegment_chats(chats_to_resegment))
 
         except Exception as e:
             logger.warning(f"Error checking new messages: {e}")
 
     async def _index_new_messages(self, messages: list[dict[str, Any]]) -> None:
-        """Compute embeddings for new messages and store in cache.
+        """Index new messages into vec_messages for semantic search.
 
         Args:
             messages: List of message dicts from _get_new_messages
         """
         try:
-            from integrations.imessage import ChatDBReader
-            from jarvis.search.semantic_search import get_semantic_searcher
+            from contracts.imessage import Message
+            from integrations.imessage.parser import parse_iso_datetime
+            from jarvis.search.vec_search import get_vec_searcher
 
             # Filter to messages with text
             text_messages = [m for m in messages if m.get("text")]
             if not text_messages:
                 return
 
-            with ChatDBReader() as reader:
-                searcher = get_semantic_searcher(reader)
-                # This call will compute and cache embeddings
-                # We convert dicts back to Message-like objects for the searcher
-                from contracts.imessage import Message
-                from integrations.imessage.parser import parse_iso_datetime
-
-                msg_objects = []
-                for m in text_messages:
-                    msg_objects.append(
-                        Message(
-                            id=m["id"],
-                            chat_id=m["chat_id"],
-                            sender=m["sender"],
-                            text=m["text"],
-                            date=parse_iso_datetime(m["date"]),
-                            is_from_me=m["is_from_me"],
-                        )
+            msg_objects = []
+            for m in text_messages:
+                msg_objects.append(
+                    Message(
+                        id=m["id"],
+                        chat_id=m["chat_id"],
+                        sender=m["sender"],
+                        text=m["text"],
+                        date=parse_iso_datetime(m["date"]),
+                        is_from_me=m["is_from_me"],
                     )
+                )
 
-                # ensures embeddings exist in cache
-                await asyncio.to_thread(searcher._ensure_embeddings, msg_objects)
-                logger.debug(f"Indexed {len(msg_objects)} new messages for semantic search")
+            searcher = get_vec_searcher()
+            count = await asyncio.to_thread(searcher.index_messages, msg_objects)
+            if count > 0:
+                logger.debug("Indexed %d new messages into vec_messages", count)
 
         except Exception as e:
-            logger.debug(f"Error indexing new messages: {e}")
+            logger.debug("Error indexing new messages: %s", e)
+
+    async def _resegment_chats(self, chat_ids: list[str]) -> None:
+        """Re-segment recent messages for chats that hit the threshold."""
+        try:
+            await asyncio.to_thread(self._do_resegment, chat_ids)
+        except Exception as e:
+            logger.warning("Error during re-segmentation: %s", e)
+
+    def _do_resegment(self, chat_ids: list[str]) -> None:
+        """Sync worker: re-segment recent messages and update vec_chunks."""
+        from integrations.imessage import ChatDBReader
+        from jarvis.search.vec_search import get_vec_searcher
+        from jarvis.topics.topic_segmenter import segment_conversation
+
+        try:
+            searcher = get_vec_searcher()
+        except Exception as e:
+            logger.debug("Cannot get vec_searcher for re-segmentation: %s", e)
+            return
+
+        with ChatDBReader() as reader:
+            for chat_id in chat_ids:
+                try:
+                    # Get recent messages (newest-first from reader), reverse to chronological
+                    messages = reader.get_messages(chat_id, limit=self._segment_window)
+                    messages.reverse()
+
+                    if not messages:
+                        continue
+
+                    segments = segment_conversation(messages, contact_id=chat_id)
+
+                    # Replace old chunks for this chat
+                    deleted = searcher.delete_chunks_for_chat(chat_id)
+                    indexed = 0
+                    for seg in segments:
+                        if searcher.index_segment(seg, chat_id=chat_id):
+                            indexed += 1
+
+                    logger.info(
+                        "Re-segmented %s: deleted=%d, indexed=%d segments",
+                        chat_id,
+                        deleted,
+                        indexed,
+                    )
+                except Exception as e:
+                    logger.warning("Error re-segmenting %s: %s", chat_id, e)
 
     def _validate_schema(self) -> bool:
         """Validate that chat.db has the expected schema.
