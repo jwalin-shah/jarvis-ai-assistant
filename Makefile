@@ -7,7 +7,10 @@
         lint format format-check typecheck check \
         verify review health \
         clean clean-all \
-        launch api-dev desktop-setup desktop-dev desktop-build frontend-dev
+        launch api-dev desktop-setup desktop-dev desktop-build frontend-dev \
+        download-models eval-setup eval eval-view eval-batch \
+        dspy-optimize dspy-optimize-mipro dspy-eval \
+        benchmark-spec
 
 # ============================================================================
 # HELP
@@ -51,6 +54,17 @@ help:
 	@echo "  make desktop-dev   Instructions for dev mode"
 	@echo "  make desktop-build Build production desktop app"
 	@echo "  make frontend-dev  Run Svelte frontend in dev mode"
+	@echo ""
+	@echo "Evals & Benchmarks:"
+	@echo "  make download-models      Download cross-encoder + draft model"
+	@echo "  make eval-setup           Install promptfoo CLI via pnpm"
+	@echo "  make eval                 Run promptfoo evaluation"
+	@echo "  make eval-view            Open promptfoo results viewer"
+	@echo "  make eval-batch           Run batch eval with local checks"
+	@echo "  make dspy-optimize        Run DSPy BootstrapFewShot optimization"
+	@echo "  make dspy-optimize-mipro  Run DSPy MIPROv2 optimization"
+	@echo "  make dspy-eval            Evaluate saved DSPy program"
+	@echo "  make benchmark-spec       Run speculative decoding A/B benchmark"
 
 # ============================================================================
 # SETUP
@@ -262,6 +276,52 @@ health:
 	@echo ""
 	@echo "## Outdated Packages (top 5)"
 	@uv pip list --outdated 2>/dev/null | head -6 || echo "Run 'uv pip list --outdated' to check"
+
+# ============================================================================
+# EVALS & BENCHMARKS
+# ============================================================================
+
+# --- Model Management ---
+
+download-models:
+	@echo "Downloading cross-encoder model..."
+	uv run huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2
+	@echo ""
+	@echo "Downloading draft model for speculative decoding..."
+	uv run huggingface-cli download mlx-community/LFM2-350M-4bit
+	@echo ""
+	@echo "Models downloaded successfully."
+
+# --- Promptfoo Evals ---
+
+eval-setup:
+	pnpm install -g promptfoo
+	@echo "promptfoo installed. Run 'make eval' to evaluate."
+
+eval:
+	uv run npx promptfoo eval -c evals/promptfoo.yaml
+
+eval-view:
+	uv run npx promptfoo view
+
+eval-batch:
+	uv run python evals/batch_eval.py
+
+# --- DSPy Optimization ---
+
+dspy-optimize:
+	uv run python evals/dspy_optimize.py
+
+dspy-optimize-mipro:
+	uv run python evals/dspy_optimize.py --optimizer mipro
+
+dspy-eval:
+	uv run python evals/dspy_optimize.py --eval-only
+
+# --- Benchmarks ---
+
+benchmark-spec:
+	uv run python evals/speculative_benchmark.py
 
 # ============================================================================
 # CLEANUP

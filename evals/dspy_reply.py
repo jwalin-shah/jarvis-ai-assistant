@@ -27,7 +27,7 @@ if _env_path.exists():
             os.environ.setdefault(_k.strip(), _v.strip())
 
 CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
-JUDGE_MODEL = "llama-3.3-70b"
+JUDGE_MODEL = "qwen-3-235b-a22b-instruct-2507"
 
 
 # ---------------------------------------------------------------------------
