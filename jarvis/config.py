@@ -189,6 +189,10 @@ class ModelSettings(BaseModel):
     generation_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0)
     idle_timeout_seconds: float = Field(default=300.0, ge=0.0, le=3600.0)
     warm_on_startup: bool = False
+    # Speculative decoding
+    speculative_enabled: bool = False
+    speculative_draft_model_id: str = "lfm-0.3b"
+    speculative_num_draft_tokens: int = Field(default=3, ge=1, le=10)
 
 
 class TaskQueueConfig(BaseModel):
@@ -340,11 +344,17 @@ class VecSearchConfig(BaseModel):
 class RetrievalConfig(BaseModel):
     """Retrieval configuration.
 
-    Note: Advanced retrieval features (BM25, Reranking, Temporal Decay) have been
-    removed in favor of a simplified, faster vector-only search strategy.
+    Attributes:
+        reranker_enabled: Enable cross-encoder reranking of vec_search results.
+        reranker_model: Cross-encoder model name from the registry.
+        reranker_top_k: Number of results to return after reranking.
+        reranker_candidates: Number of candidates to retrieve before reranking.
     """
 
-    pass
+    reranker_enabled: bool = False
+    reranker_model: str = "ms-marco-MiniLM-L-6-v2"
+    reranker_top_k: int = Field(default=3, ge=1, le=20)
+    reranker_candidates: int = Field(default=10, ge=1, le=100)
 
 
 class NormalizationProfile(BaseModel):

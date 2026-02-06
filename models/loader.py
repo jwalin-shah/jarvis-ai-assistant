@@ -146,6 +146,15 @@ class GenerationResult:
     tokens_generated: int
     generation_time_ms: float
     tokens_per_second: float = 0.0
+    draft_accepted_tokens: int = 0
+    speculative_enabled: bool = False
+
+    @property
+    def acceptance_rate(self) -> float:
+        """Return draft token acceptance rate (0.0 if speculative not used)."""
+        if not self.speculative_enabled or self.tokens_generated == 0:
+            return 0.0
+        return self.draft_accepted_tokens / self.tokens_generated
 
 
 @dataclass
@@ -156,6 +165,7 @@ class StreamToken:
     token_index: int
     is_final: bool = False
     ttft_ms: float | None = None
+    from_draft: bool = False
 
 
 class MLXModelLoader:
@@ -192,6 +202,9 @@ class MLXModelLoader:
         self._prompt_cache: list[Any] | None = None
         self._cache_prefix_len: int = 0
         self.last_load_time_ms: float | None = None
+        # Speculative decoding draft model
+        self._draft_model: Any = None
+        self._draft_config: ModelConfig | None = None
 
     def is_loaded(self) -> bool:
         """Check if model is currently loaded in memory."""
@@ -397,6 +410,8 @@ class MLXModelLoader:
         self._loaded_at = None
         self._prompt_cache = None
         self._cache_prefix_len = 0
+        self._draft_model = None
+        self._draft_config = None
 
         # Clear Metal GPU memory
         try:
@@ -407,6 +422,72 @@ class MLXModelLoader:
         # Force garbage collection
         gc.collect()
         logger.info("Model unloaded")
+
+    @property
+    def has_draft_model(self) -> bool:
+        """Check if a draft model is loaded for speculative decoding."""
+        return self._draft_model is not None
+
+    def load_draft_model(self, draft_model_id: str) -> bool:
+        """Load a draft model for speculative decoding.
+
+        Validates tokenizer compatibility (vocab_size match) with the target model.
+
+        Args:
+            draft_model_id: Model ID from registry (e.g., "lfm-0.3b").
+
+        Returns:
+            True if draft model loaded successfully.
+        """
+        if self._draft_model is not None:
+            logger.debug("Draft model already loaded")
+            return True
+
+        draft_config = ModelConfig(model_id=draft_model_id)
+
+        with MLXModelLoader._mlx_load_lock:
+            try:
+                logger.info(
+                    "Loading draft model: %s (%s)",
+                    draft_config.display_name,
+                    draft_config.model_path,
+                )
+                start = time.perf_counter()
+                draft_result = load(draft_config.model_path)
+                draft_model = draft_result[0]
+                draft_tokenizer = draft_result[1]
+
+                # Validate tokenizer compatibility
+                if self._tokenizer is not None:
+                    target_vocab = self._tokenizer.vocab_size
+                    draft_vocab = draft_tokenizer.vocab_size
+                    if target_vocab != draft_vocab:
+                        logger.warning(
+                            "Tokenizer mismatch: target vocab=%d, draft vocab=%d. "
+                            "Skipping speculative decoding.",
+                            target_vocab,
+                            draft_vocab,
+                        )
+                        del draft_model, draft_tokenizer
+                        return False
+
+                self._draft_model = draft_model
+                self._draft_config = draft_config
+                load_ms = (time.perf_counter() - start) * 1000
+                logger.info("Draft model loaded in %.0fms", load_ms)
+                return True
+
+            except Exception:
+                logger.exception("Failed to load draft model %s", draft_model_id)
+                return False
+
+    def unload_draft_model(self) -> None:
+        """Unload the draft model to free memory."""
+        if self._draft_model is None:
+            return
+        logger.info("Unloading draft model")
+        self._draft_model = None
+        self._draft_config = None
 
     def prefill_prompt_cache(self, prefix_text: str) -> None:
         """Pre-compute KV cache for a static prompt prefix.
@@ -498,6 +579,7 @@ class MLXModelLoader:
         stop_sequences: list[str] | None = None,
         timeout_seconds: float | None = None,
         prompt_cache: list[Any] | None = None,
+        num_draft_tokens: int | None = None,
     ) -> GenerationResult:
         """Generate text synchronously.
 
@@ -566,33 +648,66 @@ class MLXModelLoader:
             # Generate with timeout handling
             start_time = time.perf_counter()
 
-            def _do_generate() -> str:
+            # Track speculative decoding stats
+            draft_accepted = 0
+            using_speculative = self._draft_model is not None
+
+            def _do_generate() -> tuple[str, int]:
                 """Inner function for generation to run in executor.
 
                 Holds the shared GPU lock to prevent concurrent Metal access
                 with embedding encode() or other generation calls.
+
+                Returns:
+                    Tuple of (response_text, draft_accepted_count).
                 """
                 kwargs: dict[str, Any] = {}
                 if prompt_cache is not None:
                     kwargs["prompt_cache"] = prompt_cache
+
                 with MLXModelLoader._mlx_load_lock:
-                    return generate(
-                        model=self._model,
-                        tokenizer=self._tokenizer,
-                        prompt=formatted_prompt,
-                        max_tokens=max_tokens,
-                        sampler=sampler,
-                        logits_processors=logits_processors,
-                        verbose=False,
-                        **kwargs,
-                    )
+                    if self._draft_model is not None:
+                        # Speculative decoding: use stream_generate with draft_model
+                        # to track per-token acceptance
+                        text = ""
+                        total = 0
+                        accepted = 0
+                        for resp in stream_generate(
+                            model=self._model,
+                            tokenizer=self._tokenizer,
+                            prompt=formatted_prompt,
+                            max_tokens=max_tokens,
+                            sampler=sampler,
+                            logits_processors=logits_processors,
+                            draft_model=self._draft_model,
+                            num_draft_tokens=num_draft_tokens or 3,
+                            **kwargs,
+                        ):
+                            text = resp.text
+                            total += 1
+                            if getattr(resp, "from_draft", False):
+                                accepted += 1
+                        return text, accepted
+                    else:
+                        # Standard generation
+                        result = generate(
+                            model=self._model,
+                            tokenizer=self._tokenizer,
+                            prompt=formatted_prompt,
+                            max_tokens=max_tokens,
+                            sampler=sampler,
+                            logits_processors=logits_processors,
+                            verbose=False,
+                            **kwargs,
+                        )
+                        return result, 0
 
             if effective_timeout is not None and effective_timeout > 0:
                 # Use ThreadPoolExecutor for timeout handling
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(_do_generate)
                     try:
-                        response = future.result(timeout=effective_timeout)
+                        response, draft_accepted = future.result(timeout=effective_timeout)
                     except FuturesTimeoutError:
                         # Cancel the future (best effort, may not stop MLX generation)
                         # TODO: future.cancel() cannot stop a running MLX computation.
@@ -613,7 +728,7 @@ class MLXModelLoader:
                         )
             else:
                 # No timeout - run directly
-                response = _do_generate()
+                response, draft_accepted = _do_generate()
 
             generation_time = (time.perf_counter() - start_time) * 1000
 
@@ -644,6 +759,8 @@ class MLXModelLoader:
                 tokens_generated=tokens_generated,
                 generation_time_ms=generation_time,
                 tokens_per_second=round(tps, 1),
+                draft_accepted_tokens=draft_accepted,
+                speculative_enabled=using_speculative,
             )
 
         except ModelGenerationError:
@@ -669,6 +786,7 @@ class MLXModelLoader:
         stop_sequences: list[str] | None = None,
         stop_event: threading.Event | None = None,
         prompt_cache: list[Any] | None = None,
+        num_draft_tokens: int | None = None,
     ) -> Any:
         """Generate text with true streaming output (yields tokens as generated).
 
@@ -737,6 +855,9 @@ class MLXModelLoader:
             stream_kwargs: dict[str, Any] = {}
             if prompt_cache is not None:
                 stream_kwargs["prompt_cache"] = prompt_cache
+            if self._draft_model is not None:
+                stream_kwargs["draft_model"] = self._draft_model
+                stream_kwargs["num_draft_tokens"] = num_draft_tokens or 3
 
             with MLXModelLoader._mlx_load_lock:
                 for response in stream_generate(
@@ -782,6 +903,7 @@ class MLXModelLoader:
                             token_index=token_index,
                             is_final=is_final,
                             ttft_ms=ttft,
+                            from_draft=getattr(response, "from_draft", False),
                         )
                         token_index += 1
 

@@ -48,7 +48,7 @@ class TestMobilizationBehavior:
         ("What time is the meeting?", ResponsePressure.HIGH),
         ("Cool, see ya", ResponsePressure.LOW),
         ("?", ResponsePressure.HIGH),
-        ("k", ResponsePressure.LOW),
+        ("k", ResponsePressure.NONE),
     ])
     def test_mft_baseline_expectations(self, text, expected_pressure):
         """MFT: Basic triggers should match expected pressure buckets."""

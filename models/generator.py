@@ -150,12 +150,21 @@ class MLXGenerator:
                 # Prefill cache after first load
                 self._ensure_prompt_cache()
 
+            # Load draft model if speculative decoding is enabled
+            self._ensure_draft_model()
+
             # Build formatted prompt
             formatted_prompt = self._prompt_builder.build(request)
 
             # Use KV cache if prompt starts with system prefix
+            # Skip cache when draft model is active (speculative_generate_step
+            # manages its own cache internally)
             prompt_cache = None
-            if self._loader.has_prompt_cache and formatted_prompt.startswith(_get_system_prefix()):
+            if (
+                not self._loader.has_draft_model
+                and self._loader.has_prompt_cache
+                and formatted_prompt.startswith(_get_system_prefix())
+            ):
                 prompt_cache = self._loader._prompt_cache
                 # Strip prefix from prompt since it's already in the cache
                 formatted_prompt = formatted_prompt[len(_get_system_prefix()) :]
@@ -206,6 +215,20 @@ class MLXGenerator:
             self._loader.prefill_prompt_cache(_get_system_prefix())
         except Exception:
             logger.debug("Prompt cache prefill failed, will generate without cache")
+
+    def _ensure_draft_model(self) -> None:
+        """Load draft model for speculative decoding if enabled in config."""
+        if self._loader.has_draft_model:
+            return
+        try:
+            from jarvis.config import get_config
+
+            settings = get_config().model
+            if not settings.speculative_enabled:
+                return
+            self._loader.load_draft_model(settings.speculative_draft_model_id)
+        except Exception:
+            logger.debug("Draft model load failed, generating without speculative decoding")
 
     def is_loaded(self) -> bool:
         """Check if model is loaded in memory."""
@@ -279,12 +302,20 @@ class MLXGenerator:
                 loaded_for_this_call = True
                 self._ensure_prompt_cache()
 
+            # Load draft model if speculative decoding is enabled
+            self._ensure_draft_model()
+
             # Build formatted prompt
             formatted_prompt = self._prompt_builder.build(request)
 
             # Use KV cache if prompt starts with system prefix
+            # Skip cache when draft model is active
             stream_prompt_cache = None
-            if self._loader.has_prompt_cache and formatted_prompt.startswith(_get_system_prefix()):
+            if (
+                not self._loader.has_draft_model
+                and self._loader.has_prompt_cache
+                and formatted_prompt.startswith(_get_system_prefix())
+            ):
                 stream_prompt_cache = self._loader._prompt_cache
                 formatted_prompt = formatted_prompt[len(_get_system_prefix()) :]
 
