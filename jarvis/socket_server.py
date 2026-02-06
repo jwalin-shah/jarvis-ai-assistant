@@ -3,7 +3,7 @@
 JSON-RPC server over Unix socket AND WebSocket for the desktop app.
 Provides LLM generation, search, and classification with streaming support.
 
-Unix Socket: /tmp/jarvis.sock (for Tauri app)
+Unix Socket: ~/.jarvis/jarvis.sock (for Tauri app)
 WebSocket:   ws://localhost:8743 (for browser/Playwright)
 
 Protocol: JSON-RPC 2.0 over newline-delimited JSON
@@ -32,7 +32,7 @@ from websockets.server import ServerConnection
 logger = logging.getLogger(__name__)
 
 # Socket configuration
-SOCKET_PATH = Path("/tmp/jarvis.sock")
+SOCKET_PATH = Path.home() / ".jarvis" / "jarvis.sock"
 WEBSOCKET_HOST = "127.0.0.1"
 WEBSOCKET_PORT = 8743
 MAX_MESSAGE_SIZE = 1024 * 1024  # 1MB max message size
@@ -50,7 +50,7 @@ class WebSocketWriter:
 
     def write(self, data: bytes) -> None:
         """Buffer data to send."""
-        self._buffer += data.decode()
+        self._buffer += data.decode("utf-8", errors="replace")
 
     async def drain(self) -> None:
         """Send buffered data over WebSocket."""
@@ -145,9 +145,6 @@ class JarvisSocketServer:
         # Search methods
         self.register("semantic_search", self._semantic_search)
 
-        # Classification methods
-        self.register("classify_intent", self._classify_intent)
-
         # Batch operations
         self.register("batch", self._batch)
 
@@ -177,8 +174,11 @@ class JarvisSocketServer:
     async def start(self) -> None:
         """Start the socket server (Unix + WebSocket).
 
-        Creates /tmp/jarvis.sock and ws://localhost:8743 for connections.
+        Creates ~/.jarvis/jarvis.sock and ws://localhost:8743 for connections.
         """
+        # Ensure socket directory exists with user-only permissions
+        SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+
         # Remove existing socket file
         if SOCKET_PATH.exists():
             SOCKET_PATH.unlink()
@@ -198,6 +198,7 @@ class JarvisSocketServer:
             WEBSOCKET_HOST,
             WEBSOCKET_PORT,
             max_size=MAX_MESSAGE_SIZE,
+            origins=["tauri://localhost", "http://localhost", "http://127.0.0.1"],
         )
 
         self._running = True
@@ -253,14 +254,12 @@ class JarvisSocketServer:
         try:
             logger.info("Preloading models in background...")
 
-            # Run all preloading in parallel for faster startup
-            await asyncio.gather(
-                asyncio.to_thread(self._preload_llm),
-                asyncio.to_thread(self._preload_embeddings),
-                asyncio.to_thread(self._preload_classifiers),
-                asyncio.to_thread(self._preload_faiss_index),
-                return_exceptions=True,  # Don't fail if one preload fails
-            )
+            # Load models sequentially to avoid memory spike on 8GB systems
+            for loader in [self._preload_llm, self._preload_embeddings, self._preload_vec_index]:
+                try:
+                    await asyncio.to_thread(loader)
+                except Exception as e:
+                    logger.warning(f"Preload failed for {loader.__name__}: {e}")
 
             self._models_ready = True
             self._models_ready_event.set()
@@ -306,7 +305,7 @@ class JarvisSocketServer:
     def _preload_embeddings(self) -> None:
         """Preload the embeddings model (sync)."""
         try:
-            from jarvis.embeddings import get_embedder
+            from jarvis.embedding_adapter import get_embedder
 
             embedder = get_embedder()
             if embedder:
@@ -316,40 +315,20 @@ class JarvisSocketServer:
         except Exception as e:
             logger.debug(f"Embeddings preload skipped: {e}")
 
-    def _preload_classifiers(self) -> None:
-        """Preload intent classifier (sync)."""
+    def _preload_vec_index(self) -> None:
+        """Preload the semantic searcher for fast first search (sync)."""
         try:
-            from jarvis.intent import get_intent_classifier
+            from integrations.imessage import ChatDBReader
+            from jarvis.search.semantic_search import get_semantic_searcher
 
-            # Load intent classifier (triggers SVM model load)
-            intent_clf = get_intent_classifier()
-            if intent_clf:
-                logger.debug("Intent classifier preloaded")
+            with ChatDBReader() as reader:
+                searcher = get_semantic_searcher(reader)
+                # Just initializing it warms up the cache
+                if searcher:
+                    logger.debug("Semantic searcher preloaded")
 
         except Exception as e:
-            logger.debug(f"Classifier preload skipped: {e}")
-
-    def _preload_faiss_index(self) -> None:
-        """Preload the FAISS index for fast first search (sync)."""
-        try:
-            from jarvis.db import get_db
-            from jarvis.index import TriggerIndexSearcher
-
-            db = get_db()
-            db.init_schema()
-
-            # Check if index exists before trying to load
-            active_index = db.get_active_index()
-            if active_index:
-                searcher = TriggerIndexSearcher(db)
-                # Access the index property to trigger loading
-                _ = searcher.index
-                logger.debug(f"FAISS index preloaded (v{active_index.version_id})")
-            else:
-                logger.debug("No FAISS index to preload")
-
-        except Exception as e:
-            logger.debug(f"FAISS preload skipped: {e}")
+            logger.debug(f"Semantic searcher preload skipped: {e}")
 
     async def stop(self) -> None:
         """Stop the socket server."""
@@ -537,7 +516,7 @@ class JarvisSocketServer:
         except websockets.ConnectionClosed:
             pass
         except Exception as e:
-            logger.debug(f"WebSocket client error: {e}")
+            logger.warning(f"WebSocket client error: {e}")
         finally:
             self._ws_clients.discard(websocket)
             logger.debug(f"WebSocket client disconnected: {websocket.remote_address}")
@@ -576,6 +555,9 @@ class JarvisSocketServer:
             return self._error_response(request_id, METHOD_NOT_FOUND, f"Method not found: {method}")
 
         # Check if streaming is requested and supported
+        # Make a shallow copy to avoid mutating the original params
+        if isinstance(params, dict):
+            params = dict(params)
         stream_requested = isinstance(params, dict) and params.pop("stream", False)
         supports_streaming = method in self._streaming_methods
 
@@ -609,9 +591,9 @@ class JarvisSocketServer:
         except TypeError as e:
             return self._error_response(request_id, INVALID_PARAMS, f"Invalid params: {e}")
 
-        except Exception as e:
+        except Exception:
             logger.exception(f"Error handling {method}")
-            return self._error_response(request_id, INTERNAL_ERROR, str(e))
+            return self._error_response(request_id, INTERNAL_ERROR, "Internal server error")
 
     def _success_response(self, request_id: Any, result: Any) -> str:
         """Build a success response."""
@@ -649,6 +631,7 @@ class JarvisSocketServer:
         token: str,
         token_index: int,
         is_final: bool = False,
+        request_id: Any = None,
     ) -> None:
         """Send a streaming token notification to a client.
 
@@ -657,6 +640,7 @@ class JarvisSocketServer:
             token: The token text
             token_index: Index of this token in the stream
             is_final: Whether this is the last token
+            request_id: Request ID for correlating tokens with requests
         """
         notification = json.dumps(
             {
@@ -666,6 +650,7 @@ class JarvisSocketServer:
                     "token": token,
                     "index": token_index,
                     "final": is_final,
+                    "request_id": request_id,
                 },
             }
         )
@@ -807,7 +792,7 @@ class JarvisSocketServer:
             raise
         except Exception as e:
             logger.exception("Error generating draft")
-            raise JsonRpcError(INTERNAL_ERROR, f"Generation failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Generation failed") from e
 
     async def _generate_draft_streaming(
         self,
@@ -835,7 +820,7 @@ class JarvisSocketServer:
 
         # Ensure model is loaded before streaming
         if not model.is_loaded():
-            await asyncio.to_thread(model.load)
+            await asyncio.wait_for(asyncio.to_thread(model.load), timeout=120.0)
 
         # Build prompt
         thread_text = "\n".join(context[-10:]) if context else ""
@@ -857,7 +842,7 @@ Last message: {last_incoming}
 Write a brief, helpful reply:"""
 
         # Use a queue to bridge sync generator and async sending
-        token_queue: queue.Queue[tuple[str, int, bool] | None] = queue.Queue()
+        token_queue: queue.Queue[tuple[str, int, bool] | None] = queue.Queue(maxsize=100)
         generation_error: list[Exception] = []
 
         def producer():
@@ -871,10 +856,10 @@ Write a brief, helpful reply:"""
                             stream_token.is_final,
                         )
                     )
-                token_queue.put(None)  # Signal completion
             except Exception as e:
                 generation_error.append(e)
-                token_queue.put(None)
+            finally:
+                token_queue.put(None)  # Always signal completion
 
         # Start generation in background thread
         gen_thread = threading.Thread(target=producer, daemon=True)
@@ -900,7 +885,9 @@ Write a brief, helpful reply:"""
                 token_count += 1
 
                 # Send token to client immediately
-                await self._send_stream_token(writer, token_text, token_index, is_final)
+                await self._send_stream_token(
+                    writer, token_text, token_index, is_final, request_id=request_id
+                )
 
             # Wait for thread to finish
             gen_thread.join(timeout=5.0)
@@ -911,7 +898,7 @@ Write a brief, helpful reply:"""
 
         except Exception as e:
             logger.exception("Streaming generation failed")
-            raise JsonRpcError(INTERNAL_ERROR, f"Streaming failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
 
         # Send final response
         result = {
@@ -1018,7 +1005,7 @@ Summary:"""
             raise
         except Exception as e:
             logger.exception("Error summarizing conversation")
-            raise JsonRpcError(INTERNAL_ERROR, f"Summarization failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Summarization failed") from e
 
     async def _summarize_streaming(
         self,
@@ -1034,9 +1021,9 @@ Summary:"""
 
         # Ensure model is loaded before streaming
         if not model.is_loaded():
-            await asyncio.to_thread(model.load)
+            await asyncio.wait_for(asyncio.to_thread(model.load), timeout=120.0)
 
-        token_queue: queue.Queue[tuple[str, int, bool] | None] = queue.Queue()
+        token_queue: queue.Queue[tuple[str, int, bool] | None] = queue.Queue(maxsize=100)
         generation_error: list[Exception] = []
 
         def producer():
@@ -1049,10 +1036,10 @@ Summary:"""
                             stream_token.is_final,
                         )
                     )
-                token_queue.put(None)
             except Exception as e:
                 generation_error.append(e)
-                token_queue.put(None)
+            finally:
+                token_queue.put(None)  # Always signal completion
 
         gen_thread = threading.Thread(target=producer, daemon=True)
         gen_thread.start()
@@ -1074,7 +1061,9 @@ Summary:"""
                 full_response += token_text
                 token_count += 1
 
-                await self._send_stream_token(writer, token_text, token_index, is_final)
+                await self._send_stream_token(
+                    writer, token_text, token_index, is_final, request_id=request_id
+                )
 
             gen_thread.join(timeout=5.0)
 
@@ -1083,7 +1072,7 @@ Summary:"""
 
         except Exception as e:
             logger.exception("Streaming summarization failed")
-            raise JsonRpcError(INTERNAL_ERROR, f"Streaming failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
 
         # Parse the streamed response
         lines = full_response.strip().split("\n")
@@ -1143,7 +1132,7 @@ Summary:"""
 
         except Exception as e:
             logger.exception("Error getting smart replies")
-            raise JsonRpcError(INTERNAL_ERROR, f"Smart replies failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Smart replies failed") from e
 
     async def _semantic_search(
         self,
@@ -1164,29 +1153,33 @@ Summary:"""
             Dict with results and total_results
         """
         try:
-            from jarvis.index import semantic_search
+            from integrations.imessage.reader import ChatDBReader
+            from jarvis.search.semantic_search import SearchFilters, get_semantic_searcher
 
             # Build filter args
-            filter_kwargs: dict[str, Any] = {"limit": limit, "threshold": threshold}
+            search_filters = SearchFilters()
             if filters:
                 if "chat_id" in filters:
-                    filter_kwargs["chat_id"] = filters["chat_id"]
+                    search_filters.chat_id = filters["chat_id"]
                 if "sender" in filters:
-                    filter_kwargs["sender"] = filters["sender"]
+                    search_filters.sender = filters["sender"]
 
-            results = semantic_search(query, **filter_kwargs)
+            with ChatDBReader() as reader:
+                searcher = get_semantic_searcher(reader)
+                searcher.similarity_threshold = threshold
+                results = searcher.search(query, filters=search_filters, limit=limit)
 
             return {
                 "results": [
                     {
                         "message": {
-                            "id": r["message_id"],
-                            "chat_id": r["chat_id"],
-                            "text": r["text"],
-                            "sender": r["sender"],
-                            "date": r["date"],
+                            "id": r.message.id,
+                            "chat_id": r.message.chat_id,
+                            "text": r.message.text,
+                            "sender": r.message.sender,
+                            "date": r.message.date.isoformat(),
                         },
-                        "similarity": r["similarity"],
+                        "similarity": r.similarity,
                     }
                     for r in results
                 ],
@@ -1195,34 +1188,7 @@ Summary:"""
 
         except Exception as e:
             logger.exception("Error in semantic search")
-            raise JsonRpcError(INTERNAL_ERROR, f"Search failed: {e}") from e
-
-    async def _classify_intent(self, text: str) -> dict[str, Any]:
-        """Classify message intent.
-
-        Args:
-            text: Message text to classify
-
-        Returns:
-            Dict with intent, confidence, requires_response
-        """
-        try:
-            from jarvis.intent import get_intent_classifier
-
-            classifier = get_intent_classifier()
-            result = classifier.classify(text)
-
-            return {
-                "intent": result.intent.value
-                if hasattr(result.intent, "value")
-                else str(result.intent),
-                "confidence": result.confidence,
-                "requires_response": result.requires_response,
-            }
-
-        except Exception as e:
-            logger.exception("Error classifying intent")
-            raise JsonRpcError(INTERNAL_ERROR, f"Classification failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Search failed") from e
 
     async def _batch(
         self,
@@ -1294,11 +1260,11 @@ Summary:"""
                     "id": req_id,
                     "error": {"code": e.code, "message": e.message},
                 }
-            except Exception as e:
+            except Exception:
                 logger.exception(f"Batch error for {method}")
                 return {
                     "id": req_id,
-                    "error": {"code": INTERNAL_ERROR, "message": str(e)},
+                    "error": {"code": INTERNAL_ERROR, "message": "Internal server error"},
                 }
 
         # Execute all requests in parallel
@@ -1329,7 +1295,7 @@ Summary:"""
             return stats
         except Exception as e:
             logger.exception("Error getting prefetch stats")
-            raise JsonRpcError(INTERNAL_ERROR, f"Stats failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Stats retrieval failed") from e
 
     async def _prefetch_invalidate(
         self,
@@ -1353,7 +1319,7 @@ Summary:"""
             return {"invalidated": count}
         except Exception as e:
             logger.exception("Error invalidating cache")
-            raise JsonRpcError(INTERNAL_ERROR, f"Invalidation failed: {e}") from e
+            raise JsonRpcError(INTERNAL_ERROR, "Invalidation failed") from e
 
     async def _prefetch_focus(self, chat_id: str) -> dict[str, Any]:
         """Signal that user focused on a chat (triggers high-priority prefetch).

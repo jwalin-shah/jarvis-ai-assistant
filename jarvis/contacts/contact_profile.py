@@ -39,21 +39,110 @@ PROFILES_DIR = Path.home() / ".jarvis" / "profiles"
 MIN_MESSAGES_FOR_PROFILE = 10
 
 # Common text abbreviations
-TEXT_ABBREVIATIONS = frozenset({
-    "u", "ur", "r", "n", "y", "k", "ok", "kk", "pls", "plz", "thx",
-    "ty", "np", "yw", "idk", "idc", "imo", "imho", "tbh", "ngl",
-    "fr", "rn", "atm", "btw", "fyi", "lmk", "hmu", "wbu", "hbu",
-    "omg", "omw", "otw", "brb", "brt", "ttyl", "gtg", "g2g",
-    "lol", "lmao", "lmfao", "rofl", "jk", "jfc", "smh", "nvm",
-    "bc", "cuz", "tho", "rly", "sry", "prob", "def", "obvi",
-    "whatev", "watever", "w/e", "w/o", "b4", "2day", "2morrow",
-    "2nite", "l8r", "l8", "gr8", "m8", "str8", "h8", "w8",
-    "gonna", "wanna", "gotta", "kinda", "sorta", "tryna",
-    "boutta", "finna", "shoulda", "coulda", "woulda",
-    "yea", "yeh", "ya", "yup", "yep", "nah", "nope",
-    "aight", "ight", "bet", "facts", "cap", "nocap", "lowkey",
-    "highkey", "deadass", "sus", "slay", "fire", "lit", "goat",
-})
+TEXT_ABBREVIATIONS = frozenset(
+    {
+        "u",
+        "ur",
+        "r",
+        "n",
+        "y",
+        "k",
+        "ok",
+        "kk",
+        "pls",
+        "plz",
+        "thx",
+        "ty",
+        "np",
+        "yw",
+        "idk",
+        "idc",
+        "imo",
+        "imho",
+        "tbh",
+        "ngl",
+        "fr",
+        "rn",
+        "atm",
+        "btw",
+        "fyi",
+        "lmk",
+        "hmu",
+        "wbu",
+        "hbu",
+        "omg",
+        "omw",
+        "otw",
+        "brb",
+        "brt",
+        "ttyl",
+        "gtg",
+        "g2g",
+        "lol",
+        "lmao",
+        "lmfao",
+        "rofl",
+        "jk",
+        "jfc",
+        "smh",
+        "nvm",
+        "bc",
+        "cuz",
+        "tho",
+        "rly",
+        "sry",
+        "prob",
+        "def",
+        "obvi",
+        "whatev",
+        "watever",
+        "w/e",
+        "w/o",
+        "b4",
+        "2day",
+        "2morrow",
+        "2nite",
+        "l8r",
+        "l8",
+        "gr8",
+        "m8",
+        "str8",
+        "h8",
+        "w8",
+        "gonna",
+        "wanna",
+        "gotta",
+        "kinda",
+        "sorta",
+        "tryna",
+        "boutta",
+        "finna",
+        "shoulda",
+        "coulda",
+        "woulda",
+        "yea",
+        "yeh",
+        "ya",
+        "yup",
+        "yep",
+        "nah",
+        "nope",
+        "aight",
+        "ight",
+        "bet",
+        "facts",
+        "cap",
+        "nocap",
+        "lowkey",
+        "highkey",
+        "deadass",
+        "sus",
+        "slay",
+        "fire",
+        "lit",
+        "goat",
+    }
+)
 
 EMOJI_PATTERN = re.compile(
     r"[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F600-\U0001F64F"
@@ -61,39 +150,179 @@ EMOJI_PATTERN = re.compile(
 )
 
 # Formality indicators (from unified_relationship.py)
-CASUAL_INDICATORS = frozenset({
-    "lol", "haha", "hehe", "lmao", "omg", "btw", "brb", "ttyl", "idk", "ikr",
-    "nvm", "tbh", "imo", "np", "k", "kk", "yeah", "yep", "nope", "gonna",
-    "wanna", "gotta", "cuz", "bc", "u", "ur", "r", "thx", "ty", "pls", "plz",
-    "yo", "dude", "bro", "sis", "fam", "smh", "ngl", "rn", "af", "lowkey",
-    "highkey", "ong", "fr", "periodt", "slay", "based", "cap", "nocap",
-})
+CASUAL_INDICATORS = frozenset(
+    {
+        "lol",
+        "haha",
+        "hehe",
+        "lmao",
+        "omg",
+        "btw",
+        "brb",
+        "ttyl",
+        "idk",
+        "ikr",
+        "nvm",
+        "tbh",
+        "imo",
+        "np",
+        "k",
+        "kk",
+        "yeah",
+        "yep",
+        "nope",
+        "gonna",
+        "wanna",
+        "gotta",
+        "cuz",
+        "bc",
+        "u",
+        "ur",
+        "r",
+        "thx",
+        "ty",
+        "pls",
+        "plz",
+        "yo",
+        "dude",
+        "bro",
+        "sis",
+        "fam",
+        "smh",
+        "ngl",
+        "rn",
+        "af",
+        "lowkey",
+        "highkey",
+        "ong",
+        "fr",
+        "periodt",
+        "slay",
+        "based",
+        "cap",
+        "nocap",
+    }
+)
 
-FORMAL_INDICATORS = frozenset({
-    "regards", "sincerely", "please", "kindly", "thank you", "appreciate",
-    "regarding", "attached", "discussed", "confirmed", "scheduled", "deadline",
-    "meeting", "mr", "mrs", "ms", "dr", "hello", "dear", "cordially",
-    "per", "pursuant", "hereby", "accordingly", "respectfully",
-})
+FORMAL_INDICATORS = frozenset(
+    {
+        "regards",
+        "sincerely",
+        "please",
+        "kindly",
+        "thank you",
+        "appreciate",
+        "regarding",
+        "attached",
+        "discussed",
+        "confirmed",
+        "scheduled",
+        "deadline",
+        "meeting",
+        "mr",
+        "mrs",
+        "ms",
+        "dr",
+        "hello",
+        "dear",
+        "cordially",
+        "per",
+        "pursuant",
+        "hereby",
+        "accordingly",
+        "respectfully",
+    }
+)
 
-GREETING_PATTERNS = frozenset({
-    "hi", "hey", "hello", "yo", "sup", "whats up", "hola", "good morning",
-    "morning", "afternoon", "evening", "howdy", "hiya", "heya",
-})
+GREETING_PATTERNS = frozenset(
+    {
+        "hi",
+        "hey",
+        "hello",
+        "yo",
+        "sup",
+        "whats up",
+        "hola",
+        "good morning",
+        "morning",
+        "afternoon",
+        "evening",
+        "howdy",
+        "hiya",
+        "heya",
+    }
+)
 
-SIGNOFF_PATTERNS = frozenset({
-    "bye", "goodbye", "later", "cya", "see ya", "see you", "ttyl",
-    "talk later", "take care", "night", "goodnight", "gn", "peace",
-    "cheers", "thanks", "thank you", "thx", "ty",
-})
+SIGNOFF_PATTERNS = frozenset(
+    {
+        "bye",
+        "goodbye",
+        "later",
+        "cya",
+        "see ya",
+        "see you",
+        "ttyl",
+        "talk later",
+        "take care",
+        "night",
+        "goodnight",
+        "gn",
+        "peace",
+        "cheers",
+        "thanks",
+        "thank you",
+        "thx",
+        "ty",
+    }
+)
 
-STOPWORDS = frozenset({
-    "a", "an", "the", "is", "are", "was", "were", "be", "been",
-    "i", "you", "he", "she", "it", "we", "they", "me", "my",
-    "to", "of", "in", "for", "on", "with", "at", "by", "from",
-    "and", "or", "but", "if", "so", "that", "this", "just",
-    "not", "no", "our", "your", "their", "have", "has", "had",
-})
+STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "i",
+        "you",
+        "he",
+        "she",
+        "it",
+        "we",
+        "they",
+        "me",
+        "my",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "and",
+        "or",
+        "but",
+        "if",
+        "so",
+        "that",
+        "this",
+        "just",
+        "not",
+        "no",
+        "our",
+        "your",
+        "their",
+        "have",
+        "has",
+        "had",
+    }
+)
 
 
 # =============================================================================
@@ -241,9 +470,7 @@ class ContactProfileBuilder:
         analyze_msgs = my_messages if my_messages else messages
 
         # Relationship classification
-        relationship, rel_confidence = self._classify_relationship(
-            contact_id, messages
-        )
+        relationship, rel_confidence = self._classify_relationship(contact_id, messages)
 
         # Formality (Laplace-smoothed)
         formality_score = self._compute_formality(analyze_msgs)
@@ -268,9 +495,7 @@ class ContactProfileBuilder:
         common_phrases = self._extract_common_phrases(analyze_msgs)
 
         # Topics (optional)
-        top_topics = self._discover_topics(
-            contact_id, messages, embeddings
-        )
+        top_topics = self._discover_topics(contact_id, messages, embeddings)
 
         return ContactProfile(
             contact_id=contact_id,
@@ -297,9 +522,7 @@ class ContactProfileBuilder:
 
     # --- Relationship ---
 
-    def _classify_relationship(
-        self, contact_id: str, messages: list[Message]
-    ) -> tuple[str, float]:
+    def _classify_relationship(self, contact_id: str, messages: list[Message]) -> tuple[str, float]:
         """Classify relationship using RelationshipClassifier."""
         try:
             from jarvis.classifiers.relationship_classifier import (
@@ -459,9 +682,7 @@ class ContactProfileBuilder:
         return [s for s, _ in signoffs_found.most_common(3)]
 
     @staticmethod
-    def _extract_common_phrases(
-        messages: list[Message], min_count: int = 3
-    ) -> list[str]:
+    def _extract_common_phrases(messages: list[Message], min_count: int = 3) -> list[str]:
         phrase_counter: Counter[str] = Counter()
         for msg in messages:
             if not msg.text or len(msg.text) < 5:
@@ -508,12 +729,8 @@ class ContactProfileBuilder:
                 texts=texts,
             )
             # Extract keyword labels from top topics by message count
-            sorted_topics = sorted(
-                topics.topics, key=lambda t: t.message_count, reverse=True
-            )
-            return [
-                ", ".join(t.keywords[:3]) for t in sorted_topics[:3]
-            ]
+            sorted_topics = sorted(topics.topics, key=lambda t: t.message_count, reverse=True)
+            return [", ".join(t.keywords[:3]) for t in sorted_topics[:3]]
         except Exception as e:
             logger.warning("Topic discovery failed for %s: %s", contact_id, e)
             return []
@@ -545,10 +762,7 @@ def format_style_guide(profile: ContactProfile) -> str:
     }.get(profile.formality, "casual, friendly")
 
     if profile.relationship != "unknown":
-        parts.append(
-            f"Use a {tone_label} tone. "
-            f"This is a {profile.relationship.replace('_', ' ')}"
-        )
+        parts.append(f"Use a {tone_label} tone. This is a {profile.relationship.replace('_', ' ')}")
     else:
         parts.append(f"Use a {tone_label} tone")
 

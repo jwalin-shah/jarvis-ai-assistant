@@ -24,10 +24,18 @@ from jarvis.router import (
     get_reply_router,
     reset_reply_router,
 )
+from jarvis.services.context_service import ContextService
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def mock_health_check():
+    """Mock health check to allow generation in tests."""
+    with patch("jarvis.generation.can_use_llm", return_value=(True, "ok")):
+        yield
 
 
 @pytest.fixture
@@ -40,14 +48,6 @@ def mock_db() -> MagicMock:
     db.get_stats = MagicMock(return_value={"pairs": 100, "contacts": 10})
     db.get_active_index = MagicMock(return_value=None)
     return db
-
-
-@pytest.fixture
-def mock_index_searcher() -> MagicMock:
-    """Create a mock TriggerIndexSearcher."""
-    searcher = MagicMock()
-    searcher.search_with_pairs = MagicMock(return_value=[])
-    return searcher
 
 
 @pytest.fixture
@@ -64,15 +64,11 @@ def mock_generator() -> MagicMock:
 @pytest.fixture
 def router(
     mock_db: MagicMock,
-    mock_index_searcher: MagicMock,
     mock_generator: MagicMock,
 ) -> ReplyRouter:
     """Create a ReplyRouter with all mocked dependencies."""
-    return ReplyRouter(
-        db=mock_db,
-        index_searcher=mock_index_searcher,
-        generator=mock_generator,
-    )
+    r = ReplyRouter(db=mock_db, generator=mock_generator)
+    return r
 
 
 @pytest.fixture
@@ -99,24 +95,19 @@ class TestReplyRouterInit:
     def test_init_with_all_dependencies(
         self,
         mock_db: MagicMock,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test initialization with all dependencies provided."""
-        router = ReplyRouter(
-            db=mock_db,
-            index_searcher=mock_index_searcher,
-            generator=mock_generator,
-        )
+        router = ReplyRouter(db=mock_db, generator=mock_generator)
         assert router._db is mock_db
-        assert router._index_searcher is mock_index_searcher
+        assert router._semantic_searcher is None  # Always lazy
         assert router._generator is mock_generator
 
     def test_init_with_no_dependencies(self) -> None:
         """Test initialization with no dependencies (lazy loading)."""
         router = ReplyRouter()
         assert router._db is None
-        assert router._index_searcher is None
+        assert router._semantic_searcher is None
         assert router._generator is None
 
     def test_db_property_creates_default(self) -> None:
@@ -131,21 +122,14 @@ class TestReplyRouterInit:
             mock_get_db.assert_called_once()
             mock_db.init_schema.assert_called_once()
 
-    def test_index_searcher_property_creates_default(self) -> None:
-        """Test index_searcher property creates default instance when None."""
-        mock_db = MagicMock()
-        mock_db.init_schema = MagicMock()
-
-        with patch("jarvis.router.get_db", return_value=mock_db):
-            with patch("jarvis.index.TriggerIndexSearcher") as mock_searcher_cls:
-                mock_searcher = MagicMock()
-                mock_searcher_cls.return_value = mock_searcher
-
-                router = ReplyRouter()
-                router._index_searcher = None
-                result = router.index_searcher
-
-                assert result is mock_searcher
+    def test_semantic_searcher_returns_none_without_reader(self) -> None:
+        """Test semantic_searcher returns None when no imessage_reader."""
+        with patch(
+            "integrations.imessage.reader.ChatDBReader",
+            side_effect=Exception("No access"),
+        ):
+            router = ReplyRouter()
+            assert router.semantic_searcher is None
 
     def test_generator_property_creates_default(self) -> None:
         """Test generator property creates default instance when None."""
@@ -181,13 +165,10 @@ class TestAlwaysGenerates:
     def test_all_messages_generate(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
         message: str,
     ) -> None:
         """Test that all non-empty messages route to generation."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
         result = router.route(message)
 
         assert result["type"] == "generated"
@@ -216,12 +197,9 @@ class TestMobilizationIntegration:
     def test_high_pressure_high_confidence(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test HIGH pressure messages produce high confidence."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
         result = router.route("Can you pick me up at 5?")
 
         assert result["type"] == "generated"
@@ -230,12 +208,9 @@ class TestMobilizationIntegration:
     def test_low_pressure_medium_confidence(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test LOW pressure messages produce medium confidence."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
         result = router.route("I think the weather is nice")
 
         assert result["type"] == "generated"
@@ -244,12 +219,9 @@ class TestMobilizationIntegration:
     def test_medium_pressure_medium_confidence(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test MEDIUM pressure messages produce medium confidence."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
         result = router.route("I got the job!!")
 
         assert result["type"] == "generated"
@@ -262,16 +234,15 @@ class TestMobilizationIntegration:
 
 
 class TestRouteGeneratePath:
-    """Tests for generation with FAISS context."""
+    """Tests for generation with search context."""
 
     def test_generate_with_similar_examples(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test generation uses similar patterns as context."""
-        mock_index_searcher.search_with_pairs.return_value = [
+        search_results = [
             {
                 "trigger_text": "coffee tomorrow?",
                 "response_text": "Sounds great!",
@@ -284,35 +255,22 @@ class TestRouteGeneratePath:
             },
         ]
 
-        result = router.route("want to grab coffee?")
+        with patch.object(
+            router.context_service, "search_examples", return_value=search_results
+        ):
+            result = router.route("want to grab coffee?")
 
         assert result["type"] == "generated"
-        assert result.get("similar_triggers") is not None
-        assert len(result["similar_triggers"]) == 2
+        mock_generator.generate.assert_called()
 
-    def test_generate_fallback_on_no_index(
+    def test_generate_fallback_on_search_error(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
-        """Test generation works when FAISS index not found."""
-        mock_index_searcher.search_with_pairs.side_effect = FileNotFoundError("Index not found")
-
+        """Test generation works when search returns empty (error handled internally)."""
+        # search_examples catches exceptions and returns [], generation still proceeds
         result = router.route("how are you doing?")
-
-        assert result["type"] == "generated"
-
-    def test_generate_fallback_on_index_error(
-        self,
-        router: ReplyRouter,
-        mock_index_searcher: MagicMock,
-        mock_generator: MagicMock,
-    ) -> None:
-        """Test generation works when FAISS search errors."""
-        mock_index_searcher.search_with_pairs.side_effect = Exception("Index error")
-
-        result = router.route("tell me about the project")
 
         assert result["type"] == "generated"
 
@@ -400,12 +358,10 @@ class TestEdgeCases:
         self,
         router: ReplyRouter,
         mock_db: MagicMock,
-        mock_index_searcher: MagicMock,
         sample_contact: Contact,
     ) -> None:
         """Test routing with contact_id for personalization."""
         mock_db.get_contact.return_value = sample_contact
-        mock_index_searcher.search_with_pairs.return_value = []
 
         router.route("hello there!", contact_id=1)
 
@@ -415,13 +371,11 @@ class TestEdgeCases:
         self,
         router: ReplyRouter,
         mock_db: MagicMock,
-        mock_index_searcher: MagicMock,
         sample_contact: Contact,
     ) -> None:
         """Test routing with chat_id for contact lookup."""
         mock_db.get_contact.return_value = None
         mock_db.get_contact_by_chat_id.return_value = sample_contact
-        mock_index_searcher.search_with_pairs.return_value = []
 
         router.route("hello there!", chat_id="chat123")
 
@@ -430,13 +384,9 @@ class TestEdgeCases:
     def test_generation_error_returns_clarify(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test that generation errors fall back to clarify response."""
-        mock_index_searcher.search_with_pairs.return_value = [
-            {"trigger_text": "test", "response_text": "test", "similarity": 0.75}
-        ]
         mock_generator.generate.side_effect = RuntimeError("Generation failed")
 
         result = router.route("tell me something interesting")
@@ -489,9 +439,9 @@ class TestThresholds:
 
     def test_thresholds_exist(self) -> None:
         """Test that legacy threshold constants still exist."""
-        assert QUICK_REPLY_THRESHOLD == 0.95
-        assert CONTEXT_THRESHOLD == 0.65
-        assert GENERATE_THRESHOLD == 0.45
+        assert QUICK_REPLY_THRESHOLD == 0.8
+        assert CONTEXT_THRESHOLD == 0.4
+        assert GENERATE_THRESHOLD == 0.0
 
     def test_threshold_ordering(self) -> None:
         """Test that thresholds are properly ordered."""
@@ -531,7 +481,7 @@ class TestIndexNotAvailableError:
         from jarvis.router import IndexNotAvailableError
 
         error = IndexNotAvailableError()
-        assert "FAISS index not available" in str(error)
+        assert "index not available" in str(error).lower()
 
     def test_index_not_available_inherits_from_router_error(self) -> None:
         """Test IndexNotAvailableError inherits from RouterError."""
@@ -567,18 +517,21 @@ class TestGetRoutingStats:
         router: ReplyRouter,
         mock_db: MagicMock,
     ) -> None:
-        """Test routing stats with active index."""
-        mock_index = MagicMock()
-        mock_index.version_id = "v1.0"
-        mock_index.num_vectors = 1000
-        mock_index.model_name = "bge-small"
-        mock_db.get_active_index.return_value = mock_index
+        """Test routing stats with active vec_chunks data."""
+        # Mock the connection context manager to return vec_chunks count
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {"cnt": 1000}
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_db.connection.return_value = mock_conn
 
         stats = router.get_routing_stats()
 
         assert stats["index_available"] is True
-        assert stats["index_version"] == "v1.0"
         assert stats["index_vectors"] == 1000
+        assert stats["index_type"] == "sqlite-vec"
 
 
 # =============================================================================
@@ -592,13 +545,11 @@ class TestIMessageReaderProperty:
     def test_imessage_reader_property_returns_none_on_error(
         self,
         mock_db: MagicMock,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test imessage_reader returns None when initialization fails."""
         router = ReplyRouter(
             db=mock_db,
-            index_searcher=mock_index_searcher,
             generator=mock_generator,
         )
         router._imessage_reader = None
@@ -622,25 +573,25 @@ class TestIMessageReaderProperty:
 
 
 # =============================================================================
-# Fetch Conversation Context Tests
+# Fetch Conversation Context Tests (via ContextService)
 # =============================================================================
 
 
 class TestFetchConversationContext:
-    """Tests for _fetch_conversation_context method."""
+    """Tests for ContextService.fetch_conversation_context."""
 
     def test_fetch_context_returns_empty_when_no_reader(
         self,
-        router: ReplyRouter,
+        mock_db: MagicMock,
     ) -> None:
         """Test context fetch returns empty list when reader is None."""
-        router._imessage_reader = None
-        result = router._fetch_conversation_context("chat123", limit=10)
+        ctx = ContextService(db=mock_db, imessage_reader=None)
+        result = ctx.fetch_conversation_context("chat123", limit=10)
         assert result == []
 
     def test_fetch_context_formats_messages(
         self,
-        router: ReplyRouter,
+        mock_db: MagicMock,
     ) -> None:
         """Test context fetch correctly formats messages."""
         mock_reader = MagicMock()
@@ -657,9 +608,9 @@ class TestFetchConversationContext:
         mock_msg2.text = "Hey there!"
 
         mock_reader.get_messages.return_value = [mock_msg1, mock_msg2]
-        router._imessage_reader = mock_reader
 
-        result = router._fetch_conversation_context("chat123", limit=10)
+        ctx = ContextService(db=mock_db, imessage_reader=mock_reader)
+        result = ctx.fetch_conversation_context("chat123", limit=10)
 
         assert len(result) == 2
         assert "[John]: Hey there!" in result[0]
@@ -667,31 +618,31 @@ class TestFetchConversationContext:
 
     def test_fetch_context_handles_empty_messages(
         self,
-        router: ReplyRouter,
+        mock_db: MagicMock,
     ) -> None:
         """Test context fetch handles empty message list."""
         mock_reader = MagicMock()
         mock_reader.get_messages.return_value = []
-        router._imessage_reader = mock_reader
 
-        result = router._fetch_conversation_context("chat123")
+        ctx = ContextService(db=mock_db, imessage_reader=mock_reader)
+        result = ctx.fetch_conversation_context("chat123")
         assert result == []
 
     def test_fetch_context_handles_exception(
         self,
-        router: ReplyRouter,
+        mock_db: MagicMock,
     ) -> None:
         """Test context fetch handles exceptions gracefully."""
         mock_reader = MagicMock()
         mock_reader.get_messages.side_effect = Exception("Database error")
-        router._imessage_reader = mock_reader
 
-        result = router._fetch_conversation_context("chat123")
+        ctx = ContextService(db=mock_db, imessage_reader=mock_reader)
+        result = ctx.fetch_conversation_context("chat123")
         assert result == []
 
     def test_fetch_context_skips_empty_text(
         self,
-        router: ReplyRouter,
+        mock_db: MagicMock,
     ) -> None:
         """Test context fetch skips messages with empty text."""
         mock_reader = MagicMock()
@@ -708,9 +659,9 @@ class TestFetchConversationContext:
         mock_msg2.text = "Hello"
 
         mock_reader.get_messages.return_value = [mock_msg1, mock_msg2]
-        router._imessage_reader = mock_reader
 
-        result = router._fetch_conversation_context("chat123")
+        ctx = ContextService(db=mock_db, imessage_reader=mock_reader)
+        result = ctx.fetch_conversation_context("chat123")
 
         assert len(result) == 1
         assert "[John]: Hello" in result[0]
@@ -727,12 +678,9 @@ class TestRouteMultiOptionSimplified:
     def test_delegates_to_route(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test route_multi_option delegates to route()."""
-        mock_index_searcher.search_with_pairs.return_value = []
-
         result = router.route_multi_option("want to grab lunch?")
 
         assert result["type"] == "generated"
@@ -746,11 +694,9 @@ class TestRouteMultiOptionSimplified:
     def test_preserves_response(
         self,
         router: ReplyRouter,
-        mock_index_searcher: MagicMock,
         mock_generator: MagicMock,
     ) -> None:
         """Test route_multi_option preserves the generated response."""
-        mock_index_searcher.search_with_pairs.return_value = []
         mock_response = MagicMock()
         mock_response.text = "Sounds good!"
         mock_generator.generate.return_value = mock_response

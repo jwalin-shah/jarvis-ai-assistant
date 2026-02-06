@@ -146,10 +146,7 @@ class GracefulDegradationController:
                 # TypeError usually indicates a programming error (wrong arguments),
                 # not a transient failure. Re-raise signature mismatch errors.
                 error_msg = str(e)
-                if any(
-                    keyword in error_msg
-                    for keyword in ("argument", "positional", "keyword")
-                ):
+                if any(keyword in error_msg for keyword in ("argument", "positional", "keyword")):
                     logger.error(
                         "Feature '%s' callable signature mismatch: %s",
                         feature_name,

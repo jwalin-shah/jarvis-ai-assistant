@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from jarvis.socket_server import (
-    INTERNAL_ERROR,
     INVALID_PARAMS,
     INVALID_REQUEST,
     METHOD_NOT_FOUND,
@@ -187,35 +186,6 @@ class TestSocketServerMethods:
     def server(self) -> JarvisSocketServer:
         """Create a server instance."""
         return JarvisSocketServer(enable_watcher=False, preload_models=False)
-
-    @pytest.mark.asyncio
-    async def test_classify_intent(self, server: JarvisSocketServer) -> None:
-        """Intent classification returns expected structure."""
-        with patch("jarvis.intent.get_intent_classifier") as mock_get_classifier:
-            mock_classifier = MagicMock()
-            mock_result = MagicMock()
-            mock_result.intent = MagicMock(value="question")
-            mock_result.confidence = 0.85
-            mock_result.requires_response = True
-            mock_classifier.classify.return_value = mock_result
-            mock_get_classifier.return_value = mock_classifier
-
-            result = await server._classify_intent("What time is it?")
-
-            assert result["intent"] == "question"
-            assert result["confidence"] == 0.85
-            assert result["requires_response"] is True
-
-    @pytest.mark.asyncio
-    async def test_classify_intent_error(self, server: JarvisSocketServer) -> None:
-        """Intent classification handles errors."""
-        with patch("jarvis.intent.get_intent_classifier") as mock_get_classifier:
-            mock_get_classifier.side_effect = Exception("Classification failed")
-
-            with pytest.raises(JsonRpcError) as exc_info:
-                await server._classify_intent("test")
-
-            assert exc_info.value.code == INTERNAL_ERROR
 
     @pytest.mark.asyncio
     async def test_get_smart_replies(self, server: JarvisSocketServer) -> None:

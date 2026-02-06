@@ -19,6 +19,7 @@ import logging
 import sqlite3
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -48,11 +49,10 @@ class TTLCache:
             maxsize: Maximum number of entries to cache.
             ttl_seconds: Time-to-live for cache entries in seconds.
         """
-        self._cache: dict[Any, tuple[Any, float]] = {}
+        self._cache: OrderedDict[Any, tuple[Any, float]] = OrderedDict()
         self._maxsize = maxsize
         self._ttl = ttl_seconds
         self._lock = threading.RLock()
-        self._access_order: list[Any] = []  # For LRU tracking
 
     def get(self, key: Any) -> tuple[bool, Any]:
         """Get value from cache.
@@ -71,14 +71,10 @@ class TTLCache:
             if time.time() - timestamp > self._ttl:
                 # Expired - remove and return miss
                 del self._cache[key]
-                if key in self._access_order:
-                    self._access_order.remove(key)
                 return (False, None)
 
-            # Update access order for LRU
-            if key in self._access_order:
-                self._access_order.remove(key)
-            self._access_order.append(key)
+            # Update access order for LRU (move to end)
+            self._cache.move_to_end(key)
             return (True, value)
 
     def set(self, key: Any, value: Any) -> None:
@@ -90,27 +86,21 @@ class TTLCache:
         """
         with self._lock:
             # Evict oldest if at capacity
-            while len(self._cache) >= self._maxsize and self._access_order:
-                oldest = self._access_order.pop(0)
-                self._cache.pop(oldest, None)
+            while len(self._cache) >= self._maxsize:
+                self._cache.popitem(last=False)  # Remove oldest (FIFO)
 
             self._cache[key] = (value, time.time())
-            if key in self._access_order:
-                self._access_order.remove(key)
-            self._access_order.append(key)
+            self._cache.move_to_end(key)  # Move to end (newest)
 
     def invalidate(self, key: Any) -> None:
         """Remove a specific key from cache."""
         with self._lock:
             self._cache.pop(key, None)
-            if key in self._access_order:
-                self._access_order.remove(key)
 
     def clear(self) -> None:
         """Clear all cache entries."""
         with self._lock:
             self._cache.clear()
-            self._access_order.clear()
 
     def stats(self) -> dict[str, int]:
         """Get cache statistics."""
@@ -132,6 +122,9 @@ def _convert_timestamp(val: bytes) -> datetime:
         timepart, tz_offset = timepart.rsplit(b"+", 1)
     elif timepart.count(b"-") == 1:
         timepart, tz_offset = timepart.rsplit(b"-", 1)
+    # Note: timezone offset is intentionally discarded; JARVIS uses naive
+    # datetimes in local time throughout, consistent with iMessage's storage.
+
     # Handle microseconds
     if b"." in timepart:
         timepart, microseconds = timepart.split(b".")
@@ -557,7 +550,7 @@ EXPECTED_INDICES = {
     "idx_send_queue_scheduled",
 }
 
-CURRENT_SCHEMA_VERSION = 9  # Added content_hash for text-based deduplication
+CURRENT_SCHEMA_VERSION = 10  # sqlite-vec virtual tables for vector search
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {
@@ -568,16 +561,22 @@ VALID_MIGRATION_COLUMNS = {
     # v5: holdout
     "is_holdout",
     # v6: validity gates
-    "gate_a_passed", "gate_b_score", "gate_c_verdict", "validity_status",
+    "gate_a_passed",
+    "gate_b_score",
+    "gate_c_verdict",
+    "validity_status",
     # v7: dialogue acts + clustering
-    "trigger_da_type", "trigger_da_conf", "response_da_type", "response_da_conf", "cluster_id",
+    "trigger_da_type",
+    "trigger_da_conf",
+    "response_da_type",
+    "response_da_conf",
+    "cluster_id",
     # v9: content hash
     "content_hash",
 }
 
 # Allowlist of valid column types for ALTER TABLE migrations
 VALID_COLUMN_TYPES = {"TEXT", "REAL", "INTEGER", "BOOLEAN", "BOOLEAN DEFAULT FALSE"}
-
 
 
 class JarvisDB:
@@ -601,6 +600,10 @@ class JarvisDB:
         self._contact_cache = TTLCache(maxsize=256, ttl_seconds=30.0)
         self._stats_cache = TTLCache(maxsize=16, ttl_seconds=60.0)
         self._trigger_pattern_cache = TTLCache(maxsize=128, ttl_seconds=30.0)
+
+        # Track all thread-local connections for cleanup
+        self._all_connections: set[sqlite3.Connection] = set()
+        self._connections_lock = threading.Lock()
 
     def _ensure_directory(self) -> None:
         """Ensure the database directory exists."""
@@ -630,6 +633,19 @@ class JarvisDB:
             self._local.connection.execute("PRAGMA synchronous = NORMAL")
             self._local.connection.execute("PRAGMA cache_size = -8000")  # 8MB cache
             self._local.connection.execute("PRAGMA temp_store = MEMORY")
+            # Load sqlite-vec extension for vector search
+            try:
+                self._local.connection.enable_load_extension(True)
+                import sqlite_vec
+
+                sqlite_vec.load(self._local.connection)
+                self._local.connection.enable_load_extension(False)
+            except Exception as e:
+                logger.debug("sqlite-vec extension not loaded: %s", e)
+
+            # Track this connection for cleanup
+            with self._connections_lock:
+                self._all_connections.add(self._local.connection)
         return self._local.connection
 
     @contextmanager
@@ -648,10 +664,20 @@ class JarvisDB:
             raise
 
     def close(self) -> None:
-        """Close the thread-local connection if it exists."""
-        if hasattr(self._local, "connection") and self._local.connection is not None:
-            self._local.connection.close()
+        """Close all thread-local connections."""
+        # Close all tracked connections from all threads
+        with self._connections_lock:
+            for conn in self._all_connections:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._all_connections.clear()
+
+        # Clear current thread's reference
+        if hasattr(self._local, "connection"):
             self._local.connection = None
+
         # Clear caches on close
         self._contact_cache.clear()
         self._stats_cache.clear()
@@ -702,8 +728,10 @@ class JarvisDB:
                 logger.debug("Schema already at version %d", current_version)
                 return False
 
-            # Apply migrations for existing databases
-            if current_version == 2:
+            # Apply migrations for existing databases only.
+            # For new databases (current_version == 0), SCHEMA_SQL below creates
+            # all tables with the latest columns, so no ALTER needed.
+            if current_version > 0 and current_version == 2:
                 # Migration v2 -> v3: Add context_text column to pairs
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN context_text TEXT")
@@ -715,7 +743,7 @@ class JarvisDB:
                         logger.error("Migration v2->v3 failed: %s", e)
                         raise
 
-            if current_version <= 3:
+            if current_version > 0 and current_version <= 3:
                 # Migration v3 -> v4: Add is_group column to pairs
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN is_group BOOLEAN DEFAULT FALSE")
@@ -727,7 +755,7 @@ class JarvisDB:
                         logger.error("Migration v3->v4 failed: %s", e)
                         raise
 
-            if current_version <= 4:
+            if current_version > 0 and current_version <= 4:
                 # Migration v4 -> v5: Add is_holdout column for train/test split
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN is_holdout BOOLEAN DEFAULT FALSE")
@@ -739,7 +767,7 @@ class JarvisDB:
                         logger.error("Migration v4->v5 failed: %s", e)
                         raise
 
-            if current_version <= 5:
+            if current_version > 0 and current_version <= 5:
                 # Migration v5 -> v6: Add validity gate columns and split tables
                 # Add gate columns to pairs table
                 gate_columns = [
@@ -766,7 +794,7 @@ class JarvisDB:
                 # Create new tables (handled by SCHEMA_SQL, but ensure they exist)
                 # pair_artifacts and contact_style_targets are created by executescript
 
-            if current_version <= 6:
+            if current_version > 0 and current_version <= 6:
                 # Migration v6 -> v7: Add dialogue act classification and cluster columns
                 da_columns = [
                     ("trigger_da_type", "TEXT"),
@@ -795,7 +823,7 @@ class JarvisDB:
             # No column migrations needed since these are new tables
 
             # Migration v8 -> v9: Add content_hash for text-based deduplication
-            if current_version < 9:
+            if current_version > 0 and current_version < 9:
                 try:
                     conn.execute("ALTER TABLE pairs ADD COLUMN content_hash TEXT")
                     logger.info("Added content_hash column to pairs table")
@@ -805,6 +833,52 @@ class JarvisDB:
                     else:
                         logger.error("Migration v8->v9 failed: %s", e)
                         raise
+
+            # Migration v9 -> v10: sqlite-vec virtual tables for vector search
+            if current_version < 10:
+                try:
+                    conn.execute("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+                            embedding int8[384] distance_metric=L2,
+                            contact_id integer partition key,
+                            chat_id text,
+                            response_da_type text,
+                            quality_score float,
+                            source_timestamp float,
+                            +topic_label text,
+                            +trigger_text text,
+                            +response_text text,
+                            +formatted_text text,
+                            +keywords_json text,
+                            +message_count integer,
+                            +response_da_conf float,
+                            +source_type text,
+                            +source_id text
+                        )
+                    """)
+                    conn.execute("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0(
+                            embedding int8[384] distance_metric=L2,
+                            chat_id text partition key,
+                            +text_preview text,
+                            +sender text,
+                            +timestamp integer,
+                            +is_from_me integer
+                        )
+                    """)
+                    conn.execute("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0(
+                            embedding bit[384] distance_metric=hamming
+                        )
+                    """)
+                    logger.info(
+                        "Created sqlite-vec virtual tables (vec_chunks, vec_messages, vec_binary)"
+                    )
+                except Exception as e:
+                    if "already exists" in str(e).lower():
+                        logger.debug("vec tables already exist")
+                    else:
+                        logger.warning("sqlite-vec migration skipped: %s", e)
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)
@@ -1169,66 +1243,95 @@ class JarvisDB:
         """
         import hashlib
 
+        if not pairs:
+            return 0
+
+        # Precompute values and content hashes for all pairs
+        processed = []
+        for pair in pairs:
+            trigger_msg_ids_json = (
+                json.dumps(pair.get("trigger_msg_ids")) if pair.get("trigger_msg_ids") else None
+            )
+            response_msg_ids_json = (
+                json.dumps(pair.get("response_msg_ids")) if pair.get("response_msg_ids") else None
+            )
+            flags_json = json.dumps(pair.get("flags")) if pair.get("flags") else None
+
+            # Compute content hash for text-based deduplication
+            trigger_normalized = pair["trigger_text"].lower().strip()
+            response_normalized = pair["response_text"].lower().strip()
+            content_str = f"{trigger_normalized}|{response_normalized}"
+            content_hash = hashlib.md5(content_str.encode()).hexdigest()
+
+            processed.append(
+                {
+                    "data": (
+                        pair.get("contact_id"),
+                        pair["trigger_text"],
+                        pair["response_text"],
+                        pair["trigger_timestamp"],
+                        pair["response_timestamp"],
+                        pair["chat_id"],
+                        pair.get("trigger_msg_id"),
+                        pair.get("response_msg_id"),
+                        trigger_msg_ids_json,
+                        response_msg_ids_json,
+                        pair.get("context_text"),
+                        pair.get("quality_score", 1.0),
+                        flags_json,
+                        pair.get("is_group", False),
+                        pair.get("source_timestamp"),
+                        content_hash,
+                    ),
+                    "content_hash": content_hash,
+                }
+            )
+
         added = 0
         with self.connection() as conn:
-            for pair in pairs:
-                trigger_msg_ids_json = (
-                    json.dumps(pair.get("trigger_msg_ids")) if pair.get("trigger_msg_ids") else None
-                )
-                response_msg_ids_json = (
-                    json.dumps(pair.get("response_msg_ids"))
-                    if pair.get("response_msg_ids")
-                    else None
-                )
-                flags_json = json.dumps(pair.get("flags")) if pair.get("flags") else None
+            # Efficient content deduplication
+            if dedupe_by_content:
+                # Get unique hashes from input batch
+                unique_hashes = list({p["content_hash"] for p in processed})
 
-                # Compute content hash for text-based deduplication
-                trigger_normalized = pair["trigger_text"].lower().strip()
-                response_normalized = pair["response_text"].lower().strip()
-                content_str = f"{trigger_normalized}|{response_normalized}"
-                content_hash = hashlib.md5(content_str.encode()).hexdigest()
-
-                # Check for content duplicate if enabled
-                if dedupe_by_content:
-                    existing = conn.execute(
-                        "SELECT 1 FROM pairs WHERE content_hash = ? LIMIT 1",
-                        (content_hash,),
-                    ).fetchone()
-                    if existing:
-                        continue  # Skip content duplicate
-
-                try:
-                    conn.execute(
-                        """
-                        INSERT INTO pairs
-                        (contact_id, trigger_text, response_text, trigger_timestamp,
-                         response_timestamp, chat_id, trigger_msg_id, response_msg_id,
-                         trigger_msg_ids_json, response_msg_ids_json, context_text,
-                         quality_score, flags_json, is_group, content_hash)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            pair.get("contact_id"),
-                            pair["trigger_text"],
-                            pair["response_text"],
-                            pair["trigger_timestamp"],
-                            pair["response_timestamp"],
-                            pair["chat_id"],
-                            pair.get("trigger_msg_id"),
-                            pair.get("response_msg_id"),
-                            trigger_msg_ids_json,
-                            response_msg_ids_json,
-                            pair.get("context_text"),
-                            pair.get("quality_score", 1.0),
-                            flags_json,
-                            pair.get("is_group", False),
-                            content_hash,
-                        ),
+                # Find which ones already exist in DB (chunked to avoid SQLite parameter limits)
+                existing_hashes = set()
+                for i in range(0, len(unique_hashes), 900):
+                    chunk = unique_hashes[i : i + 900]
+                    placeholders = ",".join("?" * len(chunk))
+                    cursor = conn.execute(
+                        f"SELECT content_hash FROM pairs WHERE content_hash IN ({placeholders})",
+                        chunk,
                     )
-                    added += 1
-                except sqlite3.IntegrityError:
-                    # Skip duplicates (message ID based)
-                    continue
+                    existing_hashes.update(row["content_hash"] for row in cursor)
+
+                # Filter batch: skip existing in DB and duplicates within the batch itself
+                seen_in_batch = set()
+                final_batch = []
+                for p in processed:
+                    h = p["content_hash"]
+                    if h not in existing_hashes and h not in seen_in_batch:
+                        final_batch.append(p["data"])
+                        seen_in_batch.add(h)
+            else:
+                final_batch = [p["data"] for p in processed]
+
+            if final_batch:
+                # Use executemany with INSERT OR IGNORE for high-performance batch insertion
+                # IGNORE handles UNIQUE(trigger_msg_id, response_msg_id) violations
+                cursor = conn.executemany(
+                    """
+                    INSERT OR IGNORE INTO pairs
+                    (contact_id, trigger_text, response_text, trigger_timestamp,
+                     response_timestamp, chat_id, trigger_msg_id, response_msg_id,
+                     trigger_msg_ids_json, response_msg_ids_json, context_text,
+                     quality_score, flags_json, is_group, source_timestamp, content_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    final_batch,
+                )
+                added = cursor.rowcount
+
         return added
 
     def get_pairs(
@@ -1279,6 +1382,7 @@ class JarvisDB:
         """Batch fetch pairs by IDs.
 
         More efficient than calling get_pair in a loop.
+        Uses chunking to avoid SQLite host parameter limits.
 
         Args:
             pair_ids: List of pair IDs to fetch.
@@ -1289,13 +1393,19 @@ class JarvisDB:
         if not pair_ids:
             return {}
 
+        result = {}
         with self.connection() as conn:
-            placeholders = ",".join("?" * len(pair_ids))
-            cursor = conn.execute(
-                f"SELECT * FROM pairs WHERE id IN ({placeholders})",
-                pair_ids,
-            )
-            return {row["id"]: self._row_to_pair(row) for row in cursor}
+            # Chunk the IDs to avoid SQLite's limit on host parameters (often 999)
+            for i in range(0, len(pair_ids), 900):
+                chunk = pair_ids[i : i + 900]
+                placeholders = ",".join("?" * len(chunk))
+                cursor = conn.execute(
+                    f"SELECT * FROM pairs WHERE id IN ({placeholders})",
+                    chunk,
+                )
+                for row in cursor:
+                    result[row["id"]] = self._row_to_pair(row)
+        return result
 
     def get_all_pairs(self, min_quality: float = 0.0) -> list[Pair]:
         """Get all pairs in the database."""
@@ -1521,34 +1631,37 @@ class JarvisDB:
         if not uncached_ids:
             return result
 
-        # Batch query for uncached contacts
-        contact_placeholders = ",".join("?" * len(uncached_ids))
-        trigger_placeholders = ",".join("?" * len(self._ACK_TRIGGERS))
+        # Batch query for uncached contacts with chunking
+        for j in range(0, len(uncached_ids), 900):
+            chunk = uncached_ids[j : j + 900]
+            contact_placeholders = ",".join("?" * len(chunk))
+            trigger_placeholders = ",".join("?" * len(self._ACK_TRIGGERS))
 
-        # Use window function to limit per contact
-        query = f"""
-            SELECT * FROM (
-                SELECT *, ROW_NUMBER() OVER (
-                    PARTITION BY contact_id ORDER BY trigger_timestamp DESC
-                ) as rn
-                FROM pairs
-                WHERE contact_id IN ({contact_placeholders})
-                AND LOWER(TRIM(trigger_text)) IN ({trigger_placeholders})
-                AND quality_score >= 0.5
-            ) WHERE rn <= ?
-        """
+            # Use window function to limit per contact
+            query = f"""
+                SELECT * FROM (
+                    SELECT *, ROW_NUMBER() OVER (
+                        PARTITION BY contact_id ORDER BY trigger_timestamp DESC
+                    ) as rn
+                    FROM pairs
+                    WHERE contact_id IN ({contact_placeholders})
+                    AND LOWER(TRIM(trigger_text)) IN ({trigger_placeholders})
+                    AND quality_score >= 0.5
+                ) WHERE rn <= ?
+            """
 
-        with self.connection() as conn:
-            cursor = conn.execute(query, (*uncached_ids, *self._ACK_TRIGGERS, limit_per_contact))
+            with self.connection() as conn:
+                cursor = conn.execute(query, (*chunk, *self._ACK_TRIGGERS, limit_per_contact))
 
-            # Group results by contact_id
-            for cid in uncached_ids:
-                result[cid] = []
+                # Group results by contact_id
+                for cid in chunk:
+                    if cid not in result:
+                        result[cid] = []
 
-            for row in cursor:
-                pair = self._row_to_pair(row)
-                if pair.contact_id in result:
-                    result[pair.contact_id].append(pair)
+                for row in cursor:
+                    pair = self._row_to_pair(row)
+                    if pair.contact_id in result:
+                        result[pair.contact_id].append(pair)
 
         # Cache all results
         for cid in uncached_ids:
@@ -1674,11 +1787,14 @@ class JarvisDB:
 
             # Mark holdout contact pairs
             if holdout_contacts:
-                placeholders = ",".join("?" * len(holdout_contacts))
-                conn.execute(
-                    f"UPDATE pairs SET is_holdout = TRUE WHERE contact_id IN ({placeholders})",
-                    holdout_contacts,
-                )
+                # Chunk to avoid SQLite parameter limits
+                for i in range(0, len(holdout_contacts), 900):
+                    chunk = holdout_contacts[i : i + 900]
+                    placeholders = ",".join("?" * len(chunk))
+                    conn.execute(
+                        f"UPDATE pairs SET is_holdout = TRUE WHERE contact_id IN ({placeholders})",
+                        chunk,
+                    )
 
             # Get final counts
             cursor = conn.execute("SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = FALSE")
@@ -1979,6 +2095,7 @@ class JarvisDB:
         """Batch fetch pairs by FAISS IDs.
 
         More efficient than calling get_pair_by_faiss_id in a loop.
+        Uses chunking to handle large input lists.
 
         Args:
             faiss_ids: List of FAISS IDs to fetch.
@@ -1990,36 +2107,39 @@ class JarvisDB:
         if not faiss_ids:
             return {}
 
+        result = {}
         with self.connection() as conn:
-            placeholders = ",".join("?" * len(faiss_ids))
-            if index_version:
-                cursor = conn.execute(
-                    f"""
-                    SELECT p.*, e.faiss_id FROM pairs p
-                    JOIN pair_embeddings e ON p.id = e.pair_id
-                    WHERE e.faiss_id IN ({placeholders}) AND e.index_version = ?
-                    """,
-                    (*faiss_ids, index_version),
-                )
-            else:
-                cursor = conn.execute(
-                    f"""
-                    SELECT p.*, e.faiss_id FROM pairs p
-                    JOIN pair_embeddings e ON p.id = e.pair_id
-                    WHERE e.faiss_id IN ({placeholders})
-                    """,
-                    faiss_ids,
-                )
-            result = {}
-            for row in cursor:
-                pair = self._row_to_pair(row)
-                result[row["faiss_id"]] = pair
-            return result
+            for i in range(0, len(faiss_ids), 900):
+                chunk = faiss_ids[i : i + 900]
+                placeholders = ",".join("?" * len(chunk))
+                if index_version:
+                    cursor = conn.execute(
+                        f"""
+                        SELECT p.*, e.faiss_id FROM pairs p
+                        JOIN pair_embeddings e ON p.id = e.pair_id
+                        WHERE e.faiss_id IN ({placeholders}) AND e.index_version = ?
+                        """,
+                        (*chunk, index_version),
+                    )
+                else:
+                    cursor = conn.execute(
+                        f"""
+                        SELECT p.*, e.faiss_id FROM pairs p
+                        JOIN pair_embeddings e ON p.id = e.pair_id
+                        WHERE e.faiss_id IN ({placeholders})
+                        """,
+                        chunk,
+                    )
+                for row in cursor:
+                    pair = self._row_to_pair(row)
+                    result[row["faiss_id"]] = pair
+        return result
 
     def get_embeddings_by_pair_ids(self, pair_ids: list[int]) -> dict[int, "PairEmbedding"]:
         """Batch fetch embeddings by pair IDs.
 
         More efficient than calling get_embedding_by_pair in a loop.
+        Uses chunking to handle large input lists.
 
         Args:
             pair_ids: List of pair IDs to fetch embeddings for.
@@ -2030,26 +2150,31 @@ class JarvisDB:
         if not pair_ids:
             return {}
 
+        result = {}
         with self.connection() as conn:
-            placeholders = ",".join("?" * len(pair_ids))
-            cursor = conn.execute(
-                f"SELECT * FROM pair_embeddings WHERE pair_id IN ({placeholders})",
-                pair_ids,
-            )
-            result = {}
-            for row in cursor:
-                result[row["pair_id"]] = PairEmbedding(
-                    pair_id=row["pair_id"],
-                    faiss_id=row["faiss_id"],
-                    cluster_id=row["cluster_id"],
-                    index_version=row["index_version"] if "index_version" in row.keys() else None,
+            for i in range(0, len(pair_ids), 900):
+                chunk = pair_ids[i : i + 900]
+                placeholders = ",".join("?" * len(chunk))
+                cursor = conn.execute(
+                    f"SELECT * FROM pair_embeddings WHERE pair_id IN ({placeholders})",
+                    chunk,
                 )
-            return result
+                for row in cursor:
+                    result[row["pair_id"]] = PairEmbedding(
+                        pair_id=row["pair_id"],
+                        faiss_id=row["faiss_id"],
+                        cluster_id=row["cluster_id"],
+                        index_version=row["index_version"]
+                        if "index_version" in row.keys()
+                        else None,
+                    )
+        return result
 
     def get_clusters_batch(self, cluster_ids: list[int]) -> dict[int, "Cluster"]:
         """Batch fetch clusters by IDs.
 
         More efficient than calling get_cluster in a loop.
+        Uses chunking to handle large input lists.
 
         Args:
             cluster_ids: List of cluster IDs to fetch.
@@ -2060,18 +2185,23 @@ class JarvisDB:
         if not cluster_ids:
             return {}
 
-        # Filter out None values
-        valid_ids = [cid for cid in cluster_ids if cid is not None]
+        # Filter out None values and get unique IDs
+        valid_ids = list({cid for cid in cluster_ids if cid is not None})
         if not valid_ids:
             return {}
 
+        result = {}
         with self.connection() as conn:
-            placeholders = ",".join("?" * len(valid_ids))
-            cursor = conn.execute(
-                f"SELECT * FROM clusters WHERE id IN ({placeholders})",
-                valid_ids,
-            )
-            return {row["id"]: self._row_to_cluster(row) for row in cursor}
+            for i in range(0, len(valid_ids), 900):
+                chunk = valid_ids[i : i + 900]
+                placeholders = ",".join("?" * len(chunk))
+                cursor = conn.execute(
+                    f"SELECT * FROM clusters WHERE id IN ({placeholders})",
+                    chunk,
+                )
+                for row in cursor:
+                    result[row["id"]] = self._row_to_cluster(row)
+        return result
 
     def get_pairs_with_clusters_by_faiss_ids(
         self,
@@ -2083,6 +2213,7 @@ class JarvisDB:
 
         Consolidates 3 queries (pairs, embeddings, clusters) into 1 with JOINs.
         More efficient for search_with_pairs which needs all this data.
+        Uses chunking to handle large input lists.
 
         Args:
             faiss_ids: List of FAISS IDs to fetch.
@@ -2097,47 +2228,49 @@ class JarvisDB:
 
         # Apply limit if specified
         ids_to_query = faiss_ids[:limit] if limit else faiss_ids
+        results = []
 
         with self.connection() as conn:
-            placeholders = ",".join("?" * len(ids_to_query))
-            if index_version:
-                cursor = conn.execute(
-                    f"""
-                    SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id,
-                           c.name as cluster_name, c.description as cluster_description
-                    FROM pairs p
-                    JOIN pair_embeddings e ON p.id = e.pair_id
-                    LEFT JOIN clusters c ON e.cluster_id = c.id
-                    WHERE e.faiss_id IN ({placeholders}) AND e.index_version = ?
-                    """,
-                    (*ids_to_query, index_version),
-                )
-            else:
-                cursor = conn.execute(
-                    f"""
-                    SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id,
-                           c.name as cluster_name, c.description as cluster_description
-                    FROM pairs p
-                    JOIN pair_embeddings e ON p.id = e.pair_id
-                    LEFT JOIN clusters c ON e.cluster_id = c.id
-                    WHERE e.faiss_id IN ({placeholders})
-                    """,
-                    ids_to_query,
-                )
+            for i in range(0, len(ids_to_query), 900):
+                chunk = ids_to_query[i : i + 900]
+                placeholders = ",".join("?" * len(chunk))
+                if index_version:
+                    cursor = conn.execute(
+                        f"""
+                        SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id,
+                               c.name as cluster_name, c.description as cluster_description
+                        FROM pairs p
+                        JOIN pair_embeddings e ON p.id = e.pair_id
+                        LEFT JOIN clusters c ON e.cluster_id = c.id
+                        WHERE e.faiss_id IN ({placeholders}) AND e.index_version = ?
+                        """,
+                        (*chunk, index_version),
+                    )
+                else:
+                    cursor = conn.execute(
+                        f"""
+                        SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id,
+                               c.name as cluster_name, c.description as cluster_description
+                        FROM pairs p
+                        JOIN pair_embeddings e ON p.id = e.pair_id
+                        LEFT JOIN clusters c ON e.cluster_id = c.id
+                        WHERE e.faiss_id IN ({placeholders})
+                        """,
+                        chunk,
+                    )
 
-            results = []
-            for row in cursor:
-                pair = self._row_to_pair(row)
-                results.append(
-                    {
-                        "pair": pair,
-                        "faiss_id": row["faiss_id"],
-                        "cluster_id": row["embedding_cluster_id"],
-                        "cluster_name": row["cluster_name"],
-                        "cluster_description": row["cluster_description"],
-                    }
-                )
-            return results
+                for row in cursor:
+                    pair = self._row_to_pair(row)
+                    results.append(
+                        {
+                            "pair": pair,
+                            "faiss_id": row["faiss_id"],
+                            "cluster_id": row["embedding_cluster_id"],
+                            "cluster_name": row["cluster_name"],
+                            "cluster_description": row["cluster_description"],
+                        }
+                    )
+        return results
 
     def clear_embeddings(self, index_version: str | None = None) -> int:
         """Delete embeddings, optionally for a specific index version."""
@@ -2876,13 +3009,16 @@ class JarvisDB:
 
 # Singleton instance
 _db: JarvisDB | None = None
+_db_lock = threading.Lock()
 
 
 def get_db(db_path: Path | None = None) -> JarvisDB:
     """Get or create the singleton database instance."""
     global _db
     if _db is None:
-        _db = JarvisDB(db_path)
+        with _db_lock:
+            if _db is None:  # Double-check after acquiring lock
+                _db = JarvisDB(db_path)
     return _db
 
 

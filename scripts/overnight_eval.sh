@@ -158,7 +158,7 @@ echo ""
 # Benchmark 1: Memory Profiling (G1)
 # ============================================
 log "[1/3] Memory Profiling..."
-MEMORY_CMD="python3 -m benchmarks.memory.run --output $RESULTS_DIR/memory.json"
+MEMORY_CMD="python3 -m evals.benchmarks.memory.run --output $RESULTS_DIR/memory.json"
 if [[ "$QUICK_MODE" == "true" ]]; then
     MEMORY_CMD="$MEMORY_CMD --quick"
 fi
@@ -176,7 +176,7 @@ echo ""
 # Benchmark 2: HHEM Hallucination Evaluation (G2)
 # ============================================
 log "[2/3] HHEM Hallucination Benchmark..."
-HHEM_CMD="python3 -m benchmarks.hallucination.run --output $RESULTS_DIR/hhem.json"
+HHEM_CMD="python3 -m evals.benchmarks.hallucination.run --output $RESULTS_DIR/hhem.json"
 if [[ "$QUICK_MODE" == "true" ]]; then
     HHEM_CMD="$HHEM_CMD --verbose"
 fi
@@ -194,7 +194,7 @@ echo ""
 # Benchmark 3: Latency (G3, G4)
 # ============================================
 log "[3/3] Latency Benchmarks..."
-LATENCY_CMD="python3 -m benchmarks.latency.run --output $RESULTS_DIR/latency.json --scenario all"
+LATENCY_CMD="python3 -m evals.benchmarks.latency.run --output $RESULTS_DIR/latency.json --scenario all"
 if [[ "$QUICK_MODE" == "true" ]]; then
     LATENCY_CMD="$LATENCY_CMD --runs 3"
 fi

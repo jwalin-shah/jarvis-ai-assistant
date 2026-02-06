@@ -13,6 +13,7 @@ import {
   isDirectAccessAvailable,
   getConversations as getConversationsDirect,
   getMessages as getMessagesDirect,
+  getMessage,
   getLastMessageRowid,
   getNewMessagesSince,
 } from "../db";
@@ -853,22 +854,43 @@ function handleNewMessagePush(data: {
 
   // If this is the selected conversation, add the message
   if (data.chat_id === state.selectedChatId) {
-    // Fetch the full message to get all details (attachments, reactions, etc.)
-    fetchMessages(data.chat_id).then((messages) => {
-      conversationsStore.update((s) => ({
-        ...s,
-        messages,
-      }));
+    // OPTIMIZATION: Fetch only the new message instead of the whole list
+    if (isDirectAccessAvailable()) {
+      getMessage(data.chat_id, data.message_id).then((newMessage) => {
+        if (!newMessage) return;
 
-      // Update cache
-      const cached = messageCache.get(data.chat_id);
-      if (cached) {
-        messageCache.set(data.chat_id, {
-          ...cached,
-          messages,
+        conversationsStore.update((s) => {
+          // Avoid duplicates
+          if (s.messages.some((m) => m.id === newMessage.id)) return s;
+          const messages = [...s.messages, newMessage];
+          return { ...s, messages };
         });
-      }
-    });
+
+        // Update cache
+        const cached = messageCache.get(data.chat_id);
+        if (cached) {
+          const messages = [...cached.messages, newMessage];
+          messageCache.set(data.chat_id, { ...cached, messages });
+        }
+      });
+    } else {
+      // Fallback to full fetch if direct access not available
+      fetchMessages(data.chat_id).then((messages) => {
+        conversationsStore.update((s) => ({
+          ...s,
+          messages,
+        }));
+
+        // Update cache
+        const cached = messageCache.get(data.chat_id);
+        if (cached) {
+          messageCache.set(data.chat_id, {
+            ...cached,
+            messages,
+          });
+        }
+      });
+    }
   }
 
   // Refresh conversation list to update order and last message preview

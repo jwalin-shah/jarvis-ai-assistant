@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from jarvis.evaluation import (
+from jarvis.eval.evaluation import (
     EvaluationResult,
     FeedbackAction,
     FeedbackEntry,

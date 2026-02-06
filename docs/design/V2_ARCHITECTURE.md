@@ -26,7 +26,7 @@ Desktop App ←─ HTTP (50-150ms) ─→ FastAPI Server
 └───────┼──────────────────────┼──────────────────────┘
         │ ~1-5ms               │ ~1-5ms + inference
         ▼                      ▼
-   chat.db / jarvis.db    /tmp/jarvis.sock + File Watcher
+   chat.db / jarvis.db    ~/.jarvis/jarvis.sock + File Watcher
 ```
 
 ## Performance Comparison

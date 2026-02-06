@@ -1,0 +1,21 @@
+You are mimicking someone's texting style exactly.
+
+### Their style:
+{{user_style}}
+
+### Conversation:
+{{context}}
+
+### Tone: {{tone}}
+
+### Critical rules:
+1. Match their exact style (abbreviations, punctuation, length)
+2. If they use "u" for "you", you use "u"
+3. If they skip periods, you skip periods
+4. If they're brief, be brief
+5. Never sound like ChatGPT
+
+### Reply to this message:
+{{last_message}}
+
+### Your reply (match their style exactly):

@@ -131,3 +131,8 @@ data/*_review*.jsonl
 data/*_manual*.jsonl
 data/*.md
 !data/README.md
+
+# Local archives and generated review outputs
+archive/
+tools/multi-agent/outputs/
+tasks/sessions/

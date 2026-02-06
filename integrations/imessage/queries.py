@@ -309,6 +309,25 @@ _BASE_QUERIES = {
         WHERE message.guid = ?
         LIMIT 1
     """,
+    "messages_after": """
+        SELECT
+            message.ROWID as id,
+            chat.guid as chat_id,
+            COALESCE(handle.id, 'me') as sender,
+            message.text,
+            message.attributedBody,
+            message.date,
+            message.is_from_me,
+            message.thread_originator_guid as reply_to_guid
+        FROM message
+        JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+        JOIN chat ON chat_message_join.chat_id = chat.ROWID
+        LEFT JOIN handle ON message.handle_id = handle.ROWID
+        WHERE message.ROWID > ?
+          AND chat.guid = ?
+        ORDER BY message.date ASC
+        LIMIT ?
+    """,
 }
 
 # Version-specific queries (currently identical, will diverge as needed)
@@ -445,4 +464,5 @@ def get_query(
         type_filter=attachment_type_filter,
         date_after_filter=attachment_date_after_filter,
         date_before_filter=attachment_date_before_filter,
+        placeholders="{placeholders}",
     )

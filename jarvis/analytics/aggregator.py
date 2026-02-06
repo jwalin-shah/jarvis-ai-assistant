@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from jarvis.insights import analyze_sentiment
+from jarvis.observability.insights import analyze_sentiment
 
 if TYPE_CHECKING:
     from contracts.imessage import Message

@@ -58,8 +58,8 @@ class ClusterResultSchema(BaseModel):
     clusters: dict[str, int] = Field(default_factory=dict, description="Node to cluster mapping")
     modularity: float = Field(default=0.0, description="Modularity score")
     num_clusters: int = Field(default=0, description="Number of clusters")
-    cluster_sizes: dict[int, int] = Field(default_factory=dict, description="Size of each cluster")
-    cluster_labels: dict[int, str] = Field(default_factory=dict, description="Cluster labels")
+    cluster_sizes: dict[str, int] = Field(default_factory=dict, description="Size of each cluster")
+    cluster_labels: dict[str, str] = Field(default_factory=dict, description="Cluster labels")
 
 
 class NetworkGraphRequest(BaseModel):

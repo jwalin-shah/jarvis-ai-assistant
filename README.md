@@ -8,14 +8,15 @@ Local-first AI assistant for macOS with intelligent iMessage management using ML
 
 - **iMessage Integration** - Read-only local database access with schema auto-detection (v14/v15)
 - **MLX Model Generation** - Local inference on Apple Silicon with memory-aware loading
-- **Template-First Generation** - Semantic matching against iMessage scenario templates with configurable thresholds
+- **Unified Vector Search** - High-performance semantic search using `sqlite-vec` with quantized embeddings
 - **Intent Classification** - Natural language understanding for reply, summarize, and search intents
 
 ### AI-Powered Features
 
 - **AI Reply Suggestions** - Context-aware reply generation using conversation history (RAG)
 - **Conversation Summaries** - Generate summaries with key points from message history
-- **Smart Quick Replies** - Pattern-based suggestions without model invocation
+- **Pattern-Based Quick Replies** - Instant suggestions for common patterns without model invocation
+- **Real-time File Watching** - Near-instant notifications for new messages via FSEvents
 
 ### Export and Data Management
 
@@ -33,10 +34,10 @@ Local-first AI assistant for macOS with intelligent iMessage management using ML
 
 ### Desktop Application
 
-- **Tauri Desktop App** - Native macOS app built with Svelte
-- **Menu Bar Integration** - Quick access from system menu bar
-- **AI Draft Panel** - Generate reply suggestions with keyboard shortcut (Cmd+D)
-- **Conversation Summary Modal** - One-click summaries with key points (Cmd+S)
+- **V2 Architecture** - Direct SQLite access (1-5ms) and Unix socket IPC for maximum performance
+- **Svelte-based UI** - Native macOS experience with Tauri
+- **Real-time Sync** - Push-based updates bypassing HTTP polling
+- **Streaming Generation** - Real-time token streaming for AI drafts
 
 **Default Model**: LFM 2.5 1.2B Instruct (4-bit, `lfm-1.2b`)
 

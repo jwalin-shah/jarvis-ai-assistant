@@ -8,7 +8,7 @@ set -e
 # Configuration
 API_PORT=8742
 EMBED_PORT=8766
-SOCKET_PATH="/tmp/jarvis.sock"
+SOCKET_PATH="$HOME/.jarvis/jarvis.sock"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DESKTOP_DIR="$PROJECT_ROOT/desktop"
 EMBED_SERVICE_DIR="$HOME/.jarvis/mlx-embed-service"

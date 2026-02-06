@@ -8,6 +8,7 @@ then finds matches by cosine similarity rather than keyword matching.
 """
 
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -16,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from api.dependencies import get_imessage_reader
 from api.schemas import ErrorResponse, MessageResponse
 from integrations.imessage import ChatDBReader
-from jarvis.semantic_search import SearchFilters, SemanticSearcher
+from jarvis.search.semantic_search import SearchFilters, SemanticSearcher
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -324,7 +325,7 @@ async def semantic_search(
             has_attachments=request.filters.has_attachments,
         )
 
-    def _do_search() -> list:
+    def _do_search() -> list[Any]:
         """Perform blocking search operation in thread pool."""
         searcher = SemanticSearcher(
             reader=reader,
@@ -375,9 +376,9 @@ async def get_cache_stats() -> CacheStatsResponse:
     Returns:
         CacheStatsResponse with cache statistics
     """
-    from jarvis.semantic_search import EmbeddingCache
+    from jarvis.search.semantic_search import EmbeddingCache
 
-    def _get_stats() -> dict:
+    def _get_stats() -> dict[str, Any]:
         """Get cache stats in thread pool (file I/O)."""
         cache = EmbeddingCache()
         try:
@@ -413,9 +414,9 @@ async def clear_cache() -> dict[str, str]:
     Returns:
         Confirmation message
     """
-    from jarvis.semantic_search import EmbeddingCache
+    from jarvis.search.semantic_search import EmbeddingCache
 
-    def _clear_cache() -> dict:
+    def _clear_cache() -> dict[str, Any]:
         """Clear cache in thread pool (file I/O)."""
         cache = EmbeddingCache()
         try:

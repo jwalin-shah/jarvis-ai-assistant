@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from jarvis.evaluation import (
+from jarvis.eval.evaluation import (
     EvaluationResult,
     FeedbackAction,
     FeedbackEntry,

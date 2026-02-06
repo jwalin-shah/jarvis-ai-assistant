@@ -21,12 +21,22 @@ export default defineConfig({
   },
   resolve: {
     alias: isTauri
-      ? {}
+      ? {
+          "@": resolve(__dirname, "./src"),
+        }
       : {
+          "@": resolve(__dirname, "./src"),
           // Stub Tauri APIs when not running in Tauri context (for E2E tests)
           "@tauri-apps/api/event": resolve(__dirname, "tests/mocks/tauri-event.ts"),
           "@tauri-apps/api/core": resolve(__dirname, "tests/mocks/tauri-core.ts"),
           "@tauri-apps/plugin-sql": resolve(__dirname, "tests/mocks/tauri-sql.ts"),
         },
+  },
+  build: {
+    target: "esnext",
+    minify: "esbuild",
+    esbuild: {
+      drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
+    },
   },
 });

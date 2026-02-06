@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from jarvis.errors import ErrorCode, FeedbackInvalidActionError
-from jarvis.feedback import (
+from jarvis.eval.feedback import (
     ContactStats,
     DailyStats,
     Feedback,

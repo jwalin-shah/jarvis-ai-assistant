@@ -252,7 +252,7 @@ async def get_analytics_overview(
 
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     # Get time range filter
     time_range_start = _get_time_range_start(time_range)
@@ -368,7 +368,7 @@ async def get_analytics_timeline(
 
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     time_range_start = _get_time_range_start(time_range)
 
@@ -411,7 +411,7 @@ def _fetch_heatmap_data(
     ]
 
     # Calculate stats
-    counts: list[int] = [int(d["count"]) for d in heatmap_data]
+    counts: list[int] = [int(d["count"]) for d in heatmap_data]  # type: ignore[call-overload]
     active_days = sum(1 for c in counts if c > 0)
 
     return {
@@ -472,7 +472,7 @@ async def get_activity_heatmap(
 
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     time_range_start = _get_time_range_start(time_range)
 
@@ -584,7 +584,7 @@ async def get_contact_stats(
 
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     time_range_start = _get_time_range_start(time_range)
 
@@ -715,7 +715,7 @@ async def get_contacts_leaderboard(
 
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     time_range_start = _get_time_range_start(time_range)
 
@@ -922,7 +922,7 @@ async def get_trending_patterns(
 
     found, cached = cache.get(cache_key)
     if found:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
 
     time_range_start = _get_time_range_start(time_range)
 
@@ -945,7 +945,7 @@ def _fetch_export_data(
     # Fetch messages
     conversations = reader.get_conversations(limit=200)
     all_messages = []
-    contact_messages: dict[str, list] = defaultdict(list)
+    contact_messages: dict[str, list[Any]] = defaultdict(list)
 
     for conv in conversations:
         messages = reader.get_messages(conv.chat_id, limit=500)

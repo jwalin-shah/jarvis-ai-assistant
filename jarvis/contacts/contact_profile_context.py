@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from jarvis.contacts.contact_profile import ContactProfile
-    from jarvis.embeddings import EmbeddingStoreProfile
 
 
 _ENABLE_CONTACT_PROFILE_CONTEXT = os.environ.get(
@@ -72,17 +71,6 @@ class ContactProfileContext:
             greeting_style=profile.greeting_style,
             signoff_style=profile.signoff_style,
             top_topics=profile.top_topics,
-        )
-
-    @classmethod
-    def from_relationship_profile(
-        cls, profile: EmbeddingStoreProfile
-    ) -> ContactProfileContext:
-        """Build context from the embedding store's relationship profile."""
-        return cls(
-            tone=profile.typical_tone,
-            avg_message_length=profile.avg_message_length or 50.0,
-            response_patterns=profile.response_patterns or None,
         )
 
     @staticmethod

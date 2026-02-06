@@ -4,7 +4,7 @@
  * These tests run against the real compiled app using tauri-driver.
  * Make sure the backend services are running before running these tests:
  *   - API server on port 8742
- *   - Socket server at /tmp/jarvis.sock
+ *   - Socket server at ~/.jarvis/jarvis.sock
  */
 
 describe("JARVIS Desktop App", () => {

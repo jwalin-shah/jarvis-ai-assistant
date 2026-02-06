@@ -6,6 +6,7 @@ Contains Pydantic models for tag management, smart folders, and auto-tagging.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -229,7 +230,7 @@ class RuleConditionSchema(BaseModel):
         description="Comparison operator",
         examples=["equals", "contains", "greater_than", "in_last_days", "has_tag"],
     )
-    value: str | int | float | bool | list | None = Field(
+    value: str | int | float | bool | list[str] | None = Field(
         default=None,
         description="Value to compare against",
     )
@@ -366,7 +367,7 @@ class SmartFolderPreviewResponse(BaseModel):
     """Preview response for smart folder rules."""
 
     total_matches: int = Field(..., description="Total conversations that match", ge=0)
-    preview: list[dict] = Field(..., description="Sample of matching conversations")
+    preview: list[dict[str, Any]] = Field(..., description="Sample of matching conversations")
     has_more: bool = Field(..., description="True if there are more matches beyond preview")
 
 

@@ -80,9 +80,9 @@ def auto_label_with_embeddings(
         - all_embeddings: Embeddings for all candidates
     """
     MINORITY_CLASSES = {"AGREE", "DECLINE", "DEFER"}
+    from jarvis.classifiers.response_classifier import get_response_classifier
     from jarvis.db import get_db
     from jarvis.embedding_adapter import get_embedder
-    from jarvis.response_classifier import get_response_classifier
 
     logger.info("Loading pairs from database...")
     db = get_db()

@@ -237,40 +237,26 @@ class SuggestionResult:
 class ReplySuggester:
     """Generates reply suggestions using patterns + retrieval + templates.
 
-    Strategy:
-    1. Detect pattern type (structural rules)
-    2. Search FAISS for similar triggers you've received
-    3. Get YOUR past responses to similar messages
-    4. Cluster/dedupe to get diverse options
-    5. Fill remaining slots with templates
+    Delegates to the unified ReplyService.
     """
 
     def __init__(self, db: JarvisDB | None = None):
         """Initialize the suggester.
 
         Args:
-            db: Database instance. Uses default if None.
+            db: Database instance.
         """
-        self._db = db
-        self._index_searcher = None
+        from jarvis.reply_service import get_reply_service
+
+        self._service = get_reply_service()
+        if db:
+            from jarvis.reply_service import ReplyService
+
+            self._service = ReplyService(db=db)
 
     @property
     def db(self) -> JarvisDB:
-        """Get or create database instance."""
-        if self._db is None:
-            from jarvis.db import get_db
-
-            self._db = get_db()
-        return self._db
-
-    @property
-    def index_searcher(self):
-        """Get or create FAISS index searcher."""
-        if self._index_searcher is None:
-            from jarvis.index import TriggerIndexSearcher
-
-            self._index_searcher = TriggerIndexSearcher(self.db)
-        return self._index_searcher
+        return self._service.db
 
     def suggest(
         self,
@@ -279,82 +265,18 @@ class ReplySuggester:
         n_suggestions: int = 3,
         include_templates: bool = True,
     ) -> SuggestionResult:
-        """Get reply suggestions for a message.
-
-        Args:
-            message: The incoming message to reply to.
-            contact_id: Optional contact ID for personalization.
-            n_suggestions: Number of suggestions to return.
-            include_templates: Whether to include template fallbacks.
-
-        Returns:
-            SuggestionResult with suggestions and metadata.
-        """
-        # Step 1: Detect pattern
+        """Get reply suggestions for a message."""
         pattern = detect_pattern(message)
-        logger.debug("Detected pattern: %s for message: %s", pattern.value, message[:50])
-
-        # Step 2: Search for similar triggers
-        suggestions: list[ReplySuggestion] = []
-        similar_count = 0
-
-        try:
-            results = self.index_searcher.search_with_pairs(
-                query=message,
-                k=10,
-                threshold=0.5,
-                prefer_recent=True,
-            )
-            similar_count = len(results)
-
-            # Step 3: Get unique responses from similar triggers
-            seen_responses: set[str] = set()
-            for result in results:
-                response = result.get("response_text", "")
-                response_lower = response.lower().strip()
-
-                # Skip if duplicate or too similar
-                if response_lower in seen_responses:
-                    continue
-                if len(response) < 2 or len(response) > 200:
-                    continue
-
-                seen_responses.add(response_lower)
-                suggestions.append(
-                    ReplySuggestion(
-                        text=response,
-                        source="retrieval",
-                        confidence=result.get("similarity", 0.5),
-                    )
-                )
-
-                if len(suggestions) >= n_suggestions:
-                    break
-
-        except Exception as e:
-            logger.warning("FAISS search failed: %s", e)
-
-        # Step 4: Fill with templates if needed
-        if include_templates and len(suggestions) < n_suggestions:
-            templates = TEMPLATES.get(pattern, TEMPLATES[MessagePattern.UNKNOWN])
-            for template in templates:
-                if len(suggestions) >= n_suggestions:
-                    break
-                # Don't add template if similar response already exists
-                if any(template.lower() == s.text.lower() for s in suggestions):
-                    continue
-                suggestions.append(
-                    ReplySuggestion(
-                        text=template,
-                        source="template",
-                        confidence=0.7,
-                    )
-                )
+        suggestions = self._service.generate_suggestions(
+            incoming=message,
+            contact_id=contact_id,
+            n_suggestions=n_suggestions,
+        )
 
         return SuggestionResult(
-            suggestions=suggestions[:n_suggestions],
+            suggestions=suggestions,
             pattern=pattern,
-            similar_count=similar_count,
+            similar_count=len([s for s in suggestions if s.source == "retrieval"]),
         )
 
 

@@ -1,7 +1,6 @@
 """Unit tests for jarvis/slang.py - Slang Expansion."""
 
-
-from jarvis.slang import SLANG_MAP, expand_slang, get_slang_map
+from jarvis.nlp.slang import SLANG_MAP, expand_slang, get_slang_map
 
 
 class TestSlangMap:

@@ -32,7 +32,6 @@ from api.routers import (
     conversations_router,
     custom_templates_router,
     debug_router,
-    digest_router,
     drafts_router,
     embeddings_router,
     experiments_router,
@@ -43,7 +42,6 @@ from api.routers import (
     metrics_router,
     pdf_export_router,
     priority_router,
-    quality_router,
     relationships_router,
     scheduler_router,
     search_router,
@@ -131,12 +129,6 @@ API_TAGS_METADATA = [
         "name": "search",
         "description": "Semantic search using AI-powered embeddings. "
         "Find messages by meaning rather than exact keyword matching.",
-    },
-    {
-        "name": "digest",
-        "description": "Daily and weekly digest generation. "
-        "Get summaries of unanswered messages, group highlights, action items, and statistics. "
-        "Export digests in Markdown or HTML format.",
     },
     {
         "name": "drafts",
@@ -236,12 +228,6 @@ API_TAGS_METADATA = [
         "description": "Relationship learning and communication profiling. "
         "Build and manage profiles that capture communication patterns with each contact "
         "for personalized reply generation.",
-    },
-    {
-        "name": "quality",
-        "description": "Quality metrics dashboard for response generation. "
-        "Track template hit rates, HHEM scores, user acceptance, edit distance, and latency. "
-        "View metrics by contact, time of day, conversation type, and intent.",
     },
     {
         "name": "tags",
@@ -376,7 +362,6 @@ app.include_router(calendar_router)
 app.include_router(contacts_router)
 app.include_router(conversations_router)
 app.include_router(custom_templates_router)
-app.include_router(digest_router)
 app.include_router(drafts_router)
 app.include_router(embeddings_router)
 app.include_router(export_router)
@@ -385,7 +370,6 @@ app.include_router(search_router)
 app.include_router(suggestions_router)
 app.include_router(settings_router)
 app.include_router(stats_router)
-# Note: insights endpoints are provided by stats_router and digest_router
 app.include_router(metrics_router)
 app.include_router(template_analytics_router)
 app.include_router(threads_router)
@@ -398,7 +382,6 @@ app.include_router(scheduler_router)
 app.include_router(feedback_router)
 app.include_router(experiments_router)
 app.include_router(relationships_router)
-app.include_router(quality_router)
 app.include_router(tags_router)
 app.include_router(analytics_router)
 app.include_router(graph_router)

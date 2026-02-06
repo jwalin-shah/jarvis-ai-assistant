@@ -1,343 +1,784 @@
-# JARVIS Architecture
+# JARVIS Architecture V2: Direct SQLite + Unix Sockets
 
-Technical architecture and implementation status for the JARVIS AI assistant.
+## Overview
 
-**Related Documentation:**
-- [DESIGN.md](./DESIGN.md) - **Comprehensive design document** with rationale, decisions, and lessons learned (recommended for understanding the "why")
-- [ARCHITECTURE_V2.md](./ARCHITECTURE_V2.md) - Direct SQLite + Unix Socket architecture for faster desktop performance
-- [CLASSIFIER_SYSTEM.md](./CLASSIFIER_SYSTEM.md) - Deep dive into the hybrid classifier system
-- [design/EMBEDDINGS.md](./design/EMBEDDINGS.md) - Embedding models, multi-model support, FAISS
-- [design/TEXT_NORMALIZATION.md](./design/TEXT_NORMALIZATION.md) - Text normalization for consistent embeddings
+This document describes the optimized architecture for JARVIS, replacing HTTP polling with direct SQLite reads and Unix socket communication.
 
-## Quick Overview
+**Status:** All Phases Complete (1-4)
 
-JARVIS is a **privacy-first AI assistant** for iMessage on Apple Silicon. Key innovations:
+## Quick Start
 
-| Feature | Approach | Result |
-|---------|----------|--------|
-| Classification | 3-layer hybrid (structural → centroid → SVM) | 82% F1 |
-| Response Generation | Retrieval-augmented generation (RAG) | Personalized |
-| Performance | Unix sockets + direct SQLite (V2) | 30-50x faster |
-| Privacy | All local, MLX on Apple Silicon | No cloud |
+```bash
+# Launch includes socket server automatically
+./scripts/launch.sh
+```
 
-## Implementation Status
+## Socket Server API
 
-**Legend:**
-- ✅ **OPERATIONAL** - Code implemented, tested, and working in production
-- 🟡 **IMPLEMENTED** - Code exists but has known issues or limitations
-- 📝 **PLANNED** - Design complete, implementation pending
+The socket server runs at `~/.jarvis/jarvis.sock` with JSON-RPC 2.0 protocol.
 
-### Core Components
+**Available Methods:**
+| Method | Description | Parameters |
+|--------|-------------|------------|
+| `ping` | Health check | None |
+| `generate_draft` | Generate reply suggestions | `chat_id`, `instruction?`, `num_suggestions?` |
+| `summarize` | Summarize conversation | `chat_id`, `num_messages?` |
+| `get_smart_replies` | Quick reply suggestions | `last_message`, `num_suggestions?` |
+| `semantic_search` | Search messages | `query`, `limit?`, `threshold?`, `filters?` |
+| `classify_intent` | Classify message intent | `text` |
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Contracts/Interfaces | ✅ OPERATIONAL | 9 protocol definitions in `contracts/` |
-| Model Generator (WS8) | ✅ OPERATIONAL | MLX loader, template fallback, RAG support |
-| iMessage Reader (WS10) | ✅ OPERATIONAL | Schema detection, attachments, reactions |
-| Memory Profiler (WS1) | ✅ OPERATIONAL | MLX memory profiling with model unload |
-| HHEM Benchmark (WS2) | ✅ OPERATIONAL | Vectara HHEM model evaluation |
-| Latency Benchmark (WS4) | ✅ OPERATIONAL | Cold/warm/hot start scenarios |
-| Memory Controller (WS5) | ✅ OPERATIONAL | Three-tier modes (FULL/LITE/MINIMAL) |
-| Degradation Controller (WS6) | ✅ OPERATIONAL | Circuit breaker pattern |
-| Setup Wizard | ✅ OPERATIONAL | Environment validation, config init, health report |
-| CLI Entry Point | ✅ OPERATIONAL | `jarvis/_cli_main.py` with db, health, benchmark, serve |
-| FastAPI Layer | ✅ OPERATIONAL | `api/` module for Tauri frontend integration |
-| Config System | ✅ OPERATIONAL | `jarvis/config.py` with nested sections and migration |
-| Model Registry | ✅ OPERATIONAL | `models/registry.py` with multi-model support |
-| Intent Classification | 🟡 IMPLEMENTED | `jarvis/intent.py` - Under active development |
-| Metrics System | ✅ OPERATIONAL | `jarvis/metrics.py` for performance monitoring |
-| Export System | ✅ OPERATIONAL | `jarvis/export.py` for JSON/CSV/TXT export |
-| Error Handling | ✅ OPERATIONAL | `jarvis/errors.py` unified exception hierarchy |
-| Prompts Registry | ✅ OPERATIONAL | `jarvis/prompts.py` centralized prompt templates |
-| MLX Embeddings | ✅ OPERATIONAL | `models/embeddings.py` + `jarvis/embedding_adapter.py` multi-model support |
-| Reply Router | ✅ OPERATIONAL | `jarvis/router.py` with template/generate/clarify routing |
-| FAISS Index | ✅ OPERATIONAL | `jarvis/index.py` for trigger similarity search |
-| JARVIS Database | ✅ OPERATIONAL | `jarvis/db.py` with contacts, pairs, clusters |
-| Cluster Analysis | 🟡 IMPLEMENTED | `jarvis/clustering.py` - code exists, CLI command planned |
-| Response Classifier | 🟡 IMPLEMENTED | `jarvis/response_classifier.py` - Under active refinement |
-| Trigger Classifier | ✅ OPERATIONAL | `jarvis/trigger_classifier.py` hybrid structural+SVM (82.0% F1) |
-| Multi-Option Generation | ✅ OPERATIONAL | `jarvis/multi_option.py` for AGREE/DECLINE/DEFER |
-| Typed Retrieval | ✅ OPERATIONAL | `jarvis/retrieval.py` for DA-filtered FAISS |
-| Unix Socket Server | ✅ OPERATIONAL | `jarvis/socket_server.py` for desktop IPC (V2) |
-| File Watcher | ✅ OPERATIONAL | `jarvis/watcher.py` for real-time notifications (V2) |
+**Push Notifications:**
+| Event | Description | Data |
+|-------|-------------|------|
+| `new_message` | New message received | `message_id`, `chat_id`, `sender`, `text`, `date`, `is_from_me` |
 
-### New Modules (V3)
+## Current Architecture (V1)
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Analytics Module | ✅ OPERATIONAL | `jarvis/analytics/` - dashboard, trends, reports |
-| Graph Visualization | 🟡 IMPLEMENTED | `jarvis/graph/` - API ready, frontend integration planned |
-| Scheduler System | ✅ OPERATIONAL | `jarvis/scheduler/` - smart timing, draft scheduling |
-| Tags & Smart Folders | ✅ OPERATIONAL | `jarvis/tags/` - auto-tagging, rule-based folders |
-| Prefetch System | ✅ OPERATIONAL | `jarvis/prefetch/` - speculative caching, prediction |
-| Quality Assurance | ✅ OPERATIONAL | `jarvis/quality/` - hallucination detection, grounding |
-| Response Classifier V2 | ✅ OPERATIONAL | `jarvis/response_classifier_v2.py` - 3-layer hybrid, 10 labels |
-| Topic Segmentation | ✅ OPERATIONAL | `jarvis/topic_segmenter.py` - semantic boundary detection |
-| Contact Profiles | ✅ OPERATIONAL | `jarvis/contact_profile.py` - per-contact style analysis |
-| Adaptive Thresholds | 🟡 IMPLEMENTED | `jarvis/adaptive_thresholds.py` - Learns from user feedback |
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Tauri App (Frontend)                                               │
+│  └── Every operation goes through HTTP                              │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ HTTP (50-150ms per request)
+┌─────────────────────────────────────────────────────────────────────┐
+│  FastAPI (Python)                                                   │
+│  ├── Reads chat.db for messages                                     │
+│  ├── Reads/writes jarvis.db for embeddings                          │
+│  └── Runs LLM for drafts, classification, etc.                      │
+└─────────────────────────────────────────────────────────────────────┘
 
-## Contract-Based Design
+Problems:
+- 50-150ms latency for every operation (including simple reads)
+- Polling every 10s for new messages (wasteful)
+- Up to 10 second delay for new message notifications
+- HTTP overhead for local communication
+```
 
-Python Protocols in `contracts/` enable parallel development:
+## New Architecture (V2)
 
-| Contract | Protocol(s) | Implementation |
-|----------|-------------|----------------|
-| `contracts/memory.py` | MemoryProfiler, MemoryController | `benchmarks/memory/`, `core/memory/` |
-| `contracts/hallucination.py` | HallucinationEvaluator | `benchmarks/hallucination/` |
-| `contracts/latency.py` | LatencyBenchmarker | `benchmarks/latency/` |
-| `contracts/health.py` | DegradationController, PermissionMonitor, SchemaDetector | `core/health/`, `jarvis/setup.py` |
-| `contracts/models.py` | Generator | `models/` |
-| `contracts/imessage.py` | iMessageReader | `integrations/imessage/` |
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Tauri App (Frontend)                                               │
+│                                                                     │
+│  ┌──────────────────────┐     ┌──────────────────────────────────┐ │
+│  │  SQLite Plugin       │     │  Socket Client                   │ │
+│  │  (tauri-plugin-sql)  │     │  (JSON-RPC over Unix socket)     │ │
+│  └──────────┬───────────┘     └──────────────┬───────────────────┘ │
+│             │                                │                      │
+└─────────────┼────────────────────────────────┼──────────────────────┘
+              │ ~1-5ms                         │ ~1-5ms + inference
+              ▼                                ▼
+       ┌──────────────┐              ┌─────────────────────┐
+       │   chat.db    │              │  ~/.jarvis/jarvis.sock   │
+       │  (read-only) │              │  (Python daemon)    │
+       └──────────────┘              └──────────┬──────────┘
+       ┌──────────────┐                         │
+       │  jarvis.db   │◄────────────────────────┤
+       │(contacts/vec)│                         │
+       └──────────────┘              ┌──────────┴──────────┐
+                                     │  - LLM inference    │
+                                     │  - sqlite-vec search│
+                                     │  - Classification   │
+                                     │  - File watcher     │
+                                     │  - Speculative prefetch
+                                     └─────────────────────┘
+```
 
-## Module Structure
+## Component Details
 
-| Directory | Purpose |
-|-----------|---------|
-| `jarvis/` | Core logic: classifiers, router, embeddings, config, prompts |
-| `jarvis/analytics/` | Dashboard metrics, trends, reports, time-series aggregation |
-| `jarvis/graph/` | Relationship networks, clustering, layout, export (JSON/SVG/HTML) |
-| `jarvis/scheduler/` | Draft scheduling, smart timing, priority queue, quiet hours |
-| `jarvis/tags/` | Tags, smart folders, auto-tagging, rule-based filtering |
-| `jarvis/prefetch/` | Multi-tier cache (L1/L2/L3), prediction, invalidation |
-| `jarvis/quality/` | Hallucination detection, factuality, consistency, grounding |
-| `api/` | FastAPI REST layer for CLI and web clients |
-| `api/routers/` | API endpoints (analytics, graph, scheduler, tags, etc.) |
-| `benchmarks/` | Memory, hallucination, latency benchmarks |
-| `core/` | Memory controller, health monitoring |
-| `models/` | MLX model inference, registry, templates |
-| `integrations/imessage/` | iMessage reader with filters |
-| `desktop/` | Tauri desktop app (Svelte frontend) with direct SQLite + socket |
-| `desktop/src/lib/db/` | Direct SQLite access layer (V2) |
-| `desktop/src/lib/socket/` | Unix socket client (V2) |
-| `tests/` | Unit and integration tests |
+### 1. Direct SQLite Reads (Tauri → chat.db / jarvis.db)
 
-## Key Patterns
+**What:** Tauri reads directly from SQLite databases, bypassing HTTP entirely.
 
-### Two Template Systems
+**Why:** Reading 50 messages takes ~1-5ms via SQLite vs ~100-150ms via HTTP.
 
-1. **Static TemplateMatcher** (`models/templates.py`): ~25 canned response templates using semantic similarity (threshold: 0.70). Supports group chat context.
+**Databases:**
+| Database | Location | Access | Contains |
+|----------|----------|--------|----------|
+| chat.db | ~/Library/Messages/chat.db | Read-only | Messages, conversations, attachments |
+| jarvis.db | ~/.jarvis/jarvis.db | Read-write | Contacts, scheduled messages, pairs |
+| embeddings.db| ~/.jarvis/embeddings/{model}/embeddings.db | Read-write | Vector index (sqlite-vec) and profiles |
 
-2. **FAISS ReplyRouter** (`jarvis/router.py`): Matches against historical (trigger, response) pairs from iMessage history. Primary routing system.
+**Implementation:**
+```typescript
+// desktop/src/lib/db/direct.ts
+import Database from '@tauri-apps/plugin-sql';
 
-### Reply Router Thresholds
+let chatDb: Database | null = null;
+let jarvisDb: Database | null = null;
 
-Configurable via `~/.jarvis/config.json`:
+export async function initDatabases() {
+  const homeDir = await homeDir();
+
+  // Apple's iMessage database (read-only)
+  chatDb = await Database.load(
+    `sqlite:${homeDir}/Library/Messages/chat.db?mode=ro`
+  );
+
+  // Our database
+  jarvisDb = await Database.load(
+    `sqlite:${homeDir}/.jarvis/jarvis.db`
+  );
+}
+
+export async function getMessages(chatId: string, limit = 50): Promise<Message[]> {
+  // Direct read - ~1-5ms
+  return chatDb.select(`
+    SELECT
+      m.ROWID as id,
+      m.text,
+      m.date,
+      m.is_from_me,
+      m.cache_has_attachments,
+      h.id as sender
+    FROM message m
+    LEFT JOIN handle h ON m.handle_id = h.ROWID
+    WHERE m.chat_id = ?
+    ORDER BY m.date DESC
+    LIMIT ?
+  `, [chatId, limit]);
+}
+
+export async function getConversations(): Promise<Conversation[]> {
+  // Direct read - ~1-5ms
+  return chatDb.select(`
+    SELECT
+      c.ROWID as id,
+      c.chat_identifier as chat_id,
+      c.display_name,
+      c.group_id
+    FROM chat c
+    ORDER BY c.last_message_date DESC
+  `);
+}
+
+export async function getEmbedding(messageId: number): Promise<Float32Array | null> {
+  const row = await jarvisDb.select(
+    'SELECT embedding FROM message_embeddings WHERE message_id = ?',
+    [messageId]
+  );
+  return row[0]?.embedding;
+}
+```
+
+**Tauri Config (src-tauri/tauri.conf.json):**
 ```json
 {
-  "routing": {
-    "template_threshold": 0.90,
-    "context_threshold": 0.70,
-    "generate_threshold": 0.50
+  "plugins": {
+    "sql": {
+      "preload": ["sqlite:~/.jarvis/jarvis.db"]
+    }
   }
 }
 ```
 
-- Score >= 0.90: Template response from FAISS
-- Score 0.50-0.90: LLM generation with few-shot examples
-- Score < 0.50: Clarification request
+**Cargo.toml:**
+```toml
+[dependencies]
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+```
 
-### Classifiers
+---
 
-**Response Classifier** (`jarvis/response_classifier.py`):
-- 3-layer hybrid: structural patterns → centroid verification → SVM
-- **81.9% macro F1** [95% CI: 78.4% - 84.9%] on held-out test set
-- 6 labels: AGREE, DECLINE, DEFER, OTHER, QUESTION, REACTION
-- Model: `~/.jarvis/embeddings/{model_name}/response_classifier_model/`
-- Training: `scripts/train_response_classifier.py`
+### 2. Unix Socket Communication (Tauri ↔ Python)
 
-**Trigger Classifier** (`jarvis/trigger_classifier.py`):
-- Hybrid: structural patterns → SVM with per-class thresholds
-- **82.0% macro F1** [95% CI: 79.3% - 84.4%] on held-out test set
-- 5 labels: COMMITMENT, QUESTION, REACTION, SOCIAL, STATEMENT
-- Model: `~/.jarvis/embeddings/{model_name}/trigger_classifier_model/`
-- Training: `scripts/train_trigger_classifier.py`
+**What:** Bidirectional JSON-RPC communication over Unix socket.
 
-**Note:** Classifier models are stored per embedding model. Switching embedding models requires retraining classifiers.
+**Why:**
+- ~1-5ms latency vs ~50ms HTTP
+- Enables push notifications (no polling)
+- Persistent connection (no connection overhead)
 
-**Response Classifier V2** (`jarvis/response_classifier_v2.py`):
-- Batch processing: 32-128 messages at once with vectorized operations
-- Parallel SVM: joblib for multi-core predictions
-- Streaming: Micro-batching with 50ms windows
-- Extended labels: QUESTION subtypes, EMOTIONAL_SUPPORT, SCHEDULING
-- Target: 10x throughput, <5ms p95 latency
+**Socket Location:** `~/.jarvis/jarvis.sock`
 
-### Adaptive Thresholds
+**Protocol:** JSON-RPC 2.0
 
-`jarvis/adaptive_thresholds.py` learns optimal routing thresholds from user feedback:
+```
+Request:  {"jsonrpc": "2.0", "method": "generate_draft", "params": {...}, "id": 1}
+Response: {"jsonrpc": "2.0", "result": {...}, "id": 1}
+Push:     {"jsonrpc": "2.0", "method": "new_message", "params": {...}}
+```
 
-1. Groups feedback by similarity score buckets (e.g., 0.90-0.95)
-2. Computes acceptance rate per bucket
-3. Adjusts thresholds where acceptance drops below target
-4. Applies learning rate to prevent volatility
-
+**Python Server (jarvis/socket_server.py):**
 ```python
-from jarvis.adaptive_thresholds import get_adaptive_threshold_manager
-manager = get_adaptive_threshold_manager()
-thresholds = manager.get_adapted_thresholds()
-# {"quick_reply": 0.92, "context": 0.68, "generate": 0.48}
+import asyncio
+import json
+import os
+from pathlib import Path
+
+SOCKET_PATH = "~/.jarvis/jarvis.sock"
+
+class JarvisSocketServer:
+    def __init__(self):
+        self.clients: set[asyncio.StreamWriter] = set()
+        self.handlers = {
+            "generate_draft": self.handle_generate_draft,
+            "semantic_search": self.handle_semantic_search,
+            "classify_intent": self.handle_classify_intent,
+            "get_smart_replies": self.handle_smart_replies,
+        }
+
+    async def start(self):
+        # Clean up stale socket
+        if os.path.exists(SOCKET_PATH):
+            os.unlink(SOCKET_PATH)
+
+        server = await asyncio.start_unix_server(
+            self.handle_client,
+            path=SOCKET_PATH
+        )
+
+        # Set permissions (owner only)
+        os.chmod(SOCKET_PATH, 0o600)
+
+        async with server:
+            await server.serve_forever()
+
+    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        self.clients.add(writer)
+        try:
+            while True:
+                # Read length-prefixed message
+                length_bytes = await reader.readexactly(4)
+                length = int.from_bytes(length_bytes, 'big')
+                data = await reader.readexactly(length)
+
+                request = json.loads(data.decode())
+                response = await self.handle_request(request)
+
+                if response:  # Don't respond to notifications
+                    await self.send(writer, response)
+        except asyncio.IncompleteReadError:
+            pass  # Client disconnected
+        finally:
+            self.clients.discard(writer)
+            writer.close()
+
+    async def handle_request(self, request: dict) -> dict | None:
+        method = request.get("method")
+        params = request.get("params", {})
+        request_id = request.get("id")
+
+        handler = self.handlers.get(method)
+        if not handler:
+            return {
+                "jsonrpc": "2.0",
+                "error": {"code": -32601, "message": f"Method not found: {method}"},
+                "id": request_id
+            }
+
+        try:
+            result = await handler(params)
+            return {"jsonrpc": "2.0", "result": result, "id": request_id}
+        except Exception as e:
+            return {
+                "jsonrpc": "2.0",
+                "error": {"code": -32000, "message": str(e)},
+                "id": request_id
+            }
+
+    async def broadcast(self, method: str, params: dict):
+        """Push notification to all connected clients."""
+        message = {"jsonrpc": "2.0", "method": method, "params": params}
+        for writer in self.clients:
+            try:
+                await self.send(writer, message)
+            except:
+                self.clients.discard(writer)
+
+    async def send(self, writer: asyncio.StreamWriter, data: dict):
+        encoded = json.dumps(data).encode()
+        length = len(encoded).to_bytes(4, 'big')
+        writer.write(length + encoded)
+        await writer.drain()
+
+    # --- Handlers ---
+
+    async def handle_generate_draft(self, params: dict) -> dict:
+        from jarvis.router import generate_response
+        chat_id = params["chat_id"]
+        result = await asyncio.to_thread(generate_response, chat_id)
+        return {"drafts": result}
+
+    async def handle_semantic_search(self, params: dict) -> dict:
+        from jarvis.semantic_search import search
+        results = await asyncio.to_thread(
+            search,
+            query=params["query"],
+            chat_id=params.get("chat_id"),
+            limit=params.get("limit", 20)
+        )
+        return {"results": results}
+
+    async def handle_classify_intent(self, params: dict) -> dict:
+        from jarvis.intent import classify
+        result = await asyncio.to_thread(classify, params["text"])
+        return {"intent": result}
+
+    async def handle_smart_replies(self, params: dict) -> dict:
+        from jarvis.router import get_smart_replies
+        result = await asyncio.to_thread(
+            get_smart_replies,
+            chat_id=params["chat_id"]
+        )
+        return {"replies": result}
 ```
 
-## V3 Modules
+**TypeScript Client (desktop/src/lib/socket/client.ts):**
+```typescript
+import { invoke } from '@tauri-apps/api/core';
 
-### Analytics (`jarvis/analytics/`)
+type JsonRpcRequest = {
+  jsonrpc: "2.0";
+  method: string;
+  params?: Record<string, unknown>;
+  id?: number;
+};
 
-Conversation analytics and insights:
-- **TimeSeriesAggregator**: Pre-computed daily/hourly aggregates
-- **TrendAnalyzer**: Trend detection, anomalies, seasonality
-- **ReportGenerator**: Export to JSON/CSV
-- **AnalyticsEngine**: Dashboard overview metrics (response time, sentiment)
+type JsonRpcResponse = {
+  jsonrpc: "2.0";
+  result?: unknown;
+  error?: { code: number; message: string };
+  id?: number;
+};
 
-### Graph (`jarvis/graph/`)
+type PushHandler = (params: Record<string, unknown>) => void;
 
-Relationship network visualization:
-- **GraphBuilder**: Build network from message history
-- **LayoutEngine**: Force-directed, hierarchical, radial layouts
-- **detect_communities()**: Louvain clustering with auto-labels
-- **Export**: JSON, GraphML, SVG, interactive HTML (D3.js)
+class JarvisSocket {
+  private requestId = 0;
+  private pendingRequests = new Map<number, {
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+  }>();
+  private pushHandlers = new Map<string, PushHandler>();
+  private connected = false;
 
-### Scheduler (`jarvis/scheduler/`)
+  async connect(): Promise<void> {
+    // Tauri command connects to Unix socket
+    await invoke('connect_jarvis_socket');
+    this.connected = true;
 
-Smart draft scheduling:
-- **DraftScheduler**: Priority queue with exponential backoff
-- **TimingAnalyzer**: Contact history analysis for optimal send times
-- **Quiet hours**: Configurable per-contact time zones
-- Background executor with retry logic
+    // Start listening for messages
+    this.startListening();
+  }
 
-### Tags (`jarvis/tags/`)
+  async call<T>(method: string, params?: Record<string, unknown>): Promise<T> {
+    const id = ++this.requestId;
+    const request: JsonRpcRequest = {
+      jsonrpc: "2.0",
+      method,
+      params,
+      id
+    };
 
-Organization system:
-- **TagManager**: Hierarchical tags with colors/icons
-- **SmartFolder**: Rule-based dynamic folders (like mail filters)
-- **AutoTagger**: ML-based tag suggestions from content
-- **RulesEngine**: Field/operator/value conditions
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      invoke('send_jarvis_message', { message: JSON.stringify(request) });
+    });
+  }
 
-### Prefetch (`jarvis/prefetch/`)
+  on(method: string, handler: PushHandler): void {
+    this.pushHandlers.set(method, handler);
+  }
 
-Speculative caching for low latency:
-- **MultiTierCache**: L1 (memory) / L2 (disk) / L3 (compressed)
-- **PrefetchPredictor**: Strategies (contact frequency, time of day, UI focus)
-- **PrefetchExecutor**: Background execution with resource management
-- **CacheInvalidator**: Smart invalidation on new messages
-- Target: 80% cache hit rate, 10x latency improvement
+  private async startListening(): Promise<void> {
+    // Listen for messages from Tauri backend
+    await listen('jarvis_message', (event) => {
+      const message = JSON.parse(event.payload as string) as JsonRpcResponse;
 
-### Quality (`jarvis/quality/`)
+      if (message.id !== undefined) {
+        // Response to a request
+        const pending = this.pendingRequests.get(message.id);
+        if (pending) {
+          this.pendingRequests.delete(message.id);
+          if (message.error) {
+            pending.reject(new Error(message.error.message));
+          } else {
+            pending.resolve(message.result);
+          }
+        }
+      } else {
+        // Push notification
+        const handler = this.pushHandlers.get(message.method!);
+        if (handler) {
+          handler(message.params as Record<string, unknown>);
+        }
+      }
+    });
+  }
+}
 
-Response quality assurance:
-- **EnsembleHallucinationDetector**: Multi-model ensemble
-- **FactChecker**: Claim extraction and verification
-- **ConsistencyChecker**: Self-consistency across generations
-- **GroundingChecker**: Source attribution tracking
-- **QualityGate**: Real-time pass/warn/fail thresholds
-- **QualityDashboard**: Trend tracking, regression alerts
-
-### Frontend Redesign
-
-See [FRONTEND_REDESIGN_PLAN.md](./FRONTEND_REDESIGN_PLAN.md):
-- **Themes**: Light/Dark/System with CSS variables
-- **Skeleton loading**: Shimmer placeholders for perceived speed
-- **Optimistic sending**: Instant message feedback
-- **Glassmorphism**: Frosted glass effects
-- **Command palette**: Keyboard-first navigation (planned)
-
-### Singleton Pattern
-
-All expensive resources use lazy-loaded singletons:
-- `get_generator()` - MLX model
-- `get_embedder()` - Embedding model
-- `get_response_classifier()` - Response classifier
-- `get_trigger_classifier()` - Trigger classifier
-- `get_reply_router()` - FAISS router
-- `get_db()` - Database connection
-- `get_memory_controller()` - Memory controller
-- `get_degradation_controller()` - Circuit breaker
-
-### Data Flow for Text Generation
-
-1. Intent classification → route to handler
-2. Simple acknowledgment check → fast-path for "ok", "sounds good", etc.
-3. FAISS similarity search → get score
-4. Route based on thresholds (template/generate/clarify)
-5. Memory check → operating mode
-6. Context fetching for iMessage intents
-7. Prompt building with tone detection
-8. MLX model generation
-9. (Optional) HHEM quality validation
-
-## Validation Gates
-
-| Gate | Metric | Pass | Conditional | Fail |
-|------|--------|------|-------------|------|
-| G1 | Model stack memory | <5.5GB | 5.5-6.5GB | >6.5GB |
-| G2 | Mean HHEM score | >=0.5 | 0.4-0.5 | <0.4 |
-| G3 | Warm-start latency | <3s | 3-5s | >5s |
-| G4 | Cold-start latency | <15s | 15-20s | >20s |
-
-Run: `uv run python -m benchmarks.{memory,hallucination,latency}.run`
-
-## API Endpoints (V3)
-
-### Analytics API (`/api/analytics/*`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/overview` | GET | Dashboard metrics (messages, response time, sentiment) |
-| `/timeline` | GET | Time-series data (hour/day/week/month granularity) |
-| `/heatmap` | GET | Activity heatmap for calendar view |
-| `/contacts/{chat_id}/stats` | GET | Per-contact detailed analytics |
-| `/contacts/leaderboard` | GET | Top contacts by messages/engagement |
-| `/trends` | GET | Trend detection, anomalies, seasonality |
-| `/export` | GET | Export analytics (JSON/CSV) |
-
-### Graph API (`/api/graph/*`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/network` | GET | Full relationship network graph |
-| `/ego/{contact_id}` | GET | Ego-centric graph centered on contact |
-| `/clusters` | GET | Community detection (Louvain algorithm) |
-| `/evolution` | GET | Temporal graph snapshots |
-| `/export` | POST | Export graph (JSON/GraphML/SVG/HTML) |
-| `/stats` | GET | Network statistics |
-
-### Scheduler API (`/api/scheduler/*`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/schedule` | POST | Schedule draft for future sending |
-| `/smart-schedule` | POST | Schedule with smart timing analysis |
-| `/{item_id}` | GET | Get scheduled item |
-| `/{item_id}` | DELETE | Cancel scheduled item |
-| `/{item_id}/reschedule` | PUT | Reschedule to new time |
-| `/timing/suggest/{contact_id}` | GET | Get timing suggestions |
-| `/stats` | GET | Scheduler statistics |
-| `/start`, `/stop` | POST | Control background scheduler |
-
-### Tags API (`/api/tags/*`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET/POST | List/create tags |
-| `/{tag_id}` | GET/PATCH/DELETE | Tag CRUD |
-| `/conversations/{chat_id}` | GET/POST/PUT | Conversation tagging |
-| `/bulk/add`, `/bulk/remove` | POST | Bulk tag operations |
-| `/folders` | GET/POST | Smart folder CRUD |
-| `/folders/{folder_id}/conversations` | GET | Folder contents |
-| `/folders/preview` | POST | Preview folder rules |
-| `/rules` | GET/POST | Auto-tagging rules |
-| `/suggestions` | POST | AI-powered tag suggestions |
-| `/statistics` | GET | Tag usage statistics |
-
-## Evaluation Scripts
-
-```bash
-# Train/test split and evaluation
-uv run python -m scripts.eval_pipeline --setup
-uv run python -m scripts.eval_pipeline --limit 100
-
-# Classifier training
-uv run python -m scripts.train_response_classifier --save-best
-uv run python -m scripts.train_trigger_classifier --save-best
-
-# Quality analysis
-uv run python -m scripts.score_pair_quality --analyze
+export const jarvis = new JarvisSocket();
 ```
+
+---
+
+### 3. File Watcher (Python watches chat.db)
+
+**What:** Python daemon watches chat.db for changes, computes embeddings, pushes notifications.
+
+**Why:**
+- Instant new message notifications (no polling)
+- Embeddings computed in background
+- Tauri UI updates immediately
+
+**Technology Choice:** `watchfiles` (Rust-based, uses the `notify` crate internally). On macOS this uses FSEvents natively, giving ~100ms detection latency with our 50ms debounce. Alternatives considered:
+- `pyobjc` FSEvents wrapper: More code for no advantage over `watchfiles`
+- Raw kqueue: Lower-level than needed; FSEvents is better suited for file watching
+- SQLite WAL polling: Introduces unnecessary polling latency
+
+**Implementation (jarvis/watcher.py):**
+```python
+import asyncio
+import sqlite3
+from watchfiles import awatch
+from pathlib import Path
+
+CHAT_DB = Path.home() / "Library/Messages/chat.db"
+
+class ChatDBWatcher:
+    def __init__(self, socket_server: JarvisSocketServer):
+        self.socket_server = socket_server
+        self.last_message_id = self._get_last_message_id()
+
+    def _get_last_message_id(self) -> int:
+        conn = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
+        row = conn.execute("SELECT MAX(ROWID) FROM message").fetchone()
+        conn.close()
+        return row[0] or 0
+
+    async def watch(self):
+        async for changes in awatch(CHAT_DB):
+            await self._check_new_messages()
+
+    async def _check_new_messages(self):
+        conn = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+
+        # Get new messages since last check
+        rows = conn.execute("""
+            SELECT m.ROWID as id, m.text, m.chat_id, m.is_from_me,
+                   h.id as sender
+            FROM message m
+            LEFT JOIN handle h ON m.handle_id = h.ROWID
+            WHERE m.ROWID > ?
+            ORDER BY m.ROWID
+        """, (self.last_message_id,)).fetchall()
+
+        conn.close()
+
+        for row in rows:
+            self.last_message_id = row["id"]
+
+            # Compute embedding in background
+            if row["text"]:
+                asyncio.create_task(self._index_message(row))
+
+            # Push notification to Tauri immediately
+            await self.socket_server.broadcast("new_message", {
+                "message_id": row["id"],
+                "chat_id": row["chat_id"],
+                "is_from_me": bool(row["is_from_me"]),
+                "sender": row["sender"],
+                "text_preview": (row["text"] or "")[:100]
+            })
+
+    async def _index_message(self, row):
+        """Compute and store embedding for new message."""
+        from jarvis.embedding_adapter import get_embedder
+        from jarvis.embeddings import EmbeddingStore
+
+        embedder = get_embedder()
+        store = EmbeddingStore()
+
+        embedding = await asyncio.to_thread(
+            embedder.encode, row["text"]
+        )
+
+        await asyncio.to_thread(
+            store.add_embedding,
+            message_id=row["id"],
+            chat_id=row["chat_id"],
+            embedding=embedding,
+            text_preview=row["text"][:200]
+        )
+```
+
+---
+
+### 4. Updated Frontend Store
+
+**desktop/src/lib/stores/conversations.ts:**
+```typescript
+import { writable } from 'svelte/store';
+import { db } from '../db/direct';
+import { jarvis } from '../socket/client';
+
+export const conversationsStore = writable<ConversationsState>(initialState);
+
+// Initialize: direct reads + socket connection
+export async function initialize() {
+  await db.init();
+  await jarvis.connect();
+
+  // Load conversations directly from SQLite
+  const conversations = await db.getConversations();
+  conversationsStore.update(s => ({ ...s, conversations }));
+
+  // Listen for push notifications
+  jarvis.on('new_message', async (data) => {
+    const { chat_id, message_id } = data;
+
+    // Read full message directly from chat.db
+    const message = await db.getMessage(message_id);
+
+    // Update store
+    conversationsStore.update(s => {
+      if (s.selectedChatId === chat_id) {
+        return { ...s, messages: [...s.messages, message] };
+      }
+      // Mark as having new messages
+      const newSet = new Set(s.conversationsWithNewMessages);
+      newSet.add(chat_id);
+      return { ...s, conversationsWithNewMessages: newSet };
+    });
+  });
+}
+
+// Select conversation - direct read, no HTTP
+export async function selectConversation(chatId: string) {
+  conversationsStore.update(s => ({
+    ...s,
+    selectedChatId: chatId,
+    loadingMessages: true
+  }));
+
+  // Direct SQLite read - ~1-5ms
+  const messages = await db.getMessages(chatId, 50);
+
+  conversationsStore.update(s => ({
+    ...s,
+    messages,
+    loadingMessages: false
+  }));
+}
+
+// Generate draft - needs LLM, use socket
+export async function generateDraft(chatId: string): Promise<string[]> {
+  const result = await jarvis.call<{ drafts: string[] }>('generate_draft', {
+    chat_id: chatId
+  });
+  return result.drafts;
+}
+
+// Semantic search - needs embeddings, use socket
+export async function semanticSearch(query: string, chatId?: string) {
+  return jarvis.call('semantic_search', { query, chat_id: chatId });
+}
+```
+
+---
+
+## Performance Comparison
+
+| Operation | V1 (HTTP) | V2 (Direct + Socket) |
+|-----------|-----------|----------------------|
+| Load conversations | ~100-150ms | ~1-5ms |
+| Load messages | ~100-150ms | ~1-5ms |
+| New message notification | Up to 10s (polling) | Instant (push) |
+| Generate draft | ~50ms + inference | ~1-5ms + inference |
+| Semantic search | ~50ms + compute | ~1-5ms + compute |
+| Idle resource usage | Polling requests | Zero |
+
+---
+
+## Implementation Status
+
+### Phase 1: Direct SQLite Reads ✅ COMPLETE
+1. ✅ Install `tauri-plugin-sql` - Added to `Cargo.toml` and `package.json`
+2. ✅ Create `db/direct.ts` with query functions - `desktop/src/lib/db/direct.ts`
+3. ✅ Create `db/queries.ts` with SQL queries - Ported from `integrations/imessage/queries.py`
+4. ✅ Update stores to use direct reads - `desktop/src/lib/stores/conversations.ts`
+5. ✅ HTTP API fallback when SQLite unavailable
+
+### Phase 2: Unix Socket Server ✅ COMPLETE
+1. ✅ Create `jarvis/socket_server.py` - JSON-RPC over `~/.jarvis/jarvis.sock`
+2. ✅ Create Rust socket bridge - `desktop/src-tauri/src/socket.rs`
+3. ✅ Create TypeScript client - `desktop/src/lib/socket/client.ts`
+4. ✅ Update `scripts/launch.sh` to start socket server
+5. ✅ Model preloading at startup for faster first request
+
+### Phase 3: File Watcher + Push ✅ COMPLETE
+1. ✅ Create `jarvis/watcher.py` - Watches chat.db for changes
+2. ✅ Integrate watcher with socket server
+3. ✅ Push `new_message` notifications to clients
+4. ✅ Dynamic polling intervals (longer when socket connected)
+
+### Phase 4: Deprecate HTTP for Tauri ✅ COMPLETE
+1. ✅ HTTP API remains for CLI and other clients
+2. ✅ Tauri uses direct reads + socket (fallback to HTTP when needed)
+3. ✅ Key operations migrated to socket/direct DB with HTTP fallback:
+   - `ping()` / `getHealth()` - Socket preferred (~50x faster)
+   - `getConversations()` / `getMessages()` - Direct SQLite preferred (~30-50x faster)
+   - `getDraftReplies()` - Socket preferred (LLM via Unix socket)
+   - `getSummary()` - Socket preferred (LLM via Unix socket)
+   - `semanticSearch()` - Socket preferred (~30-50x faster)
+   - `getSmartReplySuggestions()` - Socket preferred (LLM via Unix socket)
+
+---
+
+## File Changes Summary
+
+**New Files (Created):**
+```
+jarvis/socket_server.py           # Unix socket JSON-RPC server with model preloading
+jarvis/watcher.py                 # chat.db file watcher for real-time notifications
+desktop/src/lib/db/direct.ts      # Direct SQLite access layer
+desktop/src/lib/db/queries.ts     # SQL queries ported from Python
+desktop/src/lib/db/index.ts       # DB module exports
+desktop/src/lib/socket/client.ts  # TypeScript socket client with auto-reconnect
+desktop/src/lib/socket/index.ts   # Socket module exports
+desktop/src-tauri/src/socket.rs   # Rust Unix socket bridge
+tests/unit/test_socket_server.py  # Socket server tests (17 tests)
+tests/unit/test_watcher.py        # File watcher tests (8 tests)
+```
+
+**Modified Files:**
+```
+desktop/src-tauri/Cargo.toml           # Added tauri-plugin-sql, tokio
+desktop/src-tauri/src/lib.rs           # Registered SQL plugin and socket commands
+desktop/src/lib/stores/conversations.ts # Uses direct reads + socket with HTTP fallback
+desktop/src/lib/stores/health.ts       # Phase 4: Uses socket ping with HTTP fallback
+desktop/src/lib/api/client.ts          # Phase 4: Key methods use socket/direct DB
+desktop/package.json                    # Added @tauri-apps/plugin-sql
+scripts/launch.sh                       # Starts socket server alongside API
+```
+
+**Unchanged (kept for CLI/other clients):**
+```
+api/main.py                  # HTTP API still works
+api/routers/*.py             # Still functional for CLI, web clients
+```
+
+---
+
+## Performance Optimizations
+
+This section tracks performance improvements beyond the core V2 architecture changes.
+
+### Phase 1: Backend Quick Wins (Pre-V2) ✅ COMPLETE
+
+These optimizations are independent of V2 and improve base performance:
+
+| Optimization | File | Status | Impact |
+|-------------|------|--------|--------|
+| Vectorized semantic search | `jarvis/semantic_search.py`, `jarvis/embeddings.py` | ✅ Done | 10-50x faster for large searches |
+| Scale thread pool | `jarvis/router.py` | ✅ Done | `max_workers=min(4, cpu_count)` for multi-core |
+| Batch message indexing | `jarvis/embeddings.py` | ✅ Already had | Uses `executemany` + batch encoding |
+| Embedding result cache | `jarvis/embedding_adapter.py` | ✅ Done | Increased LRU cache to 1000 entries |
+| Intent classification | `jarvis/router.py` | ✅ Done | Streamlined to single intent classifier |
+| Profile caching | `jarvis/embeddings.py` | ✅ Done | 5-min TTL cache for relationship profiles |
+| Stop words optimization | `jarvis/embeddings.py` | ✅ Done | Module-level frozenset for O(1) lookup |
+| Quick reply O(1) lookup | `jarvis/router.py` | ✅ Done | Dict lookup instead of linear search |
+
+**Details:**
+
+1. **Vectorized Semantic Search** - Replaced per-message similarity loop with single NumPy matrix operation:
+   ```python
+   # Before: O(n) Python loop
+   for msg in messages:
+       similarity = np.dot(query, msg.embedding)
+
+   # After: Single vectorized operation
+   similarities = np.dot(embedding_matrix, query)  # All at once
+   ```
+
+2. **Thread Pool Scaling** - Dynamic worker count based on CPU:
+   ```python
+   ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 2))
+   ```
+
+3. **Embedding Cache** - Singleton `CachedEmbedder` with 1000-entry LRU cache keyed by text hash.
+
+---
+
+### Phase 2: Frontend Optimizations (During V2)
+
+Apply these when V2 rewrites the relevant Svelte components:
+
+| Optimization | Files | Status | Description |
+|-------------|-------|--------|-------------|
+| Reduce animations | `MessageView.svelte`, `ConversationList.svelte` | ⏳ V2 | Remove decorative animations, keep functional |
+| Optimistic sending | `stores/conversations.ts` | ⏳ V2 | Show message instantly with "sending" state |
+| Skeleton states | `ConversationList.svelte`, `MessageView.svelte` | ⏳ V2 | Placeholder skeletons during loading |
+| Granular stores | `stores/conversations.ts` | ⏳ V2 | Split into focused stores for fewer re-renders |
+| Instant app shell | `App.svelte` | ⏳ V2 | Render structure immediately, load data into it |
+
+**Animation Strategy:**
+| Animation Type | Action | Reason |
+|---------------|--------|--------|
+| Loading spinners | Keep | Shows activity |
+| Progress bars | Keep | Shows progress |
+| New message highlight | Reduce to 1s | Draw attention without delay |
+| Skeleton loaders | Add | Perceived speed |
+| bounceIn on buttons | Remove | Decorative delay |
+| 0.15s hover transitions | Reduce to 0.05s | Snappier feel |
+| avatarPulse | Remove | Distracting |
+
+---
+
+### Phase 3: Advanced Optimizations (After V2)
+
+These require V2's socket infrastructure:
+
+| Optimization | File | Status | Description |
+|-------------|------|--------|-------------|
+| Speculative prefetching | `stores/conversations.ts` | ⏳ Post-V2 | Prefetch likely-next conversations on hover |
+| Pre-warm common queries | `jarvis/socket_server.py` | ⏳ Post-V2 | Cache common queries on startup |
+| Message virtualization | `MessageView.svelte` | ⏳ Post-V2 | Cache heights in localStorage, reduce buffer |
+| WebSocket multiplexing | `socket/client.ts` | ⏳ Post-V2 | Multiple streams over one connection |
+
+**Speculative Prefetching Example:**
+```typescript
+// When user hovers on a conversation for 200ms, prefetch messages
+function prefetchOnHover(chatId: string) {
+  if (!messageCache.has(chatId)) {
+    requestIdleCallback(() => fetchMessages(chatId));
+  }
+}
+```
+
+**Pre-warm Example:**
+```python
+async def warmup():
+    await get_conversations(limit=20)  # Likely first request
+    get_embedder()  # Pre-load model
+    await get_top_contacts(limit=10)
+```
+
+---
+
+### Skipped Optimizations
+
+| Optimization | Reason |
+|-------------|--------|
+| HTTP caching headers | V2 removes HTTP for Tauri clients |
+
+---
+
+### Performance Targets
+
+| Metric | Current | Target |
+|--------|---------|--------|
+| Cold start time | ~4-5s | <2s to interactive |
+| Conversation switch | ~100-150ms | <100ms perceived |
+| Message send feedback | ~200ms | Instant (optimistic) |
+| Search response (10k messages) | ~800ms | <500ms |
+
+### Verification
+
+After each optimization:
+1. `make test` - Ensure no regressions
+2. Manual test - Measure perceived speed improvement
+3. Profile if needed - `py-spy` for Python, Chrome DevTools for frontend

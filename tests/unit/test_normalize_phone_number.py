@@ -8,7 +8,6 @@ Tests cover:
 - Integration scenarios (real-world formats)
 """
 
-import pytest
 
 from integrations.imessage.parser import normalize_phone_number
 
@@ -146,7 +145,10 @@ class TestNormalizePhoneNumberEdgeCases:
         """Test malformed email addresses."""
         # These are not valid emails, but function may handle differently
         assert normalize_phone_number("user@") is None or normalize_phone_number("user@") == "user@"
-        assert normalize_phone_number("@domain.com") is None or normalize_phone_number("@domain.com") == "@domain.com"
+        assert (
+            normalize_phone_number("@domain.com") is None
+            or normalize_phone_number("@domain.com") == "@domain.com"
+        )
 
     def test_email_with_multiple_at_signs(self) -> None:
         """Test email with multiple @ signs."""

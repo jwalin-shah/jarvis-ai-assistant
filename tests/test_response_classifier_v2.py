@@ -20,7 +20,7 @@ import time
 import numpy as np
 import pytest
 
-from jarvis.response_classifier_v2 import (
+from jarvis.classifiers.response_classifier_v2 import (
     V2_TO_LEGACY,
     ABTestConfig,
     BatchResponseClassifier,

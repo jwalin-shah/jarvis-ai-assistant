@@ -352,7 +352,7 @@ def ensure_model_available(
     # Try to download with retries
     try:
         from huggingface_hub import snapshot_download
-        from huggingface_hub.utils import (
+        from huggingface_hub.utils import (  # type: ignore[attr-defined]
             GatedRepoError,
             HfHubHTTPError,
             RepositoryNotFoundError,

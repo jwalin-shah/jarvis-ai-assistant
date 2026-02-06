@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from contracts.imessage import Message
-from jarvis.intent import IntentClassifier, IntentResult, IntentType, get_intent_classifier
 from jarvis.router import ReplyRouter, reset_reply_router
 
 from .conftest import create_mock_message
@@ -26,70 +25,11 @@ def reset_router():
     reset_reply_router()
 
 
-class TestIntentClassification:
-    """Tests for intent classification in the message flow."""
-
-    def test_reply_intent_detected(self):
-        """Reply-related queries are classified as REPLY."""
-        classifier = IntentClassifier()
-
-        test_cases = [
-            "help me reply to this",
-            "what should I say back",
-            "draft a response",
-            "how should I respond",
-        ]
-
-        for query in test_cases:
-            with patch.object(classifier, "_get_embedder") as mock_get_embedder:
-                mock_embedder = MagicMock()
-                mock_embedder.encode.return_value = [[0.1] * 384]  # Mock embedding
-                mock_get_embedder.return_value = mock_embedder
-
-                # Skip actual embedding computation
-                with patch.object(classifier, "_ensure_embeddings_computed"):
-                    classifier._intent_centroids = {
-                        IntentType.REPLY: [0.1] * 384,
-                        IntentType.SUMMARIZE: [0.0] * 384,
-                        IntentType.SEARCH: [0.0] * 384,
-                        IntentType.QUICK_REPLY: [0.0] * 384,
-                        IntentType.GENERAL: [0.0] * 384,
-                    }
-
-    def test_quick_reply_intent_detected(self):
-        """Short acknowledgments are classified as QUICK_REPLY."""
-        classifier = IntentClassifier()
-
-        test_cases = [
-            "ok",
-            "thanks",
-            "sounds good",
-            "got it",
-        ]
-
-        for query in test_cases:
-            # These should be handled by the simple acknowledgment check first
-            result = classifier.classify(query)
-            # Even if embedding fails, it should return something
-            assert isinstance(result, IntentResult)
-
-    def test_empty_input_returns_general(self):
-        """Empty input returns GENERAL with low confidence."""
-        classifier = IntentClassifier()
-
-        result = classifier.classify("")
-
-        assert result.intent == IntentType.GENERAL
-        assert result.confidence == 0.0
-
-    def test_whitespace_input_returns_general(self):
-        """Whitespace-only input returns GENERAL with low confidence."""
-        classifier = IntentClassifier()
-
-        result = classifier.classify("   \t\n  ")
-
-        assert result.intent == IntentType.GENERAL
-        assert result.confidence == 0.0
+@pytest.fixture(autouse=True)
+def mock_health_check():
+    """Mock health check to allow generation in tests."""
+    with patch("jarvis.generation.can_use_llm", return_value=(True, "ok")):
+        yield
 
 
 class TestRouterGeneratesAllMessages:
@@ -104,7 +44,7 @@ class TestRouterGeneratesAllMessages:
         mock_db.init_schema.return_value = None
 
         mock_searcher = MagicMock()
-        mock_searcher.search_with_pairs.return_value = []
+        mock_searcher.search.return_value = []
 
         mock_gen = MagicMock()
         mock_gen.is_loaded.return_value = False
@@ -112,11 +52,9 @@ class TestRouterGeneratesAllMessages:
         mock_response.text = "Generated response"
         mock_gen.generate.return_value = mock_response
 
-        return ReplyRouter(
-            db=mock_db,
-            index_searcher=mock_searcher,
-            generator=mock_gen,
-        )
+        r = ReplyRouter(db=mock_db, generator=mock_gen)
+        r._vec_searcher = mock_searcher
+        return r
 
     def test_acknowledgment_generates(self, router):
         """Acknowledgments go through generation instead of canned response."""
@@ -151,7 +89,7 @@ class TestRouterClarification:
         mock_db.init_schema.return_value = None
 
         mock_searcher = MagicMock()
-        mock_searcher.search_with_pairs.return_value = []
+        mock_searcher.search.return_value = []
 
         mock_gen = MagicMock()
         mock_gen.is_loaded.return_value = False
@@ -159,23 +97,17 @@ class TestRouterClarification:
         mock_response.text = "Generated response"
         mock_gen.generate.return_value = mock_response
 
-        return ReplyRouter(
-            db=mock_db,
-            index_searcher=mock_searcher,
-            generator=mock_gen,
-        )
+        r = ReplyRouter(db=mock_db, generator=mock_gen)
+        r._vec_searcher = mock_searcher
+        return r
 
     def test_clarification_response_format(self, router):
-        """Clarification response has correct format."""
-        result = router._clarify_response(
-            "What are you referring to?",
-            reason="vague_reference",
-        )
+        """Empty input returns clarification with correct format."""
+        result = router.route("")
 
         assert result["type"] == "clarify"
         assert result["confidence"] == "low"
-        assert result["similarity_score"] == 0.0
-        assert "referring" in result["response"]
+        assert "empty" in result["response"].lower()
 
 
 class TestRouterEmptyInput:
@@ -190,7 +122,7 @@ class TestRouterEmptyInput:
         mock_db.init_schema.return_value = None
 
         mock_searcher = MagicMock()
-        mock_searcher.search_with_pairs.return_value = []
+        mock_searcher.search.return_value = []
 
         mock_gen = MagicMock()
         mock_gen.is_loaded.return_value = False
@@ -198,11 +130,9 @@ class TestRouterEmptyInput:
         mock_response.text = "Generated response"
         mock_gen.generate.return_value = mock_response
 
-        return ReplyRouter(
-            db=mock_db,
-            index_searcher=mock_searcher,
-            generator=mock_gen,
-        )
+        r = ReplyRouter(db=mock_db, generator=mock_gen)
+        r._vec_searcher = mock_searcher
+        return r
 
     def test_empty_string_returns_clarify(self, router):
         """Empty string returns clarification request."""
@@ -245,35 +175,35 @@ class TestEndToEndMessagePipeline:
             ),
         ]
 
-    def test_message_with_context_generates_response(self, mock_messages):
+    @patch("jarvis.generation.can_use_llm", return_value=(True, "ok"))
+    def test_message_with_context_generates_response(self, mock_health, mock_messages):
         """Message with conversation context generates appropriate response."""
         mock_db = MagicMock()
         mock_db.get_contact.return_value = None
         mock_db.get_contact_by_chat_id.return_value = None
         mock_db.init_schema.return_value = None
 
-        router = ReplyRouter(db=mock_db)
+        mock_gen = MagicMock()
+        mock_gen.is_loaded.return_value = False
+        mock_response = MagicMock()
+        mock_response.text = "Sounds great! See you there!"
+        mock_gen.generate.return_value = mock_response
 
-        with patch.object(router, "_generate_response") as mock_gen:
-            mock_gen.return_value = {
-                "type": "generated",
-                "response": "Sounds great! See you there!",
-                "confidence": "medium",
-                "similarity_score": 0.0,
-            }
+        router = ReplyRouter(db=mock_db, generator=mock_gen)
 
-            thread = [
-                "[Alice]: Hey, are you free for dinner?",
-                "[You]: Sure, what time?",
-                "[Alice]: 7pm at the usual place?",
-            ]
+        thread = [
+            "[Alice]: Hey, are you free for dinner?",
+            "[You]: Sure, what time?",
+            "[Alice]: 7pm at the usual place?",
+        ]
 
-            result = router.route(
-                "7pm at the usual place?",
-                thread=thread,
-            )
+        result = router.route(
+            "7pm at the usual place?",
+            thread=thread,
+        )
 
-            assert "response" in result
+        assert "response" in result
+        assert result["type"] == "generated"
 
 
 class TestRouterMultiOption:
@@ -288,7 +218,7 @@ class TestRouterMultiOption:
         mock_db.init_schema.return_value = None
 
         mock_searcher = MagicMock()
-        mock_searcher.search_with_pairs.return_value = []
+        mock_searcher.search.return_value = []
 
         mock_gen = MagicMock()
         mock_gen.is_loaded.return_value = False
@@ -296,11 +226,9 @@ class TestRouterMultiOption:
         mock_response.text = "Sure, I can make it!"
         mock_gen.generate.return_value = mock_response
 
-        return ReplyRouter(
-            db=mock_db,
-            index_searcher=mock_searcher,
-            generator=mock_gen,
-        )
+        r = ReplyRouter(db=mock_db, generator=mock_gen)
+        r._vec_searcher = mock_searcher
+        return r
 
     def test_multi_option_delegates_to_route(self, router):
         """route_multi_option delegates to route() and adds multi-option keys."""
@@ -334,75 +262,3 @@ class TestRouterStats:
         assert "db_stats" in stats
         assert stats["db_stats"]["pairs"] == 100
         assert "index_available" in stats
-
-
-class TestIntentParamExtraction:
-    """Tests for parameter extraction from intent."""
-
-    def test_extract_person_name(self):
-        """Person name is extracted from query."""
-        classifier = IntentClassifier()
-
-        params = classifier._extract_params("reply to John's message", IntentType.REPLY)
-        assert params.get("person_name") == "John"
-
-        params = classifier._extract_params("summarize my chat with Sarah", IntentType.SUMMARIZE)
-        assert params.get("person_name") == "Sarah"
-
-    def test_extract_time_range(self):
-        """Time range is extracted from query."""
-        classifier = IntentClassifier()
-
-        params = classifier._extract_params("summarize yesterday's messages", IntentType.SUMMARIZE)
-        assert params.get("time_range") == "yesterday"
-
-        params = classifier._extract_params("find messages from last week", IntentType.SEARCH)
-        assert params.get("time_range") == "last week"
-
-    def test_extract_search_query(self):
-        """Search query is extracted from SEARCH intent."""
-        classifier = IntentClassifier()
-
-        params = classifier._extract_params("find messages about the project", IntentType.SEARCH)
-        assert "project" in params.get("search_query", "").lower()
-
-    def test_extract_rsvp_response(self):
-        """RSVP response is extracted from group coordination intent."""
-        classifier = IntentClassifier()
-
-        params = classifier._extract_params("count me in", IntentType.GROUP_RSVP)
-        assert params.get("rsvp_response") == "yes"
-
-        params = classifier._extract_params("can't make it", IntentType.GROUP_RSVP)
-        assert params.get("rsvp_response") == "no"
-
-        params = classifier._extract_params("I might be able to come", IntentType.GROUP_RSVP)
-        assert params.get("rsvp_response") == "maybe"
-
-
-class TestIntentClassifierCaching:
-    """Tests for intent classifier caching."""
-
-    def test_classifier_cache_can_be_cleared(self):
-        """Classifier cache can be cleared."""
-        classifier = IntentClassifier()
-
-        # Set some cached data
-        classifier._intent_centroids = {"test": [0.1] * 384}
-        classifier._intent_embeddings = {"test": [[0.1] * 384]}
-
-        classifier.clear_cache()
-
-        assert classifier._intent_centroids is None
-        assert classifier._intent_embeddings is None
-
-    def test_get_intent_classifier_singleton(self):
-        """get_intent_classifier returns singleton."""
-        from jarvis.intent import reset_intent_classifier
-
-        reset_intent_classifier()
-
-        classifier1 = get_intent_classifier()
-        classifier2 = get_intent_classifier()
-
-        assert classifier1 is classifier2

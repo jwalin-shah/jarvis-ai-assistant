@@ -15,7 +15,7 @@ ALL_AGENTS="claude codex gemini opencode kimi"
 # Format: agent=model,agent=model
 declare -A AGENT_MODELS=(
     [claude]=""                              # uses default (your subscription)
-    [codex]=""                               # uses default (gpt-5.2-codex)
+    [codex]=""                               # uses default (gpt-5.3-codex from config)
     [gemini]=""                              # uses default (gemini-2.5-pro)
     [opencode]="opencode/glm-4.7-free"       # free tier
     [kimi]=""                                # uses default (kimi-k2.5)
@@ -166,7 +166,7 @@ run_agent() {
             ;;
         opencode)
             if [ -n "$model" ]; then
-                timeout "$TIMEOUT" opencode -m "$model" run "$prompt" > "$raw_file" 2>&1 || true
+                timeout "$TIMEOUT" opencode run -m "$model" "$prompt" > "$raw_file" 2>&1 || true
             else
                 timeout "$TIMEOUT" opencode run "$prompt" > "$raw_file" 2>&1 || true
             fi

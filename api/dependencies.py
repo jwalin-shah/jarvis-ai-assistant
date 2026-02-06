@@ -5,41 +5,29 @@ Uses a connection pool for thread-safe database access.
 """
 
 import threading
+from collections.abc import Iterator
 
 from fastapi import HTTPException
 
 from integrations.imessage import ChatDBReader, reset_connection_pool
 
-# Singleton iMessage reader instance
-_reader: ChatDBReader | None = None
-_reader_lock = threading.Lock()
+def get_imessage_reader() -> Iterator[ChatDBReader]:
+    """Get a thread-safe iMessage reader for the current request.
 
+    Uses a connection pool to acquire a fresh connection for each request.
+    The connection is automatically released back to the pool when the
+    request is finished.
 
-def get_imessage_reader() -> ChatDBReader:
-    """Get or create the singleton iMessage reader.
-
-    Uses double-check locking pattern to prevent race conditions in
-    multi-threaded async environments. The reader uses a shared connection
-    pool for thread-safe database access.
-
-    Returns:
+    Yields:
         ChatDBReader instance
 
     Raises:
         HTTPException: 403 if Full Disk Access is not granted
     """
-    global _reader
+    reader = ChatDBReader()
 
-    # First check without lock (fast path)
-    if _reader is None:
-        # Acquire lock for initialization
-        with _reader_lock:
-            # Double-check after acquiring lock
-            if _reader is None:
-                # use_pool=True (default) enables connection pooling
-                _reader = ChatDBReader()
-
-    if not _reader.check_access():
+    if not reader.check_access():
+        reader.close()
         raise HTTPException(
             status_code=403,
             detail={
@@ -54,15 +42,13 @@ def get_imessage_reader() -> ChatDBReader:
             },
         )
 
-    return _reader
+    try:
+        yield reader
+    finally:
+        reader.close()
 
 
 def reset_imessage_reader() -> None:
-    """Reset the singleton reader and connection pool (for testing or reconnection)."""
-    global _reader
-    with _reader_lock:
-        if _reader is not None:
-            _reader.close()
-            _reader = None
-        # Also reset the underlying connection pool
-        reset_connection_pool()
+    """Reset the connection pool (for testing or reconnection)."""
+    # Reset the underlying connection pool
+    reset_connection_pool()

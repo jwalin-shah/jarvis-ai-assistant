@@ -1,0 +1,14 @@
+Draft a text message reply. Be extremely concise.
+
+Context: {{context}}
+
+Reply to: {{last_message}}
+
+Rules:
+- Maximum 10 words
+- Match tone: {{tone}}
+- Style: {{user_style}}
+- No AI phrases, no corporate speak
+- Just text like a normal person
+
+Reply:

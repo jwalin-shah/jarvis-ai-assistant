@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from jarvis.experiments import (
+from jarvis.eval.experiments import (
     ExperimentManager,
     ExperimentResults,
     UserAction,

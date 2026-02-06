@@ -1,14 +1,11 @@
 """Tests for jarvis/ingest.py - Contact ingestion from macOS Address Book."""
 
 import sqlite3
-from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from jarvis.ingest import (
-    ADDRESS_BOOK_PATH,
-    ALL_CONTACTS_QUERY,
+from jarvis.search.ingest import (
     ingest_contacts,
     normalize_phone_number,
 )
@@ -145,9 +142,7 @@ class TestIngestContacts:
                 ("last_name",),
                 ("org_name",),
             ]
-            mock_cursor.fetchall.return_value = [
-                Row(row) for row in sample_address_book_rows
-            ]
+            mock_cursor.fetchall.return_value = [Row(row) for row in sample_address_book_rows]
 
             result = ingest_contacts(mock_db)
 

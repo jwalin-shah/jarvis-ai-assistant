@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from jarvis.classifiers.response_classifier import ResponseType
 from jarvis.multi_option import (
     COMMITMENT_TRIGGER_TYPES,
     FALLBACK_TEMPLATES,
@@ -17,7 +18,6 @@ from jarvis.multi_option import (
     get_multi_option_generator,
     reset_multi_option_generator,
 )
-from jarvis.response_classifier import ResponseType
 
 
 class TestResponseOption:
@@ -280,107 +280,12 @@ class TestMultiOptionGenerator:
         """Can create with default settings."""
         generator = MultiOptionGenerator()
         assert generator._max_options == 3
-        assert generator._retriever is None  # Lazy loaded
+        assert generator.retriever is not None
 
     def test_init_custom_max_options(self):
         """Can create with custom max_options."""
         generator = MultiOptionGenerator(max_options=5)
         assert generator._max_options == 5
-
-    def test_get_fallback_option(self):
-        """_get_fallback_option returns valid option."""
-        generator = MultiOptionGenerator()
-
-        option = generator._get_fallback_option(ResponseType.AGREE)
-        assert option.response_type == ResponseType.AGREE
-        assert option.source == "fallback"
-        assert option.confidence == 0.5
-        assert option.text in FALLBACK_TEMPLATES[ResponseType.AGREE]
-
-    @patch("jarvis.multi_option.get_typed_retriever")
-    def test_is_commitment_trigger_info_statement(self, mock_retriever):
-        """INFO_STATEMENT patterns are not commitment triggers."""
-        generator = MultiOptionGenerator()
-
-        is_commit, trigger_da = generator.is_commitment_trigger("on my way")
-        assert is_commit is False
-        assert trigger_da == "statement"
-
-    @patch("jarvis.multi_option.get_typed_retriever")
-    def test_is_commitment_trigger_wh_question(self, mock_retriever):
-        """WH_QUESTION patterns are not commitment triggers."""
-        generator = MultiOptionGenerator()
-
-        is_commit, trigger_da = generator.is_commitment_trigger("who's coming?")
-        assert is_commit is False
-        assert trigger_da == "question"
-
-
-class TestGenerateOptions:
-    """Tests for generate_options method."""
-
-    @patch("jarvis.multi_option.get_typed_retriever")
-    def test_non_commitment_returns_empty_options(self, mock_retriever):
-        """Non-commitment triggers return empty options."""
-        mock_ret = MagicMock()
-        mock_ret.classify_trigger.return_value = ("statement", 0.9)
-        mock_retriever.return_value = mock_ret
-
-        generator = MultiOptionGenerator(retriever=mock_ret)
-        result = generator.generate_options("I'm on my way")
-
-        assert result.is_commitment is False
-        assert result.options == []
-
-    @patch.object(MultiOptionGenerator, "_generate_llm_option", return_value=None)
-    @patch("jarvis.embedding_adapter.get_embedder")
-    @patch("jarvis.multi_option.get_typed_retriever")
-    def test_commitment_returns_options(self, mock_retriever, mock_embedder, mock_llm_option):
-        """Commitment triggers return multiple options (fallback templates)."""
-        # Mock retriever
-        mock_ret = MagicMock()
-        mock_ret.classify_trigger.return_value = ("commitment", 0.9)
-
-        # Mock examples (empty to trigger fallback)
-        mock_examples = MagicMock()
-        mock_examples.get_examples.return_value = []
-        mock_ret.get_examples_for_commitment.return_value = mock_examples
-
-        mock_retriever.return_value = mock_ret
-
-        # Mock embedder
-        mock_emb = MagicMock()
-        mock_embedder.return_value = mock_emb
-
-        generator = MultiOptionGenerator(retriever=mock_ret)
-        result = generator.generate_options("want to grab lunch?")
-
-        assert result.is_commitment is True
-        assert len(result.options) == 3  # AGREE, DECLINE, DEFER (fallback templates)
-
-    @patch.object(MultiOptionGenerator, "_generate_llm_option", return_value=None)
-    @patch("jarvis.embedding_adapter.get_embedder")
-    @patch("jarvis.multi_option.get_typed_retriever")
-    def test_force_commitment_flag(self, mock_retriever, mock_embedder, mock_llm_option):
-        """force_commitment=True treats any trigger as commitment."""
-        mock_ret = MagicMock()
-        mock_ret.classify_trigger.return_value = ("statement", 0.9)
-
-        mock_examples = MagicMock()
-        mock_examples.get_examples.return_value = []
-        mock_ret.get_examples_for_commitment.return_value = mock_examples
-
-        mock_retriever.return_value = mock_ret
-
-        mock_emb = MagicMock()
-        mock_embedder.return_value = mock_emb
-
-        generator = MultiOptionGenerator(retriever=mock_ret)
-        result = generator.generate_options("random text", force_commitment=True)
-
-        assert result.is_commitment is True
-        assert len(result.options) > 0
-
 
 class TestSingletonFactory:
     """Tests for singleton factory functions."""

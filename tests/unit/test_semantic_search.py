@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from contracts.imessage import Message
-from jarvis.semantic_search import (
+from jarvis.search.semantic_search import (
     EmbeddingCache,
     SearchFilters,
     SemanticSearcher,

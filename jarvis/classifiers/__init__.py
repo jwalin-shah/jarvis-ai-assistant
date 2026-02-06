@@ -5,7 +5,6 @@ This package provides reusable building blocks for classifiers:
 - SingletonFactory: Thread-safe singleton pattern
 - LazyInitializer: Thread-safe lazy initialization for expensive computations
 - EmbedderMixin: Lazy-loaded embedder access
-- SVMModelMixin: SVM model loading and prediction
 - CentroidMixin: Centroid-based verification
 - StructuralPatternMatcher: Ordered pattern matching
 - PatternMatcherByLabel: Pattern matching grouped by label
@@ -34,7 +33,7 @@ Usage:
 
 from jarvis.classifiers.factory import SingletonFactory
 from jarvis.classifiers.lazy import LazyInitializer
-from jarvis.classifiers.mixins import CentroidMixin, EmbedderMixin, SVMModelMixin
+from jarvis.classifiers.mixins import CentroidMixin, EmbedderMixin
 from jarvis.classifiers.patterns import PatternMatcherByLabel, StructuralPatternMatcher
 
 __all__ = [
@@ -44,7 +43,6 @@ __all__ = [
     "LazyInitializer",
     # Mixins
     "EmbedderMixin",
-    "SVMModelMixin",
     "CentroidMixin",
     # Pattern matching
     "StructuralPatternMatcher",

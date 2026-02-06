@@ -251,7 +251,7 @@ class PrefetchExecutor:
         self.register_handler(PredictionType.CONTACT_PROFILE, self._handle_contact_profile)
         self.register_handler(PredictionType.MODEL_WARM, self._handle_model_warm)
         self.register_handler(PredictionType.SEARCH_RESULTS, self._handle_search_results)
-        self.register_handler(PredictionType.FAISS_INDEX, self._handle_faiss_index)
+        self.register_handler(PredictionType.FAISS_INDEX, self._handle_vec_index)
 
     def register_handler(self, pred_type: PredictionType, handler: PrefetchHandler) -> None:
         """Register a handler for a prediction type.
@@ -716,13 +716,20 @@ class PrefetchExecutor:
             return None
 
         try:
-            from jarvis.index import semantic_search
+            from jarvis.db import get_db
+            from jarvis.search.vec_search import get_vec_searcher
 
-            results = semantic_search(query, limit=10)
+            db = get_db()
+            searcher = get_vec_searcher(db)
+            results = searcher.search(query=query, k=10)
 
             return {
                 "query": query,
-                "results": results,
+                "results": [
+                    {"trigger": r.last_trigger, "response": r.last_response, "sim": r.similarity}
+                    for r in results
+                    if r.last_trigger
+                ],
                 "prefetched": True,
                 "prefetch_time": time.time(),
             }
@@ -731,8 +738,8 @@ class PrefetchExecutor:
             logger.debug(f"Search prefetch failed for '{query}': {e}")
             return None
 
-    def _handle_faiss_index(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Pre-load FAISS index.
+    def _handle_vec_index(self, prediction: Prediction) -> dict[str, Any] | None:
+        """Pre-load sqlite-vec index.
 
         Args:
             prediction: Prediction for index loading.
@@ -742,17 +749,12 @@ class PrefetchExecutor:
         """
         try:
             from jarvis.db import get_db
-            from jarvis.index import TriggerIndexSearcher
+            from jarvis.search.vec_search import get_vec_searcher
 
             db = get_db()
-            active_index = db.get_active_index()
-
-            if active_index:
-                searcher = TriggerIndexSearcher(db)
-                # Access index to trigger loading
-                _ = searcher.index
+            searcher = get_vec_searcher(db)
+            if searcher._vec_tables_exist():
                 return {
-                    "index_version": active_index.version_id,
                     "loaded": True,
                     "prefetch_time": time.time(),
                 }
@@ -760,7 +762,7 @@ class PrefetchExecutor:
             return None
 
         except Exception as e:
-            logger.debug(f"FAISS index prefetch failed: {e}")
+            logger.debug(f"Vec index prefetch failed: {e}")
             return None
 
 

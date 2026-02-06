@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -365,7 +365,7 @@ class TestMethodRegistration:
         data = json.loads(response)
 
         assert data["error"]["code"] == INTERNAL_ERROR
-        assert "Something went wrong" in data["error"]["message"]
+        assert "Internal server error" in data["error"]["message"]
 
 
 class TestWebSocketWriter:
@@ -514,37 +514,6 @@ class TestStreamingSupport:
         # stream param should be removed
         assert "stream" not in received_params[0]
         assert received_params[0]["data"] == "test"
-
-
-class TestClassifyIntent:
-    """Tests for the classify_intent RPC method."""
-
-    @pytest.fixture
-    def server(self):
-        """Create a socket server instance for testing."""
-        return JarvisSocketServer(
-            enable_watcher=False,
-            preload_models=False,
-        )
-
-    @pytest.mark.asyncio
-    async def test_classify_intent_returns_result(self, server):
-        """Classify intent returns structured result."""
-        with patch("jarvis.intent.get_intent_classifier") as mock_get:
-            mock_classifier = MagicMock()
-            mock_result = MagicMock()
-            mock_result.intent = MagicMock()
-            mock_result.intent.value = "reply"
-            mock_result.confidence = 0.85
-            mock_result.requires_response = True
-            mock_classifier.classify.return_value = mock_result
-            mock_get.return_value = mock_classifier
-
-            result = await server._classify_intent("help me reply to this")
-
-            assert result["intent"] == "reply"
-            assert result["confidence"] == 0.85
-            assert result["requires_response"] is True
 
 
 class TestServerLifecycle:

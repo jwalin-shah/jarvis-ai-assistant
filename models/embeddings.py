@@ -40,7 +40,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -165,8 +165,8 @@ class MLXEmbedder:
         return next(self._request_id)
 
     def _send_request(
-        self, method: str, params: dict | None = None, timeout: float | None = None
-    ) -> dict:
+        self, method: str, params: dict[str, Any] | None = None, timeout: float | None = None
+    ) -> dict[str, Any]:
         """Send a JSON-RPC request over Unix socket.
 
         Args:
@@ -182,7 +182,6 @@ class MLXEmbedder:
             MLXEmbeddingError: If the request fails.
         """
         import json
-        import socket
 
         request = {
             "jsonrpc": "2.0",
@@ -221,7 +220,8 @@ class MLXEmbedder:
                     f"MLX service error: {error.get('message', 'Unknown error')}"
                 )
 
-            return response.get("result", {})
+            result: dict[str, Any] = response.get("result", {})
+            return result
 
         except FileNotFoundError:
             raise MLXServiceNotAvailableError(

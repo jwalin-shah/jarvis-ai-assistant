@@ -293,10 +293,10 @@ def patch_generator():
 
 @contextmanager
 def patch_services():
-    """Context manager to patch all RAG services for API testing."""
+    """Context manager to patch all RAG services for testing."""
     with patch_imessage_reader() as mock_reader:
         with patch_generator() as mock_gen:
-            with patch("jarvis.api.get_degradation_controller") as mock_deg:
+            with patch("core.health.get_degradation_controller") as mock_deg:
                 # Configure degradation controller to pass through
                 mock_controller = MagicMock()
                 mock_controller.execute.side_effect = lambda feature, func, *args: func(*args)
@@ -381,9 +381,7 @@ def intent_classifier() -> MockIntentClassifier:
 
 @pytest.fixture
 def api_client():
-    """Create a test client for the API."""
-    from fastapi.testclient import TestClient
-
-    from jarvis.api import app
-
-    return TestClient(app, raise_server_exceptions=False)
+    """Create a test client for the socket server API."""
+    # The old FastAPI app (jarvis.api) was removed in favor of the socket server.
+    # Integration tests for the API now use test_socket_server.py instead.
+    pytest.skip("jarvis.api was removed; use socket server tests instead")

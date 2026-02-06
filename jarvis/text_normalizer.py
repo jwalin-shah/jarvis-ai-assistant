@@ -12,7 +12,10 @@ Usage:
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from jarvis.nlp.ner_client import Entity
 
 # Reaction patterns - these are tapbacks in iMessage
 REACTION_PATTERNS = [
@@ -301,8 +304,9 @@ def _get_spell_checker():
     global _SPELL_CHECKER
     if _SPELL_CHECKER is None:
         try:
-            from symspellpy import SymSpell
             import importlib.resources
+
+            from symspellpy import SymSpell
 
             _SPELL_CHECKER = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
             # Load the built-in frequency dictionary
@@ -426,7 +430,7 @@ def normalize_text(
 
     # 4c. Slang expansion for better embedding alignment
     if expand_slang:
-        from jarvis.slang import expand_slang as _expand_slang
+        from jarvis.nlp.slang import expand_slang as _expand_slang
 
         cleaned = _expand_slang(cleaned)
 
@@ -578,7 +582,7 @@ def _mask_entities(text: str, use_ner: bool = False, ner_model: str = "en_core_w
 
     if use_ner:
         try:
-            from jarvis.ner_client import get_entities, is_service_running
+            from jarvis.nlp.ner_client import get_entities, is_service_running
 
             if is_service_running():
                 entities = get_entities(masked)
@@ -614,6 +618,42 @@ def _mask_entities(text: str, use_ner: bool = False, ner_model: str = "en_core_w
         masked = PERSON_CONTEXT_REGEX.sub(lambda m: f"{m.group(1)} <PERSON>", masked)
 
     return masked
+
+
+def _extract_entities_from_service(text: str) -> list["Entity"]:
+    if not text:
+        return []
+
+    try:
+        from jarvis.nlp.ner_client import get_entities, is_service_running
+
+        if is_service_running():
+            return get_entities(text)
+    except Exception:
+        pass
+
+    return []
+
+
+@dataclass
+class NormalizationResult:
+    text: str
+    entities: list["Entity"]
+
+
+def normalize_for_task_with_entities(text: str, task: str) -> NormalizationResult:
+    normalized = normalize_for_task(text, task)
+    if not normalized:
+        return NormalizationResult(text="", entities=[])
+
+    entities = _extract_entities_from_service(normalized)
+    return NormalizationResult(text=normalized, entities=entities)
+
+
+def extract_entities(text: str) -> list["Entity"]:
+    if not text:
+        return []
+    return _extract_entities_from_service(text)
 
 
 def normalize_for_task(text: str, task: str) -> str:

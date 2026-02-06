@@ -151,7 +151,7 @@ def generate_reply_suggestions(
     context_messages: list[str] | None = None,
     num_suggestions: int = 3,
 ) -> list[tuple[str, float]]:
-    """Generate reply suggestions for a message.
+    """Generate reply suggestions for a message using ReplyService.
 
     Args:
         last_message: The message to respond to
@@ -161,42 +161,16 @@ def generate_reply_suggestions(
     Returns:
         List of (suggestion_text, confidence) tuples
     """
-    # Check if we can use the LLM
-    can_generate, reason = can_use_llm()
+    from jarvis.reply_service import get_reply_service
 
-    if not can_generate:
-        logger.info("Using fallback suggestions: %s", reason)
-        fallbacks = get_fallback_reply_suggestions()
-        return [(text, 0.5) for text in fallbacks[:num_suggestions]]
+    service = get_reply_service()
 
-    try:
-        # Build prompt for reply generation
-        context_docs = context_messages or []
-        prompt = f"Generate a natural reply to: {last_message}"
+    suggestions = service.generate_suggestions(
+        incoming=last_message,
+        n_suggestions=num_suggestions,
+    )
 
-        request = GenerationRequest(
-            prompt=prompt,
-            context_documents=context_docs,
-            few_shot_examples=[],
-            max_tokens=50,
-            temperature=0.7,
-        )
-
-        response = generate_with_fallback(request)
-
-        if response.finish_reason in ("error", "fallback"):
-            # Use fallback suggestions
-            fallbacks = get_fallback_reply_suggestions()
-            return [(text, 0.5) for text in fallbacks[:num_suggestions]]
-
-        # For now, return the generated text as a single suggestion
-        # A more sophisticated implementation would generate multiple suggestions
-        return [(response.text, 0.9)]
-
-    except Exception as e:
-        logger.warning("Failed to generate suggestions: %s", str(e))
-        fallbacks = get_fallback_reply_suggestions()
-        return [(text, 0.5) for text in fallbacks[:num_suggestions]]
+    return [(s.text, s.confidence) for s in suggestions]
 
 
 def generate_summary(

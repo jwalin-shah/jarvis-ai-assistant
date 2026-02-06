@@ -71,7 +71,7 @@ def load_response_data(path: Path) -> list[tuple[str, str]]:
 
 def validate_trigger(samples: list[tuple[str, str]]) -> list[ValidationResult]:
     """Run trigger classifier on samples and prompt for validation."""
-    from jarvis.trigger_classifier import classify_trigger
+    from jarvis.classifiers.trigger_classifier import classify_trigger
 
     results = []
     total = len(samples)
@@ -127,7 +127,7 @@ def validate_trigger(samples: list[tuple[str, str]]) -> list[ValidationResult]:
 
 def validate_response(samples: list[tuple[str, str]]) -> list[ValidationResult]:
     """Run response classifier on samples and prompt for validation."""
-    from jarvis.response_classifier import get_response_classifier
+    from jarvis.classifiers.response_classifier import get_response_classifier
 
     classifier = get_response_classifier()
     results = []
