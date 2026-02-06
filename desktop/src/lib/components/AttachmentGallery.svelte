@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import { api } from "../api/client";
   import type {
     AttachmentType,
@@ -7,29 +7,31 @@
     StorageSummary,
   } from "../api/types";
 
-  // Props
-  export let chatId: string | null = null;
+  interface Props {
+    chatId?: string | null;
+  }
+  let { chatId = null }: Props = $props();
 
   // State
-  let attachments: AttachmentWithContext[] = [];
-  let storageSummary: StorageSummary | null = null;
-  let loading = false;
-  let error: string | null = null;
+  let attachments = $state<AttachmentWithContext[]>([]);
+  let storageSummary = $state<StorageSummary | null>(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
 
   // Filters
-  let selectedType: AttachmentType = "all";
-  let searchQuery = "";
-  let dateAfter: string = "";
-  let dateBefore: string = "";
+  let selectedType = $state<AttachmentType>("all");
+  let searchQuery = $state("");
+  let dateAfter = $state("");
+  let dateBefore = $state("");
 
   // View mode
-  let viewMode: "grid" | "list" = "grid";
+  let viewMode = $state<"grid" | "list">("grid");
 
   // Tab (gallery vs storage)
-  let activeTab: "gallery" | "storage" = "gallery";
+  let activeTab = $state<"gallery" | "storage">("gallery");
 
   // Pagination
-  let limit = 100;
+  let limit = $state(100);
 
   // Image loading states
   let imageStates: Map<string, "loading" | "loaded" | "error"> = $state(new Map());
@@ -83,16 +85,20 @@
   }
 
   // Filter attachments by search query
-  $: filteredAttachments = searchQuery
+  let filteredAttachments = $derived(searchQuery
     ? attachments.filter((a) =>
         a.attachment.filename.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : attachments;
+    : attachments);
 
-  // Refetch when filters change
-  $: if (selectedType || dateAfter || dateBefore || chatId) {
-    fetchAttachments();
-  }
+  // Refetch when filters/target conversation change
+  $effect(() => {
+    selectedType;
+    dateAfter;
+    dateBefore;
+    chatId;
+    void fetchAttachments();
+  });
 
   // Format file size
   function formatSize(bytes: number | null): string {
@@ -176,8 +182,7 @@
   }
 
   onMount(() => {
-    fetchAttachments();
-    fetchStorageSummary();
+    void fetchStorageSummary();
   });
 </script>
 
@@ -188,14 +193,14 @@
       <button
         class="tab"
         class:active={activeTab === "gallery"}
-        on:click={() => (activeTab = "gallery")}
+        onclick={() => (activeTab = "gallery")}
       >
         Gallery
       </button>
       <button
         class="tab"
         class:active={activeTab === "storage"}
-        on:click={() => (activeTab = "storage")}
+        onclick={() => (activeTab = "storage")}
       >
         Storage
       </button>
@@ -221,7 +226,7 @@
         <div class="view-toggle">
           <button
             class:active={viewMode === "grid"}
-            on:click={() => (viewMode = "grid")}
+            onclick={() => (viewMode = "grid")}
             title="Grid view"
           >
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -233,7 +238,7 @@
           </button>
           <button
             class:active={viewMode === "list"}
-            on:click={() => (viewMode = "list")}
+            onclick={() => (viewMode = "list")}
             title="List view"
           >
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -251,7 +256,7 @@
             <button
               class="type-filter"
               class:active={selectedType === option.value}
-              on:click={() => (selectedType = option.value)}
+              onclick={() => (selectedType = option.value)}
             >
               {option.label}
             </button>
@@ -270,7 +275,7 @@
             <input type="date" bind:value={dateBefore} />
           </label>
           {#if dateAfter || dateBefore || selectedType !== "all" || searchQuery}
-            <button class="clear-filters" on:click={clearFilters}>
+            <button class="clear-filters" onclick={clearFilters}>
               Clear filters
             </button>
           {/if}
@@ -302,14 +307,20 @@
             {@const thumbnailUrl = getThumbnailUrl(item.attachment.file_path)}
             {@const isImage = item.attachment.mime_type?.startsWith("image/")}
             {@const isVideo = item.attachment.mime_type?.startsWith("video/")}
-            <div class="grid-item" on:click={() => downloadAttachment(item)}>
+            <div
+              class="grid-item"
+              role="button"
+              tabindex="0"
+              onclick={() => downloadAttachment(item)}
+              onkeydown={(e) => (e.key === "Enter" || e.key === " ") && downloadAttachment(item)}
+            >
               <div class="thumbnail">
                 {#if (isImage || isVideo) && thumbnailUrl}
                   <img
                     src={thumbnailUrl}
                     alt={item.attachment.filename}
-                    on:load={() => handleImageLoad(item.attachment.file_path || "")}
-                    on:error={() => handleImageError(item.attachment.file_path || "")}
+                    onload={() => handleImageLoad(item.attachment.file_path || "")}
+                    onerror={() => handleImageError(item.attachment.file_path || "")}
                   />
                   {#if isVideo}
                     <div class="video-badge">
@@ -355,7 +366,13 @@
       {:else}
         <div class="list-view">
           {#each filteredAttachments as item}
-            <div class="list-item" on:click={() => downloadAttachment(item)}>
+            <div
+              class="list-item"
+              role="button"
+              tabindex="0"
+              onclick={() => downloadAttachment(item)}
+              onkeydown={(e) => (e.key === "Enter" || e.key === " ") && downloadAttachment(item)}
+            >
               <div class="list-icon">
                 {#if item.attachment.mime_type?.startsWith("image/")}
                   {@const thumbnailUrl = getThumbnailUrl(item.attachment.file_path)}

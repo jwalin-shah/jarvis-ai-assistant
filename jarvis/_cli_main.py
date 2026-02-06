@@ -270,11 +270,15 @@ def cmd_db(args: argparse.Namespace) -> int:
     subcommand = args.db_command
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
-        console.print("Available: init, add-contact, list-contacts, extract, stats, build-profiles")
+        console.print(
+            "Available: init, sync-contacts, add-contact, list-contacts, extract, stats, build-profiles"
+        )
         return 1
 
     if subcommand == "init":
         return _cmd_db_init(args)
+    elif subcommand == "sync-contacts":
+        return _cmd_db_sync_contacts(args)
     elif subcommand == "add-contact":
         return _cmd_db_add_contact(args)
     elif subcommand == "list-contacts":
@@ -401,6 +405,28 @@ def cmd_ner(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_db_sync_contacts(args: argparse.Namespace) -> int:
+    """Sync contacts from macOS Address Book into JARVIS DB."""
+    from jarvis.search.ingest import ingest_contacts
+
+    db = get_db()
+    db.init_schema()
+
+    console.print("[bold]Syncing contacts from macOS Address Book...[/bold]")
+    stats = ingest_contacts(db)
+
+    if "error" in stats:
+        console.print(f"[red]Error: {stats['error']}[/red]")
+        return 1
+
+    console.print(f"\n[bold green]Contact sync complete![/bold green]")
+    console.print(f"  Processed: {stats['processed']}")
+    console.print(f"  Created: {stats['created']}")
+    console.print(f"  Updated: {stats['updated']}")
+    console.print(f"  Skipped (unchanged): {stats['skipped']}")
+    return 0
+
+
 def _cmd_db_init(args: argparse.Namespace) -> int:
     """Initialize the JARVIS database."""
     console.print("[bold]Initializing JARVIS database...[/bold]")
@@ -495,9 +521,9 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
         return 1
 
     db = get_db()
-    if not db.exists():
-        db.init_schema()
-        console.print(f"[dim]Created database at {db.db_path}[/dim]")
+    created = db.init_schema()
+    if created:
+        console.print(f"[dim]Initialized database at {db.db_path}[/dim]")
 
     from integrations.imessage import ChatDBReader
     from jarvis.search.segment_ingest import extract_segments
@@ -766,6 +792,9 @@ def create_parser() -> argparse.ArgumentParser:
     db_add_contact_parser.add_argument(
         "--chat-id", dest="chat_id", metavar="<id>", help="iMessage chat ID"
     )
+
+    # db sync-contacts
+    db_subparsers.add_parser("sync-contacts", help="import names from macOS Address Book")
 
     # db list-contacts
     db_list_contacts_parser = db_subparsers.add_parser("list-contacts", help="list all contacts")

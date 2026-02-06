@@ -3,6 +3,7 @@
   import { api, APIError } from "../api/client";
   import type { Message, SearchFilters, SemanticSearchResultItem } from "../api/types";
   import { navigateToMessage, conversationsStore } from "../stores/conversations";
+  import { get } from "svelte/store";
 
   interface Props {
     onClose: () => void;
@@ -12,7 +13,7 @@
 
   // Search mode: text (keyword) or semantic (AI-powered)
   type SearchMode = "text" | "semantic";
-  let searchMode: SearchMode = $state("text");
+  let searchMode = $state<SearchMode>("text");
 
   // Search state
   type SearchState = "idle" | "searching" | "results" | "no-results" | "error";
@@ -32,6 +33,10 @@
   let filterStartDate = $state("");
   let filterEndDate = $state("");
   let filterHasAttachments = $state(false);
+
+  // Conversation name cache (chat_id -> display name), populated after search results arrive
+  // This decouples groupedResults from $conversationsStore to avoid recomputation on every poll
+  let conversationNameCache = new Map<string, string>();
 
   // Debounce timer
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -58,11 +63,10 @@
 
     for (const msg of items) {
       if (!groups.has(msg.chat_id)) {
-        // Find conversation name from store
-        const conv = $conversationsStore.conversations.find(c => c.chat_id === msg.chat_id);
+        // Use cached name (populated after search results arrive) instead of reading store
         groups.set(msg.chat_id, {
           chat_id: msg.chat_id,
-          conversation_name: conv?.display_name || conv?.participants?.join(", ") || msg.chat_id,
+          conversation_name: conversationNameCache.get(msg.chat_id) || msg.chat_id,
           messages: []
         });
       }
@@ -180,6 +184,7 @@
 
     results = searchResults;
     semanticResults = [];
+    populateConversationNameCache(searchResults.map(r => r.chat_id));
     searchState = searchResults.length > 0 ? "results" : "no-results";
   }
 
@@ -208,7 +213,26 @@
 
     semanticResults = response.results;
     results = [];
+    populateConversationNameCache(response.results.map(r => r.message.chat_id));
     searchState = response.results.length > 0 ? "results" : "no-results";
+  }
+
+  /** Snapshot conversation names from the store once, after results arrive */
+  function populateConversationNameCache(chatIds: string[]) {
+    const state = get(conversationsStore);
+    for (const chatId of chatIds) {
+      if (!conversationNameCache.has(chatId)) {
+        const conv = state.conversations.find(c => c.chat_id === chatId);
+        if (conv) {
+          conversationNameCache.set(
+            chatId,
+            conv.display_name || conv.participants?.join(", ") || chatId
+          );
+        }
+      }
+    }
+    // Trigger reactivity by reassigning
+    conversationNameCache = new Map(conversationNameCache);
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -340,7 +364,8 @@
     <div class="search-header">
       <div class="search-input-wrapper">
         {#if searchMode === "semantic"}
-          <svg class="search-icon semantic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" title="Semantic Search">
+          <svg class="search-icon semantic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <title>Semantic Search</title>
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"></path>
           </svg>

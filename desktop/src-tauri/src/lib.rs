@@ -3,6 +3,7 @@
 //! Provides the Tauri application setup and tray functionality.
 
 mod socket;
+mod logging;
 mod tray;
 
 use tauri::Manager;
@@ -21,6 +22,7 @@ pub fn run() {
             socket::send_message,
             socket::send_streaming_message,
             socket::is_socket_connected,
+            logging::frontend_log,
         ])
         .setup(|app| {
             // Set up the system tray

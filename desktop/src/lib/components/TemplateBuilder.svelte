@@ -311,6 +311,25 @@
     };
     reader.readAsText(file);
   }
+
+  function handleEditorBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      closeEditor();
+    }
+  }
+
+  function handleImportExportBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      showImportExport = false;
+    }
+  }
+
+  function handleBackdropKeydown(event: KeyboardEvent, closeFn: () => void) {
+    if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      closeFn();
+    }
+  }
 </script>
 
 <div class="template-builder">
@@ -367,8 +386,8 @@
     <!-- Filters -->
     <div class="filters">
       <div class="filter-group">
-        <label>Category</label>
-        <select bind:value={filterCategory} onchange={() => loadTemplates()}>
+        <label for="filter-category">Category</label>
+        <select id="filter-category" bind:value={filterCategory} onchange={() => loadTemplates()}>
           <option value="">All Categories</option>
           {#each categories as cat}
             <option value={cat}>{cat}</option>
@@ -376,8 +395,8 @@
         </select>
       </div>
       <div class="filter-group">
-        <label>Tag</label>
-        <select bind:value={filterTag} onchange={() => loadTemplates()}>
+        <label for="filter-tag">Tag</label>
+        <select id="filter-tag" bind:value={filterTag} onchange={() => loadTemplates()}>
           <option value="">All Tags</option>
           {#each allTags as tag}
             <option value={tag}>{tag}</option>
@@ -554,8 +573,15 @@
 
 <!-- Editor Modal -->
 {#if showEditor}
-  <div class="modal-overlay" onclick={closeEditor}>
-    <div class="modal editor-modal" onclick={(e) => e.stopPropagation()}>
+  <div
+    class="modal-overlay"
+    onclick={handleEditorBackdropClick}
+    onkeydown={(e) => handleBackdropKeydown(e, closeEditor)}
+    role="button"
+    tabindex="0"
+    aria-label="Close template editor"
+  >
+    <div class="modal editor-modal" role="dialog" aria-label="Template editor" tabindex="-1">
       <div class="modal-header">
         <h2>{editingTemplate ? "Edit Template" : "New Template"}</h2>
         <button class="close-btn" onclick={closeEditor} aria-label="Close editor" title="Close editor">
@@ -729,8 +755,15 @@
 
 <!-- Import/Export Modal -->
 {#if showImportExport}
-  <div class="modal-overlay" onclick={() => (showImportExport = false)}>
-    <div class="modal" onclick={(e) => e.stopPropagation()}>
+  <div
+    class="modal-overlay"
+    onclick={handleImportExportBackdropClick}
+    onkeydown={(e) => handleBackdropKeydown(e, () => (showImportExport = false))}
+    role="button"
+    tabindex="0"
+    aria-label="Close template import export dialog"
+  >
+    <div class="modal" role="dialog" aria-label="Template import export dialog" tabindex="-1">
       <div class="modal-header">
         <h2>Import/Export Templates</h2>
         <button class="close-btn" onclick={() => (showImportExport = false)} aria-label="Close import/export" title="Close import/export">

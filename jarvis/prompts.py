@@ -323,43 +323,6 @@ THREAD_EXAMPLES: dict[str, list[FewShotExample]] = {
 
 
 # =============================================================================
-# Capability Awareness (What the LLM Can/Cannot Do)
-# =============================================================================
-
-# System prompt addition for LLM self-awareness about capabilities
-CAPABILITY_AWARENESS_PROMPT = """
-IMPORTANT - Know your limitations:
-- You do NOT have access to calendars or schedules
-- You do NOT have memory of past conversations beyond what's shown
-- You do NOT know current commitments, tasks, or reminders
-- You do NOT have access to contacts, weather, or external info
-
-When you encounter these situations:
-- Scheduling questions ("Are you free Thursday?") → "I'd need to check my calendar"
-- Memory requests ("Remember Sarah's birthday") → "I can't save that"
-- Past conversation questions ("What did we decide?") → "Not in our recent messages"
-- Commitments/todos ("Don't forget to...") → Acknowledge but note you can't remind
-
-DO NOT:
-- Make up schedules, availability, or commitments
-- Pretend to remember things not in the conversation
-- Give specific times/dates without calendar access
-- Say "I'll remind you" when you can't
-
-When uncertain, ask for clarification rather than guessing.
-"""
-
-# Shorter version for token-constrained contexts
-CAPABILITY_AWARENESS_SHORT = """
-Limitations: No calendar, no memory beyond this chat, no reminders.
-- Scheduling → "I'd need to check my calendar"
-- Remember X → "I can't save that"
-- Past decisions → "I don't see that here"
-Don't make up schedules or commitments. Ask if unsure.
-"""
-
-
-# =============================================================================
 # Prompt Templates
 # =============================================================================
 
@@ -389,7 +352,7 @@ REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
     system_message=(
         "You are helping draft a text message reply. Match the user's texting style "
-        "exactly - same length, formality, and patterns.\n\n" + CAPABILITY_AWARENESS_SHORT
+        "exactly - same length, formality, and patterns."
     ),
     template="""### Conversation Context:
 {context}
@@ -400,8 +363,6 @@ Generate a reply that matches the user's texting style exactly:
 - Keep response length similar to user's typical messages
 - Use the same level of formality as the examples
 - Sound like the user wrote it, not an AI
-- If asked about schedules/availability, say you'd need to check
-- Don't make up commitments or past conversations
 {style_instructions}
 {custom_instruction}
 
@@ -413,32 +374,6 @@ Generate a reply that matches the user's texting style exactly:
 
 ### Your reply:""",
     max_output_tokens=50,
-)
-
-
-COMMITMENT_PROMPT = PromptTemplate(
-    name="commitment_response",
-    system_message=(
-        "You are helping draft a short text message response to an invitation or request. "
-        "Generate a natural, authentic response that sounds like a real person texting."
-    ),
-    template="""### Response Type: {response_type}
-
-### Style Guide:
-{style_guide}
-
-### Message to respond to:
-{trigger}
-
-### Instructions:
-Generate a short {response_type_lower} response (1-10 words max).
-- Sound natural and human, not robotic
-- Match the style guide above
-- Be concise - this is texting, not email
-{examples_section}
-
-### Your {response_type_lower} response:""",
-    max_output_tokens=30,
 )
 
 
@@ -1387,8 +1322,7 @@ RAG_REPLY_PROMPT = PromptTemplate(
     name="rag_reply_generation",
     system_message=(
         "You are helping draft a text message reply. "
-        "Match the user's exact texting style - same length, same formality, same patterns.\n\n"
-        + CAPABILITY_AWARENESS_SHORT
+        "Match the user's exact texting style - same length, same formality, same patterns."
     ),
     template="""### Communication Style with {contact_name}:
 {relationship_context}
@@ -1411,8 +1345,6 @@ Generate a reply (~{avg_length} chars) that EXACTLY matches the user's style:
 - Match user's emoji usage frequency exactly
 - Sound like the user wrote it naturally, not an AI assistant
 - NEVER use phrases like "I hope this helps" or "Let me know if you need anything"
-- If asked about schedules/availability, say you'd need to check your calendar
-- Don't make up commitments, dates, or things from past conversations not shown
 {custom_instruction}
 
 ### Last message:

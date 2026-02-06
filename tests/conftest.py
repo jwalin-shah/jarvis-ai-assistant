@@ -228,6 +228,6 @@ def auto_mock_embedder(monkeypatch, request):
         pass
 
     try:
-        monkeypatch.setattr("jarvis.semantic_search.get_embedder", mock_get_embedder)
+        monkeypatch.setattr("jarvis.search.semantic_search.get_embedder", mock_get_embedder)
     except AttributeError:
         pass

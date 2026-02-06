@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Tag } from "$lib/api/types";
+  import type { Tag } from "../../api/types";
 
   export let tag: Tag;
   export let size: "sm" | "md" | "lg" = "md";

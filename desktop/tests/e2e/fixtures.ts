@@ -94,7 +94,7 @@ export async function waitForAppLoad(page: Page): Promise<void> {
  */
 export async function navigateToView(
   page: Page,
-  view: "dashboard" | "messages" | "health" | "settings" | "templates"
+  view: "dashboard" | "messages" | "health" | "settings" | "templates" | "network"
 ): Promise<void> {
   // Click the nav button with the matching title
   const navButton = page.locator(`.nav-item[title="${capitalizeFirst(view)}"]`);

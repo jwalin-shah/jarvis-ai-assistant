@@ -61,6 +61,7 @@ struct JsonRpcRequest {
 /// JSON-RPC response/notification structure
 #[derive(Deserialize, Debug)]
 struct JsonRpcMessage {
+    #[serde(rename = "jsonrpc")]
     _jsonrpc: String,
     /// Method name (for notifications)
     #[serde(default)]
@@ -84,7 +85,7 @@ struct JsonRpcMessage {
 struct JsonRpcError {
     code: i32,
     message: String,
-    #[serde(default)]
+    #[serde(default, rename = "data")]
     _data: Option<serde_json::Value>,
 }
 

@@ -379,7 +379,7 @@
         <ClusterLegend
           nodes={graphData.nodes}
           colors={relationshipColors}
-          on:filter={(e) => filterByRelationship(e.detail)}
+          onfilter={filterByRelationship}
         />
       {/if}
     {/if}

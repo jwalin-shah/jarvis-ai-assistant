@@ -56,13 +56,32 @@
       onClose();
     }
   }
+
+  function handleOverlayClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
+
+  function handleOverlayKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClose();
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="shortcuts-overlay" onclick={onClose}>
-  <div class="shortcuts-panel glass" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Keyboard Shortcuts">
+<div
+  class="shortcuts-overlay"
+  onclick={handleOverlayClick}
+  onkeydown={handleOverlayKeydown}
+  role="button"
+  aria-label="Close keyboard shortcuts"
+  tabindex="0"
+>
+  <div class="shortcuts-panel glass" role="dialog" aria-label="Keyboard Shortcuts" tabindex="-1">
     <header class="shortcuts-header">
       <div class="shortcuts-title">
         <Icon name="settings" size={20} />

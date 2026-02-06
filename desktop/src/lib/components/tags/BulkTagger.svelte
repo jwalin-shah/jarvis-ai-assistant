@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Tag, Conversation } from "$lib/api/types";
+  import type { Tag, Conversation } from "../../api/types";
   import TagBadge from "./TagBadge.svelte";
   import TagPicker from "./TagPicker.svelte";
   import { createEventDispatcher } from "svelte";

@@ -84,6 +84,7 @@ class ChatDBWatcher:
         self._chat_msg_counts: dict[str, int] = {}
         self._segment_threshold = 15
         self._segment_window = 50
+        self._resegment_locks: dict[str, asyncio.Lock] = {}
 
     async def start(self) -> None:
         """Start watching chat.db for changes."""
@@ -236,28 +237,33 @@ class ChatDBWatcher:
                 asyncio.create_task(self._index_new_messages(new_messages))
 
             for msg in new_messages:
-                # Broadcast new message notification with concurrency bound
-                async with self._concurrency:
-                    await self._broadcast_handler.broadcast(
-                        "new_message",
-                        {
-                            "message_id": msg["id"],
-                            "chat_id": msg["chat_id"],
-                            "sender": msg["sender"],
-                            "text": msg["text"],
-                            "date": msg["date"],
-                            "is_from_me": msg["is_from_me"],
-                        },
+                try:
+                    # Broadcast new message notification with concurrency bound
+                    async with self._concurrency:
+                        await self._broadcast_handler.broadcast(
+                            "new_message",
+                            {
+                                "message_id": msg["id"],
+                                "chat_id": msg["chat_id"],
+                                "sender": msg["sender"],
+                                "text": msg["text"],
+                                "date": msg["date"],
+                                "is_from_me": msg["is_from_me"],
+                            },
+                        )
+
+                    logger.debug(
+                        f"New message in {msg['chat_id']}: "
+                        f"{msg['text'][:50] if msg['text'] else '[no text]'}..."
                     )
-
-                logger.debug(
-                    f"New message in {msg['chat_id']}: "
-                    f"{msg['text'][:50] if msg['text'] else '[no text]'}..."
-                )
-
-                # Update last known ROWID incrementally per-message to avoid
-                # re-broadcasting already-sent messages if an error occurs mid-loop
-                self._last_rowid = max(self._last_rowid or 0, msg["id"])
+                except Exception as e:
+                    logger.warning(
+                        "Failed to broadcast message %d in %s, skipping: %s",
+                        msg["id"], msg["chat_id"], e,
+                    )
+                finally:
+                    # Always advance rowid to prevent infinite retry of bad messages
+                    self._last_rowid = max(self._last_rowid or 0, msg["id"])
 
             # Track per-chat message counts for incremental re-segmentation
             chats_to_resegment: list[str] = []
@@ -311,15 +317,28 @@ class ChatDBWatcher:
         except Exception as e:
             logger.debug("Error indexing new messages: %s", e)
 
-    async def _resegment_chats(self, chat_ids: list[str]) -> None:
-        """Re-segment recent messages for chats that hit the threshold."""
-        try:
-            await asyncio.to_thread(self._do_resegment, chat_ids)
-        except Exception as e:
-            logger.warning("Error during re-segmentation: %s", e)
+    def _get_resegment_lock(self, chat_id: str) -> asyncio.Lock:
+        """Get or create a per-chat lock for serializing resegmentation."""
+        if chat_id not in self._resegment_locks:
+            self._resegment_locks[chat_id] = asyncio.Lock()
+        return self._resegment_locks[chat_id]
 
-    def _do_resegment(self, chat_ids: list[str]) -> None:
-        """Sync worker: re-segment recent messages and update vec_chunks."""
+    async def _resegment_chats(self, chat_ids: list[str]) -> None:
+        """Re-segment recent messages for chats that hit the threshold.
+
+        Acquires a per-chat lock so concurrent resegmentation tasks for the
+        same chat_id are serialized, preventing interleaved delete+index
+        operations that corrupt the vector index.
+        """
+        for chat_id in chat_ids:
+            async with self._get_resegment_lock(chat_id):
+                try:
+                    await asyncio.to_thread(self._do_resegment_one, chat_id)
+                except Exception as e:
+                    logger.warning("Error re-segmenting %s: %s", chat_id, e)
+
+    def _do_resegment_one(self, chat_id: str) -> None:
+        """Sync worker: re-segment recent messages for a single chat."""
         from integrations.imessage import ChatDBReader
         from jarvis.search.vec_search import get_vec_searcher
         from jarvis.topics.topic_segmenter import segment_conversation
@@ -331,32 +350,28 @@ class ChatDBWatcher:
             return
 
         with ChatDBReader() as reader:
-            for chat_id in chat_ids:
-                try:
-                    # Get recent messages (newest-first from reader), reverse to chronological
-                    messages = reader.get_messages(chat_id, limit=self._segment_window)
-                    messages.reverse()
+            # Get recent messages (newest-first from reader), reverse to chronological
+            messages = reader.get_messages(chat_id, limit=self._segment_window)
+            messages.reverse()
 
-                    if not messages:
-                        continue
+            if not messages:
+                return
 
-                    segments = segment_conversation(messages, contact_id=chat_id)
+            segments = segment_conversation(messages, contact_id=chat_id)
 
-                    # Replace old chunks for this chat
-                    deleted = searcher.delete_chunks_for_chat(chat_id)
-                    indexed = 0
-                    for seg in segments:
-                        if searcher.index_segment(seg, chat_id=chat_id):
-                            indexed += 1
+            # Replace old chunks for this chat
+            deleted = searcher.delete_chunks_for_chat(chat_id)
+            indexed = 0
+            for seg in segments:
+                if searcher.index_segment(seg, chat_id=chat_id):
+                    indexed += 1
 
-                    logger.info(
-                        "Re-segmented %s: deleted=%d, indexed=%d segments",
-                        chat_id,
-                        deleted,
-                        indexed,
-                    )
-                except Exception as e:
-                    logger.warning("Error re-segmenting %s: %s", chat_id, e)
+            logger.info(
+                "Re-segmented %s: deleted=%d, indexed=%d segments",
+                chat_id,
+                deleted,
+                indexed,
+            )
 
     def _validate_schema(self) -> bool:
         """Validate that chat.db has the expected schema.

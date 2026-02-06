@@ -114,8 +114,9 @@ import {
   getConversations as getConversationsDirect,
   getMessages as getMessagesDirect,
 } from "../db";
+import { getApiBaseUrl } from "../config/runtime";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8742";
+const API_BASE = getApiBaseUrl();
 
 // Check if running in Tauri context (enables socket/direct DB)
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -1063,16 +1064,23 @@ class ApiClient {
   }
 
   async testCustomTemplate(
-    templateId: string,
-    testData: CustomTemplateTestRequest
+    templateIdOrData: string | CustomTemplateTestRequest,
+    testData?: CustomTemplateTestRequest
   ): Promise<CustomTemplateTestResponse> {
-    return this.request<CustomTemplateTestResponse>(
-      `/templates/${encodeURIComponent(templateId)}/test`,
-      {
-        method: "POST",
-        body: JSON.stringify(testData),
-      }
-    );
+    if (typeof templateIdOrData === "string") {
+      return this.request<CustomTemplateTestResponse>(
+        `/templates/${encodeURIComponent(templateIdOrData)}/test`,
+        {
+          method: "POST",
+          body: JSON.stringify(testData),
+        }
+      );
+    }
+
+    return this.request<CustomTemplateTestResponse>("/templates/test", {
+      method: "POST",
+      body: JSON.stringify(templateIdOrData),
+    });
   }
 
   async getCustomTemplateStats(
@@ -1081,6 +1089,10 @@ class ApiClient {
     return this.request<CustomTemplateUsageStats>(
       `/templates/${encodeURIComponent(templateId)}/stats`
     );
+  }
+
+  async getCustomTemplateUsageStats(): Promise<CustomTemplateUsageStats> {
+    return this.request<CustomTemplateUsageStats>("/templates/stats");
   }
 
   async exportCustomTemplates(

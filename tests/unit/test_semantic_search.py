@@ -316,7 +316,7 @@ class TestSemanticSearcher:
         assert results == []
         searcher.close()
 
-    @patch("jarvis.semantic_search.get_embedder")
+    @patch("jarvis.search.semantic_search.get_embedder")
     def test_search_returns_results(
         self,
         mock_get_embedder: MagicMock,
@@ -369,7 +369,7 @@ class TestSemanticSearcher:
 
         searcher.close()
 
-    @patch("jarvis.semantic_search.get_embedder")
+    @patch("jarvis.search.semantic_search.get_embedder")
     def test_search_respects_threshold(
         self,
         mock_get_embedder: MagicMock,
@@ -404,7 +404,7 @@ class TestSemanticSearcher:
         assert len(results) == 0
         searcher.close()
 
-    @patch("jarvis.semantic_search.get_embedder")
+    @patch("jarvis.search.semantic_search.get_embedder")
     def test_search_respects_limit(
         self,
         mock_get_embedder: MagicMock,
@@ -438,7 +438,7 @@ class TestSemanticSearcher:
         assert len(results) <= 2
         searcher.close()
 
-    @patch("jarvis.semantic_search.get_embedder")
+    @patch("jarvis.search.semantic_search.get_embedder")
     def test_search_with_filters(
         self,
         mock_get_embedder: MagicMock,
@@ -470,7 +470,7 @@ class TestSemanticSearcher:
         mock_reader.get_messages.assert_called()
         searcher.close()
 
-    @patch("jarvis.semantic_search.get_embedder")
+    @patch("jarvis.search.semantic_search.get_embedder")
     def test_search_caches_embeddings(
         self,
         mock_get_embedder: MagicMock,

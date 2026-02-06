@@ -247,7 +247,7 @@ class TestEmbeddingStoreSchema:
 class TestEmbeddingStoreIndexing:
     """Tests for message indexing (with mocked embedding computation)."""
 
-    @patch("jarvis.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embedding")
     def test_index_message_basic(self, mock_embed, temp_db_path, sample_message, mock_embedding):
         """Test indexing a single message."""
         mock_embed.return_value = mock_embedding
@@ -258,7 +258,7 @@ class TestEmbeddingStoreIndexing:
         assert result is True
         mock_embed.assert_called_once_with(sample_message.text)
 
-    @patch("jarvis.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embedding")
     def test_index_message_skips_short_text(self, mock_embed, temp_db_path):
         """Test that short messages are skipped."""
         short_msg = Message(
@@ -277,7 +277,7 @@ class TestEmbeddingStoreIndexing:
         assert result is False
         mock_embed.assert_not_called()
 
-    @patch("jarvis.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embedding")
     def test_index_message_skips_empty_text(self, mock_embed, temp_db_path):
         """Test that empty messages are skipped."""
         empty_msg = Message(
@@ -296,7 +296,7 @@ class TestEmbeddingStoreIndexing:
         assert result is False
         mock_embed.assert_not_called()
 
-    @patch("jarvis.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embedding")
     def test_index_message_skips_duplicates(
         self, mock_embed, temp_db_path, sample_message, mock_embedding
     ):
@@ -312,7 +312,7 @@ class TestEmbeddingStoreIndexing:
         # Should only compute embedding once
         assert mock_embed.call_count == 1
 
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_index_messages_batch(
         self, mock_embed_batch, temp_db_path, sample_messages, mock_embedding
     ):
@@ -327,7 +327,7 @@ class TestEmbeddingStoreIndexing:
         assert stats["skipped"] == 0
         assert stats["duplicates"] == 0
 
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_index_messages_counts_skipped(self, mock_embed_batch, temp_db_path, mock_embedding):
         """Test that index_messages counts skipped messages."""
         messages = [
@@ -363,7 +363,7 @@ class TestEmbeddingStoreIndexing:
 class TestEmbeddingStoreSimilarSearch:
     """Tests for similarity search (with mocked embedding computation)."""
 
-    @patch("jarvis.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embedding")
     def test_find_similar_empty_store(self, mock_embed, temp_db_path, mock_embedding):
         """Test search on empty store returns empty list."""
         mock_embed.return_value = mock_embedding
@@ -373,8 +373,8 @@ class TestEmbeddingStoreSimilarSearch:
 
         assert results == []
 
-    @patch("jarvis.embeddings._compute_embedding")
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_find_similar_returns_matches(
         self, mock_embed_batch, mock_embed, temp_db_path, sample_messages
     ):
@@ -399,8 +399,8 @@ class TestEmbeddingStoreSimilarSearch:
             results[i].similarity >= results[i + 1].similarity for i in range(len(results) - 1)
         )
 
-    @patch("jarvis.embeddings._compute_embedding")
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_find_similar_respects_min_similarity(
         self, mock_embed_batch, mock_embed, temp_db_path, sample_messages
     ):
@@ -423,8 +423,8 @@ class TestEmbeddingStoreSimilarSearch:
         # All returned results should meet the threshold
         assert all(r.similarity >= 0.9 for r in results)
 
-    @patch("jarvis.embeddings._compute_embedding")
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_find_similar_filters_by_chat_id(
         self, mock_embed_batch, mock_embed, temp_db_path, mock_embedding
     ):
@@ -459,8 +459,8 @@ class TestEmbeddingStoreSimilarSearch:
 
         assert all(r.chat_id == "chat1" for r in results)
 
-    @patch("jarvis.embeddings._compute_embedding")
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embedding")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_find_similar_respects_limit(
         self, mock_embed_batch, mock_embed, temp_db_path, mock_embedding
     ):
@@ -491,7 +491,7 @@ class TestEmbeddingStoreSimilarSearch:
 class TestEmbeddingStoreRelationshipProfile:
     """Tests for relationship profile computation."""
 
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_get_relationship_profile_basic(
         self, mock_embed_batch, temp_db_path, sample_messages, mock_embedding
     ):
@@ -514,7 +514,7 @@ class TestEmbeddingStoreRelationshipProfile:
         assert profile.contact_id == "nonexistent"
         assert profile.total_messages == 0
 
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     @patch("jarvis.prompts.detect_tone")
     def test_get_relationship_profile_detects_tone(
         self, mock_detect_tone, mock_embed_batch, temp_db_path, sample_messages, mock_embedding
@@ -543,7 +543,7 @@ class TestEmbeddingStoreStats:
         assert stats["oldest_message"] is None
         assert stats["newest_message"] is None
 
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_get_stats_with_data(
         self, mock_embed_batch, temp_db_path, sample_messages, mock_embedding
     ):
@@ -561,7 +561,7 @@ class TestEmbeddingStoreStats:
         assert stats["db_path"] == str(temp_db_path)
         assert stats["db_size_bytes"] > 0
 
-    @patch("jarvis.embeddings._compute_embeddings_batch")
+    @patch("jarvis.search.embeddings._compute_embeddings_batch")
     def test_clear(self, mock_embed_batch, temp_db_path, sample_messages, mock_embedding):
         """Test clearing the store."""
         mock_embed_batch.return_value = np.array([mock_embedding for _ in sample_messages])
@@ -620,7 +620,7 @@ class TestEmbeddingStoreSingleton:
 class TestConvenienceFunctions:
     """Tests for module-level convenience functions."""
 
-    @patch("jarvis.embeddings.get_embedding_store")
+    @patch("jarvis.search.embeddings.get_embedding_store")
     def test_find_similar_messages_delegates(self, mock_get_store, mock_embedding):
         """Test find_similar_messages delegates to store."""
         mock_store = MagicMock()
@@ -636,7 +636,7 @@ class TestConvenienceFunctions:
             min_similarity=0.3,
         )
 
-    @patch("jarvis.embeddings.get_embedding_store")
+    @patch("jarvis.search.embeddings.get_embedding_store")
     def test_find_similar_situations_delegates(self, mock_get_store):
         """Test find_similar_situations delegates to store."""
         mock_store = MagicMock()
@@ -647,7 +647,7 @@ class TestConvenienceFunctions:
 
         mock_store.find_similar_situations.assert_called_once()
 
-    @patch("jarvis.embeddings.get_embedding_store")
+    @patch("jarvis.search.embeddings.get_embedding_store")
     def test_get_relationship_profile_delegates(self, mock_get_store):
         """Test get_relationship_profile delegates to store."""
         mock_store = MagicMock()

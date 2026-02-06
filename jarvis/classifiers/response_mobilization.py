@@ -663,7 +663,7 @@ class ResponseOptionType(str, Enum):
     """Types of user responses for multi-option generation.
 
     These are labels for the OPTIONS we generate, not for classifying
-    incoming messages. Used by multi_option.py to generate diverse choices.
+    incoming messages.
     """
 
     # Commitment responses (for HIGH pressure + COMMITMENT)

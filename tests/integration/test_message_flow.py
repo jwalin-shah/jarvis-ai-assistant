@@ -206,40 +206,6 @@ class TestEndToEndMessagePipeline:
         assert result["type"] == "generated"
 
 
-class TestRouterMultiOption:
-    """Tests for multi-option response generation."""
-
-    @pytest.fixture
-    def router(self):
-        """Create a router with mocked dependencies."""
-        mock_db = MagicMock()
-        mock_db.get_contact.return_value = None
-        mock_db.get_contact_by_chat_id.return_value = None
-        mock_db.init_schema.return_value = None
-
-        mock_searcher = MagicMock()
-        mock_searcher.search.return_value = []
-
-        mock_gen = MagicMock()
-        mock_gen.is_loaded.return_value = False
-        mock_response = MagicMock()
-        mock_response.text = "Sure, I can make it!"
-        mock_gen.generate.return_value = mock_response
-
-        r = ReplyRouter(db=mock_db, generator=mock_gen)
-        r._vec_searcher = mock_searcher
-        return r
-
-    def test_multi_option_delegates_to_route(self, router):
-        """route_multi_option delegates to route() and adds multi-option keys."""
-        result = router.route_multi_option("Are you coming to the party?")
-
-        assert result["type"] == "generated"
-        assert "is_commitment" in result
-        assert "options" in result
-        assert "suggestions" in result
-
-
 class TestRouterStats:
     """Tests for router statistics."""
 

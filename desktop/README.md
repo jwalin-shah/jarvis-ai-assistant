@@ -191,6 +191,17 @@ npm run test:e2e:headed
 
 # Run tests with step-by-step debugging
 npm run test:e2e:debug
+
+# Browser parity smoke test (Chromium + WebKit)
+npm run test:parity:browser
+```
+
+To run the same route smoke test in the actual Tauri desktop app:
+
+```bash
+# Requires a debug desktop build and tauri-driver installed
+npm run test:tauri:build
+npm run test:parity:desktop
 ```
 
 ### Test Structure

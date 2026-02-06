@@ -65,10 +65,25 @@ class VecSearchResult:
 class VecSearcher:
     """High-performance vector search using sqlite-vec."""
 
+    # Scale factor used during int8 quantization (embedding * SCALE -> int8)
+    _INT8_SCALE = 127.0
+
     def __init__(self, db: JarvisDB) -> None:
         self.db = db
         self._embedder = get_embedder()
         self._lock = threading.Lock()
+
+    @staticmethod
+    def _distance_to_similarity(distance: float) -> float:
+        """Convert int8-quantized L2 distance to approximate cosine similarity.
+
+        For normalized embeddings quantized to int8 via (emb * 127):
+            L2_int8 = 127 * L2_float
+            L2_float^2 = 2 * (1 - cos_sim)
+            cos_sim = 1 - (L2_int8 / 127)^2 / 2
+        """
+        cos_sim = 1.0 - (distance / VecSearcher._INT8_SCALE) ** 2 / 2.0
+        return max(0.0, min(1.0, cos_sim))
 
     def _vec_tables_exist(self) -> bool:
         """Check if sqlite-vec tables exist."""
@@ -109,7 +124,7 @@ class VecSearcher:
                         sender,
                         timestamp,
                         is_from_me
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, vec_int8(?), ?, ?, ?, ?, ?)
                     """,
                     (
                         message.id,
@@ -172,7 +187,7 @@ class VecSearcher:
                         sender,
                         timestamp,
                         is_from_me
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, vec_int8(?), ?, ?, ?, ?, ?)
                     """,
                     batch_data,
                 )
@@ -237,6 +252,7 @@ class VecSearcher:
                         embedding,
                         contact_id,
                         chat_id,
+                        response_da_type,
                         source_timestamp,
                         quality_score,
                         topic_label,
@@ -247,14 +263,15 @@ class VecSearcher:
                         message_count,
                         source_type,
                         source_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         self._quantize_embedding(segment.centroid),
                         contact_id or 0,
-                        chat_id,
+                        chat_id or "",
+                        "",  # response_da_type: not classified during segment ingestion
                         segment.start_time.timestamp(),
-                        segment.confidence,
+                        segment.confidence or 0.0,
                         segment.topic_label,
                         trigger_text,
                         response_text,
@@ -332,7 +349,7 @@ class VecSearcher:
                     timestamp,
                     is_from_me
                 FROM vec_messages
-                WHERE embedding MATCH ?
+                WHERE embedding MATCH vec_int8(?)
                 AND k = ?
             """
             params: list[Any] = [query_blob, limit]
@@ -345,10 +362,8 @@ class VecSearcher:
 
         results = []
         for row in rows:
-            # Convert L2 distance to similarity score
-            # 1 / (1 + distance) is a common heuristic
             dist = row["distance"]
-            score = 1.0 / (1.0 + dist)
+            score = self._distance_to_similarity(dist)
 
             results.append(
                 VecSearchResult(
@@ -393,7 +408,7 @@ class VecSearcher:
                     topic_label,
                     quality_score
                 FROM vec_chunks
-                WHERE embedding MATCH ?
+                WHERE embedding MATCH vec_int8(?)
                 AND k = ?
             """
             params: list[Any] = [query_blob, limit]
@@ -407,7 +422,7 @@ class VecSearcher:
         results = []
         for row in rows:
             dist = row["distance"]
-            score = 1.0 / (1.0 + dist)
+            score = self._distance_to_similarity(dist)
 
             results.append(
                 VecSearchResult(

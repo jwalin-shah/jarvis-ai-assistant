@@ -11,11 +11,10 @@ from jarvis.contacts.contact_profile_context import (
     is_contact_profile_context_enabled,
 )
 from jarvis.db import Contact, JarvisDB, get_db
-from jarvis.search.semantic_search import SearchFilters
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
-    from jarvis.search.semantic_search import SemanticSearcher
+    from jarvis.search.vec_search import VecSearcher
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +26,20 @@ class ContextService:
         self,
         db: JarvisDB | None = None,
         imessage_reader: ChatDBReader | None = None,
-        semantic_searcher: SemanticSearcher | None = None,
+        semantic_searcher: Any | None = None,
+        vec_searcher: VecSearcher | None = None,
     ) -> None:
         """Initialize the context service.
 
         Args:
             db: Database instance.
             imessage_reader: iMessage reader instance.
-            semantic_searcher: Semantic searcher instance.
+            semantic_searcher: Legacy semantic searcher (deprecated, ignored).
+            vec_searcher: VecSearcher for chunk-based retrieval.
         """
         self._db = db or get_db()
         self._imessage_reader = imessage_reader
-        self._semantic_searcher = semantic_searcher
+        self._vec_searcher = vec_searcher
 
     @property
     def db(self) -> JarvisDB:
@@ -76,44 +77,51 @@ class ContextService:
             logger.warning("Failed to fetch conversation context: %s", e)
             return []
 
+    def _get_vec_searcher(self) -> VecSearcher | None:
+        """Get or lazily initialize the VecSearcher."""
+        if self._vec_searcher is None:
+            try:
+                from jarvis.search.vec_search import get_vec_searcher
+
+                self._vec_searcher = get_vec_searcher(self._db)
+            except Exception:
+                pass
+        return self._vec_searcher
+
     def search_examples(
         self,
         incoming: str,
         chat_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Search messages for similar conversations."""
+        """Search vec_chunks for similar conversation segments.
+
+        Returns chunks with trigger/response text for few-shot prompting.
+        """
         try:
-            if not self._semantic_searcher:
+            searcher = self._get_vec_searcher()
+            if not searcher:
                 return []
 
-            filters = SearchFilters(chat_id=chat_id)
-            results = self._semantic_searcher.search(
+            results = searcher.search_with_pairs(
                 query=incoming,
-                filters=filters,
                 limit=5,
             )
 
             exchanges = []
             for r in results:
-                if not r.message.is_from_me:
-                    # Found a similar incoming message, find my response to it
-                    if self._imessage_reader:
-                        # Get messages immediately after this one
-                        after_messages = self._imessage_reader.get_messages_after(
-                            r.message.id, chat_id=r.message.chat_id, limit=1
-                        )
-                        if after_messages and after_messages[0].is_from_me:
-                            exchanges.append(
-                                {
-                                    "trigger_text": r.message.text,
-                                    "response_text": after_messages[0].text,
-                                    "similarity": r.similarity,
-                                }
-                            )
+                if r.trigger_text and r.response_text:
+                    exchanges.append(
+                        {
+                            "trigger_text": r.trigger_text,
+                            "response_text": r.response_text,
+                            "similarity": r.score,
+                            "topic": r.topic,
+                        }
+                    )
 
             return exchanges
         except Exception as e:
-            logger.warning("Semantic search failed: %s", e)
+            logger.warning("Chunk search failed: %s", e)
             return []
 
     def get_relationship_profile(

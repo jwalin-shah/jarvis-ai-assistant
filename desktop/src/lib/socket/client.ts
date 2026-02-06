@@ -5,11 +5,14 @@
  * Uses Tauri commands to bridge to Unix socket (in app) or WebSocket (in browser).
  */
 
+import { getSocketRpcWebSocketUrl } from "../config/runtime";
+import type { InvokeArgs, InvokeOptions } from "@tauri-apps/api/core";
+
 // Check if running in Tauri context
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
 
 // WebSocket configuration for browser mode
-const WEBSOCKET_URL = "ws://127.0.0.1:8743";
+const WEBSOCKET_URL = getSocketRpcWebSocketUrl();
 
 // Request timeout configuration (ms)
 const REQUEST_TIMEOUT = 30000; // 30s for normal requests
@@ -37,8 +40,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 // Dynamic imports for Tauri APIs - only available in Tauri context
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let invoke: ((cmd: string, args?: object) => Promise<any>) | null = null;
+let invoke: (<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions) => Promise<T>) | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let listen: ((event: string, handler: (event: any) => void) => Promise<() => void>) | null = null;
 

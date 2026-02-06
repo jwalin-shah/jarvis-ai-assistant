@@ -80,7 +80,7 @@
     }
   }
 
-  onMount(async () => {
+  onMount(() => {
     // Initialize theme system
     const cleanupTheme = initializeTheme();
 
@@ -88,32 +88,35 @@
     initAnnouncer();
 
     // Check API connection on start
-    await checkApiConnection();
+    void checkApiConnection();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let unlisten: (() => void) | null = null;
 
     // Listen for navigation events from tray menu (only in Tauri context)
     if (isTauri) {
-      try {
-        const { listen } = await import("@tauri-apps/api/event");
-        unlisten = await listen<string>("navigate", (event) => {
-          if (
-            event.payload === "health" ||
-            event.payload === "dashboard" ||
-            event.payload === "messages" ||
-            event.payload === "settings" ||
-            event.payload === "templates"
-          ) {
-            currentView = event.payload;
-            if (event.payload !== "messages") {
-              clearSelection();
+      void installFrontendLogBridge();
+      void (async () => {
+        try {
+          const { listen } = await import("@tauri-apps/api/event");
+          unlisten = await listen<string>("navigate", (event) => {
+            if (
+              event.payload === "health" ||
+              event.payload === "dashboard" ||
+              event.payload === "messages" ||
+              event.payload === "settings" ||
+              event.payload === "templates" ||
+              event.payload === "network"
+            ) {
+              currentView = event.payload;
+              if (event.payload !== "messages") {
+                clearSelection();
+              }
             }
-          }
-        });
-      } catch (error) {
-        console.warn("Failed to set up Tauri event listener:", error);
-      }
+          });
+        } catch (error) {
+          console.warn("Failed to set up Tauri event listener:", error);
+        }
+      })();
     }
 
     // Add keyboard listener for search
@@ -146,13 +149,71 @@
   function closeCommandPalette() {
     showCommandPalette = false;
   }
+
+  function serializeLogArg(arg: unknown): string {
+    if (arg instanceof Error) {
+      return `${arg.name}: ${arg.message}${arg.stack ? `\n${arg.stack}` : ""}`;
+    }
+    if (typeof arg === "string") return arg;
+    try {
+      return JSON.stringify(arg);
+    } catch {
+      return String(arg);
+    }
+  }
+
+  async function installFrontendLogBridge(): Promise<void> {
+    if (!isTauri) return;
+
+    const windowObj = window as unknown as Record<string, unknown>;
+    if (windowObj.__JARVIS_CONSOLE_BRIDGED__) return;
+    windowObj.__JARVIS_CONSOLE_BRIDGED__ = true;
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const levels = ["log", "info", "warn", "error", "debug"] as const;
+
+      const forward = async (level: (typeof levels)[number], args: unknown[]) => {
+        const message = args.map(serializeLogArg).join(" ");
+        try {
+          await invoke("frontend_log", { level, message });
+        } catch {
+          // Avoid recursive logging if invoke fails.
+        }
+      };
+
+      for (const level of levels) {
+        const original = console[level].bind(console);
+        console[level] = (...args: unknown[]) => {
+          original(...args);
+          void forward(level, args);
+        };
+      }
+
+      window.addEventListener("error", (event) => {
+        void forward("error", [
+          "window.error",
+          event.message,
+          event.filename,
+          `line:${event.lineno}`,
+          `col:${event.colno}`,
+        ]);
+      });
+
+      window.addEventListener("unhandledrejection", (event) => {
+        void forward("error", ["unhandledrejection", event.reason]);
+      });
+    } catch (error) {
+      console.warn("Failed to install frontend log bridge:", error);
+    }
+  }
 </script>
 
 <main class="app">
   <Sidebar bind:currentView bind:collapsed={sidebarCollapsed} />
 
   {#if currentView === "dashboard"}
-    <Dashboard on:navigate={(e) => currentView = e.detail} />
+    <Dashboard onNavigate={(view) => (currentView = view)} />
   {:else if currentView === "health"}
     <HealthStatus />
   {:else if currentView === "settings"}

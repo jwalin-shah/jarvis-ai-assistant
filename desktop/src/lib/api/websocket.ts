@@ -8,7 +8,9 @@
  * - Connection state management
  */
 
-export const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8742";
+import { getApiWebSocketBaseUrl } from "../config/runtime";
+
+export const WS_BASE = getApiWebSocketBaseUrl();
 
 // HTTP base URL derived from WS_BASE (convert ws:// to http://, wss:// to https://)
 export const WS_HTTP_BASE = (() => {

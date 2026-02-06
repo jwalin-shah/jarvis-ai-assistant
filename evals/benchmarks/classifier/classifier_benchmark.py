@@ -1,6 +1,6 @@
 """Response Classifier Benchmarking Suite.
 
-Measures and compares performance of V1 vs V2 response classifiers:
+Measures performance of the response classifier:
 - Throughput: messages per second
 - Latency: p50, p95, p99 percentiles
 - Memory usage
@@ -12,9 +12,6 @@ Usage:
 
     # Run specific benchmark
     python -m benchmarks.classifier.classifier_benchmark --benchmark throughput
-
-    # Compare V1 vs V2
-    python -m benchmarks.classifier.classifier_benchmark --compare
 """
 
 from __future__ import annotations
@@ -539,83 +536,18 @@ def benchmark_v1_classifier(messages: list[str], batch_size: int = 64) -> Benchm
     return result
 
 
-def benchmark_v2_classifier(
-    messages: list[str],
-    batch_size: int = 64,
-    enable_caching: bool = True,
-    enable_ensemble: bool = True,
-) -> BenchmarkResult:
-    """Benchmark V2 response classifier.
-
-    Args:
-        messages: Test messages.
-        batch_size: Batch size for throughput measurement.
-        enable_caching: Enable embedding/feature caching.
-        enable_ensemble: Enable ensemble voting.
-
-    Returns:
-        BenchmarkResult with all measurements.
-    """
-    from jarvis.classifiers.response_classifier_v2 import (
-        BatchResponseClassifier,
-        reset_batch_response_classifier,
-    )
-
-    # Reset to ensure clean state
-    reset_batch_response_classifier()
-    classifier = BatchResponseClassifier(
-        enable_caching=enable_caching,
-        enable_ensemble=enable_ensemble,
-        use_v2_api=True,
-    )
-
-    # Warmup
-    classifier.warmup()
-
-    result = BenchmarkResult(version="v2")
-
-    # Single-message latency
-    print("  Measuring V2 single-message latency...")
-    result.latency = measure_latency(classifier.classify, messages[:500])
-
-    # Batch latency (per-message)
-    print("  Measuring V2 batch latency...")
-    batch_latency = measure_batch_latency(classifier.classify_batch, messages, batch_size)
-    result.metadata["batch_latency"] = asdict(batch_latency)
-
-    # Batch throughput
-    print("  Measuring V2 throughput...")
-    result.throughput = measure_throughput(classifier.classify_batch, messages, batch_size)
-
-    # Memory usage
-    print("  Measuring V2 memory usage...")
-    result.memory = measure_memory(classifier.classify_batch, messages, batch_size)
-
-    result.metadata.update(
-        {
-            "enable_caching": enable_caching,
-            "enable_ensemble": enable_ensemble,
-            "cache_stats": classifier.get_cache_stats(),
-            "has_svm": getattr(classifier, "_svm", None) is not None,
-        }
-    )
-
-    classifier.shutdown()
-    return result
-
-
 def compare_classifiers(messages: list[str], batch_size: int = 64) -> dict[str, Any]:
-    """Compare V1 vs V2 classifiers.
+    """Benchmark the response classifier.
 
     Args:
         messages: Test messages.
         batch_size: Batch size for throughput measurement.
 
     Returns:
-        Dictionary with comparison results.
+        Dictionary with benchmark results.
     """
     print("\n" + "=" * 60)
-    print("RESPONSE CLASSIFIER BENCHMARK COMPARISON")
+    print("RESPONSE CLASSIFIER BENCHMARK")
     print("=" * 60)
     print(f"\nTest set: {len(messages)} messages")
     print(f"Batch size: {batch_size}")
@@ -631,100 +563,24 @@ def compare_classifiers(messages: list[str], batch_size: int = 64) -> dict[str, 
         print(f"  V1 benchmark failed: {e}")
         results["v1"] = {"error": str(e)}
 
-    # Benchmark V2 with caching
-    print("\n--- V2 Classifier (with caching) ---")
-    try:
-        v2_result = benchmark_v2_classifier(messages, batch_size, enable_caching=True)
-        results["v2_cached"] = v2_result.to_dict()
-    except Exception as e:
-        print(f"  V2 benchmark failed: {e}")
-        results["v2_cached"] = {"error": str(e)}
-
-    # Benchmark V2 without caching
-    print("\n--- V2 Classifier (no caching) ---")
-    try:
-        v2_nocache_result = benchmark_v2_classifier(messages, batch_size, enable_caching=False)
-        results["v2_no_cache"] = v2_nocache_result.to_dict()
-    except Exception as e:
-        print(f"  V2 no-cache benchmark failed: {e}")
-        results["v2_no_cache"] = {"error": str(e)}
-
     # Calculate improvements
     print("\n" + "=" * 60)
     print("COMPARISON RESULTS")
     print("=" * 60)
 
-    if "v1" in results and "v2_cached" in results:
-        if "error" not in results["v1"] and "error" not in results["v2_cached"]:
-            v1 = results["v1"]
-            v2 = results["v2_cached"]
-
-            # Latency comparison
-            if v1.get("latency") and v2.get("latency"):
-                v1_p95 = v1["latency"]["p95"]
-                v2_p95 = v2["latency"]["p95"]
-                latency_improvement = v1_p95 / v2_p95 if v2_p95 > 0 else 0
-
-                print("\nLatency (p95):")
-                print(f"  V1: {v1_p95:.2f}ms")
-                print(f"  V2: {v2_p95:.2f}ms")
-                print(f"  Improvement: {latency_improvement:.1f}x")
-
-                results["comparison"] = {"latency_improvement": latency_improvement}
-
-            # Throughput comparison
-            if v1.get("throughput") and v2.get("throughput"):
-                v1_tput = v1["throughput"]["messages_per_second"]
-                v2_tput = v2["throughput"]["messages_per_second"]
-                throughput_improvement = v2_tput / v1_tput if v1_tput > 0 else 0
-
-                print("\nThroughput:")
-                print(f"  V1: {v1_tput:.0f} msgs/sec")
-                print(f"  V2: {v2_tput:.0f} msgs/sec")
-                print(f"  Improvement: {throughput_improvement:.1f}x")
-
-                results["comparison"]["throughput_improvement"] = throughput_improvement
-
-            # Memory comparison
-            if v1.get("memory") and v2.get("memory"):
-                v1_mem = v1["memory"]["peak_mb"]
-                v2_mem = v2["memory"]["peak_mb"]
-                memory_ratio = v2_mem / v1_mem if v1_mem > 0 else 0
-
-                print("\nPeak Memory:")
-                print(f"  V1: {v1_mem:.1f}MB")
-                print(f"  V2: {v2_mem:.1f}MB")
-                print(f"  Ratio: {memory_ratio:.2f}x")
-
-                results["comparison"]["memory_ratio"] = memory_ratio
-
-    # Check if targets met
+    # Print results
     print("\n" + "=" * 60)
-    print("TARGET VERIFICATION")
+    print("RESULTS")
     print("=" * 60)
 
-    targets_met = True
-
-    if "v2_cached" in results and "error" not in results["v2_cached"]:
-        v2 = results["v2_cached"]
-
-        # Target: <5ms p95 latency
-        if v2.get("latency"):
-            p95 = v2["latency"]["p95"]
-            target_met = p95 < 5.0
-            status = "PASS" if target_met else "FAIL"
-            print(f"\nLatency p95 < 5ms: {status} ({p95:.2f}ms)")
-            targets_met = targets_met and target_met
-
-        # Target: 10x throughput improvement
-        if "comparison" in results and "throughput_improvement" in results["comparison"]:
-            improvement = results["comparison"]["throughput_improvement"]
-            target_met = improvement >= 10.0
-            status = "PASS" if target_met else "FAIL"
-            print(f"Throughput 10x improvement: {status} ({improvement:.1f}x)")
-            targets_met = targets_met and target_met
-
-    results["targets_met"] = targets_met
+    if "v1" in results and "error" not in results["v1"]:
+        v1 = results["v1"]
+        if v1.get("latency"):
+            print(f"\nLatency p95: {v1['latency']['p95']:.2f}ms")
+        if v1.get("throughput"):
+            print(f"Throughput: {v1['throughput']['messages_per_second']:.0f} msgs/sec")
+        if v1.get("memory"):
+            print(f"Peak Memory: {v1['memory']['peak_mb']:.1f}MB")
 
     return results
 
@@ -746,7 +602,7 @@ def main() -> int:
     parser.add_argument(
         "--compare",
         action="store_true",
-        help="Compare V1 vs V2 classifiers",
+        help="Run comparison benchmark",
     )
     parser.add_argument(
         "--messages",

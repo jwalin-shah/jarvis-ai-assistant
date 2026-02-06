@@ -163,7 +163,16 @@ class MLXModelLoader:
     and complete unloading including Metal GPU cache cleanup.
 
     Supports eager loading via preload() for faster first-request latency.
+
+    IMPORTANT: _mlx_load_lock is a class-level lock shared by ALL instances.
+    This prevents concurrent MLX model loads which crash the Metal GPU with
+    assertion failures ("A command encoder is already encoding to this command
+    buffer") or malloc errors. Multiple instances may exist (e.g. get_model()
+    singleton vs MLXGenerator's internal loader), and all must serialize their
+    load() calls through this shared lock.
     """
+
+    _mlx_load_lock = threading.Lock()
 
     def __init__(self, config: ModelConfig | None = None) -> None:
         """Initialize the loader.
@@ -174,7 +183,6 @@ class MLXModelLoader:
         self.config = config or ModelConfig()
         self._model: Any = None
         self._tokenizer: Any = None
-        self._load_lock = threading.Lock()
         self._loaded_at: float | None = None
         self._preload_thread: threading.Thread | None = None
         self._preload_error: Exception | None = None
@@ -314,7 +322,7 @@ class MLXModelLoader:
                 required_mb=required_mb,
             )
 
-        with self._load_lock:
+        with MLXModelLoader._mlx_load_lock:
             # Double-check after acquiring lock
             if self.is_loaded():
                 return True
@@ -566,6 +574,7 @@ class MLXModelLoader:
         top_k: int | None = None,
         repetition_penalty: float | None = None,
         stop_sequences: list[str] | None = None,
+        stop_event: threading.Event | None = None,
     ) -> Any:
         """Generate text with true streaming output (yields tokens as generated).
 
@@ -579,6 +588,7 @@ class MLXModelLoader:
             top_k: Top-k sampling limit (LFM optimal: 50)
             repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
             stop_sequences: Strings that stop generation
+            stop_event: If set, generation stops early (e.g. on client disconnect)
 
         Yields:
             StreamToken objects with individual tokens as they're generated
@@ -635,6 +645,11 @@ class MLXModelLoader:
                 sampler=sampler,
                 logits_processors=logits_processors,
             ):
+                # Check if caller requested cancellation (e.g. client disconnected)
+                if stop_event is not None and stop_event.is_set():
+                    logger.debug("Streaming generation cancelled via stop_event")
+                    break
+
                 # response.text contains the full text so far
                 # Extract just the new part
                 new_text = response.text[len(accumulated_text) :]
