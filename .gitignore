@@ -136,3 +136,13 @@ data/*.md
 archive/
 tools/multi-agent/outputs/
 tasks/sessions/
+tasks/*.md
+
+# Experiment artifacts (data, models, results - all regeneratable)
+experiments/**/data/*.jsonl
+experiments/**/models/
+experiments/**/results/
+
+# Training/labeling data (personal, regeneratable)
+data/*_labeling.jsonl
+data/splits/
