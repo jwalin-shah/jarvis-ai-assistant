@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """Promptfoo provider for JARVIS MLX model.
 
-Supports multiple prompt strategies for A/B testing:
-- "baseline": Current JARVIS build_reply_prompt()
-- "minimal": Bare-bones prompt, no examples
-- "examples_only": Just examples, minimal instructions
-- "style_focus": Heavy emphasis on style matching
+Supports 8 prompt strategies (structure x framing matrix) for A/B testing:
+
+Structures (2):
+- xml: XML-tagged format (<system>, <style>, <examples>, etc.)
+- md: Markdown ###-header format
+
+Framings (4):
+- drafter: "You draft text message replies" (assistant framing)
+- persona: "You ARE this person texting" (first-person identity)
+- completer: "Complete the next message" (neutral completion)
+- anti_helper: "You are NOT an AI assistant" (anti-AI framing)
 
 Usage:
-    echo '{"vars": {"context": "...", "strategy": "baseline"}}' | python jarvis_provider.py
+    echo '{"vars": {"context": "...", "strategy": "xml_drafter"}}' | python jarvis_provider.py
 """
 
 from __future__ import annotations
@@ -26,110 +32,164 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Prompt Strategies - These are what we're A/B testing
+# Framing Definitions
+# =============================================================================
+
+FRAMINGS = {
+    "drafter": ("You draft text message replies matching the sender's exact style."),
+    "persona": (
+        "You ARE this person texting. Continue the conversation as them. "
+        "Write exactly how they write."
+    ),
+    "completer": (
+        "Complete the next message in this text conversation. "
+        "Output only the reply text, nothing else."
+    ),
+    "anti_helper": (
+        "You are NOT an AI assistant. You are replying to a text message from your phone. "
+        "Just text back. No helpfulness, no formality, no assistant behavior."
+    ),
+}
+
+# Shared rules appended to all framings
+SHARED_RULES = """Rules:
+- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
+- Sound natural, never like an AI
+- No phrases like "I hope this helps" or "Let me know"
+- No formal greetings unless they use them
+- If the message is unclear or you lack context to reply properly, respond with just "?"
+"""
+
+
+# =============================================================================
+# XML Structure Strategies
 # =============================================================================
 
 
-def strategy_baseline(context: str, last_message: str, tone: str, user_style: str, **kwargs) -> str:
-    """Current JARVIS system - build_reply_prompt()."""
-    from jarvis.prompts import build_reply_prompt
-
-    instruction = f"Match this style: {user_style}" if user_style else None
-    return build_reply_prompt(
-        context=context,
-        last_message=last_message,
-        instruction=instruction,
-        tone=tone,
-    )
-
-
-def strategy_minimal(context: str, last_message: str, tone: str, user_style: str, **kwargs) -> str:
-    """Minimal prompt - no examples, just core instruction."""
-    return f"""Reply to this text message. Be {tone}, brief, and human.
-
-Conversation:
-{context}
-
-Reply to: {last_message}
-
-Your reply (1-15 words):"""
-
-
-def strategy_examples_only(
-    context: str, last_message: str, tone: str, user_style: str, **kwargs
+def _xml_strategy(
+    framing: str,
+    context: str,
+    last_message: str,
+    tone: str,
+    user_style: str,
+    **kwargs,
 ) -> str:
-    """Few-shot examples with minimal instruction."""
-    if tone == "professional":
-        examples = """Examples:
-"Can you send the report?" → "On it, will have it by 3"
-"Meeting moved to 2pm" → "Got it, thanks for the heads up"
-"Quick call?" → "Give me 5 min"
-"""
-    else:
-        examples = """Examples:
-"Want to grab lunch?" → "Sure! When works?"
-"Running late" → "No worries, take your time"
-"Did you see the game?" → "Yes!! That ending was wild"
-"Can you pick up milk?" → "Got it"
-"""
+    """Build an XML-tagged prompt with the given framing."""
+    system_text = FRAMINGS[framing]
+    style_line = f"Tone: {tone}. Style: {user_style}" if user_style else f"Tone: {tone}"
 
-    return f"""{examples}
-Now reply to this:
+    return f"""<system>
+{system_text}
+{SHARED_RULES}</system>
+
+<style>
+{style_line}
+</style>
+
+<conversation>
 {context}
+</conversation>
 
-"{last_message}" →"""
+<last_message>{last_message}</last_message>
+
+<reply>"""
 
 
-def strategy_style_focus(
-    context: str, last_message: str, tone: str, user_style: str, **kwargs
+def strategy_xml_drafter(context: str, last_message: str, tone: str, user_style: str, **kw) -> str:
+    """XML structure + drafter framing (current default)."""
+    return _xml_strategy("drafter", context, last_message, tone, user_style, **kw)
+
+
+def strategy_xml_persona(context: str, last_message: str, tone: str, user_style: str, **kw) -> str:
+    """XML structure + persona framing."""
+    return _xml_strategy("persona", context, last_message, tone, user_style, **kw)
+
+
+def strategy_xml_completer(
+    context: str, last_message: str, tone: str, user_style: str, **kw
 ) -> str:
-    """Heavy emphasis on matching user's texting style."""
-    return f"""You are mimicking someone's EXACT texting style. This is critical.
+    """XML structure + completer framing."""
+    return _xml_strategy("completer", context, last_message, tone, user_style, **kw)
 
-Their style: {user_style or "casual, brief"}
 
-Rules:
-- If they use "u" for "you", YOU use "u"
-- If they skip periods, YOU skip periods
-- If they're brief (1-5 words), YOU are brief
-- Match their energy exactly
-- NEVER sound like an AI or assistant
+def strategy_xml_anti_helper(
+    context: str, last_message: str, tone: str, user_style: str, **kw
+) -> str:
+    """XML structure + anti-helper framing."""
+    return _xml_strategy("anti_helper", context, last_message, tone, user_style, **kw)
 
-Conversation:
+
+# =============================================================================
+# Markdown Structure Strategies
+# =============================================================================
+
+
+def _md_strategy(
+    framing: str,
+    context: str,
+    last_message: str,
+    tone: str,
+    user_style: str,
+    **kwargs,
+) -> str:
+    """Build a markdown ###-header prompt with the given framing."""
+    system_text = FRAMINGS[framing]
+    style_line = f"Style: {user_style}" if user_style else ""
+
+    return f"""{system_text}
+
+### Conversation Context:
 {context}
 
-Reply to "{last_message}" in their style:"""
+### Instructions:
+Generate a reply that matches the user's texting style exactly:
+- Match the tone of the conversation ({tone})
+- Keep response length similar to user's typical messages
+- Sound like the user wrote it, not an AI
+- If the message is unclear or you lack context, respond with just "?"
+{style_line}
+
+### Last message to reply to:
+{last_message}
+
+### Your reply:"""
 
 
-def strategy_anti_ai(context: str, last_message: str, tone: str, user_style: str, **kwargs) -> str:
-    """Explicitly forbid AI-sounding phrases."""
-    return f"""Reply to this text. You MUST sound human.
+def strategy_md_drafter(context: str, last_message: str, tone: str, user_style: str, **kw) -> str:
+    """Markdown structure + drafter framing."""
+    return _md_strategy("drafter", context, last_message, tone, user_style, **kw)
 
-FORBIDDEN PHRASES (never use):
-- "I'd be happy to"
-- "That sounds"
-- "Absolutely!"
-- "I understand"
-- "Great question"
-- "I appreciate"
-- "Let me"
-- "I can help"
 
-Conversation:
-{context}
+def strategy_md_persona(context: str, last_message: str, tone: str, user_style: str, **kw) -> str:
+    """Markdown structure + persona framing."""
+    return _md_strategy("persona", context, last_message, tone, user_style, **kw)
 
-Reply to: {last_message}
-Tone: {tone}
 
-Your human reply:"""
+def strategy_md_completer(context: str, last_message: str, tone: str, user_style: str, **kw) -> str:
+    """Markdown structure + completer framing."""
+    return _md_strategy("completer", context, last_message, tone, user_style, **kw)
 
+
+def strategy_md_anti_helper(
+    context: str, last_message: str, tone: str, user_style: str, **kw
+) -> str:
+    """Markdown structure + anti-helper framing."""
+    return _md_strategy("anti_helper", context, last_message, tone, user_style, **kw)
+
+
+# =============================================================================
+# Strategy Registry
+# =============================================================================
 
 STRATEGIES = {
-    "baseline": strategy_baseline,
-    "minimal": strategy_minimal,
-    "examples_only": strategy_examples_only,
-    "style_focus": strategy_style_focus,
-    "anti_ai": strategy_anti_ai,
+    "xml_drafter": strategy_xml_drafter,
+    "xml_persona": strategy_xml_persona,
+    "xml_completer": strategy_xml_completer,
+    "xml_anti_helper": strategy_xml_anti_helper,
+    "md_drafter": strategy_md_drafter,
+    "md_persona": strategy_md_persona,
+    "md_completer": strategy_md_completer,
+    "md_anti_helper": strategy_md_anti_helper,
 }
 
 
@@ -191,10 +251,10 @@ def main():
     last_message = vars_dict.get("last_message", "")
     tone = vars_dict.get("tone", "casual")
     user_style = vars_dict.get("user_style", "")
-    strategy_name = vars_dict.get("strategy", "baseline")
+    strategy_name = vars_dict.get("strategy", "xml_drafter")
 
     # Get the strategy function
-    strategy_fn = STRATEGIES.get(strategy_name, strategy_baseline)
+    strategy_fn = STRATEGIES.get(strategy_name, strategy_xml_drafter)
 
     # Build prompt using selected strategy
     try:

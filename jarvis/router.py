@@ -35,7 +35,11 @@ from jarvis.classifiers.response_mobilization import (
 from jarvis.db import JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.errors import ErrorCode, JarvisError
-from jarvis.observability.metrics_router import RoutingMetrics, get_routing_metrics_store, hash_query
+from jarvis.observability.metrics_router import (
+    RoutingMetrics,
+    get_routing_metrics_store,
+    hash_query,
+)
 from jarvis.reply_service import ReplyService
 from jarvis.services import ContextService
 
@@ -350,11 +354,13 @@ class ReplyRouter:
             mobilization.confidence,
         )
 
-        # Search for similar examples
+        # Search for similar examples (pass cached_embedder to avoid re-encoding)
         search_start = time.perf_counter()
         search_results = self.context_service.search_examples(
             incoming,
             chat_id=chat_id,
+            contact_id=contact.id if contact else None,
+            embedder=cached_embedder,
         )
         latency_ms["vec_search"] = (time.perf_counter() - search_start) * 1000
 

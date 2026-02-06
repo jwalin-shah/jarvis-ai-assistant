@@ -58,6 +58,7 @@ class VecSearchResult:
     trigger_text: str | None = None
     response_text: str | None = None
     response_type: str | None = None
+    response_da_conf: float | None = None
     topic: str | None = None
     quality_score: float | None = None
 
@@ -212,6 +213,21 @@ class VecSearcher:
         quantized = (embedding * 127).astype(np.int8)
         return quantized.tobytes()
 
+    @staticmethod
+    def _binarize_embedding(embedding: np.ndarray) -> bytes:
+        """Binarize float embedding to bit-packed bytes for hamming search.
+
+        Each dimension becomes 1 if positive, 0 if negative/zero.
+        384 dims -> 48 bytes.
+
+        Args:
+            embedding: float32 numpy array (any length divisible by 8)
+
+        Returns:
+            bytes of bit-packed array
+        """
+        return np.packbits((embedding > 0).astype(np.uint8)).tobytes()
+
     def index_segment(
         self,
         segment: TopicSegment,
@@ -245,8 +261,11 @@ class VecSearcher:
         import json
 
         try:
+            int8_blob = self._quantize_embedding(segment.centroid)
+            binary_blob = self._binarize_embedding(segment.centroid)
+
             with self.db.connection() as conn:
-                conn.execute(
+                cursor = conn.execute(
                     """
                     INSERT INTO vec_chunks(
                         embedding,
@@ -266,7 +285,7 @@ class VecSearcher:
                     ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        self._quantize_embedding(segment.centroid),
+                        int8_blob,
                         contact_id or 0,
                         chat_id or "",
                         "",  # response_da_type: not classified during segment ingestion
@@ -282,6 +301,21 @@ class VecSearcher:
                         segment.segment_id,
                     ),
                 )
+                chunk_rowid = cursor.lastrowid
+
+                # Dual-insert into vec_binary for fast hamming pre-filter
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8)
+                        VALUES (vec_bit(?), ?, ?)
+                        """,
+                        (binary_blob, chunk_rowid, int8_blob),
+                    )
+                except Exception as e:
+                    # Non-fatal: vec_binary may not exist on older schemas
+                    logger.debug("vec_binary insert skipped: %s", e)
+
             return True
         except Exception as e:
             logger.error("Failed to index segment %s: %s", segment.segment_id, e)
@@ -313,9 +347,24 @@ class VecSearcher:
         """Delete all chunks for a chat_id. Returns count deleted."""
         try:
             with self.db.connection() as conn:
-                cursor = conn.execute(
-                    "DELETE FROM vec_chunks WHERE chat_id = ?", (chat_id,)
-                )
+                # Fetch chunk rowids first so we can clean up vec_binary
+                rows = conn.execute(
+                    "SELECT rowid FROM vec_chunks WHERE chat_id = ?", (chat_id,)
+                ).fetchall()
+                rowids = [r["rowid"] for r in rows]
+
+                if rowids:
+                    # Delete from vec_binary by chunk_rowid
+                    try:
+                        placeholders = ",".join("?" * len(rowids))
+                        conn.execute(
+                            f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",
+                            rowids,
+                        )
+                    except Exception as e:
+                        logger.debug("vec_binary delete skipped: %s", e)
+
+                cursor = conn.execute("DELETE FROM vec_chunks WHERE chat_id = ?", (chat_id,))
                 return cursor.rowcount
         except Exception as e:
             logger.error("Failed to delete chunks for chat %s: %s", chat_id, e)
@@ -381,7 +430,12 @@ class VecSearcher:
         return results
 
     def search_with_pairs(
-        self, query: str, limit: int = 5, response_type: str | None = None
+        self,
+        query: str,
+        limit: int = 5,
+        response_type: str | None = None,
+        contact_id: int | None = None,
+        embedder: Any | None = None,
     ) -> list[VecSearchResult]:
         """Search for conversation pairs (chunks) in vec_chunks.
 
@@ -389,11 +443,14 @@ class VecSearcher:
             query: Input trigger text
             limit: Max results
             response_type: Optional filter for response_da_type
+            contact_id: Optional partition key to search only one contact's chunks
+            embedder: Optional embedder override (e.g. CachedEmbedder)
 
         Returns:
             List of results with trigger/response details
         """
-        embedding = self._embedder.encode(query, normalize=True)
+        enc = embedder or self._embedder
+        embedding = enc.encode(query, normalize=True)
         query_blob = self._quantize_embedding(embedding)
 
         with self.db.connection() as conn:
@@ -405,6 +462,7 @@ class VecSearcher:
                     trigger_text,
                     response_text,
                     response_da_type,
+                    response_da_conf,
                     topic_label,
                     quality_score
                 FROM vec_chunks
@@ -412,6 +470,10 @@ class VecSearcher:
                 AND k = ?
             """
             params: list[Any] = [query_blob, limit]
+
+            if contact_id is not None:
+                sql += " AND contact_id = ?"
+                params.append(contact_id)
 
             if response_type:
                 sql += " AND response_da_type = ?"
@@ -433,12 +495,166 @@ class VecSearcher:
                     trigger_text=row["trigger_text"],
                     response_text=row["response_text"],
                     response_type=row["response_da_type"],
+                    response_da_conf=row["response_da_conf"],
                     topic=row["topic_label"],
                     quality_score=row["quality_score"],
                 )
             )
 
         return results
+
+    def search_with_pairs_global(
+        self,
+        query: str,
+        limit: int = 5,
+        embedder: Any | None = None,
+    ) -> list[VecSearchResult]:
+        """Two-phase global search: fast hamming pre-filter then int8 re-rank.
+
+        Phase 1: Hamming search on vec_binary for limit*10 candidates
+        Phase 2: Re-rank candidates by L2 distance on stored int8 embeddings
+        Phase 3: Fetch metadata from vec_chunks for top results
+
+        Falls back to standard search_with_pairs() if vec_binary is empty/missing.
+
+        Args:
+            query: Input trigger text
+            limit: Max results
+            embedder: Optional embedder override
+
+        Returns:
+            List of results with trigger/response details, sorted by int8 L2 distance
+        """
+        enc = embedder or self._embedder
+        embedding = enc.encode(query, normalize=True)
+        binary_blob = self._binarize_embedding(embedding)
+        int8_query = (embedding * self._INT8_SCALE).astype(np.int8)
+
+        candidates_k = limit * 10
+
+        try:
+            with self.db.connection() as conn:
+                # Phase 1: Fast hamming pre-filter
+                rows = conn.execute(
+                    """
+                    SELECT rowid, chunk_rowid, embedding_int8
+                    FROM vec_binary
+                    WHERE embedding MATCH vec_bit(?)
+                    AND k = ?
+                    """,
+                    (binary_blob, candidates_k),
+                ).fetchall()
+
+                if not rows:
+                    # Fall back to standard search
+                    return self.search_with_pairs(query, limit=limit, embedder=embedder)
+
+                # Phase 2: Re-rank by L2 distance on int8 embeddings
+                scored: list[tuple[int, float]] = []
+                for row in rows:
+                    chunk_rowid = row["chunk_rowid"]
+                    stored_int8 = np.frombuffer(row["embedding_int8"], dtype=np.int8)
+                    # L2 distance in int8 space
+                    diff = int8_query.astype(np.int16) - stored_int8.astype(np.int16)
+                    dist = float(np.sqrt(np.sum(diff * diff)))
+                    scored.append((chunk_rowid, dist))
+
+                scored.sort(key=lambda x: x[1])
+                top = scored[:limit]
+
+                # Phase 3: Fetch metadata from vec_chunks
+                chunk_rowids = [r[0] for r in top]
+                dist_by_rowid = {r[0]: r[1] for r in top}
+
+                placeholders = ",".join("?" * len(chunk_rowids))
+                meta_rows = conn.execute(
+                    f"""
+                    SELECT rowid, chat_id, trigger_text, response_text,
+                           response_da_type, response_da_conf, topic_label,
+                           quality_score
+                    FROM vec_chunks
+                    WHERE rowid IN ({placeholders})
+                    """,
+                    chunk_rowids,
+                ).fetchall()
+
+                results = []
+                for mrow in meta_rows:
+                    rid = mrow["rowid"]
+                    dist = dist_by_rowid.get(rid, 0.0)
+                    score = self._distance_to_similarity(dist)
+                    results.append(
+                        VecSearchResult(
+                            rowid=rid,
+                            distance=dist,
+                            score=score,
+                            chat_id=mrow["chat_id"],
+                            trigger_text=mrow["trigger_text"],
+                            response_text=mrow["response_text"],
+                            response_type=mrow["response_da_type"],
+                            response_da_conf=mrow["response_da_conf"],
+                            topic=mrow["topic_label"],
+                            quality_score=mrow["quality_score"],
+                        )
+                    )
+
+                # Sort by distance ascending (best first)
+                results.sort(key=lambda r: r.distance)
+                return results
+
+        except Exception as e:
+            logger.warning("Two-phase search failed, falling back: %s", e)
+            return self.search_with_pairs(query, limit=limit, embedder=embedder)
+
+    def backfill_vec_binary(self) -> int:
+        """Populate vec_binary from existing vec_chunks embeddings.
+
+        Reads int8 embeddings from vec_chunks, binarizes them, and inserts
+        into vec_binary for fast hamming pre-filter on global searches.
+
+        Returns:
+            Number of rows inserted.
+        """
+        with self.db.connection() as conn:
+            # Check if vec_binary exists
+            res = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='vec_binary'"
+            ).fetchone()
+            if res is None:
+                logger.warning("vec_binary table does not exist, run init_schema first")
+                return 0
+
+            # Check existing count to avoid duplicates
+            existing = conn.execute("SELECT COUNT(*) FROM vec_binary").fetchone()[0]
+            if existing > 0:
+                logger.info("vec_binary already has %d rows, skipping backfill", existing)
+                return 0
+
+            # Read all chunk embeddings (int8 blobs stored via vec_int8)
+            rows = conn.execute("SELECT rowid, embedding FROM vec_chunks").fetchall()
+
+            if not rows:
+                return 0
+
+            count = 0
+            batch = []
+            for row in rows:
+                chunk_rowid = row["rowid"]
+                int8_blob = row["embedding"]
+                # Convert int8 blob to float for binarization
+                int8_arr = np.frombuffer(int8_blob, dtype=np.int8)
+                float_arr = int8_arr.astype(np.float32) / self._INT8_SCALE
+                binary_blob = self._binarize_embedding(float_arr)
+                batch.append((binary_blob, chunk_rowid, int8_blob))
+
+            conn.executemany(
+                "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
+                "VALUES (vec_bit(?), ?, ?)",
+                batch,
+            )
+            count = len(batch)
+            logger.info("Backfilled %d rows into vec_binary", count)
+            return count
 
     def get_stats(self) -> dict[str, Any]:
         """Get index statistics.

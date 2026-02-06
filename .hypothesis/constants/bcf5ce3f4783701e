@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/schemas/templates.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.7, 0.75, 0.85, 1.0, 100, 150, 250, 1000, '2024-01-15T10:30:00Z', 'All unique tags', 'Casual Greeting', 'Greeting', 'Updated Name', 'Work Acknowledgment', 'abc123', 'acknowledgment', 'best_match', 'casual', 'categories', 'category', 'created_at', 'data', 'enabled', 'enabled_templates', 'errors', 'example', 'export_date', 'general', 'got your update', 'id', 'imported', 'input', 'match_rate', 'matched', 'max_group_size', 'min_group_size', 'name', 'overwrite', 'personal', 'professional', 'received the file', 'results', 'similarity', 'skipped', 'tags', 'template_count', 'template_ids', 'template_text', 'templates', 'test_inputs', 'thanks for sending', 'thanks for the info', 'threshold', 'top_templates', 'total', 'total_templates', 'total_usage', 'trigger_phrases', 'updated_at', 'usage_by_category', 'usage_count', 'version', 'work']

@@ -351,4 +351,3 @@ class TestDbCommand:
         parser = create_parser()
         args = parser.parse_args(["db", "stats", "--gate-breakdown"])
         assert args.gate_breakdown is True
-

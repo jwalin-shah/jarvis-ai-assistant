@@ -42,7 +42,7 @@ def main():
 
     # Step 1: Load database and get contacts with message counts
     print("\n[1/4] Loading contacts and profiles...")
-    from jarvis.contacts.contact_profile import ContactProfile, get_contact_profile, load_profile
+    from jarvis.contacts.contact_profile import ContactProfile, load_profile
     from jarvis.db import get_db
 
     db = get_db()
@@ -85,11 +85,13 @@ def main():
         if pair_count < 5:
             continue
 
-        enriched.append({
-            "contact": c,
-            "profile": profile,
-            "pair_count": pair_count,
-        })
+        enriched.append(
+            {
+                "contact": c,
+                "profile": profile,
+                "pair_count": pair_count,
+            }
+        )
 
     print(f"  {len(enriched)} contacts with profiles and 5+ pairs")
 
@@ -170,21 +172,23 @@ def main():
             gen_time = (time.perf_counter() - gen_start) * 1000
             total_gen_time += gen_time
 
-            results.append({
-                "contact_name": c.display_name or "(unknown)",
-                "relationship": profile.relationship or "unknown",
-                "formality": profile.formality or "casual",
-                "formality_score": profile.formality_score,
-                "pair_count": item["pair_count"],
-                "msg_count": profile.message_count,
-                "trigger": trigger,
-                "original": original_response,
-                "generated": result.get("response", ""),
-                "confidence": result.get("confidence", ""),
-                "similarity": result.get("similarity_score", 0.0),
-                "type": result.get("type", ""),
-                "gen_time_ms": gen_time,
-            })
+            results.append(
+                {
+                    "contact_name": c.display_name or "(unknown)",
+                    "relationship": profile.relationship or "unknown",
+                    "formality": profile.formality or "casual",
+                    "formality_score": profile.formality_score,
+                    "pair_count": item["pair_count"],
+                    "msg_count": profile.message_count,
+                    "trigger": trigger,
+                    "original": original_response,
+                    "generated": result.get("response", ""),
+                    "confidence": result.get("confidence", ""),
+                    "similarity": result.get("similarity_score", 0.0),
+                    "type": result.get("type", ""),
+                    "gen_time_ms": gen_time,
+                }
+            )
 
             # Progress indicator
             name = (c.display_name or "(unknown)")[:15]
@@ -193,21 +197,23 @@ def main():
 
         except Exception as e:
             print(f"  [{i+1}/{len(selected)}] {c.display_name or '?':<15} | ERROR: {e}")
-            results.append({
-                "contact_name": c.display_name or "(unknown)",
-                "relationship": profile.relationship or "unknown",
-                "formality": profile.formality or "casual",
-                "formality_score": profile.formality_score,
-                "pair_count": item["pair_count"],
-                "msg_count": profile.message_count,
-                "trigger": trigger,
-                "original": original_response,
-                "generated": f"ERROR: {e}",
-                "confidence": "error",
-                "similarity": 0.0,
-                "type": "error",
-                "gen_time_ms": 0,
-            })
+            results.append(
+                {
+                    "contact_name": c.display_name or "(unknown)",
+                    "relationship": profile.relationship or "unknown",
+                    "formality": profile.formality or "casual",
+                    "formality_score": profile.formality_score,
+                    "pair_count": item["pair_count"],
+                    "msg_count": profile.message_count,
+                    "trigger": trigger,
+                    "original": original_response,
+                    "generated": f"ERROR: {e}",
+                    "confidence": "error",
+                    "similarity": 0.0,
+                    "type": "error",
+                    "gen_time_ms": 0,
+                }
+            )
 
     # Step 4: Display results
     print("\n" + "=" * 80)
@@ -265,7 +271,9 @@ def main():
         print(f"  Trigger:   {r['trigger'][:100]}")
         print(f"  Original:  {r['original'][:100]}")
         print(f"  Generated: {r['generated'][:100]}")
-        print(f"  Sim: {r['similarity']:.3f} | Conf: {r['confidence']} | Time: {r['gen_time_ms']:.0f}ms")
+        print(
+            f"  Sim: {r['similarity']:.3f} | Conf: {r['confidence']} | Time: {r['gen_time_ms']:.0f}ms"
+        )
 
     # Save full results to JSON
     output_path = Path.home() / ".jarvis" / "batch_eval_results.json"

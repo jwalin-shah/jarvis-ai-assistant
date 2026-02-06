@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/cli/__init__.py
+# hypothesis_version: 6.151.5
+
+['FEATURE_CHAT', 'FEATURE_IMESSAGE', 'cleanup', 'cmd_benchmark', 'cmd_db', 'cmd_health', 'cmd_serve', 'cmd_version', 'console', 'create_parser', 'initialize_system', 'main', 'run', 'setup_logging']

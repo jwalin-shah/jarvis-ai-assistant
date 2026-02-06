@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/schemas/drafts.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.7, 0.8, 0.85, 0.9, 1.0, 200, 10000, '+15551234567', '2024-01-01', '2024-01-10', '2024-01-15', 'Dinner tonight?', 'Jane Smith', 'John', 'John Doe', 'Suggested reply text', 'Thanks!', 'ask for more details', 'chat123456789', 'chat_id', 'confidence', 'context_messages', 'context_used', 'date_range', 'end', 'error', 'example', 'file_path', 'instruction', 'is_group', 'john@example.com', 'key_points', 'last_message', 'num_messages', 'num_suggestions', 'participants', 'politely decline', 'recipient', 'start', 'success', 'suggestions', 'summary', 'text']

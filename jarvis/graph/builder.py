@@ -230,14 +230,16 @@ class GraphBuilder:
         try:
             db = JarvisDB(self.db_path)
             with db.connect() as conn:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT id, chat_id, display_name, phone_or_email,
                            relationship, style_notes, handles_json,
                            created_at, updated_at
                     FROM contacts
                     WHERE display_name IS NOT NULL
                     ORDER BY display_name
-                """)
+                """
+                )
                 for row in cursor.fetchall():
                     contacts.append(
                         {

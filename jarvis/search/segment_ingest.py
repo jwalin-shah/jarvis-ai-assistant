@@ -92,7 +92,9 @@ def extract_segments(
                 continue
 
             # Segment the conversation
-            segments = segment_conversation(messages, contact_id=str(contact_id) if contact_id else None)
+            segments = segment_conversation(
+                messages, contact_id=str(contact_id) if contact_id else None
+            )
             stats.segments_created += len(segments)
 
             # Index each segment

@@ -316,6 +316,115 @@ class RoutingMetricsStore:
         # Final flush
         self.flush()
 
+    def query_metrics(
+        self,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Query metrics for dashboard display.
+
+        Args:
+            since: Unix timestamp to filter from (optional)
+            limit: Max recent requests to return
+
+        Returns:
+            Dict with recent_requests, summary stats, and latency_trend
+        """
+        # Flush pending metrics first so dashboard shows current data
+        self.flush()
+        self._initialize()
+
+        try:
+            with sqlite3.connect(self._db_path, timeout=10.0) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # Build WHERE clause
+                where = ""
+                params: list[Any] = []
+                if since is not None:
+                    where = "WHERE timestamp >= ?"
+                    params.append(since)
+
+                # Recent requests
+                rows = conn.execute(
+                    f"""
+                    SELECT timestamp, query_hash, routing_decision,
+                           similarity_score, cache_hit, model_loaded,
+                           embedding_computations, faiss_candidates, latency_json
+                    FROM routing_metrics
+                    {where}
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                    """,
+                    params + [limit],
+                ).fetchall()
+
+                recent = []
+                total_latencies: list[float] = []
+                cache_hits = 0
+                decisions: dict[str, int] = {}
+
+                for row in rows:
+                    latency = json.loads(row["latency_json"])
+                    total_ms = sum(latency.values()) if latency else 0.0
+                    total_latencies.append(total_ms)
+
+                    if row["cache_hit"]:
+                        cache_hits += 1
+
+                    decision = row["routing_decision"]
+                    decisions[decision] = decisions.get(decision, 0) + 1
+
+                    recent.append(
+                        {
+                            "timestamp": row["timestamp"],
+                            "query_hash": row["query_hash"],
+                            "routing_decision": decision,
+                            "similarity_score": row["similarity_score"],
+                            "cache_hit": bool(row["cache_hit"]),
+                            "model_loaded": bool(row["model_loaded"]),
+                            "embedding_computations": row["embedding_computations"],
+                            "faiss_candidates": row["faiss_candidates"],
+                            "latency": latency,
+                            "total_latency_ms": total_ms,
+                        }
+                    )
+
+                # Summary stats
+                n = len(total_latencies)
+                if n > 0:
+                    sorted_lat = sorted(total_latencies)
+                    avg_lat = sum(sorted_lat) / n
+                    p50_lat = sorted_lat[n // 2]
+                    p95_idx = min(int(n * 0.95), n - 1)
+                    p95_lat = sorted_lat[p95_idx]
+                    cache_rate = cache_hits / n * 100
+                else:
+                    avg_lat = p50_lat = p95_lat = cache_rate = 0.0
+
+                # Total count (all time)
+                count_row = conn.execute(
+                    f"SELECT COUNT(*) as cnt FROM routing_metrics {where}",
+                    params,
+                ).fetchone()
+                total_count = count_row["cnt"] if count_row else 0
+
+                return {
+                    "recent_requests": recent,
+                    "summary": {
+                        "total_requests": total_count,
+                        "avg_latency_ms": round(avg_lat, 1),
+                        "p50_latency_ms": round(p50_lat, 1),
+                        "p95_latency_ms": round(p95_lat, 1),
+                        "cache_hit_rate": round(cache_rate, 1),
+                        "decisions": decisions,
+                    },
+                }
+
+        except Exception as e:
+            logger.warning(f"Failed to query metrics: {e}")
+            return {"recent_requests": [], "summary": {}}
+
     def pending_count(self) -> int:
         """Return number of metrics waiting to be flushed.
 

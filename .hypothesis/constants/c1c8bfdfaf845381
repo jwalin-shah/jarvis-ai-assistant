@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/nlp/coref_resolver.py
+# hypothesis_version: 6.151.5
+
+['CorefResolver', 'biu-nlp/f-coref', 'get_coref_resolver', 'mps', 'reset_coref_resolver']

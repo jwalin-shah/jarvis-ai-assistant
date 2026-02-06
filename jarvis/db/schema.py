@@ -215,7 +215,7 @@ EXPECTED_INDICES = {
     "idx_send_queue_scheduled",
 }
 
-CURRENT_SCHEMA_VERSION = 10  # sqlite-vec virtual tables for vector search
+CURRENT_SCHEMA_VERSION = 11  # vec_binary with chunk_rowid + embedding_int8 aux columns
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {

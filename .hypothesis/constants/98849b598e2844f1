@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/search/vec_search.py
+# hypothesis_version: 6.151.5
+
+[0.0, 1.0, 2.0, 127.0, 127, 200, 500, ' AND chat_id = ?', 'chat_id', 'chunk', 'db_path', 'distance', 'error', 'is_from_me', 'quality_score', 'response_da_type', 'response_text', 'rowid', 'sender', 'text_preview', 'timestamp', 'topic_label', 'total_embeddings', 'trigger_text', 'unique_chats']

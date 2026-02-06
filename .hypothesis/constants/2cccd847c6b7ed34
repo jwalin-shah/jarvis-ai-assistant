@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/pairs.py
+# hypothesis_version: 6.151.5
+
+[0.0, 1.0, 900, 10000, 1000000, ' AND ', ',', '?', 'DELETE FROM pairs', 'chat_id', 'chat_id = ?', 'cluster_id', 'cnt', 'contact_id', 'contact_id = ?', 'content_hash', 'context_text', 'data', 'flags', 'flags_json', 'gate_a_passed', 'gate_b_score', 'gate_c_verdict', 'id', 'is_group', 'is_holdout', 'quality_score', 'quality_score >= ?', 'response_da_conf', 'response_da_type', 'response_msg_id', 'response_msg_ids', 'response_text', 'response_timestamp', 'source_timestamp', 'trigger_da_conf', 'trigger_da_type', 'trigger_msg_id', 'trigger_msg_ids', 'trigger_msg_ids_json', 'trigger_text', 'trigger_timestamp', 'validity_status']

@@ -22,13 +22,10 @@ import threading
 from models.embeddings import (
     DEFAULT_MLX_EMBEDDING_MODEL,
     MLX_EMBEDDING_DIM,
-    MLXEmbedder,
     MLXEmbeddingError,
     MLXModelLoadError,
     MLXModelNotAvailableError,
-    get_mlx_embedder,
     is_mlx_available,
-    reset_mlx_embedder,
 )
 from models.generator import MLXGenerator
 from models.loader import MLXModelLoader, ModelConfig
@@ -72,13 +69,10 @@ __all__ = [
     # MLX Embeddings
     "DEFAULT_MLX_EMBEDDING_MODEL",
     "MLX_EMBEDDING_DIM",
-    "MLXEmbedder",
     "MLXEmbeddingError",
     "MLXModelLoadError",
     "MLXModelNotAvailableError",
-    "get_mlx_embedder",
     "is_mlx_available",
-    "reset_mlx_embedder",
     # Templates
     "ResponseTemplate",
     "SentenceModelError",

@@ -203,7 +203,8 @@ class TestSchemaDetectorImpl:
         cursor = conn.cursor()
 
         # Create required tables for v14
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE message (
                 ROWID INTEGER PRIMARY KEY,
                 text TEXT,
@@ -212,32 +213,41 @@ class TestSchemaDetectorImpl:
                 handle_id INTEGER,
                 thread_originator_guid TEXT
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat (
                 ROWID INTEGER PRIMARY KEY,
                 guid TEXT,
                 display_name TEXT
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE handle (
                 ROWID INTEGER PRIMARY KEY,
                 id TEXT
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat_message_join (
                 chat_id INTEGER,
                 message_id INTEGER
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat_handle_join (
                 chat_id INTEGER,
                 handle_id INTEGER
             )
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
@@ -259,7 +269,8 @@ class TestSchemaDetectorImpl:
         cursor = conn.cursor()
 
         # Create v15 schema with service_name in chat table
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE message (
                 ROWID INTEGER PRIMARY KEY,
                 text TEXT,
@@ -268,33 +279,42 @@ class TestSchemaDetectorImpl:
                 handle_id INTEGER,
                 thread_originator_guid TEXT
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat (
                 ROWID INTEGER PRIMARY KEY,
                 guid TEXT,
                 display_name TEXT,
                 service_name TEXT
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE handle (
                 ROWID INTEGER PRIMARY KEY,
                 id TEXT
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat_message_join (
                 chat_id INTEGER,
                 message_id INTEGER
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat_handle_join (
                 chat_id INTEGER,
                 handle_id INTEGER
             )
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
@@ -846,34 +866,44 @@ class TestSchemaDetectorImplExtended:
         cursor = conn.cursor()
 
         # Create tables with minimal columns (missing expected v14 columns)
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE message (
                 ROWID INTEGER PRIMARY KEY,
                 custom_column TEXT
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat (
                 ROWID INTEGER PRIMARY KEY
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE handle (
                 ROWID INTEGER PRIMARY KEY
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat_message_join (
                 chat_id INTEGER,
                 message_id INTEGER
             )
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE TABLE chat_handle_join (
                 chat_id INTEGER,
                 handle_id INTEGER
             )
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 

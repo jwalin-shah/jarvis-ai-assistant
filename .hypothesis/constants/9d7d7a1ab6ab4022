@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/dependencies.py
+# hypothesis_version: 6.151.5
+
+[403, 'Open System Settings', 'Permission denied', 'error', 'instructions', 'message']

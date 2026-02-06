@@ -18,13 +18,13 @@ from unittest.mock import patch
 
 import pytest
 
+from jarvis.config import AdaptiveThresholdConfig, RoutingConfig, reset_config
 from jarvis.eval.adaptive_thresholds import (
     AdaptiveThresholdManager,
     SimilarityBucketStats,
     get_adaptive_threshold_manager,
     reset_adaptive_threshold_manager,
 )
-from jarvis.config import AdaptiveThresholdConfig, RoutingConfig, reset_config
 from jarvis.eval.evaluation import (
     FeedbackAction,
     FeedbackEntry,

@@ -16,11 +16,14 @@ import {
   getMessage,
   getLastMessageRowid,
   getNewMessagesSince,
+  populateContactsCache,
+  isContactsCacheLoaded,
 } from "../db";
 import { jarvis, type ConnectionState as SocketConnectionState } from "../socket";
+import type { DraftSuggestion } from "../api/types";
 
 /** Default number of messages to fetch per page */
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 /** Pagination state for a conversation */
 export interface PaginationState {
@@ -65,6 +68,7 @@ export interface ConversationsState {
   lastKnownMessageDates: Map<string, string>;
   isWindowFocused: boolean;
   optimisticMessages: OptimisticMessage[];
+  prefetchedDraft: { chatId: string; suggestions: DraftSuggestion[] } | null;
 }
 
 /** Message cache keyed by chat_id to avoid re-fetching */
@@ -87,6 +91,7 @@ const initialState: ConversationsState = {
   lastKnownMessageDates: new Map(),
   isWindowFocused: true,
   optimisticMessages: [],
+  prefetchedDraft: null,
 };
 
 export const conversationsStore = writable<ConversationsState>(initialState);
@@ -255,6 +260,16 @@ export function clearOptimisticMessages(): void {
     ...state,
     optimisticMessages: [],
   }));
+}
+
+/**
+ * Clear the prefetched draft (e.g., after SuggestionBar uses it)
+ */
+export function clearPrefetchedDraft(): void {
+  conversationsStore.update((state) => {
+    if (!state.prefetchedDraft) return state;
+    return { ...state, prefetchedDraft: null };
+  });
 }
 
 /**
@@ -458,6 +473,27 @@ export async function selectConversation(chatId: string): Promise<void> {
 
   // Clear new message indicator when selecting
   clearNewMessageIndicator(chatId);
+
+  // Clear any previous prefetched draft
+  conversationsStore.update((state) => ({ ...state, prefetchedDraft: null }));
+
+  // Trigger prefetch and capture response for auto-display
+  jarvis
+    .call<{ prefetched?: boolean; draft?: { suggestions?: DraftSuggestion[] } }>(
+      "prefetch_focus",
+      { chat_id: chatId }
+    )
+    .then((result) => {
+      if (result?.prefetched && result?.draft?.suggestions?.length) {
+        conversationsStore.update((state) => ({
+          ...state,
+          prefetchedDraft: { chatId, suggestions: result.draft!.suggestions! },
+        }));
+      }
+    })
+    .catch((err) => {
+      console.debug("[Prefetch] Background prefetch failed:", err);
+    });
 
   // Check if we have cached messages for this conversation
   const cached = messageCache.get(chatId);
@@ -925,6 +961,41 @@ function adjustPollingIntervals(): void {
 }
 
 /**
+ * Resolve contact names from the backend and populate the frontend cache.
+ * Collects unique participant identifiers from current conversations and
+ * calls the backend resolve_contacts RPC to get display names.
+ */
+async function resolveContactNames(): Promise<void> {
+  if (isContactsCacheLoaded()) return;
+
+  try {
+    const state = get(conversationsStore);
+    const identifiers = new Set<string>();
+    for (const conv of state.conversations) {
+      for (const p of conv.participants) {
+        if (p && p !== "me") identifiers.add(p);
+      }
+    }
+
+    if (identifiers.size === 0) return;
+
+    const resolved = await jarvis.call<Record<string, string | null>>(
+      "resolve_contacts",
+      { identifiers: [...identifiers] }
+    );
+
+    if (resolved && typeof resolved === "object") {
+      populateContactsCache(resolved);
+      // Re-fetch conversations to apply resolved names
+      await fetchConversations(true);
+      console.log(`[Contacts] Resolved ${Object.values(resolved).filter(Boolean).length} names`);
+    }
+  } catch (err) {
+    console.debug("[Contacts] Backend contact resolution failed:", err);
+  }
+}
+
+/**
  * Initialize polling and window focus listeners
  * Call this on app mount
  */
@@ -933,7 +1004,11 @@ export function initializePolling(): () => void {
   initializeDirectAccess();
 
   // Initialize socket push notifications (async, non-blocking)
-  initializeSocketPush();
+  initializeSocketPush().then(() => {
+    // After socket is connected and first conversations load,
+    // resolve contact names from the backend
+    setTimeout(resolveContactNames, 2000);
+  });
 
   // Start conversation polling
   startConversationPolling();

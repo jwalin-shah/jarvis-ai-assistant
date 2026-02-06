@@ -21,12 +21,12 @@ class MemoryThresholds:
 
     Attributes:
         full_mode_mb: Minimum available MB for FULL mode (16GB+ systems)
-        lite_mode_mb: Minimum available MB for LITE mode (2GB+ available)
+        lite_mode_mb: Minimum available MB for LITE mode (512MB+ available)
         memory_buffer_multiplier: Safety buffer when checking if model can load
     """
 
     full_mode_mb: float = 8000.0
-    lite_mode_mb: float = 2000.0
+    lite_mode_mb: float = 512.0
     memory_buffer_multiplier: float = 1.2
 
 
@@ -90,8 +90,8 @@ class DefaultMemoryController:
 
         Mode thresholds (default):
         - FULL: available_mb > 8000 (8GB+ available)
-        - LITE: 2000 < available_mb <= 8000 (2-8GB available)
-        - MINIMAL: available_mb <= 2000 (<2GB available)
+        - LITE: 512 < available_mb <= 8000 (suitable for 8GB systems)
+        - MINIMAL: available_mb <= 512 (<512MB, genuinely memory-starved)
 
         Returns:
             MemoryMode for current memory state.

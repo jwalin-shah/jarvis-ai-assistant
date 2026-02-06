@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/conversations.py
+# hypothesis_version: 6.151.5
+
+[100, 150, 200, 400, 403, 408, 429, 500, 1000, 12345, '+15551234567', '/conversations', '/search', '/{chat_id}/messages', '/{chat_id}/send', '2024-01-01T00:00:00Z', '2024-01-15T10:30:00Z', '2024-01-15T23:59:59Z', 'John Doe', 'Rate limit exceeded', 'Request timed out', 'See you later!', 'application/json', 'attachments', 'chat123456789', 'chat_id', 'content', 'conversations', 'date', 'description', 'dinner', 'display_name', 'error', 'example', 'id', 'is_from_me', 'is_group', 'john@example.com', 'last_message_date', 'last_message_text', 'meeting tomorrow', 'message_count', 'model', 'none', 'participants', 'reactions', 'sender', 'sender_name', 'success', 'text']

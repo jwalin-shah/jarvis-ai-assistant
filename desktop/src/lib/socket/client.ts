@@ -929,11 +929,28 @@ class JarvisSocket {
   }
 
   /**
-   * Schedule a reconnection attempt
+   * Schedule a reconnection attempt.
+   * In Tauri mode, falls back to WebSocket after max Unix socket retries.
    */
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      if (isTauri) {
+        // Unix socket exhausted - fall back to WebSocket
+        console.warn(
+          "[JarvisSocket] Unix socket reconnect failed after %d attempts, falling back to WebSocket",
+          this.maxReconnectAttempts
+        );
+        this.reconnectAttempts = 0;
+        this.reconnectTimer = setTimeout(async () => {
+          this.reconnectTimer = null;
+          const ok = await this.connectWebSocket();
+          if (!ok) {
+            this.emit("max_reconnect_attempts", {});
+          }
+        }, this.reconnectDelay);
+        return;
+      }
       console.warn("[JarvisSocket] Max reconnect attempts reached");
       this.emit("max_reconnect_attempts", {});
       return;

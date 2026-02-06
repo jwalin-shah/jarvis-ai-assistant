@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/search.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.2, 0.5, 0.7, 6.0, 100, 900, 100000, ',', '?', 'acknowledgment', 'alright', 'cnt', 'contact_id', 'contacts_holdout', 'contacts_total', 'contacts_training', 'error', 'got it', 'holdout_contact_ids', 'holdout_contacts', 'holdout_pairs', 'holdout_ratio', 'holdout_ratio_actual', 'k', 'kk', 'ok', 'okay', 'pair_count', 'pairs_holdout', 'pairs_training', 'response_da', 'response_da_type', 'sounds good', 'success', 'sure', 'total_classified', 'training_contacts', 'training_pairs', 'trigger_da', 'trigger_da_type', 'yeah', 'yep', 'yes', 'yup']

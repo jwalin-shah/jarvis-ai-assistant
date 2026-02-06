@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/response_types.py
+# hypothesis_version: 6.151.5
+
+['ACKNOWLEDGE', 'AGREE', 'ANSWER', 'DECLINE', 'DEFER', 'GREETING', 'INFO_STATEMENT', 'INVITATION', 'NO', 'QUESTION', 'REACT_POSITIVE', 'REACT_SYMPATHY', 'REQUEST', 'ResponseType', 'STATEMENT', 'WH_QUESTION', 'YES', 'YN_QUESTION', 'commitment', 'question', 'reaction', 'social', 'statement', 'unknown']

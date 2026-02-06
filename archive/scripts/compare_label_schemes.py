@@ -146,9 +146,7 @@ def analyze_results(results: list[LabelResult]) -> dict:
         import math
 
         total = sum(dist.values())
-        return -sum(
-            (c / total) * math.log2(c / total) for c in dist.values() if c > 0
-        )
+        return -sum((c / total) * math.log2(c / total) for c in dist.values() if c > 0)
 
     entropy_5 = entropy(dist_5)
     entropy_12 = entropy(dist_12)

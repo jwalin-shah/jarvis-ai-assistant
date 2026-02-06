@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/schemas/settings.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.1, 0.4, 0.5, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 4.0, 8.0, 8.5, 12.0, 16.0, 32.0, 45.5, 100.0, 100, 150, 200, 300, 500, 750, 1000, 'Qwen 0.5B (Fast)', 'Qwen 1.5B (Balanced)', 'auto_suggest_replies', 'basic', 'behavior', 'best', 'completed', 'description', 'downloading', 'error', 'example', 'failed', 'generation', 'good', 'imessage_access', 'is_downloaded', 'is_loaded', 'is_recommended', 'max_tokens_reply', 'max_tokens_summary', 'model_id', 'model_loaded', 'name', 'progress', 'quality_tier', 'ram_requirement_gb', 'size_gb', 'status', 'success', 'suggestion_count', 'system', 'system_ram_gb', 'temperature']

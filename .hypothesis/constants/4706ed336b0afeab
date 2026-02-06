@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/models/prompt_builder.py
+# hypothesis_version: 6.151.5
+
+['\n---\n', '### Examples:', '### Your Task:']

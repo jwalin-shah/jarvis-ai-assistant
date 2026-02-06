@@ -4,12 +4,12 @@ Provides singleton instances of iMessage reader and other shared resources.
 Uses a connection pool for thread-safe database access.
 """
 
-import threading
 from collections.abc import Iterator
 
 from fastapi import HTTPException
 
 from integrations.imessage import ChatDBReader, reset_connection_pool
+
 
 def get_imessage_reader() -> Iterator[ChatDBReader]:
     """Get a thread-safe iMessage reader for the current request.

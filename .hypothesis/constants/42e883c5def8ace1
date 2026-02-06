@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/debug.py
+# hypothesis_version: 6.151.5
+
+[100, 200, 1000, 1024, '-', '/debug', '/status', '/traces', '/traces/summary', 'CPU usage %', 'Clear all traces', 'Get trace statistics', 'avg_duration_ms', 'cleared', 'cpu_percent', 'debug', 'duration_ms', 'embedding_service', 'endpoint', 'error', 'input', 'max_duration_ms', 'memory_after_mb', 'memory_before_mb', 'memory_delta_mb', 'memory_percent', 'memory_rss_mb', 'memory_vms_mb', 'metadata', 'min_duration_ms', 'model_loaded', 'name', 'output', 'status', 'steps', 'success', 'success_rate', 'timestamp', 'total_duration_ms', 'total_traces', 'trace_id']

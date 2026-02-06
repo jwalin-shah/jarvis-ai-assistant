@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/embeddings.py
+# hypothesis_version: 6.151.5
+
+[900, ',', '?', 'cluster_description', 'cluster_id', 'cluster_name', 'cnt', 'embedding_cluster_id', 'faiss_id', 'index_version', 'pair', 'pair_id']

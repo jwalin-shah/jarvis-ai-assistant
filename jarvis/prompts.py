@@ -1318,39 +1318,50 @@ def get_thread_max_tokens(config: ThreadedReplyConfig) -> int:
 # RAG-Enhanced Prompt Builder
 # =============================================================================
 
+# Static system prefix for KV cache reuse. This block is identical across all
+# contacts/messages so the KV cache computed for it can be shared.
+SYSTEM_PREFIX = """<system>
+You draft text message replies matching the sender's exact style.
+Rules:
+- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
+- Sound natural, never like an AI
+- No phrases like "I hope this helps" or "Let me know"
+- No formal greetings unless they use them
+- If the message is unclear or you lack context to reply properly, respond with just "?"
+</system>
+
+"""
+
 RAG_REPLY_PROMPT = PromptTemplate(
     name="rag_reply_generation",
-    system_message=(
-        "You are helping draft a text message reply. "
-        "Match the user's exact texting style - same length, same formality, same patterns."
-    ),
-    template="""### Communication Style with {contact_name}:
+    system_message=("You draft text message replies matching the sender's exact style."),
+    template="""<system>
+You draft text message replies matching the sender's exact style.
+Rules:
+- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
+- Sound natural, never like an AI
+- No phrases like "I hope this helps" or "Let me know"
+- No formal greetings unless they use them
+- If the message is unclear or you lack context to reply properly, respond with just "?"
+</system>
+
+<style contact="{contact_name}">
 {relationship_context}
+</style>
 
-### Similar Past Exchanges:
+<examples>
 {similar_exchanges}
+</examples>
 
-### Current Conversation:
+<conversation>
 {context}
+</conversation>
 
-### Instructions:
-Generate a reply (~{avg_length} chars) that EXACTLY matches the user's style:
-- Match the user's texting style EXACTLY (see examples above)
-- Keep response length within ±20% of user's typical responses
-- Use the SAME level of formality as the examples (casual/professional)
-- If user uses lowercase/abbreviations (u, ur, gonna), do the SAME
-- NO formal greetings like "Hey!" or "Hi there!" unless user uses them
-- NO complete sentences if user uses fragments (check examples)
-- Match user's punctuation style (minimal vs formal)
-- Match user's emoji usage frequency exactly
-- Sound like the user wrote it naturally, not an AI assistant
-- NEVER use phrases like "I hope this helps" or "Let me know if you need anything"
-{custom_instruction}
+<instruction>{custom_instruction}</instruction>
 
-### Last message:
-{last_message}
+<last_message>{last_message}</last_message>
 
-### Your reply (match user's style):""",
+<reply>""",
     max_output_tokens=40,
 )
 
@@ -1384,94 +1395,81 @@ def _format_relationship_context(
 ) -> str:
     """Format relationship context for RAG prompt.
 
+    Returns a compact single-line style description (~30 tokens) instead of
+    verbose bullet points (~80 tokens). Small models parse dense text better.
+
     Args:
-        tone: Typical communication tone
-        avg_length: Average message length
-        response_patterns: Optional response pattern statistics
-        user_messages: Optional list of user's messages for style analysis
+        contact_context: Optional typed contact profile context.
+        tone: Typical communication tone.
+        avg_length: Average message length.
+        response_patterns: Optional response pattern statistics.
+        user_messages: Optional list of user's messages for style analysis.
 
     Returns:
-        Formatted relationship context string
+        Compact relationship context string.
     """
-    lines = []
+    parts: list[str] = []
 
     # If we have user messages, analyze their style directly
     if user_messages:
         style = analyze_user_style(user_messages)
 
-        # Formality guidance based on actual analysis
-        if style.formality == "very_casual":
-            lines.append("- You text very casually (no greetings, short responses)")
-        elif style.formality == "casual":
-            lines.append("- You keep it casual and friendly")
-        else:
-            lines.append("- You use a more formal tone")
+        # Tone
+        formality_labels = {
+            "very_casual": "very casual",
+            "casual": "casual",
+            "formal": "formal",
+        }
+        parts.append(f"Tone: {formality_labels.get(style.formality, 'casual')}")
+        parts.append(f"Avg length: {int(style.avg_length)} chars")
 
-        # Length guidance with specific numbers
-        lines.append(f"- Your typical message length: {int(style.avg_length)} chars")
-
-        # Style-specific patterns
+        # Style traits as comma-separated list
+        traits: list[str] = []
         if style.uses_lowercase:
-            lines.append("- You use lowercase (don't capitalize)")
+            traits.append("lowercase")
         if style.uses_abbreviations and style.common_abbreviations:
             abbrevs = ", ".join(style.common_abbreviations[:3])
-            lines.append(f"- You use abbreviations: {abbrevs}")
+            traits.append(f"abbreviations ({abbrevs})")
         if style.uses_minimal_punctuation:
-            lines.append("- You use minimal punctuation")
+            traits.append("minimal punctuation")
         if style.emoji_frequency < 0.1:
-            lines.append("- You rarely use emojis")
+            traits.append("no emoji")
         elif style.emoji_frequency > 0.5:
-            lines.append("- You use emojis frequently")
+            traits.append("uses emoji")
 
-        return "\n".join(lines)
+        if traits:
+            parts.append(", ".join(traits))
+
+        return ". ".join(parts) + "."
 
     # Fallback: use provided tone and avg_length
     tone_source = contact_context.tone if contact_context else tone
-    tone_descriptions = {
-        "casual": "You use casual, friendly language (no formal greetings)",
-        "professional": "You use professional but concise language",
-        "mixed": "You mix casual and professional language",
-    }
-    lines.append(f"- {tone_descriptions.get(tone_source, tone_descriptions['casual'])}")
+    parts.append(f"Tone: {tone_source}")
 
     effective_avg_length = contact_context.avg_message_length if contact_context else avg_length
-
-    # Message length guidance - more specific brackets
     if effective_avg_length < 20:
-        lines.append("- You keep messages VERY short (1-5 words)")
+        parts.append("very short messages (1-5 words)")
     elif effective_avg_length < 40:
-        lines.append("- You write brief messages (1 short sentence)")
+        parts.append("brief messages (1 sentence)")
     elif effective_avg_length < 80:
-        lines.append("- You write moderate messages (1-2 sentences)")
+        parts.append("moderate messages (1-2 sentences)")
     else:
-        lines.append("- You write longer messages (2-3 sentences max)")
+        parts.append("longer messages (2-3 sentences)")
 
-    patterns = response_patterns
-    if patterns is None and contact_context and contact_context.response_patterns:
-        patterns = contact_context.response_patterns
-
-    # Response pattern insights
-    if patterns:
-        avg_response = patterns.get("avg_response_time_seconds")
-        if avg_response:
-            if avg_response < 300:
-                lines.append("- You respond quickly")
-            elif avg_response > 3600:
-                lines.append("- You take time before responding")
-
+    # Contact profile extras (compact)
     if contact_context and contact_context.style_guide:
-        lines.append(f"- Style guide: {contact_context.style_guide}")
+        parts.append(contact_context.style_guide)
     if contact_context and contact_context.greeting_style:
         greetings = ", ".join(contact_context.greeting_style[:2])
-        lines.append(f"- Common greetings: {greetings}")
+        parts.append(f"Common greetings: {greetings}")
     if contact_context and contact_context.signoff_style:
         signoffs = ", ".join(contact_context.signoff_style[:2])
-        lines.append(f"- Typical signoffs: {signoffs}")
+        parts.append(f"Typical signoffs: {signoffs}")
     if contact_context and contact_context.top_topics:
         topics = ", ".join(contact_context.top_topics[:3])
-        lines.append(f"- Topics you often discuss: {topics}")
+        parts.append(f"Topics you often discuss: {topics}")
 
-    return "\n".join(lines)
+    return ". ".join(parts) + "."
 
 
 def build_rag_reply_prompt(
@@ -1564,8 +1562,6 @@ def build_rag_reply_prompt(
         relationship_context=relationship_context,
         similar_exchanges=similar_context,
         context=truncated_context,
-        tone=tone,
-        avg_length=int(avg_length),
         custom_instruction=custom_instruction,
         last_message=last_message,
     )

@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/model_warmer.py
+# hypothesis_version: 6.151.5
+
+[0.0, 5.0, 30.0, 300.0, 'Model warmer stopped', 'Model warmer touched', 'ModelWarmerMonitor', 'critical', 'red']

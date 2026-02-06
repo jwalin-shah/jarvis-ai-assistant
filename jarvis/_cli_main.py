@@ -419,7 +419,7 @@ def _cmd_db_sync_contacts(args: argparse.Namespace) -> int:
         console.print(f"[red]Error: {stats['error']}[/red]")
         return 1
 
-    console.print(f"\n[bold green]Contact sync complete![/bold green]")
+    console.print("\n[bold green]Contact sync complete![/bold green]")
     console.print(f"  Processed: {stats['processed']}")
     console.print(f"  Created: {stats['created']}")
     console.print(f"  Updated: {stats['updated']}")
@@ -547,9 +547,7 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
                     description=f"Processing {current}/{total}: {chat_id[:30]}...",
                 )
 
-            stats = extract_segments(
-                reader, db, vec_searcher, progress_cb
-            )
+            stats = extract_segments(reader, db, vec_searcher, progress_cb)
 
     console.print("\n[bold green]Extraction complete![/bold green]")
     console.print(f"  Messages scanned: {stats['total_messages_scanned']}")
@@ -603,11 +601,7 @@ def _cmd_db_build_profiles(args: argparse.Namespace) -> int:
             task = progress.add_task("Processing...", total=None)
 
             for i, conv in enumerate(conversations):
-                display = (
-                    conv.display_name
-                    or ", ".join(conv.participants)
-                    or conv.chat_id
-                )
+                display = conv.display_name or ", ".join(conv.participants) or conv.chat_id
                 progress.update(
                     task,
                     description=f"[{i + 1}/{len(conversations)}] {display[:40]}",

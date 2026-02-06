@@ -45,8 +45,6 @@ import numpy as np
 
 from jarvis.nlp.ner_client import Entity
 from jarvis.text_normalizer import (
-    TOPIC_SHIFT_MARKERS,
-    extract_entities,
     is_question,
     is_reaction,
     normalize_for_task_with_entities,
@@ -57,8 +55,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from contracts.imessage import Message
-    from jarvis.nlp.coref_resolver import CorefResolver
     from jarvis.embedding_adapter import CachedEmbedder
+    from jarvis.nlp.coref_resolver import CorefResolver
 
 logger = logging.getLogger(__name__)
 
@@ -490,11 +488,7 @@ class TopicSegmenter:
 
             # 1. Embedding drift (compare window centroids)
             embedding_drift = 0.0
-            if (
-                window_centroids is not None
-                and i < len(window_centroids)
-                and i > 0
-            ):
+            if window_centroids is not None and i < len(window_centroids) and i > 0:
                 prev_centroid = window_centroids[i - 1]
                 curr_centroid = window_centroids[i]
                 if prev_centroid is not None and curr_centroid is not None:
@@ -567,9 +561,7 @@ class TopicSegmenter:
             # This prevents false boundaries when someone briefly mentions something
             # but then continues the original conversation
             if score >= self.boundary_threshold:
-                forward_continuity = self._check_forward_continuity(
-                    messages, i, window_centroids
-                )
+                forward_continuity = self._check_forward_continuity(messages, i, window_centroids)
                 if forward_continuity > 0:
                     # Forward messages continue old topic - reduce score
                     # Higher continuity = more reduction
@@ -577,7 +569,9 @@ class TopicSegmenter:
                     score = max(0.0, score - reduction)
                     logger.debug(
                         "Boundary %d: forward continuity %.2f, score reduced to %.2f",
-                        i, forward_continuity, score
+                        i,
+                        forward_continuity,
+                        score,
                     )
 
             # 6. Create boundary if score exceeds threshold
@@ -747,8 +741,7 @@ class TopicSegmenter:
             return 0.0
 
         forward_embeddings = [
-            m.embedding for m in messages[forward_start:forward_end]
-            if m.embedding is not None
+            m.embedding for m in messages[forward_start:forward_end] if m.embedding is not None
         ]
 
         if not forward_embeddings:
@@ -900,22 +893,127 @@ class TopicSegmenter:
         from collections import Counter
 
         stopwords = {
-            "the", "a", "an", "is", "are", "was", "were", "be", "been",
-            "being", "have", "has", "had", "do", "does", "did", "will",
-            "would", "could", "should", "may", "might", "must", "shall",
-            "i", "you", "he", "she", "it", "we", "they", "me", "him",
-            "her", "us", "them", "my", "your", "his", "its", "our",
-            "their", "this", "that", "these", "those", "and", "or",
-            "but", "if", "then", "so", "than", "too", "very", "just",
-            "to", "of", "in", "for", "on", "with", "at", "by", "from",
-            "about", "into", "through", "during", "before", "after",
-            "above", "below", "between", "under", "again", "further",
-            "once", "here", "there", "when", "where", "why", "how",
-            "all", "each", "few", "more", "most", "other", "some",
-            "such", "no", "nor", "not", "only", "own", "same", "than",
-            "what", "which", "who", "whom", "lol", "lmao", "haha",
-            "yeah", "yea", "ya", "ok", "okay", "like", "gonna", "wanna",
-            "gotta", "kinda", "sorta", "im", "dont", "cant", "wont",
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "me",
+            "him",
+            "her",
+            "us",
+            "them",
+            "my",
+            "your",
+            "his",
+            "its",
+            "our",
+            "their",
+            "this",
+            "that",
+            "these",
+            "those",
+            "and",
+            "or",
+            "but",
+            "if",
+            "then",
+            "so",
+            "than",
+            "too",
+            "very",
+            "just",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "about",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "again",
+            "further",
+            "once",
+            "here",
+            "there",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "than",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "lol",
+            "lmao",
+            "haha",
+            "yeah",
+            "yea",
+            "ya",
+            "ok",
+            "okay",
+            "like",
+            "gonna",
+            "wanna",
+            "gotta",
+            "kinda",
+            "sorta",
+            "im",
+            "dont",
+            "cant",
+            "wont",
         }
 
         word_counts: Counter[str] = Counter()

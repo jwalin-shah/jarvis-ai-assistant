@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/eval/feedback.py
+# hypothesis_version: 6.151.5
+
+[0.0, 30.0, 100, ' AND ', ' AND action = ?', ' AND contact_id = ?', ' WHERE ', '.jarvis', ';', 'ContactStats', 'DELETE FROM feedback', 'DailyStats', 'Feedback', 'FeedbackAction', 'FeedbackStore', 'acceptance_rate', 'accepted', 'action', 'action = ?', 'connection', 'contact_id', 'contact_id = ?', 'count', 'date', 'duplicate column', 'edited', 'edited_text', 'get_feedback_store', 'id', 'jarvis.db', 'message_id', 'metadata', 'metadata_json', 'original_suggestion', 'rejected', 'reset_feedback_store', 'suggestion_id', 'timestamp', 'total']

@@ -23,10 +23,15 @@ from jarvis.errors import ErrorCode, JarvisError
 from jarvis.fallbacks import (
     get_fallback_reply_suggestions,
 )
-from jarvis.observability.metrics_router import RoutingMetrics, get_routing_metrics_store, hash_query
+from jarvis.observability.metrics_router import (
+    RoutingMetrics,
+    get_routing_metrics_store,
+    hash_query,
+)
 from jarvis.services.context_service import ContextService
 
 if TYPE_CHECKING:
+    from contracts.models import GenerationRequest
     from integrations.imessage.reader import ChatDBReader
     from jarvis.search.semantic_search import SemanticSearcher
     from models import MLXGenerator
@@ -116,6 +121,67 @@ class ReplyService:
 
         return check_health()
 
+    def prepare_streaming_context(
+        self,
+        incoming: str,
+        thread: list[str] | None = None,
+        chat_id: str | None = None,
+        instruction: str | None = None,
+    ) -> tuple[GenerationRequest, dict[str, Any]]:
+        """Prepare a GenerationRequest through the full pipeline for streaming.
+
+        Runs all the same steps as the non-streaming path (health check, contact
+        lookup, mobilization classification, RAG search, prompt assembly) but
+        returns the request instead of generating. Designed to be called via
+        asyncio.to_thread() before streaming tokens.
+
+        Args:
+            incoming: The incoming message text to respond to.
+            thread: Optional recent conversation messages for context.
+            chat_id: Optional chat ID for context and contact lookup.
+            instruction: Optional user-provided instruction.
+
+        Returns:
+            Tuple of (GenerationRequest, metadata_dict).
+
+        Raises:
+            ReplyServiceError: If LLM health check fails.
+        """
+        # 1. Health check
+        can_generate, health_reason = self.can_use_llm()
+        if not can_generate:
+            raise ReplyServiceError(f"LLM unavailable: {health_reason}")
+
+        # 2. Get contact from chat_id
+        contact = self.context_service.get_contact(None, chat_id)
+
+        # 3. Classify mobilization
+        mobilization = classify_response_pressure(incoming)
+
+        # 4. Search similar examples
+        search_results = self.context_service.search_examples(incoming, chat_id=chat_id)
+
+        # 5. Build request through full pipeline
+        request = self.build_generation_request(
+            incoming=incoming,
+            search_results=search_results,
+            contact=contact,
+            thread=thread,
+            chat_id=chat_id,
+            mobilization=mobilization,
+            instruction=instruction,
+        )
+
+        # 6. Build metadata
+        similarity = search_results[0]["similarity"] if search_results else 0.0
+        metadata = {
+            "confidence": "high" if mobilization.pressure == ResponsePressure.HIGH else "medium",
+            "similarity_score": similarity,
+            "mobilization_pressure": mobilization.pressure.value,
+        }
+
+        return request, metadata
+
     def generate_reply(
         self,
         incoming: str,
@@ -195,7 +261,7 @@ class ReplyService:
 
     # --- Internal Helpers ---
 
-    def _generate_llm_reply(
+    def build_generation_request(
         self,
         incoming: str,
         search_results: list[dict[str, Any]],
@@ -203,7 +269,25 @@ class ReplyService:
         thread: list[str] | None,
         chat_id: str | None,
         mobilization: MobilizationResult,
-    ) -> dict[str, Any]:
+        instruction: str | None = None,
+    ) -> GenerationRequest:
+        """Build a GenerationRequest through the full pipeline.
+
+        Does context building, relationship profile lookup, mobilization hinting,
+        RAG prompt assembly, and GenerationRequest construction.
+
+        Args:
+            incoming: The incoming message text.
+            search_results: Similar examples from vector search.
+            contact: Contact info for personalization.
+            thread: Recent conversation messages.
+            chat_id: Chat ID for context lookup.
+            mobilization: Response mobilization classification.
+            instruction: Optional user-provided instruction override.
+
+        Returns:
+            A GenerationRequest ready for generate() or generate_stream().
+        """
         from contracts.models import GenerationRequest
         from jarvis.prompts import build_rag_reply_prompt
 
@@ -221,8 +305,9 @@ class ReplyService:
             contact, chat_id
         )
 
-        # Build mobilization hint
-        instruction = self._build_mobilization_hint(mobilization)
+        # Build mobilization hint, allow user instruction to override
+        if instruction is None:
+            instruction = self._build_mobilization_hint(mobilization)
 
         similar_exchanges = [(r["trigger_text"], r["response_text"]) for r in search_results[:3]]
 
@@ -238,17 +323,50 @@ class ReplyService:
 
         max_tokens = 20 if mobilization.pressure == ResponsePressure.NONE else 100
 
+        return GenerationRequest(
+            prompt=prompt,
+            context_documents=[],  # Already baked into RAG prompt
+            few_shot_examples=[],  # Already baked into RAG prompt
+            max_tokens=max_tokens,
+        )
+
+    # Responses that signal the model is uncertain / lacks context
+    _UNCERTAIN_SIGNALS = frozenset({"?", "??", "hm?", "what?", "huh?"})
+
+    def _generate_llm_reply(
+        self,
+        incoming: str,
+        search_results: list[dict[str, Any]],
+        contact: Contact | None,
+        thread: list[str] | None,
+        chat_id: str | None,
+        mobilization: MobilizationResult,
+    ) -> dict[str, Any]:
+        # Pre-generation gate: skip when no response is needed and no examples found
+        if mobilization.pressure == ResponsePressure.NONE and not search_results:
+            return {
+                "type": "skip",
+                "response": "",
+                "confidence": "none",
+                "reason": "no_response_needed",
+            }
+
         try:
-            request = GenerationRequest(
-                prompt=prompt,
-                context_documents=[context],
-                few_shot_examples=similar_exchanges,
-                max_tokens=max_tokens,
+            request = self.build_generation_request(
+                incoming, search_results, contact, thread, chat_id, mobilization
             )
             response = self.generator.generate(request)
             text = response.text.strip()
 
-            # Post-processing (simplified from router.py)
+            # Post-generation gate: detect model uncertainty signal
+            if text.lower() in self._UNCERTAIN_SIGNALS:
+                return {
+                    "type": "uncertain",
+                    "response": text,
+                    "confidence": "low",
+                    "reason": "model_uncertain",
+                }
+
             return {
                 "type": "generated",
                 "response": text,

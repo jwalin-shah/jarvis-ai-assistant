@@ -193,11 +193,11 @@ def benchmark_v3(texts: list[str], labels: list[str]) -> dict:
     accuracy = accuracy_score(labels, predictions)
     macro_f1 = f1_score(labels, predictions, average="macro", zero_division=0)
 
-    print(f"\n  V3 Results:")
+    print("\n  V3 Results:")
     print(f"    Accuracy: {accuracy:.1%}")
     print(f"    Macro F1: {macro_f1:.1%}")
     print(f"    Avg latency: {avg_latency:.1f}ms/msg")
-    print(f"\n  Method distribution:")
+    print("\n  Method distribution:")
     for method, count in methods.most_common():
         print(f"    {method}: {count} ({count / len(texts):.1%})")
 

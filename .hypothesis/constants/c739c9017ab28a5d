@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/calendar.py
+# hypothesis_version: 6.151.5
+
+[200, 365, 400, 403, 404, 500, '/calendars', '/detect', '/detect/messages', '/events', '/events/search', 'Get calendar events', 'Invalid event data', 'Open System Settings', 'Permission denied', 'Search query', 'calendars', 'description', 'error', 'instructions', 'message', 'model']

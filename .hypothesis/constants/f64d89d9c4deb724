@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/scheduler/timing.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.1, 0.15, 0.2, 0.3, 0.4, 1.0, 100, 3600, '; ', 'America/Los_Angeles', 'DEFAULT_QUIET_HOURS', 'DEFAULT_TIMEZONE', 'TimingAnalyzer', 'UTC', 'acceptable time', 'business_hours', 'day_distribution', 'day_rank', 'fallback', 'general availability', 'get_timing_analyzer', 'hour_distribution', 'hour_rank', 'is_from_me', 'next available time', 'no data available', 'preferred_day', 'preferred_days', 'preferred_hour', 'preferred_hours', 'response_time_mins', 'sending soon', 'soon_boost', 'suggest_send_time', 'timestamp', 'total_interactions', 'weekday', 'weekend', 'within_48h']

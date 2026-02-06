@@ -622,7 +622,7 @@ class ChatDBReader:
         # Only clear internal caches if not using shared pool
         if not self._use_pool and self.__guid_to_rowid_cache is not None:
             self.__guid_to_rowid_cache.clear()
-        
+
         self.__contacts_cache = None
         self.__guid_to_rowid_cache = None
 
@@ -752,7 +752,7 @@ class ChatDBReader:
         normalized = normalize_phone_number(identifier)
         if normalized is None:
             return None
-            
+
         # Cache is guaranteed to be initialized after _load_contacts_cache
         cache = self._contacts_cache
         if cache is None:
@@ -790,7 +790,7 @@ class ChatDBReader:
             logger.debug("Permission denied accessing AddressBook directory")
         except OSError as e:
             logger.debug("I/O error accessing AddressBook: %s", e)
-            
+
         # Atomically update the cache (sets on pool if in pool mode)
         self._contacts_cache = new_cache
 
@@ -814,7 +814,8 @@ class ChatDBReader:
 
                 # Load phone numbers with names
                 try:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT
                             ZABCDPHONENUMBER.ZFULLNUMBER as identifier,
                             ZABCDRECORD.ZFIRSTNAME as first_name,
@@ -822,7 +823,8 @@ class ChatDBReader:
                         FROM ZABCDPHONENUMBER
                         JOIN ZABCDRECORD ON ZABCDPHONENUMBER.ZOWNER = ZABCDRECORD.Z_PK
                         WHERE ZABCDPHONENUMBER.ZFULLNUMBER IS NOT NULL
-                    """)
+                    """
+                    )
                     for row in cursor.fetchall():
                         identifier = normalize_phone_number(row["identifier"])
                         name = self._format_name(row["first_name"], row["last_name"])
@@ -833,7 +835,8 @@ class ChatDBReader:
 
                 # Load email addresses with names
                 try:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT
                             ZABCDEMAILADDRESS.ZADDRESS as identifier,
                             ZABCDRECORD.ZFIRSTNAME as first_name,
@@ -841,7 +844,8 @@ class ChatDBReader:
                         FROM ZABCDEMAILADDRESS
                         JOIN ZABCDRECORD ON ZABCDEMAILADDRESS.ZOWNER = ZABCDRECORD.Z_PK
                         WHERE ZABCDEMAILADDRESS.ZADDRESS IS NOT NULL
-                    """)
+                    """
+                    )
                     for row in cursor.fetchall():
                         identifier = row["identifier"]
                         name = self._format_name(row["first_name"], row["last_name"])
@@ -1329,7 +1333,7 @@ class ChatDBReader:
                     "LEFT JOIN handle AS affected_handle "
                     "ON message.other_handle = affected_handle.ROWID"
                 )
-                
+
                 fallback_query = (
                     fallback_query.replace(
                         "message.group_action_type,",
@@ -1400,6 +1404,7 @@ class ChatDBReader:
                 logger.debug(f"Error batch-fetching attachments: {e}")
 
             return result
+
     def _prefetch_reactions(
         self,
         message_ids: list[int],

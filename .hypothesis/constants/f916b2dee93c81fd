@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/embedding_adapter.py
+# hypothesis_version: 6.151.5
+
+[100, 384, 1000, 1024, 10000, ', ', '.mmap', 'CachedEmbedder', 'EMBEDDING_DIM', 'EMBEDDING_MODEL', 'MLXEmbedder', 'TaylorAI/gte-tiny', 'UnifiedEmbedder', 'bge-micro', 'bge-small', 'get_embedder', 'get_model_info', 'gte-tiny', 'jarvis_embed_', 'minilm-l6', 'mlx', 'reset_embedder', 'utf-8', 'w+']

@@ -32,7 +32,9 @@ def mock_sentence_model():
 
     mock_model.encode.return_value = np.array([[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]])
 
-    with patch("jarvis.eval.evaluation.ResponseEvaluator._get_sentence_model", return_value=mock_model):
+    with patch(
+        "jarvis.eval.evaluation.ResponseEvaluator._get_sentence_model", return_value=mock_model
+    ):
         yield mock_model
 
 

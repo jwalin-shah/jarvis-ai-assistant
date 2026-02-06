@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/schemas/graph.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.5, 16.0, 100, 200, 500, 600, 800, 4000, '#8E8E93', 'Additional metadata', 'Average sentiment', 'Cluster labels', 'Display name', 'Edge weight (0-1)', 'Export format', 'Export height', 'Export width', 'Graph edges', 'Graph metadata', 'Graph nodes', 'Hops from center', 'Layout algorithm', 'Layout height', 'Layout width', 'Maximum neighbors', 'Modularity score', 'Node color', 'Number of clusters', 'Size of each cluster', 'Snapshot metrics', 'Snapshot timestamp', 'Source node ID', 'Target node ID', 'day', 'force', 'graphml', 'hierarchical', 'html', 'json', 'month', 'radial', 'svg', 'unknown', 'week']

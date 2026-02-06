@@ -158,7 +158,7 @@ class TestGetMode:
 
     def test_minimal_mode_with_low_memory(self, mock_monitor):
         """Returns MINIMAL mode when low memory available."""
-        mock_monitor.get_available_mb.return_value = 2000.0
+        mock_monitor.get_available_mb.return_value = 400.0
         controller = DefaultMemoryController(monitor=mock_monitor)
 
         assert controller.get_mode() == MemoryMode.MINIMAL

@@ -143,9 +143,7 @@ class ClusterMixin:
             id=row["id"],
             name=row["name"],
             description=row["description"],
-            example_triggers=json.loads(row["example_triggers"])
-            if row["example_triggers"]
-            else [],
+            example_triggers=json.loads(row["example_triggers"]) if row["example_triggers"] else [],
             example_responses=json.loads(row["example_responses"])
             if row["example_responses"]
             else [],
