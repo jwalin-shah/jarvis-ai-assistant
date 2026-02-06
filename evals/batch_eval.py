@@ -3,7 +3,7 @@
 
 Runs the local MLX model against test cases from promptfoo.yaml,
 checks local assertions (length, anti-AI phrases), then scores each
-response with Cerebras Llama 3.3 70B as an LLM judge.
+response with Cerebras Qwen3-235B as an LLM judge.
 
 Usage:
     uv run python evals/batch_eval.py              # local checks only
@@ -36,7 +36,7 @@ if _env_path.exists():
 # ---------------------------------------------------------------------------
 
 CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
-JUDGE_MODEL = "llama-3.3-70b"
+JUDGE_MODEL = "qwen-3-235b-a22b-instruct-2507"
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",

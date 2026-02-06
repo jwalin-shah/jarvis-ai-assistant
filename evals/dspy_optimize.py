@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """DSPy optimization: compile better prompts + few-shot examples.
 
-Uses Cerebras Llama 3.3 70B as teacher to bootstrap demonstrations for the
+Uses Cerebras Qwen3-235B as teacher to bootstrap demonstrations for the
 local MLX 1.2B student model, then evaluates with the same judge.
 
 Usage:
@@ -52,10 +52,10 @@ def _get_cerebras_key() -> str:
 
 
 def build_teacher_lm() -> dspy.LM:
-    """Cerebras Llama 3.3 70B as the teacher/demo generator."""
+    """Cerebras Qwen3-235B as the teacher/demo generator."""
     key = _get_cerebras_key()
     return dspy.LM(
-        model="openai/llama-3.3-70b",
+        model="openai/qwen-3-235b-a22b-instruct-2507",
         api_base="https://api.cerebras.ai/v1",
         api_key=key,
         temperature=0.7,
@@ -175,7 +175,7 @@ def main() -> int:
 
     # Build teacher
     teacher_lm = build_teacher_lm()
-    print("Teacher: Cerebras llama-3.3-70b")
+    print("Teacher: Cerebras qwen-3-235b")
     print("Student: MLX local 1.2B")
     print()
 
