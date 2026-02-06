@@ -15,6 +15,7 @@ from jarvis.db import Contact, JarvisDB, get_db
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
     from jarvis.search.vec_search import VecSearcher
+    from models.reranker import CrossEncoderReranker
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class ContextService:
         imessage_reader: ChatDBReader | None = None,
         semantic_searcher: Any | None = None,
         vec_searcher: VecSearcher | None = None,
+        reranker: CrossEncoderReranker | None = None,
     ) -> None:
         """Initialize the context service.
 
@@ -36,10 +38,12 @@ class ContextService:
             imessage_reader: iMessage reader instance.
             semantic_searcher: Legacy semantic searcher (deprecated, ignored).
             vec_searcher: VecSearcher for chunk-based retrieval.
+            reranker: Optional cross-encoder reranker for improving retrieval quality.
         """
         self._db = db or get_db()
         self._imessage_reader = imessage_reader
         self._vec_searcher = vec_searcher
+        self._reranker = reranker
 
     @property
     def db(self) -> JarvisDB:
@@ -135,6 +139,15 @@ class ContextService:
                             "topic": r.topic,
                         }
                     )
+
+            # Cross-encoder reranking (if enabled and useful)
+            if self._reranker is not None and len(exchanges) > 1:
+                exchanges = self._reranker.rerank(
+                    query=incoming,
+                    candidates=exchanges,
+                    text_key="trigger_text",
+                    top_k=3,
+                )
 
             return exchanges
         except Exception as e:

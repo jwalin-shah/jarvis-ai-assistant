@@ -48,6 +48,8 @@ class RoutingMetrics:
     model_loaded: bool
     generation_time_ms: float = 0.0
     tokens_per_second: float = 0.0
+    speculative_enabled: bool = False
+    draft_acceptance_rate: float = 0.0
 
 
 def hash_query(text: str) -> str:
@@ -138,11 +140,11 @@ class RoutingMetricsStore:
             for col, typ in [
                 ("generation_time_ms", "REAL NOT NULL DEFAULT 0.0"),
                 ("tokens_per_second", "REAL NOT NULL DEFAULT 0.0"),
+                ("speculative_enabled", "INTEGER NOT NULL DEFAULT 0"),
+                ("draft_acceptance_rate", "REAL NOT NULL DEFAULT 0.0"),
             ]:
                 try:
-                    conn.execute(
-                        f"ALTER TABLE routing_metrics ADD COLUMN {col} {typ}"
-                    )
+                    conn.execute(f"ALTER TABLE routing_metrics ADD COLUMN {col} {typ}")
                 except sqlite3.OperationalError:
                     pass  # Column already exists
             conn.execute(
@@ -245,8 +247,10 @@ class RoutingMetricsStore:
                         faiss_candidates,
                         latency_json,
                         generation_time_ms,
-                        tokens_per_second
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tokens_per_second,
+                        speculative_enabled,
+                        draft_acceptance_rate
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [
                         (
@@ -261,6 +265,8 @@ class RoutingMetricsStore:
                             json.dumps(m.latency_ms, separators=(",", ":")),
                             m.generation_time_ms,
                             m.tokens_per_second,
+                            1 if m.speculative_enabled else 0,
+                            m.draft_acceptance_rate,
                         )
                         for m in metrics_to_write
                     ],
