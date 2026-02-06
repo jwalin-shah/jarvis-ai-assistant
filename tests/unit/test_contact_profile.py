@@ -53,20 +53,13 @@ class MockMessage:
             self.attachments = []
 
 
-def _make_messages(
-    texts: list[str], is_from_me: bool = True
-) -> list[MockMessage]:
+def _make_messages(texts: list[str], is_from_me: bool = True) -> list[MockMessage]:
     """Create a list of mock messages from text strings."""
     base = datetime(2024, 1, 1, 12, 0, 0)
-    return [
-        MockMessage(text=t, is_from_me=is_from_me, date=base)
-        for t in texts
-    ]
+    return [MockMessage(text=t, is_from_me=is_from_me, date=base) for t in texts]
 
 
-def _make_conversation(
-    my_texts: list[str], their_texts: list[str]
-) -> list[MockMessage]:
+def _make_conversation(my_texts: list[str], their_texts: list[str]) -> list[MockMessage]:
     """Create interleaved conversation."""
     msgs: list[MockMessage] = []
     base = datetime(2024, 1, 1, 12, 0, 0)
@@ -205,12 +198,10 @@ class TestContactProfileBuilder:
     def builder(self) -> ContactProfileBuilder:
         return ContactProfileBuilder(min_messages=3)
 
-    def test_insufficient_messages_returns_minimal(
-        self, builder: ContactProfileBuilder
-    ) -> None:
+    def test_insufficient_messages_returns_minimal(self, builder: ContactProfileBuilder) -> None:
         msgs = _make_messages(["hi", "hey"])
         with patch(
-            "jarvis.contact_profile.ContactProfileBuilder._classify_relationship",
+            "jarvis.contacts.contact_profile.ContactProfileBuilder._classify_relationship",
             return_value=("unknown", 0.0),
         ):
             profile = builder.build_profile("chat1", msgs)  # type: ignore[arg-type]
@@ -237,7 +228,7 @@ class TestContactProfileBuilder:
             ],
         )
         with patch(
-            "jarvis.contact_profile.ContactProfileBuilder._classify_relationship",
+            "jarvis.contacts.contact_profile.ContactProfileBuilder._classify_relationship",
             return_value=("close friend", 0.8),
         ):
             profile = builder.build_profile("chat2", msgs, "John")  # type: ignore[arg-type]
@@ -267,7 +258,7 @@ class TestContactProfileBuilder:
             ],
         )
         with patch(
-            "jarvis.contact_profile.ContactProfileBuilder._classify_relationship",
+            "jarvis.contacts.contact_profile.ContactProfileBuilder._classify_relationship",
             return_value=("coworker", 0.7),
         ):
             profile = builder.build_profile("chat3", msgs)  # type: ignore[arg-type]
@@ -277,12 +268,10 @@ class TestContactProfileBuilder:
         assert profile.uses_abbreviations is False
         assert profile.emoji_frequency == 0.0
 
-    def test_no_embeddings_skips_topics(
-        self, builder: ContactProfileBuilder
-    ) -> None:
+    def test_no_embeddings_skips_topics(self, builder: ContactProfileBuilder) -> None:
         msgs = _make_messages(["test message"] * 5)
         with patch(
-            "jarvis.contact_profile.ContactProfileBuilder._classify_relationship",
+            "jarvis.contacts.contact_profile.ContactProfileBuilder._classify_relationship",
             return_value=("unknown", 0.0),
         ):
             profile = builder.build_profile("chat4", msgs, embeddings=None)  # type: ignore[arg-type]
@@ -290,11 +279,9 @@ class TestContactProfileBuilder:
         assert profile.top_topics == []
 
     def test_emoji_detection(self, builder: ContactProfileBuilder) -> None:
-        msgs = _make_messages(
-            ["Hello! 😊", "That's great 🎉", "Thanks 👍", "Sure thing"]
-        )
+        msgs = _make_messages(["Hello! 😊", "That's great 🎉", "Thanks 👍", "Sure thing"])
         with patch(
-            "jarvis.contact_profile.ContactProfileBuilder._classify_relationship",
+            "jarvis.contacts.contact_profile.ContactProfileBuilder._classify_relationship",
             return_value=("unknown", 0.0),
         ):
             profile = builder.build_profile("chat5", msgs)  # type: ignore[arg-type]
@@ -302,11 +289,9 @@ class TestContactProfileBuilder:
         assert profile.emoji_frequency == pytest.approx(0.75, rel=0.1)
 
     def test_greeting_extraction(self, builder: ContactProfileBuilder) -> None:
-        msgs = _make_messages(
-            ["hey what's up", "hey there", "hey how are you", "yo dude"]
-        )
+        msgs = _make_messages(["hey what's up", "hey there", "hey how are you", "yo dude"])
         with patch(
-            "jarvis.contact_profile.ContactProfileBuilder._classify_relationship",
+            "jarvis.contacts.contact_profile.ContactProfileBuilder._classify_relationship",
             return_value=("unknown", 0.0),
         ):
             profile = builder.build_profile("chat6", msgs)  # type: ignore[arg-type]
@@ -314,11 +299,9 @@ class TestContactProfileBuilder:
         assert "hey" in profile.greeting_style
 
     def test_lowercase_detection(self, builder: ContactProfileBuilder) -> None:
-        msgs = _make_messages(
-            ["hey what's up", "nothing much", "same here lol", "cool cool"]
-        )
+        msgs = _make_messages(["hey what's up", "nothing much", "same here lol", "cool cool"])
         with patch(
-            "jarvis.contact_profile.ContactProfileBuilder._classify_relationship",
+            "jarvis.contacts.contact_profile.ContactProfileBuilder._classify_relationship",
             return_value=("unknown", 0.0),
         ):
             profile = builder.build_profile("chat7", msgs)  # type: ignore[arg-type]
@@ -401,7 +384,7 @@ class TestStorage:
     def test_save_and_load(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch(
-                "jarvis.contact_profile.PROFILES_DIR",
+                "jarvis.contacts.contact_profile.PROFILES_DIR",
                 Path(temp_dir) / "profiles",
             ):
                 profile = ContactProfile(
@@ -432,7 +415,7 @@ class TestStorage:
     def test_load_nonexistent_returns_none(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch(
-                "jarvis.contact_profile.PROFILES_DIR",
+                "jarvis.contacts.contact_profile.PROFILES_DIR",
                 Path(temp_dir) / "profiles",
             ):
                 result = load_profile("nonexistent_contact")
@@ -482,11 +465,7 @@ class TestAbbreviationOrdering:
 
     def test_abbreviations_sorted_by_frequency(self) -> None:
         # "lol" appears 5 times, "idk" 3 times, "btw" 1 time
-        texts = (
-            ["lol that was funny"] * 5
-            + ["idk what happened"] * 3
-            + ["btw check this out"]
-        )
+        texts = ["lol that was funny"] * 5 + ["idk what happened"] * 3 + ["btw check this out"]
         builder = ContactProfileBuilder(min_messages=3)
         uses_abbrevs, abbrevs = builder._detect_abbreviations(texts)
         assert uses_abbrevs is True
@@ -499,9 +478,7 @@ class TestAbbreviationOrdering:
 
     def test_abbreviations_max_five(self) -> None:
         # Use many different abbreviations
-        texts = [
-            "lol idk btw tbh omg ngl gonna wanna u ur"
-        ] * 5
+        texts = ["lol idk btw tbh omg ngl gonna wanna u ur"] * 5
         builder = ContactProfileBuilder(min_messages=3)
         _, abbrevs = builder._detect_abbreviations(texts)
         assert len(abbrevs) <= 5
@@ -519,16 +496,14 @@ class TestCommonPhrasesFiltering:
         # "the meeting" has "the" as stopword - with AND logic, "the" is
         # a stopword but "meeting" is not. Both must be non-stopwords.
         # Phrases like "is the", "for it" (both stopwords) should be excluded.
-        msgs = _make_messages(
-            ["is the plan ready"] * 5
-            + ["plan ready for tomorrow"] * 5
-        )
+        msgs = _make_messages(["is the plan ready"] * 5 + ["plan ready for tomorrow"] * 5)
         builder = ContactProfileBuilder(min_messages=3)
         phrases = builder._extract_common_phrases(msgs)
         # "is the" should NOT appear (both words: "is" is stopword)
         for phrase in phrases:
             words = phrase.split()
             from jarvis.contacts.contact_profile import STOPWORDS
+
             # With AND logic, neither word should be a stopword
             assert words[0] not in STOPWORDS or words[1] not in STOPWORDS
             # More specifically, phrases where both are stopwords must not appear

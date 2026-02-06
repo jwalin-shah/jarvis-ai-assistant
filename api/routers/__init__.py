@@ -8,7 +8,6 @@ from .contacts import router as contacts_router
 from .conversations import router as conversations_router
 from .custom_templates import router as custom_templates_router
 from .debug import router as debug_router
-from .digest import router as digest_router
 from .drafts import router as drafts_router
 from .embeddings import router as embeddings_router
 from .experiments import router as experiments_router
@@ -16,12 +15,9 @@ from .export import router as export_router
 from .feedback import router as feedback_router
 from .graph import router as graph_router
 from .health import router as health_router
-
-# Note: insights.py is a consolidation module, not a router
 from .metrics import router as metrics_router
 from .pdf_export import router as pdf_export_router
 from .priority import router as priority_router
-from .quality import router as quality_router
 from .relationships import router as relationships_router
 from .scheduler import router as scheduler_router
 from .search import router as search_router
@@ -44,7 +40,6 @@ __all__ = [
     "conversations_router",
     "custom_templates_router",
     "debug_router",
-    "digest_router",
     "drafts_router",
     "embeddings_router",
     "experiments_router",
@@ -55,7 +50,6 @@ __all__ = [
     "metrics_router",
     "pdf_export_router",
     "priority_router",
-    "quality_router",
     "relationships_router",
     "scheduler_router",
     "search_router",

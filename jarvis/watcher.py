@@ -78,11 +78,18 @@ class ChatDBWatcher:
         self._last_mtime: float | None = None
         self._task: asyncio.Task[None] | None = None
         self._debounce_task: asyncio.Task[None] | None = None
+        self._monitor_task: asyncio.Task[None] | None = None
         self._pending_check = False
+        self._concurrency = asyncio.Semaphore(4)
 
     async def start(self) -> None:
         """Start watching chat.db for changes."""
         if self._running:
+            return
+
+        # Validate chat.db schema before starting
+        if not await asyncio.to_thread(self._validate_schema):
+            logger.error("chat.db schema validation failed, watcher not started")
             return
 
         self._running = True
@@ -102,6 +109,14 @@ class ChatDBWatcher:
     async def stop(self) -> None:
         """Stop watching."""
         self._running = False
+
+        if self._monitor_task:
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._monitor_task = None
 
         if self._debounce_task:
             self._debounce_task.cancel()
@@ -153,11 +168,17 @@ class ChatDBWatcher:
         event = asyncio.Event()
 
         async def monitor() -> None:
-            while self._running:
-                await asyncio.sleep(0.5)
-            event.set()
+            try:
+                while self._running:
+                    await asyncio.sleep(0.5)
+                event.set()
+            except asyncio.CancelledError:
+                event.set()
+            except Exception:
+                logger.exception("Stop event monitor failed")
+                event.set()
 
-        asyncio.create_task(monitor())
+        self._monitor_task = asyncio.create_task(monitor())
         return event
 
     async def _debounced_check(self) -> None:
@@ -198,7 +219,7 @@ class ChatDBWatcher:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.debug(f"Watcher error: {e}")
+                logger.warning(f"Watcher error: {e}")
                 await asyncio.sleep(self._poll_interval)
 
     async def _check_new_messages(self) -> None:
@@ -206,19 +227,25 @@ class ChatDBWatcher:
         try:
             new_messages = await self._get_new_messages()
 
+            if new_messages:
+                # Pre-index messages for semantic search in the background
+                # This ensures near-instant availability for RAG
+                asyncio.create_task(self._index_new_messages(new_messages))
+
             for msg in new_messages:
-                # Broadcast new message notification
-                await self._broadcast_handler.broadcast(
-                    "new_message",
-                    {
-                        "message_id": msg["id"],
-                        "chat_id": msg["chat_id"],
-                        "sender": msg["sender"],
-                        "text": msg["text"],
-                        "date": msg["date"],
-                        "is_from_me": msg["is_from_me"],
-                    },
-                )
+                # Broadcast new message notification with concurrency bound
+                async with self._concurrency:
+                    await self._broadcast_handler.broadcast(
+                        "new_message",
+                        {
+                            "message_id": msg["id"],
+                            "chat_id": msg["chat_id"],
+                            "sender": msg["sender"],
+                            "text": msg["text"],
+                            "date": msg["date"],
+                            "is_from_me": msg["is_from_me"],
+                        },
+                    )
 
                 logger.debug(
                     f"New message in {msg['chat_id']}: "
@@ -231,7 +258,95 @@ class ChatDBWatcher:
                 logger.debug(f"Updated last ROWID to {self._last_rowid}")
 
         except Exception as e:
-            logger.debug(f"Error checking new messages: {e}")
+            logger.warning(f"Error checking new messages: {e}")
+
+    async def _index_new_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Compute embeddings for new messages and store in cache.
+
+        Args:
+            messages: List of message dicts from _get_new_messages
+        """
+        try:
+            from integrations.imessage import ChatDBReader
+            from jarvis.search.semantic_search import get_semantic_searcher
+
+            # Filter to messages with text
+            text_messages = [m for m in messages if m.get("text")]
+            if not text_messages:
+                return
+
+            with ChatDBReader() as reader:
+                searcher = get_semantic_searcher(reader)
+                # This call will compute and cache embeddings
+                # We convert dicts back to Message-like objects for the searcher
+                from contracts.imessage import Message
+                from integrations.imessage.parser import parse_iso_datetime
+
+                msg_objects = []
+                for m in text_messages:
+                    msg_objects.append(
+                        Message(
+                            id=m["id"],
+                            chat_id=m["chat_id"],
+                            sender=m["sender"],
+                            text=m["text"],
+                            date=parse_iso_datetime(m["date"]),
+                            is_from_me=m["is_from_me"],
+                        )
+                    )
+
+                # ensures embeddings exist in cache
+                await asyncio.to_thread(searcher._ensure_embeddings, msg_objects)
+                logger.debug(f"Indexed {len(msg_objects)} new messages for semantic search")
+
+        except Exception as e:
+            logger.debug(f"Error indexing new messages: {e}")
+
+    def _validate_schema(self) -> bool:
+        """Validate that chat.db has the expected schema.
+
+        Only checks for tables and columns actually used by the watcher.
+        This is intentionally permissive - we don't fail if Apple adds new
+        tables/columns in macOS updates, only if required ones are missing.
+        """
+        if not CHAT_DB_PATH.exists():
+            logger.warning("chat.db not found, watcher cannot start")
+            return False
+
+        try:
+            conn = sqlite3.connect(
+                f"file:{CHAT_DB_PATH}?mode=ro",
+                uri=True,
+                timeout=5.0,
+            )
+            try:
+                cursor = conn.cursor()
+
+                # Check required tables (only what we use)
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = {row[0] for row in cursor.fetchall()}
+                required_tables = {"message", "chat", "handle", "chat_message_join"}
+                missing_tables = required_tables - tables
+                if missing_tables:
+                    logger.error(f"chat.db missing required tables: {missing_tables}")
+                    return False
+
+                # Check required columns in message table (only what we query)
+                # Note: ROWID is always present in SQLite, no need to check
+                cursor.execute("PRAGMA table_info(message)")
+                columns = {row[1] for row in cursor.fetchall()}
+                required_columns = {"text", "date", "is_from_me", "handle_id"}
+                missing_columns = required_columns - columns
+                if missing_columns:
+                    logger.error(f"chat.db message table missing columns: {missing_columns}")
+                    return False
+
+                return True
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"chat.db schema validation error: {e}")
+            return False
 
     async def _get_last_rowid(self) -> int | None:
         """Get the current maximum message ROWID."""
@@ -260,14 +375,40 @@ class ChatDBWatcher:
             return None
 
     async def _get_new_messages(self) -> list[dict[str, Any]]:
-        """Get messages newer than last known ROWID."""
+        """Get messages newer than last known ROWID.
+
+        Handles bursty writes by fetching in batches until all new messages
+        are retrieved (prevents missing messages when >500 arrive at once).
+        """
         if self._last_rowid is None:
             return []
 
-        return await asyncio.to_thread(self._query_new_messages, self._last_rowid)
+        all_new_messages = []
+        current_rowid = self._last_rowid
 
-    def _query_new_messages(self, since_rowid: int) -> list[dict[str, Any]]:
-        """Query for new messages (sync)."""
+        while True:
+            batch = await asyncio.to_thread(self._query_new_messages, current_rowid, limit=500)
+            if not batch:
+                break
+
+            all_new_messages.extend(batch)
+
+            # If we got fewer than the limit, we've fetched all messages
+            if len(batch) < 500:
+                break
+
+            # Update current_rowid to the max of this batch to get next batch
+            current_rowid = max(msg["id"] for msg in batch)
+
+        return all_new_messages
+
+    def _query_new_messages(self, since_rowid: int, limit: int = 500) -> list[dict[str, Any]]:
+        """Query for new messages (sync).
+
+        Args:
+            since_rowid: Only fetch messages with ROWID > this value
+            limit: Maximum number of messages to fetch in one query
+        """
         if not CHAT_DB_PATH.exists():
             return []
 
@@ -296,9 +437,9 @@ class ChatDBWatcher:
                     LEFT JOIN handle ON message.handle_id = handle.ROWID
                     WHERE message.ROWID > ?
                     ORDER BY message.date ASC
-                    LIMIT 100
+                    LIMIT ?
                     """,
-                    (since_rowid,),
+                    (since_rowid, limit),
                 )
 
                 messages = []
@@ -326,7 +467,7 @@ class ChatDBWatcher:
                 conn.close()
 
         except Exception as e:
-            logger.debug(f"Error querying new messages: {e}")
+            logger.warning(f"Error querying new messages: {e}")
             return []
 
 

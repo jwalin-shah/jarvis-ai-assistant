@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 from jarvis.exchange import CandidateExchange, ContextMessage
-from jarvis.validity_gate import GateConfig, GateResult, ValidityGate
+from jarvis.nlp.validity_gate import GateConfig, GateResult, ValidityGate
 
 
 def make_exchange(

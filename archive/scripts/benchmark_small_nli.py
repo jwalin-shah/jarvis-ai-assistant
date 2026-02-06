@@ -171,7 +171,7 @@ def benchmark_nli_model(
 
 def benchmark_v3(texts: list[str], labels: list[str]) -> dict:
     """Benchmark V3 classifier for comparison."""
-    from jarvis.trigger_classifier import classify_trigger
+    from jarvis.classifiers.trigger_classifier import classify_trigger
 
     print("\nBenchmarking V3 (current baseline)...")
 

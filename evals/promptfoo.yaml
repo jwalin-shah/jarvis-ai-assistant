@@ -1,0 +1,195 @@
+# JARVIS Prompt Strategy A/B Testing
+#
+# This compares 5 different prompt strategies to find what works best:
+#   - baseline: Current JARVIS build_reply_prompt()
+#   - minimal: Bare-bones, no examples
+#   - examples_only: Just few-shot examples
+#   - style_focus: Heavy style matching emphasis
+#   - anti_ai: Explicitly forbids AI phrases
+#
+# Run: make eval
+# View: make eval-view
+#
+# LLM Judge: export OPENAI_API_KEY=sk-... (for llm-rubric assertions)
+
+description: "A/B test prompt strategies for text message replies"
+
+# Each prompt template = one strategy to test
+# The {{strategy}} variable tells the provider which approach to use
+prompts:
+  - id: baseline
+    label: "Baseline (current JARVIS)"
+    raw: "strategy:baseline"
+  - id: minimal
+    label: "Minimal (no examples)"
+    raw: "strategy:minimal"
+  - id: examples_only
+    label: "Examples Only"
+    raw: "strategy:examples_only"
+  - id: style_focus
+    label: "Style Focus"
+    raw: "strategy:style_focus"
+  - id: anti_ai
+    label: "Anti-AI Phrases"
+    raw: "strategy:anti_ai"
+
+providers:
+  - id: exec:python jarvis_provider.py
+    label: "LFM-1.2B"
+    config:
+      temperature: 0.7
+      max_tokens: 50
+
+# Transform to inject strategy from prompt into vars
+defaultTest:
+  options:
+    transformVars: "vars.strategy = prompt.split(':')[1]; return vars;"
+
+tests:
+  # === Core Test Cases ===
+
+  - description: "Lunch invitation"
+    vars:
+      context: "[14:00] John: Want to grab lunch tomorrow?"
+      last_message: "Want to grab lunch tomorrow?"
+      tone: "casual"
+      user_style: "brief, friendly"
+    assert:
+      - type: javascript
+        value: output.length < 80
+        weight: 1
+      - type: not-icontains
+        value: "I'd be happy"
+        weight: 2
+      - type: not-icontains
+        value: "sounds great"
+        weight: 2
+      - type: not-icontains
+        value: "absolutely"
+        weight: 2
+      - type: llm-rubric
+        value: "Is this a natural, casual text reply to a lunch invitation? Should be brief (<15 words), friendly, and sound human (not AI). Pass if it sounds like a real person texting."
+        weight: 3
+
+  - description: "Running late"
+    vars:
+      context: "[09:15] Alex: Running 10 min late"
+      last_message: "Running 10 min late"
+      tone: "casual"
+      user_style: "supportive, brief"
+    assert:
+      - type: javascript
+        value: output.split(' ').length < 12
+        weight: 1
+      - type: llm-rubric
+        value: "Is this a supportive, brief reply to someone running late? Good: 'no worries', 'all good', 'take your time'. Bad: asking why, being passive aggressive, too formal."
+        weight: 3
+
+  - description: "Emotional support - venting"
+    vars:
+      context: |
+        [20:00] Mike: Work was brutal today
+        [20:01] Mike: Boss dumped a project on me last minute
+      last_message: "Boss dumped a project on me last minute"
+      tone: "casual"
+      user_style: "empathetic friend"
+    assert:
+      - type: not-icontains
+        value: "have you tried"
+        weight: 2
+      - type: not-icontains
+        value: "you should"
+        weight: 2
+      - type: llm-rubric
+        value: "Is this empathetic without giving unsolicited advice? Good: 'that sucks', 'ugh sorry'. Bad: 'have you tried...', 'you should...', therapist-speak."
+        weight: 3
+
+  - description: "Simple yes/no - trash"
+    vars:
+      context: "[15:00] Dad: Did you take out the trash?"
+      last_message: "Did you take out the trash?"
+      tone: "casual"
+      user_style: "direct"
+    assert:
+      - type: javascript
+        value: output.split(' ').length < 8
+        weight: 2
+      - type: llm-rubric
+        value: "Is this a direct answer to 'did you take out trash?' Should be very brief - ideally just 'yes/yep/yeah' or 'no/not yet'. Fail if it's more than one sentence."
+        weight: 3
+
+  - description: "Group chat confirmation"
+    vars:
+      context: |
+        [Group: Game Night]
+        [14:00] Jake: 7pm Saturday work?
+        [14:05] Lisa: I'm in!
+        [14:10] Tom: Works for me
+      last_message: "Works for me"
+      tone: "casual"
+      user_style: "brief group energy"
+    assert:
+      - type: javascript
+        value: output.split(' ').length < 6
+        weight: 2
+      - type: llm-rubric
+        value: "Is this a brief group chat confirmation? Should be 1-5 words max. Good: 'same', 'count me in', 'down'. Bad: full sentences, formal responses."
+        weight: 3
+
+  - description: "Professional - report request"
+    vars:
+      context: "[09:00] Manager: Can you send the Q4 report by EOD?"
+      last_message: "Can you send the Q4 report by EOD?"
+      tone: "professional"
+      user_style: "professional but not stiff"
+    assert:
+      - type: not-icontains
+        value: "lol"
+        weight: 1
+      - type: not-icontains
+        value: "gonna"
+        weight: 1
+      - type: llm-rubric
+        value: "Is this professional but not stiff? Should confirm the task briefly. Good: 'Will do', 'On it', 'I'll have it ready'. Bad: too casual, too formal/corporate."
+        weight: 3
+
+  - description: "Ambiguous question mark"
+    vars:
+      context: "[11:00] Chris: ?"
+      last_message: "?"
+      tone: "casual"
+      user_style: "casual"
+    assert:
+      - type: llm-rubric
+        value: "Reply to just a '?' with no context. Should ask for clarification briefly. Good: 'what's up?', '??', 'hm?'. Bad: long response, assuming what they mean."
+        weight: 3
+
+  - description: "Photo reaction"
+    vars:
+      context: |
+        [16:00] Emma: [Photo]
+        [16:00] Emma: Look at this view!
+      last_message: "Look at this view!"
+      tone: "casual"
+      user_style: "enthusiastic"
+    assert:
+      - type: not-icontains
+        value: "I can see"
+        weight: 2
+      - type: not-icontains
+        value: "the photo"
+        weight: 2
+      - type: llm-rubric
+        value: "React to a friend sharing a photo of a nice view. Should be positive and match enthusiasm. Bad: describing the photo, generic 'nice', overly formal."
+        weight: 3
+
+# Scoring - strategies compete on total weighted score
+scoring:
+  strategy: weighted
+
+# Output
+outputPath: results/eval-{{timestamp}}.json
+
+evaluateOptions:
+  maxConcurrency: 1
+  showProgressBar: true

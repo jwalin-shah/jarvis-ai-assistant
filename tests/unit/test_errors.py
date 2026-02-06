@@ -413,13 +413,14 @@ class TestAPIErrorHandlers:
 
     def test_error_status_code_mapping_exists(self):
         """API error handlers have status code mapping."""
-        from api.errors import ERROR_STATUS_CODES
+        from api.errors import ERROR_CODE_STATUS_CODES
+        from jarvis.errors import ErrorCode
 
-        # All error types should have a mapping
-        assert JarvisError in ERROR_STATUS_CODES
-        assert ModelLoadError in ERROR_STATUS_CODES
-        assert iMessageAccessError in ERROR_STATUS_CODES
-        assert ValidationError in ERROR_STATUS_CODES
+        # Mapping should have entries for key error codes
+        assert ErrorCode.VAL_INVALID_INPUT in ERROR_CODE_STATUS_CODES
+        assert ErrorCode.MDL_LOAD_FAILED in ERROR_CODE_STATUS_CODES
+        assert ErrorCode.MSG_ACCESS_DENIED in ERROR_CODE_STATUS_CODES
+        assert ErrorCode.MDL_GENERATION_FAILED in ERROR_CODE_STATUS_CODES
 
     def test_get_status_code_for_error(self):
         """get_status_code_for_error returns appropriate codes."""

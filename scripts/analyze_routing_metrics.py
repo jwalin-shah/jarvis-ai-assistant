@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from jarvis.metrics_router import DEFAULT_METRICS_DB_PATH, load_routing_metrics
+from jarvis.observability.metrics_router import DEFAULT_METRICS_DB_PATH, load_routing_metrics
 
 
 def percentile(values: list[float], p: float) -> float:

@@ -14,6 +14,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from jarvis.contacts.contact_profile_context import ContactProfileContext
+
 if TYPE_CHECKING:
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
@@ -1442,6 +1444,7 @@ def _format_similar_exchanges(exchanges: list[tuple[str, str]]) -> str:
 
 
 def _format_relationship_context(
+    contact_context: ContactProfileContext | None,
     tone: str,
     avg_length: float,
     response_patterns: dict[str, float | int] | None = None,
@@ -1491,31 +1494,50 @@ def _format_relationship_context(
         return "\n".join(lines)
 
     # Fallback: use provided tone and avg_length
+    tone_source = contact_context.tone if contact_context else tone
     tone_descriptions = {
         "casual": "You use casual, friendly language (no formal greetings)",
         "professional": "You use professional but concise language",
         "mixed": "You mix casual and professional language",
     }
-    lines.append(f"- {tone_descriptions.get(tone, tone_descriptions['casual'])}")
+    lines.append(f"- {tone_descriptions.get(tone_source, tone_descriptions['casual'])}")
+
+    effective_avg_length = contact_context.avg_message_length if contact_context else avg_length
 
     # Message length guidance - more specific brackets
-    if avg_length < 20:
+    if effective_avg_length < 20:
         lines.append("- You keep messages VERY short (1-5 words)")
-    elif avg_length < 40:
+    elif effective_avg_length < 40:
         lines.append("- You write brief messages (1 short sentence)")
-    elif avg_length < 80:
+    elif effective_avg_length < 80:
         lines.append("- You write moderate messages (1-2 sentences)")
     else:
         lines.append("- You write longer messages (2-3 sentences max)")
 
+    patterns = response_patterns
+    if patterns is None and contact_context and contact_context.response_patterns:
+        patterns = contact_context.response_patterns
+
     # Response pattern insights
-    if response_patterns:
-        avg_response = response_patterns.get("avg_response_time_seconds")
+    if patterns:
+        avg_response = patterns.get("avg_response_time_seconds")
         if avg_response:
             if avg_response < 300:
                 lines.append("- You respond quickly")
             elif avg_response > 3600:
                 lines.append("- You take time before responding")
+
+    if contact_context and contact_context.style_guide:
+        lines.append(f"- Style guide: {contact_context.style_guide}")
+    if contact_context and contact_context.greeting_style:
+        greetings = ", ".join(contact_context.greeting_style[:2])
+        lines.append(f"- Common greetings: {greetings}")
+    if contact_context and contact_context.signoff_style:
+        signoffs = ", ".join(contact_context.signoff_style[:2])
+        lines.append(f"- Typical signoffs: {signoffs}")
+    if contact_context and contact_context.top_topics:
+        topics = ", ".join(contact_context.top_topics[:3])
+        lines.append(f"- Topics you often discuss: {topics}")
 
     return "\n".join(lines)
 
@@ -1526,6 +1548,7 @@ def build_rag_reply_prompt(
     contact_name: str,
     similar_exchanges: list[tuple[str, str]] | None = None,
     relationship_profile: dict[str, Any] | None = None,
+    contact_context: ContactProfileContext | None = None,
     instruction: str | None = None,
     user_messages: list[str] | None = None,
 ) -> str:
@@ -1540,16 +1563,18 @@ def build_rag_reply_prompt(
         contact_name: Name of the contact being messaged
         similar_exchanges: List of (context, response) tuples from similar past conversations
         relationship_profile: Dict with tone, avg_message_length, response_patterns, etc.
+        contact_context: Optional typed contact profile context for richer guidance.
         instruction: Optional custom instruction for the reply
         user_messages: Optional list of user's own messages for style analysis.
             If provided, the prompt will include explicit instructions to match
             the user's texting style (length, formality, abbreviations, etc.).
+        contact_context: Optional typed context derived from contact profiles.
 
     Returns:
         Formatted prompt string ready for model input
 
     Example:
-        >>> from jarvis.embeddings import find_similar_messages, get_relationship_profile
+        >>> from jarvis.search.embeddings import find_similar_messages, get_relationship_profile
         >>> # Get similar exchanges from history
         >>> similar = find_similar_messages(last_message, contact_id="chat123", limit=3)
         >>> exchanges = [(m.text, "...response...") for m in similar]
@@ -1565,10 +1590,15 @@ def build_rag_reply_prompt(
         ... )
     """
     # Extract profile info
-    profile = relationship_profile or {}
-    tone = str(profile.get("tone", "casual"))
-    avg_length = float(profile.get("avg_message_length", 50))
-    response_patterns = profile.get("response_patterns")
+    profile_payload = relationship_profile or {}
+    tone = str(profile_payload.get("tone", contact_context.tone if contact_context else "casual"))
+    avg_length = float(
+        profile_payload.get(
+            "avg_message_length",
+            contact_context.avg_message_length if contact_context else 50,
+        )
+    )
+    response_patterns = profile_payload.get("response_patterns")
 
     # If user_messages provided, use style analysis for avg_length
     if user_messages:
@@ -1577,6 +1607,7 @@ def build_rag_reply_prompt(
 
     # Format relationship context with user messages for style analysis
     relationship_context = _format_relationship_context(
+        contact_context=contact_context,
         tone=tone,
         avg_length=avg_length,
         response_patterns=response_patterns if isinstance(response_patterns, dict) else None,
@@ -1633,29 +1664,39 @@ def build_rag_reply_prompt_from_embeddings(
         Formatted prompt string ready for model input
     """
     # Import here to avoid circular imports
-    from jarvis.embeddings import find_similar_messages, get_relationship_profile
+    from jarvis.contacts.contact_profile import get_contact_profile
+    from jarvis.search.vec_search import get_vec_searcher
 
     # Get relationship profile
-    profile = get_relationship_profile(contact_id)
-    name = contact_name or profile.display_name or "this person"
+    profile = get_contact_profile(contact_id)
+
+    if profile:
+        name = contact_name or profile.contact_name or "this person"
+        contact_context = ContactProfileContext.from_contact_profile(profile)
+        # Create dict for compatibility
+        profile_dict = {
+            "tone": contact_context.tone,
+            "avg_message_length": profile.avg_message_length,
+            "response_patterns": {},  # ContactProfile doesn't store this yet
+        }
+    else:
+        name = contact_name or "this person"
+        contact_context = None
+        profile_dict = {}
 
     # Find similar past messages
-    similar_messages = find_similar_messages(
-        query=last_message,
-        contact_id=contact_id,
-        limit=5,
-        min_similarity=0.4,
-    )
+    searcher = get_vec_searcher()
+    results = searcher.search(query=last_message, chat_id=contact_id, limit=5)
 
     # Build exchanges: for each similar incoming message, try to find your response
     # This is a simplified approach - we include the similar message as context
     # In practice, you'd want to fetch the actual response that followed
     exchanges: list[tuple[str, str]] = []
-    for msg in similar_messages:
-        if not msg.is_from_me:
+    for res in results:
+        if not res.is_from_me and res.text:
             # This was a message to you - include it as context
             # The response would need to be fetched from subsequent messages
-            exchanges.append((msg.text, "(your typical response style)"))
+            exchanges.append((res.text, "(your typical response style)"))
 
     # Build the prompt
     return build_rag_reply_prompt(
@@ -1663,11 +1704,8 @@ def build_rag_reply_prompt_from_embeddings(
         last_message=last_message,
         contact_name=name,
         similar_exchanges=exchanges,
-        relationship_profile={
-            "tone": profile.typical_tone,
-            "avg_message_length": profile.avg_message_length,
-            "response_patterns": profile.response_patterns,
-        },
+        relationship_profile=profile_dict,
+        contact_context=contact_context,
         instruction=instruction,
     )
 

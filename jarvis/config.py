@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path.home() / ".jarvis" / "config.json"
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 11
+CONFIG_VERSION = 13
 
 
 class MemoryThresholds(BaseModel):
@@ -226,6 +227,15 @@ class ClassifierThresholds(BaseModel):
         response_decline_confidence: Higher threshold for DECLINE (frequently misclassified).
         response_defer_confidence: Higher threshold for DEFER predictions.
         response_agree_confidence: Higher threshold for AGREE predictions.
+
+        trigger_svm_commitment: SVM threshold for COMMITMENT trigger type.
+        trigger_svm_question: SVM threshold for QUESTION trigger type.
+        trigger_svm_reaction: SVM threshold for REACTION trigger type.
+        trigger_svm_social: SVM threshold for SOCIAL trigger type.
+        trigger_svm_statement: SVM threshold for STATEMENT trigger type.
+        trigger_svm_default: Default SVM threshold for unknown trigger types.
+        trigger_centroid_verify: Minimum similarity to verify centroid match.
+        trigger_centroid_margin: Margin for centroid override decisions.
     """
 
     # Intent classifier thresholds (from intent.py)
@@ -239,6 +249,18 @@ class ClassifierThresholds(BaseModel):
     response_decline_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
     response_defer_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
     response_agree_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
+
+    # Trigger classifier: per-class SVM thresholds
+    trigger_svm_commitment: float = Field(default=0.70, ge=0.0, le=1.0)
+    trigger_svm_question: float = Field(default=0.55, ge=0.0, le=1.0)
+    trigger_svm_reaction: float = Field(default=0.60, ge=0.0, le=1.0)
+    trigger_svm_social: float = Field(default=0.45, ge=0.0, le=1.0)
+    trigger_svm_statement: float = Field(default=0.50, ge=0.0, le=1.0)
+    trigger_svm_default: float = Field(default=0.55, ge=0.0, le=1.0)
+
+    # Trigger classifier: centroid thresholds
+    trigger_centroid_verify: float = Field(default=0.50, ge=0.0, le=1.0)
+    trigger_centroid_margin: float = Field(default=0.10, ge=0.0, le=1.0)
 
 
 class MetricsConfig(BaseModel):
@@ -297,82 +319,32 @@ class EmbeddingConfig(BaseModel):
     """
 
     model_name: str = "bge-small"
-    mlx_service_socket: str = "/tmp/jarvis-embed.sock"
+    mlx_service_socket: str = str(Path.home() / ".jarvis" / "jarvis-embed.sock")
 
 
-class FAISSIndexConfig(BaseModel):
-    """FAISS index configuration for vector search.
-
-    Controls index type and compression level based on benchmarks from
-    docs/improvements.md Appendix A (148K real messages, bge-small 384-dim).
-
-    Index Types:
-        - "flat": IndexFlatIP brute force. 100% recall, highest memory (~586MB/400K).
-        - "ivfpq_4x": IVFPQ 384x8. 92% recall, 4x compression (~155MB/400K). DEFAULT.
-        - "ivfpq_8x": IVFPQ 192x8. 88% recall, 8x compression (~81MB/400K).
-        - "ivf": IndexIVFFlat. 93% recall, no compression (same size as flat).
+class VecSearchConfig(BaseModel):
+    """sqlite-vec search configuration.
 
     Attributes:
-        index_type: Type of FAISS index to build.
-        ivf_nprobe: Number of clusters to search (higher = more accurate, slower).
-        pq_training_ratio: Fraction of vectors to use for PQ training (0.1-1.0).
-        min_vectors_for_compression: Minimum vectors before using compression.
-            Below this threshold, flat index is used regardless of index_type.
+        embedding_dim: Dimension of embedding vectors.
+        binary_prefilter_k: Number of candidates from binary hamming scan
+            before int8 rerank in cross-contact queries.
+        contact_boost: Score multiplier for same-contact matches.
     """
 
-    index_type: Literal["flat", "ivf", "ivfpq_4x", "ivfpq_8x"] = "ivfpq_4x"
-    ivf_nprobe: int = Field(default=128, ge=1, le=512)
-    pq_training_ratio: float = Field(default=1.0, ge=0.1, le=1.0)
-    min_vectors_for_compression: int = Field(default=1000, ge=100, le=50000)
+    embedding_dim: int = 384
+    binary_prefilter_k: int = Field(default=100, ge=10, le=1000)
+    contact_boost: float = Field(default=1.2, ge=1.0, le=3.0)
 
 
 class RetrievalConfig(BaseModel):
-    """Retrieval configuration for enhanced search capabilities.
+    """Retrieval configuration.
 
-    Controls temporal weighting, hybrid BM25+FAISS retrieval, and cross-encoder reranking.
-
-    Temporal Weighting:
-        Uses exponential decay to prefer recent messages. Score is multiplied by
-        decay factor: 0.5^(age_days / half_life_days). Half-life of 365 means
-        messages lose half their score after 1 year.
-
-    Hybrid Retrieval (BM25 + FAISS):
-        Combines sparse (BM25) and dense (FAISS) retrieval using reciprocal rank fusion.
-        BM25 captures exact keyword matches while FAISS captures semantic similarity.
-
-    Cross-Encoder Reranking:
-        After initial retrieval, uses a cross-encoder model to rerank top-k candidates
-        for more accurate final ranking. More expensive but more accurate.
-
-    Attributes:
-        temporal_decay_enabled: Enable exponential decay based on message age.
-        temporal_half_life_days: Days until score is halved (default 365 = 1 year).
-        temporal_min_score: Minimum decay multiplier to prevent very old messages
-            from being completely ignored (default 0.1 = 10% of original score).
-
-        bm25_enabled: Enable hybrid BM25+FAISS retrieval.
-        bm25_weight: Weight for BM25 scores in fusion (0-1). FAISS weight = 1 - bm25_weight.
-        rrf_k: Reciprocal rank fusion constant (higher = more weight to lower ranks).
-
-        rerank_enabled: Enable cross-encoder reranking after initial retrieval.
-        rerank_model: Cross-encoder model name for reranking.
-        rerank_top_k: Number of candidates to rerank (balance accuracy vs speed).
+    Note: Advanced retrieval features (BM25, Reranking, Temporal Decay) have been
+    removed in favor of a simplified, faster vector-only search strategy.
     """
 
-    # Temporal weighting
-    temporal_decay_enabled: bool = True
-    temporal_half_life_days: float = Field(default=365.0, ge=1.0, le=3650.0)
-    temporal_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
-
-    # BM25 hybrid retrieval
-    bm25_enabled: bool = False
-    bm25_weight: float = Field(default=0.3, ge=0.0, le=1.0)
-    rrf_k: int = Field(default=60, ge=1, le=1000)
-
-    # Cross-encoder reranking
-    rerank_enabled: bool = False
-    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    rerank_top_k: int = Field(default=20, ge=5, le=100)
+    pass
 
 
 class NormalizationProfile(BaseModel):
@@ -543,7 +515,7 @@ class JarvisConfig(BaseModel):
     digest: DigestConfig = Field(default_factory=DigestConfig)
     classifier_thresholds: ClassifierThresholds = Field(default_factory=ClassifierThresholds)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
-    faiss_index: FAISSIndexConfig = Field(default_factory=FAISSIndexConfig)
+    vec_search: VecSearchConfig = Field(default_factory=VecSearchConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
     segmentation: SegmentationConfig = Field(default_factory=SegmentationConfig)
@@ -554,14 +526,195 @@ _config: JarvisConfig | None = None
 _config_lock = threading.Lock()
 
 
+def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v1 to v2: Add ui/search/chat sections."""
+    # Migrate imessage_default_limit to search.default_limit if not already set
+    if "search" not in data:
+        data["search"] = {}
+    if "default_limit" not in data["search"] and "imessage_default_limit" in data:
+        data["search"]["default_limit"] = data["imessage_default_limit"]
+
+    # Add default sections if missing
+    if "ui" not in data:
+        data["ui"] = {}
+    if "chat" not in data:
+        data["chat"] = {}
+
+    return data
+
+
+def _migrate_v2_to_v3(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v2 to v3: Add model section."""
+    # Add model section if missing
+    if "model" not in data:
+        data["model"] = {}
+
+    # Migrate model_path to model.model_id if possible
+    if "model_path" in data and "model_id" not in data["model"]:
+        # Map known paths to model IDs
+        path_to_id = {
+            "mlx-community/Qwen2.5-0.5B-Instruct-4bit": "qwen-0.5b",
+            "mlx-community/Qwen2.5-1.5B-Instruct-4bit": "qwen-1.5b",
+            "mlx-community/Qwen2.5-3B-Instruct-4bit": "qwen-3b",
+        }
+        model_path = data["model_path"]
+        if model_path in path_to_id:
+            data["model"]["model_id"] = path_to_id[model_path]
+
+    return data
+
+
+def _migrate_v3_to_v6(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v3 to v6: Add rate_limit, task_queue, digest sections."""
+    # Add rate_limit section if missing
+    if "rate_limit" not in data:
+        data["rate_limit"] = {}
+
+    # Add task_queue section if missing
+    if "task_queue" not in data:
+        data["task_queue"] = {}
+
+    # Add digest section if missing
+    if "digest" not in data:
+        data["digest"] = {}
+
+    return data
+
+
+def _migrate_v6_to_v7(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v6 to v7: Add routing section."""
+    if "routing" not in data:
+        data["routing"] = {}
+
+    return data
+
+
+def _migrate_v7_to_v8(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v7 to v8: Migrate template_similarity_threshold."""
+    # Migrate template_similarity_threshold to routing.quick_reply_threshold
+    # Only migrate if legacy field has a non-default value (0.7) and routing
+    # section doesn't have an explicit quick_reply_threshold set
+    legacy_threshold = data.get("template_similarity_threshold")
+    if "routing" not in data:
+        data["routing"] = {}
+
+    routing = data["routing"]
+    if (
+        legacy_threshold is not None
+        and legacy_threshold != 0.7
+        and "quick_reply_threshold" not in routing
+    ):
+        logger.info(
+            f"Migrating template_similarity_threshold={legacy_threshold} "
+            f"to routing.quick_reply_threshold"
+        )
+        routing["quick_reply_threshold"] = legacy_threshold
+
+    # Remove deprecated template_similarity_threshold field (no longer in schema)
+    if "template_similarity_threshold" in data:
+        del data["template_similarity_threshold"]
+
+    # Also migrate template_threshold to quick_reply_threshold
+    if "template_threshold" in routing and "quick_reply_threshold" not in routing:
+        logger.info("Migrating routing.template_threshold to routing.quick_reply_threshold")
+        routing["quick_reply_threshold"] = routing["template_threshold"]
+        del routing["template_threshold"]
+
+    return data
+
+
+def _migrate_v8_to_v9(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v8 to v9: Migrate mlx_service_url to mlx_service_socket."""
+    # Migrate mlx_service_url to mlx_service_socket
+    if "embedding" not in data:
+        data["embedding"] = {}
+
+    embedding = data["embedding"]
+    if "mlx_service_url" in embedding:
+        # Remove the old HTTP URL field - new socket path will use default
+        logger.info("Removing deprecated mlx_service_url, using Unix socket instead")
+        del embedding["mlx_service_url"]
+
+    # Update socket path from /tmp to ~/.jarvis for security
+    if (
+        "mlx_service_socket" in embedding
+        and embedding["mlx_service_socket"] == "/tmp/jarvis-embed.sock"
+    ):
+        new_socket_path = str(Path.home() / ".jarvis" / "jarvis-embed.sock")
+        logger.info(f"Migrating socket path from /tmp to {new_socket_path}")
+        embedding["mlx_service_socket"] = new_socket_path
+
+    return data
+
+
+def _migrate_v9_to_v10(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v9 to v10: Add retrieval section."""
+    # Add retrieval section if missing
+    if "retrieval" not in data:
+        data["retrieval"] = {}
+
+    return data
+
+
+def _migrate_v10_to_v11(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v10 to v11: Add segmentation section."""
+    # Add segmentation section if missing
+    if "segmentation" not in data:
+        data["segmentation"] = {}
+
+    return data
+
+
+def _migrate_v11_to_v12(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v11 to v12: Migrate faiss_index to vec_search."""
+    # Migrate faiss_index -> vec_search
+    if "faiss_index" in data:
+        logger.info("Removing deprecated faiss_index config, using vec_search defaults")
+        del data["faiss_index"]
+    if "vec_search" not in data:
+        data["vec_search"] = {}
+
+    return data
+
+
+def _migrate_v12_to_v13(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v12 to v13: Update socket path from /tmp to ~/.jarvis."""
+    if "embedding" not in data:
+        data["embedding"] = {}
+
+    embedding = data["embedding"]
+    # Update socket path from /tmp to ~/.jarvis for security
+    if (
+        "mlx_service_socket" in embedding
+        and embedding["mlx_service_socket"] == "/tmp/jarvis-embed.sock"
+    ):
+        new_socket_path = str(Path.home() / ".jarvis" / "jarvis-embed.sock")
+        logger.info(f"Migrating socket path from /tmp to {new_socket_path}")
+        embedding["mlx_service_socket"] = new_socket_path
+
+    return data
+
+
+# Migration registry mapping target versions to migration functions
+_MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    2: _migrate_v1_to_v2,
+    3: _migrate_v2_to_v3,
+    6: _migrate_v3_to_v6,
+    7: _migrate_v6_to_v7,
+    8: _migrate_v7_to_v8,
+    9: _migrate_v8_to_v9,
+    10: _migrate_v9_to_v10,
+    11: _migrate_v10_to_v11,
+    12: _migrate_v11_to_v12,
+    13: _migrate_v12_to_v13,
+}
+
+
 def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
     """Migrate config data from older versions to current schema.
 
     Preserves existing values while adding new defaults for missing fields.
-    Handles migration from:
-    - v1 (no version field) to v2 (with ui/search/chat sections)
-    - v2 to v3 (with model section)
-    - v3 to v4 (with task_queue section)
+    Uses a migration registry pattern to apply version-specific migrations.
 
     Args:
         data: Raw config data loaded from file.
@@ -571,137 +724,14 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
     """
     version = data.get("config_version", 1)
 
-    if version < 2:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
+    # Apply migrations sequentially
+    for target_version in sorted(_MIGRATIONS.keys()):
+        if version < target_version:
+            logger.info(f"Migrating config from version {version} to {target_version}")
+            data = _MIGRATIONS[target_version](data)
+            version = target_version
 
-        # Migrate imessage_default_limit to search.default_limit if not already set
-        if "search" not in data:
-            data["search"] = {}
-        if "default_limit" not in data["search"] and "imessage_default_limit" in data:
-            data["search"]["default_limit"] = data["imessage_default_limit"]
-
-        # Add default sections if missing
-        if "ui" not in data:
-            data["ui"] = {}
-        if "chat" not in data:
-            data["chat"] = {}
-
-        version = 2
-
-    if version < 3:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
-
-        # Add model section if missing
-        if "model" not in data:
-            data["model"] = {}
-
-        # Migrate model_path to model.model_id if possible
-        if "model_path" in data and "model_id" not in data["model"]:
-            # Map known paths to model IDs
-            path_to_id = {
-                "mlx-community/Qwen2.5-0.5B-Instruct-4bit": "qwen-0.5b",
-                "mlx-community/Qwen2.5-1.5B-Instruct-4bit": "qwen-1.5b",
-                "mlx-community/Qwen2.5-3B-Instruct-4bit": "qwen-3b",
-            }
-            model_path = data["model_path"]
-            if model_path in path_to_id:
-                data["model"]["model_id"] = path_to_id[model_path]
-
-        version = 3
-
-    if version < 6:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
-
-        # Add rate_limit section if missing
-        if "rate_limit" not in data:
-            data["rate_limit"] = {}
-
-        # Add task_queue section if missing
-        if "task_queue" not in data:
-            data["task_queue"] = {}
-
-        # Add digest section if missing
-        if "digest" not in data:
-            data["digest"] = {}
-
-        version = 6
-
-    if version < 7:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
-
-        if "routing" not in data:
-            data["routing"] = {}
-
-        version = 7
-
-    if version < 8:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
-
-        # Migrate template_similarity_threshold to routing.quick_reply_threshold
-        # Only migrate if legacy field has a non-default value (0.7) and routing
-        # section doesn't have an explicit quick_reply_threshold set
-        legacy_threshold = data.get("template_similarity_threshold")
-        if "routing" not in data:
-            data["routing"] = {}
-
-        routing = data["routing"]
-        if (
-            legacy_threshold is not None
-            and legacy_threshold != 0.7
-            and "quick_reply_threshold" not in routing
-        ):
-            logger.info(
-                f"Migrating template_similarity_threshold={legacy_threshold} "
-                f"to routing.quick_reply_threshold"
-            )
-            routing["quick_reply_threshold"] = legacy_threshold
-
-        # Remove deprecated template_similarity_threshold field (no longer in schema)
-        if "template_similarity_threshold" in data:
-            del data["template_similarity_threshold"]
-
-        # Also migrate template_threshold to quick_reply_threshold
-        if "template_threshold" in routing and "quick_reply_threshold" not in routing:
-            logger.info("Migrating routing.template_threshold to routing.quick_reply_threshold")
-            routing["quick_reply_threshold"] = routing["template_threshold"]
-            del routing["template_threshold"]
-
-        version = 8
-
-    if version < 9:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
-
-        # Migrate mlx_service_url to mlx_service_socket
-        if "embedding" not in data:
-            data["embedding"] = {}
-
-        embedding = data["embedding"]
-        if "mlx_service_url" in embedding:
-            # Remove the old HTTP URL field - new socket path will use default
-            logger.info("Removing deprecated mlx_service_url, using Unix socket instead")
-            del embedding["mlx_service_url"]
-
-        version = 9
-
-    if version < 10:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
-
-        # Add retrieval section if missing
-        if "retrieval" not in data:
-            data["retrieval"] = {}
-
-        version = 10
-
-    if version < 11:
-        logger.info(f"Migrating config from version {version} to {CONFIG_VERSION}")
-
-        # Add segmentation section if missing
-        if "segmentation" not in data:
-            data["segmentation"] = {}
-
-        version = 11
-
-    # Update version
+    # Update to current version
     data["config_version"] = CONFIG_VERSION
 
     return data
@@ -836,6 +866,12 @@ def get_response_classifier_path() -> Path:
         Path to response_classifier_model/ for the current embedding model.
     """
     return get_embedding_artifacts_dir() / "response_classifier_model"
+
+
+def get_trigger_classifier_path() -> Path:
+    """Get path to the trigger classifier model directory."""
+
+    return get_embedding_artifacts_dir() / "trigger_classifier_model"
 
 
 def get_embeddings_db_path() -> Path:

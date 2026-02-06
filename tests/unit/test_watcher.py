@@ -39,17 +39,18 @@ class TestChatDBWatcher:
     @pytest.mark.asyncio
     async def test_start_stop(self, watcher: ChatDBWatcher) -> None:
         """Watcher can start and stop."""
-        with patch.object(watcher, "_get_last_rowid", return_value=100):
-            with patch("jarvis.watcher.CHAT_DB_PATH") as mock_path:
-                mock_path.exists.return_value = True
-                mock_path.stat.return_value.st_mtime = 1000.0
+        with patch.object(watcher, "_validate_schema", return_value=True):
+            with patch.object(watcher, "_get_last_rowid", return_value=100):
+                with patch("jarvis.watcher.CHAT_DB_PATH") as mock_path:
+                    mock_path.exists.return_value = True
+                    mock_path.stat.return_value.st_mtime = 1000.0
 
-                await watcher.start()
-                assert watcher._running is True
-                assert watcher._last_rowid == 100
+                    await watcher.start()
+                    assert watcher._running is True
+                    assert watcher._last_rowid == 100
 
-                await watcher.stop()
-                assert watcher._running is False
+                    await watcher.stop()
+                    assert watcher._running is False
 
     @pytest.mark.asyncio
     async def test_query_last_rowid(self, watcher: ChatDBWatcher) -> None:

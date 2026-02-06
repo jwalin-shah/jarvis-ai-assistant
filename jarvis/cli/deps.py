@@ -18,7 +18,6 @@ from rich.console import Console
 from core.health import get_degradation_controller, reset_degradation_controller
 from core.memory import get_memory_controller, reset_memory_controller
 from jarvis.context import ContextFetcher
-from jarvis.intent import IntentClassifier, IntentType
 from jarvis.system import (
     FEATURE_CHAT,
     FEATURE_IMESSAGE,
@@ -67,8 +66,6 @@ __all__ = [
     "reset_memory_controller",
     # Context and intent
     "ContextFetcher",
-    "IntentClassifier",
-    "IntentType",
     # System
     "FEATURE_CHAT",
     "FEATURE_IMESSAGE",

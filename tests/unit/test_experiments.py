@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from jarvis.experiments import (
+from jarvis.eval.experiments import (
     Experiment,
     ExperimentManager,
     ExperimentOutcome,

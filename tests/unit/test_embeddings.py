@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from contracts.imessage import Message
-from jarvis.embeddings import (
+from jarvis.search.embeddings import (
     ConversationContext,
     EmbeddingError,
     EmbeddingStore,
@@ -733,6 +733,31 @@ class TestRAGPromptBuilder:
         )
 
         assert "Be brief and direct" in prompt
+
+    def test_build_rag_reply_prompt_with_context_object(self):
+        """Test RAG prompt includes style guide lines from typed context."""
+        from jarvis.contacts.contact_profile_context import ContactProfileContext
+        from jarvis.prompts import build_rag_reply_prompt
+
+        context = ContactProfileContext(
+            tone="professional",
+            avg_message_length=120,
+            style_guide="Stay formal and mention the agenda.",
+            greeting_style=["Hello"],
+            signoff_style=["Warm regards"],
+            top_topics=["budget", "roadmap"],
+        )
+
+        prompt = build_rag_reply_prompt(
+            context="Project chat",
+            last_message="Status update?",
+            contact_name="Taylor",
+            contact_context=context,
+        )
+
+        assert "Stay formal and mention the agenda." in prompt
+        assert "Common greetings: Hello" in prompt
+        assert "Topics you often discuss: budget, roadmap" in prompt
 
 
 # =============================================================================

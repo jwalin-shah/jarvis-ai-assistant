@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from jarvis.response_classifier import (
+from jarvis.classifiers.response_classifier import (
     COMMITMENT_RESPONSE_TYPES,
     STRUCTURAL_PATTERNS,
     TRIGGER_TO_VALID_RESPONSES,
@@ -154,7 +154,6 @@ class TestStructuralPatterns:
         """Structural patterns match expected response types."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
         result = classifier.classify(text)
 
@@ -178,7 +177,6 @@ class TestTapbackDetection:
         """Positive tapbacks classified as REACT_POSITIVE."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
         result = classifier.classify(text)
 
@@ -197,7 +195,6 @@ class TestTapbackDetection:
         """Filtered tapbacks return ANSWER with low confidence."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
         result = classifier.classify(text)
 
@@ -213,7 +210,6 @@ class TestHybridResponseClassifier:
         """Empty input returns STATEMENT with zero confidence."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
 
         result = classifier.classify("")
@@ -225,7 +221,6 @@ class TestHybridResponseClassifier:
         """Whitespace-only input treated as empty."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
 
         result = classifier.classify("   \t\n  ")
@@ -236,7 +231,6 @@ class TestHybridResponseClassifier:
         """Structural matches have high confidence."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
 
         result = classifier.classify("yes!")
@@ -248,7 +242,6 @@ class TestHybridResponseClassifier:
         """is_commitment_response correctly identifies commitment types."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
 
         agree_result = classifier.classify("yes")
@@ -273,7 +266,6 @@ class TestClassifyBatch:
         """Empty list returns empty results."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
         results = classifier.classify_batch([])
         assert results == []
@@ -282,7 +274,6 @@ class TestClassifyBatch:
         """Batch of empty strings uses fast path (no embedding needed)."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
         texts = ["", "   ", "\t\n"]
         results = classifier.classify_batch(texts)
@@ -296,7 +287,6 @@ class TestClassifyBatch:
         """Batch of tapbacks uses fast path (no embedding needed)."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
         texts = ['Liked "message"', 'Loved "great"', 'Disliked "bad"']
         results = classifier.classify_batch(texts)
@@ -367,7 +357,6 @@ class TestEdgeCases:
         """Patterns match case-insensitively."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
 
         lower = classifier.classify("yes")
@@ -380,7 +369,6 @@ class TestEdgeCases:
         """Unicode characters don't cause errors."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
 
         # Should not raise
@@ -394,7 +382,6 @@ class TestEdgeCases:
         """Very long input doesn't cause issues."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
         long_text = "this is a test " * 100
 
@@ -405,7 +392,6 @@ class TestEdgeCases:
         """Special characters are handled."""
         classifier = HybridResponseClassifier(
             use_centroid_verification=False,
-            use_svm=False,
         )
 
         result = classifier.classify("yes!!!")

@@ -257,14 +257,15 @@ class MLXEmbedder:
         # instead of accumulating in RAM. Prevents OOM on 8GB system.
         # 100k embeddings x 384 dims x 4 bytes = 150MB (ok)
         # 500k embeddings x 384 dims x 4 bytes = 750MB (risky without memmap)
-        MEMMAP_THRESHOLD = 10000
-        use_memmap = len(texts) > MEMMAP_THRESHOLD
+        memmap_threshold = 10000
+        use_memmap = len(texts) > memmap_threshold
         memmap_array: np.ndarray | None = None
         memmap_offset = 0
         memmap_path: str | None = None
 
         if use_memmap:
             import tempfile
+
             memmap_path = tempfile.mktemp(suffix=".mmap", prefix="jarvis_embed_")
             memmap_array = np.memmap(
                 memmap_path,
@@ -287,7 +288,7 @@ class MLXEmbedder:
             if use_memmap and memmap_array is not None:
                 batch_embeddings = batch_embeddings.astype(np.float32)
                 batch_len = len(batch_embeddings)
-                memmap_array[memmap_offset:memmap_offset + batch_len] = batch_embeddings
+                memmap_array[memmap_offset : memmap_offset + batch_len] = batch_embeddings
                 memmap_offset += batch_len
             else:
                 all_embeddings.append(batch_embeddings)
@@ -308,6 +309,7 @@ class MLXEmbedder:
             del memmap_array
             if memmap_path:
                 import os
+
                 try:
                     os.unlink(memmap_path)
                 except OSError:

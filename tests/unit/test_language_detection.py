@@ -1,6 +1,5 @@
 """Unit tests for language detection in jarvis/text_normalizer.py."""
 
-
 from jarvis.text_normalizer import detect_language, is_english
 
 

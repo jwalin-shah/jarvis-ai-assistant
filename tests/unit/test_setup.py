@@ -16,7 +16,6 @@ from contracts.health import Permission, PermissionStatus, SchemaInfo
 from contracts.memory import MemoryMode
 from jarvis.setup import (
     DEFAULT_MODEL_PATH,
-    DEFAULT_QUICK_REPLY_THRESHOLD,
     CheckResult,
     CheckStatus,
     JarvisConfig,

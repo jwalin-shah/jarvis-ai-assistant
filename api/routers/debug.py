@@ -17,8 +17,9 @@ from typing import Any
 
 import psutil
 from fastapi import APIRouter
-from starlette.concurrency import run_in_threadpool, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+from starlette.requests import Request
 
 from api.ratelimit import RATE_LIMIT_READ, limiter
 

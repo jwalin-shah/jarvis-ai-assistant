@@ -8,6 +8,7 @@ import sys
 import types
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 
@@ -107,8 +108,6 @@ requires_sentence_transformers = pytest.mark.skipif(
 # =============================================================================
 # Mock Embedder for Tests
 # =============================================================================
-
-import numpy as np
 
 
 class MockEmbedder:
@@ -225,11 +224,6 @@ def auto_mock_embedder(monkeypatch, request):
     # Also patch where it might be imported directly
     try:
         monkeypatch.setattr("jarvis.router.get_embedder", mock_get_embedder)
-    except AttributeError:
-        pass
-
-    try:
-        monkeypatch.setattr("jarvis.index.get_embedder", mock_get_embedder)
     except AttributeError:
         pass
 

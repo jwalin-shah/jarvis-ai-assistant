@@ -366,6 +366,9 @@ class TestBuildRelationshipProfile:
 
         assert "scheduling" in profile.topic_distribution.top_topics
 
+    @pytest.mark.skip(
+        reason="embedding_profile archived - embedding topic analysis moved to contact_profile"
+    )
     def test_embedding_topics_merge_with_keywords(self, monkeypatch):
         """Test embedding-derived topics merge into distribution."""
         from jarvis.embedding_profile import EmbeddingProfile, TopicCluster

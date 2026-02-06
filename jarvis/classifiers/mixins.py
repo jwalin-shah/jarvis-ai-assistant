@@ -2,32 +2,30 @@
 
 Provides composable mixins that encapsulate common patterns:
 - EmbedderMixin: Lazy-loaded embedder access
-- SVMModelMixin: SVM model loading and prediction
 - CentroidMixin: Centroid-based verification and classification
 
 Usage:
-    class MyClassifier(EmbedderMixin, SVMModelMixin):
+    class MyClassifier(EmbedderMixin, CentroidMixin):
         def __init__(self, model_path: Path):
             self._model_path = model_path
             # Mixin state is initialized lazily
 
         def classify(self, text: str):
             embedding = self.embedder.encode([text], normalize=True)[0]
-            return self._predict_svm(embedding)
+            label, score = self._find_nearest_centroid(embedding)
+            return label
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import pickle
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from jarvis.embedding_adapter import UnifiedEmbedder
+    from jarvis.embedding_adapter import CachedEmbedder
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +44,14 @@ class EmbedderMixin:
                 return self.embedder.encode([text], normalize=True)[0]
     """
 
-    _embedder: UnifiedEmbedder | None = None
+    _embedder: CachedEmbedder | None = None
 
     @property
-    def embedder(self) -> UnifiedEmbedder:
+    def embedder(self) -> CachedEmbedder:
         """Get the embedder, loading it lazily on first access.
 
         Returns:
-            The shared UnifiedEmbedder instance.
+            The shared CachedEmbedder instance.
         """
         if self._embedder is None:
             from jarvis.embedding_adapter import get_embedder
@@ -62,119 +60,14 @@ class EmbedderMixin:
         return self._embedder
 
 
-class SVMModelMixin:
-    """Mixin for loading and using SVM classifiers.
-
-    Provides methods for loading SVM models from disk and making predictions.
-    Expects subclass to set self._model_path to the model directory.
-
-    The model directory should contain:
-    - svm.pkl: Pickled sklearn SVM classifier
-    - config.json: Configuration with "labels" list
-
-    Usage:
-        class MyClassifier(SVMModelMixin):
-            def __init__(self, model_path: Path):
-                self._model_path = model_path
-                self._load_svm()
-
-            def classify(self, embedding: np.ndarray):
-                label, confidence = self._predict_svm(embedding)
-                return label
-    """
-
-    _svm: Any = None
-    _svm_labels: list[str] | None = None
-    _svm_loaded: bool = False
-    _model_path: Path
-
-    def _load_svm(self) -> bool:
-        """Load the SVM model and labels from disk.
-
-        Expects self._model_path to be set to the model directory containing:
-        - svm.pkl: Pickled SVM classifier
-        - config.json: Configuration with "labels" key
-
-        Returns:
-            True if model loaded successfully, False otherwise.
-        """
-        svm_path = self._model_path / "svm.pkl"
-        config_path = self._model_path / "config.json"
-
-        if not svm_path.exists() or not config_path.exists():
-            logger.debug("SVM model not found at %s", self._model_path)
-            self._svm_loaded = True  # Mark as attempted
-            return False
-
-        try:
-            with open(svm_path, "rb") as f:
-                self._svm = pickle.load(f)
-            with open(config_path) as f:
-                config = json.load(f)
-                # Support both "labels" and "classes" keys
-                self._svm_labels = config.get("labels") or config.get("classes") or []
-
-            self._svm_loaded = True
-            logger.info("Loaded SVM classifier from %s", self._model_path)
-            return True
-
-        except Exception as e:
-            logger.warning("Failed to load SVM model: %s", e)
-            self._svm = None
-            self._svm_labels = None
-            self._svm_loaded = True
-            return False
-
-    def _predict_svm(
-        self,
-        embedding: np.ndarray,
-    ) -> tuple[str | None, float]:
-        """Predict using the SVM classifier.
-
-        Args:
-            embedding: Normalized embedding vector.
-
-        Returns:
-            Tuple of (predicted_label, confidence).
-            Returns (None, 0.0) if SVM not available.
-        """
-        if not self._svm_loaded or self._svm is None or not self._svm_labels:
-            return None, 0.0
-
-        try:
-            # Reshape for sklearn
-            embedding_2d = embedding.reshape(1, -1).astype(np.float32)
-
-            # Get prediction and probability
-            probs = self._svm.predict_proba(embedding_2d)[0]
-            pred_idx = int(np.argmax(probs))
-            confidence = float(probs[pred_idx])
-
-            label = self._svm_labels[pred_idx]
-            return label, confidence
-
-        except Exception as e:
-            logger.warning("SVM prediction failed: %s", e)
-            return None, 0.0
-
-    @property
-    def svm_available(self) -> bool:
-        """Check if the SVM model is loaded and available.
-
-        Returns:
-            True if SVM is ready for predictions.
-        """
-        return self._svm_loaded and self._svm is not None
-
-
 class CentroidMixin:
     """Mixin for centroid-based classification and verification.
 
     Provides methods for loading centroids and finding the nearest centroid.
-    Used for verifying SVM predictions or as a standalone classifier.
+    Used for verifying predictions or as a standalone classifier.
 
     Centroids are mean embeddings for each class, stored as:
-    - centroids.npy: Numpy file with dict {label: centroid_array}
+    - centroids.npz: NumPy archive with label keys and centroid arrays (no pickle)
 
     Usage:
         class MyClassifier(CentroidMixin):
@@ -197,8 +90,8 @@ class CentroidMixin:
     def _load_centroids(self) -> bool:
         """Load centroids from file.
 
-        Expects self._model_path/centroids.npy to contain a dict
-        mapping label strings to numpy arrays.
+        Expects self._model_path/centroids.npz to contain numpy arrays
+        for each label (saved with np.savez).
 
         Returns:
             True if centroids loaded successfully.
@@ -206,15 +99,20 @@ class CentroidMixin:
         if self._centroids_loaded:
             return self._centroids is not None
 
-        centroids_path = self._model_path / "centroids.npy"
+        if not hasattr(self, "_model_path"):
+            raise AttributeError(
+                f"{type(self).__name__} must set _model_path before using CentroidMixin"
+            )
+
+        centroids_path = self._model_path / "centroids.npz"
         if not centroids_path.exists():
             logger.debug("Centroids not found at %s", centroids_path)
             self._centroids_loaded = True
             return False
 
         try:
-            data = np.load(centroids_path, allow_pickle=True).item()
-            self._centroids = {label: np.array(centroid) for label, centroid in data.items()}
+            data = np.load(centroids_path, allow_pickle=False)
+            self._centroids = {key: data[key] for key in data.files}
             self._centroids_loaded = True
             logger.info("Loaded centroids for %d classes", len(self._centroids))
             return True
@@ -316,6 +214,5 @@ class CentroidMixin:
 
 __all__ = [
     "EmbedderMixin",
-    "SVMModelMixin",
     "CentroidMixin",
 ]

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from jarvis.metrics_router import (
+from jarvis.observability.metrics_router import (
     RoutingMetrics,
     RoutingMetricsStore,
     flush_routing_metrics,

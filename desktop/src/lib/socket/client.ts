@@ -431,14 +431,6 @@ class JarvisSocket {
             if (pending && pending.onToken) {
               pending.onToken(token, index);
             }
-          } else {
-            // TODO(server): Server should include request_id with stream tokens.
-            // Fallback: broadcast to all streaming requests (legacy behavior)
-            for (const [, pending] of this.wsPendingRequests) {
-              if (pending.onToken) {
-                pending.onToken(token, index);
-              }
-            }
           }
           return;
         }

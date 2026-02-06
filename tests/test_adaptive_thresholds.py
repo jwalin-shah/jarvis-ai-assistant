@@ -18,14 +18,14 @@ from unittest.mock import patch
 
 import pytest
 
-from jarvis.adaptive_thresholds import (
+from jarvis.eval.adaptive_thresholds import (
     AdaptiveThresholdManager,
     SimilarityBucketStats,
     get_adaptive_threshold_manager,
     reset_adaptive_threshold_manager,
 )
 from jarvis.config import AdaptiveThresholdConfig, RoutingConfig, reset_config
-from jarvis.evaluation import (
+from jarvis.eval.evaluation import (
     FeedbackAction,
     FeedbackEntry,
     FeedbackStore,
@@ -496,7 +496,7 @@ class TestRouterIntegration:
             adaptive=mock_adaptive_config,
         )
 
-        with patch("jarvis.adaptive_thresholds.get_config") as mock_config:
+        with patch("jarvis.eval.adaptive_thresholds.get_config") as mock_config:
             mock_jarvis_config = type("MockConfig", (), {"routing": mock_routing_config})()
             mock_config.return_value = mock_jarvis_config
 

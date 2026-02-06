@@ -1,6 +1,6 @@
 """Tests for contract dataclass validation."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -11,14 +11,13 @@ from contracts import (
     GenerationResponse,
     HHEMBenchmarkResult,
     HHEMResult,
-    LatencyBenchmarkResult,
     LatencyResult,
     MemoryMode,
     MemoryProfile,
     MemoryState,
 )
 from contracts.health import DegradationPolicy
-from contracts.imessage import Attachment, AttachmentSummary, Conversation, Message, Reaction
+from contracts.imessage import Attachment, Conversation, Message, Reaction
 
 
 class TestDetectedEventValidation:
@@ -28,7 +27,7 @@ class TestDetectedEventValidation:
         """Test creating a valid DetectedEvent."""
         event = DetectedEvent(
             title="Team Meeting",
-            start=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+            start=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
             confidence=0.8,
         )
         assert event.title == "Team Meeting"
@@ -39,7 +38,7 @@ class TestDetectedEventValidation:
         with pytest.raises(ValueError, match="Confidence must be between 0.0 and 1.0"):
             DetectedEvent(
                 title="Meeting",
-                start=datetime.now(tz=timezone.utc),
+                start=datetime.now(tz=UTC),
                 confidence=1.5,
             )
 
@@ -48,7 +47,7 @@ class TestDetectedEventValidation:
         with pytest.raises(ValueError, match="Event title cannot be empty"):
             DetectedEvent(
                 title="   ",
-                start=datetime.now(tz=timezone.utc),
+                start=datetime.now(tz=UTC),
             )
 
 
@@ -351,7 +350,7 @@ class TestReactionValidation:
                 type="invalid",
                 sender="+1234567890",
                 sender_name="John",
-                date=datetime.now(tz=timezone.utc),
+                date=datetime.now(tz=UTC),
             )
 
     def test_valid_reaction_types(self) -> None:
@@ -362,7 +361,7 @@ class TestReactionValidation:
                 type=reaction_type,
                 sender="+1234567890",
                 sender_name="John",
-                date=datetime.now(tz=timezone.utc),
+                date=datetime.now(tz=UTC),
             )
             assert reaction.type == reaction_type
 
@@ -372,7 +371,7 @@ class TestReactionValidation:
             type="removed_love",
             sender="+1234567890",
             sender_name="John",
-            date=datetime.now(tz=timezone.utc),
+            date=datetime.now(tz=UTC),
         )
         assert reaction.type == "removed_love"
 
@@ -389,7 +388,7 @@ class TestMessageValidation:
                 sender="+1234567890",
                 sender_name="John",
                 text="Hello",
-                date=datetime.now(tz=timezone.utc),
+                date=datetime.now(tz=UTC),
                 is_from_me=False,
             )
 
@@ -404,7 +403,7 @@ class TestConversationValidation:
                 chat_id="chat-123",
                 participants=[],
                 display_name="Empty Chat",
-                last_message_date=datetime.now(tz=timezone.utc),
+                last_message_date=datetime.now(tz=UTC),
                 message_count=0,
                 is_group=False,
             )
@@ -416,7 +415,7 @@ class TestConversationValidation:
                 chat_id="chat-123",
                 participants=["+1234567890"],
                 display_name="Invalid Group",
-                last_message_date=datetime.now(tz=timezone.utc),
+                last_message_date=datetime.now(tz=UTC),
                 message_count=10,
                 is_group=True,
             )
@@ -427,7 +426,7 @@ class TestConversationValidation:
             chat_id="chat-123",
             participants=["+1234567890", "+0987654321"],
             display_name="Team Chat",
-            last_message_date=datetime.now(tz=timezone.utc),
+            last_message_date=datetime.now(tz=UTC),
             message_count=100,
             is_group=True,
         )

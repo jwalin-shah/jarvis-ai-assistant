@@ -108,9 +108,7 @@ class TestFastAPIAppStartup:
             "/experiments",
             "/templates",  # custom-templates
             "/embeddings",
-            "/digest",
             "/relationships",
-            "/quality",
             "/contacts",
         ]
 
@@ -360,15 +358,15 @@ class TestRateLimiterUnderLoad:
             RATE_LIMIT_GENERATION,
             RATE_LIMIT_READ,
             RATE_LIMIT_WRITE,
-            TIMEOUT_GENERATION,
-            TIMEOUT_READ,
+            get_timeout_generation,
+            get_timeout_read,
         )
 
         assert RATE_LIMIT_GENERATION == "10/minute"
         assert RATE_LIMIT_READ == "60/minute"
         assert RATE_LIMIT_WRITE == "30/minute"
-        assert TIMEOUT_GENERATION == 30.0
-        assert TIMEOUT_READ == 10.0
+        assert get_timeout_generation() == 30.0
+        assert get_timeout_read() == 10.0
 
     def test_with_timeout_decorator(self):
         """with_timeout decorator properly enforces timeout."""
@@ -426,7 +424,9 @@ class TestConfigMigrationEdgeCases:
         assert config.config_version == CONFIG_VERSION
         assert config.ui.theme == "system"
         assert config.search.default_limit == 75  # Migrated from imessage_default_limit
-        assert config.routing.quick_reply_threshold == 0.8  # Migrated from template_similarity_threshold
+        assert (
+            config.routing.quick_reply_threshold == 0.8
+        )  # Migrated from template_similarity_threshold
         assert config.chat.stream_responses is True
         assert config.rate_limit.enabled is True
         assert config.task_queue.max_completed_tasks == 100

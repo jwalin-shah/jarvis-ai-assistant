@@ -201,9 +201,9 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     console.print(f"[bold]Running {benchmark_type} benchmark...[/bold]\n")
 
     benchmark_modules = {
-        "memory": "benchmarks.memory.run",
-        "latency": "benchmarks.latency.run",
-        "hhem": "benchmarks.hallucination.run",
+        "memory": "evals.benchmarks.memory.run",
+        "latency": "evals.benchmarks.latency.run",
+        "hhem": "evals.benchmarks.hallucination.run",
     }
 
     if benchmark_type not in benchmark_modules:
@@ -270,9 +270,7 @@ def cmd_db(args: argparse.Namespace) -> int:
     subcommand = args.db_command
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
-        console.print(
-            "Available: init, add-contact, list-contacts, extract, build-index, stats, cluster"
-        )
+        console.print("Available: init, add-contact, list-contacts, extract, stats")
         return 1
 
     if subcommand == "init":
@@ -283,12 +281,8 @@ def cmd_db(args: argparse.Namespace) -> int:
         return _cmd_db_list_contacts(args)
     elif subcommand == "extract":
         return _cmd_db_extract(args)
-    elif subcommand == "build-index":
-        return _cmd_db_build_index(args)
     elif subcommand == "stats":
         return _cmd_db_stats(args)
-    elif subcommand == "cluster":
-        return _cmd_db_cluster(args)
     else:
         console.print(f"[red]Unknown db subcommand: {subcommand}[/red]")
         return 1
@@ -301,7 +295,7 @@ def cmd_ner(args: argparse.Namespace) -> int:
     import subprocess
     from pathlib import Path
 
-    from jarvis.ner_client import PID_FILE, SOCKET_PATH, get_pid, is_service_running
+    from jarvis.nlp.ner_client import PID_FILE, SOCKET_PATH, get_pid, is_service_running
 
     subcommand = args.ner_command
     if subcommand is None:
@@ -504,126 +498,77 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
         console.print(f"[dim]Created database at {db.db_path}[/dim]")
 
     from integrations.imessage import ChatDBReader
+    from jarvis.extract import ExchangeBuilderConfig, extract_all_pairs
 
-    use_v2 = getattr(args, "v2", False)
+    config = ExchangeBuilderConfig(
+        time_gap_boundary_minutes=getattr(args, "time_gap", 30.0),
+        context_window_size=getattr(args, "context_size", 20),
+        max_response_delay_hours=args.max_delay,
+    )
 
-    if use_v2:
-        from jarvis.extract import ExchangeBuilderConfig, extract_all_pairs_v2
+    embedder = None
+    skip_nli = getattr(args, "skip_nli", False)
+    nli_model = None
 
-        config = ExchangeBuilderConfig(
-            time_gap_boundary_minutes=getattr(args, "time_gap", 30.0),
-            context_window_size=getattr(args, "context_size", 20),
-            max_response_delay_hours=args.max_delay,
-        )
+    try:
+        from jarvis.embedding_adapter import get_embedder
 
-        embedder = None
-        skip_nli = getattr(args, "skip_nli", False)
-        nli_model = None
+        embedder = get_embedder()
+        console.print(f"[dim]Loaded embedder for Gate B (backend: {embedder.backend})[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]Could not load embedder: {e}[/yellow]")
+        console.print("[yellow]Gate B will be skipped[/yellow]")
 
+    if not skip_nli:
         try:
-            from jarvis.embedding_adapter import get_embedder
+            from jarvis.nlp.validity_gate import load_nli_model
 
-            embedder = get_embedder()
-            console.print(f"[dim]Loaded embedder for Gate B (backend: {embedder.backend})[/dim]")
+            nli_model = load_nli_model()
+            if nli_model:
+                console.print("[dim]Loaded NLI model for Gate C[/dim]")
         except Exception as e:
-            console.print(f"[yellow]Could not load embedder: {e}[/yellow]")
-            console.print("[yellow]Gate B will be skipped[/yellow]")
+            console.print(f"[yellow]Could not load NLI model: {e}[/yellow]")
 
-        if not skip_nli:
-            try:
-                from jarvis.validity_gate import load_nli_model
+    console.print("[bold]Extracting pairs using high-quality exchange pipeline...[/bold]\n")
 
-                nli_model = load_nli_model()
-                if nli_model:
-                    console.print("[dim]Loaded NLI model for Gate C[/dim]")
-            except Exception as e:
-                console.print(f"[yellow]Could not load NLI model: {e}[/yellow]")
+    with ChatDBReader() as reader:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Processing conversations...", total=None)
 
-        console.print(
-            "[bold]Extracting pairs using v2 pipeline (exchange-based with gates)...[/bold]\n"
-        )
-
-        with ChatDBReader() as reader:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-            ) as progress:
-                task = progress.add_task("Processing conversations...", total=None)
-
-                def progress_cb(current: int, total: int, chat_id: str) -> None:
-                    progress.update(
-                        task,
-                        description=f"Processing {current}/{total}: {chat_id[:30]}...",
-                    )
-
-                stats = extract_all_pairs_v2(
-                    reader, db, config, embedder, nli_model, progress_cb, skip_nli
+            def progress_cb(current: int, total: int, chat_id: str) -> None:
+                progress.update(
+                    task,
+                    description=f"Processing {current}/{total}: {chat_id[:30]}...",
                 )
 
-        console.print("\n[bold green]Extraction complete (v2 pipeline)![/bold green]")
-        console.print(f"  Messages scanned: {stats['total_messages_scanned']}")
-        console.print(f"  Exchanges built: {stats['exchanges_built']}")
-        console.print(f"  Conversations processed: {stats['conversations_processed']}")
-        console.print(f"  Pairs added: {stats['pairs_added']}")
-        console.print(f"  Duplicates skipped: {stats['pairs_skipped_duplicate']}")
+            stats = extract_all_pairs(
+                reader, db, config, embedder, nli_model, progress_cb, skip_nli
+            )
 
-        console.print("\n[bold]Validity Gate Results:[/bold]")
-        console.print(f"  Gate A rejected: {stats['gate_a_rejected']}")
-        console.print(f"  Gate B rejected: {stats['gate_b_rejected']}")
-        console.print(f"  Gate C rejected: {stats['gate_c_rejected']}")
-        console.print(f"  Final valid: {stats['final_valid']}")
-        console.print(f"  Final invalid: {stats['final_invalid']}")
-        console.print(f"  Final uncertain: {stats['final_uncertain']}")
+    console.print("\n[bold green]Extraction complete![/bold green]")
+    console.print(f"  Messages scanned: {stats['total_messages_scanned']}")
+    console.print(f"  Exchanges built: {stats['exchanges_built']}")
+    console.print(f"  Conversations processed: {stats['conversations_processed']}")
+    console.print(f"  Pairs added: {stats['pairs_added']}")
+    console.print(f"  Duplicates skipped: {stats['pairs_skipped_duplicate']}")
 
-        gate_a_reasons = stats.get("gate_a_reasons", {})
-        if gate_a_reasons:
-            console.print("\n[dim]Gate A rejection reasons:[/dim]")
-            for reason, count in sorted(gate_a_reasons.items(), key=lambda x: -x[1]):
-                console.print(f"  {reason}: {count}")
+    console.print("\n[bold]Validity Gate Results:[/bold]")
+    console.print(f"  Gate A rejected: {stats['gate_a_rejected']}")
+    console.print(f"  Gate B rejected: {stats['gate_b_rejected']}")
+    console.print(f"  Gate C rejected: {stats['gate_c_rejected']}")
+    console.print(f"  Final valid: {stats['final_valid']}")
+    console.print(f"  Final invalid: {stats['final_invalid']}")
+    console.print(f"  Final uncertain: {stats['final_uncertain']}")
 
-    else:
-        from jarvis.extract import ExtractionConfig, extract_all_pairs
-
-        config = ExtractionConfig(
-            min_trigger_length=args.min_length,
-            min_response_length=args.min_length,
-            max_response_delay_hours=args.max_delay,
-        )
-
-        console.print("[bold]Extracting (trigger, response) pairs from iMessage...[/bold]\n")
-
-        with ChatDBReader() as reader:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-            ) as progress:
-                task = progress.add_task("Processing conversations...", total=None)
-
-                def progress_cb(current: int, total: int, chat_id: str) -> None:
-                    progress.update(
-                        task,
-                        description=f"Processing {current}/{total}: {chat_id[:30]}...",
-                    )
-
-                stats = extract_all_pairs(reader, db, config, progress_cb)
-
-        console.print("\n[bold green]Extraction complete![/bold green]")
-        console.print(f"  Messages scanned: {stats.get('total_messages_scanned', 'N/A')}")
-        console.print(f"  Turns identified: {stats.get('turns_identified', 'N/A')}")
-        console.print(f"  Conversations processed: {stats['conversations_processed']}")
-        console.print(f"  Candidate pairs: {stats.get('candidate_pairs', 'N/A')}")
-        console.print(f"  Pairs extracted: {stats['pairs_extracted']}")
-        console.print(f"  Pairs added to database: {stats['pairs_added']}")
-        console.print(f"  Duplicates skipped: {stats['pairs_skipped_duplicate']}")
-
-        dropped = stats.get("dropped_by_reason", {})
-        if dropped and any(v > 0 for v in dropped.values()):
-            console.print("\n[dim]Dropped pairs by reason:[/dim]")
-            for reason, count in dropped.items():
-                if count > 0:
-                    console.print(f"  {reason}: {count}")
+    gate_a_reasons = stats.get("gate_a_reasons", {})
+    if gate_a_reasons:
+        console.print("\n[dim]Gate A rejection reasons:[/dim]")
+        for reason, count in sorted(gate_a_reasons.items(), key=lambda x: -x[1]):
+            console.print(f"  {reason}: {count}")
 
     if stats.get("errors"):
         console.print(f"\n[yellow]Errors: {len(stats['errors'])}[/yellow]")
@@ -631,53 +576,8 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_db_build_index(args: argparse.Namespace) -> int:
-    """Build FAISS index of triggers."""
-    from rich.progress import Progress, SpinnerColumn, TextColumn
-
-    from jarvis.index import build_index_from_db
-
-    db = get_db()
-    if not db.exists():
-        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
-        return 1
-
-    pair_count = db.count_pairs()
-    if pair_count == 0:
-        console.print("[yellow]No pairs found. Run 'jarvis db extract' first.[/yellow]")
-        return 1
-
-    console.print(f"[bold]Building FAISS index for {pair_count} triggers...[/bold]\n")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Initializing...", total=None)
-
-        def progress_cb(stage: str, pct: float, msg: str) -> None:
-            progress.update(task, description=msg)
-
-        result = build_index_from_db(db, None, progress_cb)
-
-    if not result["success"]:
-        console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
-        return 1
-
-    console.print("\n[bold green]Index built successfully![/bold green]")
-    console.print(f"  Triggers indexed: {result['pairs_indexed']}")
-    console.print(f"  Embedding dimension: {result['dimension']}")
-    console.print(f"  Index size: {result['index_size_bytes'] / 1024:.1f} KB")
-    console.print(f"  Index path: {result['index_path']}")
-
-    return 0
-
-
 def _cmd_db_stats(args: argparse.Namespace) -> int:
     """Show database statistics."""
-    from jarvis.index import get_index_stats
-
     db = get_db()
 
     if not db.exists():
@@ -735,89 +635,19 @@ def _cmd_db_stats(args: argparse.Namespace) -> int:
         else:
             console.print("\n[dim]No pairs with gate data. Use --v2 extraction.[/dim]")
 
-    index_stats = get_index_stats(db)
-    if index_stats and index_stats.get("exists"):
-        console.print("\n[bold]FAISS Index:[/bold]")
-        console.print(f"  Version: {index_stats.get('version_id', 'N/A')}")
-        console.print(f"  Model: {index_stats.get('model_name', 'N/A')}")
-        console.print(f"  Vectors: {index_stats['num_vectors']}")
-        console.print(f"  Dimension: {index_stats['dimension']}")
-        console.print(f"  Size: {index_stats['size_bytes'] / 1024:.1f} KB")
-        if index_stats.get("created_at"):
-            console.print(f"  Created: {index_stats['created_at']}")
-    else:
-        console.print("\n[dim]FAISS index not built. Run 'jarvis db build-index'[/dim]")
+    try:
+        with db.connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) as cnt FROM vec_chunks")
+            row = cursor.fetchone()
+            vec_count = row["cnt"] if row else 0
+        if vec_count > 0:
+            console.print(f"\n[bold]Vec Index:[/bold] {vec_count} vectors")
+        else:
+            console.print("\n[dim]Vec index empty. Run 'jarvis db build-index'[/dim]")
+    except Exception:
+        console.print("\n[dim]Vec index not available.[/dim]")
 
     return 0
-
-
-def _cmd_db_cluster(args: argparse.Namespace) -> int:
-    """Run cluster analysis on message pairs."""
-    from rich.progress import Progress, SpinnerColumn, TextColumn
-
-    from jarvis.clustering import run_cluster_analysis
-
-    db = get_db()
-    if not db.exists():
-        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
-        return 1
-
-    pair_count = db.count_pairs()
-    if pair_count == 0:
-        console.print("[yellow]No pairs found. Run 'jarvis db extract' first.[/yellow]")
-        return 1
-
-    n_clusters = args.n_clusters
-    min_cluster_size = args.min_cluster_size
-
-    console.print(f"[bold]Running cluster analysis on {pair_count} pairs...[/bold]")
-    console.print(f"  Target clusters: {n_clusters}")
-    console.print(f"  Minimum cluster size: {min_cluster_size}\n")
-
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Computing embeddings and clustering...", total=None)
-
-            stats = run_cluster_analysis(
-                n_clusters=n_clusters,
-                min_cluster_size=min_cluster_size,
-            )
-
-            progress.update(task, completed=True)
-
-        if stats.clusters_created == 0:
-            console.print("\n[yellow]No clusters created.[/yellow]")
-            console.print(f"  Total pairs analyzed: {stats.total_pairs}")
-            console.print("  Try reducing --min-cluster-size or increasing --n-clusters")
-            return 0
-
-        console.print("\n[bold green]Cluster analysis complete![/bold green]")
-        console.print(f"  Total pairs analyzed: {stats.total_pairs}")
-        console.print(f"  Pairs clustered: {stats.pairs_clustered}")
-        console.print(f"  Clusters created: {stats.clusters_created}")
-        console.print(f"  Noise (unclustered): {stats.noise_count}")
-        console.print(f"  Largest cluster: {stats.largest_cluster_size} pairs")
-        console.print(f"  Smallest cluster: {stats.smallest_cluster_size} pairs")
-        console.print(f"  Average cluster size: {stats.avg_cluster_size:.1f} pairs")
-
-        # Show cluster details
-        clusters = db.list_clusters()
-        if clusters:
-            console.print("\n[bold]Clusters:[/bold]")
-            for cluster in clusters[:10]:  # Show top 10
-                console.print(f"  • {cluster.name}: {cluster.pair_count} pairs")
-            if len(clusters) > 10:
-                console.print(f"  ... and {len(clusters) - 10} more")
-
-        return 0
-    except Exception as e:
-        console.print(f"\n[red]Error during cluster analysis: {e}[/red]")
-        logger.exception("Cluster analysis failed")
-        return 1
 
 
 # =============================================================================
@@ -928,51 +758,40 @@ def create_parser() -> argparse.ArgumentParser:
     db_list_contacts_parser.add_argument("-l", "--limit", type=int, default=100, metavar="<n>")
 
     # db extract
-    db_extract_parser = db_subparsers.add_parser("extract", help="extract pairs from iMessage")
-    db_extract_parser.add_argument(
-        "--min-length", dest="min_length", type=int, default=2, metavar="<n>"
+    db_extract_parser = db_subparsers.add_parser(
+        "extract", help="extract high-quality pairs from iMessage"
     )
     db_extract_parser.add_argument(
-        "--max-delay", dest="max_delay", type=float, default=1.0, metavar="<hours>"
+        "--max-delay",
+        dest="max_delay",
+        type=float,
+        default=24.0,
+        metavar="<hours>",
+        help="maximum response delay (default: 24h)",
     )
     db_extract_parser.add_argument(
-        "--v2", action="store_true", help="use v2 extraction with validity gates"
+        "--time-gap",
+        dest="time_gap",
+        type=float,
+        default=30.0,
+        metavar="<min>",
+        help="gap that marks a new thread (default: 30m)",
     )
     db_extract_parser.add_argument(
-        "--time-gap", dest="time_gap", type=float, default=30.0, metavar="<min>"
+        "--context-size",
+        dest="context_size",
+        type=int,
+        default=20,
+        metavar="<n>",
+        help="context window size (default: 20)",
     )
     db_extract_parser.add_argument(
-        "--context-size", dest="context_size", type=int, default=20, metavar="<n>"
+        "--skip-nli", dest="skip_nli", action="store_true", help="skip NLI validation (Gate C)"
     )
-    db_extract_parser.add_argument("--skip-nli", dest="skip_nli", action="store_true")
-
-    # db build-index
-    db_subparsers.add_parser("build-index", help="build FAISS index")
 
     # db stats
     db_stats_parser = db_subparsers.add_parser("stats", help="show database statistics")
     db_stats_parser.add_argument("--gate-breakdown", dest="gate_breakdown", action="store_true")
-
-    # db cluster
-    db_cluster_parser = db_subparsers.add_parser(
-        "cluster", help="run cluster analysis on message pairs (experimental)"
-    )
-    db_cluster_parser.add_argument(
-        "--n-clusters",
-        dest="n_clusters",
-        type=int,
-        default=5,
-        metavar="<n>",
-        help="number of clusters to create (default: 5)",
-    )
-    db_cluster_parser.add_argument(
-        "--min-cluster-size",
-        dest="min_cluster_size",
-        type=int,
-        default=10,
-        metavar="<n>",
-        help="minimum messages per cluster (default: 10)",
-    )
 
     db_parser.set_defaults(func=cmd_db)
 

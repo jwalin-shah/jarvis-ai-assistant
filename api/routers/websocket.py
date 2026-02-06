@@ -246,9 +246,9 @@ class ConnectionManager:
         for client_id in stale_clients:
             logger.info("Removing stale WebSocket connection: %s", client_id)
             try:
-                client = self._clients.get(client_id)
-                if client:
-                    await client.websocket.close(code=1000, reason="Connection timeout")
+                stale_client = self._clients.get(client_id)
+                if stale_client:
+                    await stale_client.websocket.close(code=1000, reason="Connection timeout")
             except Exception as e:
                 logger.debug("Error closing stale connection %s: %s", client_id, e)
             await self.disconnect(client_id)

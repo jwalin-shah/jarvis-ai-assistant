@@ -177,7 +177,7 @@ class TestBenchmark:
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
         assert "-m" in call_args
-        assert "benchmarks.memory.run" in call_args
+        assert "evals.benchmarks.memory.run" in call_args
         assert exit_code == 0
 
     @patch("subprocess.run")
@@ -209,7 +209,7 @@ class TestBenchmark:
         exit_code = main(["benchmark", "hhem"])
 
         call_args = mock_run.call_args[0][0]
-        assert "benchmarks.hallucination.run" in call_args
+        assert "evals.benchmarks.hallucination.run" in call_args
         assert exit_code == 0
 
 
@@ -340,12 +340,6 @@ class TestDbCommand:
         args = parser.parse_args(["db", "extract"])
         assert args.db_command == "extract"
 
-    def test_parser_db_extract_v2(self):
-        """Parser parses db extract with v2 flag."""
-        parser = create_parser()
-        args = parser.parse_args(["db", "extract", "--v2"])
-        assert args.v2 is True
-
     def test_parser_db_stats(self):
         """Parser parses db stats command."""
         parser = create_parser()
@@ -358,8 +352,3 @@ class TestDbCommand:
         args = parser.parse_args(["db", "stats", "--gate-breakdown"])
         assert args.gate_breakdown is True
 
-    def test_parser_db_build_index(self):
-        """Parser parses db build-index command."""
-        parser = create_parser()
-        args = parser.parse_args(["db", "build-index"])
-        assert args.db_command == "build-index"

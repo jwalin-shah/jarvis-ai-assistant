@@ -146,8 +146,12 @@ class ConnectionPool:
         self._checked_out: set[sqlite3.Connection] = set()
         self._created_count = 0
         self._lock = threading.Lock()
+        self._cache_lock = threading.Lock()  # Lock for cache initialization
         self._closed = False
         self._schema_version: str | None = None
+        # Shared caches for all reader instances using this pool
+        self._contacts_cache: dict[str, str] | None = None
+        self._guid_to_rowid_cache: LRUCache[str, int] = LRUCache(maxsize=10000)
 
     def _create_connection(self) -> sqlite3.Connection:
         """Create a new read-only database connection.
@@ -435,12 +439,36 @@ class ChatDBReader:
         self._connection: sqlite3.Connection | None = None
         self._connection_from_pool = False  # Track if connection came from pool
         self._schema_version: str | None = None
-        # Cache for contact name lookups (phone/email -> name)
-        self._contacts_cache: dict[str, str] | None = None
-        # LRU cache for GUID to ROWID mappings (bounded to prevent memory leaks)
-        self._guid_to_rowid_cache: LRUCache[str, int] = LRUCache(maxsize=10000)
+        # Cache for contact name lookups (lazy-loaded)
+        self.__contacts_cache: dict[str, str] | None = None
+        # LRU cache for GUID to ROWID mappings (lazy-loaded)
+        self.__guid_to_rowid_cache: LRUCache[str, int] | None = None
         # Pool reference (lazy initialized)
         self._pool: ConnectionPool | None = None
+
+    @property
+    def _contacts_cache(self) -> dict[str, str] | None:
+        """Get the contacts cache (shared if using pool)."""
+        if self._use_pool:
+            return self._get_pool()._contacts_cache
+        return self.__contacts_cache
+
+    @_contacts_cache.setter
+    def _contacts_cache(self, value: dict[str, str] | None) -> None:
+        """Set the contacts cache (shared if using pool)."""
+        if self._use_pool:
+            self._get_pool()._contacts_cache = value
+        else:
+            self.__contacts_cache = value
+
+    @property
+    def _guid_to_rowid_cache(self) -> LRUCache[str, int]:
+        """Get the GUID to ROWID cache (shared if using pool)."""
+        if self._use_pool:
+            return self._get_pool()._guid_to_rowid_cache
+        if self.__guid_to_rowid_cache is None:
+            self.__guid_to_rowid_cache = LRUCache(maxsize=10000)
+        return self.__guid_to_rowid_cache
 
     def _get_pool(self) -> ConnectionPool:
         """Get the connection pool (lazy initialization).
@@ -451,6 +479,25 @@ class ChatDBReader:
         if self._pool is None:
             self._pool = get_connection_pool(self.db_path)
         return self._pool
+
+    @contextmanager
+    def _connection_context(self) -> Iterator[sqlite3.Connection]:
+        """Context manager for thread-safe connection access.
+
+        In pool mode, acquires a fresh connection from the pool and releases it when done.
+        In legacy mode, uses the dedicated connection.
+
+        Yields:
+            SQLite connection
+        """
+        if self._use_pool:
+            pool = self._get_pool()
+            with pool.connection() as conn:
+                # Set schema version from pool
+                self._schema_version = pool.schema_version
+                yield conn
+        else:
+            yield self._get_connection()
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get a read-only database connection.
@@ -572,8 +619,12 @@ class ChatDBReader:
             self._connection_from_pool = False
 
         self._schema_version = None
-        self._contacts_cache = None
-        self._guid_to_rowid_cache.clear()
+        # Only clear internal caches if not using shared pool
+        if not self._use_pool and self.__guid_to_rowid_cache is not None:
+            self.__guid_to_rowid_cache.clear()
+        
+        self.__contacts_cache = None
+        self.__guid_to_rowid_cache = None
 
     def _get_attachments_for_message(self, message_id: int) -> list[Attachment]:
         """Fetch attachments for a specific message.
@@ -588,26 +639,26 @@ class ChatDBReader:
         if message_id is None or not isinstance(message_id, int):
             return []
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        query = get_query("attachments", self._schema_version or "v14")
+            query = get_query("attachments", self._schema_version or "v14")
 
-        try:
-            cursor.execute(query, (message_id,))
-            rows = cursor.fetchall()
-            # Convert rows to dicts, handling potential malformed rows
-            row_dicts = []
-            for row in rows:
-                try:
-                    row_dicts.append(dict(row))
-                except (IndexError, TypeError):
-                    # Skip malformed rows
-                    continue
-            return parse_attachments(row_dicts)
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.debug(f"Error fetching attachments for message {message_id}: {e}")
-            return []
+            try:
+                cursor.execute(query, (message_id,))
+                rows = cursor.fetchall()
+                # Convert rows to dicts, handling potential malformed rows
+                row_dicts = []
+                for row in rows:
+                    try:
+                        row_dicts.append(dict(row))
+                    except (IndexError, TypeError):
+                        # Skip malformed rows
+                        continue
+                return parse_attachments(row_dicts)
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error fetching attachments for message {message_id}: {e}")
+                return []
 
     def _get_reactions_for_message(self, message_guid: str) -> list[Reaction]:
         """Fetch reactions for a specific message.
@@ -622,25 +673,25 @@ class ChatDBReader:
         if not message_guid or not isinstance(message_guid, str):
             return []
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        query = get_query("reactions", self._schema_version or "v14")
+            query = get_query("reactions", self._schema_version or "v14")
 
-        try:
-            cursor.execute(query, (message_guid,))
-            rows = cursor.fetchall()
-            reactions = parse_reactions([dict(row) for row in rows])
+            try:
+                cursor.execute(query, (message_guid,))
+                rows = cursor.fetchall()
+                reactions = parse_reactions([dict(row) for row in rows])
 
-            # Resolve sender names for reactions
-            for reaction in reactions:
-                if reaction.sender != "me":
-                    reaction.sender_name = self._resolve_contact_name(reaction.sender)
+                # Resolve sender names for reactions
+                for reaction in reactions:
+                    if reaction.sender != "me":
+                        reaction.sender_name = self._resolve_contact_name(reaction.sender)
 
-            return reactions
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.debug(f"Error fetching reactions for message {message_guid}: {e}")
-            return []
+                return reactions
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error fetching reactions for message {message_guid}: {e}")
+                return []
 
     def _get_message_rowid_by_guid(self, guid: str) -> int | None:
         """Get message ROWID from GUID.
@@ -656,22 +707,22 @@ class ChatDBReader:
         if cached is not None:
             return cached
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        query = get_query("message_by_guid", self._schema_version or "v14")
+            query = get_query("message_by_guid", self._schema_version or "v14")
 
-        try:
-            cursor.execute(query, (guid,))
-            row = cursor.fetchone()
-            if row:
-                rowid: int = int(row["id"])
-                self._guid_to_rowid_cache.set(guid, rowid)
-                return rowid
-            return None
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.debug(f"Error fetching message by GUID {guid}: {e}")
-            return None
+            try:
+                cursor.execute(query, (guid,))
+                row = cursor.fetchone()
+                if row:
+                    rowid: int = int(row["id"])
+                    self._guid_to_rowid_cache.set(guid, rowid)
+                    return rowid
+                return None
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error fetching message by GUID {guid}: {e}")
+                return None
 
     def _resolve_contact_name(self, identifier: str) -> str | None:
         """Resolve a phone number or email to a contact name.
@@ -689,16 +740,24 @@ class ChatDBReader:
 
         # Lazily load contacts cache
         if self._contacts_cache is None:
-            self._load_contacts_cache()
+            if self._use_pool:
+                # Use pool's cache lock to prevent multiple threads from loading simultaneously
+                with self._get_pool()._cache_lock:
+                    if self._get_pool()._contacts_cache is None:
+                        self._load_contacts_cache()
+            else:
+                self._load_contacts_cache()
 
         # Normalize the identifier for lookup
         normalized = normalize_phone_number(identifier)
         if normalized is None:
             return None
+            
         # Cache is guaranteed to be initialized after _load_contacts_cache
-        if self._contacts_cache is None:
+        cache = self._contacts_cache
+        if cache is None:
             return None
-        return self._contacts_cache.get(normalized)
+        return cache.get(normalized)
 
     def _load_contacts_cache(self) -> None:
         """Load contacts from AddressBook database into cache.
@@ -707,11 +766,13 @@ class ChatDBReader:
         (iCloud, Google, On My Mac, etc.) in the Sources directory.
         If unavailable (no Full Disk Access or different OS), cache remains empty.
         """
-        self._contacts_cache = {}
+        # Load into a local dict first to avoid partial cache state
+        new_cache: dict[str, str] = {}
 
         # Try to find AddressBook database
         if not ADDRESSBOOK_DB_PATH.exists():
             logger.debug("AddressBook path not found, contacts resolution disabled")
+            self._contacts_cache = new_cache
             return
 
         try:
@@ -722,26 +783,24 @@ class ChatDBReader:
                     continue
                 ab_db = source_dir / "AddressBook-v22.abcddb"
                 if ab_db.exists():
-                    self._load_contacts_from_db(ab_db)
+                    self._load_contacts_from_db_to_dict(ab_db, new_cache)
                     loaded_count += 1
             logger.debug(f"Loaded contacts from {loaded_count} AddressBook sources")
         except PermissionError:
             logger.debug("Permission denied accessing AddressBook directory")
         except OSError as e:
             logger.debug("I/O error accessing AddressBook: %s", e)
+            
+        # Atomically update the cache (sets on pool if in pool mode)
+        self._contacts_cache = new_cache
 
-    def _load_contacts_from_db(self, db_path: Path) -> None:
-        """Load contacts from a specific AddressBook database.
+    def _load_contacts_from_db_to_dict(self, db_path: Path, cache: dict[str, str]) -> None:
+        """Load contacts from a specific AddressBook database into the provided dict.
 
         Args:
             db_path: Path to the AddressBook database
+            cache: Dictionary to load contacts into
         """
-        # Ensure cache is initialized
-        if self._contacts_cache is None:
-            self._contacts_cache = {}
-
-        cache = self._contacts_cache
-
         try:
             uri = f"file:{db_path}?mode=ro"
             conn = sqlite3.connect(uri, uri=True, timeout=DB_TIMEOUT_SECONDS)
@@ -847,11 +906,11 @@ class ChatDBReader:
 
         try:
             # Try to open the database
-            conn = self._get_connection()
-            # Execute a simple query to verify read access
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM chat LIMIT 1")
-            cursor.fetchone()
+            with self._connection_context() as conn:
+                # Execute a simple query to verify read access
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM chat LIMIT 1")
+                cursor.fetchone()
             return True
         except PermissionError:
             logger.warning(
@@ -896,11 +955,11 @@ class ChatDBReader:
 
         try:
             # Try to open the database
-            conn = self._get_connection()
-            # Execute a simple query to verify read access
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM chat LIMIT 1")
-            cursor.fetchone()
+            with self._connection_context() as conn:
+                # Execute a simple query to verify read access
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM chat LIMIT 1")
+                cursor.fetchone()
         except PermissionError as e:
             raise imessage_permission_denied(db_path_str) from e
         except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
@@ -955,30 +1014,30 @@ class ChatDBReader:
         Returns:
             List of Conversation objects, sorted by last message date (newest first)
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        # Build params list based on filters
-        params: list[Any] = []
-        if since is not None:
-            params.append(datetime_to_apple_timestamp(since))
-        if before is not None:
-            params.append(datetime_to_apple_timestamp(before))
-        params.append(limit)
+            # Build params list based on filters
+            params: list[Any] = []
+            if since is not None:
+                params.append(datetime_to_apple_timestamp(since))
+            if before is not None:
+                params.append(datetime_to_apple_timestamp(before))
+            params.append(limit)
 
-        query = get_query(
-            "conversations",
-            self._schema_version or "v14",
-            with_since_filter=since is not None,
-            with_conversations_before_filter=before is not None,
-        )
+            query = get_query(
+                "conversations",
+                self._schema_version or "v14",
+                with_since_filter=since is not None,
+                with_conversations_before_filter=before is not None,
+            )
 
-        try:
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.warning(f"Query error in get_conversations: {e}")
-            return []
+            try:
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.warning(f"Query error in get_conversations: {e}")
+                return []
 
         conversations = []
         for row in rows:
@@ -1052,73 +1111,102 @@ class ChatDBReader:
             logger.debug(f"Invalid chat_id: {chat_id}")
             return []
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        # Build params list based on filters
-        params: list[Any] = [chat_id]
-        if before is not None:
-            params.append(datetime_to_apple_timestamp(before))
-        params.append(limit)
+            # Build params list based on filters
+            params: list[Any] = [chat_id]
+            if before is not None:
+                params.append(datetime_to_apple_timestamp(before))
+            params.append(limit)
 
-        query = get_query(
-            "messages",
-            self._schema_version or "v14",
-            with_before_filter=before is not None,
-        )
+            query = get_query(
+                "messages",
+                self._schema_version or "v14",
+                with_before_filter=before is not None,
+            )
 
-        try:
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            # If query fails due to missing columns, use minimal fallback query
-            error_str = str(e).lower()
-            if "no such column" in error_str:
-                logger.debug(f"Query failed with missing column ({e}), using minimal fallback")
-                try:
-                    # Use v14 schema and replace all optional columns with NULL
-                    # This handles test databases or older schemas with minimal columns
-                    fallback_query = get_query(
-                        "messages",
-                        "v14",
-                        with_before_filter=before is not None,
-                    )
+            try:
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                # If query fails due to missing columns, use minimal fallback query
+                error_str = str(e).lower()
+                if "no such column" in error_str:
+                    logger.debug(f"Query failed with missing column ({e}), using minimal fallback")
+                    try:
+                        # Use v14 schema and replace all optional columns with NULL
+                        # This handles test databases or older schemas with minimal columns
+                        fallback_query = get_query(
+                            "messages",
+                            "v14",
+                            with_before_filter=before is not None,
+                        )
 
-                    # Replace all optional columns with NULL
-                    fallback_query = (
-                        fallback_query.replace(
-                            "message.date_delivered,",
-                            "NULL as date_delivered,",
+                        # Replace all optional columns with NULL
+                        fallback_query = (
+                            fallback_query.replace(
+                                "message.date_delivered,",
+                                "NULL as date_delivered,",
+                            )
+                            .replace(
+                                "message.date_read,",
+                                "NULL as date_read,",
+                            )
+                            .replace(
+                                "message.group_action_type,",
+                                "NULL as group_action_type,",
+                            )
+                            .replace(
+                                "affected_handle.id as affected_handle_id",
+                                "NULL as affected_handle_id",
+                            )
+                            .replace(
+                                "LEFT JOIN handle AS affected_handle "
+                                "ON message.other_handle = affected_handle.ROWID",
+                                "",
+                            )
                         )
-                        .replace(
-                            "message.date_read,",
-                            "NULL as date_read,",
-                        )
-                        .replace(
-                            "message.group_action_type,",
-                            "NULL as group_action_type,",
-                        )
-                        .replace(
-                            "affected_handle.id as affected_handle_id",
-                            "NULL as affected_handle_id",
-                        )
-                        .replace(
-                            "LEFT JOIN handle AS affected_handle "
-                            "ON message.other_handle = affected_handle.ROWID",
-                            "",
-                        )
-                    )
 
-                    cursor.execute(fallback_query, params)
-                    rows = cursor.fetchall()
-                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
-                    logger.warning(f"Query error after column fallback: {e2}")
+                        cursor.execute(fallback_query, params)
+                        rows = cursor.fetchall()
+                    except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
+                        logger.warning(f"Query error after column fallback: {e2}")
+                        return []
+                else:
+                    logger.warning(f"Query error in get_messages: {e}")
                     return []
-            else:
-                logger.warning(f"Query error in get_messages: {e}")
-                return []
 
         return self._rows_to_messages(rows, chat_id)
+
+    def get_messages_after(
+        self,
+        message_id: int,
+        chat_id: str,
+        limit: int = 10,
+    ) -> list[Message]:
+        """Get messages that occurred after a specific message ID.
+
+        Args:
+            message_id: The ROWID to start after
+            chat_id: The conversation ID
+            limit: Maximum messages to return
+
+        Returns:
+            List of Message objects, sorted by date (oldest first)
+        """
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
+
+            query = get_query("messages_after", self._schema_version or "v14")
+
+            try:
+                cursor.execute(query, (message_id, chat_id, limit))
+                rows = cursor.fetchall()
+                return self._rows_to_messages(rows, chat_id)
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.warning(f"Query error in get_messages_after: {e}")
+                return []
 
     def search(
         self,
@@ -1144,65 +1232,65 @@ class ChatDBReader:
         Returns:
             List of Message objects matching the query and filters
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        # Escape LIKE wildcards (query uses ESCAPE '\\' clause)
-        escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        like_pattern = f"%{escaped_query}%"
+            # Escape LIKE wildcards (query uses ESCAPE '\\' clause)
+            escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            like_pattern = f"%{escaped_query}%"
 
-        # Build params list based on filters
-        # Order: like_pattern, [sender, sender], [after], [before], [chat_id], limit
-        params: list[Any] = [like_pattern]
+            # Build params list based on filters
+            # Order: like_pattern, [sender, sender], [after], [before], [chat_id], limit
+            params: list[Any] = [like_pattern]
 
-        # Normalize sender if provided
-        normalized_sender: str | None = None
-        if sender is not None:
-            normalized_sender = sender if sender == "me" else normalize_phone_number(sender)
-            # If normalization returned None (invalid input), skip the filter
-            if normalized_sender is not None:
-                # Add sender param twice for the OR condition in the query
-                params.append(normalized_sender)
-                params.append(normalized_sender)
-            else:
-                # Treat as no sender filter if normalization failed
-                sender = None
+            # Normalize sender if provided
+            normalized_sender: str | None = None
+            if sender is not None:
+                normalized_sender = sender if sender == "me" else normalize_phone_number(sender)
+                # If normalization returned None (invalid input), skip the filter
+                if normalized_sender is not None:
+                    # Add sender param twice for the OR condition in the query
+                    params.append(normalized_sender)
+                    params.append(normalized_sender)
+                else:
+                    # Treat as no sender filter if normalization failed
+                    sender = None
 
-        if after is not None:
-            params.append(datetime_to_apple_timestamp(after))
+            if after is not None:
+                params.append(datetime_to_apple_timestamp(after))
 
-        if before is not None:
-            params.append(datetime_to_apple_timestamp(before))
+            if before is not None:
+                params.append(datetime_to_apple_timestamp(before))
 
-        if chat_id is not None:
-            params.append(chat_id)
+            if chat_id is not None:
+                params.append(chat_id)
 
-        params.append(limit)
+            params.append(limit)
 
-        sql = get_query(
-            "search",
-            self._schema_version or "v14",
-            with_sender_filter=sender is not None,
-            with_after_filter=after is not None,
-            with_search_before_filter=before is not None,
-            with_chat_id_filter=chat_id is not None,
-            with_has_attachments_filter=has_attachments,
-        )
+            sql = get_query(
+                "search",
+                self._schema_version or "v14",
+                with_sender_filter=sender is not None,
+                with_after_filter=after is not None,
+                with_search_before_filter=before is not None,
+                with_chat_id_filter=chat_id is not None,
+                with_has_attachments_filter=has_attachments,
+            )
 
-        try:
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.warning(f"Query error in search: {e}")
-            return []
+            try:
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.warning(f"Query error in search: {e}")
+                return []
 
-        messages = []
-        for row in rows:
-            msg = self._row_to_message(row, row["chat_id"])
-            if msg:
-                messages.append(msg)
+            messages = []
+            for row in rows:
+                msg = self._row_to_message(row, row["chat_id"])
+                if msg:
+                    messages.append(msg)
 
-        return messages
+            return messages
 
     def get_conversation_context(
         self,
@@ -1220,50 +1308,51 @@ class ChatDBReader:
         Returns:
             List of Message objects around the target message
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        # Get 2*context + 1 messages centered on the target
-        total_limit = context_messages * 2 + 1
+            # Get 2*context + 1 messages centered on the target
+            total_limit = context_messages * 2 + 1
 
-        query = get_query("context", self._schema_version or "v14")
-
-        try:
-            cursor.execute(query, (chat_id, around_message_id, total_limit))
-            rows = cursor.fetchall()
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            # If query fails due to missing columns, create a minimal fallback query
-            logger.debug(f"Context query failed ({e}), trying fallback")
-            fallback_query = query
-
-            # Replace all optional columns with NULL placeholders
-            affected_handle_join = (
-                "LEFT JOIN handle AS affected_handle "
-                "ON message.other_handle = affected_handle.ROWID"
-            )
-            fallback_query = (
-                fallback_query.replace(
-                    "message.group_action_type,",
-                    "NULL as group_action_type,",
-                )
-                .replace(
-                    "affected_handle.id as affected_handle_id",
-                    "NULL as affected_handle_id",
-                )
-                .replace(
-                    affected_handle_join,
-                    "",
-                )
-            )
+            query = get_query("context", self._schema_version or "v14")
 
             try:
-                cursor.execute(fallback_query, (chat_id, around_message_id, total_limit))
+                cursor.execute(query, (chat_id, around_message_id, total_limit))
                 rows = cursor.fetchall()
-            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
-                logger.warning(f"Query error in get_conversation_context: {e2}")
-                return []
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                # If query fails due to missing columns, create a minimal fallback query
+                logger.debug(f"Context query failed ({e}), trying fallback")
+                fallback_query = query
 
-        messages = self._rows_to_messages(rows, chat_id)
+                # Replace all optional columns with NULL placeholders
+                affected_handle_join = (
+                    "LEFT JOIN handle AS affected_handle "
+                    "ON message.other_handle = affected_handle.ROWID"
+                )
+                
+                fallback_query = (
+                    fallback_query.replace(
+                        "message.group_action_type,",
+                        "NULL as group_action_type,",
+                    )
+                    .replace(
+                        "affected_handle.id as affected_handle_id",
+                        "NULL as affected_handle_id",
+                    )
+                    .replace(
+                        affected_handle_join,
+                        "",
+                    )
+                )
+
+                try:
+                    cursor.execute(fallback_query, (chat_id, around_message_id, total_limit))
+                    rows = cursor.fetchall()
+                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
+                    logger.warning(f"Query error in get_conversation_context: {e2}")
+                    return []
+
+            messages = self._rows_to_messages(rows, chat_id)
 
         # Sort by date for proper ordering
         messages.sort(key=lambda m: m.date)
@@ -1271,7 +1360,8 @@ class ChatDBReader:
         return messages
 
     def _prefetch_attachments(
-        self, message_ids: list[int],
+        self,
+        message_ids: list[int],
     ) -> dict[int, list[Attachment]]:
         """Batch-fetch attachments for multiple messages in one query.
 
@@ -1284,35 +1374,35 @@ class ChatDBReader:
         if not message_ids:
             return {}
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        version = self._schema_version or "v14"
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
+            version = self._schema_version or "v14"
 
-        result: dict[int, list[Attachment]] = {}
-        try:
-            placeholders = ",".join("?" * len(message_ids))
-            query = get_query("attachments_batch", version).format(
-                placeholders=placeholders,
-            )
-            cursor.execute(query, message_ids)
-            rows = cursor.fetchall()
-            for row in rows:
-                try:
-                    row_dict = dict(row)
-                    mid = row_dict.pop("message_id")
-                    attachments = parse_attachments([row_dict])
-                    if mid not in result:
-                        result[mid] = []
-                    result[mid].extend(attachments)
-                except (IndexError, TypeError, KeyError):
-                    continue
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.debug(f"Error batch-fetching attachments: {e}")
+            result: dict[int, list[Attachment]] = {}
+            try:
+                placeholders = ",".join("?" * len(message_ids))
+                query = get_query("attachments_batch", version).format(
+                    placeholders=placeholders,
+                )
+                cursor.execute(query, message_ids)
+                rows = cursor.fetchall()
+                for row in rows:
+                    try:
+                        row_dict = dict(row)
+                        mid = row_dict.pop("message_id")
+                        attachments = parse_attachments([row_dict])
+                        if mid not in result:
+                            result[mid] = []
+                        result[mid].extend(attachments)
+                    except (IndexError, TypeError, KeyError):
+                        continue
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error batch-fetching attachments: {e}")
 
-        return result
-
+            return result
     def _prefetch_reactions(
-        self, message_ids: list[int],
+        self,
+        message_ids: list[int],
     ) -> dict[int, list[Reaction]]:
         """Batch-fetch reactions for multiple messages in one query.
 
@@ -1328,60 +1418,60 @@ class ChatDBReader:
         if not message_ids:
             return {}
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        version = self._schema_version or "v14"
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
+            version = self._schema_version or "v14"
 
-        result: dict[int, list[Reaction]] = {}
+            result: dict[int, list[Reaction]] = {}
 
-        try:
-            # Step 1: Batch-fetch GUIDs for all message IDs
-            placeholders = ",".join("?" * len(message_ids))
-            guid_query = get_query("message_guids_batch", version).format(
-                placeholders=placeholders,
-            )
-            cursor.execute(guid_query, message_ids)
-            guid_rows = cursor.fetchall()
+            try:
+                # Step 1: Batch-fetch GUIDs for all message IDs
+                placeholders = ",".join("?" * len(message_ids))
+                guid_query = get_query("message_guids_batch", version).format(
+                    placeholders=placeholders,
+                )
+                cursor.execute(guid_query, message_ids)
+                guid_rows = cursor.fetchall()
 
-            id_to_guid: dict[int, str] = {}
-            guid_to_id: dict[str, int] = {}
-            for row in guid_rows:
-                mid = row["id"]
-                guid = row["guid"]
-                if guid:
-                    id_to_guid[mid] = guid
-                    guid_to_id[guid] = mid
+                id_to_guid: dict[int, str] = {}
+                guid_to_id: dict[str, int] = {}
+                for row in guid_rows:
+                    mid = row["id"]
+                    guid = row["guid"]
+                    if guid:
+                        id_to_guid[mid] = guid
+                        guid_to_id[guid] = mid
 
-            if not guid_to_id:
-                return result
+                if not guid_to_id:
+                    return result
 
-            # Step 2: Batch-fetch reactions for all GUIDs
-            guids = list(guid_to_id.keys())
-            placeholders = ",".join("?" * len(guids))
-            rx_query = get_query("reactions_batch", version).format(
-                placeholders=placeholders,
-            )
-            cursor.execute(rx_query, guids)
-            rx_rows = cursor.fetchall()
+                # Step 2: Batch-fetch reactions for all GUIDs
+                guids = list(guid_to_id.keys())
+                placeholders = ",".join("?" * len(guids))
+                rx_query = get_query("reactions_batch", version).format(
+                    placeholders=placeholders,
+                )
+                cursor.execute(rx_query, guids)
+                rx_rows = cursor.fetchall()
 
-            for row in rx_rows:
-                row_dict = dict(row)
-                assoc_guid = row_dict.get("associated_message_guid")
-                if assoc_guid and assoc_guid in guid_to_id:
-                    mid = guid_to_id[assoc_guid]
-                    reactions = parse_reactions([row_dict])
-                    # Resolve sender names
-                    for reaction in reactions:
-                        if reaction.sender != "me":
-                            reaction.sender_name = self._resolve_contact_name(
-                                reaction.sender,
-                            )
-                    if mid not in result:
-                        result[mid] = []
-                    result[mid].extend(reactions)
+                for row in rx_rows:
+                    row_dict = dict(row)
+                    assoc_guid = row_dict.get("associated_message_guid")
+                    if assoc_guid and assoc_guid in guid_to_id:
+                        mid = guid_to_id[assoc_guid]
+                        reactions = parse_reactions([row_dict])
+                        # Resolve sender names
+                        for reaction in reactions:
+                            if reaction.sender != "me":
+                                reaction.sender_name = self._resolve_contact_name(
+                                    reaction.sender,
+                                )
+                        if mid not in result:
+                            result[mid] = []
+                        result[mid].extend(reactions)
 
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.debug(f"Error batch-fetching reactions: {e}")
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error batch-fetching reactions: {e}")
 
         return result
 
@@ -1413,7 +1503,8 @@ class ChatDBReader:
         for row in rows:
             try:
                 msg = self._row_to_message(
-                    row, chat_id,
+                    row,
+                    chat_id,
                     prefetched_attachments=attachments_map,
                     prefetched_reactions=reactions_map,
                 )
@@ -1593,21 +1684,21 @@ class ChatDBReader:
         if message_id is None or not isinstance(message_id, int):
             return []
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        # First get the message GUID
-        try:
-            cursor.execute("SELECT guid FROM message WHERE ROWID = ?", (message_id,))
-            row = cursor.fetchone()
-            if not row or not row["guid"]:
+            # First get the message GUID
+            try:
+                cursor.execute("SELECT guid FROM message WHERE ROWID = ?", (message_id,))
+                row = cursor.fetchone()
+                if not row or not row["guid"]:
+                    return []
+
+                message_guid = row["guid"]
+                return self._get_reactions_for_message(message_guid)
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error fetching GUID for message {message_id}: {e}")
                 return []
-
-            message_guid = row["guid"]
-            return self._get_reactions_for_message(message_guid)
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.debug(f"Error fetching GUID for message {message_id}: {e}")
-            return []
 
     def get_attachments(
         self,
@@ -1629,34 +1720,34 @@ class ChatDBReader:
         Returns:
             List of attachment dictionaries with extended metadata
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        # Build params list based on filters
-        params: list[Any] = []
-        if chat_id is not None:
-            params.append(chat_id)
-        if after is not None:
-            params.append(datetime_to_apple_timestamp(after))
-        if before is not None:
-            params.append(datetime_to_apple_timestamp(before))
-        params.append(limit)
+            # Build params list based on filters
+            params: list[Any] = []
+            if chat_id is not None:
+                params.append(chat_id)
+            if after is not None:
+                params.append(datetime_to_apple_timestamp(after))
+            if before is not None:
+                params.append(datetime_to_apple_timestamp(before))
+            params.append(limit)
 
-        query = get_query(
-            "all_attachments",
-            self._schema_version or "v14",
-            with_attachment_chat_filter=chat_id is not None,
-            with_attachment_type_filter=attachment_type,
-            with_attachment_date_after_filter=after is not None,
-            with_attachment_date_before_filter=before is not None,
-        )
+            query = get_query(
+                "all_attachments",
+                self._schema_version or "v14",
+                with_attachment_chat_filter=chat_id is not None,
+                with_attachment_type_filter=attachment_type,
+                with_attachment_date_after_filter=after is not None,
+                with_attachment_date_before_filter=before is not None,
+            )
 
-        try:
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.warning(f"Query error in get_attachments: {e}")
-            return []
+            try:
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.warning(f"Query error in get_attachments: {e}")
+                return []
 
         results = []
         for row in rows:
@@ -1694,22 +1785,22 @@ class ChatDBReader:
         Returns:
             Dictionary with total count, total size, and breakdown by type
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        query = get_query("attachment_stats", self._schema_version or "v14")
+            query = get_query("attachment_stats", self._schema_version or "v14")
 
-        try:
-            cursor.execute(query, (chat_id,))
-            rows = cursor.fetchall()
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.warning(f"Query error in get_attachment_stats: {e}")
-            return {
-                "total_count": 0,
-                "total_size_bytes": 0,
-                "by_type": {},
-                "size_by_type": {},
-            }
+            try:
+                cursor.execute(query, (chat_id,))
+                rows = cursor.fetchall()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.warning(f"Query error in get_attachment_stats: {e}")
+                return {
+                    "total_count": 0,
+                    "total_size_bytes": 0,
+                    "by_type": {},
+                    "size_by_type": {},
+                }
 
         total_count = 0
         total_size = 0
@@ -1747,17 +1838,17 @@ class ChatDBReader:
         Returns:
             List of dictionaries with chat_id, display_name, attachment_count, and total_size
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
 
-        query = get_query("storage_by_conversation", self._schema_version or "v14")
+            query = get_query("storage_by_conversation", self._schema_version or "v14")
 
-        try:
-            cursor.execute(query, (limit,))
-            rows = cursor.fetchall()
-        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-            logger.warning(f"Query error in get_storage_by_conversation: {e}")
-            return []
+            try:
+                cursor.execute(query, (limit,))
+                rows = cursor.fetchall()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.warning(f"Query error in get_storage_by_conversation: {e}")
+                return []
 
         results = []
         for row in rows:

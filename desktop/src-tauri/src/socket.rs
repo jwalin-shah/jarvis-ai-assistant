@@ -1,6 +1,6 @@
 //! Unix socket client for communicating with JARVIS Python daemon
 //!
-//! Provides Tauri commands for connecting to /tmp/jarvis.sock and sending JSON-RPC messages.
+//! Provides Tauri commands for connecting to ~/.jarvis/jarvis.sock and sending JSON-RPC messages.
 //! Supports both request/response and streaming patterns.
 
 use serde::{Deserialize, Serialize};
@@ -12,8 +12,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
-/// Socket path for JARVIS daemon
-const SOCKET_PATH: &str = "/tmp/jarvis.sock";
+/// Get socket path for JARVIS daemon (~/.jarvis/jarvis.sock)
+fn get_socket_path() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    format!("{home}/.jarvis/jarvis.sock")
+}
 
 /// Request ID counter
 static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
@@ -58,7 +61,7 @@ struct JsonRpcRequest {
 /// JSON-RPC response/notification structure
 #[derive(Deserialize, Debug)]
 struct JsonRpcMessage {
-    jsonrpc: String,
+    _jsonrpc: String,
     /// Method name (for notifications)
     #[serde(default)]
     method: Option<String>,
@@ -82,7 +85,7 @@ struct JsonRpcError {
     code: i32,
     message: String,
     #[serde(default)]
-    data: Option<serde_json::Value>,
+    _data: Option<serde_json::Value>,
 }
 
 /// Stream token event emitted to frontend
@@ -125,7 +128,8 @@ pub async fn connect_socket(
     }
 
     // Connect to socket
-    let stream = UnixStream::connect(SOCKET_PATH)
+    let socket_path = get_socket_path();
+    let stream = UnixStream::connect(&socket_path)
         .await
         .map_err(|e| format!("Failed to connect to socket: {}", e))?;
 
@@ -234,7 +238,7 @@ async fn handle_message(
                         message_id: params.get("message_id").and_then(|v| v.as_i64()).unwrap_or(0),
                         chat_id: params.get("chat_id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
                         sender: params.get("sender").and_then(|v| v.as_str()).map(String::from),
-                        text_preview: params.get("text_preview").and_then(|v| v.as_str()).map(String::from),
+                        text_preview: params.get("text").and_then(|v| v.as_str()).map(String::from),
                         is_from_me: params.get("is_from_me").and_then(|v| v.as_bool()).unwrap_or(false),
                     };
                     let _ = app.emit("jarvis:new_message", event);

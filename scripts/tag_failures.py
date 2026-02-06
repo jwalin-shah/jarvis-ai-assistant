@@ -18,7 +18,7 @@ import argparse
 import json
 from pathlib import Path
 
-from jarvis.evaluation import (
+from jarvis.eval.evaluation import (
     FailureReason,
     FeedbackAction,
     get_feedback_store,

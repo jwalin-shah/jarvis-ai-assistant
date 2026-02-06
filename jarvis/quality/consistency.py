@@ -270,7 +270,7 @@ class HistoryConsistencyChecker:
             with self._lock:
                 if self._embedder is None:
                     try:
-                        from jarvis.embeddings import get_embedder
+                        from jarvis.embedding_adapter import get_embedder
 
                         self._embedder = get_embedder()
                     except Exception as e:

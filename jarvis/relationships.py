@@ -434,7 +434,7 @@ def _hash_contact_id(contact_id: str) -> str:
     Returns:
         SHA-256 hash prefix (first 16 chars) for filename safety
     """
-    from jarvis.contact_utils import hash_contact_id
+    from jarvis.contacts.contact_utils import hash_contact_id
 
     return hash_contact_id(contact_id)
 

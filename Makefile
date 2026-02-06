@@ -67,6 +67,14 @@ hooks:
 setup: install hooks
 	@echo "Development environment ready!"
 
+upgrade:
+	@echo "Upgrading Python dependencies..."
+	uv lock --upgrade
+	uv sync
+	@echo "Upgrading Desktop dependencies..."
+	cd desktop && pnpm update
+	@echo "Upgrade complete!"
+
 # ============================================================================
 # TESTING
 # All test commands capture output to test_results.txt for full tracebacks
@@ -287,7 +295,7 @@ api-dev:
 	uv run uvicorn api.main:app --reload --port 8742
 
 desktop-setup:
-	cd desktop && npm install
+	cd desktop && pnpm install
 
 desktop-dev:
 	@echo "Starting API server and Tauri dev mode..."

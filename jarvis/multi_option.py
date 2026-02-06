@@ -34,10 +34,10 @@ import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from jarvis.response_classifier import (
+from jarvis.classifiers.response_classifier import (
     ResponseType,
 )
-from jarvis.retrieval import TypedRetriever, get_typed_retriever
+from jarvis.search.retrieval import TypedRetriever
 
 if TYPE_CHECKING:
     from jarvis.db import Contact
@@ -226,18 +226,7 @@ FALLBACK_TEMPLATES: dict[ResponseType, list[str]] = {
 class MultiOptionGenerator:
     """Generates diverse response options for commitment questions.
 
-    For triggers like invitations and requests, generates multiple options
-    representing different response intents (AGREE, DECLINE, DEFER).
-
-    Strategy (simple and fast):
-    1. FAISS retrieval: Get personalized examples from user's message history
-    2. Static fallback: Use high-quality template responses if no history found
-
-    No LLM needed - commitment responses are simple enough that templates work great,
-    and this keeps latency under 200ms instead of 1-2 seconds with LLM.
-
-    Thread Safety:
-        This class is thread-safe. Dependencies loaded lazily with locking.
+    Delegates to the unified ReplyService.
     """
 
     def __init__(
@@ -248,173 +237,32 @@ class MultiOptionGenerator:
         """Initialize the generator.
 
         Args:
-            retriever: TypedRetriever for getting examples. Created lazily if None.
-            max_options: Maximum number of options to generate.
+            retriever: TypedRetriever.
+            max_options: Maximum number of options.
         """
-        self._retriever = retriever
+        from jarvis.reply_service import get_reply_service
+
+        self._service = get_reply_service()
+        if retriever:
+            from jarvis.reply_service import ReplyService
+
+            self._service = ReplyService(retriever=retriever)
         self._max_options = max_options
 
     @property
     def retriever(self) -> TypedRetriever:
-        """Get or create the retriever."""
-        if self._retriever is None:
-            self._retriever = get_typed_retriever()
-        return self._retriever
+        return self._service.retriever
 
     def is_commitment_trigger(self, trigger: str) -> tuple[bool, str | None]:
-        """Check if trigger is a commitment question.
-
-        Args:
-            trigger: Trigger text.
-
-        Returns:
-            Tuple of (is_commitment, trigger_da_type).
-        """
-        # First check for INFO_STATEMENT patterns (status updates that shouldn't trigger)
-        # This catches false positives where classifier says REQUEST but it's really status
+        """Check if trigger is a commitment question."""
         if _is_info_statement(trigger):
-            return False, "statement"  # New-style label
-
-        # Check for WH_QUESTION patterns (asking for info, not invitations)
-        # "Who's coming?" asks for info, "Want to come?" is an invitation
+            return False, "statement"
         if _is_wh_question(trigger):
-            return False, "question"  # New-style label
+            return False, "question"
 
-        trigger_da, conf = self.retriever.classify_trigger(trigger)
+        trigger_da, _ = self.retriever.classify_trigger(trigger)
         is_commitment = trigger_da in COMMITMENT_TRIGGER_TYPES
         return is_commitment, trigger_da
-
-    def _get_template_option(
-        self,
-        trigger: str,
-        response_type: ResponseType,
-        examples: list,
-    ) -> ResponseOption | None:
-        """Get a template option from retrieved examples.
-
-        Args:
-            trigger: Trigger text.
-            response_type: Target response type.
-            examples: Retrieved examples of this type.
-
-        Returns:
-            ResponseOption or None if no good example found.
-        """
-        if not examples:
-            return None
-
-        # Use the best example (highest similarity)
-        best = examples[0]
-        return ResponseOption(
-            text=best.response_text,
-            response_type=response_type,
-            confidence=best.similarity,
-            source="template",
-        )
-
-    def _get_fallback_option(self, response_type: ResponseType) -> ResponseOption:
-        """Get a fallback template option.
-
-        Args:
-            response_type: Target response type.
-
-        Returns:
-            ResponseOption with a generic template.
-        """
-        import random
-
-        templates = FALLBACK_TEMPLATES.get(response_type, ["Okay"])
-        text = random.choice(templates)
-
-        return ResponseOption(
-            text=text,
-            response_type=response_type,
-            confidence=0.5,
-            source="fallback",
-        )
-
-    def _generate_llm_option(
-        self,
-        trigger: str,
-        response_type: ResponseType,
-        style_guide: str,
-        examples: list | None = None,
-    ) -> ResponseOption | None:
-        """Generate a response using the LLM.
-
-        Args:
-            trigger: The message to respond to.
-            response_type: Target response type (AGREE, DECLINE, DEFER).
-            style_guide: Style guidance from the relationship profile.
-            examples: Optional few-shot examples.
-
-        Returns:
-            ResponseOption or None if generation fails or LLM unavailable.
-        """
-        from contracts.models import GenerationRequest
-        from jarvis.generation import can_use_llm, generate_with_fallback
-        from jarvis.prompts import COMMITMENT_PROMPT
-
-        # Check if LLM is available before attempting generation
-        can_generate, reason = can_use_llm()
-        if not can_generate:
-            logger.debug("LLM unavailable for %s: %s", response_type.value, reason)
-            return None  # Fall back to static templates
-
-        # Format examples section if we have any
-        examples_section = ""
-        if examples:
-            example_lines = []
-            for ex in examples[:2]:  # Max 2 examples
-                example_lines.append(f"Message: {ex.trigger_text}")
-                example_lines.append(f"Response: {ex.response_text}")
-                example_lines.append("")
-            if example_lines:
-                examples_section = "\n### Examples:\n" + "\n".join(example_lines)
-
-        # Format the prompt
-        response_type_name = response_type.value.upper()
-        response_type_lower = response_type.value.lower()
-
-        prompt = COMMITMENT_PROMPT.template.format(
-            response_type=response_type_name,
-            response_type_lower=response_type_lower,
-            style_guide=style_guide,
-            trigger=trigger,
-            examples_section=examples_section,
-        )
-
-        try:
-            request = GenerationRequest(
-                prompt=prompt,
-                context_documents=[],
-                few_shot_examples=[],
-                max_tokens=30,
-                temperature=0.7,  # Slightly creative for variety
-            )
-
-            response = generate_with_fallback(request)
-
-            if response.text and response.finish_reason != "error":
-                # Clean up the response
-                text = response.text.strip()
-                # Remove any trailing punctuation repetition
-                text = text.rstrip(".")
-                # Take only first line if multiple
-                text = text.split("\n")[0].strip()
-
-                if text and len(text) < 100:  # Sanity check
-                    return ResponseOption(
-                        text=text,
-                        response_type=response_type,
-                        confidence=0.7,  # Medium confidence for LLM
-                        source="generated",
-                    )
-
-        except Exception as e:
-            logger.warning("LLM generation failed for %s: %s", response_type.value, e)
-
-        return None
 
     def generate_options(
         self,
@@ -424,115 +272,11 @@ class MultiOptionGenerator:
         chat_id: str | None = None,
         force_commitment: bool = False,
     ) -> MultiOptionResult:
-        """Generate diverse response options for a trigger.
-
-        Args:
-            trigger: Trigger message text.
-            contact_name: Optional contact name for personalization.
-            contact: Optional Contact object with style info.
-            chat_id: Optional chat_id for loading relationship profile.
-            force_commitment: If True, treat as commitment even if not detected.
-
-        Returns:
-            MultiOptionResult with options for different response types.
-        """
-        # Check if this is a commitment trigger
-        is_commitment, trigger_da = self.is_commitment_trigger(trigger)
-
-        if force_commitment:
-            is_commitment = True
-
-        if not is_commitment:
-            # Not a commitment question - return single option
-            return MultiOptionResult(
-                trigger=trigger,
-                trigger_da=trigger_da,
-                is_commitment=False,
-                options=[],
-            )
-
-        # Load relationship profile for style guidance
-        style_guide = "Use a casual, friendly tone."  # Default
-        if chat_id:
-            try:
-                from jarvis.embedding_profile import (
-                    generate_embedding_style_guide,
-                    load_embedding_profile,
-                )
-
-                profile = load_embedding_profile(chat_id)
-                if profile:
-                    style_guide = generate_embedding_style_guide(profile)
-                    logger.debug("Loaded profile for %s: %s", chat_id[:15], style_guide[:50])
-            except Exception as e:
-                logger.debug("Failed to load profile for %s: %s", chat_id, e)
-
-        # OPTIMIZATION: Create cached embedder for reuse across all FAISS searches
-        from jarvis.embedding_adapter import CachedEmbedder, get_embedder
-
-        cached_embedder = CachedEmbedder(get_embedder())
-
-        # Get examples for commitment types
-        # Pass trigger_da to avoid re-classification, and cached_embedder for efficiency
-        multi_examples = self.retriever.get_examples_for_commitment(
-            trigger=trigger,
-            k_per_type=3,
-            embedder=cached_embedder,
-            trigger_da=trigger_da,  # Reuse classification from above
-        )
-
-        # Generate options for each type
-        # Strategy: FAISS retrieval (high confidence) → LLM (low confidence) → static fallback
-        options: list[ResponseOption] = []
-
-        for response_type in OPTION_PRIORITY:
-            if len(options) >= self._max_options:
-                break
-
-            examples = multi_examples.get_examples(response_type)
-
-            # Strategy 1: Use retrieved examples if high confidence
-            if examples and examples[0].similarity >= MIN_RETRIEVAL_CONFIDENCE:
-                option = self._get_template_option(trigger, response_type, examples)
-                if option:
-                    logger.debug(
-                        "%s: using template (conf=%.2f)",
-                        response_type.value,
-                        examples[0].similarity,
-                    )
-                    options.append(option)
-                    continue
-
-            # Strategy 2: LLM generation for low confidence (personalized via style guide)
-            llm_option = self._generate_llm_option(
-                trigger=trigger,
-                response_type=response_type,
-                style_guide=style_guide,
-                examples=examples,  # Pass examples for few-shot even if low confidence
-            )
-            if llm_option:
-                logger.debug("%s: using LLM generation", response_type.value)
-                options.append(llm_option)
-                continue
-
-            # Strategy 3: Static fallback templates (if LLM fails)
-            logger.debug("%s: using static fallback", response_type.value)
-            options.append(self._get_fallback_option(response_type))
-
-        # Ensure diversity - no duplicate texts
-        seen_texts = set()
-        unique_options = []
-        for opt in options:
-            text_lower = opt.text.lower().strip()
-            if text_lower not in seen_texts:
-                seen_texts.add(text_lower)
-                unique_options.append(opt)
-
-        return MultiOptionResult(
-            trigger=trigger,
-            trigger_da=trigger_da,
-            is_commitment=True,
-            options=unique_options,
+        """Generate diverse response options for a trigger."""
+        return self._service.generate_options(
+            incoming=trigger,
+            chat_id=chat_id,
+            force_commitment=force_commitment,
         )
 
 

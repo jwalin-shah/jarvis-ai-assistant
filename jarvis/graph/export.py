@@ -457,8 +457,11 @@ def export_to_html(
                     <h3>${{d.label}}</h3>
                     <p>Type: <span class="stat">${{d.relationship_type}}</span></p>
                     <p>Messages: <span class="stat">${{d.message_count.toLocaleString()}}</span></p>
-                    <p>Sentiment: <span class="stat">${{(d.sentiment_score * 100).toFixed(0)}}%</span></p>
-                    ${{d.last_contact ? `<p>Last contact: <span class="stat">${{new Date(d.last_contact).toLocaleDateString()}}</span></p>` : ''}}
+                    <p>Sentiment: <span class="stat">${{
+                        (d.sentiment_score * 100).toFixed(0)}}%</span></p>
+                    ${{d.last_contact ? `<p>Last contact: <span class="stat">${{
+                        new Date(d.last_contact).toLocaleDateString()
+                    }}</span></p>` : ''}}
                 `)
                 .style("left", (event.pageX + 10) + "px")
                 .style("top", (event.pageY - 10) + "px");
@@ -531,7 +534,8 @@ def export_to_html(
             .data(types)
             .join("div")
             .attr("class", "legend-item")
-            .html(t => `<div class="legend-dot" style="background: ${{typeColors[t]}}"></div>${{t}}`);
+            .html(t => `<div class="legend-dot" style="background: ${{
+                typeColors[t]}}"></div>${{t}}`);
     </script>
 </body>
 </html>"""

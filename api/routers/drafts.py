@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -160,7 +160,7 @@ def _parse_summary_response(response_text: str) -> tuple[str, list[str]]:
                 # Extract from original line (preserving case) after the colon
                 colon_idx = clean.find(":")
                 if colon_idx >= 0:
-                    summary = clean[colon_idx + 1:].strip()
+                    summary = clean[colon_idx + 1 :].strip()
                 continue
 
         # Match key points header (case-insensitive, with optional preamble)
@@ -194,6 +194,8 @@ def _parse_summary_response(response_text: str) -> tuple[str, list[str]]:
         key_points = ["See summary for details"]
 
     return summary, key_points
+
+
 def _generate_single_suggestion(
     generator: object,
     prompt: str,
@@ -657,9 +659,9 @@ async def summarize_conversation(
 class RoutedReplyRequest(BaseModel):
     """Request for smart routed reply generation.
 
-    Uses the ReplyRouter to determine whether to use a template,
-    generate with LLM, or request clarification based on similarity
-    to historical conversation patterns.
+    Uses the ReplyRouter's simplified flow:
+    all non-empty inputs route to generation, with mobilization and
+    retrieval used as prompt context.
     """
 
     chat_id: str = Field(
@@ -672,7 +674,7 @@ class RoutedReplyRequest(BaseModel):
     )
     instruction: str | None = Field(
         default=None,
-        description="Optional instruction for reply tone/content",
+        description="Reserved for future use. Currently ignored by /drafts/smart-reply.",
     )
     context_messages: int = Field(
         default=10,
@@ -685,17 +687,17 @@ class RoutedReplyRequest(BaseModel):
 class RoutedReplyResponse(BaseModel):
     """Response from smart routed reply generation.
 
-    Includes the response type ('template', 'generated', 'clarify'),
+    Includes the response type ('generated' or 'clarify'),
     confidence level, and routing metadata.
     """
 
     response: str = Field(
         ...,
-        description="The generated or template response",
+        description="The generated response text",
     )
-    response_type: str = Field(
+    response_type: Literal["generated", "clarify"] = Field(
         ...,
-        description="How the response was generated: 'template', 'generated', or 'clarify'",
+        description="How the response was produced: 'generated' or 'clarify'",
     )
     confidence: str = Field(
         ...,
@@ -703,11 +705,11 @@ class RoutedReplyResponse(BaseModel):
     )
     similarity_score: float = Field(
         default=0.0,
-        description="Best similarity score from pattern matching (0-1)",
+        description="Top similarity score from retrieved historical exchanges (0-1)",
     )
     cluster_name: str | None = Field(
         default=None,
-        description="Name of matched cluster (for template responses)",
+        description="Legacy field retained for backward compatibility",
     )
     similar_triggers: list[str] | None = Field(
         default=None,
@@ -757,10 +759,9 @@ def _route_reply_sync(
                 "application/json": {
                     "example": {
                         "response": "Sure, sounds great!",
-                        "response_type": "template",
+                        "response_type": "generated",
                         "confidence": "high",
                         "similarity_score": 0.92,
-                        "cluster_name": "INVITATION_ACCEPT",
                     }
                 }
             },
@@ -793,30 +794,12 @@ async def generate_smart_reply(
     request: Request,
     reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> RoutedReplyResponse:
-    """Generate a smart routed reply using pattern matching and LLM.
+    """Generate a smart routed reply using the simplified router.
 
-    Uses the ReplyRouter to intelligently decide how to respond:
-
-    - **Template (high confidence):** When the incoming message closely matches
-      a pattern we've seen before (similarity >= 0.90), returns a template
-      response instantly without calling the LLM.
-
-    - **Generated (medium confidence):** When there's some similarity to past
-      patterns but not enough for a direct template match, uses the LLM with
-      similar past responses as few-shot examples.
-
-    - **Clarify (low confidence):** When the message is too vague or has
-      references we can't resolve, asks for clarification instead of guessing.
-
-    **Benefits:**
-    - Faster responses for common patterns (no LLM call)
-    - More personalized responses based on your communication history
-    - Transparent confidence indicators for UI display
-
-    **Frontend Display Suggestions:**
-    - `confidence: "high"` - Green indicator, instant response
-    - `confidence: "medium"` - Yellow indicator, "AI suggested"
-    - `confidence: "low"` - Orange indicator, "JARVIS needs more info"
+    Current behavior:
+    - Non-empty messages: generated reply path.
+    - Empty/invalid messages: clarify response.
+    - Similarity and mobilization data influence prompt quality and confidence.
 
     Args:
         routed_request: RoutedReplyRequest with chat_id and optional last_message
@@ -919,10 +902,10 @@ class ResponseOptionSchema(BaseModel):
 
 
 class MultiOptionRequest(BaseModel):
-    """Request for multi-option reply generation.
+    """Request shape retained for backward compatibility.
 
-    For commitment questions (invitations, requests), generates multiple
-    diverse response options (AGREE, DECLINE, DEFER).
+    Current simplified routing does not generate true multi-option outputs,
+    but legacy clients may still call this endpoint.
     """
 
     chat_id: str = Field(
@@ -935,15 +918,15 @@ class MultiOptionRequest(BaseModel):
     )
     force_multi: bool = Field(
         default=False,
-        description="Force multi-option even for non-commitment questions",
+        description="Compatibility flag. Accepted but currently has no effect.",
     )
 
 
 class MultiOptionResponse(BaseModel):
-    """Response with multiple reply options for commitment questions.
+    """Backward-compatible response for legacy multi-option clients.
 
-    For commitment questions, returns 3 diverse options representing
-    different response intents (AGREE, DECLINE, DEFER).
+    In simplified mode this endpoint returns a single generated response
+    and keeps multi-option fields populated with empty/default values.
     """
 
     is_commitment: bool = Field(
@@ -1017,34 +1000,13 @@ def _route_multi_option_sync(
             "content": {
                 "application/json": {
                     "example": {
-                        "is_commitment": True,
-                        "trigger_da": "INVITATION",
-                        "options": [
-                            {
-                                "type": "AGREE",
-                                "response": "Yeah I'm down!",
-                                "confidence": 0.9,
-                                "source": "template",
-                            },
-                            {
-                                "type": "DECLINE",
-                                "response": "Can't today, sorry",
-                                "confidence": 0.85,
-                                "source": "template",
-                            },
-                            {
-                                "type": "DEFER",
-                                "response": "Let me check my schedule",
-                                "confidence": 0.8,
-                                "source": "fallback",
-                            },
-                        ],
-                        "suggestions": [
-                            "Yeah I'm down!",
-                            "Can't today, sorry",
-                            "Let me check my schedule",
-                        ],
-                        "confidence": "high",
+                        "is_commitment": False,
+                        "trigger_da": None,
+                        "options": [],
+                        "suggestions": ["Sure, sounds good."],
+                        "response": "Sure, sounds good.",
+                        "response_type": "generated",
+                        "confidence": "medium",
                     }
                 }
             },
@@ -1061,26 +1023,12 @@ async def generate_multi_option_reply(
     request: Request,
     reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> MultiOptionResponse:
-    """Generate multiple reply options for commitment questions.
+    """Return compatibility multi-option payload using simplified routing.
 
-    For commitment questions (invitations, requests, yes/no questions),
-    generates 3 diverse response options representing different intents:
-
-    - **AGREE**: Positive acceptance ("Yeah I'm down!", "Sure!")
-    - **DECLINE**: Polite rejection ("Can't make it", "Not today")
-    - **DEFER**: Non-committal ("Let me check", "Maybe")
-
-    This follows the Smart Reply pattern, ensuring users have meaningful
-    choices rather than variations of the same response.
-
-    **When to use:**
-    - Messages like "Want to grab lunch?" → Get AGREE/DECLINE/DEFER options
-    - Messages like "Can you help me move?" → Get AGREE/DECLINE/DEFER options
-    - Messages like "Are you free Saturday?" → Get AGREE/DECLINE/DEFER options
-
-    **For non-commitment questions:**
-    Returns `is_commitment: false` and falls back to single response.
-    Use `force_multi: true` to always get multiple options.
+    Current behavior:
+    - Delegates to ReplyRouter.route_multi_option().
+    - Returns `is_commitment=false`, empty `options`, and one suggestion.
+    - `force_multi` is accepted for compatibility but does not alter behavior.
 
     Args:
         multi_request: MultiOptionRequest with chat_id and optional last_message

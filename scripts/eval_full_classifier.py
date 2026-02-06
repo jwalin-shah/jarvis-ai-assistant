@@ -14,8 +14,11 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from jarvis.classifiers.response_classifier import (
+    get_response_classifier,
+    reset_response_classifier,
+)
 from jarvis.db import get_db
-from jarvis.response_classifier import get_response_classifier, reset_response_classifier
 
 
 def validate_sample(n_samples: int = 200):

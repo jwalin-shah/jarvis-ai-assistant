@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Default paths for permission checks
 CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
-CONTACTS_DB_PATH = (
-    Path.home() / "Library" / "Application Support" / "AddressBook" / "Sources"
-)
+CONTACTS_DB_PATH = Path.home() / "Library" / "Application Support" / "AddressBook" / "Sources"
 CALENDAR_DB_PATH = Path.home() / "Library" / "Calendars"
 
 # Cache TTL for permission checks (seconds)
