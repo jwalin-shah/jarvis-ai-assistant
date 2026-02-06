@@ -20,11 +20,16 @@ plugins:
             show_source: true
             show_root_heading: true
             show_category_heading: true
+  - gen-files:
+      scripts:
+        - scripts/gen_ref_pages.py
+  - section-index
 
 nav:
   - Home: index.md
   - Architecture: ARCHITECTURE.md
   - How it Works: HOW_IT_WORKS.md
-  - API Reference: api_reference.md
+  - Code Reference: reference/
   - Testing: TESTING_GUIDELINES.md
   - Schema: SCHEMA.md
+
