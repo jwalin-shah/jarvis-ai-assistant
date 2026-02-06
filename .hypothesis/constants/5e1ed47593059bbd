@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/integrations/calendar/writer.py
-# hypothesis_version: 6.151.5
-
-['"', ', ', '-e', 'Unknown error', '\\', '\\"', '\\\\', '\\n', '\\r', 'osascript']

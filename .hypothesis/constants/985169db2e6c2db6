@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/search/semantic_search.py
-# hypothesis_version: 6.151.5
-
-[0.3, 10.0, 384, 500, 1000, 1024, '%', ',', '.jarvis', '?', 'count', 'embedding', 'embedding_cache.db', 'embedding_count', 'me', 'message_id', 'size', 'size_bytes', 'size_mb', 'version']

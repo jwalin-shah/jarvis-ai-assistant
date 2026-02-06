@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/nlp/__init__.py
-# hypothesis_version: 6.151.5
-
-['CorefResolver', 'Entity', 'GateConfig', 'GateResult', 'SLANG_MAP', 'ValidityGate', 'expand_slang', 'extract_locations', 'extract_person_names', 'get_coref_resolver', 'get_entities', 'get_entities_batch', 'get_pid', 'get_slang_map', 'is_service_running', 'load_nli_model', 'reset_coref_resolver']

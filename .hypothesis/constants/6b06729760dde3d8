@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/eval/adaptive_thresholds.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.1, 0.3, 0.5, 0.7, 0.85, 0.99, 1.0, 10000, 'AdaptedThresholds', 'bucket_count', 'context', 'current_thresholds', 'dismissed_count', 'edited_count', 'enabled', 'generate', 'has_sufficient_data', 'is_using_fallback', 'min_samples_required', 'non_empty_buckets', 'quick_reply', 'sent_count', 'similarity_score']

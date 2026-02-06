@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/models/bert_embedder.py
-# hypothesis_version: 6.151.5
-
-[-1000000000.0, 1e-12, 1e-09, 1.0, 512, '.attention.key', '.attention.query', '.attention.self.key', '.attention.value', '.intermediate.dense', '.intermediate_dense', '.output.LayerNorm', '.output.dense', '.output_LayerNorm', '.output_dense', '<Q', 'Unloaded %s', '[PAD]', 'arctic-l', 'arctic-m', 'arctic-s', 'arctic-xs', 'bert.', 'bge-base', 'bge-large', 'bge-small', 'clear_cache', 'cls', 'config.json', 'encoder.layer.', 'encoder.layers.', 'hidden_size', 'intermediate_size', 'metal', 'model.safetensors', 'num_attention_heads', 'num_hidden_layers', 'pooler', 'pooler.dense', 'pooler_dense', 'position_ids', 'rb', 'snapshots', 'tokenizer.json', 'type_vocab_size', 'utf-8', 'vocab_size']

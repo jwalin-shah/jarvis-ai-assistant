@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/contacts.py
-# hypothesis_version: 6.151.5
-
-[100, ';', 'chat_id', 'contact_id', 'created_at', 'db_stats', 'display_name', 'handles_json', 'id', 'phone_or_email', 'relationship', 'style_notes', 'updated_at']

@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/models/__init__.py
-# hypothesis_version: 6.151.5
-
-['DEFAULT_MODEL_ID', 'MLXEmbedder', 'MLXEmbeddingError', 'MLXGenerator', 'MLXModelLoadError', 'MLXModelLoader', 'MLX_EMBEDDING_DIM', 'MODEL_REGISTRY', 'ModelConfig', 'ModelSpec', 'PromptBuilder', 'ResponseTemplate', 'SentenceModelError', 'TemplateMatch', 'TemplateMatcher', 'get_all_models', 'get_generator', 'get_mlx_embedder', 'get_model_spec', 'is_mlx_available', 'is_model_available', 'reset_generator', 'reset_mlx_embedder', 'unload_generator']

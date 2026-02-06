@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/artifacts.py
-# hypothesis_version: 6.151.5
-
-[0.1, 0.2, 0.5, 1.0, 'contact_id', 'context_json', 'emoji_rate', 'gate_a_reason', 'gate_c_scores_json', 'greeting_rate', 'median_reply_length', 'pair_id', 'punctuation_rate', 'raw_response_text', 'raw_trigger_text', 'updated_at', 'valid']

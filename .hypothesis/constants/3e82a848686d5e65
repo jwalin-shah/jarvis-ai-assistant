@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/nlp/ner_client.py
-# hypothesis_version: 6.151.5
-
-[2.0, 10.0, 4096, '.jarvis', 'Entity', 'GPE', 'JARVIS_NER_SOCKET', 'LOC', 'NER client error: %s', 'ORG', 'PERSON', 'big', 'end', 'entities', 'error', 'extract_locations', 'extract_person_names', 'get_entities', 'get_entities_batch', 'get_pid', 'is_service_running', 'jarvis-ner.sock', 'label', 'ner_server.pid', 'results', 'start', 'text', 'texts', 'utf-8']

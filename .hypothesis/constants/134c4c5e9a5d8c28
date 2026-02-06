@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/analytics/trends.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.3, 0.5, 1.0, 2.0, 100.0, 100, '%A', '%Y-%m-%d', '%Y-W%W', 'current_period_total', 'day', 'decreasing', 'drop', 'hour', 'increasing', 'sent_messages_change', 'spike', 'stable']

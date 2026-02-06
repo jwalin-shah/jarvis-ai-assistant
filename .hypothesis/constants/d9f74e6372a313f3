@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/core.py
-# hypothesis_version: 6.151.5
-
-[30.0, 60.0, 128, 256, 'BOOLEAN', 'INTEGER', 'REAL', 'TEXT', 'all_present', 'already exists', 'cluster_id', 'connection', 'contact_cache', 'created', 'duplicate column', 'existing', 'gate_a_passed', 'gate_b_score', 'gate_c_verdict', 'missing', 'name', 'response_da_conf', 'response_da_type', 'stats_cache', 'trigger_da_conf', 'trigger_da_type', 'validity_status', 'version']

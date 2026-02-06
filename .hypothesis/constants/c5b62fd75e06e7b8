@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/models/registry.py
-# hypothesis_version: 6.151.5
-
-[0.3, 0.8, 1.0, 1.2, 1.5, 2.5, 2.75, 400, 429, 500, 1024, '.cache', 'Gemma 3 4B Instruct', 'LFM 2.5 0.3B (Fast)', 'LFM 2.5 1.2B (Base)', 'Phi-3 Mini 4K', 'Qwen 2.5 0.5B (Fast)', 'Unknown model ID: %s', 'analysis', 'basic', 'coding_assistance', 'completion', 'complex_replies', 'connection', 'drafting', 'excellent', 'few_shot', 'gemma3-4b', 'good', 'hub', 'huggingface', 'iMessage', 'lfm-0.3b', 'lfm-1.2b', 'lfm-1.2b-base', 'lfm-1.2b-thinking', 'natural_conversation', 'network', 'phi3-mini', 'quick_replies', 'qwen-0.5b', 'qwen-1.5b', 'qwen-3b', 'reasoning', 'response', 'snapshots', 'status_code', 'style_matching', 'summarization', 'testing', 'timeout']

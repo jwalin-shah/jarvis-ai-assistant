@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/contracts/__init__.py
-# hypothesis_version: 6.151.5
-
-['Attachment', 'AttachmentSummary', 'Calendar', 'CalendarEvent', 'CalendarReader', 'CalendarWriter', 'Conversation', 'CreateEventResult', 'DegradationPolicy', 'DetectedEvent', 'EventDetector', 'FeatureState', 'GenerationRequest', 'GenerationResponse', 'Generator', 'HHEMBenchmarkResult', 'HHEMResult', 'LatencyBenchmarker', 'LatencyResult', 'MemoryController', 'MemoryMode', 'MemoryProfile', 'MemoryProfiler', 'MemoryState', 'Message', 'Permission', 'PermissionMonitor', 'PermissionStatus', 'Reaction', 'Scenario', 'SchemaDetector', 'SchemaInfo', 'iMessageReader']

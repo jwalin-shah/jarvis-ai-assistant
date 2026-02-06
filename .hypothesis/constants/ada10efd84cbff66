@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/integrations/calendar/reader.py
-# hypothesis_version: 6.151.5
-
-[100, 365, 1000, '"', '%Y-%m-%dT%H:%M:%S', '+00:00', '-e', 'Unknown', 'Untitled Event', 'Z', 'all_day', 'calendar_id', 'calendar_name', 'color', 'confirmed', 'editable', 'end', 'false', 'id', 'location', 'missing value', 'name', 'notes', 'osascript', 'start', 'title', 'true', 'url', '{', '{{}}', '{}', '}', '}, {']

@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/priority.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.85, 1.0, 100, 200, 503, 12345, '+1234567890', ', ', '/clear-handled', '/contacts/important', '/handled', '/priority', '/stats', '2024-01-15T14:30:00', 'Contact identifier', 'Conversation ID', 'Get priority inbox', 'John', 'John Doe', 'Message ID', 'Message text content', 'Unique message ID', 'action_requested', 'application/json', 'chat123', 'chat123456', 'chat_id', 'contains_question', 'content', 'conversation_name', 'critical_count', 'date', 'description', 'example', 'handled', 'handled_count', 'high', 'high_count', 'identifier', 'important', 'message', 'message_id', 'messages', 'needs_response', 'needs_response_count', 'priority', 'priority_level', 'priority_score', 'reasons', 'sender', 'sender_name', 'success', 'text', 'total_count', 'unhandled_count']

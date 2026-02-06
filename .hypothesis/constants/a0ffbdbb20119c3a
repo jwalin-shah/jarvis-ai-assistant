@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/reply_service.py
-# hypothesis_version: 6.151.5
-
-[0.0, 100, 1000, 'answer', 'clarify', 'commitment', 'confidence', 'confirmation', 'empty_message', 'fallback', 'generate', 'generated', 'generation_error', 'high', 'incoming', 'low', 'medium', 'reason', 'response', 'response_text', 'similarity', 'similarity_score', 'source', 'them', 'total', 'trigger_text', 'type']

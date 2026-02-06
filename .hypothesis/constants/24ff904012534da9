@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/prefetch/executor.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.1, 0.2, 0.5, 0.6, 0.8, 1.0, 5.0, 80.0, 100, 500, 1000, 1024, 'Me', 'active_tasks', 'avg_latency_ms', 'battery', 'cache_hits', 'cached', 'can_prefetch', 'chat_id', 'confidence', 'contact', 'display_name', 'embeddings', 'executed', 'failed', 'high', 'id', 'llm', 'loaded', 'memory_available_mb', 'model', 'model_type', 'paused', 'prefetch-', 'prefetch-scheduler', 'prefetch_time', 'prefetched', 'query', 'queue_size', 'relationship', 'resource_manager', 'response', 'results', 'running', 'scheduled', 'sim', 'skipped', 'starting', 'state', 'stopped', 'stopping', 'style_notes', 'suggestions', 'text', 'texts', 'total_cost_ms', 'trigger', 'warm', 'warmup test', 'workers']

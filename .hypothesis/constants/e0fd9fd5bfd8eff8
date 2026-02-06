@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/tags/rules.py
-# hypothesis_version: 6.151.5
-
-['+00:00', 'RulesEngine', 'Z', '_preview', 'all', 'any', 'asc', 'build_rules', 'chat_id', 'contact_name', 'desc', 'display_name', 'field', 'has_attachments', 'has_more', 'is_flagged', 'is_group', 'last_message_date', 'last_message_text', 'message_count', 'needs_response', 'operator', 'preview', 'priority', 'relationship', 'sentiment', 'total_matches', 'unread_count', 'value']

@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/stats.py
-# hypothesis_version: 6.151.5
-
-['active_index', 'band', 'clusters', 'cnt', 'contacts', 'count', 'db_stats', 'display_name', 'embeddings', 'gate_a_reason', 'gate_a_reasons', 'gate_a_rejected', 'gate_b_bands', 'gate_c_verdict', 'gate_c_verdicts', 'invalid', 'name', 'pair_count', 'pairs', 'pairs_per_contact', 'pairs_quality_gte_50', 'total_gated', 'uncertain', 'valid']

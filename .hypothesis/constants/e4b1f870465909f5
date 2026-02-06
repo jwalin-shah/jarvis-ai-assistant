@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/analytics/engine.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.4, 0.6, 60.0, 300.0, 100, 300, 86400, '%A', '%Y-%m', '%Y-W%W', 'date', 'decreasing', 'increasing', 'message_count', 'neutral', 'score', 'stable', 'week']

@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/ratelimit.py
-# hypothesis_version: 6.151.5
-
-[10.0, 30.0, 408, 429, '10/minute', '100/minute', '127.0.0.1', '30/minute', '60/minute', '::1', 'F', 'RATE_LIMIT_EXCEEDED', 'RATE_LIMIT_READ', 'RATE_LIMIT_WRITE', 'RateLimitExceeded', 'Retry-After', 'code', 'detail', 'error', 'generation', 'get_remote_address', 'get_timeout_read', 'limiter', 'localhost', 'minute', 'retry_after_seconds', 'run_in_threadpool', 'second', 'unknown', 'user-agent', 'with_timeout']

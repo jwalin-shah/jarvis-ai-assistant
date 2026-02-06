@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/services/base.py
-# hypothesis_version: 6.151.5
-
-[5.0, 10.0, 30.0, 'PATH', 'Service %s stopped', 'Service error', 'Starting service %s', 'Stopping service %s', 'bin', 'dependencies', 'failed', 'getpgid', 'healthy', 'killpg', 'name', 'pid', 'running', 'service_name', 'setsid', 'starting', 'status', 'stopped', 'stopping', 'unhealthy', 'uptime']
