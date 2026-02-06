@@ -267,7 +267,7 @@ class JarvisSocketServer:
             await self._server.serve_forever()
 
     async def _preload_models_async(self) -> None:
-        """Preload LLM, embeddings, classifiers, and FAISS index in background.
+        """Preload LLM, embeddings, classifiers, and vec search index in background.
 
         This runs at startup so the first user request doesn't have to wait
         for model loading (which can take several seconds).

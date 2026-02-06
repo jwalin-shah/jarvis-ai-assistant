@@ -51,10 +51,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Legacy constants kept for backwards compatibility
-QUICK_REPLY_THRESHOLD = 0.8
-CONTEXT_THRESHOLD = 0.4
-GENERATE_THRESHOLD = 0.0
 
 
 # =============================================================================
@@ -254,7 +250,7 @@ class ReplyRouter:
                 query_hash=hash_query(incoming),
                 latency_ms=latency_ms,
                 embedding_computations=cached_embedder.embedding_computations,
-                faiss_candidates=vec_candidates,
+                vec_candidates=vec_candidates,
                 routing_decision=decision,
                 similarity_score=similarity_score,
                 cache_hit=cached_embedder.cache_hit,
@@ -293,7 +289,7 @@ class ReplyRouter:
         latency_ms: dict[str, float] = {}
         cached_embedder = CachedEmbedder(get_embedder())
 
-        # Precompute embedding (reused by FAISS search)
+        # Precompute embedding (reused by vec search)
         if incoming and incoming.strip():
             embed_start = time.perf_counter()
             cached_embedder.encode(incoming)
@@ -305,7 +301,7 @@ class ReplyRouter:
         def record_and_return(
             result: dict[str, Any],
             similarity_score: float,
-            faiss_candidates: int = 0,
+            vec_candidates: int = 0,
             model_loaded: bool = False,
             decision: str | None = None,
         ) -> dict[str, Any]:
@@ -319,7 +315,7 @@ class ReplyRouter:
                 similarity_score=similarity_score,
                 latency_ms=latency_ms,
                 cached_embedder=cached_embedder,
-                vec_candidates=faiss_candidates,
+                vec_candidates=vec_candidates,
                 model_loaded=model_loaded,
             )
             logger.info(
@@ -389,7 +385,7 @@ class ReplyRouter:
         return record_and_return(
             result,
             similarity_score=similarity,
-            faiss_candidates=len(search_results),
+            vec_candidates=len(search_results),
             model_loaded=model_loaded,
             decision="generate",
         )
@@ -461,10 +457,6 @@ def reset_reply_router() -> None:
 # =============================================================================
 
 __all__ = [
-    # Configuration (legacy, kept for backwards compatibility)
-    "QUICK_REPLY_THRESHOLD",
-    "CONTEXT_THRESHOLD",
-    "GENERATE_THRESHOLD",
     # Exceptions
     "RouterError",
     "IndexNotAvailableError",

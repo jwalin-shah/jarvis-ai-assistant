@@ -9,12 +9,7 @@ import logging
 from contracts.memory import MemoryMode
 from contracts.models import GenerationRequest, GenerationResponse
 from core.memory import get_memory_controller
-from jarvis.fallbacks import (
-    FailureReason,
-    ModelLoadError,
-    get_fallback_reply_suggestions,
-    get_fallback_response,
-)
+from jarvis.fallbacks import ModelLoadError
 from models import get_generator
 
 logger = logging.getLogger(__name__)
@@ -38,9 +33,6 @@ def can_use_llm() -> tuple[bool, str]:
 
         if state.pressure_level == "critical":
             return False, "Memory pressure critical"
-
-        if state.pressure_level == "red":
-            return False, "Memory pressure too high"
 
         return True, ""
 
@@ -95,15 +87,14 @@ def generate_with_fallback(request: GenerationRequest) -> GenerationResponse:
 
     if not can_generate:
         logger.warning("Cannot use LLM: %s", reason)
-        fallback = get_fallback_response(FailureReason.MEMORY_PRESSURE)
         return GenerationResponse(
-            text=get_fallback_reply_suggestions()[0],
+            text="",
             tokens_used=0,
             generation_time_ms=0.0,
             model_name="fallback",
-            used_template=True,
-            template_name="fallback",
-            finish_reason="fallback",
+            used_template=False,
+            template_name=None,
+            finish_reason="error",
             error=reason,
         )
 
@@ -114,20 +105,19 @@ def generate_with_fallback(request: GenerationRequest) -> GenerationResponse:
         if not generator.is_loaded():
             if not generator.load():
                 logger.error("Failed to load model")
-                fallback = get_fallback_response(FailureReason.MODEL_LOAD_FAILED)
-                raise ModelLoadError(fallback.text, reason="Memory or disk issue")
+                raise ModelLoadError("Failed to load model")
 
         return generator.generate(request)
 
     except ModelLoadError as e:
         logger.exception("Model load failed")
         return GenerationResponse(
-            text=get_fallback_reply_suggestions()[0],
+            text="",
             tokens_used=0,
             generation_time_ms=0.0,
             model_name="fallback",
-            used_template=True,
-            template_name="fallback",
+            used_template=False,
+            template_name=None,
             finish_reason="error",
             error=str(e),
         )
@@ -135,12 +125,12 @@ def generate_with_fallback(request: GenerationRequest) -> GenerationResponse:
     except Exception as e:
         logger.exception("Generation failed")
         return GenerationResponse(
-            text=get_fallback_reply_suggestions()[0],
+            text="",
             tokens_used=0,
             generation_time_ms=0.0,
             model_name="fallback",
-            used_template=True,
-            template_name="fallback",
+            used_template=False,
+            template_name=None,
             finish_reason="error",
             error=str(e),
         )

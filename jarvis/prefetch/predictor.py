@@ -45,7 +45,7 @@ class PredictionType(str, Enum):
     CONTACT_PROFILE = "contact_profile"  # Pre-load contact data
     SEARCH_RESULTS = "search_results"  # Pre-compute common search results
     MODEL_WARM = "model_warm"  # Warm up model weights
-    FAISS_INDEX = "faiss_index"  # Pre-load FAISS index segment
+    VEC_INDEX = "vec_index"  # Pre-load vec search index
 
 
 class PredictionPriority(int, Enum):
@@ -765,8 +765,21 @@ class PrefetchPredictor:
                 if pred.key not in seen_keys or pred.score > seen_keys[pred.key].score:
                     seen_keys[pred.key] = pred
 
+            # Deduplicate DRAFT_REPLY by chat_id (keep highest score per chat)
+            seen_drafts: dict[str, Prediction] = {}
+            non_drafts: list[Prediction] = []
+            for pred in seen_keys.values():
+                if pred.type == PredictionType.DRAFT_REPLY:
+                    cid = pred.params.get("chat_id", "")
+                    if cid not in seen_drafts or pred.score > seen_drafts[cid].score:
+                        seen_drafts[cid] = pred
+                else:
+                    non_drafts.append(pred)
+
+            deduped = non_drafts + list(seen_drafts.values())
+
             # Sort by score
-            final_predictions = sorted(seen_keys.values(), key=lambda p: p.score, reverse=True)
+            final_predictions = sorted(deduped, key=lambda p: p.score, reverse=True)
 
             return final_predictions[: self._max_predictions]
 

@@ -409,6 +409,18 @@ class PrefetchManager:
 
         while not self._shutdown_event.is_set():
             try:
+                # Skip predictions when memory is under pressure
+                try:
+                    from core.memory import get_memory_controller
+
+                    pressure = get_memory_controller().get_state().pressure_level
+                    if pressure in ("yellow", "red", "critical"):
+                        logger.debug("Skipping prediction cycle: memory pressure %s", pressure)
+                        self._shutdown_event.wait(self._prediction_interval)
+                        continue
+                except Exception:
+                    pass  # If memory check fails, proceed normally
+
                 # Generate predictions
                 predictions = self._predictor.predict()
 
@@ -465,17 +477,6 @@ class PrefetchManager:
                 ttl_seconds=600,
                 tags=["model", "embeddings"],
                 estimated_cost_ms=500,
-            ),
-            Prediction(
-                type=PredictionType.FAISS_INDEX,
-                priority=PredictionPriority.MEDIUM,
-                confidence=1.0,
-                key="warm:faiss",
-                params={},
-                reason="Startup warmup",
-                ttl_seconds=1800,
-                tags=["faiss"],
-                estimated_cost_ms=200,
             ),
         ]
 

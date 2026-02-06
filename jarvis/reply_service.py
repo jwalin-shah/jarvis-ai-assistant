@@ -20,9 +20,6 @@ from jarvis.classifiers.response_mobilization import (
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.errors import ErrorCode, JarvisError
-from jarvis.fallbacks import (
-    get_fallback_reply_suggestions,
-)
 from jarvis.observability.metrics_router import (
     RoutingMetrics,
     get_routing_metrics_store,
@@ -219,20 +216,22 @@ class ReplyService:
 
         # 2. Search for similar examples
         if search_results is None:
+            search_start = time.perf_counter()
             search_results = self.context_service.search_examples(incoming, chat_id=chat_id)
+            latency_ms["context_search"] = (time.perf_counter() - search_start) * 1000
 
         # 3. Generate response
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
-            logger.warning("Using fallback due to health: %s", health_reason)
+            logger.warning("FALLBACK | reason=%s | returning empty response", health_reason)
             return {
-                "type": "generated",
-                "response": get_fallback_reply_suggestions()[0],
-                "confidence": "medium",
-                "source": "fallback",
+                "type": "fallback",
+                "response": "",
+                "confidence": "none",
                 "reason": health_reason,
             }
 
+        gen_start = time.perf_counter()
         result = self._generate_llm_reply(
             incoming,
             search_results,
@@ -241,6 +240,7 @@ class ReplyService:
             chat_id=chat_id,
             mobilization=mobilization,
         )
+        latency_ms["generation"] = (time.perf_counter() - gen_start) * 1000
 
         # 4. Finalize result
         latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
@@ -401,14 +401,33 @@ class ReplyService:
             return "Keep the response brief and casual."
         return "A brief acknowledgment is fine."
 
-    def _record_metrics(self, **kwargs):
+    def _record_metrics(
+        self,
+        incoming: str,
+        decision: str,
+        similarity_score: float,
+        latency_ms: dict[str, float],
+        cached_embedder: CachedEmbedder,
+        vec_candidates: int,
+        model_loaded: bool,
+    ) -> None:
         try:
             metrics = RoutingMetrics(
-                timestamp=time.time(), query_hash=hash_query(kwargs["incoming"]), **kwargs
+                timestamp=time.time(),
+                query_hash=hash_query(incoming),
+                latency_ms=latency_ms,
+                embedding_computations=cached_embedder.embedding_computations,
+                vec_candidates=vec_candidates,
+                routing_decision=decision,
+                similarity_score=similarity_score,
+                cache_hit=cached_embedder.cache_hit,
+                model_loaded=model_loaded,
+                generation_time_ms=latency_ms.get("generation", 0.0),
+                tokens_per_second=0.0,
             )
             get_routing_metrics_store().record(metrics)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Metrics write failed: %s", e)
 
 
 _service: ReplyService | None = None

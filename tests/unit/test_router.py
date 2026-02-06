@@ -15,9 +15,6 @@ import pytest
 
 from jarvis.db import Contact
 from jarvis.router import (
-    CONTEXT_THRESHOLD,
-    GENERATE_THRESHOLD,
-    QUICK_REPLY_THRESHOLD,
     ReplyRouter,
     RouterError,
     RouteResult,
@@ -442,25 +439,6 @@ class TestRouteResult:
         assert result.cluster_name is None
         assert result.contact_style is None
         assert result.similar_triggers is None
-
-
-# =============================================================================
-# Legacy Thresholds Tests
-# =============================================================================
-
-
-class TestThresholds:
-    """Tests for legacy routing thresholds (kept for backwards compatibility)."""
-
-    def test_thresholds_exist(self) -> None:
-        """Test that legacy threshold constants still exist."""
-        assert QUICK_REPLY_THRESHOLD == 0.8
-        assert CONTEXT_THRESHOLD == 0.4
-        assert GENERATE_THRESHOLD == 0.0
-
-    def test_threshold_ordering(self) -> None:
-        """Test that thresholds are properly ordered."""
-        assert QUICK_REPLY_THRESHOLD > CONTEXT_THRESHOLD > GENERATE_THRESHOLD
 
 
 # =============================================================================

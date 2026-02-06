@@ -77,28 +77,15 @@ class MLXGenerator:
         embedder: Embedder | None = None,
     ) -> GenerationResponse:
         """Generate a response using template matching or model."""
-        from opentelemetry import trace
+        start_time = time.perf_counter()
 
-        tracer = trace.get_tracer(__name__)
+        # Try template match first
+        template_response = self._try_template_match(request, embedder=embedder)
+        if template_response is not None:
+            return template_response
 
-        with tracer.start_as_current_span("MLXGenerator.generate") as span:
-            span.set_attribute("llm.request.prompt", request.prompt)
-            start_time = time.perf_counter()
-
-            # Try template match first
-            template_response = self._try_template_match(request, embedder=embedder)
-            if template_response is not None:
-                span.set_attribute("llm.response.used_template", True)
-                return template_response
-
-            # Fall back to model generation
-            response = self._generate_with_model(request, start_time)
-
-            span.set_attribute("llm.response.text", response.text)
-            span.set_attribute("llm.response.tokens_used", response.tokens_used)
-            span.set_attribute("llm.response.model_name", response.model_name)
-
-            return response
+        # Fall back to model generation
+        return self._generate_with_model(request, start_time)
 
     def _try_template_match(
         self,

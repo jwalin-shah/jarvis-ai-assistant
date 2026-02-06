@@ -86,8 +86,8 @@ class TestCanUseLLM:
         assert can_use is False
         assert "critical" in reason.lower()
 
-    def test_returns_false_on_red_pressure(self):
-        """Returns False when memory pressure is red."""
+    def test_returns_true_on_red_pressure(self):
+        """Returns True when memory pressure is red (only critical blocks)."""
         mock_state = MemoryState(
             available_mb=4000,
             used_mb=12000,
@@ -100,8 +100,7 @@ class TestCanUseLLM:
             mock_controller.return_value.get_state.return_value = mock_state
             can_use, reason = can_use_llm()
 
-        assert can_use is False
-        assert "pressure" in reason.lower()
+        assert can_use is True
 
     def test_returns_true_on_exception(self):
         """Returns True when memory check fails (err on side of trying)."""
@@ -170,9 +169,10 @@ class TestGenerateWithFallback:
             mock_check.return_value = (False, "Memory too low")
             response = generate_with_fallback(request)
 
-        assert response.finish_reason == "fallback"
+        assert response.finish_reason == "error"
         assert response.error == "Memory too low"
         assert response.model_name == "fallback"
+        assert response.text == ""
 
     def test_calls_generator_when_can_use_llm(self):
         """Calls generator when system is healthy."""
