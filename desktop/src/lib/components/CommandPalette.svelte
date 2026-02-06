@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { tick } from "svelte";
-  import Icon from "./Icon.svelte";
+  import { tick, onMount } from "svelte";
+  import Icon, { type IconName } from "./Icon.svelte";
 
   interface Command {
     id: string;
     label: string;
     description?: string;
     shortcut?: string[];
-    icon?: string;
+    icon?: IconName;
     category: string;
     action: () => void;
   }
@@ -131,7 +131,7 @@
   ];
 
   // Filter commands based on search query
-  let filteredCommands = $derived(() => {
+  let filteredCommands = $derived.by(() => {
     if (!searchQuery.trim()) return commands;
 
     const query = searchQuery.toLowerCase();
@@ -144,9 +144,9 @@
   });
 
   // Group commands by category
-  let groupedCommands = $derived(() => {
+  let groupedCommands = $derived.by(() => {
     const groups: Record<string, Command[]> = {};
-    for (const cmd of filteredCommands()) {
+    for (const cmd of filteredCommands) {
       if (!groups[cmd.category]) {
         groups[cmd.category] = [];
       }
@@ -155,9 +155,6 @@
     return groups;
   });
 
-  // Flat list for keyboard navigation
-  let flatCommands = $derived(() => filteredCommands());
-
   // Reset selection when search changes
   $effect(() => {
     searchQuery;
@@ -165,14 +162,14 @@
   });
 
   // Focus input on mount
-  $effect(() => {
+  onMount(() => {
     tick().then(() => {
       inputRef?.focus();
     });
   });
 
   function handleKeydown(event: KeyboardEvent) {
-    const cmds = flatCommands();
+    const cmds = filteredCommands;
 
     switch (event.key) {
       case "ArrowDown":
@@ -215,15 +212,34 @@
   }
 
   function getCommandIndex(cmd: Command): number {
-    return flatCommands().findIndex((c) => c.id === cmd.id);
+    return filteredCommands.findIndex((c) => c.id === cmd.id);
+  }
+
+  function handleOverlayClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
+
+  function handleOverlayKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClose();
+    }
   }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="palette-overlay" onclick={onClose}>
-  <div class="palette glass" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Command Palette">
+<div
+  class="palette-overlay"
+  onclick={handleOverlayClick}
+  onkeydown={handleOverlayKeydown}
+  role="button"
+  aria-label="Close command palette"
+  tabindex="0"
+>
+  <div class="palette glass" role="dialog" aria-label="Command Palette" tabindex="-1">
     <div class="palette-header">
       <Icon name="search" size={18} />
       <input
@@ -240,12 +256,12 @@
     </div>
 
     <div class="palette-content">
-      {#if flatCommands().length === 0}
+      {#if filteredCommands.length === 0}
         <div class="no-results">
           <p>No commands found for "{searchQuery}"</p>
         </div>
       {:else}
-        {#each Object.entries(groupedCommands()) as [category, cmds]}
+        {#each Object.entries(groupedCommands) as [category, cmds]}
           <div class="command-group">
             <div class="group-label">{category}</div>
             {#each cmds as cmd}

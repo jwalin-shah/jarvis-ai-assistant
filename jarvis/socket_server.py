@@ -21,10 +21,12 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 import signal
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import websockets
 from websockets.server import ServerConnection
@@ -33,9 +35,11 @@ logger = logging.getLogger(__name__)
 
 # Socket configuration
 SOCKET_PATH = Path.home() / ".jarvis" / "jarvis.sock"
+WS_TOKEN_PATH = Path.home() / ".jarvis" / "ws_token"
 WEBSOCKET_HOST = "127.0.0.1"
 WEBSOCKET_PORT = 8743
 MAX_MESSAGE_SIZE = 1024 * 1024  # 1MB max message size
+MAX_WS_CONNECTIONS = 10
 
 
 class WebSocketWriter:
@@ -115,12 +119,14 @@ class JarvisSocketServer:
         self._streaming_methods: set[str] = set()  # Methods that support streaming
         self._clients: set[asyncio.StreamWriter] = set()  # Unix socket clients
         self._ws_clients: set[ServerConnection] = set()  # WebSocket clients
+        self._ws_auth_token: str | None = None
         self._running = False
         self._enable_watcher = enable_watcher
         self._preload_models = preload_models
         self._wait_for_preload = wait_for_preload
         self._preload_timeout = preload_timeout
         self._enable_prefetch = enable_prefetch
+        self._watcher: Any = None  # ChatDBWatcher instance
         self._watcher_task: asyncio.Task[None] | None = None
         self._preload_task: asyncio.Task[None] | None = None
         self._models_ready = False
@@ -192,6 +198,11 @@ class JarvisSocketServer:
         # Set socket permissions (readable/writable by user only)
         os.chmod(SOCKET_PATH, 0o600)
 
+        # Generate WebSocket auth token and write to file
+        self._ws_auth_token = secrets.token_urlsafe(32)
+        WS_TOKEN_PATH.write_text(self._ws_auth_token)
+        os.chmod(WS_TOKEN_PATH, 0o600)
+
         # Start WebSocket server for browser clients
         self._ws_server = await websockets.serve(
             self._handle_websocket_client,
@@ -209,35 +220,41 @@ class JarvisSocketServer:
         if self._enable_watcher:
             from jarvis.watcher import ChatDBWatcher
 
-            watcher = ChatDBWatcher(self)
-            self._watcher_task = asyncio.create_task(watcher.start())
+            self._watcher = ChatDBWatcher(self)
+            self._watcher_task = asyncio.create_task(self._watcher.start())
             logger.info("Started chat.db watcher for real-time notifications")
 
-        # Start prefetch manager for speculative caching
-        if self._enable_prefetch:
-            try:
-                from jarvis.prefetch import get_prefetch_manager
-
-                self._prefetch_manager = get_prefetch_manager()
-                self._prefetch_manager.start()
-                logger.info("Started prefetch manager for speculative caching")
-            except Exception as e:
-                logger.warning(f"Prefetch manager failed to start: {e}")
-                self._prefetch_manager = None
-
         # Preload models in background for faster first request
+        # NOTE: Must complete BEFORE prefetch manager starts. Concurrent MLX
+        # model loads crash the Metal GPU (assertion failures / malloc errors).
         if self._preload_models:
             self._preload_task = asyncio.create_task(self._preload_models_async())
 
-            # Optionally wait for preload to complete before accepting connections
-            # This eliminates cold-start latency for the first request
-            if self._wait_for_preload:
+            # Wait for preload: always required when prefetch is enabled (its
+            # prediction loop immediately routes messages that trigger model
+            # loading, racing with the preload). Also wait if user requested.
+            if self._wait_for_preload or self._enable_prefetch:
                 logger.info(f"Waiting up to {self._preload_timeout}s for models to preload...")
                 ready = await self.wait_for_models()
                 if ready:
                     logger.info("Models ready, accepting connections")
                 else:
                     logger.warning("Preload timeout, accepting connections anyway")
+
+        # Start prefetch manager for speculative caching
+        # Models are already loaded by preload above, so skip redundant warmup.
+        if self._enable_prefetch:
+            try:
+                from jarvis.prefetch import get_prefetch_manager
+
+                self._prefetch_manager = get_prefetch_manager()
+                if self._preload_models:
+                    self._prefetch_manager._warmup_on_start = False
+                self._prefetch_manager.start()
+                logger.info("Started prefetch manager for speculative caching")
+            except Exception as e:
+                logger.warning(f"Prefetch manager failed to start: {e}")
+                self._prefetch_manager = None
 
         # Run both servers
         async with self._server:
@@ -335,6 +352,12 @@ class JarvisSocketServer:
         self._running = False
 
         # Stop the watcher
+        if self._watcher:
+            try:
+                await self._watcher.stop()
+            except Exception as e:
+                logger.debug(f"Error stopping watcher: {e}")
+            self._watcher = None
         if self._watcher_task:
             self._watcher_task.cancel()
             try:
@@ -392,6 +415,10 @@ class JarvisSocketServer:
         # Remove socket file
         if SOCKET_PATH.exists():
             SOCKET_PATH.unlink()
+
+        # Remove WebSocket auth token file
+        if WS_TOKEN_PATH.exists():
+            WS_TOKEN_PATH.unlink()
 
         logger.info("Socket server stopped")
 
@@ -492,9 +519,34 @@ class JarvisSocketServer:
     async def _handle_websocket_client(self, websocket: ServerConnection) -> None:
         """Handle a WebSocket client connection.
 
+        Validates auth token from query params and enforces connection limits.
+
         Args:
             websocket: WebSocket connection
         """
+        # Validate auth token from query params
+        if self._ws_auth_token:
+            try:
+                path = websocket.request.path if websocket.request else ""
+                query_params = parse_qs(urlparse(path).query)
+                client_token = query_params.get("token", [None])[0]
+                if client_token != self._ws_auth_token:
+                    logger.warning(
+                        "Unauthorized WebSocket connection from %s",
+                        websocket.remote_address,
+                    )
+                    await websocket.close(4001, "Unauthorized")
+                    return
+            except Exception:
+                await websocket.close(4001, "Unauthorized")
+                return
+
+        # Enforce connection limit
+        if len(self._ws_clients) >= MAX_WS_CONNECTIONS:
+            logger.warning("WebSocket connection limit reached (%d)", MAX_WS_CONNECTIONS)
+            await websocket.close(4002, "Too many connections")
+            return
+
         self._ws_clients.add(websocket)
         logger.debug(f"WebSocket client connected: {websocket.remote_address}")
 
@@ -770,11 +822,12 @@ class JarvisSocketServer:
                     context_used=context_used,
                 )
 
-            # Non-streaming: use router
+            # Non-streaming: use router (run in thread to avoid blocking event loop)
             from jarvis.router import get_reply_router
 
             router = get_reply_router()
-            result = router.route(
+            result = await asyncio.to_thread(
+                router.route,
                 incoming=last_incoming,
                 thread=context[-10:] if context else None,
                 chat_id=chat_id,
@@ -844,11 +897,14 @@ Write a brief, helpful reply:"""
         # Use a queue to bridge sync generator and async sending
         token_queue: queue.Queue[tuple[str, int, bool] | None] = queue.Queue(maxsize=100)
         generation_error: list[Exception] = []
+        stop_event = threading.Event()
 
         def producer():
             """Run in thread: generate tokens and put in queue."""
             try:
-                for stream_token in model.generate_stream(prompt, max_tokens=150):
+                for stream_token in model.generate_stream(
+                    prompt, max_tokens=150, stop_event=stop_event
+                ):
                     token_queue.put(
                         (
                             stream_token.token,
@@ -856,6 +912,8 @@ Write a brief, helpful reply:"""
                             stream_token.is_final,
                         )
                     )
+                    if stop_event.is_set():
+                        break
             except Exception as e:
                 generation_error.append(e)
             finally:
@@ -899,6 +957,9 @@ Write a brief, helpful reply:"""
         except Exception as e:
             logger.exception("Streaming generation failed")
             raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
+        finally:
+            # Signal producer to stop if still running (e.g. client disconnected)
+            stop_event.set()
 
         # Send final response
         result = {
@@ -978,10 +1039,13 @@ Summary:"""
                     request_id=_request_id,
                 )
 
-            # Non-streaming generation - ensure model is loaded first
-            if not model.is_loaded():
-                model.load()
-            result = model.generate_sync(prompt, max_tokens=300)
+            # Non-streaming generation - run in thread to avoid blocking event loop
+            def _summarize_sync():
+                if not model.is_loaded():
+                    model.load()
+                return model.generate_sync(prompt, max_tokens=300)
+
+            result = await asyncio.to_thread(_summarize_sync)
             response_text = result.text
 
             # Parse response - simple extraction
@@ -1025,10 +1089,13 @@ Summary:"""
 
         token_queue: queue.Queue[tuple[str, int, bool] | None] = queue.Queue(maxsize=100)
         generation_error: list[Exception] = []
+        stop_event = threading.Event()
 
         def producer():
             try:
-                for stream_token in model.generate_stream(prompt, max_tokens=300):
+                for stream_token in model.generate_stream(
+                    prompt, max_tokens=300, stop_event=stop_event
+                ):
                     token_queue.put(
                         (
                             stream_token.token,
@@ -1036,6 +1103,8 @@ Summary:"""
                             stream_token.is_final,
                         )
                     )
+                    if stop_event.is_set():
+                        break
             except Exception as e:
                 generation_error.append(e)
             finally:
@@ -1073,6 +1142,8 @@ Summary:"""
         except Exception as e:
             logger.exception("Streaming summarization failed")
             raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
+        finally:
+            stop_event.set()
 
         # Parse the streamed response
         lines = full_response.strip().split("\n")
@@ -1108,11 +1179,11 @@ Summary:"""
             Dict with suggestions list
         """
         try:
-            # Use the router to generate a response
+            # Use the router to generate a response (run in thread to avoid blocking event loop)
             from jarvis.router import get_reply_router
 
             router = get_reply_router()
-            result = router.route(incoming=last_message)
+            result = await asyncio.to_thread(router.route, incoming=last_message)
 
             # Get the main response
             response_text = result.get("response", "")

@@ -41,7 +41,7 @@ class ServiceManager:
         self.project_root = project_root
         self.services: dict[str, Service] = {}
         self._shutdown_event = threading.Event()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._initialized = False
 
     def _initialize_services(self) -> None:

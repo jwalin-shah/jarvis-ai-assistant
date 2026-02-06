@@ -8,6 +8,10 @@ import type { Conversation, Message, Attachment, Reaction } from "../api/types";
 // Dynamic import for Tauri plugin - only works in Tauri context
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let Database: any = null;
+interface SqlDatabase {
+  select<T = unknown>(query: string, bindValues?: unknown[]): Promise<T>;
+  close(): Promise<void>;
+}
 
 // Check if running in Tauri context
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -28,17 +32,11 @@ import {
   type SchemaVersion,
 } from "./queries";
 
-// Database paths (lazy evaluated to avoid process.env errors in browser)
-const getChatDbPath = () => {
-  if (typeof process !== "undefined" && process.env?.HOME) {
-    return `${process.env.HOME}/Library/Messages/chat.db`;
-  }
-  // Fallback for browser context - will fail gracefully when trying to connect
-  return "/Library/Messages/chat.db";
-};
+// Cached home directory path (resolved via Tauri API)
+let resolvedHomePath: string | null = null;
 
 // Connection state
-let chatDb: Database | null = null;
+let chatDb: SqlDatabase | null = null;
 let isInitialized = false;
 let initError: Error | null = null;
 let schemaVersion: SchemaVersion = "v14";
@@ -74,9 +72,16 @@ export async function initDatabases(): Promise<void> {
       Database = module.default;
     }
 
+    // Resolve home directory via Tauri API (process.env.HOME is undefined in WebView)
+    if (!resolvedHomePath) {
+      const { homeDir } = await import("@tauri-apps/api/path");
+      resolvedHomePath = await homeDir();
+    }
+
     // Open chat.db in read-only mode via URI
     // tauri-plugin-sql uses sqlite:// protocol
-    const uri = `sqlite:${getChatDbPath()}?mode=ro`;
+    const chatDbPath = `${resolvedHomePath}Library/Messages/chat.db`;
+    const uri = `sqlite:${chatDbPath}?mode=ro`;
     chatDb = await Database.load(uri);
 
     // Detect schema version
@@ -213,14 +218,14 @@ export async function getConversations(
   try {
     const rows = await chatDb.select<ConversationRow[]>(query, params);
 
-    return rows.map((row) => {
+    return rows.map((row: ConversationRow) => {
       // Parse participants
       const participantsStr = row.participants || "";
       const participants = participantsStr
         .split(",")
-        .map((p) => p.trim())
+        .map((p: string) => p.trim())
         .filter(Boolean)
-        .map((p) => normalizePhoneNumber(p) || p);
+        .map((p: string) => normalizePhoneNumber(p) || p);
 
       // Determine if group chat
       const isGroup = participants.length > 1;
@@ -373,7 +378,7 @@ export async function getNewMessagesSince(
       [sinceRowid]
     );
 
-    return rows.map((row) => ({
+    return rows.map((row: { id: number; chat_id: string }) => ({
       chatId: row.chat_id,
       messageId: row.id,
     }));
@@ -483,7 +488,7 @@ async function getAttachmentsForMessage(messageId: number): Promise<Attachment[]
       messageId,
     ]);
 
-    return rows.map((row) => ({
+    return rows.map((row: AttachmentRow) => ({
       filename: row.transfer_name || row.filename || "attachment",
       file_path: row.filename,
       mime_type: row.mime_type,
@@ -506,7 +511,7 @@ async function getReactionsForMessage(messageGuid: string): Promise<Reaction[]> 
     ]);
 
     return rows
-      .map((row) => {
+      .map((row: ReactionRow) => {
         const reactionType = parseReactionType(row.associated_message_type);
         if (!reactionType || reactionType.startsWith("remove_")) {
           return null;
@@ -520,7 +525,7 @@ async function getReactionsForMessage(messageGuid: string): Promise<Reaction[]> 
           date: formatDate(parseAppleTimestamp(row.date)) || "",
         };
       })
-      .filter((r): r is Reaction => r !== null);
+      .filter((r: Reaction | null): r is Reaction => r !== null);
   } catch {
     return [];
   }

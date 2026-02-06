@@ -332,19 +332,6 @@ STRUCTURAL_PATTERNS: dict[ResponseType, list[tuple[str, bool]]] = {
     # They're handled by the DA classifier fallback
 }
 
-# Compile all regex patterns once at module load
-_COMPILED_PATTERNS: dict[ResponseType, list[re.Pattern]] = {}
-
-for response_type, patterns in STRUCTURAL_PATTERNS.items():
-    _COMPILED_PATTERNS[response_type] = []
-    for pattern, is_regex in patterns:
-        if is_regex:
-            try:
-                compiled = re.compile(pattern, re.IGNORECASE)
-                _COMPILED_PATTERNS[response_type].append(compiled)
-            except re.error as e:
-                logger.warning("Invalid regex pattern %s: %s", pattern, e)
-
 
 # =============================================================================
 # Classification Result

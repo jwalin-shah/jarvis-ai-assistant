@@ -25,7 +25,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Default socket path
-SOCKET_PATH = Path(os.getenv("JARVIS_NER_SOCKET", "/tmp/jarvis-ner.sock"))
+SOCKET_PATH = Path(os.getenv("JARVIS_NER_SOCKET", str(Path.home() / ".jarvis" / "jarvis-ner.sock")))
 PID_FILE = Path.home() / ".jarvis" / "ner_server.pid"
 
 # Connection timeout

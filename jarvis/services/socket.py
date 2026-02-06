@@ -39,15 +39,17 @@ class SocketService(Service):
 
         try:
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(self.config.health_check_timeout)
-            sock.connect(str(self.config.health_check_socket))
+            try:
+                sock.settimeout(self.config.health_check_timeout)
+                sock.connect(str(self.config.health_check_socket))
 
-            # Try a simple ping
-            sock.send(b'{"jsonrpc": "2.0", "method": "ping", "id": 1}\n')
-            response = sock.recv(1024)
-            sock.close()
+                # Try a simple ping
+                sock.send(b'{"jsonrpc": "2.0", "method": "ping", "id": 1}\n')
+                response = sock.recv(1024)
 
-            # Check if we got a response
-            return len(response) > 0
+                # Check if we got a response
+                return len(response) > 0
+            finally:
+                sock.close()
         except Exception:
             return False

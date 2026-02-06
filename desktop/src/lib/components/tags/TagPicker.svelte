@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Tag } from "$lib/api/types";
+  import type { Tag } from "../../api/types";
   import TagBadge from "./TagBadge.svelte";
   import { createEventDispatcher, onMount } from "svelte";
 
@@ -26,7 +26,7 @@
     ? availableTags.filter(
         (t) =>
           t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          t.aliases.some((a) => a.toLowerCase().includes(searchQuery.toLowerCase()))
+          t.aliases.some((a: string) => a.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : availableTags;
   $: canSelectMore = maxSelections === 0 || selectedTagIds.length < maxSelections;

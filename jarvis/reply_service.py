@@ -1,10 +1,8 @@
-"""Reply Service - Unified service for generating replies and suggestions.
+"""Reply Service - Unified service for generating replies.
 
 Consolidates logic from:
 - jarvis/router.py (Main RAG generation)
 - jarvis/generation.py (Health-aware utilities)
-- jarvis/reply_suggester.py (Fast pattern-based suggestions)
-- jarvis/multi_option.py (Diverse commitment options)
 """
 
 from __future__ import annotations
@@ -14,7 +12,6 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any
 
-from jarvis.classifiers.response_classifier import ResponseType
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
@@ -31,16 +28,10 @@ from jarvis.services.context_service import ContextService
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
-    from jarvis.multi_option import MultiOptionResult, ResponseOption
-    from jarvis.reply_suggester import ReplySuggestion
-    from jarvis.search.retrieval import TypedRetriever
     from jarvis.search.semantic_search import SemanticSearcher
     from models import MLXGenerator
 
 logger = logging.getLogger(__name__)
-
-# Confidence threshold for retrieval
-MIN_RETRIEVAL_CONFIDENCE = 0.5
 
 
 class ReplyServiceError(JarvisError):
@@ -51,12 +42,9 @@ class ReplyServiceError(JarvisError):
 
 
 class ReplyService:
-    """Unified service for generating AI replies and suggestions.
+    """Unified service for generating AI replies.
 
-    This service coordinates between different generation strategies:
-    1. Full RAG generation for high-quality single replies.
-    2. Multi-option generation for commitment questions.
-    3. Fast pattern-based suggestions for low-latency needs.
+    Coordinates RAG generation for high-quality single replies.
     """
 
     def __init__(
@@ -64,12 +52,10 @@ class ReplyService:
         db: JarvisDB | None = None,
         generator: MLXGenerator | None = None,
         imessage_reader: ChatDBReader | None = None,
-        retriever: TypedRetriever | None = None,
     ) -> None:
         self._db = db
         self._generator = generator
         self._imessage_reader = imessage_reader
-        self._retriever = retriever
         self._semantic_searcher: SemanticSearcher | None = None
         self._context_service: ContextService | None = None
         self._lock = threading.RLock()
@@ -113,15 +99,6 @@ class ReplyService:
             return self._semantic_searcher
 
     @property
-    def retriever(self) -> TypedRetriever:
-        with self._lock:
-            if self._retriever is None:
-                from jarvis.search.retrieval import get_typed_retriever
-
-                self._retriever = get_typed_retriever()
-            return self._retriever
-
-    @property
     def context_service(self) -> ContextService:
         """Get or create the context service."""
         with self._lock:
@@ -147,14 +124,20 @@ class ReplyService:
         thread: list[str] | None = None,
         chat_id: str | None = None,
         mobilization: MobilizationResult | None = None,
+        cached_embedder: CachedEmbedder | None = None,
     ) -> dict[str, Any]:
         """Generate a single best reply using RAG and LLM.
 
         This is the primary method for high-quality generation.
+
+        Args:
+            cached_embedder: Optional pre-warmed embedder to reuse. Avoids
+                recomputing embeddings that the caller already computed.
         """
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
-        cached_embedder = CachedEmbedder(get_embedder())
+        if cached_embedder is None:
+            cached_embedder = CachedEmbedder(get_embedder())
 
         if not incoming or not incoming.strip():
             return {
@@ -209,164 +192,6 @@ class ReplyService:
         )
 
         return result
-
-    def generate_options(
-        self,
-        incoming: str,
-        contact_id: int | None = None,
-        chat_id: str | None = None,
-        force_commitment: bool = False,
-    ) -> MultiOptionResult:
-        """Generate diverse response options (AGREE, DECLINE, DEFER).
-
-        Used primarily for commitment-style messages (invitations, requests).
-        """
-        from jarvis.multi_option import (
-            FALLBACK_TEMPLATES,
-            OPTION_PRIORITY,
-            MultiOptionResult,
-            ResponseOption,
-        )
-
-        # Check if commitment
-        is_commitment, trigger_da = self._is_commitment_trigger(incoming)
-        if force_commitment:
-            is_commitment = True
-
-        if not is_commitment:
-            return MultiOptionResult(
-                trigger=incoming,
-                trigger_da=trigger_da,
-                is_commitment=False,
-                options=[],
-            )
-
-        # Implementation similar to MultiOptionGenerator.generate_options
-        style_guide = self._get_style_guide(chat_id)
-        cached_embedder = CachedEmbedder(get_embedder())
-
-        multi_examples = self.retriever.get_examples_for_commitment(
-            trigger=incoming,
-            k_per_type=3,
-            embedder=cached_embedder,
-            trigger_da=trigger_da,
-        )
-
-        options: list[ResponseOption] = []
-        for response_type in OPTION_PRIORITY:
-            if len(options) >= 3:
-                break
-
-            examples = multi_examples.get_examples(response_type)
-
-            # Strategy: Retrieval -> LLM -> Fallback
-            if examples and examples[0].similarity >= MIN_RETRIEVAL_CONFIDENCE:
-                options.append(
-                    ResponseOption(
-                        text=examples[0].response_text,
-                        response_type=response_type,
-                        confidence=examples[0].similarity,
-                        source="template",
-                    )
-                )
-                continue
-
-            # LLM attempt
-            llm_opt = self._generate_llm_option(incoming, response_type, style_guide, examples)
-            if llm_opt:
-                options.append(llm_opt)
-                continue
-
-            # Fallback
-            import random
-
-            templates = FALLBACK_TEMPLATES.get(response_type, ["Okay"])
-            options.append(
-                ResponseOption(
-                    text=random.choice(templates),
-                    response_type=response_type,
-                    confidence=0.5,
-                    source="fallback",
-                )
-            )
-
-        # Deduplicate
-        seen = set()
-        unique_options = []
-        for opt in options:
-            if opt.text.lower().strip() not in seen:
-                seen.add(opt.text.lower().strip())
-                unique_options.append(opt)
-
-        return MultiOptionResult(
-            trigger=incoming,
-            trigger_da=trigger_da,
-            is_commitment=True,
-            options=unique_options,
-        )
-
-    def generate_suggestions(
-        self,
-        incoming: str,
-        contact_id: int | None = None,
-        n_suggestions: int = 3,
-    ) -> list[ReplySuggestion]:
-        """Generate fast reply suggestions using patterns and retrieval.
-
-        Does not use LLM, ensuring sub-200ms latency.
-        """
-        from jarvis.reply_suggester import (
-            TEMPLATES,
-            MessagePattern,
-            ReplySuggestion,
-            detect_pattern,
-        )
-
-        pattern = detect_pattern(incoming)
-        suggestions: list[ReplySuggestion] = []
-
-        try:
-            from jarvis.search.vec_search import get_vec_searcher
-
-            vec_searcher = get_vec_searcher(self.db)
-            results = vec_searcher.search_with_pairs(
-                query=incoming,
-                limit=10,
-            )
-
-            seen = set()
-            for r in results:
-                resp = r.get("response_text", "").strip()
-                if resp and resp.lower() not in seen:
-                    seen.add(resp.lower())
-                    suggestions.append(
-                        ReplySuggestion(
-                            text=resp,
-                            source="retrieval",
-                            confidence=r.get("similarity", 0.5),
-                        )
-                    )
-                if len(suggestions) >= n_suggestions:
-                    break
-        except Exception as e:
-            logger.warning("Suggestion retrieval failed: %s", e)
-
-        # Fill with templates
-        if len(suggestions) < n_suggestions:
-            templates = TEMPLATES.get(pattern, TEMPLATES[MessagePattern.UNKNOWN])
-            for t in templates:
-                if len(suggestions) >= n_suggestions:
-                    break
-                if t.lower() not in [s.text.lower() for s in suggestions]:
-                    suggestions.append(
-                        ReplySuggestion(
-                            text=t,
-                            source="template",
-                            confidence=0.7,
-                        )
-                    )
-
-        return suggestions[:n_suggestions]
 
     # --- Internal Helpers ---
 
@@ -457,76 +282,6 @@ class ReplyService:
         elif mobilization.pressure == ResponsePressure.LOW:
             return "Keep the response brief and casual."
         return "A brief acknowledgment is fine."
-
-    def _generate_llm_option(
-        self,
-        trigger: str,
-        response_type: ResponseType,
-        style_guide: str,
-        examples: list | None,
-    ) -> ResponseOption | None:
-        from jarvis.multi_option import ResponseOption
-
-        can_generate, _ = self.can_use_llm()
-        if not can_generate:
-            return None
-
-        from contracts.models import GenerationRequest
-        from jarvis.prompts import COMMITMENT_PROMPT
-
-        examples_section = ""
-        if examples:
-            ex_lines = []
-            for ex in examples[:2]:
-                ex_lines.append(f"Message: {ex.trigger_text}\nResponse: {ex.response_text}\n")
-            examples_section = "\n### Examples:\n" + "\n".join(ex_lines)
-
-        prompt = COMMITMENT_PROMPT.template.format(
-            response_type=response_type.value.upper(),
-            response_type_lower=response_type.value.lower(),
-            style_guide=style_guide,
-            trigger=trigger,
-            examples_section=examples_section,
-        )
-
-        try:
-            request = GenerationRequest(prompt=prompt, max_tokens=30, temperature=0.7)
-            response = self.generator.generate(request)
-            if response.text:
-                return ResponseOption(
-                    text=response.text.strip().split("\n")[0],
-                    response_type=response_type,
-                    confidence=0.7,
-                    source="generated",
-                )
-        except Exception:
-            pass
-        return None
-
-    def _is_commitment_trigger(self, trigger: str) -> tuple[bool, str | None]:
-        from jarvis.multi_option import (
-            COMMITMENT_TRIGGER_TYPES,
-            _is_info_statement,
-            _is_wh_question,
-        )
-
-        if _is_info_statement(trigger):
-            return False, "statement"
-        if _is_wh_question(trigger):
-            return False, "question"
-        trigger_da, _ = self.retriever.classify_trigger(trigger)
-        return trigger_da in COMMITMENT_TRIGGER_TYPES, trigger_da
-
-    def _get_style_guide(self, chat_id: str | None) -> str:
-        if not chat_id:
-            return "Use a casual, friendly tone."
-        try:
-            from jarvis.contacts.contact_profile import format_style_guide, get_contact_profile
-
-            profile = get_contact_profile(chat_id)
-            return format_style_guide(profile) if profile else "Use a casual, friendly tone."
-        except Exception:
-            return "Use a casual, friendly tone."
 
     def _record_metrics(self, **kwargs):
         try:

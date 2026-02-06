@@ -73,7 +73,7 @@ class TestTypedRetriever:
         assert retriever._vec_searcher is None  # Lazy loaded
         assert retriever._trigger_classifier is None  # Lazy loaded
 
-    @patch("jarvis.retrieval.get_db")
+    @patch("jarvis.search.retrieval.get_db")
     def test_db_property_lazy_loads(self, mock_get_db):
         """db property lazy loads database."""
         mock_db = MagicMock()
@@ -86,7 +86,7 @@ class TestTypedRetriever:
         mock_db.init_schema.assert_called_once()
         assert db == mock_db
 
-    @patch("jarvis.retrieval.get_trigger_classifier")
+    @patch("jarvis.search.retrieval.get_trigger_classifier")
     def test_trigger_classifier_property_lazy_loads(self, mock_get_classifier):
         """trigger_classifier property lazy loads classifier."""
         mock_classifier = MagicMock()
@@ -104,7 +104,7 @@ class TestTypedRetriever:
         retriever._trigger_classifier = None
 
         with patch(
-            "jarvis.retrieval.get_trigger_classifier", side_effect=Exception("Not available")
+            "jarvis.search.retrieval.get_trigger_classifier", side_effect=Exception("Not available")
         ):
             result = retriever.classify_trigger("test")
             assert result == (None, 0.0)

@@ -1,18 +1,21 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from "svelte";
+  import { onMount } from "svelte";
   import { healthStore, fetchHealth } from "../stores/health";
   import { conversationsStore, fetchConversations } from "../stores/conversations";
 
-  const dispatch = createEventDispatcher<{ navigate: string }>();
+  type View = "messages" | "dashboard" | "health" | "settings" | "templates" | "network";
+  let { onNavigate = (_view: View) => {} }: { onNavigate?: (view: View) => void } = $props();
 
   onMount(() => {
     fetchHealth();
     fetchConversations();
   });
 
-  $: totalMessages = $conversationsStore.conversations.reduce(
+  let totalMessages = $derived(
+    $conversationsStore.conversations.reduce(
     (sum, c) => sum + c.message_count,
     0
+    )
   );
 </script>
 
@@ -20,7 +23,7 @@
   <h1>Dashboard</h1>
 
   <div class="cards">
-    <button class="card" on:click={() => dispatch("navigate", "messages")}>
+    <button class="card" onclick={() => onNavigate("messages")}>
       <div class="card-icon messages">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -33,7 +36,7 @@
       </div>
     </button>
 
-    <button class="card" on:click={() => dispatch("navigate", "health")}>
+    <button class="card" onclick={() => onNavigate("health")}>
       <div class="card-icon health" class:healthy={$healthStore.data?.status === "healthy"}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -45,7 +48,7 @@
           {$healthStore.data?.status || "Unknown"}
         </p>
         <p class="sub">
-          {#if $healthStore.data}
+          {#if $healthStore.data && $healthStore.data.memory_available_gb !== null}
             {$healthStore.data.memory_available_gb.toFixed(1)} GB available
           {:else}
             Checking...

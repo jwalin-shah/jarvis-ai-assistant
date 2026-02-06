@@ -68,32 +68,26 @@ describe("JARVIS Desktop App", () => {
     await expect(header).toBeDisplayed();
   });
 
-  it("should show health status", async () => {
-    // Click Health nav item
-    const healthNav = await $('.nav-item[title="Health Status"]');
-    await healthNav.click();
+  it("should navigate through the core routes", async () => {
+    const routeChecks: Array<{ title: string; selector: string }> = [
+      { title: "Dashboard", selector: ".dashboard" },
+      { title: "Messages", selector: ".conversation-list" },
+      { title: "Template Builder", selector: ".template-builder" },
+      { title: "Network", selector: ".network-container" },
+      { title: "Health Status", selector: ".health-status" },
+      { title: "Settings", selector: ".settings" },
+    ];
 
-    // Wait for health status to load
-    const healthStatus = await $(".health-status");
-    await healthStatus.waitForDisplayed({ timeout: 10000 });
+    for (const route of routeChecks) {
+      const navItem = await $(`.nav-item[title="${route.title}"]`);
+      await navItem.click();
 
-    // Should show memory info
-    const memoryText = await $("*=Memory");
-    await expect(memoryText).toBeDisplayed();
-  });
+      const view = await $(route.selector);
+      await view.waitForDisplayed({ timeout: 10000 });
 
-  it("should show settings page", async () => {
-    // Click Settings nav item
-    const settingsNav = await $('.nav-item[title="Settings"]');
-    await settingsNav.click();
-
-    // Wait for settings to load
-    const settingsContent = await $(".settings-content");
-    await settingsContent.waitForDisplayed({ timeout: 10000 });
-
-    // Should show model section
-    const modelHeading = await $("h2=Model");
-    await expect(modelHeading).toBeDisplayed();
+      const classes = await navItem.getAttribute("class");
+      expect(classes).toContain("active");
+    }
   });
 });
 

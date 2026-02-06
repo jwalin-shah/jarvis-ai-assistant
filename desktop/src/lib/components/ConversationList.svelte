@@ -4,7 +4,6 @@
     conversationsStore,
     selectConversation,
     initializePolling,
-    connectionStatus,
   } from "../stores/conversations";
   import { api } from "../api/client";
   import type { Topic } from "../api/types";
@@ -16,6 +15,7 @@
     setConversationIndex,
     announce,
   } from "../stores/keyboard";
+  import { getApiBaseUrl } from "../config/runtime";
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
@@ -145,7 +145,7 @@
   let cleanup: (() => void) | null = null;
 
   // API base URL for avatar endpoint
-  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8742";
+  const API_BASE = getApiBaseUrl();
 
   // Track loaded avatars and their states
   let avatarStates: Map<string, "loading" | "loaded" | "error"> = $state(new Map());
@@ -197,9 +197,14 @@
     });
   });
 
-  // Fetch topics when conversations are loaded
+  // Track conversation count to avoid re-fetching topics on every store update
+  let prevConversationCount = 0;
+
+  // Fetch topics when conversations are loaded (only when count changes)
   $effect(() => {
-    if ($conversationsStore.conversations.length > 0) {
+    const count = $conversationsStore.conversations.length;
+    if (count > 0 && count !== prevConversationCount) {
+      prevConversationCount = count;
       fetchTopicsForConversations();
     }
   });
@@ -357,17 +362,6 @@
     return $conversationsStore.conversationsWithNewMessages.has(chatId);
   }
 
-  function getConnectionStatusText(status: typeof $connectionStatus): string {
-    switch (status) {
-      case "connected":
-        return "Connected";
-      case "connecting":
-        return "Connecting...";
-      case "disconnected":
-        return "Disconnected";
-    }
-  }
-
   // Get the primary identifier for a conversation (for avatar lookup)
   function getPrimaryIdentifier(conv: typeof $conversationsStore.conversations[0]): string | null {
     // For group chats, return null (use group icon)
@@ -481,10 +475,6 @@
     </div>
   {/if}
 
-  <div class="status-footer">
-    <span class="status-indicator" class:connected={$connectionStatus === "connected"} class:connecting={$connectionStatus === "connecting"} class:disconnected={$connectionStatus === "disconnected"}></span>
-    <span class="status-text">{getConnectionStatusText($connectionStatus)}</span>
-  </div>
 </div>
 
 <style>
@@ -774,48 +764,4 @@
     color: var(--error-color);
   }
 
-  .status-footer {
-    padding: 10px 16px;
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  .status-indicator {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    transition: background 0.2s ease;
-  }
-
-  .status-indicator.connected {
-    background: #34c759;
-  }
-
-  .status-indicator.connecting {
-    background: #ff9500;
-    animation: blink 1s ease-in-out infinite;
-  }
-
-  .status-indicator.disconnected {
-    background: #ff3b30;
-  }
-
-  @keyframes blink {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.4;
-    }
-  }
-
-  .status-text {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
 </style>

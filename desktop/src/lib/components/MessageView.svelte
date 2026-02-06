@@ -24,18 +24,10 @@
   } from "../stores/keyboard";
   import { WS_HTTP_BASE } from "../api/websocket";
   import AIDraftPanel from "./AIDraftPanel.svelte";
-  import SummaryModal from "./SummaryModal.svelte";
-  import SmartReplyChips from "./SmartReplyChips.svelte";
-  import SmartReplyChipsV2 from "./SmartReplyChipsV2.svelte";
-  import ConversationStats from "./ConversationStats.svelte";
-  import PDFExportModal from "./PDFExportModal.svelte";
   import MessageSkeleton from "./MessageSkeleton.svelte";
 
   // Panel visibility state
   let showDraftPanel = $state(false);
-  let showSummaryModal = $state(false);
-  let showStatsModal = $state(false);
-  let showPDFExportModal = $state(false);
   let messageViewFocused = $state(true);
 
   // Keyboard navigation state
@@ -64,6 +56,7 @@
   let virtualTopPadding = $state(0);
   let virtualBottomPadding = $state(0);
   let pendingScrollToMessageId = $state<number | null>(null);
+  let suppressScrollRecalc = false; // Prevent scroll handler from recalculating during initial scroll
 
   // Debounce utility - wait for activity to stop before executing
   function debounce<T extends (...args: unknown[]) => void>(
@@ -412,8 +405,10 @@
     const container = event.target as HTMLDivElement;
     if (!container) return;
 
-    // Update virtual scroll range
-    updateVirtualScroll();
+    // Skip virtual scroll recalculation during initial scroll-to-bottom
+    if (!suppressScrollRecalc) {
+      updateVirtualScroll();
+    }
 
     // Debounced height measurement - only measure after scrolling settles
     // This prevents expensive DOM queries on every scroll frame
@@ -520,23 +515,47 @@
       if (needsScrollToBottom) {
         visibleEndIndex = msgCount;
         visibleStartIndex = Math.max(0, msgCount - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-        virtualTopPadding = visibleStartIndex * 80; // Estimate 80px per message
+        virtualTopPadding = visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
         virtualBottomPadding = 0;
 
         console.log("[MessageView] Initial load - visible range:", visibleStartIndex, "-", visibleEndIndex);
         needsScrollToBottom = false;
 
-        // Scroll to bottom after render
-        tick().then(() => scrollToBottom());
+        // Suppress scroll handler from recalculating virtual range during initial scroll.
+        // Without this, the scroll event triggers calculateVisibleRange which uses 80px
+        // estimates that don't match actual rendered heights (especially in group chats
+        // where sender names add height), causing the view to snap away from the bottom.
+        suppressScrollRecalc = true;
+        tick().then(async () => {
+          await scrollToBottom(true);
+          // Measure actual heights now that messages are rendered
+          measureVisibleMessages();
+          // Second scroll to correct for any height estimation mismatch
+          await tick();
+          await scrollToBottom(true);
+          // Re-enable scroll recalculation after layout stabilizes
+          requestAnimationFrame(() => {
+            suppressScrollRecalc = false;
+          });
+        });
       } else {
         updateVirtualScroll();
       }
     }
   });
 
+  // Track conversation identity to detect actual changes (not just object reference)
+  let prevSelectedChatId: string | null = null;
+
   // Reset state when conversation changes
+  // NOTE: We track selectedChatId (a string) instead of selectedConversation (an object)
+  // to avoid re-triggering when the store updates but the selected conversation hasn't changed.
+  // The derived selectedConversation store returns a new object reference on every
+  // conversationsStore update, which caused an infinite loop with clearOptimisticMessages().
   $effect(() => {
-    if ($selectedConversation) {
+    const chatId = $conversationsStore.selectedChatId;
+    if (chatId && chatId !== prevSelectedChatId) {
+      prevSelectedChatId = chatId;
       console.log("[MessageView] Conversation changed, resetting state");
       previousMessageCount = 0;
       newMessageIds = new Set();
@@ -552,16 +571,19 @@
       virtualBottomPadding = 0;
       // Clear optimistic messages when switching conversations
       clearOptimisticMessages();
+    } else if (!chatId) {
+      prevSelectedChatId = null;
     }
   });
 
   // Scroll to bottom of messages
-  async function scrollToBottom() {
+  // Use instant=true for initial load (avoids race with virtual scroll rendering)
+  async function scrollToBottom(instant = false) {
     await tick();
     if (messagesContainer) {
       messagesContainer.scrollTo({
         top: messagesContainer.scrollHeight,
-        behavior: "smooth",
+        behavior: instant ? "instant" : "smooth",
       });
       hasNewMessagesBelow = false;
     }
@@ -598,18 +620,6 @@
       event.preventDefault();
       if ($selectedConversation) {
         showDraftPanel = true;
-      }
-      return;
-    } else if (isMod && event.key === "s") {
-      event.preventDefault();
-      if ($selectedConversation) {
-        showSummaryModal = true;
-      }
-      return;
-    } else if (isMod && event.key === "e") {
-      event.preventDefault();
-      if ($selectedConversation) {
-        showPDFExportModal = true;
       }
       return;
     }
@@ -875,31 +885,6 @@
       </div>
       <div class="header-actions">
         <button
-          class="action-btn"
-          onclick={() => showStatsModal = true}
-          title="View conversation statistics"
-          aria-label="View statistics"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
-          </svg>
-        </button>
-        <button
-          class="action-btn"
-          onclick={() => showSummaryModal = true}
-          title="Summarize conversation (Cmd+S)"
-          aria-label="Summarize conversation"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="21" y1="10" x2="3" y2="10"></line>
-            <line x1="21" y1="6" x2="3" y2="6"></line>
-            <line x1="21" y1="14" x2="3" y2="14"></line>
-            <line x1="21" y1="18" x2="3" y2="18"></line>
-          </svg>
-        </button>
-        <button
           class="action-btn primary"
           onclick={() => showDraftPanel = true}
           title="Generate AI reply (Cmd+D)"
@@ -982,7 +967,7 @@
                 class:optimistic-sending={optimisticStatus === "sending"}
                 class:optimistic-failed={optimisticStatus === "failed"}
                 data-message-id={message.id}
-                tabindex={isMessageFocused ? 0 : -1}
+                tabindex="-1"
                 role="article"
                 aria-label={`Message from ${message.is_from_me ? "you" : message.sender_name || message.sender}`}
               >
@@ -1060,15 +1045,6 @@
       {/if}
     </div>
 
-    <!-- Smart Reply Chips v2 - LLM-powered suggestions -->
-    {#if $selectedConversation?.chat_id}
-      <SmartReplyChipsV2
-        chatId={$selectedConversation.chat_id}
-        isFocused={messageViewFocused}
-        onSelectReply={(text) => { composeText = text; }}
-      />
-    {/if}
-
     {#if hasNewMessagesBelow}
       <button class="new-messages-button" onclick={handleNewMessagesClick}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1093,7 +1069,7 @@
         ></textarea>
         <button
           class="send-button"
-          onclick={handleSendMessage}
+          onclick={() => void handleSendMessage()}
           disabled={!composeText.trim() || sendingMessage}
           title="Send message (Enter)"
         >
@@ -1119,31 +1095,6 @@
     chatId={$selectedConversation.chat_id}
     onSelect={handleDraftSelect}
     onClose={() => showDraftPanel = false}
-  />
-{/if}
-
-<!-- Summary Modal -->
-{#if showSummaryModal && $selectedConversation}
-  <SummaryModal
-    chatId={$selectedConversation.chat_id}
-    onClose={() => showSummaryModal = false}
-  />
-{/if}
-
-<!-- Stats Modal -->
-{#if showStatsModal && $selectedConversation}
-  <ConversationStats
-    chatId={$selectedConversation.chat_id}
-    onClose={() => showStatsModal = false}
-  />
-{/if}
-
-<!-- PDF Export Modal -->
-{#if showPDFExportModal && $selectedConversation}
-  <PDFExportModal
-    chatId={$selectedConversation.chat_id}
-    conversationName={$selectedConversation.display_name || $selectedConversation.participants.join(", ")}
-    onClose={() => showPDFExportModal = false}
   />
 {/if}
 

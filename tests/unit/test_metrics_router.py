@@ -272,7 +272,7 @@ class TestSingletonManagement:
         reset_routing_metrics_store()
         # Use temp db to avoid polluting user's metrics
         monkeypatch.setattr(
-            "jarvis.metrics_router.DEFAULT_METRICS_DB_PATH",
+            "jarvis.observability.metrics_router.DEFAULT_METRICS_DB_PATH",
             tmp_path / "metrics.db",
         )
         try:

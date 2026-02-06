@@ -91,7 +91,16 @@ const initialState: ConversationsState = {
 
 export const conversationsStore = writable<ConversationsState>(initialState);
 
-// Derived store for selected conversation
+/**
+ * Derived store for selected conversation.
+ *
+ * WARNING: Returns a NEW object reference on every conversationsStore update
+ * (even when the selected conversation hasn't changed) because `.find()` returns
+ * the array element which is recreated on each store spread.
+ *
+ * In `$effect` blocks, use `$conversationsStore.selectedChatId` (a string) instead
+ * to avoid infinite loops caused by reference inequality triggering re-runs.
+ */
 export const selectedConversation = derived(
   conversationsStore,
   ($state) =>
@@ -114,6 +123,9 @@ export const hasNewMessages = derived(
 export const messagesWithOptimistic = derived(
   conversationsStore,
   ($state) => {
+    // Short-circuit: return messages directly when no optimistic messages pending (99% of the time)
+    if ($state.optimisticMessages.length === 0) return $state.messages;
+
     // Convert optimistic messages to Message-like objects for display
     const optimisticAsMessages = $state.optimisticMessages.map((opt) => ({
       id: -Date.now() - Math.random(), // Negative ID to avoid conflicts

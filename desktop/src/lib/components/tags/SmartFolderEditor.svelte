@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { SmartFolder, SmartFolderRules, RuleCondition, Tag } from "$lib/api/types";
-  import { TAG_COLORS, RULE_FIELDS, RULE_OPERATORS } from "$lib/api/types";
+  import type { SmartFolder, SmartFolderRules, RuleCondition, Tag } from "../../api/types";
+  import { TAG_COLORS, RULE_FIELDS, RULE_OPERATORS } from "../../api/types";
   import { createEventDispatcher } from "svelte";
 
   export let folder: SmartFolder | null = null;
@@ -17,7 +17,7 @@
   // Form state
   let name = "";
   let icon = "folder";
-  let color = TAG_COLORS.SLATE;
+  let color: string = TAG_COLORS.SLATE;
   let matchType: "all" | "any" = "all";
   let conditions: RuleCondition[] = [];
   let sortBy = "last_message_date";

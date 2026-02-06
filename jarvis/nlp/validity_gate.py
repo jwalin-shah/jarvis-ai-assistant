@@ -15,9 +15,8 @@ Usage:
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
-from jarvis.exchange import CandidateExchange
 from jarvis.text_normalizer import (
     extract_text_features,
     is_acknowledgment_only,
@@ -30,6 +29,20 @@ from jarvis.text_normalizer import (
 
 if TYPE_CHECKING:
     from jarvis.embedding_adapter import UnifiedEmbedder
+
+
+@runtime_checkable
+class CandidateExchange(Protocol):
+    """Minimal interface for a candidate exchange to validate."""
+
+    @property
+    def trigger_text(self) -> str: ...
+    @property
+    def response_text(self) -> str: ...
+    @property
+    def time_gap_minutes(self) -> float: ...
+    @property
+    def response_span(self) -> list[Any]: ...
 
 logger = logging.getLogger(__name__)
 

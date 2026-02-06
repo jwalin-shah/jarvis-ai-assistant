@@ -47,6 +47,7 @@ class EmbeddingService(Service):
         self.socket_path = socket_path
         self._can_run_without_process = True  # Can be healthy without process reference
         self.service_dir = service_dir
+        self._log_handles: list = []  # Track open log file handles for cleanup
 
     def _kill_orphan_processes(self) -> None:
         """Kill any orphaned embedding server processes."""
@@ -153,6 +154,15 @@ class EmbeddingService(Service):
                 except OSError as e:
                     logger.debug("Could not remove socket %s: %s", sock_file, e)
 
+    def _close_log_handles(self) -> None:
+        """Close any open log file handles."""
+        for handle in self._log_handles:
+            try:
+                handle.close()
+            except Exception:
+                pass
+        self._log_handles.clear()
+
     def _start_process(self) -> None:
         """Start the embedding service."""
         # First check if service is already running and healthy
@@ -164,6 +174,9 @@ class EmbeddingService(Service):
         # Clean up orphan processes and stale sockets before starting
         self._kill_orphan_processes()
         self._cleanup_sockets()
+
+        # Close any leftover log handles from a previous start
+        self._close_log_handles()
 
         # The embedding service uses its own venv structure
         # It needs to be run from the service directory with its python
@@ -177,13 +190,18 @@ class EmbeddingService(Service):
 
         if venv_python.exists() and server_script.exists():
             log_handle = open(log_file, "a")
-            self._process = subprocess.Popen(
-                [str(venv_python), str(server_script)],
-                cwd=self.service_dir,
-                stdout=log_handle,
-                stderr=log_handle,
-                preexec_fn=None,
-            )
+            try:
+                self._process = subprocess.Popen(
+                    [str(venv_python), str(server_script)],
+                    cwd=self.service_dir,
+                    stdout=log_handle,
+                    stderr=log_handle,
+                    preexec_fn=None,
+                )
+            except Exception:
+                log_handle.close()
+                raise
+            self._log_handles.append(log_handle)
             return
 
         # Fallback to legacy uv-run layout
@@ -192,13 +210,18 @@ class EmbeddingService(Service):
         if legacy_server.exists():
             legacy_log = legacy_dir / "server.log"
             legacy_log_handle = open(legacy_log, "a")
-            self._process = subprocess.Popen(
-                ["uv", "run", "python", str(legacy_server)],
-                cwd=legacy_dir,
-                stdout=legacy_log_handle,
-                stderr=legacy_log_handle,
-                preexec_fn=None,
-            )
+            try:
+                self._process = subprocess.Popen(
+                    ["uv", "run", "python", str(legacy_server)],
+                    cwd=legacy_dir,
+                    stdout=legacy_log_handle,
+                    stderr=legacy_log_handle,
+                    preexec_fn=None,
+                )
+            except Exception:
+                legacy_log_handle.close()
+                raise
+            self._log_handles.append(legacy_log_handle)
             return
 
         raise RuntimeError(
@@ -206,32 +229,41 @@ class EmbeddingService(Service):
             "or install the MLX embedding service."
         )
 
+    def _stop_process(self) -> None:
+        """Stop the process and clean up log file handles."""
+        try:
+            super()._stop_process()
+        finally:
+            self._close_log_handles()
+
     def _perform_health_check(self) -> bool:
         """Check if embedding service is responding."""
         # First try socket health check
         if self.config.health_check_socket:
             try:
                 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                sock.settimeout(self.config.health_check_timeout)
-                sock.connect(str(self.config.health_check_socket))
+                try:
+                    sock.settimeout(self.config.health_check_timeout)
+                    sock.connect(str(self.config.health_check_socket))
 
-                # Send health check request (newline-delimited like the server expects)
-                health_request = {"jsonrpc": "2.0", "method": "health", "id": 1}
-                request_data = json.dumps(health_request).encode() + b"\n"
-                sock.sendall(request_data)
+                    # Send health check request (newline-delimited like the server expects)
+                    health_request = {"jsonrpc": "2.0", "method": "health", "id": 1}
+                    request_data = json.dumps(health_request).encode() + b"\n"
+                    sock.sendall(request_data)
 
-                # Read response (newline-delimited)
-                response_data = sock.recv(4096)
-                sock.close()
+                    # Read response (newline-delimited)
+                    response_data = sock.recv(4096)
 
-                if response_data:
-                    response = json.loads(response_data.decode().strip())
-                    result = response.get("result", {})
-                    if isinstance(result, dict):
-                        return result.get("status") == "healthy"
+                    if response_data:
+                        response = json.loads(response_data.decode().strip())
+                        result = response.get("result", {})
+                        if isinstance(result, dict):
+                            return result.get("status") == "healthy"
+                        return False
+
                     return False
-
-                return False
+                finally:
+                    sock.close()
             except Exception:
                 # If socket check fails, fall back to process check
                 pass

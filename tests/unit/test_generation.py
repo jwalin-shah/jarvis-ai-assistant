@@ -9,7 +9,6 @@ from contracts.memory import MemoryMode, MemoryState
 from contracts.models import GenerationRequest, GenerationResponse
 from jarvis.generation import (
     can_use_llm,
-    generate_reply_suggestions,
     generate_summary,
     generate_with_fallback,
     get_generation_status,
@@ -226,43 +225,6 @@ class TestGenerateWithFallback:
 
         assert response.finish_reason == "error"
         assert "Generation failed" in response.error
-
-
-class TestGenerateReplySuggestions:
-    """Tests for generate_reply_suggestions function."""
-
-    def test_returns_fallback_when_cannot_use_llm(self):
-        """Returns fallback suggestions when LLM unavailable."""
-        with patch("jarvis.generation.can_use_llm") as mock_check:
-            mock_check.return_value = (False, "Memory low")
-            suggestions = generate_reply_suggestions("Hello", num_suggestions=3)
-
-        assert len(suggestions) > 0
-        # All fallback suggestions have some confidence
-        assert all(0 <= conf <= 1.0 for _, conf in suggestions)
-
-    def test_returns_specified_number_of_suggestions(self):
-        """Returns requested number of suggestions."""
-        with patch("jarvis.generation.can_use_llm") as mock_check:
-            mock_check.return_value = (False, "Test")
-            suggestions = generate_reply_suggestions("Hello", num_suggestions=2)
-
-        assert len(suggestions) <= 2
-
-    def test_handles_exception_gracefully(self):
-        """Returns fallback on any exception."""
-        with (
-            patch("jarvis.generation.can_use_llm") as mock_check,
-            patch("jarvis.generation.generate_with_fallback") as mock_gen,
-        ):
-            mock_check.return_value = (True, "")
-            mock_gen.side_effect = RuntimeError("Unexpected error")
-
-            suggestions = generate_reply_suggestions("Hello")
-
-        assert len(suggestions) > 0
-        # Should return valid suggestion tuples
-        assert all(isinstance(s, str) and isinstance(c, float) for s, c in suggestions)
 
 
 class TestGenerateSummary:

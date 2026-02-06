@@ -189,7 +189,6 @@ class ReplyRouter:
                 self._context_service = ContextService(
                     db=self.db,
                     imessage_reader=self.imessage_reader,
-                    semantic_searcher=self.semantic_searcher,
                 )
             return self._context_service
 
@@ -369,6 +368,7 @@ class ReplyRouter:
             thread=thread,
             chat_id=chat_id,
             mobilization=mobilization,
+            cached_embedder=cached_embedder,
         )
         latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
 
@@ -387,43 +387,6 @@ class ReplyRouter:
             model_loaded=model_loaded,
             decision="generate",
         )
-
-    def route_multi_option(
-        self,
-        incoming: str,
-        contact_id: int | None = None,
-        chat_id: str | None = None,
-        force_multi: bool = False,
-    ) -> dict[str, Any]:
-        """Compatibility wrapper for legacy multi-option callers.
-
-        Current simplified behavior delegates to ``route()`` and returns a
-        single suggestion with empty ``options``.
-
-        Args:
-            incoming: The incoming message text.
-            contact_id: Optional contact ID for personalization.
-            chat_id: Optional chat ID for context lookup.
-            force_multi: Kept for API compatibility. Currently not used.
-
-        Returns:
-            Dict with routing result including compatibility keys:
-            - is_commitment: Always False in simplified mode.
-            - options: Always empty in simplified mode.
-            - suggestions: Single-item list containing the generated response.
-            - trigger_da: Always None in simplified mode.
-        """
-        _ = force_multi
-        result = self.route(
-            incoming=incoming,
-            contact_id=contact_id,
-            chat_id=chat_id,
-        )
-        result["is_commitment"] = False
-        result["options"] = []
-        result["suggestions"] = [result["response"]]
-        result["trigger_da"] = None
-        return result
 
     def get_routing_stats(self) -> dict[str, Any]:
         """Get statistics about the router's index and database.

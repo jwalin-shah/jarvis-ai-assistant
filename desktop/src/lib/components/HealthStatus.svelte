@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import type { HealthResponse } from "../api/types";
   import { healthStore, fetchHealth } from "../stores/health";
   import {
     templateAnalyticsStore,
@@ -8,9 +9,9 @@
     exportTemplateAnalytics,
   } from "../stores/templateAnalytics";
 
-  let refreshing = false;
-  let resettingAnalytics = false;
-  let exportingAnalytics = false;
+  let refreshing = $state(false);
+  let resettingAnalytics = $state(false);
+  let exportingAnalytics = $state(false);
 
   onMount(() => {
     fetchHealth();
@@ -19,22 +20,31 @@
 
   async function refresh() {
     refreshing = true;
-    await Promise.all([fetchHealth(), fetchTemplateAnalytics()]);
-    refreshing = false;
+    try {
+      await Promise.all([fetchHealth(), fetchTemplateAnalytics()]);
+    } finally {
+      refreshing = false;
+    }
   }
 
   async function handleResetAnalytics() {
     if (confirm("Are you sure you want to reset template analytics? This cannot be undone.")) {
       resettingAnalytics = true;
-      await resetTemplateAnalytics();
-      resettingAnalytics = false;
+      try {
+        await resetTemplateAnalytics();
+      } finally {
+        resettingAnalytics = false;
+      }
     }
   }
 
   async function handleExportAnalytics() {
     exportingAnalytics = true;
-    await exportTemplateAnalytics();
-    exportingAnalytics = false;
+    try {
+      await exportTemplateAnalytics();
+    } finally {
+      exportingAnalytics = false;
+    }
   }
 
   // Calculate pie chart percentages
@@ -42,12 +52,33 @@
     const modelPercent = 100 - templatePercent;
     return `conic-gradient(#34c759 0% ${templatePercent}%, #ff9f0a ${templatePercent}% 100%)`;
   }
+
+  function formatNullable(value: number | null, decimals: number): string {
+    return value === null ? "N/A" : value.toFixed(decimals);
+  }
+
+  function memoryUsagePercent(data: HealthResponse): number {
+    if (data.memory_used_gb === null || data.memory_available_gb === null) {
+      return 0;
+    }
+    const total = data.memory_used_gb + data.memory_available_gb;
+    if (total <= 0) return 0;
+    return Math.min(100, (data.memory_used_gb / total) * 100);
+  }
+
+  let detailEntries = $derived.by(() => {
+    const details = $healthStore.data?.details;
+    if (!details || typeof details === "string") {
+      return [] as Array<[string, string]>;
+    }
+    return Object.entries(details);
+  });
 </script>
 
 <div class="health-status">
   <div class="header">
     <h1>System Health</h1>
-    <button class="refresh-btn" on:click={refresh} disabled={refreshing}>
+    <button class="refresh-btn" onclick={refresh} disabled={refreshing}>
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -113,30 +144,34 @@
       <div class="metric-card">
         <h3>Memory</h3>
         <div class="metric-value">
-          {$healthStore.data.memory_available_gb.toFixed(1)} GB
+          {formatNullable($healthStore.data.memory_available_gb, 1)} GB
           <span class="metric-label">available</span>
         </div>
         <div class="metric-bar">
           <div
             class="metric-fill"
-            style="width: {Math.min(100, ($healthStore.data.memory_used_gb / ($healthStore.data.memory_used_gb + $healthStore.data.memory_available_gb)) * 100)}%"
+            style="width: {memoryUsagePercent($healthStore.data)}%"
           ></div>
         </div>
         <p class="metric-detail">
-          {$healthStore.data.memory_used_gb.toFixed(1)} GB used of{" "}
-          {($healthStore.data.memory_used_gb + $healthStore.data.memory_available_gb).toFixed(1)} GB
+          {formatNullable($healthStore.data.memory_used_gb, 1)} GB used of{" "}
+          {#if $healthStore.data.memory_used_gb !== null && $healthStore.data.memory_available_gb !== null}
+            {($healthStore.data.memory_used_gb + $healthStore.data.memory_available_gb).toFixed(1)} GB
+          {:else}
+            N/A GB
+          {/if}
         </p>
-        <p class="metric-mode">Mode: {$healthStore.data.memory_mode}</p>
+        <p class="metric-mode">Mode: {$healthStore.data.memory_mode ?? "Unknown"}</p>
       </div>
 
       <div class="metric-card">
         <h3>JARVIS Process</h3>
         <div class="metric-value">
-          {$healthStore.data.jarvis_rss_mb.toFixed(0)} MB
+          {formatNullable($healthStore.data.jarvis_rss_mb, 0)} MB
           <span class="metric-label">RSS</span>
         </div>
         <p class="metric-detail">
-          Virtual: {$healthStore.data.jarvis_vms_mb.toFixed(0)} MB
+          Virtual: {formatNullable($healthStore.data.jarvis_vms_mb, 0)} MB
         </p>
       </div>
 
@@ -169,11 +204,11 @@
       </div>
     </div>
 
-    {#if $healthStore.data.details && Object.keys($healthStore.data.details).length > 0}
+    {#if detailEntries.length > 0}
       <div class="details">
         <h3>Issues</h3>
         <ul>
-          {#each Object.entries($healthStore.data.details) as [key, value]}
+          {#each detailEntries as [key, value]}
             <li>
               <strong>{key}:</strong> {value}
             </li>
@@ -189,7 +224,7 @@
         <div class="analytics-actions">
           <button
             class="action-btn export-btn"
-            on:click={handleExportAnalytics}
+            onclick={handleExportAnalytics}
             disabled={exportingAnalytics}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -201,7 +236,7 @@
           </button>
           <button
             class="action-btn reset-btn"
-            on:click={handleResetAnalytics}
+            onclick={handleResetAnalytics}
             disabled={resettingAnalytics}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

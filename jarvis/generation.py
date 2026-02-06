@@ -146,33 +146,6 @@ def generate_with_fallback(request: GenerationRequest) -> GenerationResponse:
         )
 
 
-def generate_reply_suggestions(
-    last_message: str,
-    context_messages: list[str] | None = None,
-    num_suggestions: int = 3,
-) -> list[tuple[str, float]]:
-    """Generate reply suggestions for a message using ReplyService.
-
-    Args:
-        last_message: The message to respond to
-        context_messages: Optional list of previous messages for context
-        num_suggestions: Number of suggestions to generate
-
-    Returns:
-        List of (suggestion_text, confidence) tuples
-    """
-    from jarvis.reply_service import get_reply_service
-
-    service = get_reply_service()
-
-    suggestions = service.generate_suggestions(
-        incoming=last_message,
-        n_suggestions=num_suggestions,
-    )
-
-    return [(s.text, s.confidence) for s in suggestions]
-
-
 def generate_summary(
     messages: list[str],
     participant: str,

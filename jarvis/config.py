@@ -390,6 +390,9 @@ class SegmentationConfig(BaseModel):
         min_segment_messages: Minimum messages per segment (smaller merged).
         max_segment_messages: Maximum messages per segment (larger split).
         boundary_threshold: Score threshold for creating a boundary (0-1).
+        forward_context_window: Messages to look ahead for continuity check.
+        forward_continuity_threshold: Similarity above this means topic continues
+            (reduces false boundary scores).
     """
 
     enabled: bool = True
@@ -406,6 +409,8 @@ class SegmentationConfig(BaseModel):
     min_segment_messages: int = Field(default=1, ge=1, le=100)
     max_segment_messages: int = Field(default=50, ge=5, le=500)
     boundary_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    forward_context_window: int = Field(default=2, ge=1, le=10)
+    forward_continuity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 
 class NormalizationConfig(BaseModel):

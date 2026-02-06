@@ -34,7 +34,7 @@ class TestDatabaseInitialization:
         """Test JarvisDB uses default path when none provided."""
         # Use a real tmp_path to avoid filesystem issues
         default_path = tmp_path / "default" / "jarvis.db"
-        monkeypatch.setattr("jarvis.db.JARVIS_DB_PATH", default_path)
+        monkeypatch.setattr("jarvis.db.core.JARVIS_DB_PATH", default_path)
         db = JarvisDB()  # No path argument - should use JARVIS_DB_PATH
         assert db.db_path == default_path
 
