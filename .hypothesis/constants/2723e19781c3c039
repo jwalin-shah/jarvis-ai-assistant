@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/generation.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.3, 150, 'Cannot use LLM: %s', 'Failed to load model', 'Generation failed', 'Memory or disk issue', 'Model load failed', 'can_generate', 'critical', 'error', 'fallback', 'memory_mode', 'model_loaded', 'reason', 'red', 'unknown']

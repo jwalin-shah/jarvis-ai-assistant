@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/classifiers/response_classifier.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.2, 0.3, 0.5, 0.8, 0.9, 0.95, 256, 'ACKNOWLEDGE', 'AGREE', 'ANSWER', 'BAD_NEWS', 'DECLINE', 'DEFER', 'GOOD_NEWS', 'GREETING', 'INFO_STATEMENT', 'INVITATION', 'OPINION', 'QUESTION', 'REACT_POSITIVE', 'REACT_SYMPATHY', 'REQUEST', 'STATEMENT', 'WH_QUESTION', 'YN_QUESTION', '["\\u201c\\u201d]', '\\?[\\s]*$', '^(ha+|he+)[\\s!.]*$', '^(rain check)', '^(true|tru)[\\s!.]*$', '^(word|bet)[\\s!.]*$', '^Laughed at\\s+', 'centroid', 'centroid_override', 'classification', 'commitment', 'empty', 'fallback', 'filtered', 'normalized_empty', 'positive', 'question', 'reaction', 'social', 'statement', 'structural', 'structural_verified', 'tapback', 'tapback_filtered', 'tapback_positive']

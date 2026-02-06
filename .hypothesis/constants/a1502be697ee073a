@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/scheduler/models.py
-# hypothesis_version: 6.151.5
-
-[0.5, 100, 'ContactTimingPrefs', 'Priority', 'QuietHours', 'ScheduledItem', 'ScheduledStatus', 'SendResult', 'TimingSuggestion', 'attempts', 'cancelled', 'chat_id', 'confidence', 'contact_id', 'created_at', 'days', 'depends_on', 'draft_id', 'enabled', 'end_hour', 'error', 'expired', 'expires_at', 'factors', 'failed', 'id', 'is_optimal', 'last_interaction', 'low', 'max_retries', 'message_text', 'metadata', 'normal', 'optimal_weekdays', 'pending', 'preferred_hours', 'priority', 'queued', 'quiet_hours', 'reason', 'result', 'retry_after', 'retry_count', 'send_at', 'sending', 'sent', 'sent_at', 'start_hour', 'status', 'success', 'suggested_time', 'timezone', 'updated_at', 'urgent']

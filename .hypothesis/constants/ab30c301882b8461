@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/schema.py
-# hypothesis_version: 6.151.5
-
-['BOOLEAN', 'INTEGER', 'REAL', 'TEXT', 'cluster_id', 'content_hash', 'context_text', 'gate_a_passed', 'gate_b_score', 'gate_c_verdict', 'idx_contacts_chat', 'idx_contacts_id', 'idx_embeddings_faiss', 'idx_embeddings_index', 'idx_pairs_chat', 'idx_pairs_contact', 'idx_pairs_quality', 'idx_pairs_timestamp', 'idx_pairs_validity', 'idx_scheduled_status', 'is_group', 'is_holdout', 'response_da_conf', 'response_da_type', 'trigger_da_conf', 'trigger_da_type', 'validity_status']

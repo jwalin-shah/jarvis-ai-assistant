@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/schemas/messages.py
-# hypothesis_version: 6.151.5
-
-[150, 12340, 12345, 67890, 245760, 1048576, '+15551234567', '+15559876543', '2024-01-15T10:30:00Z', 'Document.pdf', 'Family Group', 'File size in bytes', 'IMG_1234.jpg', 'John Doe', 'List of messages', 'Message text content', 'Mom', 'See you at dinner!', 'Sounds great!', 'Thanks!', 'application/pdf', 'attachments', 'chat123456789', 'chat_id', 'date', 'date_delivered', 'date_read', 'dislike', 'display_name', 'emphasis', 'example', 'file_path', 'file_size', 'filename', 'id', 'image/jpeg', 'is_from_me', 'is_group', 'is_system_message', 'john@example.com', 'last_message_date', 'last_message_text', 'laugh', 'like', 'love', 'message_count', 'mime_type', 'participants', 'question', 'reactions', 'reply_to_id', 'sender', 'sender_name', 'text', 'type', 'video/mp4']

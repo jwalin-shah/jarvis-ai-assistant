@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/batch.py
-# hypothesis_version: 6.151.5
-
-[200, 404, 500, '/batch', '/export', '/export/all', '/generate-replies', '/summarize', '/summarize/recent', 'batch', 'chat123', 'chat456', 'chat_ids', 'example', 'format', 'instruction', 'json', 'limit', 'message', 'num_messages', 'num_suggestions', 'output_dir', 'task']

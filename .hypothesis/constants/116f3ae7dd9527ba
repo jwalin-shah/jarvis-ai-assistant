@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/models/loader.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.1, 0.7, 1.0, 1.05, 1.1, 60.0, 100, 800, 1000, 1024, '/', '1', 'Failed to load model', 'Generation failed', 'HF_HUB_OFFLINE', 'Model unloaded', 'TRANSFORMERS_OFFLINE', 'Unknown model_id: %s', 'Unloading model', 'content', 'display_name', 'id', 'loaded', 'memory_usage_mb', 'model-preload', 'path', 'quality_tier', 'role', 'user']

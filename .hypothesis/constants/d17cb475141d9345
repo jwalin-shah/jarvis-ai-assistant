@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/custom_templates.py
-# hypothesis_version: 6.151.5
-
-[0.0, 200, 201, 400, 404, 503, '/export', '/import', '/stats/usage', '/templates', '/test', '/{template_id}', 'Import completed', 'Import results', 'Invalid import data', 'Invalid test request', 'Invalid update data', 'Template not found', 'Template test failed', 'The created template', 'The updated template', 'abc123', 'application/json', 'category', 'content', 'custom-templates', 'deleted', 'description', 'enabled', 'enabled_templates', 'errors', 'example', 'export_date', 'imported', 'max_group_size', 'min_group_size', 'model', 'name', 'skipped', 'status', 'tags', 'template_count', 'template_id', 'template_text', 'templates', 'test response', 'test_template', 'top_templates', 'total_templates', 'total_usage', 'trigger_phrases', 'usage_by_category', 'version']

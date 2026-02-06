@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/contracts/models.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.1, 1.0, 1.05, 2.0, 100, 'error', 'fallback', 'length', 'stop', 'template']

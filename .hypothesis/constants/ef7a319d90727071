@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/template_analytics.py
-# hypothesis_version: 6.151.5
-
-[0.0, '/categories', '/coverage', '/dashboard', '/export', '/metrics/templates', '/missed', '/reset', '/templates', '/top', 'Content-Disposition', 'average_similarity', 'category', 'category_averages', 'coverage', 'coverage_percent', 'hit_rate_percent', 'message', 'missed_queries', 'model_fallbacks', 'model_responses', 'ok', 'pie_chart_data', 'responses_from_model', 'status', 'summary', 'template-analytics', 'template_efficiency', 'template_hits', 'template_responses', 'top_templates', 'total_patterns', 'total_templates']

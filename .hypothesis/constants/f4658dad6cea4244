@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/scheduler/executor.py
-# hypothesis_version: 6.151.5
-
-[2.0, 100, 3600, 86400, '"', '-e', 'PendingSend', 'RateLimitConfig', 'SendExecutor', 'Unknown error', '\\', '\\"', '\\\\', '\\n', 'contact_id', 'day', 'get_executor', 'hour', 'limit', 'minute', 'osascript', 'remaining', 'reset_executor', 'used']

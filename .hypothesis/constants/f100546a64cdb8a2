@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/observability/metrics_router.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.1, 0.95, 2.0, 5.0, 10.0, 30.0, 100, ' LIMIT ?', ',', '.jarvis', ':', 'DEFAULT_BUFFER_SIZE', 'RoutingMetrics', 'RoutingMetricsStore', 'WHERE timestamp >= ?', 'avg_latency_ms', 'cache_hit', 'cache_hit_rate', 'cnt', 'decisions', 'faiss_candidates', 'hash_query', 'latency', 'latency_json', 'load_routing_metrics', 'metrics-flush', 'metrics.db', 'model_loaded', 'p50_latency_ms', 'p95_latency_ms', 'query_hash', 'recent_requests', 'routing_decision', 'similarity_score', 'summary', 'timestamp', 'total_latency_ms', 'total_requests', 'utf-8']

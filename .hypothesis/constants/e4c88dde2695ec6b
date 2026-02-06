@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/pytest
-# hypothesis_version: 6.151.5
-
-['-script.pyw', '.exe', '__main__']

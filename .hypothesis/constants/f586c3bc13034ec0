@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/tasks/queue.py
-# hypothesis_version: 6.151.5
-
-[100, '.jarvis', 'DEFAULT_QUEUE_PATH', 'TaskQueue', 'by_status', 'by_type', 'get_task_queue', 'reset_task_queue', 'task_queue.json', 'tasks', 'total', 'version', 'w']

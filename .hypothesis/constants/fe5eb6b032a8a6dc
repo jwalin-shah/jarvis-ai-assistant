@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/search.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.3, 0.55, 0.72, 0.87, 1.0, 100, 200, 403, 500, 1000, 5000, 12345, '+15551234567', '/search', '/semantic', '/semantic/cache', '2024-01-01T00:00:00Z', '2024-01-15T18:30:00Z', '2024-12-31T23:59:59Z', 'John', 'The matching message', 'application/json', 'attachments', 'chat123', 'chat123456789', 'chat_id', 'content', 'date', 'description', 'dinner plans', 'embedding_count', 'example', 'id', 'is_from_me', 'me', 'meeting tomorrow', 'message', 'messages_searched', 'model', 'project deadline', 'query', 'reactions', 'results', 'search', 'sender', 'sender_name', 'similarity', 'size_bytes', 'size_mb', 'status', 'success', 'text', 'threshold_used', 'total_results']

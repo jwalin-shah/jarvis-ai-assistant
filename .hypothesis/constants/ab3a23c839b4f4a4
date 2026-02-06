@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/clusters.py
-# hypothesis_version: 6.151.5
-
-[900, ',', '?', 'DELETE FROM clusters', 'created_at', 'description', 'example_responses', 'example_triggers', 'id', 'name']

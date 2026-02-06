@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/classifiers/mixins.py
-# hypothesis_version: 6.151.5
-
-[-1.0, 0.0, 0.15, 0.4, 'CentroidMixin', 'EmbedderMixin', 'LabelT', '_model_path', 'centroids.npz']

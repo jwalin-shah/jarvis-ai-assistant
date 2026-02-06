@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/eval/experiments.py
-# hypothesis_version: 6.151.5
-
-[-1.0, 0.0, 1e-30, 1e-10, 0.05, 1.0, 2.0, 100, '.jarvis', 'EXPERIMENTS_PATH', 'Experiment', 'ExperimentManager', 'ExperimentOutcome', 'ExperimentResults', 'OUTCOMES_PATH', 'UserAction', 'VariantConfig', 'VariantResults', 'action', 'config', 'contact_id', 'created_at', 'description', 'dismissed', 'enabled', 'experiment_name', 'experiments', 'experiments.yaml', 'get_prompt_variant', 'id', 'name', 'outcomes', 'regenerated', 'sent_edited', 'sent_unchanged', 'timestamp', 'variant_id', 'variants', 'w', 'weight']

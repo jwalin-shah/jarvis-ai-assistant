@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/__init__.py
-# hypothesis_version: 6.151.5
-
-['analytics_router', 'attachments_router', 'batch_router', 'calendar_router', 'contacts_router', 'conversations_router', 'debug_router', 'drafts_router', 'embeddings_router', 'experiments_router', 'export_router', 'feedback_router', 'graph_router', 'health_router', 'metrics_router', 'pdf_export_router', 'priority_router', 'relationships_router', 'scheduler_router', 'search_router', 'settings_router', 'stats_router', 'suggestions_router', 'tags_router', 'tasks_router', 'threads_router', 'topics_router', 'websocket_router']

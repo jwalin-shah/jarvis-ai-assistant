@@ -1,4 +1,0 @@
-# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/fallbacks.py
-# hypothesis_version: 6.151.5
-
-['Generation failed', 'Generation timed out', 'Got it, thanks!', 'Sounds good!', 'generation_error', 'generation_timeout', 'memory_pressure', 'model_load_failed', 'network_error', 'no_context_available', 'unknown']
