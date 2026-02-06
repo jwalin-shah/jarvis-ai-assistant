@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/errors.py
+# hypothesis_version: 6.151.5
+
+[400, 403, 404, 408, 500, 503, '30', '5', '60', 'INTERNAL_ERROR', 'InternalError', 'REQUEST_TIMEOUT', 'RequestTimeout', 'Retry-After', 'build_error_response', 'code', 'detail', 'details', 'error', 'jarvis_error_handler', 'status_code']

@@ -130,9 +130,10 @@ pub async fn connect_socket(
 
     // Connect to socket
     let socket_path = get_socket_path();
+    println!("[Socket] Connecting to JARVIS socket at: {}", socket_path);
     let stream = UnixStream::connect(&socket_path)
         .await
-        .map_err(|e| format!("Failed to connect to socket: {}", e))?;
+        .map_err(|e| format!("Failed to connect to socket at {}: {}", socket_path, e))?;
 
     let (reader, writer) = stream.into_split();
 

@@ -14,7 +14,9 @@
     updateOptimisticMessage,
     removeOptimisticMessage,
     clearOptimisticMessages,
+    clearPrefetchedDraft,
   } from "../stores/conversations";
+  import type { DraftSuggestion } from "../api/types";
   import {
     activeZone,
     setActiveZone,
@@ -23,11 +25,12 @@
     announce,
   } from "../stores/keyboard";
   import { WS_HTTP_BASE } from "../api/websocket";
-  import AIDraftPanel from "./AIDraftPanel.svelte";
+  import SuggestionBar from "./SuggestionBar.svelte";
   import MessageSkeleton from "./MessageSkeleton.svelte";
 
   // Panel visibility state
   let showDraftPanel = $state(false);
+  let prefetchedSuggestions = $state<DraftSuggestion[] | undefined>(undefined);
   let messageViewFocused = $state(true);
 
   // Keyboard navigation state
@@ -576,6 +579,17 @@
     }
   });
 
+  // Auto-open SuggestionBar when a prefetched draft arrives for the current conversation
+  $effect(() => {
+    const draft = $conversationsStore.prefetchedDraft;
+    const chatId = $conversationsStore.selectedChatId;
+    if (draft && chatId && draft.chatId === chatId && !showDraftPanel) {
+      prefetchedSuggestions = draft.suggestions;
+      showDraftPanel = true;
+      clearPrefetchedDraft();
+    }
+  });
+
   // Scroll to bottom of messages
   // Use instant=true for initial load (avoids race with virtual scroll rendering)
   async function scrollToBottom(instant = false) {
@@ -619,6 +633,7 @@
     if (isMod && event.key === "d") {
       event.preventDefault();
       if ($selectedConversation) {
+        prefetchedSuggestions = undefined;
         showDraftPanel = true;
       }
       return;
@@ -749,13 +764,18 @@
     announce(`${sender} at ${time}: ${text.slice(0, 100)}${text.length > 100 ? "..." : ""}`);
   }
 
-  // Handle draft panel selection
+  // Handle suggestion bar selection - fill compose area
   function handleDraftSelect(text: string) {
-    // Copy the selected draft to clipboard
-    navigator.clipboard.writeText(text).catch(() => {
-      console.error("Failed to copy draft to clipboard");
-    });
+    composeText = text;
     showDraftPanel = false;
+    // Focus and auto-resize the compose textarea
+    tick().then(() => {
+      if (composeInputRef) {
+        composeInputRef.focus();
+        composeInputRef.style.height = "auto";
+        composeInputRef.style.height = Math.min(composeInputRef.scrollHeight, 120) + "px";
+      }
+    });
   }
 
   // Handle scrolling to a message from search results
@@ -886,7 +906,7 @@
       <div class="header-actions">
         <button
           class="action-btn primary"
-          onclick={() => showDraftPanel = true}
+          onclick={() => { prefetchedSuggestions = undefined; showDraftPanel = true; }}
           title="Generate AI reply (Cmd+D)"
           aria-label="Generate AI reply"
         >
@@ -1054,6 +1074,15 @@
       </button>
     {/if}
 
+    {#if showDraftPanel && $selectedConversation}
+      <SuggestionBar
+        chatId={$selectedConversation.chat_id}
+        onSelect={handleDraftSelect}
+        onClose={() => { showDraftPanel = false; prefetchedSuggestions = undefined; }}
+        initialSuggestions={prefetchedSuggestions}
+      />
+    {/if}
+
     <!-- Compose Message Input -->
     <div class="compose-area">
       <div class="compose-input-wrapper">
@@ -1088,15 +1117,6 @@
     </div>
   {/if}
 </div>
-
-<!-- AI Draft Panel -->
-{#if showDraftPanel && $selectedConversation}
-  <AIDraftPanel
-    chatId={$selectedConversation.chat_id}
-    onSelect={handleDraftSelect}
-    onClose={() => showDraftPanel = false}
-  />
-{/if}
 
 <style>
   .message-view {

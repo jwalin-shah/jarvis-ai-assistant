@@ -26,37 +26,31 @@ ACTUAL_TEXTS = [
     ("I wonder what happened", "ACKNOWLEDGEABLE"),
     ("Curious how they'll handle it", "ACKNOWLEDGEABLE"),
     ("Wonder if anyone else noticed", "ACKNOWLEDGEABLE"),
-
     # Opinions disguised as statements
     ("No way Dallas could've gotten lottery picks", "ACKNOWLEDGEABLE"),
     ("No way that's real", "ACKNOWLEDGEABLE"),  # NOT expressive, just disbelief statement
     ("No chance they win tonight", "ACKNOWLEDGEABLE"),
     ("I don't think it's gonna happen", "ACKNOWLEDGEABLE"),
     ("Doubt they'll actually do it", "ACKNOWLEDGEABLE"),
-
     # Rhetorical / statement questions
     ("Why do dads text like that", "ACKNOWLEDGEABLE"),  # rhetorical
     ("How does that even work", "ACKNOWLEDGEABLE"),  # rhetorical amazement
     ("Who even says that anymore", "ACKNOWLEDGEABLE"),  # rhetorical
-
     # Actual questions (SHOULD be ANSWERABLE)
     ("What time is the game", "ANSWERABLE"),
     ("Where are you", "ANSWERABLE"),
     ("Did you get my text", "ANSWERABLE"),
     ("What happened at the meeting", "ANSWERABLE"),
-
     # Actual requests (SHOULD be ACTIONABLE)
     ("Can you pick me up", "ACTIONABLE"),
     ("Wanna grab lunch", "ACTIONABLE"),
     ("Let me know when you're free", "ACTIONABLE"),
     ("Text me when you get there", "ACTIONABLE"),
-
     # Actual reactive content (SHOULD be REACTIVE)
     ("Omg I got the job!!", "REACTIVE"),
     ("That's so sad", "REACTIVE"),
     ("This is amazing!!", "REACTIVE"),
     ("I can't believe it!!!", "REACTIVE"),
-
     # Statements that need simple ack
     ("I went to the store", "ACKNOWLEDGEABLE"),
     ("The game starts at 7", "ACKNOWLEDGEABLE"),
@@ -99,6 +93,7 @@ def get_memory_mb() -> float:
     """Get current process memory usage in MB."""
     try:
         import psutil
+
         return psutil.Process().memory_info().rss / 1024 / 1024
     except ImportError:
         return 0.0
@@ -107,6 +102,7 @@ def get_memory_mb() -> float:
 def load_model(model_id: str):
     """Load NLI cross-encoder model."""
     from sentence_transformers import CrossEncoder
+
     return CrossEncoder(model_id, max_length=512)
 
 
@@ -184,7 +180,9 @@ def print_result(result: BenchmarkResult, verbose: bool = True):
     print(f"Model: {result.model_name}")
     print(f"{'='*70}")
     print(f"Overall Accuracy: {result.accuracy:.1%}")
-    print(f"Load Time: {result.load_time_ms:.0f}ms | Latency: {result.avg_latency_ms:.1f}ms | Memory: {result.memory_mb:.0f}MB")
+    print(
+        f"Load Time: {result.load_time_ms:.0f}ms | Latency: {result.avg_latency_ms:.1f}ms | Memory: {result.memory_mb:.0f}MB"
+    )
     print()
     print("Accuracy by category:")
     for cat, acc in result.accuracy_by_category.items():
@@ -193,13 +191,15 @@ def print_result(result: BenchmarkResult, verbose: bool = True):
     if verbose and result.misclassifications:
         print(f"\nMisclassifications ({len(result.misclassifications)}):")
         for text, expected, got, scores in result.misclassifications[:10]:
-            score_str = ", ".join(f"{k[:3]}:{v:.2f}" for k, v in sorted(scores.items(), key=lambda x: -x[1])[:3])
+            score_str = ", ".join(
+                f"{k[:3]}:{v:.2f}" for k, v in sorted(scores.items(), key=lambda x: -x[1])[:3]
+            )
             print(f"  '{text[:45]:<45s}' expected={expected:14s} got={got:14s} [{score_str}]")
 
 
 def main():
     print("NLI Model Comparison for Casual Chat Classification")
-    print("="*70)
+    print("=" * 70)
     print(f"Testing on {len(ACTUAL_TEXTS)} actual texts")
     print()
 
@@ -217,11 +217,13 @@ def main():
         gc.collect()
 
     # Summary table
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("SUMMARY")
-    print("="*80)
-    print(f"{'Model':<25s} {'Accuracy':>10s} {'ANSWER':>10s} {'ACK':>10s} {'Latency':>10s} {'Memory':>10s}")
-    print("-"*80)
+    print("=" * 80)
+    print(
+        f"{'Model':<25s} {'Accuracy':>10s} {'ANSWER':>10s} {'ACK':>10s} {'Latency':>10s} {'Memory':>10s}"
+    )
+    print("-" * 80)
     for r in results:
         print(
             f"{r.model_name:<25s} "

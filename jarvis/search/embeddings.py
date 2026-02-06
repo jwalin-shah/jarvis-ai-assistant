@@ -407,7 +407,8 @@ class EmbeddingStore:
     def _init_schema(self) -> None:
         """Initialize the database schema."""
         with self._get_connection() as conn:
-            conn.executescript("""
+            conn.executescript(
+                """
                 -- Main embeddings table
                 CREATE TABLE IF NOT EXISTS message_embeddings (
                     message_id INTEGER PRIMARY KEY,
@@ -454,7 +455,8 @@ class EmbeddingStore:
                     stat_value TEXT,
                     updated_at INTEGER DEFAULT (strftime('%s', 'now'))
                 );
-            """)
+            """
+            )
             conn.commit()
 
     def index_message(self, message: Message) -> bool:

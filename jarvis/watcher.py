@@ -259,7 +259,9 @@ class ChatDBWatcher:
                 except Exception as e:
                     logger.warning(
                         "Failed to broadcast message %d in %s, skipping: %s",
-                        msg["id"], msg["chat_id"], e,
+                        msg["id"],
+                        msg["chat_id"],
+                        e,
                     )
                 finally:
                     # Always advance rowid to prevent infinite retry of bad messages

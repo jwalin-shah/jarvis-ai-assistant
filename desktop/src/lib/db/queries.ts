@@ -272,17 +272,24 @@ export function parseReactionType(type: number): string | null {
 }
 
 /**
- * Parse attributedBody blob to extract text
- * attributedBody is a binary plist containing NSAttributedString data
+ * Parse attributedBody blob to extract text.
+ *
+ * attributedBody is a serialized NSAttributedString in one of two formats:
+ * 1. NSKeyedArchive (binary plist / bplist00) - newer format
+ * 2. Typedstream (legacy NSArchiver) - starts with "streamtyped"
+ *
+ * This implements a proper bplist parser + typedstream extractor,
+ * mirroring the Python logic in integrations/imessage/parser.py.
  */
-/** NSCoding class names and metadata to filter from attributedBody parsing */
-const NS_CODING_ARTIFACTS = [
-  "NSAttributedString",
+
+/** Metadata strings to skip when scanning NSKeyedArchive $objects */
+const NS_METADATA_STRINGS = new Set([
   "NSMutableAttributedString",
+  "NSAttributedString",
+  "NSMutableString",
+  "NSString",
   "NSDictionary",
   "NSMutableDictionary",
-  "NSString",
-  "NSMutableString",
   "NSArray",
   "NSMutableArray",
   "NSNumber",
@@ -294,103 +301,293 @@ const NS_CODING_ARTIFACTS = [
   "NSColor",
   "NSKern",
   "NSOriginalFont",
-  "NSParagraphStyleName",
-  "NSWritingDirection",
+]);
+
+/** Strings to skip in typedstream fallback scanning */
+const NS_SKIP_STRINGS = new Set([
+  "streamtyped",
+  "NSAttributedString",
+  "NSObject",
+  "NSString",
+  "NSDictionary",
+  "NSNumber",
+  "NSValue",
+  "NSArray",
+  "NSMutableAttributedString",
+  "NSMutableString",
   "__kIMMessagePartAttributeName",
   "__kIMFileTransferGUIDAttributeName",
   "__kIMDataDetectedAttributeName",
-  "__kIMBaseWritingDirectionAttributeName",
-  "NSAttachment",
-  "streamtyped",
-  "typedstream",
-];
+]);
 
-/**
- * Check if a string looks like binary garbage (high ratio of non-printable chars)
- */
-function looksLikeBinaryGarbage(text: string): boolean {
-  if (text.length < 2) return true;
-  let nonPrintable = 0;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    // Count chars outside normal text range (excluding common Unicode)
-    if (code < 32 || (code >= 127 && code < 160)) {
-      nonPrintable++;
+// -- bplist00 parser helpers --
+
+/** Read a big-endian unsigned integer */
+function readBE(bytes: Uint8Array, offset: number, size: number): number {
+  let value = 0;
+  for (let i = 0; i < size; i++) {
+    value = value * 256 + bytes[offset + i];
+  }
+  return value;
+}
+
+/** Read object length, handling extended-length encoding (info nibble = 0xF) */
+function readObjectLength(
+  bytes: Uint8Array,
+  offset: number,
+  info: number,
+): [number, number] {
+  if (info !== 0x0f) {
+    return [info, offset + 1];
+  }
+  const intMarker = bytes[offset + 1];
+  const intSize = 1 << (intMarker & 0x0f);
+  const length = readBE(bytes, offset + 2, intSize);
+  return [length, offset + 2 + intSize];
+}
+
+interface BplistArray extends Array<BplistValue> {}
+interface BplistDict {
+  [key: string]: BplistValue;
+}
+type BplistValue = null | boolean | number | string | Uint8Array | BplistArray | BplistDict;
+
+interface BplistCtx {
+  bytes: Uint8Array;
+  objRefSize: number;
+  numObjects: number;
+  offsets: number[];
+  cache: Map<number, BplistValue>;
+}
+
+/** Parse a single object from a bplist by its index in the offset table */
+function parseBplistObject(ctx: BplistCtx, index: number): BplistValue {
+  if (index >= ctx.numObjects) return null;
+  if (ctx.cache.has(index)) return ctx.cache.get(index)!;
+
+  ctx.cache.set(index, null); // prevent infinite recursion
+
+  const off = ctx.offsets[index];
+  if (off >= ctx.bytes.length) return null;
+
+  const marker = ctx.bytes[off];
+  const type = (marker & 0xf0) >> 4;
+  const info = marker & 0x0f;
+  let result: BplistValue = null;
+
+  switch (type) {
+    case 0x0: // null, bool, fill
+      if (marker === 0x08) result = false;
+      else if (marker === 0x09) result = true;
+      break;
+
+    case 0x1: { // integer
+      const size = 1 << info;
+      result = readBE(ctx.bytes, off + 1, size);
+      break;
+    }
+
+    case 0x5: { // ASCII string
+      const [len, start] = readObjectLength(ctx.bytes, off, info);
+      try {
+        result = new TextDecoder("ascii").decode(ctx.bytes.slice(start, start + len));
+      } catch { /* skip malformed */ }
+      break;
+    }
+
+    case 0x6: { // UTF-16BE string (length = character count)
+      const [len, start] = readObjectLength(ctx.bytes, off, info);
+      try {
+        result = new TextDecoder("utf-16be").decode(ctx.bytes.slice(start, start + len * 2));
+      } catch { /* skip malformed */ }
+      break;
+    }
+
+    case 0x4: { // binary data
+      const [len, start] = readObjectLength(ctx.bytes, off, info);
+      result = ctx.bytes.slice(start, start + len);
+      break;
+    }
+
+    case 0xa:
+    case 0xc: { // array or set
+      const [count, start] = readObjectLength(ctx.bytes, off, info);
+      const arr: BplistValue[] = [];
+      for (let i = 0; i < count; i++) {
+        const ref = readBE(ctx.bytes, start + i * ctx.objRefSize, ctx.objRefSize);
+        arr.push(parseBplistObject(ctx, ref));
+      }
+      result = arr;
+      break;
+    }
+
+    case 0xd: { // dictionary
+      const [count, start] = readObjectLength(ctx.bytes, off, info);
+      const dict: Record<string, BplistValue> = {};
+      for (let i = 0; i < count; i++) {
+        const keyRef = readBE(ctx.bytes, start + i * ctx.objRefSize, ctx.objRefSize);
+        const valRef = readBE(
+          ctx.bytes,
+          start + (count + i) * ctx.objRefSize,
+          ctx.objRefSize,
+        );
+        const key = parseBplistObject(ctx, keyRef);
+        if (typeof key === "string") {
+          dict[key] = parseBplistObject(ctx, valRef);
+        }
+      }
+      result = dict;
+      break;
     }
   }
-  return nonPrintable / text.length > 0.3;
+
+  ctx.cache.set(index, result);
+  return result;
+}
+
+/** Extract message text from a bplist00 (NSKeyedArchive) blob */
+function extractTextFromBplist(data: Uint8Array): string | null {
+  if (data.length < 40) return null;
+
+  // Verify "bplist00" header
+  if (
+    data[0] !== 0x62 || data[1] !== 0x70 || data[2] !== 0x6c ||
+    data[3] !== 0x69 || data[4] !== 0x73 || data[5] !== 0x74 ||
+    data[6] !== 0x30 || data[7] !== 0x30
+  ) {
+    return null;
+  }
+
+  // Trailer: last 32 bytes
+  const t = data.length - 32;
+  const offsetSize = data[t + 6];
+  const objRefSize = data[t + 7];
+  const numObjects = readBE(data, t + 8, 8);
+  const topObject = readBE(data, t + 16, 8);
+  const offsetTableOffset = readBE(data, t + 24, 8);
+
+  if (numObjects === 0 || numObjects > 100000) return null;
+
+  const offsets: number[] = [];
+  for (let i = 0; i < numObjects; i++) {
+    offsets.push(readBE(data, offsetTableOffset + i * offsetSize, offsetSize));
+  }
+
+  const ctx: BplistCtx = {
+    bytes: data,
+    objRefSize,
+    numObjects,
+    offsets,
+    cache: new Map(),
+  };
+
+  const root = parseBplistObject(ctx, topObject);
+  if (!root || typeof root !== "object" || Array.isArray(root)) return null;
+
+  const objects = (root as Record<string, BplistValue>)["$objects"];
+  if (!Array.isArray(objects)) return null;
+
+  // Return first non-metadata string (mirrors Python parser logic)
+  for (const obj of objects) {
+    if (typeof obj === "string" && obj.length > 0) {
+      if (obj.startsWith("$")) continue;
+      if (NS_METADATA_STRINGS.has(obj)) continue;
+      return obj;
+    }
+    // Check dict objects for NS.string / NSString keys
+    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+      const d = obj as Record<string, BplistValue>;
+      for (const key of ["NS.string", "NSString"]) {
+        if (typeof d[key] === "string") return d[key] as string;
+      }
+    }
+  }
+
+  return null;
+}
+
+// -- Typedstream helpers --
+
+/** Find a byte sequence (ASCII needle) in a Uint8Array */
+function findBytes(
+  haystack: Uint8Array,
+  needle: string,
+  start = 0,
+  end?: number,
+): number {
+  const searchEnd = end ?? haystack.length;
+  const needleBytes = new TextEncoder().encode(needle);
+  outer: for (let i = start; i <= searchEnd - needleBytes.length; i++) {
+    for (let j = 0; j < needleBytes.length; j++) {
+      if (haystack[i + j] !== needleBytes[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+/** Extract text from typedstream format (legacy NSArchiver) */
+function extractFromTypedstream(data: Uint8Array): string | null {
+  // Strategy 1: Find NSString marker, then read length-prefixed string after "+"
+  const nsIdx = findBytes(data, "NSString");
+  if (nsIdx !== -1) {
+    const searchStart = nsIdx + 8; // skip past "NSString"
+    const searchEnd = Math.min(searchStart + 20, data.length);
+    for (let i = searchStart; i < searchEnd; i++) {
+      if (data[i] === 0x2b) { // "+" byte precedes length
+        const lengthPos = i + 1;
+        if (lengthPos >= data.length) break;
+        const length = data[lengthPos];
+        const textStart = lengthPos + 1;
+        const textEnd = textStart + length;
+        if (textEnd <= data.length && length > 0) {
+          try {
+            const text = new TextDecoder("utf-8").decode(
+              data.slice(textStart, textEnd),
+            );
+            if (text.trim()) return text.trim();
+          } catch { /* fall through */ }
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Scan for longest printable text that isn't metadata
+  const decoded = new TextDecoder("utf-8", { fatal: false }).decode(data);
+  const printablePattern = /[\x20-\x7e\u00a0-\uffff]+/g;
+  let match;
+  while ((match = printablePattern.exec(decoded)) !== null) {
+    const clean = match[0].trim();
+    if (!clean || clean.length < 2) continue;
+    if (clean.startsWith("$")) continue;
+    if (NS_SKIP_STRINGS.has(clean)) continue;
+    if (clean.includes("NS") || clean.includes("kIM") || clean.includes("Attribute")) {
+      continue;
+    }
+    return clean;
+  }
+
+  return null;
 }
 
 export function parseAttributedBody(data: ArrayBuffer | null): string | null {
   if (!data) return null;
 
   try {
-    // attributedBody is a serialized NSAttributedString
-    // The text is usually at a known offset after the "NSString" marker
     const bytes = new Uint8Array(data);
-    const decoder = new TextDecoder("utf-8");
+    if (bytes.length < 8) return null;
 
-    // Simple extraction: find readable text between control characters
-    // This is a simplified approach - the full implementation would parse the bplist
-    let text = "";
-    let inText = false;
-    let consecutivePrintable = 0;
-
-    for (let i = 0; i < bytes.length; i++) {
-      const byte = bytes[i];
-      // Check if printable ASCII or UTF-8 continuation
-      if ((byte >= 32 && byte < 127) || byte >= 128) {
-        consecutivePrintable++;
-        if (consecutivePrintable >= 2) {
-          inText = true;
-        }
-        if (inText) {
-          // Accumulate bytes for UTF-8 decoding
-        }
-      } else {
-        if (inText && consecutivePrintable >= 3) {
-          // Try to decode the accumulated text
-          const chunk = bytes.slice(i - consecutivePrintable, i);
-          try {
-            const decoded = decoder.decode(chunk);
-            // Filter out NSCoding artifacts and metadata
-            const isArtifact = NS_CODING_ARTIFACTS.some(
-              (artifact) => decoded.includes(artifact)
-            );
-            if (!isArtifact && !looksLikeBinaryGarbage(decoded)) {
-              text += decoded;
-            }
-          } catch {
-            // Ignore decoding errors
-          }
-        }
-        inText = false;
-        consecutivePrintable = 0;
-      }
+    // Check for typedstream format ("streamtyped" near start)
+    if (findBytes(bytes, "streamtyped", 0, 20) !== -1) {
+      const result = extractFromTypedstream(bytes);
+      if (result) return result;
     }
 
-    // Handle remaining text
-    if (inText && consecutivePrintable >= 3) {
-      const chunk = bytes.slice(bytes.length - consecutivePrintable);
-      try {
-        const decoded = decoder.decode(chunk);
-        const isArtifact = NS_CODING_ARTIFACTS.some(
-          (artifact) => decoded.includes(artifact)
-        );
-        if (!isArtifact && !looksLikeBinaryGarbage(decoded)) {
-          text += decoded;
-        }
-      } catch {
-        // Ignore
-      }
-    }
+    // Try bplist00 (NSKeyedArchive) format
+    const result = extractTextFromBplist(bytes);
+    if (result) return result;
 
-    const result = text.trim();
-    // Final sanity check: reject results that are too short or look like garbage
-    if (!result || result.length < 1 || looksLikeBinaryGarbage(result)) {
-      return null;
-    }
-    return result;
+    return null;
   } catch {
     return null;
   }

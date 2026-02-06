@@ -305,13 +305,13 @@ class SendExecutor:
             # Determine if chat_id is a phone number or email
             chat_id = item.chat_id
 
-            script = f'''
+            script = f"""
             tell application "Messages"
                 set targetService to 1st service whose service type = iMessage
                 set targetBuddy to buddy "{chat_id}" of targetService
                 send "{escaped_text}" to targetBuddy
             end tell
-            '''
+            """
 
             # Execute AppleScript
             result = subprocess.run(

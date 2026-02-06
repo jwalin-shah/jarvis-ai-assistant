@@ -165,11 +165,11 @@ class MLXModelLoader:
     Supports eager loading via preload() for faster first-request latency.
 
     IMPORTANT: _mlx_load_lock is a class-level lock shared by ALL instances.
-    This prevents concurrent MLX model loads which crash the Metal GPU with
-    assertion failures ("A command encoder is already encoding to this command
-    buffer") or malloc errors. Multiple instances may exist (e.g. get_model()
-    singleton vs MLXGenerator's internal loader), and all must serialize their
-    load() calls through this shared lock.
+    This serializes ALL Metal GPU operations (load, generate, encode) to prevent
+    concurrent access which crashes with assertion failures ("A command encoder
+    is already encoding to this command buffer") or malloc errors. Multiple
+    instances may exist (e.g. get_model() singleton vs MLXGenerator's internal
+    loader), and all must serialize GPU ops through this shared lock.
     """
 
     _mlx_load_lock = threading.Lock()
@@ -186,6 +186,9 @@ class MLXModelLoader:
         self._loaded_at: float | None = None
         self._preload_thread: threading.Thread | None = None
         self._preload_error: Exception | None = None
+        # KV cache for static prompt prefix reuse
+        self._prompt_cache: list[Any] | None = None
+        self._cache_prefix_len: int = 0
 
     def is_loaded(self) -> bool:
         """Check if model is currently loaded in memory."""
@@ -388,6 +391,8 @@ class MLXModelLoader:
         self._model = None
         self._tokenizer = None
         self._loaded_at = None
+        self._prompt_cache = None
+        self._cache_prefix_len = 0
 
         # Clear Metal GPU memory
         try:
@@ -398,6 +403,74 @@ class MLXModelLoader:
         # Force garbage collection
         gc.collect()
         logger.info("Model unloaded")
+
+    def prefill_prompt_cache(self, prefix_text: str) -> None:
+        """Pre-compute KV cache for a static prompt prefix.
+
+        The cached KV state can be reused across generation calls that share
+        the same prefix, saving ~50-100ms of prefill per call for a ~130 token
+        system prompt on a 1.2B model.
+
+        Must be called after load() and while holding _mlx_load_lock (or from
+        a context where no concurrent GPU ops are possible).
+
+        Args:
+            prefix_text: The static prompt text to cache (e.g. system prompt).
+        """
+        if not self.is_loaded():
+            logger.warning("Cannot prefill cache: model not loaded")
+            return
+
+        from mlx_lm.models.cache import make_prompt_cache
+
+        try:
+            # Tokenize the prefix
+            tokens = mx.array(self._tokenizer.encode(prefix_text))
+            self._prompt_cache = make_prompt_cache(self._model)
+            self._cache_prefix_len = tokens.shape[0]
+
+            # Prefill: run forward pass with max_tokens=0 to populate cache
+            from mlx_lm.generate import generate_step
+
+            for _ in generate_step(
+                tokens,
+                self._model,
+                max_tokens=0,
+                prompt_cache=self._prompt_cache,
+            ):
+                pass
+            mx.eval([c.state for c in self._prompt_cache if hasattr(c, "state")])
+
+            logger.info("Prefilled prompt cache with %d prefix tokens", self._cache_prefix_len)
+        except Exception:
+            logger.exception("Failed to prefill prompt cache")
+            self._prompt_cache = None
+            self._cache_prefix_len = 0
+
+    def trim_prompt_cache(self) -> None:
+        """Reset the prompt cache back to the prefilled prefix state.
+
+        After each generation, the cache contains KV pairs for prefix + suffix.
+        This trims it back to just the prefix so it can be reused for the next
+        generation with a different suffix.
+        """
+        if self._prompt_cache is None or self._cache_prefix_len == 0:
+            return
+
+        try:
+            for c in self._prompt_cache:
+                if hasattr(c, "reuse"):
+                    # KVCache/RotatingKVCache support reuse(num_to_keep, offset)
+                    c.reuse(self._cache_prefix_len, 0)
+        except Exception:
+            logger.debug("Could not trim prompt cache, will recreate on next use")
+            self._prompt_cache = None
+            self._cache_prefix_len = 0
+
+    @property
+    def has_prompt_cache(self) -> bool:
+        """Check if a prefilled prompt cache is available."""
+        return self._prompt_cache is not None and self._cache_prefix_len > 0
 
     def get_memory_usage_mb(self) -> float:
         """Return estimated memory usage of loaded model.
@@ -420,6 +493,7 @@ class MLXModelLoader:
         repetition_penalty: float | None = None,
         stop_sequences: list[str] | None = None,
         timeout_seconds: float | None = None,
+        prompt_cache: list[Any] | None = None,
     ) -> GenerationResult:
         """Generate text synchronously.
 
@@ -432,6 +506,8 @@ class MLXModelLoader:
             repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
             stop_sequences: Strings that stop generation
             timeout_seconds: Timeout for generation (overrides config if provided)
+            prompt_cache: Optional pre-computed KV cache from prefill_prompt_cache().
+                If provided, passed through to mlx_lm.generate() for prefix reuse.
 
         Returns:
             GenerationResult with text, token count, and timing
@@ -487,16 +563,25 @@ class MLXModelLoader:
             start_time = time.perf_counter()
 
             def _do_generate() -> str:
-                """Inner function for generation to run in executor."""
-                return generate(
-                    model=self._model,
-                    tokenizer=self._tokenizer,
-                    prompt=formatted_prompt,
-                    max_tokens=max_tokens,
-                    sampler=sampler,
-                    logits_processors=logits_processors,
-                    verbose=False,
-                )
+                """Inner function for generation to run in executor.
+
+                Holds the shared GPU lock to prevent concurrent Metal access
+                with embedding encode() or other generation calls.
+                """
+                kwargs: dict[str, Any] = {}
+                if prompt_cache is not None:
+                    kwargs["prompt_cache"] = prompt_cache
+                with MLXModelLoader._mlx_load_lock:
+                    return generate(
+                        model=self._model,
+                        tokenizer=self._tokenizer,
+                        prompt=formatted_prompt,
+                        max_tokens=max_tokens,
+                        sampler=sampler,
+                        logits_processors=logits_processors,
+                        verbose=False,
+                        **kwargs,
+                    )
 
             if effective_timeout is not None and effective_timeout > 0:
                 # Use ThreadPoolExecutor for timeout handling
@@ -575,6 +660,7 @@ class MLXModelLoader:
         repetition_penalty: float | None = None,
         stop_sequences: list[str] | None = None,
         stop_event: threading.Event | None = None,
+        prompt_cache: list[Any] | None = None,
     ) -> Any:
         """Generate text with true streaming output (yields tokens as generated).
 
@@ -634,55 +720,63 @@ class MLXModelLoader:
                 logits_processors = [make_repetition_penalty(repetition_penalty)]
 
             # Use real streaming with mlx_lm.stream_generate
+            # Hold the shared GPU lock for the entire generation to prevent
+            # concurrent Metal access with embedding encode() or other callers.
             accumulated_text = ""
             token_index = 0
 
-            for response in stream_generate(
-                model=self._model,
-                tokenizer=self._tokenizer,
-                prompt=formatted_prompt,
-                max_tokens=max_tokens,
-                sampler=sampler,
-                logits_processors=logits_processors,
-            ):
-                # Check if caller requested cancellation (e.g. client disconnected)
-                if stop_event is not None and stop_event.is_set():
-                    logger.debug("Streaming generation cancelled via stop_event")
-                    break
+            stream_kwargs: dict[str, Any] = {}
+            if prompt_cache is not None:
+                stream_kwargs["prompt_cache"] = prompt_cache
 
-                # response.text contains the full text so far
-                # Extract just the new part
-                new_text = response.text[len(accumulated_text) :]
-                accumulated_text = response.text
+            with MLXModelLoader._mlx_load_lock:
+                for response in stream_generate(
+                    model=self._model,
+                    tokenizer=self._tokenizer,
+                    prompt=formatted_prompt,
+                    max_tokens=max_tokens,
+                    sampler=sampler,
+                    logits_processors=logits_processors,
+                    **stream_kwargs,
+                ):
+                    # Check if caller requested cancellation (e.g. client disconnected)
+                    if stop_event is not None and stop_event.is_set():
+                        logger.debug("Streaming generation cancelled via stop_event")
+                        break
 
-                # Check for stop sequences
-                should_stop = False
-                if stop_sequences and new_text:
-                    for stop_seq in stop_sequences:
-                        if stop_seq in accumulated_text:
-                            # Trim to stop sequence
-                            stop_idx = accumulated_text.index(stop_seq)
-                            new_text = accumulated_text[
-                                len(accumulated_text) - len(new_text) : stop_idx
-                            ]
-                            should_stop = True
-                            break
+                    # response.text contains the full text so far
+                    # Extract just the new part
+                    new_text = response.text[len(accumulated_text) :]
+                    accumulated_text = response.text
 
-                if new_text:
-                    is_final = response.finish_reason is not None or should_stop
-                    yield StreamToken(
-                        token=new_text,
-                        token_index=token_index,
-                        is_final=is_final,
-                    )
-                    token_index += 1
+                    # Check for stop sequences
+                    should_stop = False
+                    if stop_sequences and new_text:
+                        for stop_seq in stop_sequences:
+                            if stop_seq in accumulated_text:
+                                # Trim to stop sequence
+                                stop_idx = accumulated_text.index(stop_seq)
+                                new_text = accumulated_text[
+                                    len(accumulated_text) - len(new_text) : stop_idx
+                                ]
+                                should_stop = True
+                                break
 
-                if should_stop:
-                    break
+                    if new_text:
+                        is_final = response.finish_reason is not None or should_stop
+                        yield StreamToken(
+                            token=new_text,
+                            token_index=token_index,
+                            is_final=is_final,
+                        )
+                        token_index += 1
 
-                # Yield on finish
-                if response.finish_reason is not None:
-                    break
+                    if should_stop:
+                        break
+
+                    # Yield on finish
+                    if response.finish_reason is not None:
+                        break
 
         except ModelGenerationError:
             raise

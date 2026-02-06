@@ -25,12 +25,21 @@ class PromptBuilder:
     def build(self, request: GenerationRequest) -> str:
         """Build a formatted prompt from a generation request.
 
+        If the prompt already contains XML tags (e.g. from build_rag_reply_prompt)
+        and no extra context/examples are provided, pass it through directly
+        to avoid wrapping with ### headers that add noise for small models.
+
         Args:
             request: The generation request with prompt, context, and examples
 
         Returns:
             Formatted prompt string ready for model input
         """
+        # Pass through XML-tagged prompts that already contain everything
+        has_extra = bool(request.context_documents) or bool(request.few_shot_examples)
+        if not has_extra and request.prompt.lstrip().startswith("<"):
+            return request.prompt
+
         sections = []
 
         # Add context section if documents provided

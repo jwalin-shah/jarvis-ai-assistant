@@ -1,0 +1,66 @@
+# serializer version: 1
+# name: test_reply_prompt_snapshot
+  '''
+  ### Conversation Context:
+  [10:00] John: Hello\n[10:01] Me: Hi
+  
+  ### Instructions:
+  Generate a reply that matches the user's texting style exactly:
+  - Match the tone of the conversation (casual/friendly)
+  - Keep response length similar to user's typical messages
+  - Use the same level of formality as the examples
+  - Sound like the user wrote it, not an AI
+  
+  - Additional guidance: be nice
+  
+  ### Examples:
+  Context: [10:30] John: Want to grab lunch?
+  Reply: Sure! What time works for you?
+  
+  Context: [14:00] Mom: Don't forget dinner Sunday
+  Reply: I'll be there! Should I bring anything?
+  
+  Context: [09:15] Alex: Running 10 min late
+  Reply: No worries, see you soon!
+  
+  ### Last message to reply to:
+  How are you?
+  
+  ### Your reply:
+  '''
+# ---
+# name: test_threaded_reply_prompt_snapshot
+  '''
+  ### Thread Context:
+  Topic: Logistics
+  State: Open Question
+  Your role: Responder
+  Group chat with 2 participants
+  
+  ### Relevant Messages:
+  [] Alice: Where are we meeting?
+  
+  ### Instructions:
+  Generate a natural reply that:
+  - Matches the thread's concise tone
+  - Is brief and to the point (1-2 sentences)
+  - Answer the question directly
+  - Be clear and specific about times/places
+  - Confirm key details
+  - Additional guidance: confirm 5pm
+  
+  ### Examples:
+  Context: [14:00] Sarah: What time works for pickup?
+  [14:05] Me: How about 5pm?
+  Reply: 5pm works! See you then.
+  
+  Context: [10:00] John: Running late, stuck in traffic
+  [10:05] John: Be there in 15
+  Reply: No worries, take your time!
+  
+  ### Last message to reply to:
+  Where are we meeting?
+  
+  ### Your reply:
+  '''
+# ---

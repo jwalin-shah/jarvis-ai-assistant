@@ -28,7 +28,10 @@
     "test:tauri:build": "pnpm tauri build -- --debug && pnpm test:tauri",
     "test:ai": "playwright test --config=playwright.testdriver.config.ts",
     "test:ai:ui": "playwright test --config=playwright.testdriver.config.ts --ui",
-    "test:ai:headed": "playwright test --config=playwright.testdriver.config.ts --headed"
+    "test:ai:headed": "playwright test --config=playwright.testdriver.config.ts --headed",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:unit:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@playwright/test": "^1.41.0",
@@ -44,6 +47,7 @@
     "tslib": "^2.6.2",
     "typescript": "^5.3.3",
     "vite": "^6.0.0",
+    "vitest": "^4.0.18",
     "webdriverio": "^9.23.3"
   },
   "dependencies": {

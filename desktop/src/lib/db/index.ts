@@ -13,6 +13,8 @@ export {
   getMessage,
   getLastMessageRowid,
   getNewMessagesSince,
+  populateContactsCache,
+  isContactsCacheLoaded,
 } from "./direct";
 
 export {

@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/integrations/imessage/queries.py
+# hypothesis_version: 6.151.5
+
+['AND chat.guid = ?', 'AND message.date < ?', 'AND message.date > ?', 'WHERE 1=1', 'WHERE chat.guid = ?', 'all_attachments', 'attachment_stats', 'attachments', 'attachments_batch', 'attachments_extended', 'audio', 'context', 'conversations', 'documents', 'images', 'message_by_guid', 'message_guids_batch', 'messages', 'messages_after', 'reactions', 'reactions_batch', 'search', 'service_name', 'unknown', 'v14', 'v15', 'videos', '{placeholders}']

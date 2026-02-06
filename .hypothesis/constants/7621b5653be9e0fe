@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/schemas/threads.py
+# hypothesis_version: 6.151.5
+
+[0.1, 0.3, 0.4, 0.5, 0.9, 100, 120, 1440, 12345, 12346, 12347, '+15551234567', '2024-01-15T18:00:00Z', '2024-01-15T18:30:00Z', 'Dinner Plans', 'John Doe', 'Weekend Plans', 'Work Discussion', 'a1b2c3d4e5f67890', 'attachments', 'chat123456789', 'chat_id', 'date', 'end_time', 'example', 'id', 'is_from_me', 'is_system_message', 'is_thread_start', 'message_count', 'messages', 'participant_count', 'reactions', 'reply_to_id', 'sender', 'sender_name', 'start_time', 'text', 'thread_id', 'thread_position', 'threads', 'topic_label', 'total_messages', 'total_threads']

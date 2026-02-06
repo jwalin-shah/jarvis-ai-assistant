@@ -69,12 +69,14 @@ def _read_all_source_dbs() -> list[dict]:
             conn.close()
 
             for row in rows:
-                all_rows.append({
-                    "identifier": row["identifier"],
-                    "first_name": row["first_name"],
-                    "last_name": row["last_name"],
-                    "org_name": row["org_name"],
-                })
+                all_rows.append(
+                    {
+                        "identifier": row["identifier"],
+                        "first_name": row["first_name"],
+                        "last_name": row["last_name"],
+                        "org_name": row["org_name"],
+                    }
+                )
         except Exception as e:
             logger.debug("Skipping source %s: %s", source_dir.name, e)
 

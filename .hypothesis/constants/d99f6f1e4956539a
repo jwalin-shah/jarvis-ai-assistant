@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/contacts/contact_profile_context.py
+# hypothesis_version: 6.151.5
+
+[0.7, 50.0, '1', 'avg_message_length', 'casual', 'emoji_frequency', 'friend', 'greeting_style', 'professional', 'relationship', 'response_patterns', 'signoff_style', 'style_guide', 'tone', 'top_topics', 'true', 'very_casual', 'yes']

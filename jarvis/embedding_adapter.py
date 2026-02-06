@@ -3,16 +3,14 @@
 This is the SINGLE SOURCE OF TRUTH for embedding computation in JARVIS.
 All modules that need to compute embeddings should import from here.
 
-Provides a unified interface that connects to the MLX embedding service
-for GPU-accelerated embeddings on Apple Silicon.
+Provides a unified interface using in-process MLX BERT inference for
+GPU-accelerated embeddings on Apple Silicon (~30MB RAM overhead).
 
-Architecture (3-layer embedding stack):
+Architecture (2-layer embedding stack):
     1. jarvis/embeddings.py       - Embedding STORAGE (SQLite-backed message search)
            Uses get_embedder() from this module
     2. jarvis/embedding_adapter.py - UNIFIED INTERFACE (this file, use this!)
-           Wraps MLX service client
-    3. models/embeddings.py       - MLX SERVICE CLIENT (low-level, internal)
-           Unix socket client to MLX microservice
+           Wraps InProcessEmbedder from models/bert_embedder.py
 
 Usage:
     from jarvis.embedding_adapter import get_embedder
@@ -51,7 +49,7 @@ logger = logging.getLogger(__name__)
 # Embedding dimension is 384 for all supported models
 EMBEDDING_DIM = 384
 
-# Batch size for MLX service requests (avoid request size limits)
+# Batch size for MLX embedding requests
 MLX_BATCH_SIZE = 100
 
 # =============================================================================
@@ -117,10 +115,10 @@ def get_configured_model_name() -> str:
 
 
 class MLXEmbedder:
-    """MLX-only embedder using the MLX embedding service.
+    """MLX-only embedder using in-process BERT inference.
 
-    Connects to the MLX embedding microservice via Unix socket for
-    GPU-accelerated embeddings on Apple Silicon.
+    Runs GPU-accelerated embeddings directly in-process via MLX,
+    eliminating the need for an external microservice.
 
     Thread Safety:
         This class is thread-safe for concurrent encode() calls.
@@ -140,12 +138,13 @@ class MLXEmbedder:
         self._init_attempted = False
 
     def _initialize(self) -> None:
-        """Initialize the MLX embedding backend.
+        """Initialize the in-process MLX embedding backend.
 
         Uses the model configured in config.embedding.model_name.
+        Model loading is lazy - happens on first encode() call.
 
         Raises:
-            RuntimeError: If MLX service is not available.
+            RuntimeError: If MLX is not available.
         """
         if self._init_attempted:
             return
@@ -160,36 +159,27 @@ class MLXEmbedder:
             _, mlx_model_name = get_model_info()
             self._model_name = get_configured_model_name()
 
-            # Connect to MLX service
             try:
-                from models.embeddings import get_mlx_embedder
+                from models.bert_embedder import get_in_process_embedder
 
-                self._mlx_embedder = get_mlx_embedder(model_name=mlx_model_name)
-                if not self._mlx_embedder.is_available():
-                    raise RuntimeError(
-                        "MLX embedding service is not running. "
-                        "Start it with: cd ~/.jarvis/mlx-embed-service && uv run python server.py"
-                    )
+                self._mlx_embedder = get_in_process_embedder(model_name=mlx_model_name)
                 logger.info(
-                    "Connected to MLX embedding service with model: %s",
+                    "Initialized in-process MLX embedder with model: %s",
                     mlx_model_name,
                 )
             except Exception as e:
-                logger.error("Failed to connect to MLX embedding service: %s", e)
-                raise RuntimeError(
-                    f"Could not connect to MLX embedding service: {e}. "
-                    "Start it with: cd ~/.jarvis/mlx-embed-service && uv run python server.py"
-                ) from e
+                logger.error("Failed to initialize in-process MLX embedder: %s", e)
+                raise RuntimeError(f"Could not initialize in-process MLX embedder: {e}") from e
 
     def is_available(self) -> bool:
-        """Check if the MLX embedding service is available.
+        """Check if the in-process MLX embedder is available.
 
         Returns:
-            True if MLX service is running and connected.
+            True if MLX is importable and embedder is initialized.
         """
         try:
             self._initialize()
-            return self._mlx_embedder is not None and self._mlx_embedder.is_available()
+            return self._mlx_embedder is not None
         except RuntimeError:
             return False
 
@@ -229,7 +219,7 @@ class MLXEmbedder:
             For single string input, still returns shape (1, 384).
 
         Raises:
-            RuntimeError: If MLX service is not available.
+            RuntimeError: If MLX embedder is not available.
 
         Example:
             >>> embedder = MLXEmbedder()
@@ -318,7 +308,7 @@ class MLXEmbedder:
         return np.vstack(all_embeddings)
 
     def unload(self) -> None:
-        """Request the MLX service to unload the model."""
+        """Unload the in-process embedding model to free GPU memory."""
         with self._lock:
             if self._mlx_embedder is not None:
                 self._mlx_embedder.unload()
@@ -476,7 +466,7 @@ def get_embedder() -> CachedEmbedder:
         The shared CachedEmbedder instance.
 
     Raises:
-        RuntimeError: If MLX embedding service is not available.
+        RuntimeError: If MLX embedder is not available.
 
     Example:
         >>> embedder = get_embedder()

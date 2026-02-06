@@ -114,11 +114,13 @@ class EmbeddingCache:
         if conn is None:
             return
 
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER PRIMARY KEY
             )
-        """)
+        """
+        )
 
         # Check schema version
         cursor = conn.execute("SELECT version FROM schema_version LIMIT 1")
@@ -127,7 +129,8 @@ class EmbeddingCache:
 
         if current_version < self.SCHEMA_VERSION:
             # Create or migrate schema
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS embeddings (
                     message_id INTEGER PRIMARY KEY,
                     chat_id TEXT NOT NULL,
@@ -135,15 +138,20 @@ class EmbeddingCache:
                     embedding BLOB NOT NULL,
                     created_at REAL NOT NULL
                 )
-            """)
-            conn.execute("""
+            """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_embeddings_chat_id
                 ON embeddings(chat_id)
-            """)
-            conn.execute("""
+            """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_embeddings_text_hash
                 ON embeddings(text_hash)
-            """)
+            """
+            )
 
             # Update schema version
             conn.execute("DELETE FROM schema_version")

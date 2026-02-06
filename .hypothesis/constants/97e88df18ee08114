@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/prefetch/invalidation.py
+# hypothesis_version: 6.151.5
+
+['active', 'by_reason', 'cascade', 'chat_id', 'contact', 'contact_id', 'contact_update', 'count', 'draft', 'embedding', 'embeddings', 'events_processed', 'expired', 'faiss', 'index_rebuild', 'is_from_me', 'keys_invalidated', 'llm', 'manual', 'message_sent', 'message_sent_active', 'message_text', 'model', 'model_type', 'model_update', 'new_message', 'new_message_draft', 'rules_count', 'search', 'total_invalidations', 'warm:faiss']

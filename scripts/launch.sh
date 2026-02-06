@@ -7,13 +7,10 @@ set -e
 
 # Configuration
 API_PORT=8742
-EMBED_PORT=8766
 SOCKET_PATH="$HOME/.jarvis/jarvis.sock"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DESKTOP_DIR="$PROJECT_ROOT/desktop"
-EMBED_SERVICE_DIR="$HOME/.jarvis/mlx-embed-service"
 API_PID=""
-EMBED_PID=""
 SOCKET_PID=""
 TAURI_PID=""
 
@@ -56,13 +53,6 @@ cleanup() {
         log_info "Stopping socket server (PID: $SOCKET_PID)..."
         kill "$SOCKET_PID" 2>/dev/null || true
         wait "$SOCKET_PID" 2>/dev/null || true
-    fi
-
-    # Kill the embedding service if we started it
-    if [ -n "$EMBED_PID" ] && kill -0 "$EMBED_PID" 2>/dev/null; then
-        log_info "Stopping embedding service (PID: $EMBED_PID)..."
-        kill "$EMBED_PID" 2>/dev/null || true
-        wait "$EMBED_PID" 2>/dev/null || true
     fi
 
     # Kill any remaining processes on the API port
@@ -134,50 +124,6 @@ wait_for_api() {
     return 1
 }
 
-# Check if embedding service is running
-check_embed_service() {
-    curl -s "http://localhost:$EMBED_PORT/health" >/dev/null 2>&1
-}
-
-# Start embedding service if not running
-start_embed_service() {
-    # Check if already running
-    if check_embed_service; then
-        log_success "Embedding service already running on port $EMBED_PORT"
-        return 0
-    fi
-
-    # Check if service directory exists
-    if [ ! -d "$EMBED_SERVICE_DIR" ]; then
-        log_warn "Embedding service not installed at $EMBED_SERVICE_DIR"
-        log_warn "Some features may be unavailable"
-        return 1
-    fi
-
-    log_info "Starting MLX embedding service..."
-    cd "$EMBED_SERVICE_DIR"
-
-    # Start in background, redirect output to log file
-    uv run python server.py >> "$EMBED_SERVICE_DIR/server.log" 2>&1 &
-    EMBED_PID=$!
-    log_info "Embedding service started (PID: $EMBED_PID)"
-
-    # Wait for it to be ready
-    local max_attempts=15
-    local attempt=0
-    while [ $attempt -lt $max_attempts ]; do
-        if check_embed_service; then
-            log_success "Embedding service is ready"
-            return 0
-        fi
-        attempt=$((attempt + 1))
-        sleep 1
-    done
-
-    log_warn "Embedding service failed to start (check $EMBED_SERVICE_DIR/server.log)"
-    return 1
-}
-
 # Main function
 main() {
     log_info "Starting JARVIS..."
@@ -203,10 +149,7 @@ main() {
         log_warn "No virtual environment found at $PROJECT_ROOT/.venv"
     fi
 
-    # Step 3: Start embedding service (optional, some features need it)
-    start_embed_service || true  # Don't fail if embedding service doesn't start
-
-    # Step 4: Start the FastAPI backend
+    # Step 3: Start the FastAPI backend
     log_info "Starting FastAPI backend on port $API_PORT..."
     cd "$PROJECT_ROOT"
     uvicorn api.main:app --port "$API_PORT" --host 127.0.0.1 &
@@ -219,7 +162,7 @@ main() {
         exit 1
     fi
 
-    # Step 5: Start the socket server for direct desktop communication
+    # Step 4: Start the socket server for direct desktop communication
     log_info "Starting socket server..."
     cd "$PROJECT_ROOT"
     uv run python -m jarvis.socket_server &
@@ -234,7 +177,7 @@ main() {
         log_warn "Socket server may not be ready yet"
     fi
 
-    # Step 6: Start the Tauri desktop app
+    # Step 5: Start the Tauri desktop app
     log_info "Starting JARVIS desktop app..."
     cd "$DESKTOP_DIR"
 

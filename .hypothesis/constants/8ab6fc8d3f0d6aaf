@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/tasks/models.py
+# hypothesis_version: 6.151.5
+
+[0.0, 100.0, 'Cancelled', 'Completed', 'Starting...', 'Task', 'TaskProgress', 'TaskResult', 'TaskStatus', 'TaskType', 'batch_export', 'batch_summarize', 'cancelled', 'completed', 'completed_at', 'created_at', 'current', 'data', 'duration_seconds', 'error', 'error_message', 'failed', 'id', 'items_failed', 'items_processed', 'max_retries', 'message', 'params', 'partial_results', 'pending', 'percent', 'progress', 'result', 'retry_count', 'running', 'single_export', 'single_summarize', 'started_at', 'status', 'success', 'task_type', 'total']

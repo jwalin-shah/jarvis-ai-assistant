@@ -23,6 +23,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Lazy-loaded reference to SYSTEM_PREFIX from prompts.py (single source of truth).
+# Imported lazily to avoid circular imports (prompts -> relationships -> ... -> models).
+_SYSTEM_PREFIX: str | None = None
+
+
+def _get_system_prefix() -> str:
+    """Get the cacheable system prompt prefix, importing lazily."""
+    global _SYSTEM_PREFIX
+    if _SYSTEM_PREFIX is None:
+        from jarvis.prompts import SYSTEM_PREFIX
+
+        _SYSTEM_PREFIX = SYSTEM_PREFIX
+    return _SYSTEM_PREFIX
+
 
 class MLXGenerator:
     """Generator implementation using MLX with template fallback.
@@ -62,26 +76,29 @@ class MLXGenerator:
         request: GenerationRequest,
         embedder: Embedder | None = None,
     ) -> GenerationResponse:
-        """Generate a response using template matching or model.
+        """Generate a response using template matching or model."""
+        from opentelemetry import trace
 
-        Args:
-            request: Generation request with prompt, context, and examples
-            embedder: Optional embedder override for cache cohesion. If provided,
-                uses this embedder (e.g., CachedEmbedder) for template matching
-                instead of internal cache.
+        tracer = trace.get_tracer(__name__)
 
-        Returns:
-            GenerationResponse with text and metadata
-        """
-        start_time = time.perf_counter()
+        with tracer.start_as_current_span("MLXGenerator.generate") as span:
+            span.set_attribute("llm.request.prompt", request.prompt)
+            start_time = time.perf_counter()
 
-        # Try template match first (pass embedder for cache cohesion)
-        template_response = self._try_template_match(request, embedder=embedder)
-        if template_response is not None:
-            return template_response
+            # Try template match first
+            template_response = self._try_template_match(request, embedder=embedder)
+            if template_response is not None:
+                span.set_attribute("llm.response.used_template", True)
+                return template_response
 
-        # Fall back to model generation
-        return self._generate_with_model(request, start_time)
+            # Fall back to model generation
+            response = self._generate_with_model(request, start_time)
+
+            span.set_attribute("llm.response.text", response.text)
+            span.set_attribute("llm.response.tokens_used", response.tokens_used)
+            span.set_attribute("llm.response.model_name", response.model_name)
+
+            return response
 
     def _try_template_match(
         self,
@@ -120,6 +137,9 @@ class MLXGenerator:
     ) -> GenerationResponse:
         """Generate response using the MLX model.
 
+        Uses KV cache prefix when prompt starts with the known system prefix,
+        saving ~50-100ms of prefill per call.
+
         Args:
             request: Generation request
             start_time: When generation started (for timing)
@@ -140,9 +160,18 @@ class MLXGenerator:
                     msg = "Failed to load model"
                     raise RuntimeError(msg)
                 loaded_for_this_call = True
+                # Prefill cache after first load
+                self._ensure_prompt_cache()
 
             # Build formatted prompt
             formatted_prompt = self._prompt_builder.build(request)
+
+            # Use KV cache if prompt starts with system prefix
+            prompt_cache = None
+            if self._loader.has_prompt_cache and formatted_prompt.startswith(_get_system_prefix()):
+                prompt_cache = self._loader._prompt_cache
+                # Strip prefix from prompt since it's already in the cache
+                formatted_prompt = formatted_prompt[len(_get_system_prefix()) :]
 
             # Generate with model using LFM-optimal parameters
             result = self._loader.generate_sync(
@@ -153,7 +182,12 @@ class MLXGenerator:
                 top_k=request.top_k,
                 repetition_penalty=request.repetition_penalty,
                 stop_sequences=request.stop_sequences,
+                prompt_cache=prompt_cache,
             )
+
+            # Trim cache back to prefix for next call
+            if prompt_cache is not None:
+                self._loader.trim_prompt_cache()
 
             total_time = (time.perf_counter() - start_time) * 1000
 
@@ -175,17 +209,31 @@ class MLXGenerator:
                 self._loader.unload()
             raise
 
+    def _ensure_prompt_cache(self) -> None:
+        """Prefill the KV cache with the system prompt prefix if not already done."""
+        if self._loader.has_prompt_cache:
+            return
+        if not self._loader.is_loaded():
+            return
+        try:
+            self._loader.prefill_prompt_cache(_get_system_prefix())
+        except Exception:
+            logger.debug("Prompt cache prefill failed, will generate without cache")
+
     def is_loaded(self) -> bool:
         """Check if model is loaded in memory."""
         return self._loader.is_loaded()
 
     def load(self) -> bool:
-        """Load model into memory.
+        """Load model into memory and prefill KV cache.
 
         Returns:
             True if loaded successfully, False otherwise
         """
-        return self._loader.load()
+        result = self._loader.load()
+        if result:
+            self._ensure_prompt_cache()
+        return result
 
     def unload(self) -> None:
         """Unload model to free memory."""
@@ -242,9 +290,16 @@ class MLXGenerator:
                     msg = "Failed to load model"
                     raise RuntimeError(msg)
                 loaded_for_this_call = True
+                self._ensure_prompt_cache()
 
             # Build formatted prompt
             formatted_prompt = self._prompt_builder.build(request)
+
+            # Use KV cache if prompt starts with system prefix
+            stream_prompt_cache = None
+            if self._loader.has_prompt_cache and formatted_prompt.startswith(_get_system_prefix()):
+                stream_prompt_cache = self._loader._prompt_cache
+                formatted_prompt = formatted_prompt[len(_get_system_prefix()) :]
 
             # Use a queue to bridge sync generator and async iteration
             token_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
@@ -258,6 +313,7 @@ class MLXGenerator:
                         max_tokens=request.max_tokens,
                         temperature=request.temperature,
                         stop_sequences=request.stop_sequences,
+                        prompt_cache=stream_prompt_cache,
                     ):
                         token_queue.put(
                             {
@@ -288,6 +344,10 @@ class MLXGenerator:
                 yield item
 
             gen_thread.join(timeout=5.0)
+
+            # Trim cache back to prefix for next call
+            if stream_prompt_cache is not None:
+                self._loader.trim_prompt_cache()
 
             if generation_error:
                 raise generation_error[0]

@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/analytics/__init__.py
+# hypothesis_version: 6.151.5
+
+['AnalyticsEngine', 'AnalyticsReport', 'AnalyticsResult', 'ContactAnalytics', 'DailyAggregate', 'OverviewMetrics', 'ReportGenerator', 'ReportSection', 'TimeSeriesAggregator', 'TrendAnalyzer', 'TrendResult', 'aggregate_by_day', 'aggregate_by_hour', 'aggregate_by_month', 'aggregate_by_week', 'detect_anomalies', 'detect_peak_periods', 'detect_trend', 'get_analytics_engine']

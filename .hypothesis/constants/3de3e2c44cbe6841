@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/setup.py
+# hypothesis_version: 6.151.5
+
+[0.7, 5.0, 800, 1024, '--', '--check', '--open-preferences', '--verbose', '-v', '.cache', '.jarvis', '/', 'Application Support', 'Check', 'Config created', 'Configuration', 'Darwin', 'Database not found', 'Default Model', 'Details', 'Full Disk Access', 'Incompatible schema', 'Library', 'Messages', 'Permission denied', 'Permission granted', 'Platform', 'Setup Check Results', 'Status', 'System Memory', 'TCC.db', '[dim]SKIP[/dim]', '[green]PASS[/green]', '[red]FAIL[/red]', '__main__', 'blue', 'bold', 'center', 'chat', 'chat.db', 'chat_handle_join', 'chat_message_join', 'com.apple.TCC', 'config.json', 'cyan', 'date', 'fail', 'green', 'handle', 'handle_id', 'hub', 'huggingface', 'iMessage Database', 'is_from_me', 'message', 'open', 'pass', 'rb', 'red', 'required_tables', 'service_name', 'skip', 'store_true', 'text', 'unknown', 'v14', 'v15', 'warn']

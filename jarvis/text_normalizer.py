@@ -370,6 +370,14 @@ def normalize_text(
 
     Returns:
         Normalized text. Returns empty string if text is a reaction or None.
+
+    Example:
+        >>> normalize_text("Liked \\"hello\\"")
+        ''
+        >>> normalize_text("Hey   there!!!")
+        'Hey there!!!'
+        >>> normalize_text("😭 😭 😭")
+        '😭 😭'
     """
     if not text:
         return ""

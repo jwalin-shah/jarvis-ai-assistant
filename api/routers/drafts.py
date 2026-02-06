@@ -885,5 +885,3 @@ async def generate_smart_reply(
         similar_triggers=result.get("similar_triggers"),
         context_used=context_info,
     )
-
-

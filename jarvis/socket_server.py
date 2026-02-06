@@ -154,6 +154,12 @@ class JarvisSocketServer:
         # Batch operations
         self.register("batch", self._batch)
 
+        # Contact resolution
+        self.register("resolve_contacts", self._resolve_contacts)
+
+        # Metrics
+        self.register("get_routing_metrics", self._get_routing_metrics)
+
         # Prefetch/cache operations
         self.register("prefetch_stats", self._prefetch_stats)
         self.register("prefetch_invalidate", self._prefetch_invalidate)
@@ -308,14 +314,29 @@ class JarvisSocketServer:
             return False
 
     def _preload_llm(self) -> None:
-        """Preload the LLM model (sync)."""
+        """Preload the LLM model (sync).
+
+        Loads both the singleton loader (get_model()) AND the generator's
+        internal loader. These are separate MLXModelLoader instances that
+        share a class-level _mlx_load_lock, so both loads are serialized
+        and safe from concurrent Metal GPU access.
+        """
         try:
+            from models import get_generator
             from models.loader import get_model
 
-            # This triggers model loading
+            # Load the singleton model loader
             model = get_model()
-            if model:
-                logger.debug(f"LLM model preloaded: {model.model_id}")
+            if model and not model.is_loaded():
+                model.load()
+                logger.debug(f"LLM model preloaded: {model.config.display_name}")
+
+            # Also preload the generator's internal loader (separate instance)
+            generator = get_generator()
+            if generator._loader and not generator._loader.is_loaded():
+                generator._loader.load()
+                logger.debug("Generator LLM loader preloaded")
+
         except Exception as e:
             logger.debug(f"LLM preload skipped: {e}")
 
@@ -333,19 +354,18 @@ class JarvisSocketServer:
             logger.debug(f"Embeddings preload skipped: {e}")
 
     def _preload_vec_index(self) -> None:
-        """Preload the semantic searcher for fast first search (sync)."""
+        """Preload vec searcher and backfill vec_binary if needed (sync)."""
         try:
-            from integrations.imessage import ChatDBReader
-            from jarvis.search.semantic_search import get_semantic_searcher
+            from jarvis.search.vec_search import get_vec_searcher
 
-            with ChatDBReader() as reader:
-                searcher = get_semantic_searcher(reader)
-                # Just initializing it warms up the cache
-                if searcher:
-                    logger.debug("Semantic searcher preloaded")
+            searcher = get_vec_searcher()
+            if searcher:
+                # Backfill vec_binary from existing vec_chunks (no-op if already populated)
+                searcher.backfill_vec_binary()
+                logger.debug("Vec searcher preloaded")
 
         except Exception as e:
-            logger.debug(f"Semantic searcher preload skipped: {e}")
+            logger.debug(f"Vec searcher preload skipped: {e}")
 
     async def stop(self) -> None:
         """Stop the socket server."""
@@ -857,113 +877,55 @@ class JarvisSocketServer:
         request_id: Any,
         context_used: dict[str, Any],
     ) -> dict[str, Any]:
-        """Generate draft with real token streaming.
+        """Generate draft with real token streaming through full pipeline.
 
-        Streams tokens to the client as they're generated using a queue
-        to bridge sync generator and async sending.
+        Phase 1: Build GenerationRequest through the same pipeline as non-streaming
+                 (mobilization, RAG search, relationship profiles, prompt assembly).
+        Phase 2: Stream tokens from generator.generate_stream().
+        Phase 3: Send final response.
         """
-        import queue
-        import threading
+        from jarvis.reply_service import get_reply_service
 
-        from models.loader import get_model
+        reply_service = get_reply_service()
 
-        model = get_model()
-        if not model:
-            raise JsonRpcError(INTERNAL_ERROR, "Model not available")
+        # Phase 1: Build request through full pipeline (sync, run in thread)
+        try:
+            request, metadata = await asyncio.to_thread(
+                reply_service.prepare_streaming_context,
+                incoming=last_incoming,
+                thread=context[-10:] if context else None,
+                chat_id=chat_id,
+                instruction=instruction,
+            )
+        except Exception as e:
+            logger.exception("Failed to prepare streaming context")
+            raise JsonRpcError(INTERNAL_ERROR, f"Context preparation failed: {e}") from e
 
-        # Ensure model is loaded before streaming
-        if not model.is_loaded():
-            await asyncio.wait_for(asyncio.to_thread(model.load), timeout=120.0)
+        confidence = 0.8 if metadata.get("confidence") == "high" else 0.6
 
-        # Build prompt
-        thread_text = "\n".join(context[-10:]) if context else ""
-        if instruction:
-            prompt = f"""Conversation:
-{thread_text}
-
-Last message: {last_incoming}
-
-Instruction: {instruction}
-
-Write a helpful reply:"""
-        else:
-            prompt = f"""Conversation:
-{thread_text}
-
-Last message: {last_incoming}
-
-Write a brief, helpful reply:"""
-
-        # Use a queue to bridge sync generator and async sending
-        token_queue: queue.Queue[tuple[str, int, bool] | None] = queue.Queue(maxsize=100)
-        generation_error: list[Exception] = []
-        stop_event = threading.Event()
-
-        def producer():
-            """Run in thread: generate tokens and put in queue."""
-            try:
-                for stream_token in model.generate_stream(
-                    prompt, max_tokens=150, stop_event=stop_event
-                ):
-                    token_queue.put(
-                        (
-                            stream_token.token,
-                            stream_token.token_index,
-                            stream_token.is_final,
-                        )
-                    )
-                    if stop_event.is_set():
-                        break
-            except Exception as e:
-                generation_error.append(e)
-            finally:
-                token_queue.put(None)  # Always signal completion
-
-        # Start generation in background thread
-        gen_thread = threading.Thread(target=producer, daemon=True)
-        gen_thread.start()
-
-        # Consume tokens and send to client
+        # Phase 2: Stream tokens from generator
         full_response = ""
         token_count = 0
 
         try:
-            while True:
-                # Check queue with timeout to stay responsive
-                try:
-                    item = await asyncio.to_thread(token_queue.get, timeout=30.0)
-                except Exception:
-                    break
+            async for token_data in reply_service.generator.generate_stream(request):
+                token_text = token_data["token"]
+                token_index = token_data["token_index"]
+                is_final = token_data["is_final"]
 
-                if item is None:
-                    break  # Generation complete
-
-                token_text, token_index, is_final = item
                 full_response += token_text
                 token_count += 1
 
-                # Send token to client immediately
                 await self._send_stream_token(
                     writer, token_text, token_index, is_final, request_id=request_id
                 )
-
-            # Wait for thread to finish
-            gen_thread.join(timeout=5.0)
-
-            # Check for errors
-            if generation_error:
-                raise generation_error[0]
-
         except Exception as e:
             logger.exception("Streaming generation failed")
             raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
-        finally:
-            # Signal producer to stop if still running (e.g. client disconnected)
-            stop_event.set()
 
-        # Send final response
+        # Phase 3: Send final response
         result = {
-            "suggestions": [{"text": full_response.strip(), "confidence": 0.8}],
+            "suggestions": [{"text": full_response.strip(), "confidence": confidence}],
             "context_used": context_used,
             "streamed": True,
             "tokens_generated": token_count,
@@ -1345,6 +1307,65 @@ Summary:"""
         )
 
         return {"results": list(results)}
+
+    # ========== Contact Resolution ==========
+
+    async def _resolve_contacts(self, identifiers: list[str]) -> dict[str, str | None]:
+        """Resolve a batch of phone numbers/emails to contact names.
+
+        Uses the iMessage ChatDBReader which has AddressBook access.
+
+        Args:
+            identifiers: List of phone numbers or email addresses
+
+        Returns:
+            Dict mapping identifier -> display_name (or None if unknown)
+        """
+        if not identifiers:
+            return {}
+
+        # Cap at 500 to prevent abuse
+        identifiers = identifiers[:500]
+
+        try:
+            from integrations.imessage import ChatDBReader
+
+            def _resolve_sync() -> dict[str, str | None]:
+                result: dict[str, str | None] = {}
+                with ChatDBReader() as reader:
+                    for identifier in identifiers:
+                        result[identifier] = reader._resolve_contact_name(identifier)
+                return result
+
+            return await asyncio.to_thread(_resolve_sync)
+        except Exception as e:
+            logger.warning(f"Contact resolution failed: {e}")
+            return {}
+
+    # ========== Metrics ==========
+
+    async def _get_routing_metrics(
+        self,
+        since: float | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Get routing metrics for the dashboard.
+
+        Args:
+            since: Unix timestamp to filter from
+            limit: Max recent requests to return
+
+        Returns:
+            Dict with recent_requests and summary stats
+        """
+        try:
+            from jarvis.observability.metrics_router import get_routing_metrics_store
+
+            store = get_routing_metrics_store()
+            return await asyncio.to_thread(store.query_metrics, since, limit)
+        except Exception as e:
+            logger.warning(f"Failed to get routing metrics: {e}")
+            return {"recent_requests": [], "summary": {}}
 
     # ========== Prefetch RPC Methods ==========
 

@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/router.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.4, 0.8, 100, 1000, '(empty)', '=', 'CONTEXT_THRESHOLD', 'GENERATE_THRESHOLD', 'ROUTE OUTPUT | %s', 'ReplyRouter', 'RouteResult', 'RouterError', 'clarify', 'cnt', 'confidence', 'db_stats', 'embedding_precompute', 'generate', 'generated', 'get_reply_router', 'high', 'index_available', 'index_type', 'index_vectors', 'medium', 'mobilization', 'reset_reply_router', 'response', 'similarity', 'sqlite-vec', 'total', 'type', 'vec_search']

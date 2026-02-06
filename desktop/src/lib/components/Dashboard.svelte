@@ -1,7 +1,13 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { healthStore, fetchHealth } from "../stores/health";
   import { conversationsStore, fetchConversations } from "../stores/conversations";
+  import {
+    metricsStore,
+    startMetricsPolling,
+    stopMetricsPolling,
+    type MetricsRequest,
+  } from "../stores/metrics";
 
   type View = "messages" | "dashboard" | "health" | "settings" | "templates" | "network";
   let { onNavigate = (_view: View) => {} }: { onNavigate?: (view: View) => void } = $props();
@@ -9,19 +15,68 @@
   onMount(() => {
     fetchHealth();
     fetchConversations();
+    startMetricsPolling(10000);
+  });
+
+  onDestroy(() => {
+    stopMetricsPolling();
   });
 
   let totalMessages = $derived(
     $conversationsStore.conversations.reduce(
-    (sum, c) => sum + c.message_count,
-    0
+      (sum, c) => sum + c.message_count,
+      0
     )
   );
+
+  function formatTimestamp(ts: number): string {
+    return new Date(ts * 1000).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
+  function formatLatency(ms: number): string {
+    if (ms < 1) return "<1ms";
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+
+  function truncateHash(hash: string): string {
+    return hash.length > 8 ? hash.slice(0, 8) : hash;
+  }
+
+  // Compute max latency for bar chart scaling
+  function getMaxLatency(requests: MetricsRequest[]): number {
+    if (requests.length === 0) return 100;
+    return Math.max(...requests.map((r) => r.total_latency_ms), 100);
+  }
+
+  // Get latency phases in consistent order
+  function getPhases(latency: Record<string, number>): [string, number][] {
+    return Object.entries(latency).sort(([a], [b]) => a.localeCompare(b));
+  }
+
+  // Phase colors for latency breakdown bars
+  const phaseColors: Record<string, string> = {
+    embedding: "#007aff",
+    search: "#5856d6",
+    generate: "#34c759",
+    total: "#ff9500",
+    route: "#ff3b30",
+    classify: "#af52de",
+  };
+
+  function getPhaseColor(phase: string): string {
+    return phaseColors[phase] || "#8e8e93";
+  }
 </script>
 
 <div class="dashboard">
   <h1>Dashboard</h1>
 
+  <!-- Status cards -->
   <div class="cards">
     <button class="card" onclick={() => onNavigate("messages")}>
       <div class="card-icon messages">
@@ -91,28 +146,122 @@
     </div>
   </div>
 
-  <div class="recent">
-    <h2>Recent Conversations</h2>
-    {#if $conversationsStore.conversations.length === 0}
-      <p class="empty">No conversations yet</p>
-    {:else}
-      <div class="recent-list">
-        {#each $conversationsStore.conversations.slice(0, 5) as conv (conv.chat_id)}
-          <div class="recent-item">
-            <div class="recent-avatar" class:group={conv.is_group}>
-              {(conv.display_name || conv.participants[0] || "?").charAt(0).toUpperCase()}
-            </div>
-            <div class="recent-info">
-              <span class="recent-name">
-                {conv.display_name || conv.participants.join(", ")}
-              </span>
-              <span class="recent-preview">
-                {conv.last_message_text || "No messages"}
-              </span>
-            </div>
-          </div>
-        {/each}
+  <!-- Routing Metrics Section -->
+  <div class="metrics-section">
+    <h2>Routing Metrics</h2>
+
+    {#if $metricsStore.loading && !$metricsStore.summary}
+      <div class="metrics-loading">
+        <span class="spinner"></span>
+        Loading metrics...
       </div>
+    {:else if $metricsStore.error && !$metricsStore.summary}
+      <div class="metrics-empty">{$metricsStore.error}</div>
+    {:else if $metricsStore.summary}
+      <!-- Summary cards -->
+      <div class="metric-cards">
+        <div class="metric-card">
+          <span class="metric-label">Total Requests</span>
+          <span class="metric-value">{$metricsStore.summary.total_requests}</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Avg Latency</span>
+          <span class="metric-value">{formatLatency($metricsStore.summary.avg_latency_ms)}</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Cache Hit Rate</span>
+          <span class="metric-value">{$metricsStore.summary.cache_hit_rate}%</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">P95 Latency</span>
+          <span class="metric-value">{formatLatency($metricsStore.summary.p95_latency_ms)}</span>
+        </div>
+      </div>
+
+      <!-- Decision breakdown -->
+      {#if $metricsStore.summary.decisions && Object.keys($metricsStore.summary.decisions).length > 0}
+        <div class="decision-breakdown">
+          <h3>Decision Distribution</h3>
+          <div class="decision-chips">
+            {#each Object.entries($metricsStore.summary.decisions) as [decision, count]}
+              <span class="decision-chip" class:generate={decision === "generate"}
+                class:template={decision === "template"} class:cache={decision === "cache"}>
+                {decision}: {count}
+              </span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Request log table -->
+      {#if $metricsStore.recentRequests.length > 0}
+        <div class="request-log">
+          <h3>Recent Requests</h3>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Decision</th>
+                  <th>Similarity</th>
+                  <th>Cache</th>
+                  <th>Latency</th>
+                  <th>Breakdown</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each $metricsStore.recentRequests.slice(0, 50) as req (req.timestamp + req.query_hash)}
+                  <tr>
+                    <td class="mono">{formatTimestamp(req.timestamp)}</td>
+                    <td>
+                      <span class="badge" class:generate={req.routing_decision === "generate"}
+                        class:template={req.routing_decision === "template"}
+                        class:cache={req.routing_decision === "cache"}>
+                        {req.routing_decision}
+                      </span>
+                    </td>
+                    <td class="mono">{req.similarity_score.toFixed(3)}</td>
+                    <td>
+                      {#if req.cache_hit}
+                        <span class="cache-hit">HIT</span>
+                      {:else}
+                        <span class="cache-miss">MISS</span>
+                      {/if}
+                    </td>
+                    <td class="mono">{formatLatency(req.total_latency_ms)}</td>
+                    <td>
+                      <div class="latency-bar"
+                        title={getPhases(req.latency).map(([p, v]) => `${p}: ${formatLatency(v)}`).join(", ")}>
+                        {#each getPhases(req.latency) as [phase, ms]}
+                          <div
+                            class="bar-segment"
+                            style="width: {Math.max(2, (ms / getMaxLatency($metricsStore.recentRequests)) * 120)}px; background: {getPhaseColor(phase)};"
+                            title="{phase}: {formatLatency(ms)}"
+                          ></div>
+                        {/each}
+                      </div>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Legend -->
+          <div class="legend">
+            {#each Object.entries(phaseColors) as [phase, color]}
+              <span class="legend-item">
+                <span class="legend-dot" style="background: {color};"></span>
+                {phase}
+              </span>
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <div class="metrics-empty">No routing requests recorded yet</div>
+      {/if}
+    {:else}
+      <div class="metrics-empty">No metrics data available</div>
     {/if}
   </div>
 </div>
@@ -228,74 +377,256 @@
     margin-top: 4px;
   }
 
-  .recent {
+  /* Metrics Section */
+  .metrics-section {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 20px;
   }
 
-  .recent h2 {
+  .metrics-section h2 {
     font-size: 18px;
     font-weight: 600;
     margin-bottom: 16px;
   }
 
-  .recent-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .recent-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .recent-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--accent-color);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .metrics-section h3 {
+    font-size: 14px;
     font-weight: 600;
-    font-size: 14px;
-    color: white;
-  }
-
-  .recent-avatar.group {
-    background: var(--group-color);
-  }
-
-  .recent-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .recent-name {
-    display: block;
-    font-weight: 500;
-    font-size: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .recent-preview {
-    display: block;
-    font-size: 13px;
     color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin-bottom: 12px;
   }
 
-  .empty {
+  .metrics-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 24px 0;
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .metrics-empty {
     color: var(--text-secondary);
     text-align: center;
     padding: 24px;
+    font-size: 14px;
+  }
+
+  /* Metric summary cards */
+  .metric-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .metric-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .metric-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .metric-value {
+    display: block;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* Decision breakdown */
+  .decision-breakdown {
+    margin-bottom: 20px;
+  }
+
+  .decision-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .decision-chip {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+  }
+
+  .decision-chip.generate {
+    background: rgba(52, 199, 89, 0.15);
+    color: #34c759;
+    border-color: rgba(52, 199, 89, 0.3);
+  }
+
+  .decision-chip.template {
+    background: rgba(88, 86, 214, 0.15);
+    color: #5856d6;
+    border-color: rgba(88, 86, 214, 0.3);
+  }
+
+  .decision-chip.cache {
+    background: rgba(255, 149, 0, 0.15);
+    color: #ff9500;
+    border-color: rgba(255, 149, 0, 0.3);
+  }
+
+  /* Request log table */
+  .request-log {
+    margin-top: 16px;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  th {
+    background: var(--bg-primary);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover td {
+    background: var(--bg-hover);
+  }
+
+  .mono {
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 12px;
+  }
+
+  /* Decision badges */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .badge.generate {
+    background: rgba(52, 199, 89, 0.15);
+    color: #34c759;
+  }
+
+  .badge.template {
+    background: rgba(88, 86, 214, 0.15);
+    color: #5856d6;
+  }
+
+  .badge.cache {
+    background: rgba(255, 149, 0, 0.15);
+    color: #ff9500;
+  }
+
+  .cache-hit {
+    color: #34c759;
+    font-weight: 600;
+    font-size: 11px;
+  }
+
+  .cache-miss {
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
+  /* Latency breakdown bar */
+  .latency-bar {
+    display: flex;
+    height: 12px;
+    border-radius: 3px;
+    overflow: hidden;
+    gap: 1px;
+    min-width: 40px;
+  }
+
+  .bar-segment {
+    height: 100%;
+    min-width: 2px;
+    border-radius: 2px;
+    transition: width 0.2s ease;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
   }
 </style>

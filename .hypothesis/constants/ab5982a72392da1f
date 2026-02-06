@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/export.py
+# hypothesis_version: 6.151.5
+
+['%Y%m%d_%H%M%S', '%Y-%m-%d', '%Y-%m-%d %H:%M', ', ', '-_', '; ', '=', 'CONVERSATION EXPORT', 'Me', 'Unknown date', '\\n', '_', 'attachment_count', 'attachment_filenames', 'attachments', 'chat_id', 'conversation', 'conversation_count', 'conversations', 'csv', 'date', 'date_delivered', 'date_read', 'display_name', 'export', 'export_metadata', 'exported_at', 'file_path', 'file_size', 'filename', 'format', 'full_backup', 'id', 'ignore', 'is_from_me', 'is_group', 'is_system_message', 'json', 'last_message_date', 'last_message_text', 'message_count', 'messages', 'metadata', 'mime_type', 'participants', 'query', 'reaction_count', 'reactions', 'reply_to_id', 'result_count', 'search_results', 'sender', 'sender_name', 'text', 'total_message_count', 'txt', 'type']

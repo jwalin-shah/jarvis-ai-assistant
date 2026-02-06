@@ -80,9 +80,22 @@ export async function initDatabases(): Promise<void> {
 
     // Open chat.db in read-only mode via URI
     // tauri-plugin-sql uses sqlite:// protocol
-    const chatDbPath = `${resolvedHomePath}Library/Messages/chat.db`;
+    const { join } = await import("@tauri-apps/api/path");
+    const chatDbPath = await join(resolvedHomePath!, "Library", "Messages", "chat.db");
     const uri = `sqlite:${chatDbPath}?mode=ro`;
-    chatDb = await Database.load(uri);
+    try {
+      chatDb = await Database.load(uri);
+    } catch (dbError: unknown) {
+      const msg = dbError instanceof Error ? dbError.message : String(dbError);
+      // SQLite error code 14 = SQLITE_CANTOPEN
+      if (msg.includes("14") || msg.toLowerCase().includes("unable to open")) {
+        throw new Error(
+          `Cannot open chat.db at ${chatDbPath}. ` +
+          "Grant Full Disk Access to this app in System Settings > Privacy & Security > Full Disk Access."
+        );
+      }
+      throw dbError;
+    }
 
     // Detect schema version
     schemaVersion = await detectSchemaVersion();
@@ -571,6 +584,26 @@ function resolveContactName(identifier: string): string | null {
   // Contact resolution not available in direct mode
   // Names will be resolved via HTTP API fallback
   return null;
+}
+
+/**
+ * Populate the contacts cache from an external source (e.g., backend RPC).
+ * After calling this, resolveContactName() will return cached names.
+ */
+export function populateContactsCache(contacts: Record<string, string | null>): void {
+  for (const [identifier, name] of Object.entries(contacts)) {
+    if (name) {
+      contactsCache.set(identifier, name);
+    }
+  }
+  contactsCacheLoaded = true;
+}
+
+/**
+ * Check if contacts cache has been populated
+ */
+export function isContactsCacheLoaded(): boolean {
+  return contactsCacheLoaded;
 }
 
 /**

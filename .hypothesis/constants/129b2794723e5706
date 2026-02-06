@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/contracts/latency.py
+# hypothesis_version: 6.151.5
+
+['cold', 'hot', 'warm']

@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/search/retrieval.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.3, 1.0, 1.5, 'MultiTypeExamples', 'TypedExample', 'TypedRetriever', 'chat_id', 'get_typed_retriever', 'pair_id', 'quality_score', 'response_da_conf', 'response_da_type', 'response_text', 'similarity', 'trigger_text', 'weighted_score']

@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/retry.py
+# hypothesis_version: 6.151.5
+
+[1.0, 10.0, 'P', 'RetryAttempt', 'RetryContext', 'T']

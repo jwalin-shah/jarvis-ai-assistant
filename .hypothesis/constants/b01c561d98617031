@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/services/api.py
+# hypothesis_version: 6.151.5
+
+[30.0, 200, 8742, '--host', '--port', '127.0.0.1', 'api', 'api.main:app', 'status', 'uvicorn']

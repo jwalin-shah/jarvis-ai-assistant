@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/experiments.py
+# hypothesis_version: 6.151.5
+
+[100, 200, 201, 400, 404, 409, 500, '/experiments', '/{name}', '/{name}/outcomes', '/{name}/record', '/{name}/results', '/{name}/variant', 'Assigned variant', 'Creation timestamp', 'Delete experiment', 'Experiment created', 'Experiment deleted', 'Experiment details', 'Experiment name', 'Experiment not found', 'Experiment updated', 'Invalid action', 'List all experiments', 'List of experiments', 'List of variants', 'New enabled state', 'Outcomes cleared', 'Recorded action', 'Results per variant', 'Times user dismissed', 'Update experiment', 'Variant ID', 'Variant identifier', 'cleared', 'deleted', 'description', 'experiment_name', 'experiments', 'id', 'status', 'weight']

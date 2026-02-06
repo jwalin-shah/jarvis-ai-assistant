@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/classifiers/lazy.py
+# hypothesis_version: 6.151.5
+
+['LazyInitializer', 'T', 'data', 'failed', 'initialized', 'pending']

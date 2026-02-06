@@ -92,20 +92,37 @@ class ContextService:
         self,
         incoming: str,
         chat_id: str | None = None,
+        contact_id: int | None = None,
+        embedder: Any | None = None,
     ) -> list[dict[str, Any]]:
         """Search vec_chunks for similar conversation segments.
 
         Returns chunks with trigger/response text for few-shot prompting.
+
+        Args:
+            embedder: Optional embedder override (e.g. CachedEmbedder) to avoid
+                re-encoding the query if the caller already computed the embedding.
         """
         try:
             searcher = self._get_vec_searcher()
             if not searcher:
                 return []
 
-            results = searcher.search_with_pairs(
-                query=incoming,
-                limit=5,
-            )
+            if contact_id is not None:
+                # Fast path: partition-filtered search (~0.2ms)
+                results = searcher.search_with_pairs(
+                    query=incoming,
+                    limit=5,
+                    contact_id=contact_id,
+                    embedder=embedder,
+                )
+            else:
+                # Global search: hamming pre-filter via vec_binary (~5ms)
+                results = searcher.search_with_pairs_global(
+                    query=incoming,
+                    limit=5,
+                    embedder=embedder,
+                )
 
             exchanges = []
             for r in results:

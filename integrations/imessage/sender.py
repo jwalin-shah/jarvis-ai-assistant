@@ -120,25 +120,25 @@ class IMessageSender:
             if not chat_id:
                 return SendResult(success=False, error="Chat ID required for group")
             escaped_chat_id = chat_id.replace("\\", "\\\\").replace('"', '\\"')
-            applescript = f'''
+            applescript = f"""
 tell application "Messages"
     set targetChat to chat id "{escaped_chat_id}"
     set theFile to POSIX file "{escaped_path}"
     send theFile to targetChat
 end tell
-'''
+"""
         else:
             if not recipient:
                 return SendResult(success=False, error="Recipient required")
             escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
-            applescript = f'''
+            applescript = f"""
 tell application "Messages"
     set targetService to 1st account whose service type = iMessage
     set targetBuddy to participant "{escaped_recipient}" of targetService
     set theFile to POSIX file "{escaped_path}"
     send theFile to targetBuddy
 end tell
-'''
+"""
         return self._run_applescript(applescript, f"attachment to {chat_id or recipient}")
 
     @staticmethod
@@ -171,13 +171,13 @@ end tell
         escaped_text = self._escape_for_applescript(text)
         escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
 
-        applescript = f'''
+        applescript = f"""
 tell application "Messages"
     set targetService to 1st account whose service type = iMessage
     set targetBuddy to participant "{escaped_recipient}" of targetService
     send "{escaped_text}" to targetBuddy
 end tell
-'''
+"""
         return self._run_applescript(applescript, f"individual: {recipient}")
 
     def _send_to_group(self, text: str, chat_id: str | None) -> SendResult:
@@ -190,12 +190,12 @@ end tell
         escaped_chat_id = chat_id.replace("\\", "\\\\").replace('"', '\\"')
 
         # For group chats, we find the chat by its ID and send directly to it
-        applescript = f'''
+        applescript = f"""
 tell application "Messages"
     set targetChat to chat id "{escaped_chat_id}"
     send "{escaped_text}" to targetChat
 end tell
-'''
+"""
         return self._run_applescript(applescript, f"group: {chat_id}")
 
     def _run_applescript(self, script: str, target_desc: str) -> SendResult:

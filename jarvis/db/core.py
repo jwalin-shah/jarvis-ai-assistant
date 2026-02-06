@@ -150,49 +150,68 @@ class JarvisDBBase:
 
         Called as a safety net when schema version is already current but
         vec tables may have been skipped (e.g., sqlite-vec wasn't loaded).
+        Creates each table independently so partial failures don't block others.
         """
         try:
-            res = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='vec_chunks'"
-            ).fetchone()
-            if res is not None:
-                return  # Already exists
+            existing = {
+                row["name"]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name IN ('vec_chunks', 'vec_messages', 'vec_binary')"
+                ).fetchall()
+            }
 
-            conn.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                    embedding int8[384] distance_metric=L2,
-                    contact_id integer partition key,
-                    chat_id text,
-                    response_da_type text,
-                    quality_score float,
-                    source_timestamp float,
-                    +topic_label text,
-                    +trigger_text text,
-                    +response_text text,
-                    +formatted_text text,
-                    +keywords_json text,
-                    +message_count integer,
-                    +response_da_conf float,
-                    +source_type text,
-                    +source_id text
+            if "vec_chunks" not in existing:
+                conn.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+                        embedding int8[384] distance_metric=L2,
+                        contact_id integer partition key,
+                        chat_id text,
+                        response_da_type text,
+                        quality_score float,
+                        source_timestamp float,
+                        +topic_label text,
+                        +trigger_text text,
+                        +response_text text,
+                        +formatted_text text,
+                        +keywords_json text,
+                        +message_count integer,
+                        +response_da_conf float,
+                        +source_type text,
+                        +source_id text
+                    )
+                """
                 )
-            """)
-            conn.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0(
-                    embedding int8[384] distance_metric=L2,
-                    chat_id text partition key,
-                    +text_preview text,
-                    +sender text,
-                    +timestamp integer,
-                    +is_from_me integer
+                logger.info("Created vec_chunks table")
+
+            if "vec_messages" not in existing:
+                conn.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0(
+                        embedding int8[384] distance_metric=L2,
+                        chat_id text partition key,
+                        +text_preview text,
+                        +sender text,
+                        +timestamp integer,
+                        +is_from_me integer
+                    )
+                """
                 )
-            """)
-            conn.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0(
-                    embedding bit[384] distance_metric=hamming
+                logger.info("Created vec_messages table")
+
+            if "vec_binary" not in existing:
+                conn.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0(
+                        embedding bit[384],
+                        +chunk_rowid integer,
+                        +embedding_int8 blob
+                    )
+                """
                 )
-            """)
-            logger.info("Created missing sqlite-vec virtual tables")
+                logger.info("Created vec_binary table")
+
         except Exception as e:
             logger.warning("Could not create vec tables: %s", e)
 
@@ -332,7 +351,8 @@ class JarvisDBBase:
             # Migration v9 -> v10: sqlite-vec virtual tables for vector search
             if current_version < 10:
                 try:
-                    conn.execute("""
+                    conn.execute(
+                        """
                         CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
                             embedding int8[384] distance_metric=L2,
                             contact_id integer partition key,
@@ -350,8 +370,10 @@ class JarvisDBBase:
                             +source_type text,
                             +source_id text
                         )
-                    """)
-                    conn.execute("""
+                    """
+                    )
+                    conn.execute(
+                        """
                         CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0(
                             embedding int8[384] distance_metric=L2,
                             chat_id text partition key,
@@ -360,12 +382,17 @@ class JarvisDBBase:
                             +timestamp integer,
                             +is_from_me integer
                         )
-                    """)
-                    conn.execute("""
+                    """
+                    )
+                    conn.execute(
+                        """
                         CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0(
-                            embedding bit[384] distance_metric=hamming
+                            embedding bit[384],
+                            +chunk_rowid integer,
+                            +embedding_int8 blob
                         )
-                    """)
+                    """
+                    )
                     logger.info(
                         "Created sqlite-vec virtual tables (vec_chunks, vec_messages, vec_binary)"
                     )
@@ -374,6 +401,27 @@ class JarvisDBBase:
                         logger.debug("vec tables already exist")
                     else:
                         logger.warning("sqlite-vec migration skipped: %s", e)
+
+            # Migration v10 -> v11: Recreate vec_binary with aux columns
+            if current_version == 10:
+                try:
+                    # Old vec_binary had no aux columns; drop and recreate
+                    conn.execute("DROP TABLE IF EXISTS vec_binary")
+                    conn.execute(
+                        """
+                        CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0(
+                            embedding bit[384],
+                            +chunk_rowid integer,
+                            +embedding_int8 blob
+                        )
+                    """
+                    )
+                    logger.info("Recreated vec_binary with chunk_rowid + embedding_int8 columns")
+                except Exception as e:
+                    if "already exists" in str(e).lower():
+                        logger.debug("vec_binary already has new schema")
+                    else:
+                        logger.warning("vec_binary migration skipped: %s", e)
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)

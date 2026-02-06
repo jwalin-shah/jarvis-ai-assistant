@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/pdf_export.py
+# hypothesis_version: 6.151.5
+
+[404, 500, 1000, 10000, '%Y%m%d_%H%M%S', '-_', '/export', '/pdf/{chat_id}', 'Content-Disposition', 'End date (inclusive)', '_', 'application/pdf', 'export', 'utf-8']

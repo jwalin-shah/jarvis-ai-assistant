@@ -25,10 +25,8 @@ Usage:
 from __future__ import annotations
 
 import re
-import time
 
 import numpy as np
-
 
 TEXTS = [
     # Musings - no ? but could be confused with questions
@@ -37,30 +35,25 @@ TEXTS = [
     ("I wonder what happened", "ACKNOWLEDGEABLE"),
     ("Curious how they'll handle it", "ACKNOWLEDGEABLE"),
     ("Wonder if anyone else noticed", "ACKNOWLEDGEABLE"),
-
     # Opinions with "no way" - could be confused with reactive
     ("No way Dallas could've gotten lottery picks", "ACKNOWLEDGEABLE"),
     ("No way that's real", "ACKNOWLEDGEABLE"),
     ("No chance they win tonight", "ACKNOWLEDGEABLE"),
     ("I don't think it's gonna happen", "ACKNOWLEDGEABLE"),
     ("Doubt they'll actually do it", "ACKNOWLEDGEABLE"),
-
     # Rhetorical questions - look like questions but aren't
     ("Why do dads text like that", "ACKNOWLEDGEABLE"),
     ("How does that even work", "ACKNOWLEDGEABLE"),
     ("Who even says that anymore", "ACKNOWLEDGEABLE"),
-
     # Actual questions WITH question marks
     ("What time is the game?", "ANSWERABLE"),
     ("Where are you?", "ANSWERABLE"),
     ("Did you get my text?", "ANSWERABLE"),
     ("What happened at the meeting?", "ANSWERABLE"),
-
     # Actual questions WITHOUT question marks (informal)
     ("What time is the game", "ANSWERABLE"),
     ("Where are you", "ANSWERABLE"),
     ("Did you get my text", "ANSWERABLE"),
-
     # Requests
     ("Can you pick me up?", "ACTIONABLE"),
     ("Can you pick me up", "ACTIONABLE"),
@@ -68,13 +61,11 @@ TEXTS = [
     ("Wanna grab lunch", "ACTIONABLE"),
     ("Let me know when you're free", "ACTIONABLE"),
     ("Text me when you get there", "ACTIONABLE"),
-
     # Reactive
     ("Omg I got the job!!", "REACTIVE"),
     ("That's so sad", "REACTIVE"),
     ("This is amazing!!", "REACTIVE"),
     ("I can't believe it!!!", "REACTIVE"),
-
     # Statements
     ("I went to the store", "ACKNOWLEDGEABLE"),
     ("The game starts at 7", "ACKNOWLEDGEABLE"),
@@ -101,14 +92,30 @@ def classify_structural(text: str) -> tuple[str, float] | None:
         return ("ACTIONABLE", 0.90)
 
     # Imperative verbs at start
-    imperatives = {"send", "give", "bring", "take", "get", "grab", "pick", "call", "text", "help", "come", "tell", "show"}
+    imperatives = {
+        "send",
+        "give",
+        "bring",
+        "take",
+        "get",
+        "grab",
+        "pick",
+        "call",
+        "text",
+        "help",
+        "come",
+        "tell",
+        "show",
+    }
     if words and words[0] in imperatives:
         return ("ACTIONABLE", 0.85)
 
     # Direct WH-questions with ? (ANSWERABLE)
     if text.rstrip().endswith("?"):
         wh_question = re.match(r"^(what|where|when|who|how|which|why)\s", text_lower)
-        yesno_question = re.match(r"^(is|are|was|were|do|does|did|can|could|will|would|have|has)\s", text_lower)
+        yesno_question = re.match(
+            r"^(is|are|was|were|do|does|did|can|could|will|would|have|has)\s", text_lower
+        )
         if wh_question or yesno_question:
             return ("ANSWERABLE", 0.90)
 
@@ -121,10 +128,46 @@ def classify_structural(text: str) -> tuple[str, float] | None:
         return ("REACTIVE", 0.80)
 
     # Short acknowledgment words (ACKNOWLEDGEABLE)
-    ack_words = {"ok", "okay", "k", "kk", "yes", "yeah", "yea", "yep", "yup", "no", "nope",
-                 "nah", "sure", "bet", "cool", "nice", "good", "great", "fine", "alright",
-                 "word", "true", "facts", "lol", "lmao", "haha", "hi", "hey", "hello", "yo",
-                 "sup", "bye", "cya", "later", "thanks", "thx", "ty", "np"}
+    ack_words = {
+        "ok",
+        "okay",
+        "k",
+        "kk",
+        "yes",
+        "yeah",
+        "yea",
+        "yep",
+        "yup",
+        "no",
+        "nope",
+        "nah",
+        "sure",
+        "bet",
+        "cool",
+        "nice",
+        "good",
+        "great",
+        "fine",
+        "alright",
+        "word",
+        "true",
+        "facts",
+        "lol",
+        "lmao",
+        "haha",
+        "hi",
+        "hey",
+        "hello",
+        "yo",
+        "sup",
+        "bye",
+        "cya",
+        "later",
+        "thanks",
+        "thx",
+        "ty",
+        "np",
+    }
     if len(words) == 1 and text_lower.rstrip("!?.") in ack_words:
         return ("ACKNOWLEDGEABLE", 0.95)
 
@@ -155,7 +198,9 @@ def classify_structural(text: str) -> tuple[str, float] | None:
 
     # Rhetorical questions - no ? and phrased as wondering
     # "Why do X" without ? = rhetorical
-    if re.match(r"^(why|how|who)\s+(do|does|did|would|could|even)\b", text_lower) and not text.endswith("?"):
+    if re.match(
+        r"^(why|how|who)\s+(do|does|did|would|could|even)\b", text_lower
+    ) and not text.endswith("?"):
         return ("ACKNOWLEDGEABLE", 0.75)
 
     return None
@@ -213,6 +258,7 @@ def main():
     # Load model
     print("Loading model...")
     from sentence_transformers import CrossEncoder
+
     model = CrossEncoder("cross-encoder/nli-deberta-v3-small", max_length=512)
     print()
 
@@ -253,7 +299,9 @@ def main():
     print("=" * 80)
 
     # Group misclassifications by pattern
-    musing_errors = [m for m in misclassifications if "wonder" in m[0].lower() or "curious" in m[0].lower()]
+    musing_errors = [
+        m for m in misclassifications if "wonder" in m[0].lower() or "curious" in m[0].lower()
+    ]
     question_errors = [m for m in misclassifications if m[1] == "ANSWERABLE"]
     request_errors = [m for m in misclassifications if m[1] == "ACTIONABLE"]
     reactive_errors = [m for m in misclassifications if m[1] == "REACTIVE"]

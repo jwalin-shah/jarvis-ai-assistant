@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/core/health/permissions.py
+# hypothesis_version: 6.151.5
+
+[0.0, 1.0, 5.0, 'AddressBook', 'Application Support', 'Calendar', 'Calendars', 'Contacts', 'Library', 'Messages', 'Sources', 'chat.db', 'rb']

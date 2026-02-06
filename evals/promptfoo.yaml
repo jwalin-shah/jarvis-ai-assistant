@@ -1,37 +1,44 @@
 # JARVIS Prompt Strategy A/B Testing
 #
-# This compares 5 different prompt strategies to find what works best:
-#   - baseline: Current JARVIS build_reply_prompt()
-#   - minimal: Bare-bones, no examples
-#   - examples_only: Just few-shot examples
-#   - style_focus: Heavy style matching emphasis
-#   - anti_ai: Explicitly forbids AI phrases
+# Structure x Framing matrix (8 strategies):
+#   Structures: xml (XML tags), md (markdown headers)
+#   Framings: drafter, persona, completer, anti_helper
+#
+# 8 strategies x 13 test cases = 104 evaluations per run
 #
 # Run: make eval
 # View: make eval-view
 #
 # LLM Judge: export OPENAI_API_KEY=sk-... (for llm-rubric assertions)
 
-description: "A/B test prompt strategies for text message replies"
+description: "A/B test prompt strategies: structure (xml/md) x framing (drafter/persona/completer/anti_helper)"
 
-# Each prompt template = one strategy to test
-# The {{strategy}} variable tells the provider which approach to use
+# Each prompt = one strategy from the 2x4 matrix
 prompts:
-  - id: baseline
-    label: "Baseline (current JARVIS)"
-    raw: "strategy:baseline"
-  - id: minimal
-    label: "Minimal (no examples)"
-    raw: "strategy:minimal"
-  - id: examples_only
-    label: "Examples Only"
-    raw: "strategy:examples_only"
-  - id: style_focus
-    label: "Style Focus"
-    raw: "strategy:style_focus"
-  - id: anti_ai
-    label: "Anti-AI Phrases"
-    raw: "strategy:anti_ai"
+  - id: xml_drafter
+    label: "XML + Drafter (default)"
+    raw: "strategy:xml_drafter"
+  - id: xml_persona
+    label: "XML + Persona"
+    raw: "strategy:xml_persona"
+  - id: xml_completer
+    label: "XML + Completer"
+    raw: "strategy:xml_completer"
+  - id: xml_anti_helper
+    label: "XML + Anti-Helper"
+    raw: "strategy:xml_anti_helper"
+  - id: md_drafter
+    label: "MD + Drafter"
+    raw: "strategy:md_drafter"
+  - id: md_persona
+    label: "MD + Persona"
+    raw: "strategy:md_persona"
+  - id: md_completer
+    label: "MD + Completer"
+    raw: "strategy:md_completer"
+  - id: md_anti_helper
+    label: "MD + Anti-Helper"
+    raw: "strategy:md_anti_helper"
 
 providers:
   - id: exec:python jarvis_provider.py
@@ -44,9 +51,25 @@ providers:
 defaultTest:
   options:
     transformVars: "vars.strategy = prompt.split(':')[1]; return vars;"
+  assert:
+    # Universal anti-AI checks on every test
+    - type: not-icontains
+      value: "I'd be happy to"
+      weight: 2
+    - type: not-icontains
+      value: "I hope this helps"
+      weight: 2
+    - type: not-icontains
+      value: "Let me know if"
+      weight: 2
+    - type: not-icontains
+      value: "I understand"
+      weight: 1
 
 tests:
-  # === Core Test Cases ===
+  # =========================================================================
+  # Core Test Cases (9)
+  # =========================================================================
 
   - description: "Lunch invitation"
     vars:
@@ -58,9 +81,6 @@ tests:
       - type: javascript
         value: output.length < 80
         weight: 1
-      - type: not-icontains
-        value: "I'd be happy"
-        weight: 2
       - type: not-icontains
         value: "sounds great"
         weight: 2
@@ -181,6 +201,86 @@ tests:
         weight: 2
       - type: llm-rubric
         value: "React to a friend sharing a photo of a nice view. Should be positive and match enthusiasm. Bad: describing the photo, generic 'nice', overly formal."
+        weight: 3
+
+  - description: "Weekend plans"
+    vars:
+      context: "[18:30] Sam: Any plans this weekend?"
+      last_message: "Any plans this weekend?"
+      tone: "casual"
+      user_style: "conversational"
+    assert:
+      - type: javascript
+        value: output.length < 120
+        weight: 1
+      - type: llm-rubric
+        value: "Is this a natural response to 'any plans this weekend?' Should share plans or ask back. Good: 'Not yet, you?', 'Might grab brunch, wbu?'. Bad: formal, overly helpful."
+        weight: 3
+
+  # =========================================================================
+  # Low-Context / Edge Test Cases (4)
+  # =========================================================================
+
+  - description: "No context - bare message from unknown"
+    vars:
+      context: "[11:00] Unknown: hey"
+      last_message: "hey"
+      tone: "casual"
+      user_style: ""
+    assert:
+      - type: javascript
+        value: output.length < 30
+        weight: 2
+      - type: llm-rubric
+        value: "Reply to 'hey' from an unknown person with zero context. Should be very brief - a simple greeting back. Good: 'hey', 'hey what's up', 'yo'. Bad: long reply, introducing yourself, asking detailed questions."
+        weight: 3
+
+  - description: "Ambiguous forwarded link - no text"
+    vars:
+      context: "[12:00] Sarah: [Link]"
+      last_message: "[Link]"
+      tone: "casual"
+      user_style: ""
+    assert:
+      - type: javascript
+        value: output.length < 40
+        weight: 2
+      - type: not-icontains
+        value: "article"
+        weight: 1
+      - type: not-icontains
+        value: "interesting"
+        weight: 1
+      - type: llm-rubric
+        value: "Someone sent just a link with no text. Model should NOT confabulate what the link is about. Good: 'what's this?', '?', 'ooh what is it'. Bad: commenting on the content, assuming what it is."
+        weight: 3
+
+  - description: "Inside joke / unknown reference"
+    vars:
+      context: "[14:00] Tom: lmao remember the thing"
+      last_message: "lmao remember the thing"
+      tone: "casual"
+      user_style: "casual bro"
+    assert:
+      - type: javascript
+        value: output.length < 40
+        weight: 2
+      - type: llm-rubric
+        value: "Reply to an inside joke reference ('the thing') that the model can't possibly know. Should NOT pretend to know. Good: 'lol which thing', 'haha yes', 'omg yes'. Bad: making up a specific memory, detailed response about 'the thing'."
+        weight: 3
+
+  - description: "Stale thread - weeks-old message"
+    vars:
+      context: "[3 weeks ago] Dave: hey you free Saturday?"
+      last_message: "hey you free Saturday?"
+      tone: "casual"
+      user_style: "casual"
+    assert:
+      - type: javascript
+        value: output.length < 60
+        weight: 2
+      - type: llm-rubric
+        value: "Replying to a 3-week-old message asking about Saturday. Should acknowledge the staleness or not pretend it's timely. Good: 'sorry just saw this', 'lol my bad, super late'. Bad: answering as if it's current ('yeah I'm free!')."
         weight: 3
 
 # Scoring - strategies compete on total weighted score

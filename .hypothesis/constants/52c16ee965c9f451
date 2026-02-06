@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/routers/health.py
+# hypothesis_version: 6.151.5
+
+[0.0, 2.0, 3.5, 4.0, 12.5, 256.5, 1024.0, 200, 429, 1024, '/', '/health', 'FULL', 'LITE', 'MINIMAL', 'Rate limit exceeded', 'Service is running', 'Unknown', '_loader', 'application/json', 'content', 'degraded', 'description', 'display_name', 'example', 'health', 'health_status', 'healthy', 'id', 'imessage', 'imessage_access', 'jarvis-api', 'jarvis_rss_mb', 'jarvis_vms_mb', 'loaded', 'memory', 'memory_available_gb', 'memory_mode', 'memory_usage_mb', 'memory_used_gb', 'model_info', 'model_loaded', 'ok', 'permissions_ok', 'quality_tier', 'service', 'status', 'unhealthy']

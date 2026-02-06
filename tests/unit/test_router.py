@@ -145,34 +145,51 @@ class TestReplyRouterInit:
 
 
 class TestAlwaysGenerates:
-    """Tests that all non-empty messages go through LLM generation."""
+    """Tests that non-empty messages go through LLM generation or skip for NONE pressure."""
 
     @pytest.mark.parametrize(
         "message",
         [
             "want to grab lunch?",
             "what time?",
-            "ok",
-            "thanks",
             "how are you?",
             "are you coming to the party?",
             "I'm doing well",
-            "lol",
             "The weather is nice today",
             "sounds good to me",
         ],
     )
-    def test_all_messages_generate(
+    def test_non_backchannel_messages_generate(
         self,
         router: ReplyRouter,
         mock_generator: MagicMock,
         message: str,
     ) -> None:
-        """Test that all non-empty messages route to generation."""
+        """Test that non-backchannel messages route to generation."""
         result = router.route(message)
 
         assert result["type"] == "generated"
         mock_generator.generate.assert_called()
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "ok",
+            "thanks",
+            "lol",
+        ],
+    )
+    def test_backchannel_skips_without_context(
+        self,
+        router: ReplyRouter,
+        mock_generator: MagicMock,
+        message: str,
+    ) -> None:
+        """Test that NONE-pressure messages with no search results skip generation."""
+        result = router.route(message)
+
+        assert result["type"] == "skip"
+        assert result["reason"] == "no_response_needed"
 
     def test_empty_message_clarifies(self, router: ReplyRouter) -> None:
         """Test that empty messages return clarify."""
@@ -255,9 +272,7 @@ class TestRouteGeneratePath:
             },
         ]
 
-        with patch.object(
-            router.context_service, "search_examples", return_value=search_results
-        ):
+        with patch.object(router.context_service, "search_examples", return_value=search_results):
             result = router.route("want to grab coffee?")
 
         assert result["type"] == "generated"
@@ -665,5 +680,3 @@ class TestFetchConversationContext:
 
         assert len(result) == 1
         assert "[John]: Hello" in result[0]
-
-

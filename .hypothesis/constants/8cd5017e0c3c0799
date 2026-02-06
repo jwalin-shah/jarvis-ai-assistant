@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/prefetch/cache.py
+# hypothesis_version: 6.151.5
+
+[0.0, 10.0, 300.0, 100, 300, 1000, 1024, '.jarvis', 'II', 'T', '[]', '__repr__', '_metadata.json', 'access_count', 'accessed_at', 'avg_access_count', 'bytes', 'cache', 'connection', 'created_at', 'demotions', 'entries', 'evictions', 'hit_rates', 'hits', 'json', 'key', 'l1', 'l2', 'l3', 'max_bytes', 'maxsize', 'misses', 'numpy', 'overall', 'pickle', 'prefetch_cache.db', 'promotions', 'rb', 'size_bytes', 'str', 'tags', 'tags_json', 'total_bytes', 'ttl_seconds', 'value', 'value_type', 'wb']

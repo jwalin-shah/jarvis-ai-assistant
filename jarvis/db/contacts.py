@@ -151,9 +151,7 @@ class ContactMixin:
             if row is None and ";" in chat_id:
                 identifier = chat_id.rsplit(";", 1)[-1]
                 if identifier:
-                    cursor = conn.execute(
-                        "SELECT * FROM contacts WHERE chat_id = ?", (identifier,)
-                    )
+                    cursor = conn.execute("SELECT * FROM contacts WHERE chat_id = ?", (identifier,))
                     row = cursor.fetchone()
 
             result = self._row_to_contact(row) if row else None

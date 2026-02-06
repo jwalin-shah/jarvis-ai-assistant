@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/models/generator.py
+# hypothesis_version: 6.151.5
+
+[0.0, 0.2, 0.3, 0.5, 0.6, 0.7, 5.0, 60.0, 1000, '! ', '###', '. ', '...', '? ', 'Failed to load model', 'catching_up', 'celebration', 'decision_making', 'emotional_support', 'information', 'is_final', 'logistics', 'planning', 'quick_exchange', 'stop', 'template', 'template_name', 'text', 'token', 'token_index', 'unknown', 'used_template']

@@ -14,10 +14,6 @@ Usage:
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass
-from typing import Callable
-
 import numpy as np
 
 # Test texts with ground truth
@@ -28,36 +24,30 @@ TEXTS = [
     ("I wonder what happened", "ACKNOWLEDGEABLE"),
     ("Curious how they'll handle it", "ACKNOWLEDGEABLE"),
     ("Wonder if anyone else noticed", "ACKNOWLEDGEABLE"),
-
     # Opinions/disbelief - NOT emotional reactions
     ("No way Dallas could've gotten lottery picks", "ACKNOWLEDGEABLE"),
     ("No way that's real", "ACKNOWLEDGEABLE"),
     ("No chance they win tonight", "ACKNOWLEDGEABLE"),
     ("I don't think it's gonna happen", "ACKNOWLEDGEABLE"),
     ("Doubt they'll actually do it", "ACKNOWLEDGEABLE"),
-
     # Rhetorical questions - don't expect answers
     ("Why do dads text like that", "ACKNOWLEDGEABLE"),
     ("How does that even work", "ACKNOWLEDGEABLE"),
     ("Who even says that anymore", "ACKNOWLEDGEABLE"),
-
     # Actual questions - DO expect answers
     ("What time is the game", "ANSWERABLE"),
     ("Where are you", "ANSWERABLE"),
     ("Did you get my text", "ANSWERABLE"),
     ("What happened at the meeting", "ANSWERABLE"),
-
     # Requests - DO require commitment
     ("Can you pick me up", "ACTIONABLE"),
     ("Wanna grab lunch", "ACTIONABLE"),
     ("Let me know when you're free", "ACTIONABLE"),
     ("Text me when you get there", "ACTIONABLE"),
-
     # Reactions - DO warrant emotional response
     ("Omg I got the job!!", "REACTIVE"),
     ("That's so sad", "REACTIVE"),
     ("This is amazing!!", "REACTIVE"),
-
     # Statements
     ("I went to the store", "ACKNOWLEDGEABLE"),
     ("The game starts at 7", "ACKNOWLEDGEABLE"),
@@ -156,6 +146,7 @@ HYPOTHESIS_VARIANTS = {
 def load_model(model_id: str = "cross-encoder/nli-deberta-v3-small"):
     """Load NLI model."""
     from sentence_transformers import CrossEncoder
+
     return CrossEncoder(model_id, max_length=512)
 
 
@@ -225,7 +216,9 @@ def main():
         print(f"Variant: {name}")
         print(f"{'='*70}")
         print(f"Overall: {result['accuracy']:.1%}")
-        print("By category:", ", ".join(f"{k}:{v:.0%}" for k, v in result['accuracy_by_cat'].items()))
+        print(
+            "By category:", ", ".join(f"{k}:{v:.0%}" for k, v in result["accuracy_by_cat"].items())
+        )
 
         # Show hypothesis text
         print("\nHypotheses:")
@@ -233,7 +226,11 @@ def main():
             print(f"  {cat:15s}: {h[:60]}...")
 
         # Show misclassifications on musing texts
-        musing_errors = [m for m in result['misclassifications'] if 'wonder' in m[0].lower() or 'curious' in m[0].lower()]
+        musing_errors = [
+            m
+            for m in result["misclassifications"]
+            if "wonder" in m[0].lower() or "curious" in m[0].lower()
+        ]
         if musing_errors:
             print(f"\nMusing errors ({len(musing_errors)}):")
             for text, expected, got, scores in musing_errors[:5]:
@@ -243,7 +240,7 @@ def main():
     print("\n" + "=" * 80)
     print("SUMMARY - Sorted by Accuracy")
     print("=" * 80)
-    results.sort(key=lambda x: -x['accuracy'])
+    results.sort(key=lambda x: -x["accuracy"])
 
     print(f"{'Variant':<25s} {'Overall':>10s} {'ACK':>10s} {'ANS':>10s} {'ACT':>10s} {'REA':>10s}")
     print("-" * 80)
@@ -263,13 +260,15 @@ def main():
     print(f"BEST: {best['name']} ({best['accuracy']:.1%})")
     print(f"{'='*80}")
     print("Hypotheses:")
-    for cat, h in HYPOTHESIS_VARIANTS[best['name']].items():
+    for cat, h in HYPOTHESIS_VARIANTS[best["name"]].items():
         print(f"  {cat}: {h}")
 
-    if best['misclassifications']:
+    if best["misclassifications"]:
         print(f"\nRemaining misclassifications ({len(best['misclassifications'])}):")
-        for text, expected, got, scores in best['misclassifications']:
-            score_str = ", ".join(f"{k[:3]}:{v:.2f}" for k, v in sorted(scores.items(), key=lambda x: -x[1])[:2])
+        for text, expected, got, scores in best["misclassifications"]:
+            score_str = ", ".join(
+                f"{k[:3]}:{v:.2f}" for k, v in sorted(scores.items(), key=lambda x: -x[1])[:2]
+            )
             print(f"  '{text[:45]:<45s}' exp={expected:14s} got={got:14s} [{score_str}]")
 
 

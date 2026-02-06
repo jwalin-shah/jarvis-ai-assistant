@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/api/schemas/system.py
+# hypothesis_version: 6.151.5
+
+[0.0, 3.5, 4.0, 8.0, 12.5, 16.0, 32.0, 256.5, 450.5, 512.0, 1024.0, 2048.0, 1024, 2048, 'FULL', 'Failed to load model', 'LITE', 'MDL_LOAD_FAILED', 'MINIMAL', 'MSG_ACCESS_DENIED', 'ModelLoadError', 'Qwen 0.5B (Fast)', 'Qwen 1.5B (Balanced)', 'VAL_INVALID_INPUT', 'ValidationError', 'available_mb', 'basic', 'best', 'code', 'degraded', 'detail', 'details', 'display_name', 'email', 'error', 'example', 'field', 'good', 'healthy', 'iMessageAccessError', 'id', 'imessage', 'imessage_access', 'jarvis_rss_mb', 'jarvis_vms_mb', 'loaded', 'memory_available_gb', 'memory_mode', 'memory_usage_mb', 'memory_used_gb', 'model', 'model_loaded', 'permissions_ok', 'quality_tier', 'recommended_model', 'required_mb', 'status', 'system_ram_gb', 'unhealthy']

@@ -222,7 +222,7 @@ class PrefetchExecutor:
             tick_interval: How often to check for tasks (seconds).
         """
         self._cache = cache or get_cache()
-        self._max_workers = max_workers or (os.cpu_count() or 4)
+        self._max_workers = max_workers or 2
         self._max_queue_size = max_queue_size
         self._tick_interval = tick_interval
 

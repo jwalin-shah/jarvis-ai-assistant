@@ -29,6 +29,7 @@ def get_memory_mb() -> float:
     """Get current process memory usage in MB."""
     try:
         import psutil
+
         process = psutil.Process()
         return process.memory_info().rss / 1024 / 1024
     except ImportError:
@@ -129,7 +130,7 @@ def benchmark_model(
     verbose: bool = True,
 ) -> dict:
     """Benchmark a single model configuration."""
-    from jarvis.classifiers.zeroshot_nli import SpeechActClassifier, NLI_MODELS
+    from jarvis.classifiers.zeroshot_nli import NLI_MODELS, SpeechActClassifier
 
     # Clear any cached models
     gc.collect()
@@ -180,7 +181,7 @@ def benchmark_model(
 
     # Show sample classifications
     if verbose:
-        print(f"\nSample classifications:")
+        print("\nSample classifications:")
         samples = [
             "Can you pick me up?",
             "I'll be there at 5",
@@ -217,11 +218,13 @@ def benchmark_all_models(n_runs: int = 2) -> None:
     for model_name, multi in test_configs:
         try:
             stats = benchmark_model(model_name, multi_hypothesis=multi, n_runs=n_runs)
-            results.append({
-                "model": model_name,
-                "multi": multi,
-                **stats,
-            })
+            results.append(
+                {
+                    "model": model_name,
+                    "multi": multi,
+                    **stats,
+                }
+            )
         except Exception as e:
             print(f"Error with {model_name}: {e}")
 
@@ -230,11 +233,13 @@ def benchmark_all_models(n_runs: int = 2) -> None:
         gc.collect()
 
     # Summary table
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("SUMMARY")
-    print("="*80)
-    print(f"{'Model':<15} {'Multi':<6} {'Load(ms)':<10} {'Mean(ms)':<10} {'P95(ms)':<10} {'Mem(MB)':<10}")
-    print("-"*80)
+    print("=" * 80)
+    print(
+        f"{'Model':<15} {'Multi':<6} {'Load(ms)':<10} {'Mean(ms)':<10} {'P95(ms)':<10} {'Mem(MB)':<10}"
+    )
+    print("-" * 80)
     for r in results:
         print(
             f"{r['model']:<15} "
@@ -248,7 +253,7 @@ def benchmark_all_models(n_runs: int = 2) -> None:
 
 def show_detailed_results(model_name: str, multi: bool = False) -> None:
     """Show detailed classification results for all sample texts."""
-    from jarvis.classifiers.zeroshot_nli import SpeechActClassifier, SpeechAct
+    from jarvis.classifiers.zeroshot_nli import SpeechAct, SpeechActClassifier
 
     classifier = SpeechActClassifier(model_name=model_name, multi_hypothesis=multi)
 
@@ -283,7 +288,7 @@ def show_detailed_results(model_name: str, multi: bool = False) -> None:
 
 def compare_hypotheses(model_name: str = "xsmall") -> None:
     """Compare single vs multi hypothesis performance."""
-    from jarvis.classifiers.zeroshot_nli import SpeechActClassifier, SpeechAct
+    from jarvis.classifiers.zeroshot_nli import SpeechAct, SpeechActClassifier
 
     print(f"\n{'='*60}")
     print(f"Comparing Single vs Multi Hypothesis ({model_name})")
@@ -311,14 +316,18 @@ def compare_hypotheses(model_name: str = "xsmall") -> None:
             total += 1
 
             if single_result.act != multi_result.act:
-                disagreements.append({
-                    "text": text,
-                    "expected": expected_act.value,
-                    "single": single_result.act.value,
-                    "multi": multi_result.act.value,
-                })
+                disagreements.append(
+                    {
+                        "text": text,
+                        "expected": expected_act.value,
+                        "single": single_result.act.value,
+                        "multi": multi_result.act.value,
+                    }
+                )
 
-    print(f"\nSingle-hypothesis accuracy: {single_correct}/{total} ({100*single_correct/total:.1f}%)")
+    print(
+        f"\nSingle-hypothesis accuracy: {single_correct}/{total} ({100*single_correct/total:.1f}%)"
+    )
     print(f"Multi-hypothesis accuracy:  {multi_correct}/{total} ({100*multi_correct/total:.1f}%)")
     print(f"\nDisagreements: {len(disagreements)}")
 
@@ -327,42 +336,28 @@ def compare_hypotheses(model_name: str = "xsmall") -> None:
         for d in disagreements[:10]:
             exp_marker = lambda x: "✓" if x == d["expected"] else "✗"
             print(f"  '{d['text'][:35]:<35}' expected={d['expected']}")
-            print(f"      single={d['single']} {exp_marker(d['single'])}, multi={d['multi']} {exp_marker(d['multi'])}")
+            print(
+                f"      single={d['single']} {exp_marker(d['single'])}, multi={d['multi']} {exp_marker(d['multi'])}"
+            )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark NLI speech act classifiers")
     parser.add_argument(
-        "--model", "-m",
+        "--model",
+        "-m",
         default="xsmall",
-        help="Model to benchmark (xsmall, mini, distil, base, large, bart)"
+        help="Model to benchmark (xsmall, mini, distil, base, large, bart)",
+    )
+    parser.add_argument("--multi", "-M", action="store_true", help="Use multi-hypothesis mode")
+    parser.add_argument("--all", "-a", action="store_true", help="Benchmark all models")
+    parser.add_argument(
+        "--detailed", "-d", action="store_true", help="Show detailed per-text results"
     )
     parser.add_argument(
-        "--multi", "-M",
-        action="store_true",
-        help="Use multi-hypothesis mode"
+        "--compare", "-c", action="store_true", help="Compare single vs multi hypothesis"
     )
-    parser.add_argument(
-        "--all", "-a",
-        action="store_true",
-        help="Benchmark all models"
-    )
-    parser.add_argument(
-        "--detailed", "-d",
-        action="store_true",
-        help="Show detailed per-text results"
-    )
-    parser.add_argument(
-        "--compare", "-c",
-        action="store_true",
-        help="Compare single vs multi hypothesis"
-    )
-    parser.add_argument(
-        "--runs", "-n",
-        type=int,
-        default=3,
-        help="Number of benchmark runs"
-    )
+    parser.add_argument("--runs", "-n", type=int, default=3, help="Number of benchmark runs")
 
     args = parser.parse_args()
 

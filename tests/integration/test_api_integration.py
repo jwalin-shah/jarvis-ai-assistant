@@ -506,9 +506,9 @@ class TestConfigMigrationEdgeCases:
                 json.dump(v2_config, f)
 
             config = load_config(config_file)
-            assert config.model.model_id == expected_model_id, (
-                f"Expected {expected_model_id} for {model_path}"
-            )
+            assert (
+                config.model.model_id == expected_model_id
+            ), f"Expected {expected_model_id} for {model_path}"
 
     def test_corrupted_json_returns_defaults(self, tmp_path):
         """Corrupted JSON file returns default configuration."""

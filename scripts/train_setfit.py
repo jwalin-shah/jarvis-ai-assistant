@@ -1064,7 +1064,8 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("NEXT STEPS")
     print("=" * 70)
-    print("""
+    print(
+        """
 1. Review results - did fine-tuning improve F1 scores?
    All models have been saved to: ~/.jarvis/models/setfit-{classifier}-{model}/
 
@@ -1075,7 +1076,8 @@ def main() -> None:
    - Increase epochs (try 2-3) for better convergence
    - Increase iterations (try 30-50) for more contrastive pairs
    - Add more training data if available
-""")
+"""
+    )
 
 
 if __name__ == "__main__":

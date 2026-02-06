@@ -632,18 +632,45 @@ class RelationshipClassifier:
     # Display name -> relationship mappings (checked case-insensitively)
     _DISPLAY_NAME_SIGNALS: dict[str, list[str]] = {
         "family": [
-            "mom", "dad", "mother", "father", "mama", "papa",
-            "sis", "bro", "brother", "sister",
-            "grandma", "grandpa", "grandmother", "grandfather",
-            "aunt", "uncle", "cousin",
-            "wife", "husband",
+            "mom",
+            "dad",
+            "mother",
+            "father",
+            "mama",
+            "papa",
+            "sis",
+            "bro",
+            "brother",
+            "sister",
+            "grandma",
+            "grandpa",
+            "grandmother",
+            "grandfather",
+            "aunt",
+            "uncle",
+            "cousin",
+            "wife",
+            "husband",
             # Indian family terms
-            "nana", "nani", "dadi", "dada",
-            "masi", "mausi", "chacha", "bua", "taya",
+            "nana",
+            "nani",
+            "dadi",
+            "dada",
+            "masi",
+            "mausi",
+            "chacha",
+            "bua",
+            "taya",
         ],
         "romantic partner": [
-            "babe", "baby", "bae", "love", "honey",
-            "sweetheart", "hubby", "wifey",
+            "babe",
+            "baby",
+            "bae",
+            "love",
+            "honey",
+            "sweetheart",
+            "hubby",
+            "wifey",
         ],
     }
 
@@ -759,9 +786,7 @@ class RelationshipClassifier:
         with _cache_lock:
             if len(_classification_cache) >= _CLASSIFICATION_CACHE_MAX_SIZE:
                 # Evict oldest entry
-                oldest_key = min(
-                    _classification_cache, key=lambda k: _classification_cache[k][0]
-                )
+                oldest_key = min(_classification_cache, key=lambda k: _classification_cache[k][0])
                 del _classification_cache[oldest_key]
             _classification_cache[chat_id] = (now, result)
 

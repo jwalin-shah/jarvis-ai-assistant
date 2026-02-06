@@ -285,12 +285,14 @@ class FeedbackStore:
                                 raise
 
             # Create version tracking table if needed
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS feedback_schema_version (
                     version INTEGER PRIMARY KEY,
                     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
             conn.execute(
                 "INSERT OR REPLACE INTO feedback_schema_version (version) VALUES (?)",
                 (FEEDBACK_SCHEMA_VERSION,),

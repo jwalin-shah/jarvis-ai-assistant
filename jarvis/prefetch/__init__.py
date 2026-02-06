@@ -167,6 +167,7 @@ class PrefetchManager:
         prediction_interval: float = 5.0,  # How often to generate predictions
         cleanup_interval: float = 60.0,  # How often to cleanup expired entries
         warmup_on_start: bool = True,  # Run startup warmup
+        startup_delay: float = 10.0,  # Delay before first prediction cycle
     ) -> None:
         """Initialize the prefetch manager.
 
@@ -174,6 +175,7 @@ class PrefetchManager:
             prediction_interval: Seconds between prediction cycles.
             cleanup_interval: Seconds between cache cleanup.
             warmup_on_start: Whether to run startup warming.
+            startup_delay: Seconds to wait before first prediction cycle.
         """
         self._cache = get_cache()
         self._predictor = get_predictor()
@@ -183,6 +185,7 @@ class PrefetchManager:
         self._prediction_interval = prediction_interval
         self._cleanup_interval = cleanup_interval
         self._warmup_on_start = warmup_on_start
+        self._startup_delay = startup_delay
 
         self._running = False
         self._prediction_thread: threading.Thread | None = None
@@ -400,6 +403,10 @@ class PrefetchManager:
 
     def _prediction_loop(self) -> None:
         """Background prediction loop."""
+        if self._startup_delay > 0:
+            logger.info(f"Delaying first prediction cycle by {self._startup_delay}s")
+            self._shutdown_event.wait(self._startup_delay)
+
         while not self._shutdown_event.is_set():
             try:
                 # Generate predictions
@@ -473,10 +480,6 @@ class PrefetchManager:
         ]
 
         self._executor.schedule_batch(warmup_predictions)
-
-        # Also run initial predictions
-        predictions = self._predictor.predict()
-        self._executor.schedule_batch(predictions)
 
 
 # Singleton instance

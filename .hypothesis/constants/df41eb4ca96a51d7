@@ -1,0 +1,4 @@
+# file: /Users/jwalinshah/projects/jarvis-ai-assistant/jarvis/db/index_versions.py
+# hypothesis_version: 6.151.5
+
+['created_at', 'embedding_dim', 'id', 'index_path', 'is_active', 'model_name', 'num_vectors', 'version_id']
