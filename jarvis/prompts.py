@@ -12,11 +12,13 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.contacts.contact_profile_context import ContactProfileContext
 
 if TYPE_CHECKING:
+    from jarvis.classifiers.response_mobilization import MobilizationResult
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
 
@@ -315,8 +317,12 @@ QUICK_EXCHANGE_THREAD_EXAMPLES: list[FewShotExample] = [
 # Thread examples organized by topic for the registry
 THREAD_EXAMPLES: dict[str, list[FewShotExample]] = {
     "logistics": LOGISTICS_THREAD_EXAMPLES,
-    "emotional_support": EMOTIONAL_SUPPORT_THREAD_EXAMPLES,
+    "warm": EMOTIONAL_SUPPORT_THREAD_EXAMPLES,
     "planning": PLANNING_THREAD_EXAMPLES,
+    "social": CATCHING_UP_THREAD_EXAMPLES,
+    "brief": QUICK_EXCHANGE_THREAD_EXAMPLES,
+    # Legacy aliases for thread topic enum values
+    "emotional_support": EMOTIONAL_SUPPORT_THREAD_EXAMPLES,
     "catching_up": CATCHING_UP_THREAD_EXAMPLES,
     "quick_exchange": QUICK_EXCHANGE_THREAD_EXAMPLES,
 }
@@ -1112,16 +1118,20 @@ def _get_thread_examples(topic_name: str) -> list[FewShotExample]:
     topic_map = {
         "logistics": "logistics",
         "planning": "planning",
-        "catching_up": "catching_up",
-        "emotional_support": "emotional_support",
-        "quick_exchange": "quick_exchange",
+        "social": "social",
+        "catching_up": "social",
+        "warm": "warm",
+        "emotional_support": "warm",
+        "brief": "brief",
+        "quick_exchange": "brief",
         "information": "logistics",  # Use logistics as fallback
         "decision_making": "planning",  # Similar to planning
-        "celebration": "catching_up",  # Similar tone
-        "unknown": "catching_up",  # Default to conversational
+        "celebration": "social",  # Similar tone
+        "unknown": "social",  # Default to conversational
+        "clarify": "social",  # Clarify uses social examples as fallback
     }
 
-    key = topic_map.get(topic_name, "catching_up")
+    key = topic_map.get(topic_name, "social")
     return THREAD_EXAMPLES.get(key, CATCHING_UP_THREAD_EXAMPLES)
 
 
@@ -1321,7 +1331,8 @@ def get_thread_max_tokens(config: ThreadedReplyConfig) -> int:
 # Static system prefix for KV cache reuse. This block is identical across all
 # contacts/messages so the KV cache computed for it can be shared.
 SYSTEM_PREFIX = """<system>
-You draft text message replies matching the sender's exact style.
+You are NOT an AI assistant. You are replying to a text message from your phone.
+Just text back. No helpfulness, no formality, no assistant behavior.
 Rules:
 - Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
 - Sound natural, never like an AI
@@ -1334,9 +1345,13 @@ Rules:
 
 RAG_REPLY_PROMPT = PromptTemplate(
     name="rag_reply_generation",
-    system_message=("You draft text message replies matching the sender's exact style."),
+    system_message=(
+        "You are NOT an AI assistant. You are replying to a text message from your phone. "
+        "Just text back. No helpfulness, no formality, no assistant behavior."
+    ),
     template="""<system>
-You draft text message replies matching the sender's exact style.
+You are NOT an AI assistant. You are replying to a text message from your phone.
+Just text back. No helpfulness, no formality, no assistant behavior.
 Rules:
 - Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
 - Sound natural, never like an AI
@@ -1636,6 +1651,201 @@ def build_rag_reply_prompt_from_embeddings(
         contact_context=contact_context,
         instruction=instruction,
     )
+
+
+# =============================================================================
+# DSPy-Optimized Per-Category Prompt Loader
+# =============================================================================
+
+
+@dataclass
+class OptimizedCategoryProgram:
+    """Loaded optimized program for a specific category.
+
+    Attributes:
+        category: The response category name
+        instruction: Optimized instruction text from MIPRO v2
+        demos: Few-shot demo examples [(context, reply), ...]
+    """
+
+    category: str
+    instruction: str
+    demos: list[tuple[str, str]]
+
+
+# Cache of loaded programs
+_optimized_programs: dict[str, OptimizedCategoryProgram] | None = None
+
+# Path to per-category compiled programs
+_CATEGORY_DIR = Path(__file__).parent.parent / "evals" / "optimized_categories"
+
+
+def _load_optimized_programs() -> dict[str, OptimizedCategoryProgram]:
+    """Load all per-category optimized programs from disk.
+
+    Reads DSPy compiled JSON files and extracts the instruction text
+    and few-shot demonstrations for each category.
+
+    Returns:
+        Dict mapping category name -> OptimizedCategoryProgram
+    """
+    programs: dict[str, OptimizedCategoryProgram] = {}
+
+    if not _CATEGORY_DIR.exists():
+        return programs
+
+    import json as _json
+
+    for path in _CATEGORY_DIR.glob("optimized_*.json"):
+        category = path.stem.replace("optimized_", "")
+        try:
+            data = _json.loads(path.read_text())
+
+            # Extract instruction from DSPy compiled program format
+            # DSPy saves programs as {"generate": {"lm": null, "traces": [...], ...}}
+            instruction = ""
+            demos: list[tuple[str, str]] = []
+
+            # Navigate DSPy's saved format to find instruction and demos
+            generate_data = data.get("generate", data)
+
+            # Try to extract instruction from extended_signature or signature
+            if "extended_signature_instructions" in generate_data:
+                instruction = generate_data["extended_signature_instructions"]
+            elif "signature_instructions" in generate_data:
+                instruction = generate_data["signature_instructions"]
+
+            # Extract demos from the compiled program
+            for demo in generate_data.get("demos", []):
+                ctx = demo.get("context", "")
+                reply = demo.get("reply", demo.get("output", ""))
+                if ctx and reply:
+                    demos.append((ctx, reply))
+
+            programs[category] = OptimizedCategoryProgram(
+                category=category,
+                instruction=instruction,
+                demos=demos,
+            )
+        except Exception:
+            # Skip malformed files silently
+            continue
+
+    return programs
+
+
+def get_optimized_program(category: str) -> OptimizedCategoryProgram | None:
+    """Get the optimized program for a category, loading from disk on first call.
+
+    Args:
+        category: Category name (quick_exchange, emotional_support, etc.)
+
+    Returns:
+        OptimizedCategoryProgram if found, None otherwise
+    """
+    global _optimized_programs
+    if _optimized_programs is None:
+        _optimized_programs = _load_optimized_programs()
+    return _optimized_programs.get(category)
+
+
+def get_optimized_examples(category: str) -> list[FewShotExample]:
+    """Get DSPy-optimized examples for a category, falling back to static ones.
+
+    If a compiled program exists for the category, returns its optimized demos.
+    Otherwise returns the static THREAD_EXAMPLES for that category.
+
+    Args:
+        category: Category name matching THREAD_EXAMPLES keys
+
+    Returns:
+        List of FewShotExample objects
+    """
+    program = get_optimized_program(category)
+    if program and program.demos:
+        return [FewShotExample(context=ctx, output=reply) for ctx, reply in program.demos]
+    # Fallback to static examples
+    return THREAD_EXAMPLES.get(category, CATCHING_UP_THREAD_EXAMPLES)
+
+
+# Legacy aliases for backward compatibility
+EMOTIONAL_SUPPORT_EXAMPLES = EMOTIONAL_SUPPORT_THREAD_EXAMPLES
+CATCHING_UP_EXAMPLES = CATCHING_UP_THREAD_EXAMPLES
+QUICK_EXCHANGE_EXAMPLES = QUICK_EXCHANGE_THREAD_EXAMPLES
+
+
+def get_optimized_instruction(category: str) -> str | None:
+    """Get the MIPRO v2-optimized instruction prefix for a category.
+
+    Args:
+        category: Category name
+
+    Returns:
+        Optimized instruction string, or None if no compiled program exists
+    """
+    program = get_optimized_program(category)
+    if program and program.instruction:
+        return program.instruction
+    return None
+
+
+# Category mapping: map runtime signals to optimization categories
+CATEGORY_MAP: dict[str, str] = {
+    # Short transactional
+    "brief": "brief",
+    "quick_exchange": "brief",
+    "logistics": "brief",
+    # Emotional weight
+    "warm": "warm",
+    "emotional_support": "warm",
+    # Casual conversational (default)
+    "social": "social",
+    "catching_up": "social",
+    "planning": "social",
+    "celebration": "social",
+    "professional": "brief",
+    # Ambiguous / low context
+    "clarify": "clarify",
+    "edge_case": "clarify",
+    "unknown": "clarify",
+    "information": "clarify",
+}
+
+
+def resolve_category(
+    last_message: str,
+    context: list[str] | None = None,
+    tone: str = "casual",
+    mobilization: MobilizationResult | None = None,
+) -> str:
+    """Classify a message into an optimization category.
+
+    Uses the SVM-based category classifier when available, falling back
+    to the static CATEGORY_MAP for graceful degradation.
+
+    Args:
+        last_message: The incoming message text.
+        context: Recent conversation messages.
+        tone: Detected tone (casual/professional/mixed).
+        mobilization: Pre-computed mobilization result.
+
+    Returns:
+        Optimization category name.
+    """
+    try:
+        from jarvis.classifiers.category_classifier import classify_category
+
+        result = classify_category(last_message, context=context, mobilization=mobilization)
+        return result.category
+    except Exception:
+        # Graceful fallback to static mapping
+        return CATEGORY_MAP.get(tone, "social")
+
+
+def reset_optimized_programs() -> None:
+    """Reset the cached optimized programs (for testing)."""
+    global _optimized_programs
+    _optimized_programs = None
 
 
 # =============================================================================
