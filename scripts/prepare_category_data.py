@@ -165,7 +165,9 @@ def load_dailydialog() -> list[dict]:
     from datasets import load_dataset
 
     print("Loading DailyDialog...")
-    ds = load_dataset("li2017dailydialog/daily_dialog", split="train")
+    # Use OpenRL parquet mirror (original li2017dailydialog repo requires
+    # deprecated dataset scripts, incompatible with datasets>=4.0)
+    ds = load_dataset("OpenRL/daily_dialog", split="train")
     print(f"  {len(ds)} dialogues loaded")
 
     examples: list[dict] = []
@@ -281,7 +283,8 @@ def load_samsum_with_labels(
     from evals.judge_config import JUDGE_API_KEY_ENV, JUDGE_BASE_URL
 
     print("Loading SAMSum...")
-    ds = load_dataset("Samsung/samsum", split="train")
+    # Use knkarthick mirror (Samsung/samsum gated/unavailable on datasets>=4.0)
+    ds = load_dataset("knkarthick/samsum", split="train")
     print(f"  {len(ds)} conversations loaded")
 
     # Extract all per-turn examples first
@@ -548,7 +551,7 @@ def prepare_data(
     label_map = {label: i for i, label in enumerate(labels)}
 
     metadata = {
-        "sources": ["li2017dailydialog/daily_dialog", "Samsung/samsum"],
+        "sources": ["OpenRL/daily_dialog", "knkarthick/samsum"],
         "categories": sorted(VALID_CATEGORIES),
         "labeling_methods": {
             "dailydialog": "mechanical (act+emotion mapping)",
