@@ -3,7 +3,7 @@
 
 Runs the local MLX model against test cases from promptfoo.yaml,
 checks local assertions (length, anti-AI phrases), then scores each
-response with Cerebras Qwen3-235B as an LLM judge.
+response with Gemini 2.5 Flash via DeepInfra as an LLM judge.
 
 Usage:
     uv run python evals/batch_eval.py              # local checks only
@@ -35,8 +35,7 @@ if _env_path.exists():
 # Constants
 # ---------------------------------------------------------------------------
 
-CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
-JUDGE_MODEL = "qwen-3-235b-a22b-instruct-2507"
+from evals.judge_config import JUDGE_MODEL, get_judge_client as _get_judge_client  # noqa: E402
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",
@@ -50,10 +49,22 @@ ANTI_AI_PHRASES = [
     "great question",
 ]
 
-# Test cases mirrored from promptfoo.yaml
+# Category definitions for per-category MIPRO v2 optimization
+CATEGORIES = [
+    "brief",
+    "warm",
+    "social",
+    "clarify",
+]
+
+# Test cases with category labels for per-category optimization
 TEST_CASES = [
+    # =========================================================================
+    # brief: Short transactional replies (12 cases: 7 casual + 5 professional)
+    # =========================================================================
     {
         "name": "Lunch invitation",
+        "category": "brief",
         "context": "[14:00] John: Want to grab lunch tomorrow?",
         "last_message": "Want to grab lunch tomorrow?",
         "tone": "casual",
@@ -69,6 +80,7 @@ TEST_CASES = [
     },
     {
         "name": "Running late",
+        "category": "brief",
         "context": "[09:15] Alex: Running 10 min late",
         "last_message": "Running 10 min late",
         "tone": "casual",
@@ -81,23 +93,8 @@ TEST_CASES = [
         ),
     },
     {
-        "name": "Emotional support - venting",
-        "context": (
-            "[20:00] Mike: Work was brutal today\n"
-            "[20:01] Mike: Boss dumped a project on me last minute"
-        ),
-        "last_message": "Boss dumped a project on me last minute",
-        "tone": "casual",
-        "user_style": "empathetic friend",
-        "banned": ["have you tried", "you should"],
-        "rubric": (
-            "Is this empathetic without giving unsolicited advice? "
-            "Good: 'that sucks', 'ugh sorry'. "
-            "Bad: 'have you tried...', 'you should...', therapist-speak."
-        ),
-    },
-    {
         "name": "Simple yes/no - trash",
+        "category": "brief",
         "context": "[15:00] Dad: Did you take out the trash?",
         "last_message": "Did you take out the trash?",
         "tone": "casual",
@@ -111,6 +108,7 @@ TEST_CASES = [
     },
     {
         "name": "Group chat confirmation",
+        "category": "brief",
         "context": (
             "[Group: Game Night]\n"
             "[14:00] Jake: 7pm Saturday work?\n"
@@ -128,7 +126,134 @@ TEST_CASES = [
         ),
     },
     {
+        "name": "Quick favor - pickup",
+        "category": "brief",
+        "context": "[17:30] Mom: Can you pick up milk on your way home?",
+        "last_message": "Can you pick up milk on your way home?",
+        "tone": "casual",
+        "user_style": "brief, agreeable",
+        "max_words": 10,
+        "rubric": (
+            "Is this a quick confirmation to a simple favor request? "
+            "Good: 'sure thing', 'yep', 'on it'. "
+            "Bad: asking for details, long response, overly enthusiastic."
+        ),
+    },
+    {
+        "name": "ETA check",
+        "category": "brief",
+        "context": "[19:00] Jake: you close?",
+        "last_message": "you close?",
+        "tone": "casual",
+        "user_style": "brief",
+        "max_words": 8,
+        "max_chars": 40,
+        "rubric": (
+            "Quick reply to 'you close?' asking about arrival. "
+            "Good: 'yeah 5 min', 'almost there', 'pulling up'. "
+            "Bad: long explanation, formal response."
+        ),
+    },
+    {
+        "name": "Confirmation - address",
+        "category": "brief",
+        "context": "[12:00] Sarah: 123 Main St right?",
+        "last_message": "123 Main St right?",
+        "tone": "casual",
+        "user_style": "direct",
+        "max_words": 6,
+        "rubric": (
+            "Confirm or correct an address. "
+            "Good: 'yep that's it', 'yeah', 'no it's 125'. "
+            "Bad: long explanation, repeating the full address formally."
+        ),
+    },
+    # =========================================================================
+    # warm: Emotional weight - comfort or celebrate (5 cases)
+    # =========================================================================
+    {
+        "name": "Emotional support - venting",
+        "category": "warm",
+        "context": (
+            "[20:00] Mike: Work was brutal today\n"
+            "[20:01] Mike: Boss dumped a project on me last minute"
+        ),
+        "last_message": "Boss dumped a project on me last minute",
+        "tone": "casual",
+        "user_style": "empathetic friend",
+        "banned": ["have you tried", "you should"],
+        "rubric": (
+            "Is this empathetic without giving unsolicited advice? "
+            "Good: 'that sucks', 'ugh sorry'. "
+            "Bad: 'have you tried...', 'you should...', therapist-speak."
+        ),
+    },
+    {
+        "name": "Emotional support - breakup",
+        "category": "warm",
+        "context": (
+            "[22:00] Sarah: Mark and I broke up\n[22:01] Sarah: I don't even know what happened"
+        ),
+        "last_message": "I don't even know what happened",
+        "tone": "casual",
+        "user_style": "warm, supportive",
+        "banned": ["you'll find someone", "plenty of fish", "you should"],
+        "rubric": (
+            "Is this supportive without minimizing or giving cliched advice? "
+            "Good: 'I'm so sorry', 'that's rough, I'm here for you'. "
+            "Bad: 'you'll find someone better', platitudes, therapist-speak."
+        ),
+    },
+    {
+        "name": "Emotional support - bad news",
+        "category": "warm",
+        "context": "[15:00] John: Didn't get the job. Thought the interview went well",
+        "last_message": "Didn't get the job. Thought the interview went well",
+        "tone": "casual",
+        "user_style": "empathetic, brief",
+        "banned": ["everything happens for a reason", "you should"],
+        "rubric": (
+            "Empathetic response to job rejection. "
+            "Good: 'damn that sucks', 'their loss honestly'. "
+            "Bad: toxic positivity, unsolicited advice, long pep talk."
+        ),
+    },
+    {
+        "name": "Emotional support - health worry",
+        "category": "warm",
+        "context": (
+            "[11:00] Mom: Doctor wants to run more tests\n[11:02] Mom: Trying not to worry"
+        ),
+        "last_message": "Trying not to worry",
+        "tone": "casual",
+        "user_style": "caring, reassuring",
+        "banned": ["i'm sure it's nothing", "don't worry"],
+        "rubric": (
+            "Supportive response to a parent's health worry. "
+            "Good: 'I'm here for you', 'let me know what they say'. "
+            "Bad: dismissing worry ('it's probably nothing'), medical advice."
+        ),
+    },
+    {
+        "name": "Emotional support - stressed",
+        "category": "warm",
+        "context": "[23:00] Alex: Can't sleep. Too much on my mind",
+        "last_message": "Can't sleep. Too much on my mind",
+        "tone": "casual",
+        "user_style": "gentle, supportive",
+        "banned": ["have you tried", "you should try"],
+        "rubric": (
+            "Late night support for a stressed friend. "
+            "Good: 'wanna talk about it?', 'I'm up if you need to vent'. "
+            "Bad: sleep advice, telling them to relax, dismissive."
+        ),
+    },
+    # =========================================================================
+    # brief (professional tone): Formal tone handled by detect_tone() (5 cases)
+    # =========================================================================
+    {
         "name": "Professional - report request",
+        "category": "brief",
         "context": "[09:00] Manager: Can you send the Q4 report by EOD?",
         "last_message": "Can you send the Q4 report by EOD?",
         "tone": "professional",
@@ -141,19 +266,70 @@ TEST_CASES = [
         ),
     },
     {
-        "name": "Ambiguous question mark",
-        "context": "[11:00] Chris: ?",
-        "last_message": "?",
-        "tone": "casual",
-        "user_style": "casual",
+        "name": "Professional - meeting reschedule",
+        "category": "brief",
+        "context": "[10:00] Client: Need to push our 2pm to Thursday. Does that work?",
+        "last_message": "Need to push our 2pm to Thursday. Does that work?",
+        "tone": "professional",
+        "user_style": "polite, concise",
+        "banned": ["lol", "haha", "gonna"],
         "rubric": (
-            "Reply to just a '?' with no context. Should ask for clarification briefly. "
-            "Good: 'what's up?', '??', 'hm?'. "
-            "Bad: long response, assuming what they mean."
+            "Professional response to a meeting reschedule. "
+            "Good: 'Thursday works for me', 'Sure, same time?'. "
+            "Bad: too casual, overly formal, long response."
         ),
     },
     {
+        "name": "Professional - project update",
+        "category": "brief",
+        "context": (
+            "[14:00] Manager: How's the migration project coming along?\n"
+            "[14:01] Manager: Board wants an update Friday"
+        ),
+        "last_message": "Board wants an update Friday",
+        "tone": "professional",
+        "user_style": "clear, status-oriented",
+        "banned": ["lol", "dude"],
+        "rubric": (
+            "Professional status update response. "
+            "Good: 'On track. I'll prep a summary for Friday.', 'Will have slides ready'. "
+            "Bad: vague, too casual, overly long."
+        ),
+    },
+    {
+        "name": "Professional - thank you",
+        "category": "brief",
+        "context": "[16:00] Colleague: Thanks for covering the call today, really helped",
+        "last_message": "Thanks for covering the call today, really helped",
+        "tone": "professional",
+        "user_style": "warm professional",
+        "banned": ["lol", "np bro"],
+        "rubric": (
+            "Acknowledge thanks from a colleague professionally but warmly. "
+            "Good: 'Happy to help', 'Of course, anytime'. "
+            "Bad: too casual, dismissive, overly formal."
+        ),
+    },
+    {
+        "name": "Professional - deadline question",
+        "category": "brief",
+        "context": "[11:30] HR: When can you have the compliance training done?",
+        "last_message": "When can you have the compliance training done?",
+        "tone": "professional",
+        "user_style": "direct, professional",
+        "banned": ["lol", "idk"],
+        "rubric": (
+            "Professional response to a deadline question. "
+            "Good: 'I'll have it done by end of week', 'Can finish by Wednesday'. "
+            "Bad: vague, too casual, no commitment."
+        ),
+    },
+    # =========================================================================
+    # social: Casual conversational (6 cases)
+    # =========================================================================
+    {
         "name": "Photo reaction",
+        "category": "social",
         "context": "[16:00] Emma: [Photo]\n[16:00] Emma: Look at this view!",
         "last_message": "Look at this view!",
         "tone": "casual",
@@ -167,6 +343,7 @@ TEST_CASES = [
     },
     {
         "name": "Weekend plans",
+        "category": "social",
         "context": "[18:30] Sam: Any plans this weekend?",
         "last_message": "Any plans this weekend?",
         "tone": "casual",
@@ -180,7 +357,81 @@ TEST_CASES = [
         ),
     },
     {
+        "name": "Inside joke / unknown reference",
+        "category": "social",
+        "context": "[14:00] Tom: lmao remember the thing",
+        "last_message": "lmao remember the thing",
+        "tone": "casual",
+        "user_style": "casual bro",
+        "max_chars": 40,
+        "rubric": (
+            "Reply to an inside joke reference ('the thing') that the model can't "
+            "possibly know. Should NOT pretend to know. "
+            "Good: 'lol which thing', 'haha yes', 'omg yes'. "
+            "Bad: making up a specific memory, detailed response about 'the thing'."
+        ),
+    },
+    {
+        "name": "Long time no talk",
+        "category": "social",
+        "context": "[19:00] College Friend: Dude it's been forever! How are you??",
+        "last_message": "Dude it's been forever! How are you??",
+        "tone": "casual",
+        "user_style": "warm, conversational",
+        "max_chars": 120,
+        "rubric": (
+            "Warm response to a friend reaching out after a long time. "
+            "Good: 'I know right! I'm good, how about you?'. "
+            "Bad: formal, distant, overly detailed life update."
+        ),
+    },
+    {
+        "name": "Travel flex",
+        "category": "social",
+        "context": "[10:00] Lisa: Just landed in Tokyo!!",
+        "last_message": "Just landed in Tokyo!!",
+        "tone": "casual",
+        "user_style": "excited, enthusiastic",
+        "banned": ["i hope you", "have a wonderful"],
+        "rubric": (
+            "Excited response to a friend's travel announcement. "
+            "Good: 'omg so jealous!', 'yesss enjoy!', 'send pics!'. "
+            "Bad: formal wishes, travel advice, assistant-like response."
+        ),
+    },
+    {
+        "name": "Music share",
+        "category": "social",
+        "context": "[21:00] Jake: Have you heard the new Kendrick album?",
+        "last_message": "Have you heard the new Kendrick album?",
+        "tone": "casual",
+        "user_style": "casual, opinionated",
+        "max_chars": 80,
+        "rubric": (
+            "Natural response to a music recommendation question. "
+            "Good: 'not yet, is it good?', 'yeah it slaps'. "
+            "Bad: formal review, overly long, AI-sounding analysis."
+        ),
+    },
+    # =========================================================================
+    # clarify: Low-context / ambiguous (7 cases)
+    # =========================================================================
+    {
+        "name": "Ambiguous question mark",
+        "category": "clarify",
+        "context": "[11:00] Chris: ?",
+        "last_message": "?",
+        "tone": "casual",
+        "user_style": "casual",
+        "rubric": (
+            "Reply to just a '?' with no context. Should ask for clarification briefly. "
+            "Good: 'what's up?', '??', 'hm?'. "
+            "Bad: long response, assuming what they mean."
+        ),
+    },
+    {
         "name": "No context - bare hey",
+        "category": "clarify",
         "context": "[11:00] Unknown: hey",
         "last_message": "hey",
         "tone": "casual",
@@ -195,6 +446,7 @@ TEST_CASES = [
     },
     {
         "name": "Ambiguous forwarded link",
+        "category": "clarify",
         "context": "[12:00] Sarah: [Link]",
         "last_message": "[Link]",
         "tone": "casual",
@@ -208,21 +460,8 @@ TEST_CASES = [
         ),
     },
     {
-        "name": "Inside joke / unknown reference",
-        "context": "[14:00] Tom: lmao remember the thing",
-        "last_message": "lmao remember the thing",
-        "tone": "casual",
-        "user_style": "casual bro",
-        "max_chars": 40,
-        "rubric": (
-            "Reply to an inside joke reference ('the thing') that the model can't "
-            "possibly know. Should NOT pretend to know. "
-            "Good: 'lol which thing', 'haha yes', 'omg yes'. "
-            "Bad: making up a specific memory, detailed response about 'the thing'."
-        ),
-    },
-    {
         "name": "Stale thread - weeks old",
+        "category": "clarify",
         "context": "[3 weeks ago] Dave: hey you free Saturday?",
         "last_message": "hey you free Saturday?",
         "tone": "casual",
@@ -235,12 +474,55 @@ TEST_CASES = [
             "Bad: answering as if it's current ('yeah I'm free!')."
         ),
     },
+    {
+        "name": "Emoji only message",
+        "category": "clarify",
+        "context": "[13:00] Tina: \U0001f602\U0001f602\U0001f602",
+        "last_message": "\U0001f602\U0001f602\U0001f602",
+        "tone": "casual",
+        "user_style": "casual",
+        "max_chars": 30,
+        "rubric": (
+            "Reply to a message that's just laughing emojis with no context. "
+            "Good: 'lol', '\U0001f602', 'what', '??'. "
+            "Bad: long response, asking detailed questions, pretending to know what's funny."
+        ),
+    },
+    {
+        "name": "Voice memo reference",
+        "category": "clarify",
+        "context": "[16:00] Dan: [Voice Memo]",
+        "last_message": "[Voice Memo]",
+        "tone": "casual",
+        "user_style": "",
+        "max_chars": 50,
+        "rubric": (
+            "Reply to a voice memo that can't be transcribed. "
+            "Good: 'can't listen rn, what's up?', 'send a text lol'. "
+            "Bad: pretending to have heard it, long response."
+        ),
+    },
+    {
+        "name": "Wrong number / random text",
+        "category": "clarify",
+        "context": "[08:00] Unknown: Tell Maria I'll be there at 6",
+        "last_message": "Tell Maria I'll be there at 6",
+        "tone": "casual",
+        "user_style": "",
+        "max_chars": 50,
+        "rubric": (
+            "Reply to what looks like a wrong-number text. "
+            "Good: 'wrong number', 'think you have the wrong person'. "
+            "Bad: agreeing to tell Maria, long explanation."
+        ),
+    },
 ]
 
 
 @dataclass
 class EvalResult:
     name: str
+    category: str
     output: str
     latency_ms: float
     checks_passed: list[str]
@@ -256,18 +538,11 @@ class EvalResult:
 
 
 def get_judge_client():
-    """Create Cerebras OpenAI-compatible client."""
-    api_key = os.environ.get("CEREBRAS_API_KEY", "")
-    if not api_key or api_key == "your-key-here":
-        return None
-    from openai import OpenAI
-
-    return OpenAI(base_url=CEREBRAS_BASE_URL, api_key=api_key)
+    """Create OpenAI-compatible client for the judge model."""
+    return _get_judge_client()
 
 
-def judge_response(
-    client, tc: dict, output: str
-) -> tuple[float, str]:
+def judge_response(client, tc: dict, output: str) -> tuple[float, str]:
     """Score a response using the LLM judge.
 
     Returns (score 0-10, reasoning).
@@ -412,7 +687,8 @@ def main() -> int:
     print("=" * 70)
     print(f"Test cases:  {len(TEST_CASES)}")
     print(f"Strategy:    {strategy}")
-    print(f"LLM judge:   {'Cerebras ' + JUDGE_MODEL if args.judge else 'disabled (use --judge)'}")
+    judge_label = f"{JUDGE_MODEL} via DeepInfra" if args.judge else "disabled (use --judge)"
+    print(f"LLM judge:   {judge_label}")
     print()
 
     # Init judge
@@ -444,7 +720,7 @@ def main() -> int:
             from evals.dspy_reply import ReplyModule
             from jarvis.dspy_client import DSPYMLXClient
 
-            student_lm = DSPYMLXClient(max_tokens=50, temperature=0.7)
+            student_lm = DSPYMLXClient(max_tokens=50, temperature=0.1)
             dspy.configure(lm=student_lm)
             dspy_program = ReplyModule()
             dspy_program.load(str(optimized_dir))
@@ -490,7 +766,7 @@ def main() -> int:
                 prompt = build_prompt(tc)
                 result = loader.generate_sync(
                     prompt=prompt,
-                    temperature=0.7,
+                    temperature=0.1,
                     max_tokens=50,
                     top_p=0.1,
                     top_k=50,
@@ -514,6 +790,7 @@ def main() -> int:
 
         er = EvalResult(
             name=tc["name"],
+            category=tc.get("category", "unknown"),
             output=output,
             latency_ms=latency_ms,
             checks_passed=passed_checks,
@@ -526,8 +803,9 @@ def main() -> int:
 
         # Print per-case
         status = "PASS" if all_passed else "FAIL"
-        print(f"\n[{i:2d}/{len(TEST_CASES)}] {tc['name']}")
-        print(f"  Output:  \"{output}\"")
+        cat = tc.get("category", "?")
+        print(f"\n[{i:2d}/{len(TEST_CASES)}] [{cat}] {tc['name']}")
+        print(f'  Output:  "{output}"')
         judge_str = ""
         if judge_score is not None and judge_score >= 0:
             judge_str = f" | Judge: {judge_score:.0f}/10"
@@ -580,6 +858,25 @@ def main() -> int:
             if not r.passed:
                 print(f"  - {r.name}: {', '.join(r.checks_failed)}")
 
+    # Per-category breakdown
+    print()
+    print("PER-CATEGORY BREAKDOWN")
+    print("-" * 70)
+    for cat in CATEGORIES:
+        cat_results = [r for r in results if r.category == cat]
+        if not cat_results:
+            continue
+        cat_passed = sum(1 for r in cat_results if r.passed)
+        cat_scored = [r for r in cat_results if r.judge_score is not None and r.judge_score >= 0]
+        cat_judge = ""
+        if cat_scored:
+            cat_avg = sum(r.judge_score for r in cat_scored) / len(cat_scored)
+            cat_judge = f"  judge_avg={cat_avg:.1f}/10"
+        print(
+            f"  {cat:20s}  local={cat_passed}/{len(cat_results)}"
+            f" ({cat_passed / len(cat_results) * 100:.0f}%){cat_judge}"
+        )
+
     if scored:
         low = [r for r in scored if r.judge_score < 7]
         if low:
@@ -609,6 +906,7 @@ def main() -> int:
         "results": [
             {
                 "name": r.name,
+                "category": r.category,
                 "output": r.output,
                 "latency_ms": round(r.latency_ms, 1),
                 "local_passed": r.passed,
