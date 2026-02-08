@@ -28,22 +28,35 @@ from evals.judge_config import get_judge_client, JUDGE_BASE_URL
 from scripts.labeling_functions import get_registry, ABSTAIN
 from scripts.label_aggregation import aggregate_labels
 
-VALID_CATEGORIES = ["ack", "info", "emotional", "social", "clarify"]
+VALID_CATEGORIES = ["closing", "acknowledge", "question", "request", "emotion", "statement"]
 
-CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message into ONE category based on the type of response needed.
+CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message into ONE category. Use the decision tree below - check categories in order, take the FIRST match.
 
-Categories (choose the BEST fit):
-- ack: Acknowledgment/reaction only ("ok", "thanks", emoji). No substantive reply needed.
-- info: ASKING for information/action OR ANSWERING a direct question. Examples: "What time?", "Can you?", "I suggest we...", answering "yes" to a question.
-- emotional: Expressing strong feelings (happy, sad, frustrated, excited). Needs empathy. Example: "I'm so stressed", "This is amazing!"
-- social: Casual conversation, opinions, stories, comments. NOT answering a question. Example: "That's interesting", "I think...", "Nice!"
-- clarify: Ambiguous or incomplete (needs more context). Example: "???", "...", "huh?"
+Categories (check in this order):
+
+1. closing - Ending the conversation
+   Examples: "bye", "ttyl", "see you later", "gotta go", "talk soon"
+
+2. acknowledge - Minimal agreement/acknowledgment (≤3 words, no question)
+   Examples: "ok", "thanks", "yeah", "gotcha", "sure", "yup", "👍"
+
+3. question - Seeking information (has "?" OR starts with: what, when, where, who, why, how, is, are, do, does, can, could, would)
+   Examples: "What time?", "Where are you?", "Can you help?", "Is it ready?"
+
+4. request - Seeking action (imperative verb OR "can you"/"could you"/"please" + verb OR "I suggest"/"let's")
+   Examples: "Send me the file", "Please call me", "I suggest we meet", "Let's go"
+
+5. emotion - Expressing feelings (contains: happy, sad, angry, stressed, excited, frustrated, love, hate, amazing, terrible OR multiple "!" OR CAPS)
+   Examples: "I'm so stressed!", "This is AMAZING", "Ugh so frustrated", "Love it!"
+
+6. statement - Everything else (opinions, facts, stories, answers, comments)
+   Examples: "It's raining", "I think so", "The meeting went well", "That's cool"
 
 For each message, consider the conversation context (previous message) when classifying.
 
 {messages_block}
 
-Reply with ONLY the category name for each, one per line (e.g., "ack"). No numbers, no explanations."""
+Reply with ONLY the category name for each, one per line (e.g., "acknowledge"). No numbers, no explanations."""
 
 
 def load_ambiguous_examples(max_examples: int = 17000) -> list[dict]:
