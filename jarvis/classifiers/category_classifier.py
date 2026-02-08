@@ -395,7 +395,7 @@ class CategoryClassifier(EmbedderMixin):
                 mob_type = mobilization.response_type if mobilization else "answer"
 
                 # 1. BERT embedding (384)
-                embedding = self.embed(text)
+                embedding = self.embedder.encode([text], normalize=True)[0]
 
                 # 2. Hand-crafted features (26)
                 hand_crafted = _extract_hand_crafted(text, context, mob_pressure, mob_type)
