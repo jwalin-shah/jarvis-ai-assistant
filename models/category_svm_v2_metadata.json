@@ -1,0 +1,35 @@
+{
+  "model_type": "LinearSVC",
+  "n_features": 424,
+  "feature_breakdown": {
+    "bert_embeddings": 384,
+    "hand_crafted": 26,
+    "spacy": 14
+  },
+  "categories": [
+    "acknowledge",
+    "closing",
+    "emotion",
+    "question",
+    "request",
+    "statement"
+  ],
+  "n_train": 11860,
+  "n_test": 2965,
+  "cv_f1_macro": 0.7935933562326536,
+  "best_params": {
+    "C": 1.0,
+    "class_weight": "balanced",
+    "dual": "auto",
+    "fit_intercept": true,
+    "intercept_scaling": 1,
+    "loss": "squared_hinge",
+    "max_iter": 5000,
+    "multi_class": "ovr",
+    "penalty": "l2",
+    "random_state": 42,
+    "tol": 0.0001,
+    "verbose": 0
+  },
+  "trained_at": "2026-02-07 22:36:21"
+}

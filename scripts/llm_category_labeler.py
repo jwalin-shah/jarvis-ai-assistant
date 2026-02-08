@@ -304,7 +304,7 @@ def classify_batch_llm(
             while len(predictions) < i + len(batch):
                 predictions.append("statement")
 
-            time.sleep(2)  # Rate limiting: 30 req/min = 2s between calls
+            time.sleep(0.12)  # Rate limiting: 500 req/min (paid plan: 1000 RPM limit)
 
         except Exception as e:
             print(f"    ERROR: {type(e).__name__}: {e}", flush=True)
@@ -427,7 +427,7 @@ def main() -> int:
 
     # Classify with LLM
     print(f"\nClassifying {len(examples)} examples with {args.model}...", flush=True)
-    print(f"Estimated time: {len(examples) // args.batch_size * 2 / 60:.1f} minutes", flush=True)
+    print(f"Estimated time: {len(examples) // args.batch_size * 0.12 / 60:.1f} minutes", flush=True)
     print()
 
     t0 = time.perf_counter()

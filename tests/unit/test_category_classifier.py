@@ -30,156 +30,71 @@ def _reset_singleton():
 
 class TestCategoryResult:
     def test_repr(self) -> None:
-        result = CategoryResult("brief", 0.87, "svm")
-        assert "brief" in repr(result)
+        result = CategoryResult("request", 0.87, "svm")
+        assert "request" in repr(result)
         assert "0.87" in repr(result)
         assert "svm" in repr(result)
 
     def test_fields(self) -> None:
-        result = CategoryResult("warm", 0.90, "structural")
-        assert result.category == "warm"
+        result = CategoryResult("emotion", 0.90, "fast_path")
+        assert result.category == "emotion"
         assert result.confidence == 0.90
-        assert result.method == "structural"
+        assert result.method == "fast_path"
 
 
 # =============================================================================
-# Structural patterns (Layer 1)
+# Fast path (Layer 0)
 # =============================================================================
 
 
-class TestStructuralPatterns:
-    def test_bare_question_mark(self) -> None:
-        result = classify_category("?")
-        assert result.category == "clarify"
-        assert result.method == "structural"
+class TestFastPath:
+    def test_reaction_tapback(self) -> None:
+        """iMessage reactions should be acknowledge."""
+        result = classify_category('Loved "Hey there"')
+        assert result.category == "acknowledge"
+        assert result.method == "fast_path"
+        assert result.confidence == 1.0
 
-    def test_bare_exclamation(self) -> None:
-        result = classify_category("!")
-        assert result.category == "clarify"
-        assert result.method == "structural"
+    def test_acknowledgment_ok(self) -> None:
+        result = classify_category("ok")
+        assert result.category == "acknowledge"
+        assert result.method == "fast_path"
 
-    def test_bare_ellipsis(self) -> None:
-        result = classify_category("...")
-        assert result.category == "clarify"
-        assert result.method == "structural"
+    def test_acknowledgment_got_it(self) -> None:
+        result = classify_category("got it")
+        assert result.category == "acknowledge"
+        assert result.method == "fast_path"
 
-    def test_empty_string(self) -> None:
-        result = classify_category("")
-        assert result.category == "clarify"
-        assert result.method == "structural"
+    def test_acknowledgment_sounds_good(self) -> None:
+        result = classify_category("sounds good")
+        assert result.category == "acknowledge"
+        assert result.method == "fast_path"
 
-    def test_whitespace_only(self) -> None:
-        result = classify_category("   ")
-        assert result.category == "clarify"
-        assert result.method == "structural"
-
-    def test_professional_keywords_no_structural(self) -> None:
-        """Professional keywords no longer match structural patterns (handled by detect_tone)."""
-        result = classify_category("Regarding the quarterly report")
-        assert result.method != "structural"
-
-    def test_emotional_pattern(self) -> None:
-        result = classify_category("I'm so depressed right now")
-        assert result.category == "warm"
-        assert result.method == "structural"
-
-    def test_emotional_breakup(self) -> None:
-        result = classify_category("I just broke up with my girlfriend")
-        assert result.category == "warm"
-        assert result.method == "structural"
-
-    def test_emotional_grief(self) -> None:
-        result = classify_category("My grandma passed away last night")
-        assert result.category == "warm"
-        assert result.method == "structural"
-
-    def test_normal_message_no_structural(self) -> None:
-        """Normal messages should not match structural patterns."""
+    def test_normal_message_no_fast_path(self) -> None:
+        """Normal messages should not match fast path."""
         result = classify_category("Want to grab lunch tomorrow?")
-        assert result.method != "structural"
+        assert result.method != "fast_path"
 
 
 # =============================================================================
-# Mobilization mapping (Layer 2)
-# =============================================================================
-
-
-class TestMobilizationMapping:
-    def test_high_commitment_maps_to_brief(self) -> None:
-        mob = MobilizationResult(
-            pressure=ResponsePressure.HIGH,
-            response_type=ResponseType.COMMITMENT,
-            confidence=0.90,
-            features={},
-        )
-        result = classify_category("Can you pick me up?", mobilization=mob)
-        assert result.category == "brief"
-        assert result.method == "mobilization"
-
-    def test_high_answer_maps_to_brief(self) -> None:
-        mob = MobilizationResult(
-            pressure=ResponsePressure.HIGH,
-            response_type=ResponseType.ANSWER,
-            confidence=0.90,
-            features={},
-        )
-        result = classify_category("What time is the meeting?", mobilization=mob)
-        assert result.category == "brief"
-        assert result.method == "mobilization"
-
-    def test_medium_emotional_maps_to_warm(self) -> None:
-        mob = MobilizationResult(
-            pressure=ResponsePressure.MEDIUM,
-            response_type=ResponseType.EMOTIONAL,
-            confidence=0.85,
-            features={},
-        )
-        result = classify_category("I got the promotion!!", mobilization=mob)
-        assert result.category == "warm"
-        assert result.method == "mobilization"
-
-    def test_none_closing_maps_to_clarify(self) -> None:
-        mob = MobilizationResult(
-            pressure=ResponsePressure.NONE,
-            response_type=ResponseType.CLOSING,
-            confidence=0.95,
-            features={},
-        )
-        result = classify_category("ok", mobilization=mob)
-        assert result.category == "clarify"
-        assert result.method == "mobilization"
-
-    def test_low_optional_falls_through(self) -> None:
-        """LOW/OPTIONAL mobilization should NOT route via mobilization."""
-        mob = MobilizationResult(
-            pressure=ResponsePressure.LOW,
-            response_type=ResponseType.OPTIONAL,
-            confidence=0.80,
-            features={},
-        )
-        result = classify_category("I went to the store", mobilization=mob)
-        # Should fall through to SVM or default, not mobilization
-        assert result.method != "mobilization"
-
-
-# =============================================================================
-# Fallback without trained model (Layer 5)
+# Fallback without trained model (default)
 # =============================================================================
 
 
 class TestFallbackNoModel:
-    def test_default_social(self) -> None:
-        """Without SVM model, non-matching messages should default to social."""
+    def test_default_statement(self) -> None:
+        """Without SVM model, non-matching messages should default to statement."""
         result = classify_category("Hey how have you been?")
-        assert result.category == "social"
+        assert result.category == "statement"
         assert result.method == "default"
+        assert result.confidence == 0.30
 
     def test_default_with_context(self) -> None:
         result = classify_category(
             "Not much, just hanging out",
             context=["Hey what's up"],
         )
-        assert result.category == "social"
+        assert result.category == "statement"
         assert result.method == "default"
 
 
@@ -228,7 +143,8 @@ class TestAPIContract:
             "What time?", context=["Let's meet up"], mobilization=mob
         )
         assert result is not None
-        assert result.category in {"brief", "clarify", "social", "warm"}
+        # Should be one of valid categories
+        assert result.category in {"closing", "acknowledge", "question", "request", "emotion", "statement"}
 
 
 # =============================================================================
@@ -247,15 +163,62 @@ class TestCategoryClassifier:
         assert clf._load_svm() is False
         assert clf._svm_loaded is True  # Attempted
 
-    def test_structural_takes_priority_over_mobilization(self) -> None:
-        """Structural patterns should fire before mobilization."""
+    def test_fast_path_takes_priority(self) -> None:
+        """Fast path should fire before SVM."""
         mob = MobilizationResult(
             pressure=ResponsePressure.HIGH,
             response_type=ResponseType.ANSWER,
             confidence=0.90,
             features={},
         )
-        # "?" matches structural clarify, even though mob says brief
-        result = classify_category("?", mobilization=mob)
-        assert result.category == "clarify"
-        assert result.method == "structural"
+        # "ok" matches fast path acknowledge, even with mobilization
+        result = classify_category("ok", mobilization=mob)
+        assert result.category == "acknowledge"
+        assert result.method == "fast_path"
+
+
+# =============================================================================
+# Feature extraction
+# =============================================================================
+
+
+class TestFeatureExtraction:
+    def test_extract_hand_crafted_features(self) -> None:
+        """Hand-crafted features should return 26 values."""
+        from jarvis.classifiers.category_classifier import _extract_hand_crafted
+
+        features = _extract_hand_crafted(
+            text="Hey what's up?",
+            context=["Hello"],
+            mobilization_pressure="none",
+            mobilization_type="answer",
+        )
+        assert len(features) == 26
+        assert features.dtype.name == "float32"
+
+    def test_extract_spacy_features(self) -> None:
+        """SpaCy features should return 14 values."""
+        from jarvis.classifiers.category_classifier import _extract_spacy_features
+
+        features = _extract_spacy_features("Can you help me?")
+        assert len(features) == 14
+        assert features.dtype.name == "float32"
+
+    def test_spacy_imperative_detection(self) -> None:
+        from jarvis.classifiers.category_classifier import _extract_spacy_features
+
+        # "Send" is VB at start -> imperative
+        features = _extract_spacy_features("Send me the file")
+        assert features[0] == 1.0  # has_imperative
+
+    def test_spacy_you_modal_detection(self) -> None:
+        from jarvis.classifiers.category_classifier import _extract_spacy_features
+
+        features = _extract_spacy_features("Can you help?")
+        assert features[1] == 1.0  # you_modal
+
+    def test_spacy_agreement_detection(self) -> None:
+        from jarvis.classifiers.category_classifier import _extract_spacy_features
+
+        features = _extract_spacy_features("sure thing")
+        assert features[8] == 1.0  # has_agreement
