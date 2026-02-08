@@ -22,43 +22,102 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from evals.judge_config import get_judge_client, JUDGE_BASE_URL
-from scripts.labeling_functions import get_registry, ABSTAIN
-from scripts.label_aggregation import aggregate_labels
 
 VALID_CATEGORIES = ["closing", "acknowledge", "question", "request", "emotion", "statement"]
 
-CLASSIFICATION_PROMPT_TEMPLATE = """For each message, check the rules IN ORDER and pick the FIRST match:
+CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message. Check rules in order, take FIRST match:
 
-RULE 1: closing
-- Check: Does it say "bye", "ttyl", "see you", "gotta go", or "talk soon"?
-- If YES → category = closing
+1. closing: "bye", "ttyl", "see you later", "gotta go"
+2. acknowledge: ≤3 words: "ok", "thanks", "yeah", "gotcha"
+3. request: "can you", "could you", "please", "I suggest", "let's"
+4. question: has "?" OR starts with question word
+5. emotion: "happy", "sad", "love", "hate", "!!", CAPS
+6. statement: everything else
 
-RULE 2: acknowledge
-- Check: Is it EXACTLY one of these words (ignore punctuation): "ok", "okay", "yeah", "yep", "yup", "sure", "thanks", "thank you", "gotcha", "fine", "alright", "cool", "k", "kk", or just emoji like "👍"?
-- If YES → category = acknowledge
+EXAMPLES:
 
-RULE 3: request
-- Check: Does it contain "can you", "could you", "would you", "please", OR "I suggest", OR "let's"?
-- If YES → category = request
+Message 1:
+Previous: "How was your day?"
+Current: "Good thanks"
+acknowledge
 
-RULE 4: question
-- Check: Does it contain "?" OR start with "what", "when", "where", "who", "why", "how", "is", "are", "do", "does"?
-- If YES → category = question
+Message 2:
+Previous: "Are you coming?"
+Current: "When does it start?"
+question
 
-RULE 5: emotion
-- Check: Does it contain "happy", "sad", "angry", "stressed", "excited", "frustrated", "love", "hate", "amazing", "terrible" OR "!!" (2+ exclamation marks) OR ALLCAPS words?
-- If YES → category = emotion
+Message 3:
+Previous: "I'm at the store"
+Current: "Can you get milk?"
+request
 
-RULE 6: statement
-- If none of the above match → category = statement
+Message 4:
+Previous: "See you soon"
+Current: "Bye!"
+closing
 
 ---
 
-Classify these messages:
+NOW CLASSIFY THESE:
 
 {messages_block}
 
-For each message, output the category (format: "**Result: category**" or "- Category: category")."""
+OUTPUT (one category per line, no other text):"""
+
+
+def simple_heuristic_label(text: str) -> str:
+    """Apply simple heuristics matching the 6-category schema.
+
+    Args:
+        text: Message text to classify.
+
+    Returns:
+        Category label (closing, acknowledge, question, request, emotion, statement).
+    """
+    import re
+
+    text_lower = text.lower().strip()
+    text_clean = re.sub(r'[^\w\s?!]', '', text_lower)  # Remove punctuation except ?!
+    words = text_clean.split()
+
+    # Rule 1: closing
+    closing_words = {"bye", "ttyl", "see", "you", "later", "gotta", "go", "talk", "soon", "goodbye"}
+    if any(w in closing_words for w in words[:3]):  # Check first 3 words
+        if "bye" in text_lower or "ttyl" in text_lower or "gotta go" in text_lower:
+            return "closing"
+
+    # Rule 2: acknowledge (≤3 words, no question mark)
+    if "?" not in text and len(words) <= 3:
+        ack_words = {"ok", "okay", "yeah", "yep", "yup", "sure", "thanks", "thank", "you",
+                     "gotcha", "fine", "alright", "cool", "k", "kk"}
+        if any(w in ack_words for w in words):
+            return "acknowledge"
+
+    # Rule 3: request (imperatives, can you, I suggest)
+    request_patterns = ["can you", "could you", "would you", "please", "i suggest", "let's", "lets"]
+    if any(p in text_lower for p in request_patterns):
+        return "request"
+
+    # Rule 4: question (? or question words)
+    if "?" in text:
+        return "question"
+    question_starters = ["what", "when", "where", "who", "why", "how", "is", "are", "do", "does"]
+    if words and words[0] in question_starters:
+        return "question"
+
+    # Rule 5: emotion (emotion words, multiple !, CAPS)
+    emotion_words = {"happy", "sad", "angry", "stressed", "excited", "frustrated",
+                     "love", "hate", "amazing", "terrible", "wow", "omg", "ugh"}
+    if any(w in emotion_words for w in words):
+        return "emotion"
+    if "!!" in text:  # Multiple exclamation marks
+        return "emotion"
+    caps_words = [w for w in text.split() if w.isupper() and len(w) > 2]
+    if len(caps_words) >= 2:
+        return "emotion"
+
+    # Rule 6: statement (default)
+    return "statement"
 
 
 def load_stratified_sample(n_per_category: int = 40) -> list[dict]:
@@ -71,7 +130,6 @@ def load_stratified_sample(n_per_category: int = 40) -> list[dict]:
         List of examples with text, context, last_message, label (heuristic).
     """
     from datasets import load_dataset
-    from scripts.labeling_functions import get_registry
 
     print(f"Loading datasets for stratified sampling ({n_per_category} per category)...", flush=True)
 
@@ -147,14 +205,10 @@ def load_stratified_sample(n_per_category: int = 40) -> list[dict]:
 
     print(f"  Loaded {len(all_examples)} raw examples", flush=True)
 
-    # Apply heuristic labeling for stratification
-    print("  Applying heuristic labeling for stratification...", flush=True)
-    registry = get_registry()
-    labels, confidences = aggregate_labels(all_examples, registry, method="majority")
-
-    for i, ex in enumerate(all_examples):
-        ex["heuristic_label"] = labels[i]
-        ex["confidence"] = confidences[i]
+    # Apply simple heuristic labeling for stratification
+    print("  Applying simple heuristic labeling for stratification...", flush=True)
+    for ex in all_examples:
+        ex["heuristic_label"] = simple_heuristic_label(ex["text"])
 
     # Stratified sampling
     import numpy as np
@@ -168,7 +222,8 @@ def load_stratified_sample(n_per_category: int = 40) -> list[dict]:
             indices = rng.choice(len(cat_examples), n_per_category, replace=False)
             stratified.extend([cat_examples[i] for i in indices])
         else:
-            # If not enough, take all
+            # If not enough, take all we have
+            print(f"    Warning: Only {len(cat_examples)} examples for {category}, needed {n_per_category}", flush=True)
             stratified.extend(cat_examples)
 
     rng.shuffle(stratified)
@@ -185,7 +240,7 @@ def classify_batch_llm(
     examples: list[dict],
     model: str,
     client,
-    batch_size: int = 10,  # Reduced from 20 - model reasoning is verbose
+    batch_size: int = 5,  # Smaller batches work better for these models
 ) -> list[str]:
     """Classify examples using LLM in batches.
 
@@ -219,16 +274,16 @@ def classify_batch_llm(
 
         try:
             response = client.chat.completions.create(
-                model="zai-glm-4.7",  # Less verbose than gpt-oss-120b
+                model=model,  # Use model from args
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
-                max_tokens=1500,  # Enough for 10 messages with reasoning
+                max_tokens=1500,  # Enough for batch with reasoning
             )
 
             # Check if response is valid
             if not response or not response.choices:
                 print(f"    ERROR: Empty response from API", flush=True)
-                predictions.extend(["social"] * len(batch))
+                predictions.extend(["statement"] * len(batch))
                 continue
 
             # Parse response (reasoning models use .reasoning instead of .content)
@@ -237,25 +292,39 @@ def classify_batch_llm(
             if content is None:
                 print(f"    ERROR: API returned None for both content and reasoning", flush=True)
                 print(f"    Response: {response}", flush=True)
-                predictions.extend(["social"] * len(batch))
+                predictions.extend(["statement"] * len(batch))
                 continue
 
             content = content.strip()
+
+            # Debug: print first batch response to see format
+            if i == 0:
+                print(f"\n  DEBUG - First batch response:\n{content[:500]}\n", flush=True)
+
             lines = [line.strip() for line in content.split("\n") if line.strip()]
 
-            # Parse - look for both "**Result:" and "- Category:" patterns
+            # Parse response - expect one category per line
             import re
-            result_pattern = r'(?:\*\*Result:?|-\s*Category:)\s*(\w+)'
-            matches = re.findall(result_pattern, content, re.IGNORECASE)
+            # Try multiple patterns:
+            # 1. Plain category name (one per line)
+            # 2. "**Result: category**" or "- Category: category"
+            # 3. Numbered: "1. category" or "Message 1: category"
 
-            for match in matches:
-                match_lower = match.lower()
-                if match_lower in VALID_CATEGORIES:
-                    predictions.append(match_lower)
+            for line in lines:
+                # Remove common prefixes
+                line_clean = re.sub(r'^(\d+[\.\):]\s*|Message\s+\d+[\.:]\s*|\*\*Result:?\s*|-\s*Category:\s*)', '', line, flags=re.IGNORECASE)
+                line_clean = line_clean.strip().strip('*').strip()
+
+                # Check if it's a valid category
+                if line_clean.lower() in VALID_CATEGORIES:
+                    predictions.append(line_clean.lower())
+                # Map old "social" to new "statement"
+                elif line_clean.lower() == "social":
+                    predictions.append("statement")
 
             # Ensure we have exactly batch_size predictions
             while len(predictions) < i + len(batch):
-                predictions.append("social")  # Pad with fallback
+                predictions.append("statement")  # Pad with fallback
 
             time.sleep(2)  # Rate limiting: 30 req/min = 2s between calls
 
@@ -263,8 +332,8 @@ def classify_batch_llm(
             print(f"    ERROR: {type(e).__name__}: {e}", flush=True)
             import traceback
             print(f"    Traceback: {traceback.format_exc()}", flush=True)
-            # Fallback to social for failed batch
-            predictions.extend(["social"] * len(batch))
+            # Fallback to statement for failed batch
+            predictions.extend(["statement"] * len(batch))
 
     return predictions[:len(examples)]  # Trim any excess
 
