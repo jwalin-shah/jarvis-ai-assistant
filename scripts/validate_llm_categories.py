@@ -210,10 +210,11 @@ def classify_batch_llm(
                 predictions.extend(["social"] * len(batch))
                 continue
 
-            # Parse response
-            content = response.choices[0].message.content
+            # Parse response (reasoning models use .reasoning instead of .content)
+            message = response.choices[0].message
+            content = message.content or message.reasoning
             if content is None:
-                print(f"    ERROR: API returned None for content", flush=True)
+                print(f"    ERROR: API returned None for both content and reasoning", flush=True)
                 print(f"    Response: {response}", flush=True)
                 predictions.extend(["social"] * len(batch))
                 continue
