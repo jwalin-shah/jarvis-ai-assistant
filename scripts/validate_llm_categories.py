@@ -89,7 +89,12 @@ def load_stratified_sample(n_per_category: int = 40) -> list[dict]:
             })
 
     # SAMSum (first 500 conversations for speed)
-    for conv in samsum_ds[:500]:
+    conv_count = 0
+    for conv in samsum_ds:
+        if conv_count >= 500:
+            break
+        conv_count += 1
+
         dialogue_text = conv["dialogue"]
         lines = [l.strip() for l in dialogue_text.split("\n") if l.strip()]
 
