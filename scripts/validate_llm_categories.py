@@ -25,44 +25,18 @@ from evals.judge_config import get_judge_client, JUDGE_BASE_URL
 
 VALID_CATEGORIES = ["closing", "acknowledge", "question", "request", "emotion", "statement"]
 
-CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message. Check rules in order, take FIRST match:
+CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message. Check categories in this order:
 
-1. closing: "bye", "ttyl", "see you later", "gotta go"
-2. acknowledge: ≤3 words: "ok", "thanks", "yeah", "gotcha"
-3. request: "can you", "could you", "please", "I suggest", "let's"
-4. question: has "?" OR starts with question word
-5. emotion: "happy", "sad", "love", "hate", "!!", CAPS
-6. statement: everything else
-
-EXAMPLES:
-
-Message 1:
-Previous: "How was your day?"
-Current: "Good thanks"
-acknowledge
-
-Message 2:
-Previous: "Are you coming?"
-Current: "When does it start?"
-question
-
-Message 3:
-Previous: "I'm at the store"
-Current: "Can you get milk?"
-request
-
-Message 4:
-Previous: "See you soon"
-Current: "Bye!"
-closing
-
----
-
-NOW CLASSIFY THESE:
+1. closing: Says goodbye ("bye", "ttyl", "see you later", "gotta go")
+2. acknowledge: ≤5 words AND expresses agreement/thanks ("ok", "yeah", "thanks", "sure", "here you are")
+3. request: Asks for action ("can you", "could you", "would you", "please" + verb, "let's", "I'd like")
+4. question: Has "?" OR starts with question word ("what", "when", "where", "who", "why", "how", "is", "are", "do")
+5. emotion: Strong feelings - has emotion words ("happy", "sad", "love", "hate", "excited", "stressed") OR "!!" OR ALLCAPS words OR "😂" OR "wow"
+6. statement: Neutral facts, opinions, explanations (if none of above match)
 
 {messages_block}
 
-OUTPUT (one category per line, no other text):"""
+Answer (comma-separated):"""
 
 
 def simple_heuristic_label(text: str) -> str:
@@ -275,9 +249,12 @@ def classify_batch_llm(
         try:
             response = client.chat.completions.create(
                 model=model,  # Use model from args
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": "You are a text classifier. Output only category labels, nothing else."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.0,
-                max_tokens=1500,  # Enough for batch with reasoning
+                max_tokens=200,  # Just enough for labels (5 examples × 10 chars = 50 tokens)
             )
 
             # Check if response is valid
@@ -301,26 +278,32 @@ def classify_batch_llm(
             if i == 0:
                 print(f"\n  DEBUG - First batch response:\n{content[:500]}\n", flush=True)
 
-            lines = [line.strip() for line in content.split("\n") if line.strip()]
-
-            # Parse response - expect one category per line
             import re
-            # Try multiple patterns:
-            # 1. Plain category name (one per line)
-            # 2. "**Result: category**" or "- Category: category"
-            # 3. Numbered: "1. category" or "Message 1: category"
 
-            for line in lines:
-                # Remove common prefixes
-                line_clean = re.sub(r'^(\d+[\.\):]\s*|Message\s+\d+[\.:]\s*|\*\*Result:?\s*|-\s*Category:\s*)', '', line, flags=re.IGNORECASE)
-                line_clean = line_clean.strip().strip('*').strip()
+            # Try comma-separated format first
+            if "," in content:
+                # Extract comma-separated list
+                parts = [p.strip().lower() for p in content.split(",")]
+                for part in parts:
+                    # Clean up any extra text
+                    part_clean = re.sub(r'^.*?(\w+)$', r'\1', part)
+                    if part_clean in VALID_CATEGORIES:
+                        predictions.append(part_clean)
+                    elif part_clean == "social":
+                        predictions.append("statement")
+            else:
+                # Fall back to line-by-line parsing
+                lines = [line.strip() for line in content.split("\n") if line.strip()]
+                for line in lines:
+                    # Remove common prefixes
+                    line_clean = re.sub(r'^(\d+[\.\):]\s*|Message\s+\d+[\.:]\s*|\*\*Result:?\s*|-\s*Category:\s*)', '', line, flags=re.IGNORECASE)
+                    line_clean = line_clean.strip().strip('*').strip().lower()
 
-                # Check if it's a valid category
-                if line_clean.lower() in VALID_CATEGORIES:
-                    predictions.append(line_clean.lower())
-                # Map old "social" to new "statement"
-                elif line_clean.lower() == "social":
-                    predictions.append("statement")
+                    # Check if it's a valid category
+                    if line_clean in VALID_CATEGORIES:
+                        predictions.append(line_clean)
+                    elif line_clean == "social":
+                        predictions.append("statement")
 
             # Ensure we have exactly batch_size predictions
             while len(predictions) < i + len(batch):
@@ -408,7 +391,7 @@ def main() -> int:
     # Classify with LLM
     print(f"\nClassifying {len(examples)} examples with {args.model}...", flush=True)
     t0 = time.perf_counter()
-    predictions = classify_batch_llm(examples, args.model, client, batch_size=20)
+    predictions = classify_batch_llm(examples, args.model, client, batch_size=5)
     elapsed = time.perf_counter() - t0
 
     print(f"\nClassification complete in {elapsed:.1f}s", flush=True)
