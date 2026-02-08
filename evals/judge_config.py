@@ -29,10 +29,15 @@ if _env_path.exists():
 # Judge configuration (change here to switch providers)
 # ---------------------------------------------------------------------------
 
-# Cerebras Llama 3.3 70B (FREE, 30 req/min, 14.4k req/day)
-JUDGE_MODEL = "llama-3.3-70b"
-JUDGE_BASE_URL = "https://api.cerebras.ai/v1"
-JUDGE_API_KEY_ENV = "CEREBRAS_API_KEY"
+# Groq Llama 3.3 70B (FREE, ultra-fast, 30 req/min, 6k req/day)
+JUDGE_MODEL = "llama-3.3-70b-versatile"
+JUDGE_BASE_URL = "https://api.groq.com/openai/v1"
+JUDGE_API_KEY_ENV = "GROQ_API_KEY"
+
+# Alternative: Cerebras Llama 3.3 70B (FREE, 30 req/min, 14.4k req/day)
+# JUDGE_MODEL = "llama-3.3-70b"
+# JUDGE_BASE_URL = "https://api.cerebras.ai/v1"
+# JUDGE_API_KEY_ENV = "CEREBRAS_API_KEY"
 
 
 def get_judge_api_key() -> str:

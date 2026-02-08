@@ -24,44 +24,69 @@ from collections import Counter
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.judge_config import get_judge_client, JUDGE_BASE_URL
-from scripts.labeling_functions import get_registry, ABSTAIN
-from scripts.label_aggregation import aggregate_labels
+from evals.judge_config import get_judge_client, JUDGE_BASE_URL, JUDGE_MODEL
 
 VALID_CATEGORIES = ["closing", "acknowledge", "question", "request", "emotion", "statement"]
 
-CLASSIFICATION_PROMPT_TEMPLATE = """For each message, check the rules IN ORDER and pick the FIRST match:
+CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message. Check categories in this order:
 
-RULE 1: closing
-- Check: Does it say "bye", "ttyl", "see you", "gotta go", or "talk soon"?
-- If YES → category = closing
-
-RULE 2: acknowledge
-- Check: Is it EXACTLY one of these words (ignore punctuation): "ok", "okay", "yeah", "yep", "yup", "sure", "thanks", "thank you", "gotcha", "fine", "alright", "cool", "k", "kk", or just emoji like "👍"?
-- If YES → category = acknowledge
-
-RULE 3: request
-- Check: Does it contain "can you", "could you", "would you", "please", OR "I suggest", OR "let's"?
-- If YES → category = request
-
-RULE 4: question
-- Check: Does it contain "?" OR start with "what", "when", "where", "who", "why", "how", "is", "are", "do", "does"?
-- If YES → category = question
-
-RULE 5: emotion
-- Check: Does it contain "happy", "sad", "angry", "stressed", "excited", "frustrated", "love", "hate", "amazing", "terrible" OR "!!" (2+ exclamation marks) OR ALLCAPS words?
-- If YES → category = emotion
-
-RULE 6: statement
-- If none of the above match → category = statement
-
----
-
-Classify these messages:
+1. closing: Says goodbye ("bye", "ttyl", "see you later", "gotta go")
+2. acknowledge: ≤5 words AND expresses agreement/thanks ("ok", "yeah", "thanks", "sure", "here you are")
+3. request: Asks for action ("can you", "could you", "would you", "please" + verb, "let's", "I'd like")
+4. question: Has "?" OR starts with question word ("what", "when", "where", "who", "why", "how", "is", "are", "do")
+5. emotion: Strong feelings - has emotion words ("happy", "sad", "love", "hate", "excited", "stressed") OR "!!" OR ALLCAPS words OR "😂" OR "wow"
+6. statement: Neutral facts, opinions, explanations (if none of above match)
 
 {messages_block}
 
-For each message, output the category (format: "**Result: category**" or "- Category: category")."""
+Answer (comma-separated):"""
+
+
+def simple_heuristic_label(text: str) -> str:
+    """Apply simple heuristics matching the 6-category schema."""
+    import re
+    text_lower = text.lower().strip()
+    text_clean = re.sub(r'[^\w\s?!]', '', text_lower)
+    words = text_clean.split()
+
+    # closing
+    closing_words = {"bye", "ttyl", "see", "you", "later", "gotta", "go", "talk", "soon", "goodbye"}
+    if any(w in closing_words for w in words[:3]):
+        if "bye" in text_lower or "ttyl" in text_lower or "gotta go" in text_lower:
+            return "closing"
+
+    # acknowledge (≤5 words)
+    if "?" not in text and len(words) <= 5:
+        ack_words = {"ok", "okay", "yeah", "yep", "yup", "sure", "thanks", "thank", "you",
+                     "gotcha", "fine", "alright", "cool", "k", "kk", "here", "are"}
+        if any(w in ack_words for w in words):
+            return "acknowledge"
+
+    # request
+    request_patterns = ["can you", "could you", "would you", "please", "i suggest", "let's", "lets", "i'd like"]
+    if any(p in text_lower for p in request_patterns):
+        return "request"
+
+    # question
+    if "?" in text:
+        return "question"
+    question_starters = ["what", "when", "where", "who", "why", "how", "is", "are", "do", "does"]
+    if words and words[0] in question_starters:
+        return "question"
+
+    # emotion
+    emotion_words = {"happy", "sad", "angry", "stressed", "excited", "frustrated",
+                     "love", "hate", "amazing", "terrible", "wow", "omg", "ugh"}
+    if any(w in emotion_words for w in words):
+        return "emotion"
+    if "!!" in text:
+        return "emotion"
+    caps_words = [w for w in text.split() if w.isupper() and len(w) > 2]
+    if len(caps_words) >= 2:
+        return "emotion"
+
+    # statement (default)
+    return "statement"
 
 
 def load_ambiguous_examples(max_examples: int = 17000) -> list[dict]:
@@ -149,43 +174,15 @@ def load_ambiguous_examples(max_examples: int = 17000) -> list[dict]:
 
     print(f"  Total raw examples: {len(all_examples)}", flush=True)
 
-    # Apply weak supervision to identify ambiguous examples
-    print("\nApplying weak supervision to identify ambiguous examples...", flush=True)
-    registry = get_registry()
-    labels, confidences = aggregate_labels(all_examples, registry, method="majority")
-
-    for i, ex in enumerate(all_examples):
-        ex["heuristic_label"] = labels[i]
-        ex["confidence"] = confidences[i]
-
-    # Count LF votes per example (exclude abstain)
-    vote_counts: list[int] = []
+    # Apply simple heuristic labeling for stratification
+    print("\nApplying simple heuristic labeling for stratification...", flush=True)
     for ex in all_examples:
-        lf_labels = registry.apply_all(
-            ex["text"], ex["context"], ex["last_message"], ex.get("metadata")
-        )
-        non_abstain = [lbl for lbl in lf_labels if lbl != ABSTAIN]
-        vote_counts.append(len(non_abstain))
+        ex["heuristic_label"] = simple_heuristic_label(ex["text"])
 
-    for i, ex in enumerate(all_examples):
-        ex["lf_vote_count"] = vote_counts[i]
+    # All examples are candidates for LLM labeling (simple heuristics aren't high-confidence)
+    ambiguous = all_examples
 
-    # Filter ambiguous examples:
-    # 1. Low confidence (< 0.5) OR only 1 LF vote
-    # 2. Disagreement zone (0.4 <= confidence < 0.6, 2+ LFs voted)
-    ambiguous = [
-        ex for ex in all_examples
-        if (ex["confidence"] < 0.5 or ex["lf_vote_count"] <= 1)
-        or (0.4 <= ex["confidence"] < 0.6 and ex["lf_vote_count"] >= 2)
-    ]
-
-    print(f"  Ambiguous examples (need LLM): {len(ambiguous)}", flush=True)
-
-    # Show confidence distribution
-    conf_bins = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-    for i in range(len(conf_bins) - 1):
-        count = sum(1 for ex in ambiguous if conf_bins[i] <= ex["confidence"] < conf_bins[i + 1])
-        print(f"    Confidence [{conf_bins[i]:.1f}-{conf_bins[i + 1]:.1f}): {count}", flush=True)
+    print(f"  Examples to label: {len(ambiguous)}", flush=True)
 
     # Limit to max_examples
     import numpy as np
@@ -222,7 +219,7 @@ def classify_batch_llm(
     examples: list[dict],
     model: str,
     client,
-    batch_size: int = 10,  # Reduced from 20 - model reasoning is verbose
+    batch_size: int = 5,  # Smaller batches work better
 ) -> list[str]:
     """Classify examples using LLM in batches.
 
@@ -256,10 +253,13 @@ def classify_batch_llm(
 
         try:
             response = client.chat.completions.create(
-                model="zai-glm-4.7",  # Less verbose than gpt-oss-120b
-                messages=[{"role": "user", "content": prompt}],
+                model=model,  # Use model from args (llama-3.3-70b)
+                messages=[
+                    {"role": "system", "content": "You are a text classifier. Output only category labels, nothing else."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.0,
-                max_tokens=1500,  # Enough for 10 messages with reasoning
+                max_tokens=200,  # Just enough for labels
             )
 
             # Check if response is valid
@@ -268,31 +268,40 @@ def classify_batch_llm(
                 predictions.extend([ex["heuristic_label"] for ex in batch])
                 continue
 
-            # Parse response (reasoning models use .reasoning instead of .content)
+            # Parse response
             message = response.choices[0].message
             content = message.content or message.reasoning
             if content is None:
-                print(f"    ERROR: API returned None for both content and reasoning", flush=True)
-                print(f"    Response: {response}", flush=True)
+                print(f"    ERROR: API returned None", flush=True)
                 predictions.extend([ex["heuristic_label"] for ex in batch])
                 continue
 
             content = content.strip()
-            lines = [line.strip() for line in content.split("\n") if line.strip()]
-
-            # Parse - look for both "**Result:" and "- Category:" patterns
             import re
-            result_pattern = r'(?:\*\*Result:?|-\s*Category:)\s*(\w+)'
-            matches = re.findall(result_pattern, content, re.IGNORECASE)
 
-            for match in matches:
-                match_lower = match.lower()
-                if match_lower in VALID_CATEGORIES:
-                    predictions.append(match_lower)
+            # Parse comma-separated format
+            if "," in content:
+                parts = [p.strip().lower() for p in content.split(",")]
+                for part in parts:
+                    part_clean = re.sub(r'^.*?(\w+)$', r'\1', part)
+                    if part_clean in VALID_CATEGORIES:
+                        predictions.append(part_clean)
+                    elif part_clean == "social":
+                        predictions.append("statement")
+            else:
+                # Fall back to line-by-line
+                lines = [line.strip() for line in content.split("\n") if line.strip()]
+                for line in lines:
+                    line_clean = re.sub(r'^(\d+[\.\):]\s*|Message\s+\d+[\.:]\s*|\*\*Result:?\s*|-\s*Category:\s*)', '', line, flags=re.IGNORECASE)
+                    line_clean = line_clean.strip().strip('*').strip().lower()
+                    if line_clean in VALID_CATEGORIES:
+                        predictions.append(line_clean)
+                    elif line_clean == "social":
+                        predictions.append("statement")
 
-            # Ensure we have exactly batch_size predictions
+            # Pad with fallback if needed
             while len(predictions) < i + len(batch):
-                predictions.append("social")  # Pad with fallback
+                predictions.append("statement")
 
             time.sleep(2)  # Rate limiting: 30 req/min = 2s between calls
 
@@ -362,16 +371,16 @@ def main() -> int:
         description="Full LLM-based category labeling"
     )
     parser.add_argument(
-        "--model", type=str, default="gpt-oss-120b",
-        help="Model to use (default: gpt-oss-120b)",
+        "--model", type=str, default=JUDGE_MODEL,
+        help=f"Model to use (default: {JUDGE_MODEL})",
     )
     parser.add_argument(
         "--max-examples", type=int, default=17000,
         help="Max number of examples to label (default: 17000)",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=20,
-        help="Batch size for API calls (default: 20)",
+        "--batch-size", type=int, default=5,
+        help="Batch size for API calls (default: 5)",
     )
     parser.add_argument(
         "--output", type=str, default="llm_category_labels.jsonl",
