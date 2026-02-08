@@ -28,7 +28,9 @@ if _env_path.exists():
 # ---------------------------------------------------------------------------
 # Judge configuration (change here to switch providers)
 # ---------------------------------------------------------------------------
-JUDGE_MODEL = "zai-glm-4.7"
+
+# Cerebras Llama 3.3 70B (FREE, 30 req/min, 14.4k req/day)
+JUDGE_MODEL = "llama-3.3-70b"
 JUDGE_BASE_URL = "https://api.cerebras.ai/v1"
 JUDGE_API_KEY_ENV = "CEREBRAS_API_KEY"
 
