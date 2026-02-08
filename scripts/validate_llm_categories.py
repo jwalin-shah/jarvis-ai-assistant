@@ -36,7 +36,8 @@ Categories:
 - social: Casual chat, banter, opinions, stories. Needs friendly engagement.
 - clarify: Ambiguous, incomplete, context-dependent. Needs more context first.
 
-Messages:
+For each message, consider the conversation context (previous message) when classifying.
+
 {messages_block}
 
 Reply with ONLY the category name for each, one per line (e.g., "ack"). No numbers, no explanations."""
@@ -184,9 +185,11 @@ def classify_batch_llm(
     for i in range(0, len(examples), batch_size):
         batch = examples[i:i + batch_size]
 
-        # Format messages block
-        messages_block = "\n".join([
-            f"{j + 1}. {ex['text']}"
+        # Format messages block with context
+        messages_block = "\n\n".join([
+            f"Message {j + 1}:\n"
+            f"Previous: \"{ex['last_message'][:100] if ex['last_message'] else '(start of conversation)'}\"\n"
+            f"Current: \"{ex['text']}\""
             for j, ex in enumerate(batch)
         ])
 
