@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
-"""Prepare multi-source training data for 4-category classifier.
+"""Prepare multi-source training data for 5-category classifier using weak supervision.
 
-Downloads DailyDialog + SAMSum from HuggingFace, maps/labels to 4 categories
-(clarify, warm, brief, social), extracts features (384-dim embeddings + 19
-hand-crafted), balances classes, and saves train/test splits.
+Downloads DailyDialog + SAMSum from HuggingFace, applies 27+ labeling functions
+(heuristics + mobilization features) via weak supervision, aggregates votes into
+labels, extracts features (384-dim embeddings + 19 hand-crafted), balances classes,
+and saves train/test splits.
 
 Categories:
-- clarify: ambiguous/missing context, defer or ask for clarification
-- warm: emotional weight (comfort or celebrate)
-- brief: short transactional (confirm, decline, ETA, yes/no)
-- social: casual conversational, DEFAULT
+- ack: Acknowledgments, reactions, simple agreements (skip SLM, use template)
+- info: Information requests, commitments, direct questions (context=5)
+- emotional: Emotional support, celebrations, empathy needs (context=3)
+- social: Casual conversation, banter, stories (context=3)
+- clarify: Requests for clarification, ambiguous messages (context=5)
 
-DailyDialog labeling: mechanical mapping from act+emotion labels (FREE).
-SAMSum labeling: batched Cerebras API (Qwen3-235B, ~$2).
+Labeling: DIY weak supervision (25+ heuristic labeling functions, no external deps).
+Aggregation: Weighted majority vote or Dawid-Skene EM.
 
 Output: data/category_training/{train,test}.npz, metadata.json
 
 Usage:
-    uv run python scripts/prepare_category_data.py --dry-run   # preview distribution
-    uv run python scripts/prepare_category_data.py              # full run
+    uv run python scripts/prepare_category_data.py --dry-run                           # preview distribution
+    uv run python scripts/prepare_category_data.py                                      # full run (majority vote)
+    uv run python scripts/prepare_category_data.py --method dawid_skene                # use Dawid-Skene EM
+    uv run python scripts/prepare_category_data.py --min-confidence 0.5                # filter low-confidence
+    uv run python scripts/prepare_category_data.py --llm-labels labels.jsonl          # override with LLM labels
 """
 
 from __future__ import annotations
@@ -49,7 +54,7 @@ if _env_path.exists():
             _k, _, _v = _line.partition("=")
             os.environ.setdefault(_k.strip(), _v.strip())
 
-VALID_CATEGORIES = {"clarify", "warm", "brief", "social"}
+VALID_CATEGORIES = {"ack", "info", "emotional", "social", "clarify"}
 
 OUTPUT_DIR = PROJECT_ROOT / "data" / "category_training"
 
@@ -122,53 +127,23 @@ def extract_hand_crafted_features(
 
 
 # ---------------------------------------------------------------------------
-# DailyDialog: mechanical mapping (FREE)
+# DailyDialog: load raw data with metadata (weak supervision replaces mapping)
 # ---------------------------------------------------------------------------
 
-# Dialog act labels: 1=inform, 2=question, 3=directive, 4=commissive
-# Emotion labels: 0=no_emotion, 1=anger, 2=disgust, 3=fear, 4=happiness, 5=sadness, 6=surprise
-NEGATIVE_EMOTIONS = {1, 2, 3, 5}  # anger, disgust, fear, sadness
-POSITIVE_EMOTIONS = {4, 6}  # happiness, surprise
 
+def load_dailydialog_raw() -> list[dict]:
+    """Load DailyDialog and extract per-utterance examples WITHOUT pre-assigned labels.
 
-def map_dailydialog_category(act: int, emotion: int, text_len: int) -> str:
-    """Map DailyDialog act+emotion labels to our 4 categories.
-
-    Mapping table from research doc:
-    - directive/commissive → brief (commands/commitments need action response)
-    - negative emotion → warm (bad news needs empathy)
-    - positive emotion → warm (good news needs celebration)
-    - question + no_emotion + short → brief
-    - question + no_emotion + long → social
-    - inform + no_emotion + short → brief
-    - inform + no_emotion + long → social
-    """
-    # Directive and commissive are always brief
-    if act in (3, 4):
-        return "brief"
-
-    # Any negative or positive emotion → warm
-    if emotion in NEGATIVE_EMOTIONS or emotion in POSITIVE_EMOTIONS:
-        return "warm"
-
-    # No emotion: short messages → brief, long → social
-    if text_len < 40:
-        return "brief"
-    return "social"
-
-
-def load_dailydialog() -> list[dict]:
-    """Load DailyDialog and extract per-utterance examples with labels.
-
-    Returns list of dicts with keys: text, last_message, label, context.
+    Returns list of dicts with keys: text, last_message, context, metadata (act, emotion).
+    Labels will be assigned via weak supervision labeling functions.
     """
     from datasets import load_dataset
 
-    print("Loading DailyDialog...")
+    print("Loading DailyDialog...", flush=True)
     # Use OpenRL parquet mirror (original li2017dailydialog repo requires
     # deprecated dataset scripts, incompatible with datasets>=4.0)
     ds = load_dataset("OpenRL/daily_dialog", split="train")
-    print(f"  {len(ds)} dialogues loaded")
+    print(f"  {len(ds)} dialogues loaded", flush=True)
 
     examples: list[dict] = []
 
@@ -187,7 +162,6 @@ def load_dailydialog() -> list[dict]:
 
             act = acts[i]
             emotion = emotions[i]
-            label = map_dailydialog_category(act, emotion, len(text))
 
             # Context: up to 5 previous utterances
             context = [u.strip() for u in utterances[max(0, i - 5):i]]
@@ -196,96 +170,32 @@ def load_dailydialog() -> list[dict]:
             examples.append({
                 "text": text,
                 "last_message": last_msg,
-                "label": label,
                 "context": context,
+                "metadata": {"act": int(act), "emotion": int(emotion)},
                 "source": "dailydialog",
             })
 
-    print(f"  {len(examples)} per-utterance examples extracted")
+    print(f"  {len(examples)} per-utterance examples extracted", flush=True)
     return examples
 
 
 # ---------------------------------------------------------------------------
-# SAMSum: Cerebras API labeling (cached)
+# SAMSum: load raw data (weak supervision replaces LLM labeling)
 # ---------------------------------------------------------------------------
 
-SAMSUM_LABEL_PROMPT = """\
-Classify each text message into the reply strategy it demands.
 
-Categories (pick the FIRST that applies):
-1. clarify - Message is ambiguous, missing context, or can't be interpreted \
-(bare "?", voice memos, single emoji with no context, forwarded media)
-2. warm - Message carries emotional weight requiring validation \
-(bad news, good news, venting, celebration, grief, excitement)
-3. brief - Message needs a short transactional reply \
-(yes/no questions, confirmations, ETAs, logistics, scheduling)
-4. social - Message invites casual conversation (DEFAULT) \
-(catching up, banter, opinions, stories, general chat)
+def load_samsum_raw(dry_run: bool = False, max_dry_run: int = 100) -> list[dict]:
+    """Load SAMSum and extract per-utterance examples WITHOUT pre-assigned labels.
 
-Rules:
-- Pick the FIRST applicable category in order: clarify > warm > brief > social
-- "social" is the DEFAULT - use when others don't clearly fit
-- Professional tone does NOT change category; ignore formality
-
-Messages:
-{messages}
-
-Reply with ONLY the category numbers (1-4), one per line. \
-No explanations, no extra text."""
-
-CATEGORY_NUM_MAP = {"1": "clarify", "2": "warm", "3": "brief", "4": "social"}
-
-
-def _parse_batch_labels(response_text: str, batch_size: int) -> list[str]:
-    """Parse batch labeling response into category names.
-
-    Extracts numbers 1-4 from the response, maps to category names.
-    Falls back to 'social' for unparseable lines.
-    """
-    # Strip chain-of-thought blocks
-    text = re.sub(r"<think>.*?</think>", "", response_text, flags=re.DOTALL)
-    idx = text.find("<think>")
-    if idx != -1:
-        text = text[:idx]
-
-    labels: list[str] = []
-    for line in text.strip().splitlines():
-        line = line.strip().rstrip(".")
-        # Extract first digit 1-4
-        match = re.search(r"[1-4]", line)
-        if match:
-            labels.append(CATEGORY_NUM_MAP[match.group()])
-        elif labels:
-            # Skip blank lines between numbers
-            continue
-
-    # Pad or truncate to batch_size
-    while len(labels) < batch_size:
-        labels.append("social")
-    return labels[:batch_size]
-
-
-def load_samsum_with_labels(
-    cache_dir: Path,
-    batch_size: int = 100,
-    dry_run: bool = False,
-    max_dry_run: int = 100,
-) -> list[dict]:
-    """Load SAMSum and label messages via Cerebras API.
-
-    Labels are cached per-batch to disk for resume-on-failure.
-
-    Returns list of dicts with keys: text, last_message, label, context.
+    Returns list of dicts with keys: text, last_message, context, metadata (None for SAMSum).
+    Labels will be assigned via weak supervision labeling functions.
     """
     from datasets import load_dataset
-    from openai import OpenAI
 
-    from evals.judge_config import JUDGE_API_KEY_ENV, JUDGE_BASE_URL
-
-    print("Loading SAMSum...")
+    print("Loading SAMSum...", flush=True)
     # Use knkarthick mirror (Samsung/samsum gated/unavailable on datasets>=4.0)
     ds = load_dataset("knkarthick/samsum", split="train")
-    print(f"  {len(ds)} conversations loaded")
+    print(f"  {len(ds)} conversations loaded", flush=True)
 
     # Extract all per-turn examples first
     all_turns: list[dict] = []
@@ -318,110 +228,16 @@ def load_samsum_with_labels(
                 "text": text,
                 "last_message": last_msg,
                 "context": context,
+                "metadata": None,  # SAMSum has no native metadata
                 "source": "samsum",
             })
 
-    print(f"  {len(all_turns)} per-turn examples extracted")
+    print(f"  {len(all_turns)} per-turn examples extracted", flush=True)
 
     if dry_run:
         all_turns = all_turns[:max_dry_run]
 
-    # Load cached labels
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    label_cache_path = cache_dir / "samsum_labels.jsonl"
-    cached_labels: dict[int, str] = {}
-    if label_cache_path.exists():
-        for line in label_cache_path.read_text().splitlines():
-            if line.strip():
-                entry = json.loads(line)
-                cached_labels[entry["idx"]] = entry["label"]
-        print(f"  Loaded {len(cached_labels)} cached labels")
-
-    # Determine which turns need labeling
-    to_label_indices = [i for i in range(len(all_turns)) if i not in cached_labels]
-
-    if to_label_indices:
-        api_key = os.environ.get(JUDGE_API_KEY_ENV, "")
-        if not api_key or api_key == "your-key-here":
-            print(f"WARNING: {JUDGE_API_KEY_ENV} not set. Using 'social' for all unlabeled.")
-            for i in to_label_indices:
-                cached_labels[i] = "social"
-        else:
-            client = OpenAI(base_url=JUDGE_BASE_URL, api_key=api_key)
-
-            # Batch the indices
-            batches = []
-            for start in range(0, len(to_label_indices), batch_size):
-                batches.append(to_label_indices[start:start + batch_size])
-
-            print(f"  Labeling {len(to_label_indices)} turns in {len(batches)} batches "
-                  f"(batch_size={batch_size})...")
-
-            labeled = 0
-            errors = 0
-
-            # Use qwen-3-235b on Cerebras for labeling
-            label_model = "qwen-3-235b-a22b-instruct-2507"
-
-            with open(label_cache_path, "a") as cache_file:
-                for batch_num, batch_indices in enumerate(batches):
-                    # Format messages for this batch
-                    batch_texts = []
-                    for idx in batch_indices:
-                        batch_texts.append(all_turns[idx]["text"])
-
-                    messages_str = "\n".join(
-                        f"{i + 1}. {t}" for i, t in enumerate(batch_texts)
-                    )
-                    prompt = SAMSUM_LABEL_PROMPT.format(messages=messages_str)
-
-                    try:
-                        resp = client.chat.completions.create(
-                            model=label_model,
-                            messages=[{"role": "user", "content": prompt}],
-                            temperature=0.0,
-                            max_tokens=batch_size * 3,
-                        )
-                        response_text = resp.choices[0].message.content.strip()
-                        batch_labels = _parse_batch_labels(
-                            response_text, len(batch_indices)
-                        )
-
-                        for idx, label in zip(batch_indices, batch_labels):
-                            cached_labels[idx] = label
-                            cache_file.write(
-                                json.dumps({"idx": idx, "label": label}) + "\n"
-                            )
-                            labeled += 1
-
-                        cache_file.flush()
-
-                    except Exception as e:
-                        logger.warning("Batch %d error: %s", batch_num, e)
-                        errors += 1
-                        # Default to social for failed batches
-                        for idx in batch_indices:
-                            if idx not in cached_labels:
-                                cached_labels[idx] = "social"
-                                cache_file.write(
-                                    json.dumps({"idx": idx, "label": "social"}) + "\n"
-                                )
-                        cache_file.flush()
-
-                    if (batch_num + 1) % 100 == 0:
-                        print(f"    Batch {batch_num + 1}/{len(batches)} "
-                              f"(labeled={labeled}, errors={errors})")
-
-            print(f"  Labeled {labeled} turns ({errors} batch errors)")
-
-    # Attach labels to turns
-    examples: list[dict] = []
-    for i, turn in enumerate(all_turns):
-        label = cached_labels.get(i, "social")
-        turn["label"] = label
-        examples.append(turn)
-
-    return examples
+    return all_turns
 
 
 # ---------------------------------------------------------------------------
@@ -432,60 +248,174 @@ def load_samsum_with_labels(
 def prepare_data(
     seed: int = 42,
     dry_run: bool = False,
-    max_overrep_ratio: float = 2.0,
+    max_overrep_ratio: float = 1.0,
+    method: str = "majority",
+    min_confidence: float = 0.0,
+    add_synthetic: bool = True,
+    llm_labels_path: str | None = None,
 ) -> dict:
-    """Load, label, extract features, balance, and save training data.
+    """Load, label (via weak supervision), extract features, balance, and save training data.
+
+    Args:
+        seed: Random seed for reproducibility.
+        dry_run: If True, show label distribution without feature extraction.
+        max_overrep_ratio: Max ratio of (class count / minority count).
+            1.0 = perfectly balanced (all classes match minority)
+            2.0 = allows 2x imbalance (majority can be 2x minority)
+        method: Label aggregation method ("majority" or "dawid_skene").
+        min_confidence: Minimum confidence threshold to keep an example (0.0 = keep all).
+        add_synthetic: If True, add synthetic examples.
+        llm_labels_path: Optional path to LLM labels JSONL (overrides weak supervision).
 
     Returns dict with stats.
     """
+    from scripts.label_aggregation import aggregate_labels
+    from scripts.labeling_functions import get_registry
+
     from jarvis.classifiers.response_mobilization import classify_response_pressure
     from jarvis.embedding_adapter import get_embedder
 
     output_dir = OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Load and label both datasets
+    # Step 1: Load both datasets (without labels)
     t0 = time.perf_counter()
-    dd_examples = load_dailydialog()
-    samsum_cache = output_dir / "samsum_cache"
-    samsum_examples = load_samsum_with_labels(
-        samsum_cache, dry_run=dry_run, max_dry_run=200,
-    )
+    dd_examples = load_dailydialog_raw()
+    samsum_examples = load_samsum_raw(dry_run=dry_run, max_dry_run=200)
 
     all_examples = dd_examples + samsum_examples
-    print(f"\nTotal raw examples: {len(all_examples)}")
 
-    # Distribution before filtering
+    # Step 1b: Add synthetic examples for ack only (clarify/social synthetic removed - caused confusion)
+    if add_synthetic:
+        from scripts.generate_synthetic_examples import generate_ack_examples
+
+        print("\nGenerating synthetic examples...", flush=True)
+        ack_synthetic = generate_ack_examples(n=1500)
+        all_examples.extend(ack_synthetic)
+        print(f"  Added {len(ack_synthetic)} synthetic ack examples", flush=True)
+
+    print(f"\nTotal raw examples: {len(all_examples)}", flush=True)
+
+    # Step 2: Apply weak supervision labeling functions (skip for synthetic - already labeled)
+    print(f"\nApplying labeling functions (method={method})...", flush=True)
+    registry = get_registry()
+    print(f"  {len(registry.lfs)} labeling functions registered", flush=True)
+
+    # Separate synthetic from real examples
+    synthetic_examples = [ex for ex in all_examples if ex.get("source", "").startswith("synthetic_")]
+    real_examples = [ex for ex in all_examples if not ex.get("source", "").startswith("synthetic_")]
+
+    # Label only real examples (synthetic are pre-labeled)
+    if real_examples:
+        labels, confidences = aggregate_labels(real_examples, registry, method=method)
+        for i, ex in enumerate(real_examples):
+            ex["label"] = labels[i]
+            ex["confidence"] = confidences[i]
+
+    # Load LLM labels if provided (overrides weak supervision)
+    if llm_labels_path:
+        llm_label_path = Path(llm_labels_path)
+        if llm_label_path.exists():
+            print(f"\nLoading LLM labels from {llm_label_path}...", flush=True)
+            llm_labels_map: dict[str, dict] = {}
+            with llm_label_path.open() as f:
+                for line in f:
+                    if line.strip():
+                        record = json.loads(line)
+                        # Use text as key (unique identifier)
+                        llm_labels_map[record["text"]] = {
+                            "label": record["label"],
+                            "confidence": record.get("confidence", 0.95),
+                            "source_labeling": "llm",
+                        }
+
+            # Override weak supervision labels with LLM labels
+            llm_override_count = 0
+            for ex in real_examples:
+                if ex["text"] in llm_labels_map:
+                    llm_data = llm_labels_map[ex["text"]]
+                    ex["label"] = llm_data["label"]
+                    ex["confidence"] = llm_data["confidence"]
+                    ex["source_labeling"] = "llm"
+                    llm_override_count += 1
+                else:
+                    ex["source_labeling"] = "heuristic"
+
+            print(f"  Overrode {llm_override_count} labels with LLM labels", flush=True)
+        else:
+            print(f"WARNING: LLM labels file not found: {llm_label_path}", flush=True)
+
+    # Synthetic examples already have labels, give them confidence=1.0
+    for ex in synthetic_examples:
+        ex["confidence"] = 1.0
+
+    # Merge back
+    all_examples = real_examples + synthetic_examples
+
+    # Extract labels and confidences for stats
+    labels = [ex["label"] for ex in all_examples]
+    confidences = [ex["confidence"] for ex in all_examples]
+
+    print(f"  Labels assigned to {len(all_examples)} examples", flush=True)
+
+    # Distribution after labeling
     raw_counts = Counter(ex["label"] for ex in all_examples)
-    print("\nRaw label distribution:")
+    avg_confidence = np.mean(confidences)
+    print(f"\nLabel distribution (avg confidence={avg_confidence:.3f}):")
     for label, count in sorted(raw_counts.items(), key=lambda x: -x[1]):
         pct = count / len(all_examples) * 100
-        print(f"  {label:10s} {count:6d} ({pct:.1f}%)")
+        avg_conf_per_class = np.mean([
+            ex["confidence"] for ex in all_examples if ex["label"] == label
+        ])
+        print(f"  {label:10s} {count:6d} ({pct:.1f}%) [avg_conf={avg_conf_per_class:.3f}]")
 
     # Per-source breakdown
-    for source in ("dailydialog", "samsum"):
+    for source in ("dailydialog", "samsum", "synthetic_ack", "synthetic_clarify", "synthetic_social"):
         src_examples = [ex for ex in all_examples if ex["source"] == source]
+        if not src_examples:
+            continue
         src_counts = Counter(ex["label"] for ex in src_examples)
         print(f"\n  {source} ({len(src_examples)} total):")
         for label, count in sorted(src_counts.items(), key=lambda x: -x[1]):
             pct = count / max(len(src_examples), 1) * 100
             print(f"    {label:10s} {count:6d} ({pct:.1f}%)")
 
+    # LF coverage stats (only on real examples, skip synthetic)
+    from scripts.labeling_functions import ABSTAIN
+
+    total_votes = 0
+    abstain_votes = 0
+    for ex in real_examples[:1000]:  # Sample for speed
+        lf_labels = registry.apply_all(
+            ex["text"], ex["context"], ex["last_message"], ex.get("metadata")
+        )
+        total_votes += len(lf_labels)
+        abstain_votes += sum(1 for lbl in lf_labels if lbl == ABSTAIN)
+
+    coverage = 1.0 - (abstain_votes / max(total_votes, 1))
+    print(f"\nLF coverage (sampled): {coverage:.1%} (non-abstain votes)")
+
     if dry_run:
         print("\n--- DRY RUN: stopping before feature extraction ---")
         return {
             "total_raw": len(all_examples),
             "raw_distribution": dict(raw_counts),
+            "avg_confidence": float(avg_confidence),
+            "lf_coverage": float(coverage),
         }
 
-    # Step 2: Filter too-short texts
-    filtered = [ex for ex in all_examples if len(ex["text"].strip()) >= 3]
-    print(f"\nAfter filtering (len >= 3): {len(filtered)}")
+    # Step 3: Filter by length and confidence
+    filtered = [
+        ex for ex in all_examples
+        if len(ex["text"].strip()) >= 3 and ex["confidence"] >= min_confidence
+    ]
+    print(f"\nAfter filtering (len >= 3, confidence >= {min_confidence}): {len(filtered)}")
 
     # Step 3: Balance classes
+    # Use minority count as baseline, allow max_overrep_ratio × minority
     label_counts = Counter(ex["label"] for ex in filtered)
-    median_count = int(np.median(list(label_counts.values())))
-    max_per_class = int(median_count * max_overrep_ratio)
+    minority_count = min(label_counts.values())
+    max_per_class = int(minority_count * max_overrep_ratio)
 
     rng = np.random.default_rng(seed)
     balanced: list[dict] = []
@@ -553,10 +483,12 @@ def prepare_data(
     metadata = {
         "sources": ["OpenRL/daily_dialog", "knkarthick/samsum"],
         "categories": sorted(VALID_CATEGORIES),
-        "labeling_methods": {
-            "dailydialog": "mechanical (act+emotion mapping)",
-            "samsum": "llm (qwen-3-235b on Cerebras)",
-        },
+        "labeling_method": f"weak_supervision ({method})",
+        "num_labeling_functions": len(registry.lfs),
+        "aggregation_method": method,
+        "min_confidence": min_confidence,
+        "avg_confidence": float(avg_confidence),
+        "lf_coverage": float(coverage),
         "total_raw": len(all_examples),
         "total_filtered": len(filtered),
         "total_balanced": len(balanced),
@@ -584,17 +516,44 @@ def prepare_data(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Prepare multi-source category training data"
+        description="Prepare multi-source category training data using weak supervision"
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Preview label distribution without feature extraction",
     )
+    parser.add_argument(
+        "--method", type=str, default="majority", choices=["majority", "dawid_skene"],
+        help="Label aggregation method (default: majority)",
+    )
+    parser.add_argument(
+        "--min-confidence", type=float, default=0.0,
+        help="Minimum confidence threshold to keep an example (default: 0.0)",
+    )
+    parser.add_argument(
+        "--no-synthetic", action="store_true",
+        help="Skip synthetic example generation",
+    )
+    parser.add_argument(
+        "--llm-labels", type=str, default=None,
+        help="Path to LLM labels JSONL (overrides weak supervision)",
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
-    prepare_data(seed=args.seed, dry_run=args.dry_run)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    prepare_data(
+        seed=args.seed,
+        dry_run=args.dry_run,
+        method=args.method,
+        min_confidence=args.min_confidence,
+        add_synthetic=not args.no_synthetic,
+        llm_labels_path=args.llm_labels,
+    )
     return 0
 
 
