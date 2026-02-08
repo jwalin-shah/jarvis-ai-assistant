@@ -201,7 +201,7 @@ def classify_batch_llm(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
-                max_tokens=100,
+                max_tokens=400,  # Increased to handle verbose model responses
             )
 
             # Check if response is valid
@@ -222,14 +222,30 @@ def classify_batch_llm(
             content = content.strip()
             lines = [line.strip() for line in content.split("\n") if line.strip()]
 
-            # Validate and normalize
+            # Validate and normalize (handle verbose responses like '1. "ok" -> ack')
             for line in lines:
-                # Remove leading numbers and periods if present
-                clean = line.lstrip("0123456789. ").lower().strip()
+                # Skip explanatory lines
+                if "classify" in line.lower() or "let's" in line.lower() or "need to" in line.lower():
+                    continue
+
+                # Extract category from line (handle formats like: ack, "ok" -> ack, 1. ack, etc.)
+                # Try to find category after '->' if present
+                if "->" in line:
+                    parts = line.split("->")
+                    if len(parts) >= 2:
+                        clean = parts[1].split("(")[0].strip().lower()  # Remove trailing explanations
+                    else:
+                        clean = line.lstrip("0123456789. \"").lower().strip()
+                else:
+                    clean = line.lstrip("0123456789. \"").lower().strip()
+
+                # Remove trailing parenthetical explanations
+                clean = clean.split("(")[0].strip()
+
                 if clean in VALID_CATEGORIES:
                     predictions.append(clean)
                 else:
-                    # Fallback: try to extract category name
+                    # Fallback: try to find category name anywhere in line
                     for cat in VALID_CATEGORIES:
                         if cat in clean:
                             predictions.append(cat)
