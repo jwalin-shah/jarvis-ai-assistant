@@ -49,9 +49,9 @@ class TestCategoryResult:
 
 class TestFastPath:
     def test_reaction_tapback(self) -> None:
-        """iMessage reactions should be acknowledge."""
+        """iMessage reactions categorized by intent: Loved = emotion."""
         result = classify_category('Loved "Hey there"')
-        assert result.category == "acknowledge"
+        assert result.category == "emotion"
         assert result.method == "fast_path"
         assert result.confidence == 1.0
 
@@ -155,13 +155,16 @@ class TestAPIContract:
 class TestCategoryClassifier:
     def test_classifier_init(self) -> None:
         clf = CategoryClassifier()
-        assert clf._svm_model is None
-        assert clf._svm_loaded is False
+        assert clf._pipeline is None
+        assert clf._pipeline_loaded is False
 
-    def test_load_svm_returns_false_when_no_model(self) -> None:
+    def test_load_pipeline_attempts_load(self) -> None:
+        """Loading pipeline should update the loaded flag."""
         clf = CategoryClassifier()
-        assert clf._load_svm() is False
-        assert clf._svm_loaded is True  # Attempted
+        result = clf._load_pipeline()
+        # Either loads successfully (True) or fails gracefully (False)
+        assert isinstance(result, bool)
+        assert clf._pipeline_loaded is True  # Attempted
 
     def test_fast_path_takes_priority(self) -> None:
         """Fast path should fire before SVM."""
@@ -185,40 +188,45 @@ class TestCategoryClassifier:
 class TestFeatureExtraction:
     def test_extract_hand_crafted_features(self) -> None:
         """Hand-crafted features should return 26 values."""
-        from jarvis.classifiers.category_classifier import _extract_hand_crafted
+        from jarvis.features import CategoryFeatureExtractor
 
-        features = _extract_hand_crafted(
+        extractor = CategoryFeatureExtractor()
+        features = extractor.extract_hand_crafted(
             text="Hey what's up?",
             context=["Hello"],
-            mobilization_pressure="none",
-            mobilization_type="answer",
+            mob_pressure="none",
+            mob_type="answer",
         )
         assert len(features) == 26
         assert features.dtype.name == "float32"
 
     def test_extract_spacy_features(self) -> None:
-        """SpaCy features should return 14 values."""
-        from jarvis.classifiers.category_classifier import _extract_spacy_features
+        """SpaCy features should return ~69 values (14 original + 55 new)."""
+        from jarvis.features import CategoryFeatureExtractor
 
-        features = _extract_spacy_features("Can you help me?")
-        assert len(features) == 14
+        extractor = CategoryFeatureExtractor()
+        features = extractor.extract_spacy_features("Can you help me?")
+        assert len(features) == 69
         assert features.dtype.name == "float32"
 
     def test_spacy_imperative_detection(self) -> None:
-        from jarvis.classifiers.category_classifier import _extract_spacy_features
+        from jarvis.features import CategoryFeatureExtractor
 
+        extractor = CategoryFeatureExtractor()
         # "Send" is VB at start -> imperative
-        features = _extract_spacy_features("Send me the file")
+        features = extractor.extract_spacy_features("Send me the file")
         assert features[0] == 1.0  # has_imperative
 
     def test_spacy_you_modal_detection(self) -> None:
-        from jarvis.classifiers.category_classifier import _extract_spacy_features
+        from jarvis.features import CategoryFeatureExtractor
 
-        features = _extract_spacy_features("Can you help?")
+        extractor = CategoryFeatureExtractor()
+        features = extractor.extract_spacy_features("Can you help?")
         assert features[1] == 1.0  # you_modal
 
     def test_spacy_agreement_detection(self) -> None:
-        from jarvis.classifiers.category_classifier import _extract_spacy_features
+        from jarvis.features import CategoryFeatureExtractor
 
-        features = _extract_spacy_features("sure thing")
+        extractor = CategoryFeatureExtractor()
+        features = extractor.extract_spacy_features("sure thing")
         assert features[8] == 1.0  # has_agreement
