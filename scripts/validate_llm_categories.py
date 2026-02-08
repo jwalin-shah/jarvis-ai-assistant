@@ -31,8 +31,9 @@ CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message. Check categories in t
 2. acknowledge: ≤5 words AND expresses agreement/thanks ("ok", "yeah", "thanks", "sure", "here you are")
 3. request: Asks for action ("can you", "could you", "would you", "please" + verb, "let's", "I'd like")
 4. question: Has "?" OR starts with question word ("what", "when", "where", "who", "why", "how", "is", "are", "do")
-5. emotion: Strong feelings - has emotion words ("happy", "sad", "love", "hate", "excited", "stressed") OR "!!" OR ALLCAPS words OR "😂" OR "wow"
-6. statement: Neutral facts, opinions, explanations (if none of above match)
+5. emotion: Expressing feelings - has emotion words ("happy", "sad", "love", "hate", "excited", "stressed", "wow") OR "!!" OR ALLCAPS words OR 😂😭❤️
+   Note: "happy birthday" and "happy new year" are greetings (statement), not genuine emotions
+6. statement: Neutral facts, opinions, polite phrases (default - includes "I'm happy to hear that")
 
 {messages_block}
 
