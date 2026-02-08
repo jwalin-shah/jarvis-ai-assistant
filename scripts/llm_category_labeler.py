@@ -40,11 +40,11 @@ Categories (check in this order):
 2. acknowledge - Minimal agreement/acknowledgment (≤3 words, no question)
    Examples: "ok", "thanks", "yeah", "gotcha", "sure", "yup", "👍"
 
-3. question - Seeking information (has "?" OR starts with: what, when, where, who, why, how, is, are, do, does, can, could, would)
-   Examples: "What time?", "Where are you?", "Can you help?", "Is it ready?"
+3. request - Seeking action (has "can you"/"could you"/"would you"/"please" + action verb OR imperative verb OR "I suggest"/"let's")
+   Examples: "Can you send the file?", "Please call me", "Send it over", "I suggest we meet", "Let's go"
 
-4. request - Seeking action (imperative verb OR "can you"/"could you"/"please" + verb OR "I suggest"/"let's")
-   Examples: "Send me the file", "Please call me", "I suggest we meet", "Let's go"
+4. question - Seeking information (has "?" OR starts with: what, when, where, who, why, how, is, are, do, does, will, should)
+   Examples: "What time?", "Where are you?", "Is it ready?", "How are you?"
 
 5. emotion - Expressing feelings (contains: happy, sad, angry, stressed, excited, frustrated, love, hate, amazing, terrible OR multiple "!" OR CAPS)
    Examples: "I'm so stressed!", "This is AMAZING", "Ugh so frustrated", "Love it!"
