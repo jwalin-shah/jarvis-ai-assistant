@@ -1,0 +1,113 @@
+Loading BERT embedder and feature extractor...
+
+######################################################################
+# VALIDATION SET: Combined Validation Set
+# Path: /Users/jwalinshah/projects/jarvis-ai-assistant/validation_sets_multilabel.jsonl
+######################################################################
+
+Loading validation data...
+Loaded 400 examples
+  Extracting 915-dim features...
+    Current BERT:   0%|          | 0/4 [00:00<?, ?it/s]mx.metal.set_memory_limit is deprecated and will be removed in a future version. Use mx.set_memory_limit instead.
+mx.metal.set_cache_limit is deprecated and will be removed in a future version. Use mx.set_cache_limit instead.
+    Current BERT:  25%|██▌       | 1/4 [00:02<00:07,  2.36s/it]    Current BERT:  50%|█████     | 2/4 [00:02<00:02,  1.06s/it]    Current BERT:  75%|███████▌  | 3/4 [00:02<00:00,  1.60it/s]                                                               [BERT] BEFORE mx.load: RSS=258.4 MB, VMS=401930.5 MB
+[BERT] AFTER mx.load: RSS=258.9 MB (+0.5), VMS=401931.5 MB (+1.0)
+[BERT] BEFORE model.load_weights: RSS=258.9 MB, VMS=401931.5 MB
+[BERT] AFTER model.load_weights: RSS=259.2 MB (+0.2), VMS=401931.5 MB (+0.0)
+[BERT] AFTER deleting weight dicts: RSS=259.2 MB, VMS=401931.5 MB
+[BERT] BEFORE mx.eval: RSS=259.2 MB, VMS=401931.5 MB
+[BERT] AFTER mx.eval: RSS=386.8 MB (+127.6), VMS=402063.2 MB (+131.7)
+[BERT] AFTER mx.clear_cache: RSS=386.8 MB, VMS=402063.2 MB
+    Context BERT:   0%|          | 0/4 [00:00<?, ?it/s]    Context BERT:  25%|██▌       | 1/4 [00:00<00:00,  3.35it/s]    Context BERT:  50%|█████     | 2/4 [00:00<00:00,  2.71it/s]    Context BERT:  75%|███████▌  | 3/4 [00:01<00:00,  1.39it/s]    Context BERT: 100%|██████████| 4/4 [00:02<00:00,  1.81it/s]                                                                   Non-BERT:   0%|          | 0/400 [00:00<?, ?it/s]    Non-BERT:   0%|          | 1/400 [00:00<01:41,  3.95it/s]    Non-BERT:  10%|▉         | 39/400 [00:00<00:02, 139.50it/s]    Non-BERT:  20%|██        | 82/400 [00:00<00:01, 237.22it/s]    Non-BERT:  31%|███       | 124/400 [00:00<00:00, 295.46it/s]    Non-BERT:  42%|████▏     | 166/400 [00:00<00:00, 334.06it/s]    Non-BERT:  51%|█████▏    | 205/400 [00:00<00:00, 350.26it/s]    Non-BERT:  61%|██████    | 244/400 [00:00<00:00, 360.60it/s]    Non-BERT:  71%|███████   | 283/400 [00:00<00:00, 368.88it/s]    Non-BERT:  80%|████████  | 322/400 [00:01<00:00, 373.21it/s]    Non-BERT:  90%|█████████ | 362/400 [00:01<00:00, 379.97it/s]                                                                  Feature matrix: (400, 915)
+
+======================================================================
+EVALUATING: LinearSVC (915 features, tuned)
+======================================================================
+Loading model from /Users/jwalinshah/projects/jarvis-ai-assistant/models/category_multilabel_hardclass.joblib...
+Loading thresholds from /Users/jwalinshah/projects/jarvis-ai-assistant/models/category_multilabel_hardclass_optimal_thresholds.json...
+Getting predictions...
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/metrics/_classification.py:1833: UndefinedMetricWarning: Precision is ill-defined and being set to 0.0 in samples with no predicted labels. Use `zero_division` parameter to control this behavior.
+  _warn_prf(average, modifier, f"{metric.capitalize()} is", result.shape[0])
+
+Per-class classification report:
+              precision    recall  f1-score   support
+
+ acknowledge     0.4889    0.3548    0.4112        62
+     closing     0.1111    0.5000    0.1818         2
+     emotion     0.7500    0.5534    0.6369       103
+    question     0.9394    0.4429    0.6019        70
+     request     0.6000    0.3529    0.4444        34
+   statement     0.8077    0.5625    0.6632       224
+
+   micro avg     0.7345    0.5030    0.5971       495
+   macro avg     0.6162    0.4611    0.4899       495
+weighted avg     0.7573    0.5030    0.6005       495
+ samples avg     0.5613    0.5567    0.5453       495
+
+
+Multi-label metrics:
+  F1 (samples): 0.5453
+  F1 (macro):   0.4899
+  Hamming loss: 0.1400
+  Jaccard:      0.5146
+
+======================================================================
+EVALUATING: LightGBM (915 features, tuned)
+======================================================================
+Loading model from /Users/jwalinshah/projects/jarvis-ai-assistant/models/category_multilabel_lightgbm_hardclass.joblib...
+Loading thresholds from /Users/jwalinshah/projects/jarvis-ai-assistant/models/category_multilabel_lightgbm_hardclass_optimal_thresholds.json...
+Getting predictions...
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/metrics/_classification.py:1833: UndefinedMetricWarning: Precision is ill-defined and being set to 0.0 in samples with no predicted labels. Use `zero_division` parameter to control this behavior.
+  _warn_prf(average, modifier, f"{metric.capitalize()} is", result.shape[0])
+
+Per-class classification report:
+              precision    recall  f1-score   support
+
+ acknowledge     0.6000    0.3871    0.4706        62
+     closing     0.0000    0.0000    0.0000         2
+     emotion     0.6701    0.6311    0.6500       103
+    question     0.8947    0.4857    0.6296        70
+     request     0.5333    0.2353    0.3265        34
+   statement     0.6494    0.9509    0.7717       224
+
+   micro avg     0.6628    0.6949    0.6785       495
+   macro avg     0.5579    0.4483    0.4747       495
+weighted avg     0.6716    0.6949    0.6549       495
+ samples avg     0.7071    0.7562    0.7067       495
+
+
+Multi-label metrics:
+  F1 (samples): 0.7067
+  F1 (macro):   0.4747
+  Hamming loss: 0.1358
+  Jaccard:      0.6519
+
+######################################################################
+# VALIDATION SET: Validation Set 2
+# Path: /Users/jwalinshah/projects/jarvis-ai-assistant/validation_set_2_labeled.jsonl
+######################################################################
+
+Loading validation data...
+Traceback (most recent call last):
+  File "/Users/jwalinshah/projects/jarvis-ai-assistant/scripts/evaluate_on_validation_sets.py", line 249, in <module>
+    main()
+    ~~~~^^
+  File "/Users/jwalinshah/projects/jarvis-ai-assistant/scripts/evaluate_on_validation_sets.py", line 214, in main
+    texts, labels, contexts = load_validation_set(val_path)
+                              ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/jwalinshah/projects/jarvis-ai-assistant/scripts/evaluate_on_validation_sets.py", line 45, in load_validation_set
+    labels.append(example["labels"])
+                  ~~~~~~~^^^^^^^^^^
+KeyError: 'labels'
