@@ -34,8 +34,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ner_server")
 
-# Default paths
-SOCKET_PATH = Path(os.getenv("JARVIS_NER_SOCKET", "/tmp/jarvis-ner.sock"))
+# Default paths (must match ner_client.py)
+SOCKET_PATH = Path(os.getenv("JARVIS_NER_SOCKET", str(Path.home() / ".jarvis" / "jarvis-ner.sock")))
 PID_FILE = Path.home() / ".jarvis" / "ner_server.pid"
 SPACY_MODEL = os.getenv("JARVIS_SPACY_MODEL", "en_core_web_sm")
 
@@ -101,6 +101,131 @@ def extract_entities_batch(texts: list[str]) -> list[list[dict]]:
     return results
 
 
+def extract_syntactic_features(text: str) -> list[float]:
+    """Extract 14 syntactic features for dialogue act classification.
+
+    Features:
+    - Directive indicators (5): imperative, you+modal, request verbs, starts_modal, directive_question
+    - Commissive indicators (4): i_will, promise_verb, first_person_count, agreement
+    - General syntactic (5): modal_count, verb_count, second_person_count, has_negation, is_interrogative
+
+    Returns:
+        14-element list of float features
+    """
+    if not nlp or not text:
+        return [0.0] * 14
+
+    import re
+
+    doc = nlp(text)
+    features = []
+
+    # Directive indicators (5)
+    # 1. Imperative verb (VB tag at sentence start)
+    features.append(1.0 if doc and doc[0].tag_ == "VB" else 0.0)
+
+    # 2. "you/u" + modal pattern
+    features.append(1.0 if re.search(r"\b(you|u)\s+(can|could|should|will|would)\b", text, re.I) else 0.0)
+
+    # 3. Request verbs
+    request_verbs = {"ask", "tell", "send", "call", "let", "give", "show", "help"}
+    features.append(1.0 if any(tok.lemma_ in request_verbs for tok in doc) else 0.0)
+
+    # 4. Starts with modal (polite request)
+    modal_verbs = {"can", "could", "will", "would", "should", "must", "may", "might"}
+    features.append(1.0 if doc and doc[0].lemma_ in modal_verbs else 0.0)
+
+    # 5. Directive question (ends with ? and has you/your)
+    features.append(1.0 if text.endswith("?") and any(t.text.lower() in {"you", "your"} for t in doc) else 0.0)
+
+    # Commissive indicators (4)
+    # 6. First person future (I'll, I will, we'll, we will)
+    features.append(1.0 if re.search(r"\b(i'?ll|i will|we'?ll|we will)\b", text, re.I) else 0.0)
+
+    # 7. Promise verbs
+    promise_verbs = {"promise", "commit", "agree", "guarantee", "swear"}
+    features.append(1.0 if any(tok.lemma_ in promise_verbs for tok in doc) else 0.0)
+
+    # 8. First person pronoun count
+    first_person = sum(1 for t in doc if t.text.lower() in {"i", "me", "my", "we", "us", "our"})
+    features.append(float(first_person))
+
+    # 9. Agreement words
+    agreement_words = {"ok", "okay", "sure", "yeah", "yes", "yep", "yup", "alright"}
+    features.append(1.0 if any(t.text.lower() in agreement_words for t in doc) else 0.0)
+
+    # General syntactic (5)
+    # 10. Modal verb count
+    modal_count = sum(1 for t in doc if t.lemma_ in modal_verbs)
+    features.append(float(modal_count))
+
+    # 11. Verb count
+    verb_count = sum(1 for t in doc if t.pos_ == "VERB")
+    features.append(float(verb_count))
+
+    # 12. Second person count
+    second_person = sum(1 for t in doc if t.text.lower() in {"you", "your", "yours"})
+    features.append(float(second_person))
+
+    # 13. Has negation
+    features.append(1.0 if any(t.dep_ == "neg" for t in doc) else 0.0)
+
+    # 14. Is interrogative (wh-word or ends with ?)
+    wh_tags = {"WDT", "WP", "WP$", "WRB"}
+    features.append(1.0 if (doc and doc[0].tag_ in wh_tags) or text.endswith("?") else 0.0)
+
+    return features
+
+
+def extract_syntactic_features_batch(texts: list[str]) -> list[list[float]]:
+    """Extract syntactic features from multiple texts using pipe for efficiency."""
+    if not nlp or not texts:
+        return [[0.0] * 14 for _ in texts]
+
+    import re
+
+    logger.info(f"Processing batch of {len(texts)} texts for syntactic features")
+
+    results = []
+    modal_verbs = {"can", "could", "will", "would", "should", "must", "may", "might"}
+    request_verbs = {"ask", "tell", "send", "call", "let", "give", "show", "help"}
+    promise_verbs = {"promise", "commit", "agree", "guarantee", "swear"}
+    agreement_words = {"ok", "okay", "sure", "yeah", "yes", "yep", "yup", "alright"}
+    wh_tags = {"WDT", "WP", "WP$", "WRB"}
+
+    # Use larger batch size for better throughput (256 is optimal for most SpaCy models)
+    for doc, text in zip(nlp.pipe(texts, batch_size=256), texts):
+        features = []
+
+        # Directive indicators (5)
+        features.append(1.0 if doc and doc[0].tag_ == "VB" else 0.0)
+        features.append(1.0 if re.search(r"\b(you|u)\s+(can|could|should|will|would)\b", text, re.I) else 0.0)
+        features.append(1.0 if any(tok.lemma_ in request_verbs for tok in doc) else 0.0)
+        features.append(1.0 if doc and doc[0].lemma_ in modal_verbs else 0.0)
+        features.append(1.0 if text.endswith("?") and any(t.text.lower() in {"you", "your"} for t in doc) else 0.0)
+
+        # Commissive indicators (4)
+        features.append(1.0 if re.search(r"\b(i'?ll|i will|we'?ll|we will)\b", text, re.I) else 0.0)
+        features.append(1.0 if any(tok.lemma_ in promise_verbs for tok in doc) else 0.0)
+        first_person = sum(1 for t in doc if t.text.lower() in {"i", "me", "my", "we", "us", "our"})
+        features.append(float(first_person))
+        features.append(1.0 if any(t.text.lower() in agreement_words for t in doc) else 0.0)
+
+        # General syntactic (5)
+        modal_count = sum(1 for t in doc if t.lemma_ in modal_verbs)
+        features.append(float(modal_count))
+        verb_count = sum(1 for t in doc if t.pos_ == "VERB")
+        features.append(float(verb_count))
+        second_person = sum(1 for t in doc if t.text.lower() in {"you", "your", "yours"})
+        features.append(float(second_person))
+        features.append(1.0 if any(t.dep_ == "neg" for t in doc) else 0.0)
+        features.append(1.0 if (doc and doc[0].tag_ in wh_tags) or text.endswith("?") else 0.0)
+
+        results.append(features)
+
+    return results
+
+
 def handle_request(data: bytes) -> bytes:
     """Handle a single request.
 
@@ -112,8 +237,25 @@ def handle_request(data: bytes) -> bytes:
     """
     try:
         request = json.loads(data.decode("utf-8"))
+        request_type = request.get("type", "entities")
 
-        # Handle batch request
+        # Handle syntactic features batch request
+        if request_type == "syntactic_batch":
+            texts = request.get("texts", [])
+            if not isinstance(texts, list):
+                return json.dumps({"error": "texts must be a list"}).encode()
+            features = extract_syntactic_features_batch(texts)
+            return json.dumps({"results": features}).encode()
+
+        # Handle syntactic features single request
+        if request_type == "syntactic":
+            text = request.get("text", "")
+            if not text:
+                return json.dumps({"features": [0.0] * 14}).encode()
+            features = extract_syntactic_features(text)
+            return json.dumps({"features": features}).encode()
+
+        # Handle batch entity request
         if "texts" in request:
             texts = request["texts"]
             if not isinstance(texts, list):
@@ -121,7 +263,7 @@ def handle_request(data: bytes) -> bytes:
             entities = extract_entities_batch(texts)
             return json.dumps({"results": entities}).encode()
 
-        # Handle single request
+        # Handle single entity request
         text = request.get("text", "")
         if not text:
             return json.dumps({"entities": []}).encode()

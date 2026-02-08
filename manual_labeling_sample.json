@@ -1,0 +1,761 @@
+{
+  "instructions": "\nLabel each message with ONE category:\n\n1. needs_answer - Expects factual info (has \"?\" + wh-word: what/when/where/who/how/why)\n2. needs_confirmation - Expects yes/no/acknowledgment (imperative OR \"can you/could you/will you/please\")\n3. needs_empathy - Needs emotional support (negative: sad/stressed/died/failed OR very positive: promoted/excited OR emojis \ud83d\ude2d\ud83d\ude0a\ud83c\udf89)\n4. conversational - Casual engagement (default, everything else)\n\nFor each message, consider:\n- What kind of REPLY does this expect?\n- What should the SLM's tone/style be?\n",
+  "categories": [
+    "needs_answer",
+    "needs_confirmation",
+    "needs_empathy",
+    "conversational"
+  ],
+  "messages": [
+    {
+      "text": "I thought it was about 5G technology or something of the sort.. hahaha",
+      "previous": "Oh \ud83d\ude15",
+      "source": "samsum"
+    },
+    {
+      "text": "Urgh",
+      "previous": "Whenever I don't have much work to do then I don't feel like going out",
+      "source": "samsum"
+    },
+    {
+      "text": "Woowee! Well done, girl! I must meet this English gent!",
+      "previous": "Franklin and me are taking things slooowwww! We did get together at Thanksgiving though!",
+      "source": "samsum"
+    },
+    {
+      "text": "Oh thanks! I'm on it",
+      "previous": "You can step by the spa, or just call them from the desk phone, its 2279 extension",
+      "source": "samsum"
+    },
+    {
+      "text": "it's great too but you know, Naughty Dog's games are THE best",
+      "previous": "but man, I still haven't finished God of War",
+      "source": "samsum"
+    },
+    {
+      "text": "yeah \u2639\ufe0f",
+      "previous": "Holy",
+      "source": "samsum"
+    },
+    {
+      "text": "i still haven't seen \"Kler\"",
+      "previous": "i know ;) what would you like to see?",
+      "source": "samsum"
+    },
+    {
+      "text": "alone?",
+      "previous": "I want go to the town",
+      "source": "samsum"
+    },
+    {
+      "text": "Are there many side effects ?",
+      "previous": "We could start with Hydrochlorothiazide , which is a diuretic .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "that was a BIG mess",
+      "previous": "no biggie",
+      "source": "samsum"
+    },
+    {
+      "text": "great see ya",
+      "previous": "yeah picked it up 10 min ago",
+      "source": "samsum"
+    },
+    {
+      "text": "Hello , Mr Hong . What can I do for you ?",
+      "previous": "This is James Hong calling from Lincoln Bank .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "You \u2019 re welcome .",
+      "previous": "I got it . Thank you so much .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "per person",
+      "previous": "how many nights?",
+      "source": "samsum"
+    },
+    {
+      "text": "Which model is the best seller of this year ?",
+      "previous": "The fridges is covered by a one-year warranty .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "He just has his secretary do his homework for him .",
+      "previous": "Why is that ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "guess what? I'm moving into this new GREAT, FANCY place uptown",
+      "previous": "doing great, thanks!",
+      "source": "samsum"
+    },
+    {
+      "text": "Yes the gate was open exactly at the expected time",
+      "previous": "But now everything\u2019s ok?",
+      "source": "samsum"
+    },
+    {
+      "text": "Go without us guys",
+      "previous": "yes, we\u2019ll be there in a minute",
+      "source": "samsum"
+    },
+    {
+      "text": "Do you have an online edition of that magazine ?",
+      "previous": "Sometimes it takes too long to find the exact information you are looking for . Besides , I like to read a magazine in a coffee bar sometimes .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Just taking a smoke break .",
+      "previous": "Hey Bobby . What's going on ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Rockets vs Lakers . Yao Ming , my idol , will appear in front of several hundred million of the worldwide audience .",
+      "previous": "Who plays who ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "That's the best price we can offer .",
+      "previous": "We think the price is too high .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Well, it's about Kate wanting to redecorate the whole thing...",
+      "previous": "So what is it about?",
+      "source": "samsum"
+    },
+    {
+      "text": "i dont beleive you",
+      "previous": "he wasnt i promise",
+      "source": "samsum"
+    },
+    {
+      "text": "You better hurry - he's turning kinda red like a tomato",
+      "previous": "You can prepare my lovely eulogy while Perry finishes me off",
+      "source": "samsum"
+    },
+    {
+      "text": "Is it just just one more final for you too?",
+      "previous": "Ye and Sure! \u263a\ufe0f",
+      "source": "samsum"
+    },
+    {
+      "text": "I will \ud83d\ude0a",
+      "previous": "call me \ud83d\ude1c",
+      "source": "samsum"
+    },
+    {
+      "text": "Seems like no!",
+      "previous": "Yeah, can't they afford to get it fixed if they pay our bonuses?",
+      "source": "samsum"
+    },
+    {
+      "text": "nothing",
+      "previous": "nope;/",
+      "source": "samsum"
+    },
+    {
+      "text": "<file_photo>",
+      "previous": "sure, here you are",
+      "source": "samsum"
+    },
+    {
+      "text": "Yeah, they're getting me cake, too! It's a surprise, so I'm a little excited, hehe :D",
+      "previous": "Well, sometimes it's good to have a chill day, haha",
+      "source": "samsum"
+    },
+    {
+      "text": "yes , you need to be careful with what you eat when you're abroad . Sometimes new food might disagree with you .",
+      "previous": "yes , at the beginning we were all excited and had lots of fun . However , on the third day of traveling in the city , I felt sick . I think I had something bad to eat , but it passed by the evening .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Yeah, easy, there are some people who are gonna be 30 minutes late so no pressure.",
+      "previous": "No probs.",
+      "source": "samsum"
+    },
+    {
+      "text": "What kind of people do you like to work with ?",
+      "previous": "I maintain that the most important thing is having good friends . A person can't live all by himself I think . A friend in need is a friend in deed.The more really close friends I have , the better .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Oh , my God , you're kidding me ! He carried him back ?",
+      "previous": "Right . Luckily it was on the eighteen hole , quite near the clubhouse , so he didn't have far to carry him .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Why can't I call the police now ? He was definitely following me !",
+      "previous": "Actually , I don't think you can call the police . Not yet at least.He hasn't done anything . And probably the police will just ignore it.But if anything happens again , then maybe you should call .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "maybe he just tryna be tough",
+      "previous": "agreed.",
+      "source": "samsum"
+    },
+    {
+      "text": "Thank you. Remember - 1,5 hours.",
+      "previous": "I'll get right on it.",
+      "source": "samsum"
+    },
+    {
+      "text": "Sure . Take your time .",
+      "previous": "Let me think about it .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Send me some nice pics whenever you find some awesome places. <\u4e36\u00b4\u0414\uff40>",
+      "previous": "That\u2019s true. \ud83d\udc7c\ud83d\udc7c",
+      "source": "samsum"
+    },
+    {
+      "text": "I mean really\u2026 in a nice way\u2026 It can't be like this forever",
+      "previous": "Hahah for sure!",
+      "source": "samsum"
+    },
+    {
+      "text": "ok, sounds easy",
+      "previous": "Just take the underground train at the airport, it will bring you to the main station, about 2 Euro I think",
+      "source": "samsum"
+    },
+    {
+      "text": "Hahaha!",
+      "previous": "Somewhere in the deep dark corners of the web there's a room full of broken men with your name scrawled across their bodies.",
+      "source": "samsum"
+    },
+    {
+      "text": "i have a special gift for you",
+      "previous": "awwww <3 so cute",
+      "source": "samsum"
+    },
+    {
+      "text": "Maybe good, you'd poo yourself",
+      "previous": "I'm on the toilet",
+      "source": "samsum"
+    },
+    {
+      "text": "Thanks!",
+      "previous": "Ok, no prob",
+      "source": "samsum"
+    },
+    {
+      "text": "Ofc. Sure, you can buy something machine-made, but making ur own is far more satisfying!",
+      "previous": "And that's how you get a nice pattern on table linen?",
+      "source": "samsum"
+    },
+    {
+      "text": "I was involved in the linguistic project of our department",
+      "previous": "but why actually?",
+      "source": "samsum"
+    },
+    {
+      "text": "You bet . The wrestlers had got sound defences and they simply couldn't make it .",
+      "previous": "Yes , of course . And I'm amazed the those karate and judo boys were so helpless before the wrestlers .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "never leave a house without snacks for kids! Haha!",
+      "previous": "at all?! Yeah, whatever!",
+      "source": "samsum"
+    },
+    {
+      "text": "How about you?",
+      "previous": "Shut up! LOL",
+      "source": "samsum"
+    },
+    {
+      "text": "Exactly.",
+      "previous": "What you've just described is the way the referendum was organised.",
+      "source": "samsum"
+    },
+    {
+      "text": "What time are you going ?",
+      "previous": "I'd like to say good-bye to everyone .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Oh , forget it then . Hey , I told you to put the files on the in tray , not on my desk .",
+      "previous": "It broke down one year ago .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Sure I would. Are you?",
+      "previous": "If you were staying with us, I image you'd be in the pool all the time.",
+      "source": "samsum"
+    },
+    {
+      "text": "Yes , I do . Everyone \u2019 s really friendly . Sometimes , I wish I worked outdoors more , especially during the summer .",
+      "previous": "Do you enjoy working in this office ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "I see, makes sense",
+      "previous": "I think the British king gave the land to his brother, the Duke of York, hence the name!",
+      "source": "samsum"
+    },
+    {
+      "text": "im surprised your up at this hour",
+      "previous": "dude you up?",
+      "source": "samsum"
+    },
+    {
+      "text": "could you check for me if my train is still scheduled?",
+      "previous": "yes but at the airport I have to catch a train",
+      "source": "samsum"
+    },
+    {
+      "text": "But if you go to university , you'll still have time for fun .",
+      "previous": "You should take their advice . They know what's best for you.But my friends will have jobs and lots of fun , while I spend all my time doing reading and writing .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "sure baby",
+      "previous": "good .. i am waiting send me",
+      "source": "samsum"
+    },
+    {
+      "text": "Yes . The sliced noodles they offer are among the most authentic Shanti cuisines .",
+      "previous": "Sounds great . Do they serve noodles ? I am in the mood for some tasty noodles as well .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "I wish they didn't",
+      "previous": "At least we know they noticed...",
+      "source": "samsum"
+    },
+    {
+      "text": "on my way!",
+      "previous": "where the fuck are you?!",
+      "source": "samsum"
+    },
+    {
+      "text": "So see you .",
+      "previous": "Well . Thank you for coming .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Easier said than done .",
+      "previous": "Government is making efforts to change situation .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Speaking of history, what was the homework? I arrived late and she had already wiped it off the board.",
+      "previous": "thank Diana :)",
+      "source": "samsum"
+    },
+    {
+      "text": "around 8, ok?",
+      "previous": "what time will u come?",
+      "source": "samsum"
+    },
+    {
+      "text": ":-D",
+      "previous": "Upper legs? Is that a polite way of saying your ass??? :-D",
+      "source": "samsum"
+    },
+    {
+      "text": "Keep it up! Love and hugs!",
+      "previous": "Very much so!",
+      "source": "samsum"
+    },
+    {
+      "text": "Look at the candy bar over there . It is so colorful and tasty .",
+      "previous": "why not ? I would like to buy some candies . Since there are so many people , I think they must have delicious candy .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Then describe Ms Suarez ;-)",
+      "previous": "hahahha",
+      "source": "samsum"
+    },
+    {
+      "text": "They are mostly people believing in things that have nothing to do with logic or reason: miracles, ghosts, witchcraft, just as our neighbour.",
+      "previous": "It's just not true.",
+      "source": "samsum"
+    },
+    {
+      "text": "I take architecture as my major .",
+      "previous": "What's your major in college ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "You are in the right place . Roll up your left sleeve and have a seat .",
+      "previous": "I came to this lab to have my blood drawn .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "I need to find a new way of getting my insurance .",
+      "previous": "Hello , Sir . What can I do for you today ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Oh thats too sad. :( may their soul RIP",
+      "previous": "2 people were killed in a road accident. My elder brother saw this. He was there",
+      "source": "samsum"
+    },
+    {
+      "text": "I got the job!",
+      "previous": "shoot",
+      "source": "samsum"
+    },
+    {
+      "text": "you can donate it to charity :-D",
+      "previous": "i remember that bike!!!",
+      "source": "samsum"
+    },
+    {
+      "text": "Yeah , sir . Your shirt will be ready by Thursday morning . Anything else ?",
+      "previous": "Yes , heavy starch in the collar please .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Tell me which building it's in .",
+      "previous": "I have no idea where my class is .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "We cannot think like this. I think he is troubled and he needs help.",
+      "previous": "I understand, this is serious. Is our son becoming some kind of disgusting pervert?",
+      "source": "samsum"
+    },
+    {
+      "text": "The crab soup is quite delicious.It ' s always a favorite with our customers .",
+      "previous": "What's the specialty of your restaurant ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Sharing knowledge can be very settled and some second stances . People may think you are telling them how to do their work . If they take it personally , they feel angry at you and even become reluctant to support you at work .",
+      "previous": "Thank you for saying so . I don \u2019 t know , probably because I like sharing my experience and knowledge with them . I think this kind of communication helps to improve our work efficiency and also helps to get along with colleagues .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "cool",
+      "previous": "ok, I'll write him write now",
+      "source": "samsum"
+    },
+    {
+      "text": "I don \u2019 t know . It was there when I woke up this morning .",
+      "previous": "You \u2019 Ve god a fever and playing football isn \u2019 t a good idea for a boy with a fever . What \u2019 s that on your arm ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "And if you ditch me this time I'm gonna take the team off the competition ._. . You guys are so annoying.",
+      "previous": "Great!",
+      "source": "samsum"
+    },
+    {
+      "text": "I feel ya, I'll cancel then",
+      "previous": "Don't even start, I am so pissed",
+      "source": "samsum"
+    },
+    {
+      "text": "Mr.Black , if I'm not mistaken .",
+      "previous": "Oh , what a pleasant surprise ! Don't you remember me ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Let's go out to celebrate!!!",
+      "previous": "congratulations! i'm so happy for you!!  i knew you'd get it",
+      "source": "samsum"
+    },
+    {
+      "text": "Anything else ?",
+      "previous": "I would like to have shelled shrimps with cashew nuts .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "yes , he is . I \u2019 Ve make an appointment for 10 o \u2019 clock , so I \u2019 d better move along .",
+      "previous": "well . I \u2019 m sure the doctor will be able to prescribe something to make you well again . Dr . Jameson is very good .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "I promise than when I get we'll have a trip to the seaside!",
+      "previous": "cutie pie, she takes after her mum :D",
+      "source": "samsum"
+    },
+    {
+      "text": "According to what you did last time , I have my doubts .",
+      "previous": "I am 100 % certain .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Strawberry",
+      "previous": "Which flavor?",
+      "source": "samsum"
+    },
+    {
+      "text": "I thought it was pretty good .",
+      "previous": "How did you like the movie ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Yes , but I prefer red wine with meat .",
+      "previous": "Shall we have some white wine then ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "No, I can't.",
+      "previous": "Are you going to the party?",
+      "source": "samsum"
+    },
+    {
+      "text": "Youre sweet <3",
+      "previous": "I\u2019m sure it will ;*",
+      "source": "samsum"
+    },
+    {
+      "text": "I don't mind really",
+      "previous": "so, what time?",
+      "source": "samsum"
+    },
+    {
+      "text": "It's in photos on our Facebook Fanpage.",
+      "previous": "Where do I find the menu?",
+      "source": "samsum"
+    },
+    {
+      "text": "to be honest , I'm a bit fed up .",
+      "previous": "I'm in a really good mood , actually . How about you ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Oh ! I hate rainy days !",
+      "previous": "It says a storm may come tomorrow .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Just the truth!",
+      "previous": "You are no help!",
+      "source": "samsum"
+    },
+    {
+      "text": "shit",
+      "previous": "lol",
+      "source": "samsum"
+    },
+    {
+      "text": "ask me again.....in latin.....",
+      "previous": "can we please start over",
+      "source": "samsum"
+    },
+    {
+      "text": "same here",
+      "previous": "how long do you think it will take you?",
+      "source": "samsum"
+    },
+    {
+      "text": "Spidey!!",
+      "previous": "I can't believe they killed so many heroes",
+      "source": "samsum"
+    },
+    {
+      "text": "of course not, i am not dumb lol, i told her to get lost ;)",
+      "previous": "did you get them?",
+      "source": "samsum"
+    },
+    {
+      "text": "yeah right",
+      "previous": "doing useless things like working for example",
+      "source": "samsum"
+    },
+    {
+      "text": "I have enough to live off of for about 3 months . But I really don't want to spend my life savings on just living ! I \u2019 d rather invest my money somehow .",
+      "previous": "let \u2019 s think realistically about what might happen . How much money do you have in your savings ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "i know!!! i'm having buyer's remorse.",
+      "previous": "buying clothes online is always a risk",
+      "source": "samsum"
+    },
+    {
+      "text": "Yes , but I've nearly fixed it . Just take it , will you ?",
+      "previous": "What are you doing ? Is anything wrong ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "ahh she is so pretty looks like her dad",
+      "previous": ",File_photo>",
+      "source": "samsum"
+    },
+    {
+      "text": "Yeah, think chicken with its head cut off :D",
+      "previous": "Ohh no worries. You do what you have to do!",
+      "source": "samsum"
+    },
+    {
+      "text": "Me too. Yesterday at night.",
+      "previous": "Really??",
+      "source": "samsum"
+    },
+    {
+      "text": "please don't bother, I'll get an uber",
+      "previous": "I'll ask Derren to pick you up from the station",
+      "source": "samsum"
+    },
+    {
+      "text": "Did you need help finding anything else ?",
+      "previous": "I think I can find that .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "Yes , so I had to wait three hours for the next one . I didn't get home till four in the morning , and when I got home I realized I'd left my house keys in my hotel in Bangkok .",
+      "previous": "Oh , no !",
+      "source": "dailydialog"
+    },
+    {
+      "text": "He went str8 to the boss to tell on me and to state that managers have too much power in the company! Believe it?",
+      "previous": "If this is going to make me laugh, I need to prepare first ;)",
+      "source": "samsum"
+    },
+    {
+      "text": "Friday night or Sat",
+      "previous": "When?",
+      "source": "samsum"
+    },
+    {
+      "text": "I see . Are there any seat available ?",
+      "previous": "It leaves at 8",
+      "source": "dailydialog"
+    },
+    {
+      "text": "What?",
+      "previous": "Did you know that the dean died yesterday?",
+      "source": "samsum"
+    },
+    {
+      "text": "I have given it to Nathan, You can take it from him",
+      "previous": "Do you still have that white jacket?",
+      "source": "samsum"
+    },
+    {
+      "text": "That's why you should go there , If you don't dare to speak English owing to the fact that you are afraid of making mistakes , you simply will never learn English .",
+      "previous": "You know , I am poor at English , especially spoken English .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "No , I \u2019 m sorry . I'm going to meet some friends tomorrow evening . And I'm in a hurry now .",
+      "previous": "What about tomorrow evening ?",
+      "source": "dailydialog"
+    },
+    {
+      "text": "I found one that is much cheaper from one of the outlets",
+      "previous": "I'll bring along the organic shampoo",
+      "source": "samsum"
+    },
+    {
+      "text": "OK , Mom . Can I swim now ? I want to learn butterfly stroke .",
+      "previous": "Look out , honey . Let's come to the shoal waters . Follow me !",
+      "source": "dailydialog"
+    },
+    {
+      "text": "And Tom , you will help Johnny with his homework , won't you ?",
+      "previous": "Of course .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "You haven't lost any weight , have you ?",
+      "previous": "Pretty good , I'd say .",
+      "source": "dailydialog"
+    },
+    {
+      "text": "and that's the same alternative view, what you guys think?",
+      "previous": "<file_photo>",
+      "source": "samsum"
+    },
+    {
+      "text": "Yup. I'm gonna do nothing :)",
+      "previous": "So you are going to go and relax now, right?",
+      "source": "samsum"
+    },
+    {
+      "text": "i still don't know what we did with art ;/",
+      "previous": "Yaa - everything we did wth art",
+      "source": "samsum"
+    },
+    {
+      "text": "Hey!! I'm so sorry I didn't reply earlier - I had a couple of trips going on and literally no time to check the Internet!!! :( Now my Inbox is stuffed with emails that need replying -_-",
+      "previous": "<file_other>",
+      "source": "samsum"
+    },
+    {
+      "text": "you mean out? could be bit cold still",
+      "previous": "more like have a bottle 2gether and then after midnite do more",
+      "source": "samsum"
+    },
+    {
+      "text": "I don't want problems, come down",
+      "previous": "not even one beer",
+      "source": "samsum"
+    },
+    {
+      "text": "Can you get Brazilian nuts?",
+      "previous": "Anything else?",
+      "source": "samsum"
+    },
+    {
+      "text": "mainly managing myself :P",
+      "previous": "Aaa, so what are u doing on the daily basis?",
+      "source": "samsum"
+    },
+    {
+      "text": "<file_gif>",
+      "previous": "are u still watching The Good Place?",
+      "source": "samsum"
+    },
+    {
+      "text": "Have you got it now ?",
+      "previous": "Well , I ... I lost my wallet , and I ...",
+      "source": "dailydialog"
+    },
+    {
+      "text": "me neither. ppl work tet",
+      "previous": "man, too busy 2 watch",
+      "source": "samsum"
+    },
+    {
+      "text": "Nahh, you're fine!",
+      "previous": "I hope it won't be a problem",
+      "source": "samsum"
+    },
+    {
+      "text": "wouldn't that be the truth?",
+      "previous": "people will start to thing that I'm avoiding them",
+      "source": "samsum"
+    },
+    {
+      "text": "ok, thank you for the tips <3 hopefully you won't be horrified this time unlike last year",
+      "previous": "you could try looking in Sephora for example ooooorrr maybe Zara for fun/sparkly things \ud83d\ude1c",
+      "source": "samsum"
+    },
+    {
+      "text": "dinner will get cold",
+      "previous": "really???",
+      "source": "samsum"
+    },
+    {
+      "text": "Nice?",
+      "previous": "Looks like the French Riviera",
+      "source": "samsum"
+    },
+    {
+      "text": "you'll clean the bathroom this week",
+      "previous": "you owe me a big one",
+      "source": "samsum"
+    },
+    {
+      "text": "Nope, not really! Christmas Day, I suppose, but then I have to get up at Stupid o' Clock on Boxing Day!",
+      "previous": "You basically have no holidays then this year?",
+      "source": "samsum"
+    },
+    {
+      "text": "Totally weird",
+      "previous": "I also have mixed feelings",
+      "source": "samsum"
+    }
+  ]
+}

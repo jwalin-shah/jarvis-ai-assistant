@@ -1,0 +1,16 @@
+Makefile:467: warning: overriding commands for target `train-category-svm'
+Makefile:385: warning: ignoring old commands for target `train-category-svm'
+uv run python scripts/prepare_dailydialog_data.py
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/OpenRL/daily_dialog/1668faf0c0dc44664f108c489fd0666128db2c48/README.md "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/1668faf0c0dc44664f108c489fd0666128db2c48/daily_dialog.py "HTTP/1.1 404 Not Found"
+INFO:httpx:HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/OpenRL/daily_dialog/OpenRL/daily_dialog.py "HTTP/1.1 404 Not Found"
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/datasets/OpenRL/daily_dialog/revision/1668faf0c0dc44664f108c489fd0666128db2c48 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/1668faf0c0dc44664f108c489fd0666128db2c48/.huggingface.yaml "HTTP/1.1 404 Not Found"
+INFO:httpx:HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=OpenRL/daily_dialog "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/datasets/OpenRL/daily_dialog/tree/1668faf0c0dc44664f108c489fd0666128db2c48/data?recursive=true&expand=false "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://huggingface.co/api/datasets/OpenRL/daily_dialog/tree/1668faf0c0dc44664f108c489fd0666128db2c48?recursive=false&expand=false "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/1668faf0c0dc44664f108c489fd0666128db2c48/dataset_infos.json "HTTP/1.1 404 Not Found"
+INFO:jarvis.embedding_adapter:Initialized in-process MLX embedder with model: bge-small
+INFO:models.bert_embedder:Loading bge-small (hidden=384, layers=12, pooler=True)
+INFO:models.bert_embedder:Model loaded in 0.12s

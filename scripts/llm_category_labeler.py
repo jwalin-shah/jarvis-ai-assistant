@@ -30,14 +30,14 @@ from scripts.label_aggregation import aggregate_labels
 
 VALID_CATEGORIES = ["ack", "info", "emotional", "social", "clarify"]
 
-CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message into ONE category based on how an AI assistant should respond.
+CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message into ONE category based on the type of response needed.
 
-Categories:
-- ack: Simple acknowledgment, reaction, emoji-only, "ok/yes/no/thanks/bye". No reply needed.
-- info: Question, request, scheduling, logistics. Needs factual/action response.
-- emotional: Expresses feelings, celebrates, vents. Needs empathy/support.
-- social: Casual chat, banter, opinions, stories. Needs friendly engagement.
-- clarify: Ambiguous, incomplete, context-dependent. Needs more context first.
+Categories (choose the BEST fit):
+- ack: Acknowledgment/reaction only ("ok", "thanks", emoji). No substantive reply needed.
+- info: ASKING for information/action OR ANSWERING a direct question. Examples: "What time?", "Can you?", "I suggest we...", answering "yes" to a question.
+- emotional: Expressing strong feelings (happy, sad, frustrated, excited). Needs empathy. Example: "I'm so stressed", "This is amazing!"
+- social: Casual conversation, opinions, stories, comments. NOT answering a question. Example: "That's interesting", "I think...", "Nice!"
+- clarify: Ambiguous or incomplete (needs more context). Example: "???", "...", "huh?"
 
 For each message, consider the conversation context (previous message) when classifying.
 

@@ -889,6 +889,11 @@ def get_trigger_classifier_path() -> Path:
     return get_embedding_artifacts_dir() / "trigger_classifier_model"
 
 
+def get_category_classifier_path() -> Path:
+    """Get path to the category classifier model directory."""
+    return get_embedding_artifacts_dir() / "category_classifier_model"
+
+
 def get_embeddings_db_path() -> Path:
     """Get path to the embeddings database.
 

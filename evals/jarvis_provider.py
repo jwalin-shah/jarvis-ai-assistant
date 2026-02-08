@@ -214,7 +214,7 @@ def generate_reply(prompt: str, config: dict) -> dict:
         loader = load_model()
         result = loader.generate_sync(
             prompt=prompt,
-            temperature=config.get("temperature", 0.7),
+            temperature=config.get("temperature", 0.1),
             max_tokens=config.get("max_tokens", 50),
             top_p=config.get("top_p", 0.1),
             top_k=config.get("top_k", 50),
@@ -235,23 +235,35 @@ def generate_reply(prompt: str, config: dict) -> dict:
 
 
 def main():
-    input_data = sys.stdin.read()
-
-    try:
-        request = json.loads(input_data)
-    except json.JSONDecodeError as e:
-        print(json.dumps({"error": f"Invalid JSON: {e}"}))
+    # promptfoo exec provider passes: argv[1]=prompt, argv[2]=config_json, argv[3]=context_json
+    if len(sys.argv) < 4:
+        print(json.dumps({"error": f"Expected 3 args, got {len(sys.argv) - 1}"}))
         sys.exit(1)
 
-    vars_dict = request.get("vars", {})
-    config = request.get("config", {})
+    raw_prompt = sys.argv[1]  # e.g. "strategy:xml_drafter"
+    try:
+        config = json.loads(sys.argv[2]).get("config", {})
+    except json.JSONDecodeError:
+        config = {}
+    try:
+        context_obj = json.loads(sys.argv[3])
+    except json.JSONDecodeError as e:
+        print(json.dumps({"error": f"Invalid context JSON: {e}"}))
+        sys.exit(1)
+
+    vars_dict = context_obj.get("vars", {})
+
+    # Extract strategy from prompt string (format: "strategy:xml_drafter")
+    if ":" in raw_prompt:
+        strategy_name = raw_prompt.split(":", 1)[1]
+    else:
+        strategy_name = vars_dict.get("strategy", "xml_drafter")
 
     # Extract test case variables
     context = vars_dict.get("context", "")
     last_message = vars_dict.get("last_message", "")
     tone = vars_dict.get("tone", "casual")
     user_style = vars_dict.get("user_style", "")
-    strategy_name = vars_dict.get("strategy", "xml_drafter")
 
     # Get the strategy function
     strategy_fn = STRATEGIES.get(strategy_name, strategy_xml_drafter)

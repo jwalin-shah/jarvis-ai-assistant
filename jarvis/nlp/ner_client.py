@@ -259,6 +259,71 @@ def extract_organizations(text: str) -> list[str]:
     return [e.text for e in entities if e.is_organization()]
 
 
+def get_syntactic_features(text: str) -> list[float]:
+    """Extract syntactic features for dialogue act classification.
+
+    Returns 14 features:
+    - Directive indicators (5): imperative, you+modal, request verbs, starts_modal, directive_question
+    - Commissive indicators (4): i_will, promise_verb, first_person_count, agreement
+    - General syntactic (5): modal_count, verb_count, second_person_count, has_negation, is_interrogative
+
+    Args:
+        text: Text to extract features from.
+
+    Returns:
+        List of 14 float features. Returns zeros if service unavailable.
+    """
+    if not text or not SOCKET_PATH.exists():
+        return [0.0] * 14
+
+    try:
+        response = _send_request({"type": "syntactic", "text": text})
+
+        if "error" in response:
+            logger.warning("NER service error: %s", response["error"])
+            return [0.0] * 14
+
+        return response.get("features", [0.0] * 14)
+
+    except (ConnectionError, TimeoutError) as e:
+        logger.warning("NER service connection failed: %s", e)
+        return [0.0] * 14
+    except Exception as e:
+        logger.warning("NER client error: %s", e)
+        return [0.0] * 14
+
+
+def get_syntactic_features_batch(texts: list[str]) -> list[list[float]]:
+    """Extract syntactic features from multiple texts.
+
+    More efficient than calling get_syntactic_features() in a loop.
+
+    Args:
+        texts: List of texts to extract features from.
+
+    Returns:
+        List of 14-element feature lists, one per input text.
+    """
+    if not texts or not SOCKET_PATH.exists():
+        return [[0.0] * 14 for _ in texts]
+
+    try:
+        response = _send_request({"type": "syntactic_batch", "texts": texts})
+
+        if "error" in response:
+            logger.warning("NER service error: %s", response["error"])
+            return [[0.0] * 14 for _ in texts]
+
+        return response.get("results", [[0.0] * 14 for _ in texts])
+
+    except (ConnectionError, TimeoutError) as e:
+        logger.warning("NER service connection failed: %s", e)
+        return [[0.0] * 14 for _ in texts]
+    except Exception as e:
+        logger.warning("NER client error: %s", e)
+        return [[0.0] * 14 for _ in texts]
+
+
 __all__ = [
     "Entity",
     "is_service_running",
@@ -268,4 +333,6 @@ __all__ = [
     "extract_person_names",
     "extract_locations",
     "extract_organizations",
+    "get_syntactic_features",
+    "get_syntactic_features_batch",
 ]

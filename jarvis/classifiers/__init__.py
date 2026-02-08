@@ -31,6 +31,7 @@ Usage:
         return _factory.get()
 """
 
+from jarvis.classifiers.category_classifier import CategoryResult, classify_category
 from jarvis.classifiers.factory import SingletonFactory
 from jarvis.classifiers.lazy import LazyInitializer
 from jarvis.classifiers.mixins import CentroidMixin, EmbedderMixin
@@ -47,4 +48,7 @@ __all__ = [
     # Pattern matching
     "StructuralPatternMatcher",
     "PatternMatcherByLabel",
+    # Category classifier
+    "CategoryResult",
+    "classify_category",
 ]

@@ -1,0 +1,114 @@
+{
+  "timestamp": "2026-02-06 22:47:30",
+  "config": {
+    "train_size": 4000,
+    "test_size": 1000,
+    "train_size_after_resample": 5133,
+    "test_proportion": 0.2,
+    "c_values": [
+      7.0
+    ],
+    "gamma_values": [
+      "scale"
+    ],
+    "resample": {
+      "commissive": 2.6,
+      "directive": 3.0,
+      "inform": 0.6,
+      "question": 1.0
+    },
+    "n_jobs": 5,
+    "seed": 42
+  },
+  "class_distribution_train": {
+    "commissive": 1105,
+    "directive": 1842,
+    "inform": 1161,
+    "question": 1025
+  },
+  "class_distribution_test": {
+    "commissive": 106,
+    "directive": 154,
+    "inform": 484,
+    "question": 256
+  },
+  "results": [
+    {
+      "C": 7.0,
+      "gamma": "scale",
+      "mean_f1": 0.7469098010220672,
+      "std_f1": 0.003995100504037019
+    }
+  ],
+  "best_config": {
+    "C": 7.0,
+    "gamma": "scale",
+    "mean_f1": 0.7469098010220672,
+    "std_f1": 0.003995100504037019,
+    "test_set_metrics": {
+      "commissive": {
+        "precision": 0.36257309941520466,
+        "recall": 0.5849056603773585,
+        "f1-score": 0.44765342960288806,
+        "support": 106.0
+      },
+      "directive": {
+        "precision": 0.39436619718309857,
+        "recall": 0.36363636363636365,
+        "f1-score": 0.3783783783783784,
+        "support": 154.0
+      },
+      "inform": {
+        "precision": 0.8414634146341463,
+        "recall": 0.7128099173553719,
+        "f1-score": 0.7718120805369127,
+        "support": 484.0
+      },
+      "question": {
+        "precision": 0.855595667870036,
+        "recall": 0.92578125,
+        "f1-score": 0.8893058161350844,
+        "support": 256.0
+      },
+      "accuracy": 0.7,
+      "macro avg": {
+        "precision": 0.6134995947756214,
+        "recall": 0.6467832978422735,
+        "f1-score": 0.6217874261633158,
+        "support": 1000.0
+      },
+      "weighted avg": {
+        "precision": 0.725465926561865,
+        "recall": 0.7,
+        "f1-score": 0.7069408697186238,
+        "support": 1000.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        62,
+        15,
+        24,
+        5
+      ],
+      [
+        27,
+        56,
+        39,
+        32
+      ],
+      [
+        81,
+        55,
+        345,
+        3
+      ],
+      [
+        1,
+        16,
+        2,
+        237
+      ]
+    ]
+  }
+}

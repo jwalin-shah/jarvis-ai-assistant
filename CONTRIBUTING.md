@@ -132,7 +132,7 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 JARVIS runs on memory-constrained systems (8GB RAM). Follow these rules:
 
-1. **Always parallelize**: Use `n_jobs=-1` for scikit-learn operations
+1. **Always parallelize**: Use `n_jobs=2` for scikit-learn operations (memory-constrained)
 2. **Always batch**: Process lists together, not one-at-a-time loops
 3. **Always cache**: Cache expensive computations (embeddings, model loads)
 4. **Stream large data**: Never hold >500MB in RAM; use memmap for large arrays

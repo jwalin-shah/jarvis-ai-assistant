@@ -156,6 +156,37 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         description="LFM 2.5 1.2B base model. No instruct tuning - raw completion.",
         recommended_for=["completion", "few_shot", "style_matching"],
     ),
+    # Fine-tuned variants (SOC conversation data)
+    "lfm-1.2b-ft": ModelSpec(
+        id="lfm-1.2b-ft",
+        path="models/lfm-1.2b-final",
+        display_name="LFM 2.5 1.2B Fine-Tuned",
+        size_gb=1.2,
+        min_ram_gb=8,
+        quality_tier="excellent",
+        description="LFM 2.5 1.2B fine-tuned on SOC + ORPO aligned. Best for texting.",
+        recommended_for=["quick_replies", "natural_conversation", "drafting", "iMessage"],
+    ),
+    "lfm-1.2b-sft": ModelSpec(
+        id="lfm-1.2b-sft",
+        path="models/lfm-1.2b-soc-fused",
+        display_name="LFM 2.5 1.2B SFT Only",
+        size_gb=1.2,
+        min_ram_gb=8,
+        quality_tier="excellent",
+        description="LFM 2.5 1.2B SFT fine-tuned on SOC conversations (no ORPO).",
+        recommended_for=["quick_replies", "natural_conversation", "iMessage"],
+    ),
+    "lfm-0.3b-ft": ModelSpec(
+        id="lfm-0.3b-ft",
+        path="models/lfm-0.3b-soc-fused",
+        display_name="LFM 2.5 0.3B Fine-Tuned (Draft)",
+        size_gb=0.3,
+        min_ram_gb=4,
+        quality_tier="basic",
+        description="LFM 2.5 0.3B fine-tuned draft model for speculative decoding.",
+        recommended_for=["speculative_decoding", "testing"],
+    ),
 }
 
 # Default model ID when none specified

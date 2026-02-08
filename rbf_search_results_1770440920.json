@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-02-06 21:08:40",
+  "config": {
+    "subset_size": 5000,
+    "c_values": [
+      10.0,
+      40.0,
+      100.0
+    ],
+    "gamma_values": [
+      "scale"
+    ],
+    "oversample": {},
+    "seed": 42
+  },
+  "class_distribution": {
+    "commissive": 531,
+    "directive": 768,
+    "inform": 2420,
+    "question": 1281
+  },
+  "results": [
+    {
+      "C": 10.0,
+      "gamma": "scale",
+      "mean_f1": 0.6213022115915148,
+      "std_f1": 0.012861225064062122,
+      "time_sec": 5.634489059448242
+    },
+    {
+      "C": 40.0,
+      "gamma": "scale",
+      "mean_f1": 0.5991234739527221,
+      "std_f1": 0.015954696699023354,
+      "time_sec": 4.478096961975098
+    },
+    {
+      "C": 100.0,
+      "gamma": "scale",
+      "mean_f1": 0.5979061981684566,
+      "std_f1": 0.013991596791978561,
+      "time_sec": 4.31560206413269
+    }
+  ],
+  "best_config": {
+    "C": 10.0,
+    "gamma": "scale",
+    "mean_f1": 0.6213022115915148,
+    "std_f1": 0.012861225064062122,
+    "time_sec": 5.634489059448242
+  }
+}

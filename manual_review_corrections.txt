@@ -1,0 +1,104 @@
+MANUAL REVIEW OF 30 DEFAULTED CASES
+====================================
+
+1. "I thought it was about 5G technology or something of the sort.. hahaha"
+   Auto: conversational → CORRECT ✓ (casual explanation)
+
+2. "Urgh"
+   Auto: conversational → WRONG ❌ Should be needs_empathy (frustration)
+
+3. "Woowee! Well done, girl! I must meet this English gent!"
+   Auto: conversational → WRONG ❌ Should be needs_empathy (celebration)
+
+4. "it's great too but you know, Naughty Dog's games are THE best"
+   Auto: conversational → CORRECT ✓ (opinion/chat)
+
+5. "yeah ☹️"
+   Auto: conversational → WRONG ❌ Should be needs_empathy (sad emoji)
+
+6. "i still haven't seen 'Kler'"
+   Auto: conversational → CORRECT ✓ (casual statement)
+
+7. "that was a BIG mess"
+   Auto: conversational → WRONG ❌ Should be needs_empathy (negative event)
+
+8. "great see ya"
+   Auto: conversational → CORRECT ✓ (farewell)
+
+9. "You're welcome."
+   Auto: conversational → CORRECT ✓ (polite response)
+
+10. "per person"
+    Auto: conversational → CORRECT ✓ (answering)
+
+11. "He just has his secretary do his homework for him."
+    Auto: conversational → CORRECT ✓ (statement)
+
+12. "Yes the gate was open exactly at the expected time"
+    Auto: conversational → CORRECT ✓ (confirming)
+
+13. "Just taking a smoke break."
+    Auto: conversational → CORRECT ✓ (status update)
+
+14. "Rockets vs Lakers. Yao Ming..."
+    Auto: conversational → CORRECT ✓ (sharing info)
+
+15. "That's the best price we can offer."
+    Auto: conversational → CORRECT ✓ (negotiation)
+
+16. "Well, it's about Kate wanting to redecorate the whole thing..."
+    Auto: conversational → CORRECT ✓ (explanation)
+
+17. "i dont beleive you"
+    Auto: conversational → CORRECT ✓ (skepticism)
+
+18. "You better hurry - he's turning kinda red like a tomato"
+    Auto: conversational → WRONG ❌ Should be needs_confirmation (urgent directive)
+
+19. "Seems like no!"
+    Auto: conversational → CORRECT ✓ (response)
+
+20. "nothing"
+    Auto: conversational → CORRECT ✓ (brief answer)
+
+21. "<file_photo>"
+    Auto: conversational → AMBIGUOUS ⚠️ Could be needs_answer (what's this?) or conversational
+
+22. "yes, you need to be careful with what you eat when you're abroad..."
+    Auto: conversational → CORRECT ✓ (advice)
+
+23. "maybe he just tryna be tough"
+    Auto: conversational → CORRECT ✓ (speculation)
+
+24. "Thank you. Remember - 1,5 hours."
+    Auto: conversational → WRONG ❌ Should be needs_confirmation (reminder/directive)
+
+25. "Sure. Take your time."
+    Auto: conversational → CORRECT ✓ (reassurance)
+
+26. "I mean really… in a nice way… It can't be like this forever"
+    Auto: conversational → AMBIGUOUS ⚠️ Could be needs_empathy (concern) or conversational
+
+27. "ok, sounds easy"
+    Auto: conversational → CORRECT ✓ (acknowledgment)
+
+28. "Hahaha!"
+    Auto: conversational → CORRECT ✓ (laughter)
+
+29. "i have a special gift for you"
+    Auto: conversational → CORRECT ✓ (announcement)
+
+30. "Maybe good, you'd poo yourself"
+    Auto: conversational → CORRECT ✓ (joking)
+
+SUMMARY:
+========
+Correct: 23/30 (77%)
+Wrong: 6/30 (20%)
+Ambiguous: 2/30 (7%)
+
+Categories where defaults failed:
+- needs_empathy: missed 4 cases (Urgh, Woowee!, yeah ☹️, BIG mess)
+- needs_confirmation: missed 2 cases (You better hurry, Remember - 1,5 hours)
+
+The heuristics are too strict - they miss emotional nuances and subtle directives.

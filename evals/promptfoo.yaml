@@ -9,7 +9,7 @@
 # Run: make eval
 # View: make eval-view
 #
-# LLM Judge: export OPENAI_API_KEY=sk-... (for llm-rubric assertions)
+# LLM Judge: ZAI GLM 4.7 via Cerebras (export CEREBRAS_API_KEY=...)
 
 description: "A/B test prompt strategies: structure (xml/md) x framing (drafter/persona/completer/anti_helper)"
 
@@ -44,13 +44,13 @@ providers:
   - id: exec:python jarvis_provider.py
     label: "LFM-1.2B"
     config:
-      temperature: 0.7
+      temperature: 0.1
       max_tokens: 50
 
-# Transform to inject strategy from prompt into vars
+# LLM-rubric grader: ZAI GLM 4.7 via Cerebras (via OPENAI_* env vars in Makefile)
 defaultTest:
   options:
-    transformVars: "vars.strategy = prompt.split(':')[1]; return vars;"
+    provider: openai:chat:zai-glm-4.7
   assert:
     # Universal anti-AI checks on every test
     - type: not-icontains
@@ -288,7 +288,7 @@ scoring:
   strategy: weighted
 
 # Output
-outputPath: results/eval-{{timestamp}}.json
+outputPath: results/promptfoo-eval-latest.json
 
 evaluateOptions:
   maxConcurrency: 1

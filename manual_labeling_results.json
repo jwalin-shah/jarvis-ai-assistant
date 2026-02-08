@@ -1,0 +1,1799 @@
+{
+  "summary": {
+    "total": 150,
+    "confident": 53,
+    "uncertain": 97,
+    "distribution": {
+      "needs_answer": 10,
+      "needs_confirmation": 23,
+      "needs_empathy": 10,
+      "conversational": 107
+    }
+  },
+  "labeled_messages": [
+    {
+      "text": "I thought it was about 5G technology or something of the sort.. hahaha",
+      "previous": "Oh \ud83d\ude15",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Urgh",
+      "previous": "Whenever I don't have much work to do then I don't feel like going out",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Woowee! Well done, girl! I must meet this English gent!",
+      "previous": "Franklin and me are taking things slooowwww! We did get together at Thanksgiving though!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Oh thanks! I'm on it",
+      "previous": "You can step by the spa, or just call them from the desk phone, its 2279 extension",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "it's great too but you know, Naughty Dog's games are THE best",
+      "previous": "but man, I still haven't finished God of War",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "yeah \u2639\ufe0f",
+      "previous": "Holy",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "i still haven't seen \"Kler\"",
+      "previous": "i know ;) what would you like to see?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "alone?",
+      "previous": "I want go to the town",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Are there many side effects ?",
+      "previous": "We could start with Hydrochlorothiazide , which is a diuretic .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "that was a BIG mess",
+      "previous": "no biggie",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "great see ya",
+      "previous": "yeah picked it up 10 min ago",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Hello , Mr Hong . What can I do for you ?",
+      "previous": "This is James Hong calling from Lincoln Bank .",
+      "source": "dailydialog",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "You \u2019 re welcome .",
+      "previous": "I got it . Thank you so much .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "per person",
+      "previous": "how many nights?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Which model is the best seller of this year ?",
+      "previous": "The fridges is covered by a one-year warranty .",
+      "source": "dailydialog",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "He just has his secretary do his homework for him .",
+      "previous": "Why is that ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "guess what? I'm moving into this new GREAT, FANCY place uptown",
+      "previous": "doing great, thanks!",
+      "source": "samsum",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "Yes the gate was open exactly at the expected time",
+      "previous": "But now everything\u2019s ok?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Go without us guys",
+      "previous": "yes, we\u2019ll be there in a minute",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Do you have an online edition of that magazine ?",
+      "previous": "Sometimes it takes too long to find the exact information you are looking for . Besides , I like to read a magazine in a coffee bar sometimes .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Just taking a smoke break .",
+      "previous": "Hey Bobby . What's going on ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Rockets vs Lakers . Yao Ming , my idol , will appear in front of several hundred million of the worldwide audience .",
+      "previous": "Who plays who ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "That's the best price we can offer .",
+      "previous": "We think the price is too high .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Well, it's about Kate wanting to redecorate the whole thing...",
+      "previous": "So what is it about?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "i dont beleive you",
+      "previous": "he wasnt i promise",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "You better hurry - he's turning kinda red like a tomato",
+      "previous": "You can prepare my lovely eulogy while Perry finishes me off",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Is it just just one more final for you too?",
+      "previous": "Ye and Sure! \u263a\ufe0f",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "I will \ud83d\ude0a",
+      "previous": "call me \ud83d\ude1c",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "Seems like no!",
+      "previous": "Yeah, can't they afford to get it fixed if they pay our bonuses?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "nothing",
+      "previous": "nope;/",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "<file_photo>",
+      "previous": "sure, here you are",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Yeah, they're getting me cake, too! It's a surprise, so I'm a little excited, hehe :D",
+      "previous": "Well, sometimes it's good to have a chill day, haha",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "yes , you need to be careful with what you eat when you're abroad . Sometimes new food might disagree with you .",
+      "previous": "yes , at the beginning we were all excited and had lots of fun . However , on the third day of traveling in the city , I felt sick . I think I had something bad to eat , but it passed by the evening .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Yeah, easy, there are some people who are gonna be 30 minutes late so no pressure.",
+      "previous": "No probs.",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "What kind of people do you like to work with ?",
+      "previous": "I maintain that the most important thing is having good friends . A person can't live all by himself I think . A friend in need is a friend in deed.The more really close friends I have , the better .",
+      "source": "dailydialog",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "Oh , my God , you're kidding me ! He carried him back ?",
+      "previous": "Right . Luckily it was on the eighteen hole , quite near the clubhouse , so he didn't have far to carry him .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Why can't I call the police now ? He was definitely following me !",
+      "previous": "Actually , I don't think you can call the police . Not yet at least.He hasn't done anything . And probably the police will just ignore it.But if anything happens again , then maybe you should call .",
+      "source": "dailydialog",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "maybe he just tryna be tough",
+      "previous": "agreed.",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Thank you. Remember - 1,5 hours.",
+      "previous": "I'll get right on it.",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Sure . Take your time .",
+      "previous": "Let me think about it .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Send me some nice pics whenever you find some awesome places. <\u4e36\u00b4\u0414\uff40>",
+      "previous": "That\u2019s true. \ud83d\udc7c\ud83d\udc7c",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "I mean really\u2026 in a nice way\u2026 It can't be like this forever",
+      "previous": "Hahah for sure!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "ok, sounds easy",
+      "previous": "Just take the underground train at the airport, it will bring you to the main station, about 2 Euro I think",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Hahaha!",
+      "previous": "Somewhere in the deep dark corners of the web there's a room full of broken men with your name scrawled across their bodies.",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "i have a special gift for you",
+      "previous": "awwww <3 so cute",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Maybe good, you'd poo yourself",
+      "previous": "I'm on the toilet",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Thanks!",
+      "previous": "Ok, no prob",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Ofc. Sure, you can buy something machine-made, but making ur own is far more satisfying!",
+      "previous": "And that's how you get a nice pattern on table linen?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I was involved in the linguistic project of our department",
+      "previous": "but why actually?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "You bet . The wrestlers had got sound defences and they simply couldn't make it .",
+      "previous": "Yes , of course . And I'm amazed the those karate and judo boys were so helpless before the wrestlers .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "never leave a house without snacks for kids! Haha!",
+      "previous": "at all?! Yeah, whatever!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "How about you?",
+      "previous": "Shut up! LOL",
+      "source": "samsum",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "Exactly.",
+      "previous": "What you've just described is the way the referendum was organised.",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "What time are you going ?",
+      "previous": "I'd like to say good-bye to everyone .",
+      "source": "dailydialog",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "Oh , forget it then . Hey , I told you to put the files on the in tray , not on my desk .",
+      "previous": "It broke down one year ago .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Sure I would. Are you?",
+      "previous": "If you were staying with us, I image you'd be in the pool all the time.",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Yes , I do . Everyone \u2019 s really friendly . Sometimes , I wish I worked outdoors more , especially during the summer .",
+      "previous": "Do you enjoy working in this office ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I see, makes sense",
+      "previous": "I think the British king gave the land to his brother, the Duke of York, hence the name!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "im surprised your up at this hour",
+      "previous": "dude you up?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "could you check for me if my train is still scheduled?",
+      "previous": "yes but at the airport I have to catch a train",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "But if you go to university , you'll still have time for fun .",
+      "previous": "You should take their advice . They know what's best for you.But my friends will have jobs and lots of fun , while I spend all my time doing reading and writing .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "sure baby",
+      "previous": "good .. i am waiting send me",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Yes . The sliced noodles they offer are among the most authentic Shanti cuisines .",
+      "previous": "Sounds great . Do they serve noodles ? I am in the mood for some tasty noodles as well .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I wish they didn't",
+      "previous": "At least we know they noticed...",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "on my way!",
+      "previous": "where the fuck are you?!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "So see you .",
+      "previous": "Well . Thank you for coming .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Easier said than done .",
+      "previous": "Government is making efforts to change situation .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Speaking of history, what was the homework? I arrived late and she had already wiped it off the board.",
+      "previous": "thank Diana :)",
+      "source": "samsum",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "around 8, ok?",
+      "previous": "what time will u come?",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": ":-D",
+      "previous": "Upper legs? Is that a polite way of saying your ass??? :-D",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Keep it up! Love and hugs!",
+      "previous": "Very much so!",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "Look at the candy bar over there . It is so colorful and tasty .",
+      "previous": "why not ? I would like to buy some candies . Since there are so many people , I think they must have delicious candy .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Then describe Ms Suarez ;-)",
+      "previous": "hahahha",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "They are mostly people believing in things that have nothing to do with logic or reason: miracles, ghosts, witchcraft, just as our neighbour.",
+      "previous": "It's just not true.",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I take architecture as my major .",
+      "previous": "What's your major in college ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "You are in the right place . Roll up your left sleeve and have a seat .",
+      "previous": "I came to this lab to have my blood drawn .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I need to find a new way of getting my insurance .",
+      "previous": "Hello , Sir . What can I do for you today ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Oh thats too sad. :( may their soul RIP",
+      "previous": "2 people were killed in a road accident. My elder brother saw this. He was there",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "I got the job!",
+      "previous": "shoot",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "you can donate it to charity :-D",
+      "previous": "i remember that bike!!!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Yeah , sir . Your shirt will be ready by Thursday morning . Anything else ?",
+      "previous": "Yes , heavy starch in the collar please .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Tell me which building it's in .",
+      "previous": "I have no idea where my class is .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "We cannot think like this. I think he is troubled and he needs help.",
+      "previous": "I understand, this is serious. Is our son becoming some kind of disgusting pervert?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "The crab soup is quite delicious.It ' s always a favorite with our customers .",
+      "previous": "What's the specialty of your restaurant ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Sharing knowledge can be very settled and some second stances . People may think you are telling them how to do their work . If they take it personally , they feel angry at you and even become reluctant to support you at work .",
+      "previous": "Thank you for saying so . I don \u2019 t know , probably because I like sharing my experience and knowledge with them . I think this kind of communication helps to improve our work efficiency and also helps to get along with colleagues .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "cool",
+      "previous": "ok, I'll write him write now",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Casual reaction",
+      "confident": true
+    },
+    {
+      "text": "I don \u2019 t know . It was there when I woke up this morning .",
+      "previous": "You \u2019 Ve god a fever and playing football isn \u2019 t a good idea for a boy with a fever . What \u2019 s that on your arm ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "And if you ditch me this time I'm gonna take the team off the competition ._. . You guys are so annoying.",
+      "previous": "Great!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "I feel ya, I'll cancel then",
+      "previous": "Don't even start, I am so pissed",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "Mr.Black , if I'm not mistaken .",
+      "previous": "Oh , what a pleasant surprise ! Don't you remember me ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "Let's go out to celebrate!!!",
+      "previous": "congratulations! i'm so happy for you!!  i knew you'd get it",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "Anything else ?",
+      "previous": "I would like to have shelled shrimps with cashew nuts .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "yes , he is . I \u2019 Ve make an appointment for 10 o \u2019 clock , so I \u2019 d better move along .",
+      "previous": "well . I \u2019 m sure the doctor will be able to prescribe something to make you well again . Dr . Jameson is very good .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I promise than when I get we'll have a trip to the seaside!",
+      "previous": "cutie pie, she takes after her mum :D",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "According to what you did last time , I have my doubts .",
+      "previous": "I am 100 % certain .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Strawberry",
+      "previous": "Which flavor?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I thought it was pretty good .",
+      "previous": "How did you like the movie ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Yes , but I prefer red wine with meat .",
+      "previous": "Shall we have some white wine then ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "No, I can't.",
+      "previous": "Are you going to the party?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "Youre sweet <3",
+      "previous": "I\u2019m sure it will ;*",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I don't mind really",
+      "previous": "so, what time?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "It's in photos on our Facebook Fanpage.",
+      "previous": "Where do I find the menu?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "to be honest , I'm a bit fed up .",
+      "previous": "I'm in a really good mood , actually . How about you ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "Oh ! I hate rainy days !",
+      "previous": "It says a storm may come tomorrow .",
+      "source": "dailydialog",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "Just the truth!",
+      "previous": "You are no help!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "shit",
+      "previous": "lol",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Casual reaction",
+      "confident": true
+    },
+    {
+      "text": "ask me again.....in latin.....",
+      "previous": "can we please start over",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "same here",
+      "previous": "how long do you think it will take you?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Spidey!!",
+      "previous": "I can't believe they killed so many heroes",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "of course not, i am not dumb lol, i told her to get lost ;)",
+      "previous": "did you get them?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "yeah right",
+      "previous": "doing useless things like working for example",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I have enough to live off of for about 3 months . But I really don't want to spend my life savings on just living ! I \u2019 d rather invest my money somehow .",
+      "previous": "let \u2019 s think realistically about what might happen . How much money do you have in your savings ?",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "i know!!! i'm having buyer's remorse.",
+      "previous": "buying clothes online is always a risk",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "Yes , but I've nearly fixed it . Just take it , will you ?",
+      "previous": "What are you doing ? Is anything wrong ?",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "ahh she is so pretty looks like her dad",
+      "previous": ",File_photo>",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Yeah, think chicken with its head cut off :D",
+      "previous": "Ohh no worries. You do what you have to do!",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Me too. Yesterday at night.",
+      "previous": "Really??",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "please don't bother, I'll get an uber",
+      "previous": "I'll ask Derren to pick you up from the station",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Did you need help finding anything else ?",
+      "previous": "I think I can find that .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Yes , so I had to wait three hours for the next one . I didn't get home till four in the morning , and when I got home I realized I'd left my house keys in my hotel in Bangkok .",
+      "previous": "Oh , no !",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "He went str8 to the boss to tell on me and to state that managers have too much power in the company! Believe it?",
+      "previous": "If this is going to make me laugh, I need to prepare first ;)",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "Friday night or Sat",
+      "previous": "When?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I see . Are there any seat available ?",
+      "previous": "It leaves at 8",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "What?",
+      "previous": "Did you know that the dean died yesterday?",
+      "source": "samsum",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "I have given it to Nathan, You can take it from him",
+      "previous": "Do you still have that white jacket?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "That's why you should go there , If you don't dare to speak English owing to the fact that you are afraid of making mistakes , you simply will never learn English .",
+      "previous": "You know , I am poor at English , especially spoken English .",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "No , I \u2019 m sorry . I'm going to meet some friends tomorrow evening . And I'm in a hurry now .",
+      "previous": "What about tomorrow evening ?",
+      "source": "dailydialog",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "I found one that is much cheaper from one of the outlets",
+      "previous": "I'll bring along the organic shampoo",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "OK , Mom . Can I swim now ? I want to learn butterfly stroke .",
+      "previous": "Look out , honey . Let's come to the shoal waters . Follow me !",
+      "source": "dailydialog",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "And Tom , you will help Johnny with his homework , won't you ?",
+      "previous": "Of course .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "You haven't lost any weight , have you ?",
+      "previous": "Pretty good , I'd say .",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "and that's the same alternative view, what you guys think?",
+      "previous": "<file_photo>",
+      "source": "samsum",
+      "label": "needs_answer",
+      "reason": "Heuristic match: Expects factual info",
+      "confident": true
+    },
+    {
+      "text": "Yup. I'm gonna do nothing :)",
+      "previous": "So you are going to go and relax now, right?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Statement about plans/status",
+      "confident": true
+    },
+    {
+      "text": "i still don't know what we did with art ;/",
+      "previous": "Yaa - everything we did wth art",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Hey!! I'm so sorry I didn't reply earlier - I had a couple of trips going on and literally no time to check the Internet!!! :( Now my Inbox is stuffed with emails that need replying -_-",
+      "previous": "<file_other>",
+      "source": "samsum",
+      "label": "needs_empathy",
+      "reason": "Heuristic match: Needs emotional support",
+      "confident": true
+    },
+    {
+      "text": "you mean out? could be bit cold still",
+      "previous": "more like have a bottle 2gether and then after midnite do more",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "I don't want problems, come down",
+      "previous": "not even one beer",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Can you get Brazilian nuts?",
+      "previous": "Anything else?",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "mainly managing myself :P",
+      "previous": "Aaa, so what are u doing on the daily basis?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "<file_gif>",
+      "previous": "are u still watching The Good Place?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Have you got it now ?",
+      "previous": "Well , I ... I lost my wallet , and I ...",
+      "source": "dailydialog",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "me neither. ppl work tet",
+      "previous": "man, too busy 2 watch",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Nahh, you're fine!",
+      "previous": "I hope it won't be a problem",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "wouldn't that be the truth?",
+      "previous": "people will start to thing that I'm avoiding them",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "ok, thank you for the tips <3 hopefully you won't be horrified this time unlike last year",
+      "previous": "you could try looking in Sephora for example ooooorrr maybe Zara for fun/sparkly things \ud83d\ude1c",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "dinner will get cold",
+      "previous": "really???",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Nice?",
+      "previous": "Looks like the French Riviera",
+      "source": "samsum",
+      "label": "needs_confirmation",
+      "reason": "Heuristic match: Expects yes/no/acknowledgment",
+      "confident": true
+    },
+    {
+      "text": "you'll clean the bathroom this week",
+      "previous": "you owe me a big one",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Nope, not really! Christmas Day, I suppose, but then I have to get up at Stupid o' Clock on Boxing Day!",
+      "previous": "You basically have no holidays then this year?",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    },
+    {
+      "text": "Totally weird",
+      "previous": "I also have mixed feelings",
+      "source": "samsum",
+      "label": "conversational",
+      "reason": "Default (no clear category)",
+      "confident": false
+    }
+  ],
+  "uncertain_cases": [
+    {
+      "index": 0,
+      "text": "I thought it was about 5G technology or something of the sort.. hahaha",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 1,
+      "text": "Urgh",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 2,
+      "text": "Woowee! Well done, girl! I must meet this English gent!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 4,
+      "text": "it's great too but you know, Naughty Dog's games are THE best",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 5,
+      "text": "yeah \u2639\ufe0f",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 6,
+      "text": "i still haven't seen \"Kler\"",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 9,
+      "text": "that was a BIG mess",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 10,
+      "text": "great see ya",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 12,
+      "text": "You \u2019 re welcome .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 13,
+      "text": "per person",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 15,
+      "text": "He just has his secretary do his homework for him .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 17,
+      "text": "Yes the gate was open exactly at the expected time",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 20,
+      "text": "Just taking a smoke break .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 21,
+      "text": "Rockets vs Lakers . Yao Ming , my idol , will appear in front of several hundred million of the worldwide audience .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 22,
+      "text": "That's the best price we can offer .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 23,
+      "text": "Well, it's about Kate wanting to redecorate the whole thing...",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 24,
+      "text": "i dont beleive you",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 25,
+      "text": "You better hurry - he's turning kinda red like a tomato",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 28,
+      "text": "Seems like no!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 29,
+      "text": "nothing",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 30,
+      "text": "<file_photo>",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 32,
+      "text": "yes , you need to be careful with what you eat when you're abroad . Sometimes new food might disagree with you .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 37,
+      "text": "maybe he just tryna be tough",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 38,
+      "text": "Thank you. Remember - 1,5 hours.",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 39,
+      "text": "Sure . Take your time .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 41,
+      "text": "I mean really\u2026 in a nice way\u2026 It can't be like this forever",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 42,
+      "text": "ok, sounds easy",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 43,
+      "text": "Hahaha!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 44,
+      "text": "i have a special gift for you",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 45,
+      "text": "Maybe good, you'd poo yourself",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 46,
+      "text": "Thanks!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 47,
+      "text": "Ofc. Sure, you can buy something machine-made, but making ur own is far more satisfying!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 48,
+      "text": "I was involved in the linguistic project of our department",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 49,
+      "text": "You bet . The wrestlers had got sound defences and they simply couldn't make it .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 50,
+      "text": "never leave a house without snacks for kids! Haha!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 52,
+      "text": "Exactly.",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 54,
+      "text": "Oh , forget it then . Hey , I told you to put the files on the in tray , not on my desk .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 56,
+      "text": "Yes , I do . Everyone \u2019 s really friendly . Sometimes , I wish I worked outdoors more , especially during the summer .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 57,
+      "text": "I see, makes sense",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 58,
+      "text": "im surprised your up at this hour",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 60,
+      "text": "But if you go to university , you'll still have time for fun .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 61,
+      "text": "sure baby",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 62,
+      "text": "Yes . The sliced noodles they offer are among the most authentic Shanti cuisines .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 63,
+      "text": "I wish they didn't",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 64,
+      "text": "on my way!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 65,
+      "text": "So see you .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 66,
+      "text": "Easier said than done .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 69,
+      "text": ":-D",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 71,
+      "text": "Look at the candy bar over there . It is so colorful and tasty .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 72,
+      "text": "Then describe Ms Suarez ;-)",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 73,
+      "text": "They are mostly people believing in things that have nothing to do with logic or reason: miracles, ghosts, witchcraft, just as our neighbour.",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 74,
+      "text": "I take architecture as my major .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 75,
+      "text": "You are in the right place . Roll up your left sleeve and have a seat .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 76,
+      "text": "I need to find a new way of getting my insurance .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 78,
+      "text": "I got the job!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 79,
+      "text": "you can donate it to charity :-D",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 81,
+      "text": "Tell me which building it's in .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 82,
+      "text": "We cannot think like this. I think he is troubled and he needs help.",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 83,
+      "text": "The crab soup is quite delicious.It ' s always a favorite with our customers .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 84,
+      "text": "Sharing knowledge can be very settled and some second stances . People may think you are telling them how to do their work . If they take it personally , they feel angry at you and even become reluctant to support you at work .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 86,
+      "text": "I don \u2019 t know . It was there when I woke up this morning .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 92,
+      "text": "yes , he is . I \u2019 Ve make an appointment for 10 o \u2019 clock , so I \u2019 d better move along .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 93,
+      "text": "I promise than when I get we'll have a trip to the seaside!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 94,
+      "text": "According to what you did last time , I have my doubts .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 95,
+      "text": "Strawberry",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 96,
+      "text": "I thought it was pretty good .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 97,
+      "text": "Yes , but I prefer red wine with meat .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 99,
+      "text": "Youre sweet <3",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 100,
+      "text": "I don't mind really",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 101,
+      "text": "It's in photos on our Facebook Fanpage.",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 104,
+      "text": "Just the truth!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 106,
+      "text": "ask me again.....in latin.....",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 107,
+      "text": "same here",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 109,
+      "text": "of course not, i am not dumb lol, i told her to get lost ;)",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 110,
+      "text": "yeah right",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 111,
+      "text": "I have enough to live off of for about 3 months . But I really don't want to spend my life savings on just living ! I \u2019 d rather invest my money somehow .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 114,
+      "text": "ahh she is so pretty looks like her dad",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 115,
+      "text": "Yeah, think chicken with its head cut off :D",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 116,
+      "text": "Me too. Yesterday at night.",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 119,
+      "text": "Yes , so I had to wait three hours for the next one . I didn't get home till four in the morning , and when I got home I realized I'd left my house keys in my hotel in Bangkok .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 121,
+      "text": "Friday night or Sat",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 124,
+      "text": "I have given it to Nathan, You can take it from him",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 125,
+      "text": "That's why you should go there , If you don't dare to speak English owing to the fact that you are afraid of making mistakes , you simply will never learn English .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 127,
+      "text": "I found one that is much cheaper from one of the outlets",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 128,
+      "text": "OK , Mom . Can I swim now ? I want to learn butterfly stroke .",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 133,
+      "text": "i still don't know what we did with art ;/",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 135,
+      "text": "you mean out? could be bit cold still",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 136,
+      "text": "I don't want problems, come down",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 138,
+      "text": "mainly managing myself :P",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 139,
+      "text": "<file_gif>",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 141,
+      "text": "me neither. ppl work tet",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 142,
+      "text": "Nahh, you're fine!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 144,
+      "text": "ok, thank you for the tips <3 hopefully you won't be horrified this time unlike last year",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 145,
+      "text": "dinner will get cold",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 147,
+      "text": "you'll clean the bathroom this week",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 148,
+      "text": "Nope, not really! Christmas Day, I suppose, but then I have to get up at Stupid o' Clock on Boxing Day!",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    },
+    {
+      "index": 149,
+      "text": "Totally weird",
+      "category": "conversational",
+      "reason": "Default (no clear category)"
+    }
+  ]
+}

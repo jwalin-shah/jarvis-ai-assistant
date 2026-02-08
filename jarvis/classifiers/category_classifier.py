@@ -37,10 +37,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = frozenset({
-    "clarify",
-    "warm",
-    "brief",
+    "ack",
+    "info",
+    "emotional",
     "social",
+    "clarify",
 })
 
 # ---------------------------------------------------------------------------
@@ -68,8 +69,10 @@ class CategoryResult:
 # ---------------------------------------------------------------------------
 
 STRUCTURAL_PATTERNS: list[tuple[str, str, float]] = [
-    # Clarify: bare punctuation or single emoji
+    # Ack: reactions (handled by text_normalizer.is_reaction)
+    # Bare punctuation → clarify
     (r"^[?!.]{1,3}$", "clarify", 0.95),
+    # Single emoji → clarify (ambiguous without context)
     (
         r"^[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"
         r"\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U00002600-\U000026FF]{1,2}$",
@@ -89,6 +92,48 @@ EMOTIONAL_PATTERN = re.compile(
     r"(funeral|grief|passed away|died|death|suicide|self-harm|panic attack))",
     re.IGNORECASE,
 )
+
+# Deictic pronouns pattern (words that need context)
+DEICTIC_PATTERN = re.compile(
+    r"\b(this|that|it|these|those|here|there)\b",
+    re.IGNORECASE,
+)
+
+
+def _detect_clarify_signals(
+    text: str,
+    context: list[str],
+    has_attachment: bool = False,
+) -> int:
+    """Detect signals that indicate a clarification request is appropriate.
+
+    Args:
+        text: The message text to analyze.
+        context: Recent conversation messages (before this message).
+        has_attachment: Whether the message has media attachments.
+
+    Returns:
+        Number of clarify signals detected (0-4).
+    """
+    signals = 0
+
+    # Signal 1: Deictic pronouns without sufficient context
+    if DEICTIC_PATTERN.search(text) and len(context) < 2:
+        signals += 1
+
+    # Signal 2: Media-only or near-empty message
+    if has_attachment and len(text.strip()) < 5:
+        signals += 1
+
+    # Signal 3: Very short message (< 3 words)
+    if len(text.split()) < 3 and len(text.strip()) > 0:
+        signals += 1
+
+    # Signal 4: Ellipsis or incomplete thought
+    if text.rstrip().endswith("..."):
+        signals += 1
+
+    return signals
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +258,7 @@ class CategoryClassifier(EmbedderMixin, CentroidMixin):
         text: str,
         context: list[str] | None = None,
         mobilization: MobilizationResult | None = None,
+        has_attachment: bool = False,
     ) -> CategoryResult:
         """Classify a message into a category.
 
@@ -220,6 +266,7 @@ class CategoryClassifier(EmbedderMixin, CentroidMixin):
             text: The message text to classify.
             context: Recent conversation messages (before this message).
             mobilization: Pre-computed mobilization result (avoids re-computing).
+            has_attachment: Whether the message has media attachments.
 
         Returns:
             CategoryResult with category, confidence, and method.
@@ -229,6 +276,22 @@ class CategoryClassifier(EmbedderMixin, CentroidMixin):
 
         context = context or []
 
+        # Layer 0: Check for reactions (highest priority)
+        from jarvis.text_normalizer import is_reaction, is_acknowledgment_only
+
+        if is_reaction(text):
+            return CategoryResult("ack", 0.95, "structural")
+
+        if is_acknowledgment_only(text):
+            return CategoryResult("ack", 0.90, "structural")
+
+        # Layer 0b: Enhanced clarify detection heuristics
+        clarify_signals = _detect_clarify_signals(text, context, has_attachment)
+        if clarify_signals >= 2:
+            # Multiple signals indicate likely need for clarification
+            confidence = 0.85 if clarify_signals >= 3 else 0.75
+            return CategoryResult("clarify", confidence, "heuristic")
+
         # Layer 1: Structural patterns
         label, conf = _structural_matcher.match(text)
         if label is not None:
@@ -236,7 +299,7 @@ class CategoryClassifier(EmbedderMixin, CentroidMixin):
 
         # Check emotional patterns
         if EMOTIONAL_PATTERN.search(text):
-            return CategoryResult("warm", 0.90, "structural")
+            return CategoryResult("emotional", 0.90, "structural")
 
         # Layer 2: Mobilization mapping
         if mobilization is not None:
@@ -266,17 +329,20 @@ class CategoryClassifier(EmbedderMixin, CentroidMixin):
         p = mobilization.pressure
         t = mobilization.response_type
 
+        # HIGH pressure + COMMITMENT/ANSWER → info
         if p == ResponsePressure.HIGH and t in (
             ResponseType.COMMITMENT,
             ResponseType.ANSWER,
         ):
-            return CategoryResult("brief", 0.80, "mobilization")
+            return CategoryResult("info", 0.80, "mobilization")
 
+        # MEDIUM pressure + EMOTIONAL → emotional
         if p == ResponsePressure.MEDIUM and t == ResponseType.EMOTIONAL:
-            return CategoryResult("warm", 0.80, "mobilization")
+            return CategoryResult("emotional", 0.80, "mobilization")
 
+        # NONE pressure + CLOSING → ack
         if p == ResponsePressure.NONE and t == ResponseType.CLOSING:
-            return CategoryResult("clarify", 0.75, "mobilization")
+            return CategoryResult("ack", 0.75, "mobilization")
 
         # Don't route LOW/OPTIONAL via mobilization -- too ambiguous
         return None
@@ -354,6 +420,7 @@ def classify_category(
     text: str,
     context: list[str] | None = None,
     mobilization: MobilizationResult | None = None,
+    has_attachment: bool = False,
 ) -> CategoryResult:
     """Classify a message into an optimization category.
 
@@ -363,11 +430,12 @@ def classify_category(
         text: Message text.
         context: Recent conversation messages.
         mobilization: Pre-computed mobilization result.
+        has_attachment: Whether the message has media attachments.
 
     Returns:
         CategoryResult with category, confidence, and method.
     """
-    return get_category_classifier().classify(text, context, mobilization)
+    return get_category_classifier().classify(text, context, mobilization, has_attachment)
 
 
 __all__ = [

@@ -1,0 +1,37 @@
+{
+  "model_type": "lightgbm",
+  "labels": [
+    "commissive",
+    "directive",
+    "inform",
+    "question"
+  ],
+  "label_map": {
+    "commissive": 0,
+    "directive": 1,
+    "inform": 2,
+    "question": 3
+  },
+  "feature_dims": 417,
+  "embedding_dims": 384,
+  "hand_crafted_dims": 19,
+  "spacy_dims": 14,
+  "train_samples": 60839,
+  "test_samples": 15210,
+  "test_f1_macro": 0.716358846117768,
+  "hyperparameters": {
+    "n_estimators": 450,
+    "num_leaves": 30,
+    "learning_rate": 0.07419003382547604,
+    "min_child_samples": 52,
+    "subsample": 0.8866072921978443,
+    "colsample_bytree": 0.7571734685657941,
+    "reg_alpha": 0.014041434752305963,
+    "reg_lambda": 0.016128658941597113,
+    "class_weight": "balanced",
+    "n_jobs": 1,
+    "random_state": 42,
+    "verbose": -1
+  },
+  "tuning_cv_f1": 0.7110782157004556
+}
