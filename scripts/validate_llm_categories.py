@@ -204,8 +204,21 @@ def classify_batch_llm(
                 max_tokens=100,
             )
 
+            # Check if response is valid
+            if not response or not response.choices:
+                print(f"    ERROR: Empty response from API", flush=True)
+                predictions.extend(["social"] * len(batch))
+                continue
+
             # Parse response
-            content = response.choices[0].message.content.strip()
+            content = response.choices[0].message.content
+            if content is None:
+                print(f"    ERROR: API returned None for content", flush=True)
+                print(f"    Response: {response}", flush=True)
+                predictions.extend(["social"] * len(batch))
+                continue
+
+            content = content.strip()
             lines = [line.strip() for line in content.split("\n") if line.strip()]
 
             # Validate and normalize
@@ -230,7 +243,9 @@ def classify_batch_llm(
             time.sleep(2)  # Rate limiting: 30 req/min = 2s between calls
 
         except Exception as e:
-            print(f"    ERROR: {e}", flush=True)
+            print(f"    ERROR: {type(e).__name__}: {e}", flush=True)
+            import traceback
+            print(f"    Traceback: {traceback.format_exc()}", flush=True)
             # Fallback to social for failed batch
             predictions.extend(["social"] * len(batch))
 
