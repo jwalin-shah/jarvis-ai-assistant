@@ -245,17 +245,22 @@ class ReplyService:
 
         # 1b. Category classification and routing
         from jarvis.classifiers.category_classifier import classify_category
-        from jarvis.prompts import ACK_TEMPLATES, get_category_config
+        from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES, get_category_config
         import random
 
         category_result = classify_category(incoming, context=thread or [], mobilization=mobilization)
         category_config = get_category_config(category_result.category)
 
-        # If ack category, skip SLM and return template
+        # If closing/acknowledge category, skip SLM and return template
         if category_config.skip_slm:
+            if category_result.category == "closing":
+                template_response = random.choice(CLOSING_TEMPLATES)
+            else:  # acknowledge
+                template_response = random.choice(ACKNOWLEDGE_TEMPLATES)
+
             return {
-                "type": "ack",
-                "response": random.choice(ACK_TEMPLATES),
+                "type": category_result.category,
+                "response": template_response,
                 "confidence": "high",
                 "reason": f"category={category_result.category}",
                 "category": category_result.category,
@@ -286,6 +291,7 @@ class ReplyService:
             thread,
             chat_id=chat_id,
             mobilization=mobilization,
+            category_result=category_result,
         )
         latency_ms["generation"] = (time.perf_counter() - gen_start) * 1000
 
@@ -317,6 +323,7 @@ class ReplyService:
         chat_id: str | None,
         mobilization: MobilizationResult,
         instruction: str | None = None,
+        category_result = None,
     ) -> GenerationRequest:
         """Build a GenerationRequest through the full pipeline.
 
@@ -336,14 +343,20 @@ class ReplyService:
             A GenerationRequest ready for generate() or generate_stream().
         """
         from contracts.models import GenerationRequest
-        from jarvis.prompts import build_rag_reply_prompt
+        from jarvis.prompts import build_rag_reply_prompt, get_category_config
 
-        # Build context
+        # Build context with category-specific depth
+        if category_result:
+            category_config = get_category_config(category_result.category)
+            context_depth = category_config.context_depth
+        else:
+            context_depth = 5  # default
+
         context_messages = []
         if thread:
-            context_messages = thread[-10:]
-        elif chat_id:
-            context_messages = self.context_service.fetch_conversation_context(chat_id, limit=10)
+            context_messages = thread[-context_depth:] if context_depth > 0 else []
+        elif chat_id and context_depth > 0:
+            context_messages = self.context_service.fetch_conversation_context(chat_id, limit=context_depth)
 
         context = "\n".join(context_messages) + f"\n[Incoming]: {incoming}"
 
@@ -537,6 +550,7 @@ class ReplyService:
         thread: list[str] | None,
         chat_id: str | None,
         mobilization: MobilizationResult,
+        category_result = None,
     ) -> dict[str, Any]:
         # Pre-generation gate: skip when no response is needed and no examples found
         if mobilization.pressure == ResponsePressure.NONE and not search_results:
@@ -549,7 +563,8 @@ class ReplyService:
 
         try:
             request = self.build_generation_request(
-                incoming, search_results, contact, thread, chat_id, mobilization
+                incoming, search_results, contact, thread, chat_id, mobilization,
+                category_result=category_result,
             )
             response = self.generator.generate(request)
             text = response.text.strip()

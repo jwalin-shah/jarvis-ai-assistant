@@ -1789,19 +1789,27 @@ def get_optimized_instruction(category: str) -> str | None:
     return None
 
 
-# Category mapping: map runtime signals to optimization categories
+# Category mapping: map old/runtime signals to new 6-category schema
 CATEGORY_MAP: dict[str, str] = {
-    # Short transactional
-    "brief": "brief",
-    "quick_exchange": "brief",
-    "logistics": "brief",
-    # Emotional weight
-    "warm": "warm",
-    "emotional_support": "warm",
-    # Casual conversational (default)
-    "social": "social",
-    "catching_up": "social",
-    "planning": "social",
+    # Old 5-category schema -> new 6-category
+    "ack": "acknowledge",
+    "info": "request",
+    "emotional": "emotion",
+    "clarify": "question",
+    "social": "statement",
+    # Old 4-category schema -> new 6-category
+    "brief": "request",
+    "warm": "emotion",
+    # Runtime signals -> new categories
+    "quick_exchange": "acknowledge",
+    "logistics": "request",
+    "emotional_support": "emotion",
+    "catching_up": "statement",
+    "planning": "request",
+    # Tone -> category defaults
+    "casual": "statement",
+    "professional": "request",
+    "mixed": "statement",
     "celebration": "social",
     "professional": "brief",
     # Ambiguous / low context
@@ -1839,7 +1847,7 @@ def resolve_category(
         return result.category
     except Exception:
         # Graceful fallback to static mapping
-        return CATEGORY_MAP.get(tone, "social")
+        return CATEGORY_MAP.get(tone, "statement")
 
 
 def reset_optimized_programs() -> None:
@@ -2212,35 +2220,41 @@ class CategoryConfig:
 
 # Category configurations (maps category → routing behavior)
 CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
-    "ack": CategoryConfig(
+    "closing": CategoryConfig(
         skip_slm=True,
         prompt=None,
         context_depth=0,
         system_prompt=None,
     ),
-    "info": CategoryConfig(
+    "acknowledge": CategoryConfig(
+        skip_slm=True,
+        prompt=None,
+        context_depth=0,
+        system_prompt=None,
+    ),
+    "question": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
         context_depth=5,
-        system_prompt="Be direct and informative. Answer questions clearly, confirm commitments, provide requested details.",
+        system_prompt="Answer the question directly and helpfully. Be clear and informative.",
     ),
-    "emotional": CategoryConfig(
-        skip_slm=False,
-        prompt="reply_generation",
-        context_depth=3,
-        system_prompt="Be empathetic and supportive. Show you care, offer comfort or celebrate with them, match their emotional tone.",
-    ),
-    "social": CategoryConfig(
-        skip_slm=False,
-        prompt="reply_generation",
-        context_depth=3,
-        system_prompt="Be casual and conversational. Keep it light, share opinions/stories, engage naturally.",
-    ),
-    "clarify": CategoryConfig(
+    "request": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
         context_depth=5,
-        system_prompt="Ask for clarification when the message is ambiguous or lacks context. Be polite but direct: 'What do you mean?' or '?'.",
+        system_prompt="Respond to the request. Confirm, commit, or clarify what's needed.",
+    ),
+    "emotion": CategoryConfig(
+        skip_slm=False,
+        prompt="reply_generation",
+        context_depth=3,
+        system_prompt="Be empathetic and supportive. Show you care, match their emotional tone.",
+    ),
+    "statement": CategoryConfig(
+        skip_slm=False,
+        prompt="reply_generation",
+        context_depth=3,
+        system_prompt="Engage naturally. React, comment, or share thoughts.",
     ),
 }
 
@@ -2249,16 +2263,16 @@ def get_category_config(category: str) -> CategoryConfig:
     """Get routing configuration for a category.
 
     Args:
-        category: Category name (ack, info, emotional, social, clarify).
+        category: Category name (closing, acknowledge, question, request, emotion, statement).
 
     Returns:
-        CategoryConfig for the category, or default (social) if unknown.
+        CategoryConfig for the category, or default (statement) if unknown.
     """
-    return CATEGORY_CONFIGS.get(category, CATEGORY_CONFIGS["social"])
+    return CATEGORY_CONFIGS.get(category, CATEGORY_CONFIGS["statement"])
 
 
-# Template responses for ack category (when skip_slm=True)
-ACK_TEMPLATES: list[str] = [
+# Template responses for acknowledge/closing categories (when skip_slm=True)
+ACKNOWLEDGE_TEMPLATES: list[str] = [
     "ok",
     "sounds good",
     "got it",
@@ -2269,4 +2283,15 @@ ACK_TEMPLATES: list[str] = [
     "alright",
     "bet",
     "cool",
+]
+
+CLOSING_TEMPLATES: list[str] = [
+    "bye!",
+    "see ya",
+    "later!",
+    "talk soon",
+    "ttyl",
+    "peace",
+    "catch you later",
+    "gn",
 ]
