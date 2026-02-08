@@ -9,8 +9,12 @@
         clean clean-all \
         launch api-dev desktop-setup desktop-dev desktop-build frontend-dev \
         download-models eval-setup eval eval-view eval-batch \
-        dspy-optimize dspy-optimize-mipro dspy-eval \
-        benchmark-spec
+        dspy-optimize dspy-optimize-mipro dspy-optimize-category dspy-eval dspy-eval-category \
+        eval-rag eval-rag-relevance eval-rag-ablation eval-rag-audit \
+        benchmark-spec \
+        prepare-data finetune-sft finetune-draft fuse-models \
+        generate-prefs finetune-orpo fuse-orpo finetune-embedder \
+        prepare-dailydialog dailydialog-sweep dailydialog-sweep-quick dailydialog-analyze train-category-svm
 
 # ============================================================================
 # HELP
@@ -56,15 +60,38 @@ help:
 	@echo "  make frontend-dev  Run Svelte frontend in dev mode"
 	@echo ""
 	@echo "Evals & Benchmarks:"
-	@echo "  make download-models      Download cross-encoder + draft model"
-	@echo "  make eval-setup           Install promptfoo CLI via pnpm"
-	@echo "  make eval                 Run promptfoo evaluation"
-	@echo "  make eval-view            Open promptfoo results viewer"
-	@echo "  make eval-batch           Run batch eval with local checks"
-	@echo "  make dspy-optimize        Run DSPy BootstrapFewShot optimization"
-	@echo "  make dspy-optimize-mipro  Run DSPy MIPROv2 optimization"
-	@echo "  make dspy-eval            Evaluate saved DSPy program"
-	@echo "  make benchmark-spec       Run speculative decoding A/B benchmark"
+	@echo "  make download-models         Download cross-encoder + draft model"
+	@echo "  make eval-setup              Install promptfoo CLI via pnpm"
+	@echo "  make eval                    Run promptfoo evaluation"
+	@echo "  make eval-view               Open promptfoo results viewer"
+	@echo "  make eval-batch              Run batch eval with local checks"
+	@echo "  make dspy-optimize           Run DSPy BootstrapFewShot optimization"
+	@echo "  make dspy-optimize-mipro     Run DSPy MIPROv2 optimization (global)"
+	@echo "  make dspy-optimize-category  Run per-category MIPROv2 optimization"
+	@echo "  make dspy-eval               Evaluate saved DSPy program (global)"
+	@echo "  make dspy-eval-category      Evaluate per-category DSPy programs"
+	@echo "  make eval-rag                Run full RAG quality evaluation"
+	@echo "  make eval-rag-relevance      RAG retrieval relevance only"
+	@echo "  make eval-rag-ablation       RAG generation ablation only"
+	@echo "  make eval-rag-audit          RAG pair quality audit only"
+	@echo "  make benchmark-spec          Run speculative decoding A/B benchmark"
+	@echo ""
+	@echo "Fine-Tuning Pipeline:"
+	@echo "  make prepare-data            Download SOC-2508 and convert to SFT format"
+	@echo "  make finetune-sft            Fine-tune LFM 1.2B on SOC data (QLoRA)"
+	@echo "  make finetune-draft          Fine-tune LFM 0.3B draft model (QLoRA)"
+	@echo "  make fuse-models             Fuse LoRA adapters into base models"
+	@echo "  make generate-prefs          Generate ORPO preference pairs via Gemini"
+	@echo "  make finetune-orpo           Run ORPO preference alignment"
+	@echo "  make fuse-orpo               Fuse ORPO adapter into final model"
+	@echo "  make finetune-embedder       Fine-tune BGE-small on conversation triplets"
+	@echo ""
+	@echo "DailyDialog Dialog Acts Experiments:"
+	@echo "  make prepare-dailydialog     Extract DailyDialog with native dialog act labels"
+	@echo "  make dailydialog-sweep       Run full 144-experiment sweep (5-7 hours)"
+	@echo "  make dailydialog-sweep-quick Quick sweep: 3-class combined only (32 experiments)"
+	@echo "  make dailydialog-analyze     Analyze sweep results and print recommendations"
+	@echo "  make train-category-svm      Train production SVM (requires --label-map flag)"
 
 # ============================================================================
 # SETUP
@@ -299,13 +326,15 @@ eval-setup:
 	@echo "promptfoo installed. Run 'make eval' to evaluate."
 
 eval:
+	OPENAI_API_KEY=$$(grep CEREBRAS_API_KEY .env | cut -d= -f2) \
+	OPENAI_BASE_URL=https://api.cerebras.ai/v1 \
 	uv run npx promptfoo eval -c evals/promptfoo.yaml
 
 eval-view:
 	uv run npx promptfoo view
 
 eval-batch:
-	uv run python evals/batch_eval.py
+	uv run python evals/batch_eval.py $(ARGS)
 
 # --- DSPy Optimization ---
 
@@ -315,13 +344,127 @@ dspy-optimize:
 dspy-optimize-mipro:
 	uv run python evals/dspy_optimize.py --optimizer mipro
 
+dspy-optimize-category:
+	uv run python evals/dspy_optimize.py --per-category --optimizer mipro
+
 dspy-eval:
 	uv run python evals/dspy_optimize.py --eval-only
+
+dspy-eval-category:
+	uv run python evals/dspy_optimize.py --eval-only --per-category
+
+# --- RAG Quality Evaluation ---
+
+eval-rag:
+	uv run python evals/rag_eval.py
+
+eval-rag-relevance:
+	uv run python evals/rag_eval.py --relevance-only
+
+eval-rag-ablation:
+	uv run python evals/rag_eval.py --ablation-only
+
+eval-rag-audit:
+	uv run python evals/rag_eval.py --audit-only
 
 # --- Benchmarks ---
 
 benchmark-spec:
 	uv run python evals/speculative_benchmark.py
+
+# ============================================================================
+# CATEGORY CLASSIFIER TRAINING
+# ============================================================================
+
+# Label SOC-2508 conversations with categories
+label-categories:
+	uv run python scripts/label_soc_categories.py
+
+# Train LinearSVC on labeled data
+train-category-svm:
+	uv run python scripts/train_category_svm.py
+
+# Full pipeline: label + train
+train-classifiers: label-categories train-category-svm
+
+# ============================================================================
+# FINE-TUNING PIPELINE
+# ============================================================================
+
+# Step 1: Prepare SOC-2508 training data
+prepare-data:
+	uv run python scripts/prepare_soc_data.py
+
+# Step 2: SFT fine-tune LFM 1.2B
+finetune-sft:
+	uv run mlx_lm.lora --config fine_tune_config.yaml
+
+# Step 3: SFT fine-tune LFM 0.3B draft model
+finetune-draft:
+	uv run mlx_lm.lora --config fine_tune_config_draft.yaml
+
+# Step 4: Fuse LoRA adapters into base models
+fuse-models:
+	uv run mlx_lm.fuse \
+		--model LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit \
+		--adapter-path adapters/lfm-1.2b-soc-sft \
+		--save-path models/lfm-1.2b-soc-fused
+	uv run mlx_lm.fuse \
+		--model mlx-community/LFM2-350M-4bit \
+		--adapter-path adapters/lfm-0.3b-soc-sft \
+		--save-path models/lfm-0.3b-soc-fused
+
+# Step 5: Generate ORPO preference pairs with Gemini
+generate-prefs:
+	uv run python scripts/generate_preference_pairs.py
+
+# Step 6: ORPO preference alignment on SFT-fused model
+finetune-orpo:
+	uv run mlx_lm_lora.lora \
+		--model models/lfm-1.2b-soc-fused \
+		--data data/soc_orpo \
+		--train \
+		--training-mode orpo \
+		--batch-size 2 \
+		--grad-checkpoint \
+		--iters 1000 \
+		--adapter-path adapters/lfm-1.2b-orpo
+
+# Step 7: Fuse ORPO adapter into final model
+fuse-orpo:
+	uv run mlx_lm.fuse \
+		--model models/lfm-1.2b-soc-fused \
+		--adapter-path adapters/lfm-1.2b-orpo \
+		--save-path models/lfm-1.2b-final
+
+# Step 8: Fine-tune BGE-small embedder
+finetune-embedder:
+	uv run python scripts/finetune_embedder.py
+
+# ============================================================================
+# DailyDialog Dialog Acts Experiments
+# ============================================================================
+
+# Prepare DailyDialog data with native dialog act labels
+prepare-dailydialog:
+	uv run python scripts/prepare_dailydialog_data.py
+
+# Run full 144-experiment sweep (5-7 hours)
+dailydialog-sweep:
+	uv run python experiments/scripts/dailydialog_sweep.py
+
+# Quick sweep: 3-class combined features only (32 experiments, ~1 hour)
+dailydialog-sweep-quick:
+	uv run python experiments/scripts/dailydialog_sweep.py --quick
+
+# Analyze sweep results and print recommendations
+dailydialog-analyze:
+	uv run python experiments/scripts/analyze_dailydialog_results.py
+
+# Train production category SVM
+# Usage: make train-category-svm ARGS="--label-map 3class"
+train-category-svm:
+	uv run python scripts/train_category_svm.py $(ARGS)
 
 # ============================================================================
 # CLEANUP

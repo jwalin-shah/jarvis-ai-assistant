@@ -122,6 +122,7 @@ ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
 # ML scripts use standard conventions like X, C, X_train, BATCH_SIZE
 "experiments/**/*.py" = ["N803", "N806"]
 "scripts/train_*.py" = ["N803", "N806"]
+"scripts/label_*.py" = ["N803", "N806"]
 "scripts/eval_*.py" = ["N806"]
 
 [tool.mypy]

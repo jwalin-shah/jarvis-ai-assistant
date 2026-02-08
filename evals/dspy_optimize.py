@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 """DSPy optimization: compile better prompts + few-shot examples.
 
-Uses Cerebras Qwen3-235B as teacher to bootstrap demonstrations for the
+Supports two modes:
+1. Global: optimize a single program across all test cases (original behavior)
+2. Per-category: optimize separate programs for each category (MIPRO v2)
+
+Uses ZAI GLM 4.7 via Cerebras as teacher to bootstrap demonstrations for the
 local MLX 1.2B student model, then evaluates with the same judge.
 
 Usage:
-    uv run python evals/dspy_optimize.py                    # BootstrapFewShot (fast)
-    uv run python evals/dspy_optimize.py --optimizer mipro  # MIPROv2 (slower)
-    uv run python evals/dspy_optimize.py --eval-only        # just evaluate a saved program
+    uv run python evals/dspy_optimize.py                         # BootstrapFewShot (global)
+    uv run python evals/dspy_optimize.py --optimizer mipro       # MIPROv2 (global)
+    uv run python evals/dspy_optimize.py --per-category          # Per-category MIPROv2
+    uv run python evals/dspy_optimize.py --eval-only             # Evaluate saved global program
+    uv run python evals/dspy_optimize.py --eval-only --per-category  # Eval all categories
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -34,38 +42,37 @@ import dspy  # noqa: E402
 
 from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
+    CategoryReplyModule,
     ReplyModule,
-    cerebras_judge_metric,
+    clean_reply,
+    get_all_categories,
+    get_category_examples,
+    judge_metric,
 )
 from jarvis.dspy_client import DSPYMLXClient  # noqa: E402
 
-SAVE_DIR = PROJECT_ROOT / "evals" / "optimized_reply"
-
-
-def _get_cerebras_key() -> str:
-    key = os.environ.get("CEREBRAS_API_KEY", "")
-    if not key or key == "your-key-here":
-        print("ERROR: CEREBRAS_API_KEY not set in .env")
-        print("       Required for teacher model and judge scoring.")
-        sys.exit(1)
-    return key
+# Save paths
+SAVE_DIR = PROJECT_ROOT / "evals" / "optimized_reply.json"
+CATEGORY_SAVE_DIR = PROJECT_ROOT / "evals" / "optimized_categories"
 
 
 def build_teacher_lm() -> dspy.LM:
-    """Cerebras Qwen3-235B as the teacher/demo generator."""
-    key = _get_cerebras_key()
+    """Cerebras ZAI GLM 4.7 as the teacher/demo generator."""
+    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+
+    key = get_judge_api_key()
     return dspy.LM(
-        model="openai/qwen-3-235b-a22b-instruct-2507",
-        api_base="https://api.cerebras.ai/v1",
+        model=f"openai/{JUDGE_MODEL}",
+        api_base=JUDGE_BASE_URL,
         api_key=key,
         temperature=0.7,
-        max_tokens=100,
+        max_tokens=300,
     )
 
 
 def build_student_lm() -> DSPYMLXClient:
     """Local MLX 1.2B as the student model."""
-    return DSPYMLXClient(max_tokens=50, temperature=0.7)
+    return DSPYMLXClient(max_tokens=50, temperature=0.1)
 
 
 def run_bootstrap(
@@ -79,7 +86,7 @@ def run_bootstrap(
     print(f"  trainset size: {len(trainset)}")
 
     optimizer = dspy.BootstrapFewShot(
-        metric=cerebras_judge_metric,
+        metric=judge_metric,
         max_bootstrapped_demos=3,
         max_labeled_demos=4,
     )
@@ -91,49 +98,206 @@ def run_bootstrap(
 
 
 def run_mipro(
-    student: ReplyModule,
+    student: dspy.Module,
     trainset: list[dspy.Example],
     teacher_lm: dspy.LM,
-    student_lm: DSPYMLXClient,
-) -> ReplyModule:
-    """MIPROv2: slower, also optimizes the instruction text."""
+    num_candidates: int = 5,
+    num_trials: int = 15,
+    max_bootstrapped_demos: int = 3,
+) -> dspy.Module:
+    """MIPROv2: optimizes instruction text + few-shot demos."""
     print("Optimizer: MIPROv2")
-    print("  num_candidates=5, max_bootstrapped_demos=3")
+    print(
+        f"  num_candidates={num_candidates}, num_trials={num_trials}, "
+        f"max_bootstrapped_demos={max_bootstrapped_demos}"
+    )
     print(f"  trainset size: {len(trainset)}")
 
     optimizer = dspy.MIPROv2(
-        metric=cerebras_judge_metric,
-        num_candidates=5,
-        max_bootstrapped_demos=3,
+        metric=judge_metric,
+        prompt_model=teacher_lm,
+        auto=None,
+        num_candidates=num_candidates,
+        max_bootstrapped_demos=max_bootstrapped_demos,
         max_labeled_demos=4,
     )
 
     compiled = optimizer.compile(
         student=student,
         trainset=trainset,
-        teacher=teacher_lm,
-        requires_permission_to_run=False,
+        num_trials=num_trials,
+        minibatch=False,
     )
 
     return compiled
 
 
-def evaluate_program(program: ReplyModule, trainset: list[dspy.Example]) -> float:
-    """Run the metric on all examples, return pass rate."""
-    passed = 0
+@dataclass
+class EvalCaseResult:
+    """Result of evaluating a single test case."""
+
+    query: str
+    raw_reply: str
+    cleaned_reply: str
+    score: float  # Continuous 0.0-1.0 score from judge
+    passed: bool  # score >= 0.7
+    has_artifacts: bool  # True if raw != cleaned (DSPy leak detected)
+    error: str | None = None
+
+
+def evaluate_program(
+    program: dspy.Module, trainset: list[dspy.Example]
+) -> tuple[float, list[EvalCaseResult]]:
+    """Run the metric on all examples, return (avg score, detailed results).
+
+    Uses continuous 0-1 scoring for better signal. Reports both average score
+    and pass rate (>= 0.7 threshold).
+    """
+    scores: list[float] = []
+    details: list[EvalCaseResult] = []
     for ex in trainset:
         try:
             pred = program(**{k: ex[k] for k in ["context", "last_message", "tone", "user_style"]})
-            if cerebras_judge_metric(ex, pred):
-                passed += 1
-                print(f"  PASS: {ex.last_message[:40]!r} -> {pred.reply!r}")
-            else:
-                print(f"  FAIL: {ex.last_message[:40]!r} -> {pred.reply!r}")
+            raw = pred.reply.strip()
+            cleaned = clean_reply(pred.reply)
+            has_artifacts = raw != cleaned
+            score = judge_metric(ex, pred)
+            scores.append(score)
+            passed = score >= 0.7
+            status = f"{score * 10:.0f}/10"
+            artifact_tag = " [ARTIFACT]" if has_artifacts else ""
+            print(f"  {status}: {ex.last_message[:40]!r} -> {raw!r}{artifact_tag}")
+            if has_artifacts:
+                print(f"         cleaned: {cleaned!r}")
+            details.append(
+                EvalCaseResult(
+                    query=ex.last_message,
+                    raw_reply=raw,
+                    cleaned_reply=cleaned,
+                    score=score,
+                    passed=passed,
+                    has_artifacts=has_artifacts,
+                )
+            )
         except Exception as e:
             print(f"  ERROR: {ex.last_message[:40]!r} -> {e}")
-    rate = passed / len(trainset) if trainset else 0
-    print(f"\nPass rate: {passed}/{len(trainset)} ({rate:.0%})")
-    return rate
+            scores.append(0.0)
+            details.append(
+                EvalCaseResult(
+                    query=ex.last_message,
+                    raw_reply="",
+                    cleaned_reply="",
+                    score=0.0,
+                    passed=False,
+                    has_artifacts=False,
+                    error=str(e),
+                )
+            )
+    avg_score = sum(scores) / len(scores) if scores else 0
+    n_passed = sum(1 for d in details if d.passed)
+    artifact_fails = sum(1 for d in details if not d.passed and d.has_artifacts)
+    print(f"\nAvg score: {avg_score * 10:.1f}/10")
+    print(f"Pass rate (>=7): {n_passed}/{len(trainset)} ({n_passed / len(trainset) * 100:.0f}%)")
+    if artifact_fails:
+        print(f"  ({artifact_fails} failures had DSPy artifacts - fixable with post-processing)")
+    return avg_score, details
+
+
+# ---------------------------------------------------------------------------
+# Per-category optimization
+# ---------------------------------------------------------------------------
+
+
+def run_per_category(
+    teacher_lm: dspy.LM,
+    optimizer_name: str = "mipro",
+) -> dict[str, float]:
+    """Run optimization separately for each category.
+
+    Returns dict of category -> pass rate.
+    """
+    categories = get_all_categories()
+    print(f"\nRunning per-category optimization for: {', '.join(categories)}")
+    print(f"Optimizer: {optimizer_name}")
+    print()
+
+    CATEGORY_SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    results: dict[str, float] = {}
+    all_details: dict[str, list[EvalCaseResult]] = {}
+
+    for cat in categories:
+        cat_examples = get_category_examples(cat)
+        if len(cat_examples) < 3:
+            print(f"SKIP {cat}: only {len(cat_examples)} examples (need >= 3)")
+            continue
+
+        print("=" * 70)
+        print(f"CATEGORY: {cat} ({len(cat_examples)} examples)")
+        print("=" * 70)
+
+        student = CategoryReplyModule(cat)
+        start = time.perf_counter()
+
+        if optimizer_name == "mipro":
+            compiled = run_mipro(
+                student=student,
+                trainset=cat_examples,
+                teacher_lm=teacher_lm,
+                num_candidates=5,
+                num_trials=15,
+                max_bootstrapped_demos=3,
+            )
+        else:
+            compiled = run_bootstrap(student, cat_examples, teacher_lm)
+
+        elapsed = time.perf_counter() - start
+        print(f"\n{cat} optimization took {elapsed:.1f}s")
+
+        # Save per-category program
+        save_path = CATEGORY_SAVE_DIR / f"optimized_{cat}.json"
+        compiled.save(str(save_path))
+        print(f"Saved to {save_path}")
+
+        # Evaluate
+        print(f"\nEvaluating {cat}:")
+        rate, cat_details = evaluate_program(compiled, cat_examples)
+        results[cat] = rate
+        all_details[cat] = cat_details
+        print()
+
+    return results, all_details
+
+
+def eval_per_category() -> tuple[dict[str, float], dict[str, list[EvalCaseResult]]]:
+    """Evaluate all saved per-category programs."""
+    categories = get_all_categories()
+    results: dict[str, float] = {}
+    all_details: dict[str, list[EvalCaseResult]] = {}
+
+    for cat in categories:
+        save_path = CATEGORY_SAVE_DIR / f"optimized_{cat}.json"
+        if not save_path.exists():
+            print(f"SKIP {cat}: no saved program at {save_path}")
+            continue
+
+        cat_examples = get_category_examples(cat)
+        print(f"\n{'=' * 70}")
+        print(f"CATEGORY: {cat} ({len(cat_examples)} examples)")
+        print(f"{'=' * 70}")
+
+        program = CategoryReplyModule(cat)
+        program.load(str(save_path))
+
+        rate, cat_details = evaluate_program(program, cat_examples)
+        results[cat] = rate
+        all_details[cat] = cat_details
+
+    return results, all_details
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -145,9 +309,14 @@ def main() -> int:
         help="Optimization strategy (default: bootstrap)",
     )
     parser.add_argument(
+        "--per-category",
+        action="store_true",
+        help="Run per-category optimization instead of global",
+    )
+    parser.add_argument(
         "--eval-only",
         action="store_true",
-        help="Skip optimization, just evaluate saved program",
+        help="Skip optimization, just evaluate saved program(s)",
     )
     args = parser.parse_args()
 
@@ -161,45 +330,103 @@ def main() -> int:
 
     trainset = TRAIN_EXAMPLES
     print(f"Training examples: {len(trainset)}")
+    print(f"Categories: {', '.join(get_all_categories())}")
 
+    # --- Eval-only mode ---
     if args.eval_only:
-        if not SAVE_DIR.exists():
-            print(f"ERROR: No saved program at {SAVE_DIR}")
-            return 1
-        print(f"\nLoading compiled program from {SAVE_DIR}")
-        program = ReplyModule()
-        program.load(str(SAVE_DIR))
-        print("\nEvaluating compiled program:")
-        evaluate_program(program, trainset)
-        return 0
+        if args.per_category:
+            print("\nEvaluating per-category compiled programs:")
+            results, all_details = eval_per_category()
+            if results:
+                print("\n" + "=" * 70)
+                print("PER-CATEGORY SUMMARY")
+                print("=" * 70)
+                for cat, rate in sorted(results.items()):
+                    print(f"  {cat:20s}  {rate:.0%}")
+                avg = sum(results.values()) / len(results)
+                print(f"  {'AVERAGE':20s}  {avg:.0%}")
+            return 0
+        else:
+            if not SAVE_DIR.exists():
+                print(f"ERROR: No saved program at {SAVE_DIR}")
+                return 1
+            print(f"\nLoading compiled program from {SAVE_DIR}")
+            program = ReplyModule()
+            program.load(str(SAVE_DIR))
+            print("\nEvaluating compiled program:")
+            evaluate_program(program, trainset)  # results printed inline
+            return 0
 
-    # Build teacher
+    # --- Optimization mode ---
     teacher_lm = build_teacher_lm()
-    print("Teacher: Cerebras qwen-3-235b")
+    print("Teacher: ZAI GLM 4.7 via Cerebras")
     print("Student: MLX local 1.2B")
     print()
 
-    # Run optimization
-    start = time.perf_counter()
-    student = ReplyModule()
+    if args.per_category:
+        # Per-category optimization (default: mipro for per-category)
+        optimizer_name = args.optimizer if args.optimizer != "bootstrap" else "mipro"
+        results, all_details = run_per_category(teacher_lm, optimizer_name)
 
-    if args.optimizer == "mipro":
-        compiled = run_mipro(student, trainset, teacher_lm, student_lm)
+        print("\n" + "=" * 70)
+        print("PER-CATEGORY RESULTS")
+        print("=" * 70)
+        for cat, rate in sorted(results.items()):
+            print(f"  {cat:20s}  {rate:.0%}")
+        if results:
+            avg = sum(results.values()) / len(results)
+            print(f"  {'AVERAGE':20s}  {avg:.0%}")
+
+        # Save detailed summary with per-case logs
+        summary_path = CATEGORY_SAVE_DIR / "summary.json"
+        detail_data: dict = {}
+        for cat, cases in all_details.items():
+            detail_data[cat] = [
+                {
+                    "query": c.query,
+                    "raw_reply": c.raw_reply,
+                    "cleaned_reply": c.cleaned_reply,
+                    "passed": c.passed,
+                    "has_artifacts": c.has_artifacts,
+                    "error": c.error,
+                }
+                for c in cases
+            ]
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "optimizer": optimizer_name,
+                    "temperature": 0.1,
+                    "per_category_pass_rates": results,
+                    "per_case_details": detail_data,
+                },
+                indent=2,
+            )
+        )
+        print(f"\nSummary saved to {summary_path}")
     else:
-        compiled = run_bootstrap(student, trainset, teacher_lm)
+        # Global optimization (original behavior)
+        start = time.perf_counter()
+        student = ReplyModule()
 
-    elapsed = time.perf_counter() - start
-    print(f"\nOptimization took {elapsed:.1f}s")
+        if args.optimizer == "mipro":
+            compiled = run_mipro(student, trainset, teacher_lm)
+        else:
+            compiled = run_bootstrap(student, trainset, teacher_lm)
 
-    # Save
-    SAVE_DIR.mkdir(parents=True, exist_ok=True)
-    compiled.save(str(SAVE_DIR))
-    print(f"Saved compiled program to {SAVE_DIR}")
+        elapsed = time.perf_counter() - start
+        print(f"\nOptimization took {elapsed:.1f}s")
 
-    # Evaluate the compiled program
-    print("\n" + "-" * 70)
-    print("Evaluating compiled program:")
-    evaluate_program(compiled, trainset)
+        # Save
+        SAVE_DIR.parent.mkdir(parents=True, exist_ok=True)
+        compiled.save(str(SAVE_DIR))
+        print(f"Saved compiled program to {SAVE_DIR}")
+
+        # Evaluate the compiled program
+        print("\n" + "-" * 70)
+        print("Evaluating compiled program:")
+        evaluate_program(compiled, trainset)
 
     print("=" * 70)
     print("Done. Run batch_eval with --optimized to compare:")

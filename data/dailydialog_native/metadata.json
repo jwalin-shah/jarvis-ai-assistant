@@ -1,0 +1,60 @@
+{
+  "source": "OpenRL/daily_dialog",
+  "labels": [
+    "commissive",
+    "directive",
+    "inform",
+    "question"
+  ],
+  "label_map": {
+    "commissive": 0,
+    "directive": 1,
+    "inform": 2,
+    "question": 3
+  },
+  "total_raw": 76051,
+  "total_filtered": 76049,
+  "train_size": 60839,
+  "test_size": 15210,
+  "feature_dims": 417,
+  "embedding_dims": 384,
+  "hand_crafted_dims": 19,
+  "spacy_dims": 14,
+  "text_normalization": "expand_slang",
+  "spacy_features": [
+    "has_imperative",
+    "you_modal",
+    "request_verb",
+    "starts_modal",
+    "directive_question",
+    "i_will",
+    "promise_verb",
+    "first_person_count",
+    "agreement",
+    "modal_count",
+    "verb_count",
+    "second_person_count",
+    "has_negation",
+    "is_interrogative"
+  ],
+  "label_distribution_raw": {
+    "commissive": 8077,
+    "question": 19474,
+    "directive": 11685,
+    "inform": 36815
+  },
+  "label_distribution_train": {
+    "directive": 9348,
+    "inform": 29450,
+    "commissive": 6462,
+    "question": 15579
+  },
+  "label_distribution_test": {
+    "question": 3895,
+    "inform": 7363,
+    "commissive": 1615,
+    "directive": 2337
+  },
+  "balance_ratio": 4.558004209483719,
+  "seed": 42
+}

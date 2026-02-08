@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-02-06 21:36:36",
+  "config": {
+    "subset_size": 12400,
+    "c_values": [
+      7.0
+    ],
+    "gamma_values": [
+      "scale"
+    ],
+    "oversample": {
+      "commissive": 2.35,
+      "directive": 1.63,
+      "inform": 0.52,
+      "question": 0.98
+    },
+    "seed": 42
+  },
+  "class_distribution": {
+    "commissive": 2495,
+    "directive": 2503,
+    "inform": 4841,
+    "question": 2561
+  },
+  "results": [
+    {
+      "C": 7.0,
+      "gamma": "scale",
+      "mean_f1": 0.7184097270802157,
+      "std_f1": 0.006368438449531108,
+      "time_sec": 42.172324895858765
+    }
+  ],
+  "best_config": {
+    "C": 7.0,
+    "gamma": "scale",
+    "mean_f1": 0.7184097270802157,
+    "std_f1": 0.006368438449531108,
+    "time_sec": 42.172324895858765
+  }
+}

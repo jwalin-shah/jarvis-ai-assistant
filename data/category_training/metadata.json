@@ -1,0 +1,50 @@
+{
+  "sources": [
+    "OpenRL/daily_dialog",
+    "knkarthick/samsum"
+  ],
+  "categories": [
+    "ack",
+    "clarify",
+    "emotional",
+    "info",
+    "social"
+  ],
+  "labeling_method": "weak_supervision (majority)",
+  "num_labeling_functions": 29,
+  "aggregation_method": "majority",
+  "min_confidence": 0.0,
+  "avg_confidence": 0.6666740263205975,
+  "lf_coverage": 0.05062068965517241,
+  "total_raw": 226804,
+  "total_filtered": 223994,
+  "total_balanced": 23120,
+  "train_size": 18496,
+  "test_size": 4624,
+  "feature_dims": 403,
+  "embedding_dims": 384,
+  "hand_crafted_dims": 19,
+  "label_map": {
+    "ack": 0,
+    "clarify": 1,
+    "emotional": 2,
+    "info": 3,
+    "social": 4
+  },
+  "label_distribution_raw": {
+    "info": 119442,
+    "emotional": 13353,
+    "social": 69245,
+    "clarify": 4661,
+    "ack": 20103
+  },
+  "label_distribution_balanced": {
+    "info": 4624,
+    "clarify": 4624,
+    "ack": 4624,
+    "emotional": 4624,
+    "social": 4624
+  },
+  "max_overrep_ratio": 1.0,
+  "seed": 42
+}

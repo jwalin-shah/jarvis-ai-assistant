@@ -60,6 +60,7 @@ class ReplyService:
         self._imessage_reader = imessage_reader
         self._semantic_searcher: SemanticSearcher | None = None
         self._context_service: ContextService | None = None
+        self._reranker = None
         self._lock = threading.RLock()
 
     @property
@@ -111,6 +112,16 @@ class ReplyService:
                     semantic_searcher=self.semantic_searcher,
                 )
             return self._context_service
+
+    @property
+    def reranker(self):
+        """Get or create the cross-encoder reranker (lazy-loaded)."""
+        with self._lock:
+            if self._reranker is None:
+                from models.reranker import get_reranker
+
+                self._reranker = get_reranker()
+            return self._reranker
 
     def can_use_llm(self) -> tuple[bool, str]:
         """Check if LLM can be used based on system health."""
@@ -169,11 +180,29 @@ class ReplyService:
             instruction=instruction,
         )
 
-        # 6. Build metadata
+        # 6. Build metadata with improved confidence scoring
         similarity = search_results[0]["similarity"] if search_results else 0.0
+        example_diversity = self._compute_example_diversity(search_results)
+
+        # For streaming, we don't have the reply yet, so use pressure-based confidence
+        base_confidence = {
+            ResponsePressure.HIGH: 0.85,
+            ResponsePressure.MEDIUM: 0.65,
+            ResponsePressure.LOW: 0.45,
+            ResponsePressure.NONE: 0.30,
+        }[mobilization.pressure]
+
+        if similarity < 0.5:
+            base_confidence *= 0.8
+        if example_diversity < 0.3:
+            base_confidence *= 0.9
+
+        confidence = "high" if base_confidence >= 0.7 else "medium" if base_confidence >= 0.45 else "low"
+
         metadata = {
-            "confidence": "high" if mobilization.pressure == ResponsePressure.HIGH else "medium",
+            "confidence": confidence,
             "similarity_score": similarity,
+            "example_diversity": example_diversity,
             "mobilization_pressure": mobilization.pressure.value,
         }
 
@@ -213,6 +242,24 @@ class ReplyService:
         # 1. Context and classification
         if mobilization is None:
             mobilization = classify_response_pressure(incoming)
+
+        # 1b. Category classification and routing
+        from jarvis.classifiers.category_classifier import classify_category
+        from jarvis.prompts import ACK_TEMPLATES, get_category_config
+        import random
+
+        category_result = classify_category(incoming, context=thread or [], mobilization=mobilization)
+        category_config = get_category_config(category_result.category)
+
+        # If ack category, skip SLM and return template
+        if category_config.skip_slm:
+            return {
+                "type": "ack",
+                "response": random.choice(ACK_TEMPLATES),
+                "confidence": "high",
+                "reason": f"category={category_result.category}",
+                "category": category_result.category,
+            }
 
         # 2. Search for similar examples
         if search_results is None:
@@ -305,17 +352,57 @@ class ReplyService:
             contact, chat_id
         )
 
-        # Build mobilization hint, allow user instruction to override
+        # Category routing: classify message and use MIPRO-optimized programs
+        from jarvis.prompts import (
+            get_optimized_examples,
+            get_optimized_instruction,
+            resolve_category,
+        )
+
+        category = resolve_category(
+            incoming, context=context_messages, mobilization=mobilization,
+        )
+
+        # Use MIPRO-compiled instruction if available, else mobilization hint
         if instruction is None:
-            instruction = self._build_mobilization_hint(mobilization)
+            optimized_instruction = get_optimized_instruction(category)
+            if optimized_instruction:
+                instruction = optimized_instruction
+            else:
+                instruction = self._build_mobilization_hint(mobilization)
+
+        # Rerank search results for better relevance
+        if len(search_results) > 1:
+            search_results = self.reranker.rerank(
+                query=incoming,
+                candidates=search_results,
+                text_key="trigger_text",
+                top_k=5,
+            )
+
+        # Use category-specific few-shot examples if available
+        optimized_examples = get_optimized_examples(category)
+        category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
 
         similar_exchanges = [(r["trigger_text"], r["response_text"]) for r in search_results[:3]]
+
+        # Merge: RAG-retrieved examples first, then category-specific (up to 5 total)
+        all_exchanges = similar_exchanges + [
+            ex for ex in category_exchanges if ex not in similar_exchanges
+        ]
+
+        # Deduplicate semantically similar examples
+        cached_embedder = CachedEmbedder(get_embedder())
+        all_exchanges = self._dedupe_examples(all_exchanges, cached_embedder)
+
+        # Limit to 5 total examples
+        all_exchanges = all_exchanges[:5]
 
         prompt = build_rag_reply_prompt(
             context=context,
             last_message=incoming,
             contact_name=contact.display_name if contact else "them",
-            similar_exchanges=similar_exchanges if similar_exchanges else None,
+            similar_exchanges=all_exchanges if all_exchanges else None,
             relationship_profile=relationship_profile,
             contact_context=contact_context,
             instruction=instruction,
@@ -332,6 +419,115 @@ class ReplyService:
 
     # Responses that signal the model is uncertain / lacks context
     _UNCERTAIN_SIGNALS = frozenset({"?", "??", "hm?", "what?", "huh?"})
+
+    @staticmethod
+    def _compute_confidence(
+        pressure: ResponsePressure,
+        rag_similarity: float,
+        example_diversity: float,
+        reply_length: int,
+        reply_text: str,
+    ) -> str:
+        """Compute confidence level based on multiple signals.
+
+        Args:
+            pressure: Response mobilization pressure level.
+            rag_similarity: Top RAG result similarity score (0-1).
+            example_diversity: Measure of example diversity (0-1).
+            reply_length: Number of words in the reply.
+            reply_text: The actual reply text for uncertain signal detection.
+
+        Returns:
+            Confidence level: "high", "medium", or "low".
+        """
+        # Base confidence by pressure
+        base_confidence = {
+            ResponsePressure.HIGH: 0.85,
+            ResponsePressure.MEDIUM: 0.65,
+            ResponsePressure.LOW: 0.45,
+            ResponsePressure.NONE: 0.30,
+        }[pressure]
+
+        # Adjust based on RAG quality
+        if rag_similarity < 0.5:
+            base_confidence *= 0.8
+
+        # Adjust based on example diversity
+        if example_diversity < 0.3:  # All from same contact
+            base_confidence *= 0.9
+
+        # Uncertain signals only matter if very short reply + high pressure
+        if (
+            reply_length < 3
+            and pressure == ResponsePressure.HIGH
+            and reply_text.lower() in ReplyService._UNCERTAIN_SIGNALS
+        ):
+            base_confidence *= 0.7
+
+        # Map float to discrete level
+        if base_confidence >= 0.7:
+            return "high"
+        elif base_confidence >= 0.45:
+            return "medium"
+        else:
+            return "low"
+
+    @staticmethod
+    def _compute_example_diversity(search_results: list[dict[str, Any]]) -> float:
+        """Compute diversity of search results by unique contacts/contexts.
+
+        Args:
+            search_results: List of search result dicts.
+
+        Returns:
+            Diversity score from 0.0 (all same) to 1.0 (all unique).
+        """
+        if not search_results:
+            return 0.0
+
+        # Count unique trigger texts as proxy for diversity
+        unique_triggers = len(set(r.get("trigger_text", "") for r in search_results))
+        return min(unique_triggers / len(search_results), 1.0)
+
+    def _dedupe_examples(
+        self, examples: list[tuple[str, str]], embedder: CachedEmbedder
+    ) -> list[tuple[str, str]]:
+        """Deduplicate examples using semantic similarity.
+
+        Args:
+            examples: List of (context, output) tuples.
+            embedder: Embedder for computing similarity.
+
+        Returns:
+            Deduplicated list of examples (highest quality kept).
+        """
+        if len(examples) <= 1:
+            return examples
+
+        # Compute embeddings for all examples
+        texts = [f"{ctx} {out}" for ctx, out in examples]
+        embeddings = embedder.encode(texts, normalize=True)
+
+        # Find near-duplicates (cosine sim > 0.85)
+        keep = [True] * len(examples)
+        for i in range(len(examples)):
+            if not keep[i]:
+                continue
+            for j in range(i + 1, len(examples)):
+                if not keep[j]:
+                    continue
+                import numpy as np
+
+                sim = float(np.dot(embeddings[i], embeddings[j]))
+                if sim > 0.85:
+                    # Keep the one with more context
+                    if len(examples[i][0]) >= len(examples[j][0]):
+                        keep[j] = False
+                    else:
+                        keep[i] = False
+                        break
+
+        return [ex for ex, k in zip(examples, keep) if k]
 
     def _generate_llm_reply(
         self,
@@ -367,13 +563,25 @@ class ReplyService:
                     "reason": "model_uncertain",
                 }
 
+            # Compute confidence using multiple signals
+            similarity = search_results[0]["similarity"] if search_results else 0.0
+            example_diversity = self._compute_example_diversity(search_results)
+            reply_length = len(text.split())
+
+            confidence = self._compute_confidence(
+                mobilization.pressure,
+                similarity,
+                example_diversity,
+                reply_length,
+                text,
+            )
+
             return {
                 "type": "generated",
                 "response": text,
-                "confidence": "high"
-                if mobilization.pressure == ResponsePressure.HIGH
-                else "medium",
-                "similarity_score": search_results[0]["similarity"] if search_results else 0.0,
+                "confidence": confidence,
+                "similarity_score": similarity,
+                "example_diversity": example_diversity,
             }
         except Exception as e:
             logger.exception("LLM generation failed: %s", e)

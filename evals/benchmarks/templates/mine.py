@@ -185,7 +185,7 @@ class TemplateMiner:
             eps=self.eps,
             min_samples=self.min_samples,
             metric="cosine",
-            n_jobs=-1,
+            n_jobs=2,
         )
 
         labels = clusterer.fit_predict(embeddings)

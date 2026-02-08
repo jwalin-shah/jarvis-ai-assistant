@@ -71,11 +71,41 @@ make verify         # Full verification (lint + typecheck + test)
 - Loop until criteria met (don't say "should work" without verifying)
 
 ### Performance by Default
-- **Always parallelize**: `n_jobs=-1` for scikit-learn (GridSearchCV, cross_val_score)
+- **Always parallelize**: `n_jobs=2` for scikit-learn (GridSearchCV, cross_val_score) - constrained by 8GB RAM
 - **Always batch**: Process lists together, not one-at-a-time loops
 - **Always cache**: Expensive computations (embeddings, model loads)
 - **Vectorized ops**: NumPy/pandas over Python loops
 - A slow script is NOT acceptable - performance is a correctness requirement
+
+#### Visible Progress (MANDATORY)
+**ALL scripts/operations MUST have visible, real-time progress.** Zero visibility is unacceptable.
+
+- **Python stdout buffering**: Use `print(..., flush=True)` or `python -u` (unbuffered mode)
+- **Long operations (>30s)** require ALL of:
+  1. Progress indicator (bar, counter, percentage)
+  2. ETA or time estimate
+  3. Current step description (what's happening NOW)
+  4. Log to file in real-time (use `logging` with `FileHandler`)
+- **Training/GridSearch**: Always use `verbose=2` or higher AND log to file
+- **Background processes**: Provide a way to check status without killing/restarting
+- **macOS memory tracking**: Use `jarvis/utils/memory.py` to show real pressure, not just swap
+
+Examples of REQUIRED visibility:
+```python
+# GridSearchCV
+search = GridSearchCV(..., verbose=2)  # Shows per-fold progress
+logging.basicConfig(handlers=[FileHandler("progress.log"), StreamHandler()])
+
+# Long loops
+for i, item in enumerate(items):
+    print(f"Processing {i+1}/{len(items)}: {item.name}", flush=True)
+
+# Data processing
+with tqdm(total=len(data), desc="Encoding") as pbar:
+    for batch in batches:
+        process(batch)
+        pbar.update(len(batch))
+```
 
 #### Never Load Twice
 - **NEVER load data/models/files twice** - this is a critical efficiency bug
@@ -200,5 +230,5 @@ This system has **8GB RAM**. Large data processing MUST account for this:
 - **Prompts**: All in `jarvis/prompts.py` - nowhere else
 - **Errors**: Inherit from `JarvisError` in `jarvis/errors.py`
 - **Batching**: Use `classify_batch()`, `embedder.encode(list)` - never loop
-- **Parallelization**: `n_jobs=-1` for all sklearn operations
+- **Parallelization**: `n_jobs=2` for all sklearn operations (memory-constrained)
 - **IPC Protocol**: Use binary encoding (base64) not JSON for large arrays

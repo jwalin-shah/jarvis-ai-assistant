@@ -1,0 +1,109 @@
+{
+  "timestamp": "2026-02-06 22:46:45",
+  "config": {
+    "train_size": 4000,
+    "test_size": 1000,
+    "train_size_after_resample": 4000,
+    "test_proportion": 0.2,
+    "c_values": [
+      7.0
+    ],
+    "gamma_values": [
+      "scale"
+    ],
+    "resample": {},
+    "n_jobs": 5,
+    "seed": 42
+  },
+  "class_distribution_train": {
+    "commissive": 425,
+    "directive": 614,
+    "inform": 1936,
+    "question": 1025
+  },
+  "class_distribution_test": {
+    "commissive": 106,
+    "directive": 154,
+    "inform": 484,
+    "question": 256
+  },
+  "results": [
+    {
+      "C": 7.0,
+      "gamma": "scale",
+      "mean_f1": 0.6122707974980955,
+      "std_f1": 0.011106768517653604
+    }
+  ],
+  "best_config": {
+    "C": 7.0,
+    "gamma": "scale",
+    "mean_f1": 0.6122707974980955,
+    "std_f1": 0.011106768517653604,
+    "test_set_metrics": {
+      "commissive": {
+        "precision": 0.3742690058479532,
+        "recall": 0.6037735849056604,
+        "f1-score": 0.4620938628158845,
+        "support": 106.0
+      },
+      "directive": {
+        "precision": 0.3841059602649007,
+        "recall": 0.37662337662337664,
+        "f1-score": 0.380327868852459,
+        "support": 154.0
+      },
+      "inform": {
+        "precision": 0.8571428571428571,
+        "recall": 0.7066115702479339,
+        "f1-score": 0.7746319365798414,
+        "support": 484.0
+      },
+      "question": {
+        "precision": 0.8494623655913979,
+        "recall": 0.92578125,
+        "f1-score": 0.8859813084112149,
+        "support": 256.0
+      },
+      "accuracy": 0.701,
+      "macro avg": {
+        "precision": 0.6162450472117772,
+        "recall": 0.6531974454442427,
+        "f1-score": 0.62575874416485,
+        "support": 1000.0
+      },
+      "weighted avg": {
+        "precision": 0.7311443409492184,
+        "recall": 0.701,
+        "f1-score": 0.7092855135196767,
+        "support": 1000.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        64,
+        16,
+        21,
+        5
+      ],
+      [
+        29,
+        58,
+        34,
+        33
+      ],
+      [
+        77,
+        61,
+        342,
+        4
+      ],
+      [
+        1,
+        16,
+        2,
+        237
+      ]
+    ]
+  }
+}

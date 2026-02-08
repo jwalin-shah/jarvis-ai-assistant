@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-02-07 12:37:36",
+  "n_samples": 60839,
+  "n_features": 417,
+  "cv_folds": 3,
+  "results": [
+    {
+      "model": "LinearSVC",
+      "f1_mean": 0.6670143989538428,
+      "f1_std": 0.0019352978166995373,
+      "time_seconds": 171.3752589225769,
+      "fold_scores": [
+        0.6678859174202161,
+        0.6688255060119741,
+        0.6643317734293382
+      ]
+    },
+    {
+      "model": "Nystroem(300)+LinearSVC",
+      "f1_mean": 0.6212400179755058,
+      "f1_std": 0.0065936186535625356,
+      "time_seconds": 49.85110402107239,
+      "fold_scores": [
+        0.6167288480547843,
+        0.6305631852581811,
+        0.6164280206135516
+      ]
+    },
+    {
+      "model": "Nystroem(500)+LinearSVC",
+      "f1_mean": 0.6371417127465949,
+      "f1_std": 0.0021206817000377688,
+      "time_seconds": 82.16711187362671,
+      "fold_scores": [
+        0.6351502823320359,
+        0.6400794861371659,
+        0.6361953697705829
+      ]
+    },
+    {
+      "model": "LightGBM",
+      "f1_mean": 0.7020080898838063,
+      "f1_std": 0.002611043965681385,
+      "time_seconds": 125.79782199859619,
+      "fold_scores": [
+        0.7012662240814388,
+        0.7055116817569401,
+        0.6992463638130397
+      ]
+    },
+    {
+      "model": "XGBoost",
+      "error": "\nAll the 3 fits failed.\nIt is very likely that your model is misconfigured.\nYou can try to debug the error by setting error_score='raise'.\n\nBelow are more details about the failures:\n--------------------------------------------------------------------------------\n3 fits failed with the following error:\nTraceback (most recent call last):\n  File \"/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/model_selection/_validation.py\", line 833, in _fit_and_score\n    estimator.fit(X_train, y_train, **fit_params)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/base.py\", line 1336, in wrapper\n    return fit_method(estimator, *args, **kwargs)\n  File \"/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/sklearn/pipeline.py\", line 621, in fit\n    self._final_estimator.fit(Xt, y, **last_step_params[\"fit\"])\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/xgboost/core.py\", line 774, in inner_f\n    return func(**kwargs)\n  File \"/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/lib/python3.13/site-packages/xgboost/sklearn.py\", line 1763, in fit\n    raise ValueError(\n    ...<2 lines>...\n    )\nValueError: Invalid classes inferred from unique values of `y`.  Expected: [0 1 2 3], got ['commissive' 'directive' 'inform' 'question']\n"
+    },
+    {
+      "model": "RBF-SVM(5k-sample)",
+      "f1_mean": 0.6026540793558793,
+      "f1_std": 0.010590921379993306,
+      "time_seconds": 4.726632118225098,
+      "fold_scores": [
+        0.6036868180499183,
+        0.6150780157088105,
+        0.5891974043089092
+      ]
+    }
+  ]
+}

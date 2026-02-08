@@ -2186,3 +2186,87 @@ def reset_prompt_registry() -> None:
     """
     global _registry
     _registry = None
+
+
+# =============================================================================
+# Category Configuration (for reply routing)
+# =============================================================================
+
+
+@dataclass
+class CategoryConfig:
+    """Configuration for a message category.
+
+    Attributes:
+        skip_slm: If True, skip SLM generation (use template response).
+        prompt: Prompt template key to use (if not skipping SLM).
+        context_depth: Number of messages to include in context.
+        system_prompt: Optional category-specific system prompt.
+    """
+
+    skip_slm: bool
+    prompt: str | None
+    context_depth: int
+    system_prompt: str | None = None
+
+
+# Category configurations (maps category → routing behavior)
+CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
+    "ack": CategoryConfig(
+        skip_slm=True,
+        prompt=None,
+        context_depth=0,
+        system_prompt=None,
+    ),
+    "info": CategoryConfig(
+        skip_slm=False,
+        prompt="reply_generation",
+        context_depth=5,
+        system_prompt="Be direct and informative. Answer questions clearly, confirm commitments, provide requested details.",
+    ),
+    "emotional": CategoryConfig(
+        skip_slm=False,
+        prompt="reply_generation",
+        context_depth=3,
+        system_prompt="Be empathetic and supportive. Show you care, offer comfort or celebrate with them, match their emotional tone.",
+    ),
+    "social": CategoryConfig(
+        skip_slm=False,
+        prompt="reply_generation",
+        context_depth=3,
+        system_prompt="Be casual and conversational. Keep it light, share opinions/stories, engage naturally.",
+    ),
+    "clarify": CategoryConfig(
+        skip_slm=False,
+        prompt="reply_generation",
+        context_depth=5,
+        system_prompt="Ask for clarification when the message is ambiguous or lacks context. Be polite but direct: 'What do you mean?' or '?'.",
+    ),
+}
+
+
+def get_category_config(category: str) -> CategoryConfig:
+    """Get routing configuration for a category.
+
+    Args:
+        category: Category name (ack, info, emotional, social, clarify).
+
+    Returns:
+        CategoryConfig for the category, or default (social) if unknown.
+    """
+    return CATEGORY_CONFIGS.get(category, CATEGORY_CONFIGS["social"])
+
+
+# Template responses for ack category (when skip_slm=True)
+ACK_TEMPLATES: list[str] = [
+    "ok",
+    "sounds good",
+    "got it",
+    "thanks",
+    "np",
+    "👍",
+    "for sure",
+    "alright",
+    "bet",
+    "cool",
+]

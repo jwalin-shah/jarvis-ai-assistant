@@ -1,0 +1,59 @@
+Loading DailyDialog...
+16:50:59 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+16:50:59 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/OpenRL/daily_dialog/1668faf0c0dc44664f108c489fd0666128db2c48/README.md "HTTP/1.1 200 OK"
+16:51:00 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/1668faf0c0dc44664f108c489fd0666128db2c48/daily_dialog.py "HTTP/1.1 404 Not Found"
+16:51:00 [INFO] HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/OpenRL/daily_dialog/OpenRL/daily_dialog.py "HTTP/1.1 404 Not Found"
+16:51:00 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/OpenRL/daily_dialog/revision/1668faf0c0dc44664f108c489fd0666128db2c48 "HTTP/1.1 200 OK"
+16:51:00 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/1668faf0c0dc44664f108c489fd0666128db2c48/.huggingface.yaml "HTTP/1.1 404 Not Found"
+16:51:00 [INFO] HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=OpenRL/daily_dialog "HTTP/1.1 200 OK"
+16:51:00 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/OpenRL/daily_dialog/tree/1668faf0c0dc44664f108c489fd0666128db2c48/data?recursive=true&expand=false "HTTP/1.1 200 OK"
+16:51:00 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/OpenRL/daily_dialog/tree/1668faf0c0dc44664f108c489fd0666128db2c48?recursive=false&expand=false "HTTP/1.1 200 OK"
+16:51:01 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/OpenRL/daily_dialog/resolve/1668faf0c0dc44664f108c489fd0666128db2c48/dataset_infos.json "HTTP/1.1 404 Not Found"
+  11118 dialogues loaded
+  76051 per-utterance examples extracted
+Loading SAMSum...
+16:51:01 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/knkarthick/samsum/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+16:51:01 [WARNING] Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+16:51:01 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/knkarthick/samsum/6b929ff10edec703164e3ddb2e94aae058c9ab5f/README.md "HTTP/1.1 200 OK"
+16:51:01 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/knkarthick/samsum/resolve/6b929ff10edec703164e3ddb2e94aae058c9ab5f/samsum.py "HTTP/1.1 404 Not Found"
+16:51:01 [INFO] HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/knkarthick/samsum/knkarthick/samsum.py "HTTP/1.1 404 Not Found"
+16:51:01 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/knkarthick/samsum/revision/6b929ff10edec703164e3ddb2e94aae058c9ab5f "HTTP/1.1 200 OK"
+16:51:01 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/knkarthick/samsum/resolve/6b929ff10edec703164e3ddb2e94aae058c9ab5f/.huggingface.yaml "HTTP/1.1 404 Not Found"
+16:51:02 [INFO] HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=knkarthick/samsum "HTTP/1.1 200 OK"
+16:51:02 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/knkarthick/samsum/tree/6b929ff10edec703164e3ddb2e94aae058c9ab5f/data?recursive=true&expand=false "HTTP/1.1 404 Not Found"
+16:51:02 [INFO] HTTP Request: GET https://huggingface.co/api/datasets/knkarthick/samsum/tree/6b929ff10edec703164e3ddb2e94aae058c9ab5f?recursive=false&expand=false "HTTP/1.1 200 OK"
+16:51:02 [INFO] HTTP Request: HEAD https://huggingface.co/datasets/knkarthick/samsum/resolve/6b929ff10edec703164e3ddb2e94aae058c9ab5f/dataset_infos.json "HTTP/1.1 404 Not Found"
+  14731 conversations loaded
+  149253 per-turn examples extracted
+
+Total raw examples: 76251
+
+Applying labeling functions (method=majority)...
+  29 labeling functions registered
+  Labels assigned to 76251 examples
+
+Label distribution (avg confidence=0.793):
+  info        56787 (74.5%) [avg_conf=0.915]
+  social      11545 (15.1%) [avg_conf=0.116]
+  emotional    5906 (7.7%) [avg_conf=0.951]
+  clarify      1406 (1.8%) [avg_conf=0.754]
+  ack           607 (0.8%) [avg_conf=0.710]
+
+  dailydialog (76051 total):
+    info        56712 (74.6%)
+    social      11447 (15.1%)
+    emotional    5898 (7.8%)
+    clarify      1403 (1.8%)
+    ack           591 (0.8%)
+
+  samsum (200 total):
+    social         98 (49.0%)
+    info           75 (37.5%)
+    ack            16 (8.0%)
+    emotional       8 (4.0%)
+    clarify         3 (1.5%)
+
+LF coverage: 5.3% (non-abstain votes)
+
+--- DRY RUN: stopping before feature extraction ---
