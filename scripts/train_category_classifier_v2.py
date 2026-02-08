@@ -6,25 +6,29 @@ Training data: llm_category_labels.jsonl (Groq Llama 3.3 70B labels)
 Categories: closing, acknowledge, question, request, emotion, statement
 
 Feature pipeline:
-- 384-dim BERT embeddings (via get_embedder().encode())
+- 384-dim BERT embeddings (via get_embedder().encode(), normalized)
 - 26 hand-crafted features (message structure, context, style, reactions, emotions)
-- 14 spaCy features (imperatives, modals, agreement, etc.)
-Total: 424 features
+- ~69 spaCy features (14 original + 55 new targeted features)
+- 8 new hand-crafted features (from error analysis)
+Total: ~487 features
 
-Model: LinearSVC with GridSearchCV (balanced classes, n_jobs=1 for 8GB RAM)
+Model: Pipeline with ColumnTransformer (scaling) + LinearSVC
+GridSearchCV with n_jobs=1 for 8GB RAM constraint
+
+CRITICAL: Training uses normalize=True for BERT to match serving (FIX train/serve skew)
 """
 
 import json
-import re
 import time
 from pathlib import Path
 
 import joblib
-import lightgbm as lgb
 import numpy as np
-import spacy
-from sklearn.metrics import classification_report
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import GridSearchCV, StratifiedShuffleSplit
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from tqdm import tqdm
 
@@ -33,177 +37,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from jarvis.embedding_adapter import get_embedder
-
-# Load spaCy model
-print("Loading spaCy model...", flush=True)
-nlp = spacy.load("en_core_web_sm")
-
-# Regex patterns for hand-crafted features (synced with production)
-EMOJI_RE = re.compile(
-    r"[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"
-    r"\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF"
-    r"\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF]"
-)
-
-PROFESSIONAL_KEYWORDS_RE = re.compile(
-    r"\b(meeting|deadline|project|report|schedule|conference|presentation|"
-    r"budget|client|invoice|proposal)\b",
-    re.IGNORECASE,
-)
-
-ABBREVIATION_RE = re.compile(
-    r"\b(lol|lmao|omg|wtf|brb|btw|smh|tbh|imo|idk|ngl|fr|rn|ong|nvm|wya|hmu|"
-    r"fyi|asap|dm|irl|fomo|goat|sus|bet|cap|no cap)\b",
-    re.IGNORECASE,
-)
-
-
-def extract_spacy_features(text: str) -> np.ndarray:
-    """Extract 14 SpaCy linguistic features."""
-    doc = nlp(text)
-    features = []
-
-    # 1. has_imperative: Check for imperative verbs (VB at start)
-    has_imperative = 0.0
-    if len(doc) > 0 and doc[0].pos_ == "VERB" and doc[0].tag_ == "VB":
-        has_imperative = 1.0
-    features.append(has_imperative)
-
-    # 2. you_modal: "can you", "could you", "would you", "will you"
-    text_lower = text.lower()
-    you_modal = 1.0 if any(p in text_lower for p in ["can you", "could you", "would you", "will you", "should you"]) else 0.0
-    features.append(you_modal)
-
-    # 3. request_verb: Common request verbs
-    request_verbs = {"send", "give", "help", "tell", "show", "let", "call", "get", "make", "take"}
-    has_request = 1.0 if any(token.lemma_ in request_verbs for token in doc) else 0.0
-    features.append(has_request)
-
-    # 4. starts_modal: Starts with modal verb
-    starts_modal = 0.0
-    if len(doc) > 0 and doc[0].tag_ in ("MD", "VB"):
-        starts_modal = 1.0
-    features.append(starts_modal)
-
-    # 5. directive_question: Questions that are really directives
-    directive_q = 1.0 if you_modal and "?" in text else 0.0
-    features.append(directive_q)
-
-    # 6. i_will: "I'll", "I will", "I'm gonna"
-    i_will = 1.0 if any(p in text_lower for p in ["i'll", "i will", "i'm gonna", "ima", "imma"]) else 0.0
-    features.append(i_will)
-
-    # 7. promise_verb: Promise/commitment verbs
-    promise_verbs = {"promise", "guarantee", "commit", "swear"}
-    has_promise = 1.0 if any(token.lemma_ in promise_verbs for token in doc) else 0.0
-    features.append(has_promise)
-
-    # 8. first_person_count
-    first_person = sum(1 for token in doc if token.text.lower() in ("i", "me", "my", "mine", "myself"))
-    features.append(float(first_person))
-
-    # 9. agreement: Agreement words
-    agreement_words = {"sure", "okay", "ok", "yes", "yeah", "yep", "yup", "sounds good", "bet", "fs"}
-    has_agreement = 1.0 if any(word in text_lower for word in agreement_words) else 0.0
-    features.append(has_agreement)
-
-    # 10. modal_count
-    modal_count = sum(1 for token in doc if token.tag_ == "MD")
-    features.append(float(modal_count))
-
-    # 11. verb_count
-    verb_count = sum(1 for token in doc if token.pos_ == "VERB")
-    features.append(float(verb_count))
-
-    # 12. second_person_count
-    second_person = sum(1 for token in doc if token.text.lower() in ("you", "your", "yours", "yourself"))
-    features.append(float(second_person))
-
-    # 13. has_negation
-    has_neg = 1.0 if any(token.dep_ == "neg" for token in doc) else 0.0
-    features.append(has_neg)
-
-    # 14. is_interrogative: Question indicators
-    is_question = 1.0 if "?" in text or any(token.tag_ in ("WDT", "WP", "WP$", "WRB") for token in doc) else 0.0
-    features.append(is_question)
-
-    return np.array(features, dtype=np.float32)
-
-
-def extract_hand_crafted_features(text: str, context: list[str]) -> np.ndarray:
-    """Extract 26 hand-crafted features (enhanced with reaction/emotion detection)."""
-    features: list[float] = []
-    text_lower = text.lower()
-    words = text.split()
-    total_words = len(words)
-
-    # Message structure (5)
-    features.append(float(len(text)))
-    features.append(float(total_words))
-    features.append(float(text.count("?")))
-    features.append(float(text.count("!")))
-    features.append(float(len(EMOJI_RE.findall(text))))
-
-    # Mobilization one-hots (7) - default to "none" and "answer" for training
-    # These will be provided by mobilization classifier at inference
-    for level in ("high", "medium", "low", "none"):
-        features.append(1.0 if level == "none" else 0.0)
-    for rtype in ("commitment", "answer", "emotional"):
-        features.append(1.0 if rtype == "answer" else 0.0)
-
-    # Tone flags (2)
-    features.append(1.0 if PROFESSIONAL_KEYWORDS_RE.search(text) else 0.0)
-    features.append(1.0 if ABBREVIATION_RE.search(text) else 0.0)
-
-    # Context features (3)
-    features.append(float(len(context)))
-    avg_ctx_len = float(np.mean([len(m) for m in context])) if context else 0.0
-    features.append(avg_ctx_len)
-    features.append(1.0 if len(context) == 0 else 0.0)
-
-    # Style features (2)
-    abbr_count = len(ABBREVIATION_RE.findall(text))
-    features.append(abbr_count / max(total_words, 1))
-    capitalized = sum(1 for w in words[1:] if w[0].isupper()) if len(words) > 1 else 0
-    features.append(capitalized / max(len(words) - 1, 1))
-
-    # NEW: Reaction/emotion features (7)
-    # 1. Is this an iMessage reaction/tapback?
-    reaction_patterns = ["Laughed at", "Loved", "Liked", "Disliked", "Emphasized", "Questioned"]
-    is_reaction = 1.0 if any(text.startswith(p) for p in reaction_patterns) else 0.0
-    features.append(is_reaction)
-
-    # 2. Emotional marker count (lmao, lol, xd, haha, bruh, rip, omg)
-    emotional_markers = ["lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"]
-    emotional_count = sum(text_lower.count(marker) for marker in emotional_markers)
-    features.append(float(emotional_count))
-
-    # 3. Does message END with emotional marker?
-    last_word = words[-1].lower() if words else ""
-    ends_with_emotion = 1.0 if last_word in emotional_markers else 0.0
-    features.append(ends_with_emotion)
-
-    # 4. Question word at start (what, why, how, when, where, who, did, do, does)
-    question_starters = {"what", "why", "how", "when", "where", "who", "did", "do", "does", "can", "could", "would", "will", "should"}
-    first_word = words[0].lower() if words else ""
-    question_first = 1.0 if first_word in question_starters else 0.0
-    features.append(question_first)
-
-    # 5. Imperative verb at start (make, send, get, tell, show, give, come, take)
-    imperative_verbs = {"make", "send", "get", "tell", "show", "give", "come", "take", "call", "help", "let"}
-    imperative_first = 1.0 if first_word in imperative_verbs else 0.0
-    features.append(imperative_first)
-
-    # 6. Brief agreement phrase (ok, yeah, sure, cool, bet)
-    brief_agreements = {"ok", "okay", "k", "yeah", "yep", "yup", "sure", "cool", "bet", "fs", "aight"}
-    is_brief_agreement = 1.0 if total_words <= 3 and any(w in brief_agreements for w in words) else 0.0
-    features.append(is_brief_agreement)
-
-    # 7. Exclamatory ending (!, multiple !!, or all caps)
-    exclamatory = 1.0 if (text.endswith("!") or text.isupper() and total_words <= 5) else 0.0
-    features.append(exclamatory)
-
-    return np.array(features, dtype=np.float32)
+from jarvis.features import CategoryFeatureExtractor, FeatureConfig
 
 
 def load_training_data(path: Path) -> tuple[list[str], list[str], list[list[str]]]:
@@ -233,68 +67,104 @@ def load_training_data(path: Path) -> tuple[list[str], list[str], list[list[str]
     return texts, labels, contexts
 
 
-def extract_features(
+def extract_bert_embeddings(
     texts: list[str],
-    contexts: list[list[str]],
     embedder,
     batch_size: int = 100,
+    cache_path: Path | None = None,
 ) -> np.ndarray:
-    """Extract all 424 features: 384 BERT + 26 hand-crafted + 14 spaCy."""
-    print(f"\nExtracting features for {len(texts)} examples...", flush=True)
+    """Extract BERT embeddings with optional caching.
 
-    # 1. BERT embeddings (384-dim) in batches
-    print("Encoding BERT embeddings (batches of 100)...", flush=True)
+    CRITICAL: Uses normalize=True to match serving path (FIX train/serve skew).
+    """
+    # Check cache first
+    if cache_path and cache_path.exists():
+        print(f"Loading cached BERT embeddings from {cache_path}...", flush=True)
+        return np.load(cache_path)
+
+    print(f"\nEncoding BERT embeddings (batches of {batch_size})...", flush=True)
     bert_embeds = []
     for i in tqdm(range(0, len(texts), batch_size), desc="BERT encoding"):
         batch = texts[i:i+batch_size]
-        embeds = embedder.encode(batch)
+        # CRITICAL: normalize=True to match serving
+        embeds = embedder.encode(batch, normalize=True)
         bert_embeds.append(embeds)
     bert_embeds = np.vstack(bert_embeds)
     print(f"BERT embeddings shape: {bert_embeds.shape}", flush=True)
 
-    # 2. Hand-crafted features (26-dim)
-    print("Extracting hand-crafted features...", flush=True)
-    hand_crafted = []
-    for text, context in tqdm(zip(texts, contexts), total=len(texts), desc="Hand-crafted"):
-        hand_crafted.append(extract_hand_crafted_features(text, context))
-    hand_crafted = np.vstack(hand_crafted)
-    print(f"Hand-crafted features shape: {hand_crafted.shape}", flush=True)
+    # Save to cache
+    if cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(cache_path, bert_embeds)
+        print(f"Cached BERT embeddings to {cache_path}", flush=True)
 
-    # 3. SpaCy features (14-dim)
-    print("Extracting spaCy features...", flush=True)
-    spacy_feats = []
-    for text in tqdm(texts, desc="SpaCy"):
-        spacy_feats.append(extract_spacy_features(text))
-    spacy_feats = np.vstack(spacy_feats)
-    print(f"SpaCy features shape: {spacy_feats.shape}", flush=True)
-
-    # 4. Concatenate all features
-    X = np.hstack([bert_embeds, hand_crafted, spacy_feats])
-    print(f"Final feature matrix: {X.shape} (384 BERT + 26 hand + 14 spaCy = {X.shape[1]})", flush=True)
-
-    return X
+    return bert_embeds
 
 
-def train_linearsvc(X_train, y_train, X_test, y_test):
-    """Train LinearSVC with GridSearchCV."""
-    print("\n" + "="*70, flush=True)
-    print("TRAINING LINEARSVC", flush=True)
-    print("="*70, flush=True)
-    print(f"Train size: {X_train.shape[0]}, Test size: {X_test.shape[0]}", flush=True)
+def extract_non_bert_features(
+    texts: list[str],
+    contexts: list[list[str]],
+    extractor: CategoryFeatureExtractor,
+) -> np.ndarray:
+    """Extract all non-BERT features (~103 dims)."""
+    print("Extracting non-BERT features (~103 dims)...", flush=True)
+    features = []
+    for text, context in tqdm(zip(texts, contexts), total=len(texts), desc="Non-BERT features"):
+        # extract_all returns 26 + ~69 + 8 = ~103 features
+        features.append(extractor.extract_all(text, context))
+    features = np.vstack(features)
+    print(f"Non-BERT features shape: {features.shape}", flush=True)
+    return features
 
-    # GridSearchCV with n_jobs=1 for 8GB RAM constraint
-    param_grid = {
-        "C": [0.01, 0.1, 1.0, 10.0],
-    }
 
-    svm = LinearSVC(
-        max_iter=5000,
-        class_weight="balanced",
-        random_state=42,
+def build_pipeline() -> Pipeline:
+    """Build Pipeline with ColumnTransformer scaling + LinearSVC.
+
+    Feature groups:
+    - [0:384] = BERT (already normalized, passthrough)
+    - [384:391] = Mobilization one-hots (binary, passthrough)
+    - [391:~487] = Other features (scale with StandardScaler)
+    """
+    bert_indices, binary_indices, scale_indices = FeatureConfig.get_scaling_indices()
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('bert_pass', 'passthrough', bert_indices),
+            ('binary_pass', 'passthrough', binary_indices),
+            ('count_scale', StandardScaler(), scale_indices),
+        ],
+        remainder='drop',  # Should never hit this
     )
 
+    pipeline = Pipeline([
+        ('preprocess', preprocessor),
+        ('svm', LinearSVC(max_iter=5000, class_weight="balanced", random_state=42)),
+    ])
+
+    return pipeline
+
+
+def train_with_gridsearch(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+) -> tuple[Pipeline, float]:
+    """Train Pipeline with GridSearchCV."""
+    print("\n" + "="*70, flush=True)
+    print("TRAINING PIPELINE (ColumnTransformer + LinearSVC)", flush=True)
+    print("="*70, flush=True)
+    print(f"Train size: {X_train.shape[0]}, Test size: {X_test.shape[0]}", flush=True)
+    print(f"Feature dims: {X_train.shape[1]} (~487 expected)", flush=True)
+
+    pipeline = build_pipeline()
+
+    param_grid = {
+        "svm__C": [0.01, 0.1, 1.0, 10.0],
+    }
+
     grid = GridSearchCV(
-        svm,
+        pipeline,
         param_grid,
         cv=5,
         scoring="f1_macro",
@@ -316,62 +186,112 @@ def train_linearsvc(X_train, y_train, X_test, y_test):
     report = classification_report(y_test, y_pred, digits=4)
     print(report, flush=True)
 
+    # Confusion matrix
+    print("\nCONFUSION MATRIX:", flush=True)
+    cm = confusion_matrix(y_test, y_pred, labels=sorted(set(y_test)))
+    print("Labels:", sorted(set(y_test)), flush=True)
+    print(cm, flush=True)
+
     return grid.best_estimator_, grid.best_score_
 
 
-def train_lightgbm(X_train, y_train, X_test, y_test):
-    """Train LightGBM with GridSearchCV."""
+def ablation_study(
+    bert_train: np.ndarray,
+    bert_test: np.ndarray,
+    non_bert_train: np.ndarray,
+    non_bert_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+):
+    """Run ablation experiments to measure incremental feature value.
+
+    A: BERT only (384)
+    B: BERT + hand-crafted (26)
+    C: B + old spaCy (14)
+    D: C + new spaCy (55)
+    E: D + new hand-crafted (8)
+    F: E with ColumnTransformer scaling
+    """
     print("\n" + "="*70, flush=True)
-    print("TRAINING LIGHTGBM", flush=True)
+    print("ABLATION STUDY", flush=True)
     print("="*70, flush=True)
 
-    # Encode string labels to integers
-    from sklearn.preprocessing import LabelEncoder
-    le = LabelEncoder()
-    y_train_encoded = le.fit_transform(y_train)
-    y_test_encoded = le.transform(y_test)
+    results = []
 
-    param_grid = {
-        "n_estimators": [100, 200],
-        "learning_rate": [0.05, 0.1],
-        "max_depth": [5, 10],
-        "num_leaves": [31, 50],
-    }
+    # A: BERT only
+    print("\nA: BERT only (384 dims)", flush=True)
+    X_train_a = bert_train
+    X_test_a = bert_test
+    svm_a = LinearSVC(C=1.0, max_iter=5000, class_weight="balanced", random_state=42)
+    svm_a.fit(X_train_a, y_train)
+    y_pred_a = svm_a.predict(X_test_a)
+    report_a = classification_report(y_test, y_pred_a, output_dict=True)
+    results.append(("A: BERT only", report_a["accuracy"], report_a["macro avg"]["f1-score"]))
+    print(f"Accuracy: {report_a['accuracy']:.4f}, F1 (macro): {report_a['macro avg']['f1-score']:.4f}", flush=True)
 
-    lgbm = lgb.LGBMClassifier(
-        random_state=42,
-        class_weight="balanced",
-        verbose=-1,
-    )
+    # B: BERT + hand-crafted (26)
+    print("\nB: BERT + hand-crafted (410 dims)", flush=True)
+    X_train_b = np.hstack([bert_train, non_bert_train[:, :26]])
+    X_test_b = np.hstack([bert_test, non_bert_test[:, :26]])
+    svm_b = LinearSVC(C=1.0, max_iter=5000, class_weight="balanced", random_state=42)
+    svm_b.fit(X_train_b, y_train)
+    y_pred_b = svm_b.predict(X_test_b)
+    report_b = classification_report(y_test, y_pred_b, output_dict=True)
+    results.append(("B: + hand-crafted (26)", report_b["accuracy"], report_b["macro avg"]["f1-score"]))
+    print(f"Accuracy: {report_b['accuracy']:.4f}, F1 (macro): {report_b['macro avg']['f1-score']:.4f}", flush=True)
 
-    grid = GridSearchCV(
-        lgbm,
-        param_grid,
-        cv=5,
-        scoring="f1_macro",
-        verbose=2,
-        n_jobs=1,
-    )
+    # C: B + old spaCy (14)
+    print("\nC: B + old spaCy (424 dims)", flush=True)
+    X_train_c = np.hstack([bert_train, non_bert_train[:, :40]])  # 26 + 14
+    X_test_c = np.hstack([bert_test, non_bert_test[:, :40]])
+    svm_c = LinearSVC(C=1.0, max_iter=5000, class_weight="balanced", random_state=42)
+    svm_c.fit(X_train_c, y_train)
+    y_pred_c = svm_c.predict(X_test_c)
+    report_c = classification_report(y_test, y_pred_c, output_dict=True)
+    results.append(("C: + old spaCy (14)", report_c["accuracy"], report_c["macro avg"]["f1-score"]))
+    print(f"Accuracy: {report_c['accuracy']:.4f}, F1 (macro): {report_c['macro avg']['f1-score']:.4f}", flush=True)
 
-    start = time.time()
-    grid.fit(X_train, y_train_encoded)
-    elapsed = time.time() - start
+    # D: C + new spaCy (55)
+    print("\nD: C + new spaCy (479 dims)", flush=True)
+    X_train_d = np.hstack([bert_train, non_bert_train[:, :95]])  # 26 + 69
+    X_test_d = np.hstack([bert_test, non_bert_test[:, :95]])
+    svm_d = LinearSVC(C=1.0, max_iter=5000, class_weight="balanced", random_state=42)
+    svm_d.fit(X_train_d, y_train)
+    y_pred_d = svm_d.predict(X_test_d)
+    report_d = classification_report(y_test, y_pred_d, output_dict=True)
+    results.append(("D: + new spaCy (55)", report_d["accuracy"], report_d["macro avg"]["f1-score"]))
+    print(f"Accuracy: {report_d['accuracy']:.4f}, F1 (macro): {report_d['macro avg']['f1-score']:.4f}", flush=True)
 
-    print(f"\nTraining completed in {elapsed:.1f}s", flush=True)
-    print(f"Best params: {grid.best_params_}", flush=True)
-    print(f"Best CV F1 (macro): {grid.best_score_:.4f}", flush=True)
+    # E: D + new hand-crafted (8)
+    print("\nE: D + new hand-crafted (487 dims)", flush=True)
+    X_train_e = np.hstack([bert_train, non_bert_train])  # All features
+    X_test_e = np.hstack([bert_test, non_bert_test])
+    svm_e = LinearSVC(C=1.0, max_iter=5000, class_weight="balanced", random_state=42)
+    svm_e.fit(X_train_e, y_train)
+    y_pred_e = svm_e.predict(X_test_e)
+    report_e = classification_report(y_test, y_pred_e, output_dict=True)
+    results.append(("E: + new hand-crafted (8)", report_e["accuracy"], report_e["macro avg"]["f1-score"]))
+    print(f"Accuracy: {report_e['accuracy']:.4f}, F1 (macro): {report_e['macro avg']['f1-score']:.4f}", flush=True)
 
-    # Evaluate on test set
-    print("\nTEST SET PERFORMANCE:", flush=True)
-    y_pred_encoded = grid.predict(X_test)
-    y_pred = le.inverse_transform(y_pred_encoded)
-    report = classification_report(y_test, y_pred, digits=4)
-    print(report, flush=True)
+    # F: E with ColumnTransformer scaling (FINAL)
+    print("\nF: E with ColumnTransformer scaling (487 dims)", flush=True)
+    pipeline_f = build_pipeline()
+    pipeline_f.fit(X_train_e, y_train)
+    y_pred_f = pipeline_f.predict(X_test_e)
+    report_f = classification_report(y_test, y_pred_f, output_dict=True)
+    results.append(("F: + scaling (ColumnTransformer)", report_f["accuracy"], report_f["macro avg"]["f1-score"]))
+    print(f"Accuracy: {report_f['accuracy']:.4f}, F1 (macro): {report_f['macro avg']['f1-score']:.4f}", flush=True)
 
-    # Store label encoder in model for later use
-    grid.best_estimator_.label_encoder_ = le
+    # Summary table
+    print("\n" + "="*70, flush=True)
+    print("ABLATION SUMMARY", flush=True)
+    print("="*70, flush=True)
+    print(f"{'Experiment':<40} {'Accuracy':<10} {'F1 (macro)':<10}", flush=True)
+    print("-"*70, flush=True)
+    for exp, acc, f1 in results:
+        print(f"{exp:<40} {acc:<10.4f} {f1:<10.4f}", flush=True)
 
-    return grid.best_estimator_, grid.best_score_
+    return pipeline_f
 
 
 def main():
@@ -379,14 +299,14 @@ def main():
     data_path = project_root / "llm_category_labels.jsonl"
     model_path = project_root / "models" / "category_svm_v2.joblib"
     metadata_path = project_root / "models" / "category_svm_v2_metadata.json"
+    cache_path = project_root / "models" / "cache" / "bert_embeddings.npy"
 
-    # Ensure models directory exists
+    # Ensure directories exist
     model_path.parent.mkdir(exist_ok=True)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load data
     texts, labels, contexts = load_training_data(data_path)
-
-    # Convert to numpy arrays
     y = np.array(labels)
 
     # Stratified train/test split (80/20)
@@ -403,42 +323,59 @@ def main():
 
     print(f"Train: {len(texts_train)}, Test: {len(texts_test)}", flush=True)
 
-    # Load embedder
+    # Load embedder and feature extractor
     print("\nLoading BERT embedder...", flush=True)
     embedder = get_embedder()
 
-    # Extract features
-    X_train = extract_features(texts_train, contexts_train, embedder)
-    X_test = extract_features(texts_test, contexts_test, embedder)
+    print("Loading feature extractor...", flush=True)
+    extractor = CategoryFeatureExtractor()
 
-    # Train LinearSVC only (skip LightGBM for deployment)
-    svm_model, svm_score = train_linearsvc(X_train, y_train, X_test, y_test)
+    # Extract BERT embeddings (cached)
+    bert_train = extract_bert_embeddings(texts_train, embedder, cache_path=None)  # No cache for train set
+    bert_test = extract_bert_embeddings(texts_test, embedder, cache_path=None)
 
-    # Select LinearSVC
+    # Extract non-BERT features
+    non_bert_train = extract_non_bert_features(texts_train, contexts_train, extractor)
+    non_bert_test = extract_non_bert_features(texts_test, contexts_test, extractor)
+
+    # Full feature matrix
+    X_train = np.hstack([bert_train, non_bert_train])
+    X_test = np.hstack([bert_test, non_bert_test])
+    print(f"\nFull feature matrix: {X_train.shape} (expected ~487 dims)", flush=True)
+
+    # Ablation study
+    best_pipeline = ablation_study(
+        bert_train, bert_test,
+        non_bert_train, non_bert_test,
+        y_train, y_test
+    )
+
+    # Train final model with GridSearchCV (on full feature set)
     print("\n" + "="*70, flush=True)
-    print("DEPLOYING LINEARSVC", flush=True)
+    print("FINAL MODEL TRAINING (GridSearchCV)", flush=True)
     print("="*70, flush=True)
-    print(f"LinearSVC CV F1:  {svm_score:.4f}", flush=True)
-    best_model = svm_model
-    model_type = "LinearSVC"
+    final_pipeline, final_score = train_with_gridsearch(X_train, y_train, X_test, y_test)
 
-    # Save best model and metadata
-    print(f"\nSaving {model_type} to {model_path}...", flush=True)
-    joblib.dump(best_model, model_path)
+    # Save pipeline
+    print(f"\nSaving pipeline to {model_path}...", flush=True)
+    joblib.dump(final_pipeline, model_path)
 
+    # Save metadata
     metadata = {
-        "model_type": model_type,
+        "model_type": "Pipeline (ColumnTransformer + LinearSVC)",
         "n_features": X_train.shape[1],
         "feature_breakdown": {
-            "bert_embeddings": 384,
-            "hand_crafted": 26,
-            "spacy": 14,
+            "bert_embeddings": FeatureConfig.BERT_DIM,
+            "hand_crafted": FeatureConfig.HAND_CRAFTED_DIM,
+            "spacy": FeatureConfig.SPACY_DIM,
+            "new_hand_crafted": FeatureConfig.NEW_HAND_CRAFTED_DIM,
+            "total_non_bert": FeatureConfig.TOTAL_NON_BERT,
         },
         "categories": sorted(set(labels)),
         "n_train": len(texts_train),
         "n_test": len(texts_test),
-        "cv_f1_macro": float(svm_score),
-        "best_params": best_model.get_params(),
+        "cv_f1_macro": float(final_score),
+        "best_params": final_pipeline.get_params(),
         "trained_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -446,7 +383,7 @@ def main():
         json.dump(metadata, f, indent=2)
 
     print(f"Metadata saved to {metadata_path}", flush=True)
-    print(f"\n✓ Training complete! Best model: {model_type}", flush=True)
+    print(f"\n✓ Training complete! Pipeline saved to {model_path}", flush=True)
 
 
 if __name__ == "__main__":

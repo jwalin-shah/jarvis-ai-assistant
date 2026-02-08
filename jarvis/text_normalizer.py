@@ -18,28 +18,29 @@ if TYPE_CHECKING:
     from jarvis.nlp.ner_client import Entity
 
 # Reaction patterns - these are tapbacks in iMessage
+# NOTE: iMessage uses curly quotes (\u201c \u201d) not straight quotes (")
 REACTION_PATTERNS = [
-    # Full quoted forms
-    r'^Liked\s+".*"$',
-    r'^Loved\s+".*"$',
-    r'^Disliked\s+".*"$',
-    r'^Laughed at\s+".*"$',
-    r'^Emphasized\s+".*"$',
-    r'^Questioned\s+".*"$',
-    r'^Removed a like from\s+".*"$',
-    r'^Removed a heart from\s+".*"$',
-    r'^Removed a dislike from\s+".*"$',
-    r'^Removed a laugh from\s+".*"$',
-    r'^Removed an exclamation from\s+".*"$',
-    r'^Removed a question mark from\s+".*"$',
+    # Full quoted forms (match both straight and curly quotes)
+    r'^Liked\s+["\u201c].*["\u201d]$',
+    r'^Loved\s+["\u201c].*["\u201d]$',
+    r'^Disliked\s+["\u201c].*["\u201d]$',
+    r'^Laughed at\s+["\u201c].*["\u201d]$',
+    r'^Emphasized\s+["\u201c].*["\u201d]$',
+    r'^Questioned\s+["\u201c].*["\u201d]$',
+    r'^Removed a like from\s+["\u201c].*["\u201d]$',
+    r'^Removed a heart from\s+["\u201c].*["\u201d]$',
+    r'^Removed a dislike from\s+["\u201c].*["\u201d]$',
+    r'^Removed a laugh from\s+["\u201c].*["\u201d]$',
+    r'^Removed an exclamation from\s+["\u201c].*["\u201d]$',
+    r'^Removed a question mark from\s+["\u201c].*["\u201d]$',
     # Truncated quote forms (missing closing quote)
-    r'^Liked\s+"',
-    r'^Loved\s+"',
-    r'^Disliked\s+"',
-    r'^Laughed at\s+"',
-    r'^Emphasized\s+"',
-    r'^Questioned\s+"',
-    r'^Removed a .* from\s+"',
+    r'^Liked\s+["\u201c]',
+    r'^Loved\s+["\u201c]',
+    r'^Disliked\s+["\u201c]',
+    r'^Laughed at\s+["\u201c]',
+    r'^Emphasized\s+["\u201c]',
+    r'^Questioned\s+["\u201c]',
+    r'^Removed a .* from\s+["\u201c]',
 ]
 REACTION_REGEX = re.compile("|".join(REACTION_PATTERNS), re.IGNORECASE | re.DOTALL)
 
