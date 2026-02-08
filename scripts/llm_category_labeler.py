@@ -217,7 +217,7 @@ def classify_batch_llm(
     examples: list[dict],
     model: str,
     client,
-    batch_size: int = 20,
+    batch_size: int = 10,  # Reduced from 20 - model reasoning is verbose
 ) -> list[str]:
     """Classify examples using LLM in batches.
 
