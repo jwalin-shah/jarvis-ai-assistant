@@ -30,33 +30,38 @@ from scripts.label_aggregation import aggregate_labels
 
 VALID_CATEGORIES = ["closing", "acknowledge", "question", "request", "emotion", "statement"]
 
-CLASSIFICATION_PROMPT_TEMPLATE = """Classify each message into ONE category. Use the decision tree below - check categories in order, take the FIRST match.
+CLASSIFICATION_PROMPT_TEMPLATE = """For each message, check the rules IN ORDER and pick the FIRST match:
 
-Categories (check in this order):
+RULE 1: closing
+- Check: Does it say "bye", "ttyl", "see you", "gotta go", or "talk soon"?
+- If YES → category = closing
 
-1. closing - Ending the conversation
-   Examples: "bye", "ttyl", "see you later", "gotta go", "talk soon"
+RULE 2: acknowledge
+- Check: Is it EXACTLY one of these words (ignore punctuation): "ok", "okay", "yeah", "yep", "yup", "sure", "thanks", "thank you", "gotcha", "fine", "alright", "cool", "k", "kk", or just emoji like "👍"?
+- If YES → category = acknowledge
 
-2. acknowledge - Minimal agreement/acknowledgment (≤3 words, no question)
-   Examples: "ok", "thanks", "yeah", "gotcha", "sure", "yup", "👍"
+RULE 3: request
+- Check: Does it contain "can you", "could you", "would you", "please", OR "I suggest", OR "let's"?
+- If YES → category = request
 
-3. request - Seeking action (has "can you"/"could you"/"would you"/"please" + action verb OR imperative verb OR "I suggest"/"let's")
-   Examples: "Can you send the file?", "Please call me", "Send it over", "I suggest we meet", "Let's go"
+RULE 4: question
+- Check: Does it contain "?" OR start with "what", "when", "where", "who", "why", "how", "is", "are", "do", "does"?
+- If YES → category = question
 
-4. question - Seeking information (has "?" OR starts with: what, when, where, who, why, how, is, are, do, does, will, should)
-   Examples: "What time?", "Where are you?", "Is it ready?", "How are you?"
+RULE 5: emotion
+- Check: Does it contain "happy", "sad", "angry", "stressed", "excited", "frustrated", "love", "hate", "amazing", "terrible" OR "!!" (2+ exclamation marks) OR ALLCAPS words?
+- If YES → category = emotion
 
-5. emotion - Expressing feelings (contains: happy, sad, angry, stressed, excited, frustrated, love, hate, amazing, terrible OR multiple "!" OR CAPS)
-   Examples: "I'm so stressed!", "This is AMAZING", "Ugh so frustrated", "Love it!"
+RULE 6: statement
+- If none of the above match → category = statement
 
-6. statement - Everything else (opinions, facts, stories, answers, comments)
-   Examples: "It's raining", "I think so", "The meeting went well", "That's cool"
+---
 
-For each message, consider the conversation context (previous message) when classifying.
+Classify these messages:
 
 {messages_block}
 
-Reply with ONLY the category name for each, one per line (e.g., "acknowledge"). No numbers, no explanations."""
+For each message, output the category (format: "**Result: category**" or "- Category: category")."""
 
 
 def load_ambiguous_examples(max_examples: int = 17000) -> list[dict]:
@@ -251,10 +256,10 @@ def classify_batch_llm(
 
         try:
             response = client.chat.completions.create(
-                model=model,
+                model="zai-glm-4.7",  # Less verbose than gpt-oss-120b
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
-                max_tokens=400,  # Increased to handle verbose model responses
+                max_tokens=1500,  # Enough for 10 messages with reasoning
             )
 
             # Check if response is valid
@@ -275,36 +280,15 @@ def classify_batch_llm(
             content = content.strip()
             lines = [line.strip() for line in content.split("\n") if line.strip()]
 
-            # Validate and normalize (handle verbose responses like '1. "ok" -> ack')
-            for line in lines:
-                # Skip explanatory lines
-                if "classify" in line.lower() or "let's" in line.lower() or "need to" in line.lower():
-                    continue
+            # Parse - look for both "**Result:" and "- Category:" patterns
+            import re
+            result_pattern = r'(?:\*\*Result:?|-\s*Category:)\s*(\w+)'
+            matches = re.findall(result_pattern, content, re.IGNORECASE)
 
-                # Extract category from line (handle formats like: ack, "ok" -> ack, 1. ack, etc.)
-                # Try to find category after '->' if present
-                if "->" in line:
-                    parts = line.split("->")
-                    if len(parts) >= 2:
-                        clean = parts[1].split("(")[0].strip().lower()  # Remove trailing explanations
-                    else:
-                        clean = line.lstrip("0123456789. \"").lower().strip()
-                else:
-                    clean = line.lstrip("0123456789. \"").lower().strip()
-
-                # Remove trailing parenthetical explanations
-                clean = clean.split("(")[0].strip()
-
-                if clean in VALID_CATEGORIES:
-                    predictions.append(clean)
-                else:
-                    # Fallback: try to find category name anywhere in line
-                    for cat in VALID_CATEGORIES:
-                        if cat in clean:
-                            predictions.append(cat)
-                            break
-                    else:
-                        predictions.append("social")  # Default fallback
+            for match in matches:
+                match_lower = match.lower()
+                if match_lower in VALID_CATEGORIES:
+                    predictions.append(match_lower)
 
             # Ensure we have exactly batch_size predictions
             while len(predictions) < i + len(batch):
