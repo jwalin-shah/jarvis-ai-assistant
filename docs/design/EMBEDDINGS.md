@@ -50,7 +50,7 @@ jarvis/embedding_adapter.py (MLXEmbedder)
                           │
                           ▼
 ~/.jarvis/mlx-embed-service/ (separate process)
-├─ Unix socket: /tmp/jarvis-embed.sock
+├─ Unix socket: ~/.jarvis/jarvis-embed.sock
 ├─ JSON-RPC 2.0 protocol
 ├─ GPU-accelerated via MLX on Apple Silicon
 └─ Downloads models on first use (mlx-embedding-models)

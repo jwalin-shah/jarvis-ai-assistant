@@ -69,7 +69,7 @@ We use **regex patterns + features from preprocessing we already run**:
 | Approach | Pros | Cons |
 |----------|------|------|
 | **Fine-tuned classifier** | High accuracy | Need labeled data, retraining |
-| **Zero-shot (BART-MNLI)** | Flexible labels | +800MB memory, 100ms/msg |
+| **LightGBM + BERT embeddings** | High accuracy, fast | Requires labeled training data |
 | **Unsupervised clustering** | No labels, adapts | Slightly lower precision |
 
 **Decision**: Unsupervised. No labeled data collection needed, automatically adapts to new contacts and topics, minimal memory overhead.
