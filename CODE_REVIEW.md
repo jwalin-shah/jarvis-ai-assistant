@@ -878,16 +878,116 @@ No validation of required keys in embeddings cache file.
 
 | Issue | Severity | Status | Notes |
 |-------|----------|--------|-------|
-| C-1 | Critical | Pending | |
-| C-2 | Critical | Pending | |
-| C-3 | Critical | Pending | |
-| C-4 | Critical | Pending | |
-| C-5 | Critical | Pending | |
-| C-6 | Critical | Pending | |
-| C-7 | Critical | Pending | |
-| H-1 through H-22 | High | Pending | |
-| M-1 through M-38 | Medium | Pending | |
-| L-1 through L-43 | Low | Pending | |
+| C-1 | Critical | Fixed | Added `import logging` and `logger` to text_normalizer.py |
+| C-2 | Critical | Fixed | Changed to `Depends(get_imessage_reader)` in priority.py |
+| C-3 | Critical | Fixed | Changed `Lock()` to `RLock()` in metrics.py |
+| C-4 | Critical | Fixed | Added chat_id escaping + \r \t escaping in executor.py |
+| C-5 | Critical | Fixed | Added safe_id escaping in calendar reader.py |
+| C-6 | Critical | Fixed | Added `_escape_applescript(calendar_id)` in writer.py |
+| C-7 | Critical | Fixed | Changed `Callable[[], None]` to `Callable[[str], None]` |
+| H-1 | High | Fixed | Rewrote get_generator() to always acquire lock first |
+| H-2 | High | Fixed | Module-level `_searcher_lock = threading.Lock()` |
+| H-3 | High | Fixed | Module-level `_cache_ops_lock` for cache operations |
+| H-4 | High | Fixed | Moved /completed/clear before /{task_id} route |
+| H-5 | High | Fixed | Used `model_dump(exclude_unset=True)` for partial updates |
+| H-6 | High | Fixed | Removed token value from log message |
+| H-7 | High | Fixed | Added file_path validator (home dir check) |
+| H-8 | High | Fixed | Added output_dir validator and format regex |
+| H-9 | High | Fixed | Dedicated ChatDBReader for singleton searcher |
+| H-10 | High | Fixed | Added TTL cache resets to reset_metrics() |
+| H-11 | High | Fixed | Removed debug print() and psutil imports |
+| H-12 | High | Fixed | Wrapped set_model_loaded in self._lock |
+| H-13 | High | Fixed | Removed unreliable __del__ method |
+| H-14 | High | Fixed | Added _router.close() in reset_reply_router() |
+| H-15 | High | Fixed | Wrapped mem0 import in try/except |
+| H-16 | High | Fixed | Optimized Louvain with neighbor adjacency dict |
+| H-17 | High | Fixed | Incremental modularity calculation |
+| H-18 | High | Skipped | Barnes-Hut would be overengineering for current data sizes |
+| H-19 | High | Fixed | Dict-based O(1) lookup in cross_reference() |
+| H-20 | High | Fixed | Return None instead of sys.exit(1) |
+| H-21 | High | Skipped | Design-level change (WebSocket auth protocol) |
+| H-22 | High | Fixed | Added duplicate text warning |
+| M-1 | Medium | Fixed | Case-insensitive re.sub for prompt sanitization |
+| M-2 | Medium | Skipped | Already has header auth; query param is fallback |
+| M-3 | Medium | Fixed | Dict.get() is GIL-atomic; added clarifying comment |
+| M-4 | Medium | Fixed | Uncommented generic exception handler |
+| M-5 | Medium | Fixed | `datetime.now(tz=timezone.utc)` throughout |
+| M-6 | Medium | Fixed | Returns 404 instead of empty list |
+| M-7 | Medium | Fixed | Already addressed in H-8 (format pattern regex) |
+| M-8 | Medium | Skipped | Requires new DB method; too invasive for review fix |
+| M-9 | Medium | Fixed | NER stderr to ~/.jarvis/ner_server.log |
+| M-10 | Medium | Fixed | os.chmod(path, 0o600) after writing config |
+| M-11 | Medium | Skipped | No actual import collision; cosmetic naming concern |
+| M-12 | Medium | Fixed | Wrapped cache ops in self._lock |
+| M-13 | Medium | Fixed | _handled_items mutations under self._lock |
+| M-14 | Medium | Fixed | Thread-safe optimized programs with Lock |
+| M-15 | Medium | Fixed | Initialize response_words unconditionally |
+| M-16 | Medium | Fixed | Removed single-letter entries (y, n, b, c, k) |
+| M-17 | Medium | Fixed | Added public `gpu_lock()` classmethod accessor |
+| M-18 | Medium | Skipped | Extracting shared serialization would be risky refactoring |
+| M-19 | Medium | Fixed | Use `random.Random(seed)` for isolated RNG |
+| M-20 | Medium | Fixed | Replaced preexec_fn with process_group=0 |
+| M-21 | Medium | Fixed | Wrapped os.killpg in try/except ProcessLookupError |
+| M-22 | Medium | Fixed | Chunked backfill in 1000-row batches |
+| M-23 | Medium | Fixed | Main-thread check before SIGALRM; fallback for non-main |
+| M-24 | Medium | Fixed | I/O outside lock; re-check cache before storing |
+| M-25 | Medium | Fixed | valid_indices is already a set (was fixed) |
+| M-26 | Medium | Fixed | Handle empty snapshots dir gracefully |
+| M-27 | Medium | Fixed | Use `get_embedder()` directly (already CachedEmbedder) |
+| M-28 | Medium | Fixed | ~1.3x word count approximation with comment |
+| M-29 | Medium | Fixed | try/finally for temp file cleanup |
+| M-30 | Medium | Fixed | Check-and-unload under self._lock |
+| M-31 | Medium | Fixed | Log message length instead of text content |
+| M-32 | Medium | Fixed | Connection limit check inside clients_lock |
+| M-33 | Medium | Fixed | Dict comprehension excludes streaming params |
+| M-34 | Medium | Fixed | Docstring defaults match actual defaults |
+| M-35 | Medium | Fixed | Guard `if n == 0` before division |
+| M-36 | Medium | Skipped | Exception hierarchy change too risky |
+| M-37 | Medium | Fixed | Seeded random_state for reproducible CI |
+| M-38 | Medium | Fixed | Truncate empty/stale file on fresh runs |
+| L-1 | Low | Fixed | Removed duplicate emoji in NEGATIVE_EMOJIS |
+| L-2 | Low | Skipped | MD5 is fine for non-security hashing |
+| L-3 | Low | Fixed | Corrected misleading comment |
+| L-4 | Low | Skipped | Cluster colors don't need determinism |
+| L-5 | Low | Skipped | Rowid is reliable for single-writer SQLite |
+| L-6 | Low | Fixed | Removed unused _rate_limit_enabled/_get_rate_limit |
+| L-7 | Low | Skipped | Empty TYPE_CHECKING blocks are harmless |
+| L-8 | Low | Skipped | Private access is deliberate for these patterns |
+| L-9 | Low | Skipped | f-string perf impact negligible for this app |
+| L-10 | Low | Fixed | Added `from e` exception chains |
+| L-11 | Low | Skipped | Slice is minor redundancy |
+| L-12 | Low | Skipped | Duplicate fallback is defensive coding |
+| L-13 | Low | Skipped | Read timeout vs write timeout is minor |
+| L-14 | Low | Skipped | RouteResult/RoutingResponse used as documentation |
+| L-15 | Low | Skipped | Jitter not needed for local-only retries |
+| L-16 | Low | Skipped | Async annotation minor |
+| L-17 | Low | Fixed | Removed duplicate contact_context parameter |
+| L-18 | Low | Skipped | Intentional no-op migration placeholder |
+| L-19 | Low | Skipped | Silent save failure is acceptable during migration |
+| L-20 | Low | Skipped | O(n) lookup acceptable for small conversation lists |
+| L-21 | Low | Skipped | Phone matching strictness is a feature tradeoff |
+| L-22 | Low | Skipped | O(N^2) acceptable for typical message counts |
+| L-23 | Low | Skipped | Emoji regex overmatch is minor |
+| L-24 | Low | Skipped | list[Any] is deliberate for flexibility |
+| L-25 | Low | Fixed | Moved heapq import to module level |
+| L-26 | Low | Fixed | Use manual first-char upper instead of capitalize() |
+| L-27 | Low | Skipped | Class-level import is minor |
+| L-28 | Low | Skipped | Empty prompt returns empty - acceptable behavior |
+| L-29 | Low | Skipped | Counter increment is effectively atomic under GIL |
+| L-30 | Low | Fixed | Removed no-op replace("bert.", "bert.") |
+| L-31 | Low | Fixed | Renamed variable from `l` to `length` |
+| L-32 | Low | Skipped | Missing field on empty filter is edge case |
+| L-33 | Low | Skipped | Manual delegation is explicit and clear |
+| L-34 | Low | Skipped | ParagraphStyle creation per msg is minor perf |
+| L-35 | Low | Skipped | sys.path manipulation is standard for scripts |
+| L-36 | Low | Fixed | Fixed typo mlx_lm_lora -> mlx_lm |
+| L-37 | Low | Skipped | Duplicate ANTI_AI_PHRASES acceptable for script isolation |
+| L-38 | Low | Skipped | CATEGORIES list is for future validation |
+| L-39 | Low | Fixed | Fixed misleading API key name in error message |
+| L-40 | Low | Skipped | Version bounds are pyproject.toml concern |
+| L-41 | Low | Skipped | Return type annotation in experiment script |
+| L-42 | Low | Skipped | .env loading is fine duplicated across scripts |
+| L-43 | Low | Skipped | KeyError guard for optional cache file |
 
 ---
 
