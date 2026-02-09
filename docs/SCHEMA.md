@@ -127,7 +127,7 @@ JARVIS uses the `sqlite-vec` extension for high-performance vector search direct
 ### JARVIS Primary Database
 
 **Location**: `~/.jarvis/jarvis.db`
-**Current Schema Version**: 11
+**Current Schema Version**: 12
 
 #### `contacts`
 Stores contact relationship metadata and handle mappings.
@@ -301,6 +301,26 @@ Aggregated communication patterns cached per model.
 | display_name | TEXT | Name |
 | profile_data | TEXT | JSON blob of style, tone, and topics |
 
+#### `contact_facts`
+Extracted facts about contacts from message history (v12+). Used by the knowledge graph for relationship/location/work/preference tracking.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| contact_id | TEXT | FK to contacts (chat_id) |
+| category | TEXT | relationship, location, work, preference, event |
+| subject | TEXT | Entity name (e.g., "Sarah", "Austin", "Google") |
+| predicate | TEXT | Relation type (e.g., is_family_of, lives_in, works_at, likes) |
+| value | TEXT | Optional detail (e.g., "sister", "software engineer") |
+| confidence | REAL | 0.0-1.0, from rule-based patterns or NLI verification |
+| source_message_id | INTEGER | Which message this fact was extracted from |
+| source_text | TEXT | Source message text (truncated to 500 chars) |
+| extracted_at | TIMESTAMP | When the fact was extracted |
+
+**Unique constraint**: `(contact_id, category, subject, predicate)` prevents duplicate facts.
+
+**Indexes**: `idx_facts_contact` on contact_id, `idx_facts_category` on category.
+
 ### Quality Metrics (In-Memory)
 
 Quality tracking data is kept in memory during runtime and optionally persisted to `jarvis.db`.
@@ -322,6 +342,8 @@ iMessage DB (read-only)
     Message Reader
         │
         ├──▶ sqlite-vec Index (semantic search)
+        │
+        ├──▶ Fact Extractor → contact_facts (knowledge graph)
         │
         ├──▶ Contact Profiler (style analysis)
         │

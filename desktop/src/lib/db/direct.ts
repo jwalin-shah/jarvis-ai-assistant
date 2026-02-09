@@ -227,7 +227,14 @@ export async function getConversations(
   params.push(limit);
 
   try {
+    const startTime = performance.now();
+    console.log(`[LATENCY] Starting getConversations, limit=${limit}`);
     const rows = await chatDb.select<ConversationRow[]>(query, params);
+    const elapsed = performance.now() - startTime;
+    console.log(`[LATENCY] getConversations fetched ${rows.length} conversations in ${elapsed.toFixed(1)}ms`);
+    if (elapsed > 100) {
+      console.warn(`[LATENCY WARNING] getConversations took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
+    }
 
     return rows.map((row: ConversationRow) => {
       // Parse participants
@@ -297,6 +304,7 @@ export async function getMessages(
 
   try {
     const startTime = performance.now();
+    console.log(`[LATENCY] Starting getMessages for chat_id=${chatId}, limit=${limit}`);
     const rows = await chatDb.select<MessageRow[]>(query, params);
 
     // PERF FIX: Batch prefetch attachments and reactions to avoid N+1 queries
@@ -401,6 +409,9 @@ export async function getMessages(
 
     const elapsed = performance.now() - startTime;
     console.log(`[DirectDB] getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`);
+    if (elapsed > 100) {
+      console.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms) - possible N+1 pattern`);
+    }
 
     return messages;
   } catch (error) {

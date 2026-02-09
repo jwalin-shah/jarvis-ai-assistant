@@ -130,4 +130,5 @@ def track_latency(operation: str, **metadata):
         with track_latency("query_execute", query_type="SELECT"):
             result = db.execute(...)
     """
-    yield from _tracker.track(operation, **metadata)
+    with _tracker.track(operation, **metadata):
+        yield

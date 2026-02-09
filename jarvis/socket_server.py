@@ -32,6 +32,8 @@ from urllib.parse import parse_qs, urlparse
 import websockets
 from websockets.server import ServerConnection
 
+from jarvis.utils.latency_tracker import track_latency
+
 logger = logging.getLogger(__name__)
 
 # Socket configuration
@@ -831,8 +833,9 @@ class JarvisSocketServer:
             # Get context from iMessage
             from integrations.imessage import ChatDBReader
 
-            with ChatDBReader() as reader:
-                messages = reader.get_messages(chat_id, limit=context_messages)
+            with track_latency("socket_get_messages", chat_id=chat_id, limit=context_messages):
+                with ChatDBReader() as reader:
+                    messages = reader.get_messages(chat_id, limit=context_messages)
 
             if not messages:
                 raise JsonRpcError(INVALID_PARAMS, "No messages found in conversation")
@@ -1409,12 +1412,14 @@ Summary:"""
             before_dt = datetime.fromtimestamp(before) if before else None
 
             db_start = time.time()
-            with ChatDBReader() as reader:
-                conversations = reader.get_conversations(
-                    limit=limit,
-                    since=since_dt,
-                    before=before_dt,
-                )
+            # Wrap the DB call with latency tracking
+            with track_latency("socket_list_conversations", limit=limit):
+                with ChatDBReader() as reader:
+                    conversations = reader.get_conversations(
+                        limit=limit,
+                        since=since_dt,
+                        before=before_dt,
+                    )
             db_elapsed_ms = (time.time() - db_start) * 1000
 
             # Convert Conversation objects to dicts for JSON serialization

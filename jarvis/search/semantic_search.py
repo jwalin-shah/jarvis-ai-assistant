@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from integrations.imessage import ChatDBReader
 
 from jarvis.embedding_adapter import get_embedder
+from jarvis.utils.latency_tracker import track_latency
 
 # Embedding dimension for bge-small-en-v1.5
 EMBEDDING_DIM = 384
@@ -433,36 +434,37 @@ class SemanticSearcher:
         filters = filters or SearchFilters()
         start_time = time.perf_counter()
 
-        # PERF FIX: Push filters into SQL query instead of post-filtering in Python
-        # Before: Fetch 1000 messages, filter to 200 in Python = ~100ms + iteration overhead
-        # After: SQL does filtering, fetch only 200 = ~20ms
-        # The reader.search() and get_messages() already support these filters
+        with track_latency("search_index_messages", limit=limit):
+            # PERF FIX: Push filters into SQL query instead of post-filtering in Python
+            # Before: Fetch 1000 messages, filter to 200 in Python = ~100ms + iteration overhead
+            # After: SQL does filtering, fetch only 200 = ~20ms
+            # The reader.search() and get_messages() already support these filters
 
-        if filters.chat_id:
-            # Get messages from specific conversation
-            messages = self.reader.get_messages(
-                chat_id=filters.chat_id,
-                limit=limit,
-                before=filters.before,
-            )
-        else:
-            # Search across all conversations - reader.search() handles the filters
-            messages = self.reader.search(
-                query="%",  # Match all
-                limit=limit,
-                sender=filters.sender,
-                after=filters.after,
-                before=filters.before,
-                has_attachments=filters.has_attachments,
-            )
+            if filters.chat_id:
+                # Get messages from specific conversation
+                messages = self.reader.get_messages(
+                    chat_id=filters.chat_id,
+                    limit=limit,
+                    before=filters.before,
+                )
+            else:
+                # Search across all conversations - reader.search() handles the filters
+                messages = self.reader.search(
+                    query="%",  # Match all
+                    limit=limit,
+                    sender=filters.sender,
+                    after=filters.after,
+                    before=filters.before,
+                    has_attachments=filters.has_attachments,
+                )
 
-        # Only apply text length filter (SQL can't do easily) - all other filters
-        # are now handled by the SQL query
-        filtered = []
-        for msg in messages:
-            if not msg.text or len(msg.text.strip()) < 2:
-                continue  # Skip empty/trivial messages
-            filtered.append(msg)
+            # Only apply text length filter (SQL can't do easily) - all other filters
+            # are now handled by the SQL query
+            filtered = []
+            for msg in messages:
+                if not msg.text or len(msg.text.strip()) < 2:
+                    continue  # Skip empty/trivial messages
+                filtered.append(msg)
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         logger.debug(
