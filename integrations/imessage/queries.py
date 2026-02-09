@@ -48,32 +48,24 @@ def detect_schema_version(conn: sqlite3.Connection) -> str:
 # Base SQL query templates (shared between v14 and v15 until divergence needed)
 _BASE_QUERIES = {
     "conversations": """
-        WITH chat_participants AS (
+        WITH message_ranked AS (
+            SELECT
+                cmj.chat_id,
+                m.text,
+                m.attributedBody,
+                m.date,
+                ROW_NUMBER() OVER (PARTITION BY cmj.chat_id ORDER BY m.date DESC) as msg_rank,
+                COUNT(*) OVER (PARTITION BY cmj.chat_id) as message_count
+            FROM chat_message_join cmj
+            JOIN message m ON cmj.message_id = m.ROWID
+        ),
+        chat_participants AS (
             SELECT
                 chat_handle_join.chat_id,
                 GROUP_CONCAT(handle.id, ', ') as participants
             FROM chat_handle_join
             JOIN handle ON chat_handle_join.handle_id = handle.ROWID
             GROUP BY chat_handle_join.chat_id
-        ),
-        msg_stats AS (
-            SELECT
-                chat_message_join.chat_id,
-                COUNT(*) as message_count,
-                MAX(message.date) as last_message_date
-            FROM chat_message_join
-            JOIN message ON chat_message_join.message_id = message.ROWID
-            GROUP BY chat_message_join.chat_id
-        ),
-        last_msgs AS (
-            SELECT
-                cmj.chat_id,
-                m.text as last_message_text,
-                m.attributedBody as last_message_attributed_body
-            FROM chat_message_join cmj
-            JOIN message m ON cmj.message_id = m.ROWID
-            JOIN msg_stats ms ON cmj.chat_id = ms.chat_id
-                AND m.date = ms.last_message_date
         )
         SELECT
             chat.ROWID as chat_rowid,
@@ -81,18 +73,17 @@ _BASE_QUERIES = {
             chat.display_name,
             chat.chat_identifier,
             cp.participants,
-            COALESCE(ms.message_count, 0) as message_count,
-            ms.last_message_date,
-            lm.last_message_text,
-            lm.last_message_attributed_body
+            COALESCE(mr.message_count, 0) as message_count,
+            mr.date as last_message_date,
+            mr.text as last_message_text,
+            mr.attributedBody as last_message_attributed_body
         FROM chat
         LEFT JOIN chat_participants cp ON cp.chat_id = chat.ROWID
-        LEFT JOIN msg_stats ms ON ms.chat_id = chat.ROWID
-        LEFT JOIN last_msgs lm ON lm.chat_id = chat.ROWID
-        WHERE COALESCE(ms.message_count, 0) > 0
+        LEFT JOIN message_ranked mr ON mr.chat_id = chat.ROWID AND mr.msg_rank = 1
+        WHERE COALESCE(mr.message_count, 0) > 0
         {since_filter}
         {before_filter}
-        ORDER BY ms.last_message_date DESC
+        ORDER BY mr.date DESC
         LIMIT ?
     """,
     "messages": """
