@@ -1,0 +1,33 @@
+{
+  "model_type": "OneVsRestClassifier(LGBMClassifier)",
+  "n_features": 915,
+  "feature_breakdown": {
+    "bert_embeddings": 384,
+    "context_bert_embeddings": 384,
+    "hand_crafted": 26,
+    "spacy": 94,
+    "new_hand_crafted": 19,
+    "hard_class": 8,
+    "total_non_bert": 147
+  },
+  "lgbm_params": {
+    "n_estimators": 500,
+    "learning_rate": 0.05,
+    "max_depth": 6,
+    "class_weight": "balanced"
+  },
+  "categories": [
+    "acknowledge",
+    "closing",
+    "emotion",
+    "question",
+    "request",
+    "statement"
+  ],
+  "n_train": 11345,
+  "n_test": 2837,
+  "test_f1_samples": 0.7831864645752555,
+  "primary_label_recall": 0.8861473387381036,
+  "trained_at": "2026-02-08 15:33:04",
+  "notes": "LightGBM + context embeddings + 36 new features (915 total)"
+}

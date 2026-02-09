@@ -169,24 +169,39 @@ class TestAlwaysGenerates:
         mock_generator.generate.assert_called()
 
     @pytest.mark.parametrize(
-        "message",
+        "message,expected_type",
         [
-            "ok",
-            "thanks",
-            "lol",
+            ("ok", "acknowledge"),
+            ("thanks", "acknowledge"),
         ],
     )
-    def test_backchannel_skips_without_context(
+    def test_acknowledgments_use_templates(
         self,
         router: ReplyRouter,
         mock_generator: MagicMock,
         message: str,
+        expected_type: str,
     ) -> None:
-        """Test that NONE-pressure messages with no search results skip generation."""
+        """Test that acknowledgments return template responses (no LLM generation)."""
         result = router.route(message)
 
+        # Should return template response based on category
+        assert result["type"] == expected_type
+        # Should not call LLM generator
+        mock_generator.generate.assert_not_called()
+
+    def test_emotion_without_context_skips(
+        self,
+        router: ReplyRouter,
+        mock_generator: MagicMock,
+    ) -> None:
+        """Test that emotion messages without context skip (NONE pressure, no examples)."""
+        result = router.route("lol")
+
+        # Emotion with no context → NONE pressure → skip
         assert result["type"] == "skip"
         assert result["reason"] == "no_response_needed"
+        mock_generator.generate.assert_not_called()
 
     def test_empty_message_clarifies(self, router: ReplyRouter) -> None:
         """Test that empty messages return clarify."""
@@ -269,7 +284,14 @@ class TestRouteGeneratePath:
             },
         ]
 
-        with patch.object(router.context_service, "search_examples", return_value=search_results):
+        # Mock reranker to avoid requiring cross-encoder model in test environment
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.return_value = search_results
+
+        with (
+            patch.object(router.context_service, "search_examples", return_value=search_results),
+            patch("jarvis.reply_service.get_reranker", return_value=mock_reranker),
+        ):
             result = router.route("want to grab coffee?")
 
         assert result["type"] == "generated"

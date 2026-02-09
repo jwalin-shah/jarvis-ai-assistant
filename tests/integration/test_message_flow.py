@@ -56,15 +56,21 @@ class TestRouterGeneratesAllMessages:
         r._vec_searcher = mock_searcher
         return r
 
-    def test_acknowledgment_skips_without_context(self, router):
-        """Acknowledgments with no context skip generation (NONE pressure)."""
+    def test_acknowledgment_returns_template(self, router):
+        """Acknowledgments return template responses (no LLM generation)."""
         result = router.route("thanks")
-        assert result["type"] == "skip"
+        assert result["type"] == "acknowledge"
+        # Template response from ACKNOWLEDGE_TEMPLATES (randomized, just check non-empty)
+        assert result["response"]
+        assert len(result["response"]) > 0
 
-    def test_ok_skips_without_context(self, router):
-        """'ok' with no context skips generation (NONE pressure)."""
+    def test_ok_returns_template(self, router):
+        """'ok' returns template response (no LLM generation)."""
         result = router.route("ok")
-        assert result["type"] == "skip"
+        assert result["type"] == "acknowledge"
+        # Template response from ACKNOWLEDGE_TEMPLATES (randomized, just check non-empty)
+        assert result["response"]
+        assert len(result["response"]) > 0
 
     def test_question_generates(self, router):
         """Questions go through generation."""
