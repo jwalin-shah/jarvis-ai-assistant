@@ -147,3 +147,96 @@ experiments/**/results/
 # Training/labeling data (personal, regeneratable)
 data/*_labeling.jsonl
 data/splits/
+
+# Experiment artifacts (root level - all regeneratable)
+# Analysis and test scripts
+analyze_*.py
+compare_*.py
+extract_*.py
+inspect_*.py
+label_*.py
+manual_review_*.py
+research_*.py
+review_*.py
+sample_*.py
+test_*.py
+validate_*.py
+verify_*.py
+detailed_*.py
+
+# Experiment results and outputs
+*_results.json
+*_output.txt
+*_tuning_results.json
+*search_results_*.json
+validation_*.json
+manual_*.json
+human_labels_*.json
+llm_*.json
+gemini_*.json
+gold_standard*.json
+improved_*.json
+production_*.json
+qwen_*.json
+simple_*.json
+true_*.json
+ablation*.json
+class_weight*.json
+learning*.json
+
+# Experiment data files
+*.jsonl
+!training_pairs.jsonl
+!semantic_conversations.jsonl
+
+# Training outputs
+train_*_output.txt
+tune_*_output.txt
+retrain_*_output.txt
+threshold_*.txt
+imessage_*.txt
+quote_fix*.txt
+set*_*.txt
+debate_*.txt
+dry_run*.txt
+final_*.txt
+dailydialog*.txt
+
+# Manual review documents (root level)
+set*_manual_review.md
+manual_review.md
+set*_summary.md
+
+# Experiment notes (root level)
+CONSENSUS_*.md
+FINAL_*.md
+*_ANALYSIS.md
+*_RESULTS.md
+*_PLAN.md
+REVIEW_COMPLETE.md
+debate_*.md
+validation_summary.md
+
+# Obsolete/experimental models
+models/category_svm_v2.*
+models/category_lightgbm_915_*.*
+models/category_lightgbm_no_context.*
+models/lightgbm_category_final.*
+models/category_multilabel_hardclass.*
+models/category_multilabel_logistic.*
+models/category_multilabel_svm.*
+models/category_multilabel_metadata.json
+models/category_multilabel_optimal_thresholds.json
+models/category_linearsvc_*.*
+models/category_multilabel_lightgbm.joblib
+models/category_multilabel_lightgbm_metadata.json
+models/*_imessage_thresholds.json
+
+# Optuna databases
+optuna_bayesian.db
+
+# Gemini review batches
+gemini_reviews_batches/
+
+# Backup files
+*.bak
