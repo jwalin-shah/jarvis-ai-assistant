@@ -1625,6 +1625,28 @@ export interface GraphExportResponse {
   size_bytes: number;
 }
 
+export interface ContactFact {
+  category: string;
+  subject: string;
+  predicate: string;
+  value: string | null;
+  confidence: number;
+}
+
+export interface ContactProfileDetail {
+  contact_id: string;
+  contact_name: string | null;
+  relationship: string;
+  formality: string;
+  formality_score: number;
+  style_guide: string;
+  message_count: number;
+  avg_message_length: number;
+  avg_response_time_minutes: number | null;
+  top_topics: string[];
+  facts: ContactFact[];
+}
+
 export interface GraphStats {
   total_contacts: number;
   total_messages: number;

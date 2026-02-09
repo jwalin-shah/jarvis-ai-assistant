@@ -170,7 +170,12 @@ class IMessageSender:
         if is_group:
             if not chat_id:
                 return SendResult(success=False, error="Chat ID required for group")
-            escaped_chat_id = chat_id.replace("\\", "\\\\").replace('"', '\\"')
+            # Extract the actual chat identifier from the guid format
+            actual_chat_id = chat_id
+            if ";" in chat_id:
+                parts = chat_id.split(";")
+                actual_chat_id = parts[-1] if len(parts) > 1 else chat_id
+            escaped_chat_id = actual_chat_id.replace("\\", "\\\\").replace('"', '\\"')
             applescript = f"""
 tell application "Messages"
     set targetChat to chat id "{escaped_chat_id}"
@@ -277,9 +282,18 @@ end tell
         if not chat_id:
             return SendResult(success=False, error="Chat ID is required for group chats")
 
+        # Extract the actual chat identifier from the guid format
+        # Database guid format: "iMessage;+;chat<numbers>" or "iMessage;-;+<phone>"
+        # We need just the "chat<numbers>" part for AppleScript
+        actual_chat_id = chat_id
+        if ";" in chat_id:
+            # Split by semicolon and take the last part
+            parts = chat_id.split(";")
+            actual_chat_id = parts[-1] if len(parts) > 1 else chat_id
+
         # Escape special characters for AppleScript
         escaped_text = self._escape_for_applescript(text)
-        escaped_chat_id = chat_id.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_chat_id = actual_chat_id.replace("\\", "\\\\").replace('"', '\\"')
 
         # For group chats, we find the chat by its ID and send directly to it
         applescript = f"""

@@ -13,6 +13,13 @@ from api.main import app
 from api.routers.websocket import manager
 
 
+@pytest.fixture(autouse=True)
+def disable_ws_auth():
+    """Disable WebSocket auth for tests."""
+    with patch("api.routers.websocket._validate_websocket_auth", return_value=True):
+        yield
+
+
 @pytest.fixture
 def client():
     """Create a test client."""

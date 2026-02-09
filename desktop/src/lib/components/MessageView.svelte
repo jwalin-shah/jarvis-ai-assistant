@@ -348,6 +348,8 @@
         // Refresh messages and remove optimistic message once real one appears
         pollMessages().then(() => {
           removeOptimisticMessage(optimisticId);
+          // Scroll back to bottom after real message appears
+          scrollToBottom();
         }).catch(err => console.error("Poll error:", err));
       } else {
         updateOptimisticMessage(optimisticId, {
