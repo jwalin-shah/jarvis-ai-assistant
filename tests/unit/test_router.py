@@ -290,7 +290,7 @@ class TestRouteGeneratePath:
 
         with (
             patch.object(router.context_service, "search_examples", return_value=search_results),
-            patch("jarvis.reply_service.get_reranker", return_value=mock_reranker),
+            patch("models.reranker.get_reranker", return_value=mock_reranker),
         ):
             result = router.route("want to grab coffee?")
 

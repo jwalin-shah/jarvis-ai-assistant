@@ -20,6 +20,8 @@ import type {
   Calendar,
   CalendarEvent,
   ClusterResult,
+  ContactFact,
+  ContactProfileDetail,
   ContactsLeaderboard,
   ContactStats,
   Conversation,
@@ -1782,6 +1784,12 @@ class ApiClient {
           height: options.height ?? 600,
         }),
       }
+    );
+  }
+
+  async getContactProfile(contactId: string): Promise<ContactProfileDetail> {
+    return this.request<ContactProfileDetail>(
+      `/graph/contact/${encodeURIComponent(contactId)}`
     );
   }
 

@@ -522,9 +522,11 @@ class TestTimingAnalyzer:
         )
         analyzer.set_contact_prefs(1, prefs)
 
+        # Use a fixed morning time to avoid test flakiness when run during quiet hours
+        morning = datetime(2025, 6, 15, 10, 0, 0, tzinfo=UTC)
         suggestions = analyzer.suggest_time(
             contact_id=1,
-            earliest=datetime.now(UTC),
+            earliest=morning,
             num_suggestions=5,
         )
 

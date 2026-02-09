@@ -14,6 +14,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from api.schemas.graph import (
     ClusterResultSchema,
+    ContactFactSchema,
+    ContactProfileDetailSchema,
     ExportGraphRequest,
     ExportGraphResponse,
     GraphDataSchema,
@@ -249,6 +251,100 @@ def get_ego_graph(
         raise
     except Exception as e:
         logger.exception(f"Error building ego graph for {contact_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/contact/{contact_id}",
+    response_model=ContactProfileDetailSchema,
+    summary="Get contact profile with facts",
+    responses={
+        200: {"description": "Contact profile with knowledge graph facts"},
+        404: {"description": "Contact not found"},
+    },
+)
+def get_contact_profile(contact_id: str) -> ContactProfileDetailSchema:
+    """Get a detailed contact profile combining relationship data and knowledge graph facts.
+
+    Returns profile metadata (relationship, formality, style guide, topics)
+    plus structured facts from the knowledge graph (location, work, preferences, etc.).
+    """
+    try:
+        from jarvis.contacts.contact_profile import (
+            ContactProfile,
+            load_profile as load_contact_profile,
+        )
+        from jarvis.relationships import generate_style_guide, load_profile
+
+        # Try to load ContactProfile (has formality, topics, etc.)
+        cp: ContactProfile | None = None
+        try:
+            cp = load_contact_profile(contact_id)
+        except Exception:
+            pass
+
+        # Try to load RelationshipProfile (has style guide data)
+        style_guide = ""
+        avg_response_time: float | None = None
+        try:
+            rp = load_profile(contact_id)
+            if rp:
+                style_guide = generate_style_guide(rp)
+                avg_response_time = rp.response_patterns.avg_response_time_minutes
+        except Exception:
+            pass
+
+        # Load facts from DB
+        facts: list[ContactFactSchema] = []
+        try:
+            from jarvis.db import get_db
+
+            db = get_db()
+            with db.connection() as conn:
+                rows = conn.execute(
+                    "SELECT category, subject, predicate, value, confidence "
+                    "FROM contact_facts WHERE contact_id = ? ORDER BY confidence DESC",
+                    (contact_id,),
+                ).fetchall()
+                for row in rows:
+                    r = dict(row) if hasattr(row, "keys") else {
+                        "category": row[0],
+                        "subject": row[1],
+                        "predicate": row[2],
+                        "value": row[3],
+                        "confidence": row[4],
+                    }
+                    facts.append(ContactFactSchema(
+                        category=r["category"],
+                        subject=r["subject"],
+                        predicate=r["predicate"],
+                        value=r["value"],
+                        confidence=r["confidence"],
+                    ))
+        except Exception as e:
+            logger.debug("Could not load contact facts: %s", e)
+
+        if cp is None and not facts and style_guide == "":
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        return ContactProfileDetailSchema(
+            contact_id=contact_id,
+            contact_name=cp.contact_name if cp else None,
+            relationship=cp.relationship if cp else "unknown",
+            formality=cp.formality if cp else "casual",
+            formality_score=cp.formality_score if cp else 0.5,
+            style_guide=style_guide,
+            message_count=cp.message_count if cp else 0,
+            avg_message_length=cp.avg_message_length if cp else 0.0,
+            avg_response_time_minutes=avg_response_time,
+            top_topics=cp.top_topics if cp else [],
+            facts=facts,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error loading contact profile for %s", contact_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 

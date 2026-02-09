@@ -129,6 +129,36 @@ class ExportGraphRequest(BaseModel):
     height: int = Field(default=600, ge=100, le=4000, description="Export height")
 
 
+class ContactFactSchema(BaseModel):
+    """A single fact about a contact from the knowledge graph."""
+
+    category: str = Field(description="Fact category: relationship, location, work, preference, event")
+    subject: str = Field(description="The subject/entity of the fact")
+    predicate: str = Field(description="The relationship type (e.g. lives_in, works_at)")
+    value: str | None = Field(default=None, description="Optional value/detail")
+    confidence: float = Field(default=1.0, description="Confidence score 0-1")
+
+
+class ContactProfileDetailSchema(BaseModel):
+    """Detailed contact profile combining relationship data and knowledge graph facts."""
+
+    contact_id: str = Field(description="Contact identifier")
+    contact_name: str | None = Field(default=None, description="Display name")
+    relationship: str = Field(default="unknown", description="Relationship type")
+    formality: str = Field(default="casual", description="Communication formality level")
+    formality_score: float = Field(default=0.5, description="Formality score 0-1")
+    style_guide: str = Field(default="", description="Natural language style description")
+    message_count: int = Field(default=0, description="Total messages exchanged")
+    avg_message_length: float = Field(default=0.0, description="Average message length")
+    avg_response_time_minutes: float | None = Field(
+        default=None, description="Average response time in minutes"
+    )
+    top_topics: list[str] = Field(default_factory=list, description="Common conversation topics")
+    facts: list[ContactFactSchema] = Field(
+        default_factory=list, description="Knowledge graph facts about this contact"
+    )
+
+
 class ExportGraphResponse(BaseModel):
     """Response for graph export endpoint."""
 

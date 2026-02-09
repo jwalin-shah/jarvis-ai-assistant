@@ -86,6 +86,8 @@ from api.schemas.export import (
 # Graph visualization models
 from api.schemas.graph import (
     ClusterResultSchema,
+    ContactFactSchema,
+    ContactProfileDetailSchema,
     EgoGraphRequest,
     ExportGraphRequest,
     ExportGraphResponse,
@@ -264,6 +266,8 @@ __all__ = [
     "UnansweredConversationResponse",
     # Graph
     "ClusterResultSchema",
+    "ContactFactSchema",
+    "ContactProfileDetailSchema",
     "EgoGraphRequest",
     "ExportGraphRequest",
     "ExportGraphResponse",

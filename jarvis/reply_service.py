@@ -412,16 +412,24 @@ class ReplyService:
         optimized_examples = get_optimized_examples(category)
         category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
 
-        similar_exchanges = [(r["trigger_text"], r["response_text"]) for r in search_results[:3]]
+        top_results = search_results[:3]
+        similar_exchanges = [(r["trigger_text"], r["response_text"]) for r in top_results]
+        rag_rerank_scores = [r.get("rerank_score", 0.0) for r in top_results]
 
         # Merge: RAG-retrieved examples first, then category-specific (up to 5 total)
         all_exchanges = similar_exchanges + [
             ex for ex in category_exchanges if ex not in similar_exchanges
         ]
+        # Extend rerank scores with 0.0 for category examples
+        all_rerank_scores = rag_rerank_scores + [0.0] * (
+            len(all_exchanges) - len(similar_exchanges)
+        )
 
         # Deduplicate semantically similar examples
         cached_embedder = get_embedder()
-        all_exchanges = self._dedupe_examples(all_exchanges, cached_embedder)
+        all_exchanges = self._dedupe_examples(
+            all_exchanges, cached_embedder, rerank_scores=all_rerank_scores
+        )
 
         # Limit to 5 total examples
         all_exchanges = all_exchanges[:5]
@@ -452,7 +460,9 @@ class ReplyService:
         example_diversity: float,
         reply_length: int,
         reply_text: str,
-    ) -> str:
+        incoming_text: str = "",
+        rerank_score: float | None = None,
+    ) -> tuple[float, str]:
         """Compute confidence level based on multiple signals.
 
         Args:
@@ -461,9 +471,11 @@ class ReplyService:
             example_diversity: Measure of example diversity (0-1).
             reply_length: Number of words in the reply.
             reply_text: The actual reply text for uncertain signal detection.
+            incoming_text: Original incoming message for coherence check.
+            rerank_score: Cross-encoder rerank score from top result (0-1).
 
         Returns:
-            Confidence level: "high", "medium", or "low".
+            Tuple of (numeric_confidence 0-1, discrete label "high"/"medium"/"low").
         """
         # Base confidence by pressure
         base_confidence = {
@@ -477,6 +489,10 @@ class ReplyService:
         if rag_similarity < 0.5:
             base_confidence *= 0.8
 
+        # Boost from cross-encoder reranking (more reliable than embedding sim)
+        if rerank_score is not None and rerank_score > 0.7:
+            base_confidence = min(base_confidence * 1.1, 0.95)
+
         # Adjust based on example diversity
         if example_diversity < 0.3:  # All from same contact
             base_confidence *= 0.9
@@ -489,13 +505,27 @@ class ReplyService:
         ):
             base_confidence *= 0.7
 
+        # Coherence penalty: reply that parrots the input is low quality
+        if incoming_text and reply_text:
+            reply_lower = reply_text.lower().strip()
+            incoming_lower = incoming_text.lower().strip()
+            if reply_lower == incoming_lower or (
+                len(reply_lower) > 5 and incoming_lower.startswith(reply_lower)
+            ):
+                base_confidence *= 0.5
+
+        # Clamp to [0, 1]
+        base_confidence = max(0.0, min(base_confidence, 1.0))
+
         # Map float to discrete level
         if base_confidence >= 0.7:
-            return "high"
+            label = "high"
         elif base_confidence >= 0.45:
-            return "medium"
+            label = "medium"
         else:
-            return "low"
+            label = "low"
+
+        return base_confidence, label
 
     @staticmethod
     def _compute_example_diversity(search_results: list[dict[str, Any]]) -> float:
@@ -515,13 +545,17 @@ class ReplyService:
         return min(unique_triggers / len(search_results), 1.0)
 
     def _dedupe_examples(
-        self, examples: list[tuple[str, str]], embedder: CachedEmbedder
+        self,
+        examples: list[tuple[str, str]],
+        embedder: CachedEmbedder,
+        rerank_scores: list[float] | None = None,
     ) -> list[tuple[str, str]]:
-        """Deduplicate examples using semantic similarity.
+        """Deduplicate examples using semantic similarity with topic diversity.
 
         Args:
             examples: List of (context, output) tuples.
             embedder: Embedder for computing similarity.
+            rerank_scores: Optional per-example rerank scores (higher = better).
 
         Returns:
             Deduplicated list of examples (highest quality kept).
@@ -533,6 +567,9 @@ class ReplyService:
         texts = [f"{ctx} {out}" for ctx, out in examples]
         embeddings = embedder.encode(texts, normalize=True)
 
+        # Score for tiebreaking: prefer rerank_score, fallback to context length
+        scores = rerank_scores or [0.0] * len(examples)
+
         # Find near-duplicates (cosine sim > 0.85)
         keep = [True] * len(examples)
         for i in range(len(examples)):
@@ -543,14 +580,40 @@ class ReplyService:
                     continue
                 sim = float(np.dot(embeddings[i], embeddings[j]))
                 if sim > 0.85:
-                    # Keep the one with more context
-                    if len(examples[i][0]) >= len(examples[j][0]):
+                    # Keep the one with higher rerank score, break ties by context length
+                    i_score = (scores[i], len(examples[i][0]))
+                    j_score = (scores[j], len(examples[j][0]))
+                    if i_score >= j_score:
                         keep[j] = False
                     else:
                         keep[i] = False
                         break
 
-        return [ex for ex, k in zip(examples, keep) if k]
+        kept = [ex for ex, k in zip(examples, keep) if k]
+        kept_embs = [emb for emb, k in zip(embeddings, keep) if k]
+
+        # Topic diversity: if all remaining examples are too similar to each other
+        # (avg pairwise sim > 0.75), drop the least unique one to make room
+        if len(kept) > 2:
+            n = len(kept)
+            pair_sims = []
+            for i in range(n):
+                for j in range(i + 1, n):
+                    pair_sims.append(float(np.dot(kept_embs[i], kept_embs[j])))
+            avg_sim = sum(pair_sims) / len(pair_sims) if pair_sims else 0.0
+            if avg_sim > 0.75:
+                # Drop the example most similar to all others
+                avg_per_ex = []
+                for i in range(n):
+                    s = sum(
+                        float(np.dot(kept_embs[i], kept_embs[j]))
+                        for j in range(n) if j != i
+                    ) / (n - 1)
+                    avg_per_ex.append(s)
+                drop_idx = int(np.argmax(avg_per_ex))
+                kept.pop(drop_idx)
+
+        return kept
 
     def _generate_llm_reply(
         self,
@@ -569,6 +632,24 @@ class ReplyService:
                 "response": "",
                 "confidence": "none",
                 "reason": "no_response_needed",
+            }
+
+        # Ambiguity gate: clarify when signals are too weak to generate well
+        cat_conf = getattr(category_result, "confidence", 1.0) if category_result else 1.0
+        has_thin_context = not thread or len(thread) < 2
+        is_short_msg = len(incoming.split()) <= 3
+        if (
+            cat_conf < 0.4
+            and mobilization.pressure == ResponsePressure.NONE
+            and is_short_msg
+            and has_thin_context
+        ):
+            return {
+                "type": "clarify",
+                "response": "",
+                "confidence": "low",
+                "confidence_score": cat_conf,
+                "reason": "ambiguous_message",
             }
 
         try:
@@ -597,19 +678,23 @@ class ReplyService:
             similarity = search_results[0]["similarity"] if search_results else 0.0
             example_diversity = self._compute_example_diversity(search_results)
             reply_length = len(text.split())
+            rerank_score = search_results[0].get("rerank_score") if search_results else None
 
-            confidence = self._compute_confidence(
+            confidence_score, confidence = self._compute_confidence(
                 mobilization.pressure,
                 similarity,
                 example_diversity,
                 reply_length,
                 text,
+                incoming_text=incoming,
+                rerank_score=rerank_score,
             )
 
             return {
                 "type": "generated",
                 "response": text,
                 "confidence": confidence,
+                "confidence_score": confidence_score,
                 "similarity_score": similarity,
                 "example_diversity": example_diversity,
             }
