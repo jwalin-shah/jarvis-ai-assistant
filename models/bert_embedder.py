@@ -211,21 +211,7 @@ class BertModel(nn.Module):
 
 def load_bert_weights(model: BertModel, weights_path: Path, has_pooler: bool = True) -> None:
     """Load weights from HuggingFace safetensors into our model."""
-    import psutil
-
-    proc = psutil.Process()
-
-    mem_before = proc.memory_info()
-    print(
-        f"[BERT] BEFORE mx.load: RSS={mem_before.rss / 1024 / 1024:.1f} MB, VMS={mem_before.vms / 1024 / 1024:.1f} MB"
-    )
-
     hf_weights = mx.load(str(weights_path))
-
-    mem_after = proc.memory_info()
-    print(
-        f"[BERT] AFTER mx.load: RSS={mem_after.rss / 1024 / 1024:.1f} MB (+{(mem_after.rss - mem_before.rss) / 1024 / 1024:.1f}), VMS={mem_after.vms / 1024 / 1024:.1f} MB (+{(mem_after.vms - mem_before.vms) / 1024 / 1024:.1f})"
-    )
 
     new_weights = {}
 
@@ -259,25 +245,10 @@ def load_bert_weights(model: BertModel, weights_path: Path, has_pooler: bool = T
     # This prevents holding 2 copies (hf_weights + model params) simultaneously on 8GB systems
     del hf_weights
 
-    mem_before_load = proc.memory_info()
-    print(
-        f"[BERT] BEFORE model.load_weights: RSS={mem_before_load.rss / 1024 / 1024:.1f} MB, VMS={mem_before_load.vms / 1024 / 1024:.1f} MB"
-    )
-
     model.load_weights(list(new_weights.items()))
-
-    mem_after_load = proc.memory_info()
-    print(
-        f"[BERT] AFTER model.load_weights: RSS={mem_after_load.rss / 1024 / 1024:.1f} MB (+{(mem_after_load.rss - mem_before_load.rss) / 1024 / 1024:.1f}), VMS={mem_after_load.vms / 1024 / 1024:.1f} MB (+{(mem_after_load.vms - mem_before_load.vms) / 1024 / 1024:.1f})"
-    )
 
     # FREE MEMORY: Delete new_weights dict (hf_weights already deleted above)
     del new_weights
-
-    mem_after_del = proc.memory_info()
-    print(
-        f"[BERT] AFTER deleting weight dicts: RSS={mem_after_del.rss / 1024 / 1024:.1f} MB, VMS={mem_after_del.vms / 1024 / 1024:.1f} MB"
-    )
 
 
 # =============================================================================
@@ -381,34 +352,15 @@ class InProcessEmbedder:
             )
             start = time.time()
 
-            import psutil
-
-            proc = psutil.Process()
-
             self.model = BertModel(self.config, add_pooler=has_pooler)
             load_bert_weights(self.model, weights_path, has_pooler=has_pooler)
 
-            mem_before_eval = proc.memory_info()
-            print(
-                f"[BERT] BEFORE mx.eval: RSS={mem_before_eval.rss / 1024 / 1024:.1f} MB, VMS={mem_before_eval.vms / 1024 / 1024:.1f} MB"
-            )
-
             mx.eval(self.model.parameters())
-
-            mem_after_eval = proc.memory_info()
-            print(
-                f"[BERT] AFTER mx.eval: RSS={mem_after_eval.rss / 1024 / 1024:.1f} MB (+{(mem_after_eval.rss - mem_before_eval.rss) / 1024 / 1024:.1f}), VMS={mem_after_eval.vms / 1024 / 1024:.1f} MB (+{(mem_after_eval.vms - mem_before_eval.vms) / 1024 / 1024:.1f})"
-            )
 
             # Clear cache after loading to free temp GPU buffers
             gc.collect()
             if hasattr(mx, "clear_cache"):
                 mx.clear_cache()
-
-            mem_after_clear = proc.memory_info()
-            print(
-                f"[BERT] AFTER mx.clear_cache: RSS={mem_after_clear.rss / 1024 / 1024:.1f} MB, VMS={mem_after_clear.vms / 1024 / 1024:.1f} MB"
-            )
 
             self.model_name = model_name
             logger.info("Model loaded in %.2fs", time.time() - start)

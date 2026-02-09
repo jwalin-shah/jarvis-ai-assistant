@@ -112,26 +112,14 @@ def get_generator(
     """
     global _generator, _current_model_id
 
-    if _generator is None:
-        with _generator_lock:
-            # Double-check after acquiring lock
-            if _generator is None:
-                config = ModelConfig(model_id=model_id) if model_id else None
-                _generator = MLXGenerator(config=config, skip_templates=skip_templates)
-                _current_model_id = model_id
-    else:
-        # If requesting a different model, reset and recreate inside lock
-        with _generator_lock:
-            if model_id is not None and _current_model_id != model_id:
-                if _generator is not None:
-                    _generator.unload()
-                _generator = None
-                _current_model_id = None
-                # Recreate with new model
-                config = ModelConfig(model_id=model_id) if model_id else None
-                _generator = MLXGenerator(config=config, skip_templates=skip_templates)
-                _current_model_id = model_id
-    return _generator
+    with _generator_lock:
+        if _generator is None or (model_id is not None and _current_model_id != model_id):
+            if _generator is not None:
+                _generator.unload()
+            config = ModelConfig(model_id=model_id) if model_id else None
+            _generator = MLXGenerator(config=config, skip_templates=skip_templates)
+            _current_model_id = model_id
+        return _generator
 
 
 def unload_generator() -> None:

@@ -248,9 +248,6 @@ class ReplyRouter:
                 logger.debug("Error closing iMessage reader: %s", e)
             self._imessage_reader = None
 
-    def __del__(self) -> None:
-        """Clean up on deletion."""
-        self.close()
 
     @staticmethod
     def _build_mobilization_hint(mobilization: MobilizationResult) -> str | None:
@@ -483,6 +480,8 @@ def reset_reply_router() -> None:
     global _router
 
     with _router_lock:
+        if _router is not None:
+            _router.close()
         _router = None
 
 

@@ -188,6 +188,11 @@ class LouvainClustering:
                 cluster_sizes={i: 1 for i in range(n)},
             )
 
+        # Pre-build neighbor adjacency dict from weights for O(neighbors) iteration
+        neighbors: dict[int, dict[int, float]] = {i: {} for i in range(n)}
+        for (i, j), w in weights.items():
+            neighbors[i][j] = w
+
         # Initialize each node in its own community
         community = list(range(n))
         community_weight: dict[int, float] = {i: degrees[i] for i in range(n)}
@@ -213,7 +218,7 @@ class LouvainClustering:
                 # Remove node from current community
                 community_weight[current_comm] -= node_degree
                 sum_to_current = sum(
-                    weights.get((node, j), 0) for j in range(n) if community[j] == current_comm
+                    w for j, w in neighbors[node].items() if community[j] == current_comm
                 )
                 community_internal[current_comm] -= sum_to_current
 
@@ -222,14 +227,11 @@ class LouvainClustering:
                 best_gain = 0.0
 
                 # Check neighboring communities
-                neighbor_comms: set[int] = set()
-                for j in range(n):
-                    if weights.get((node, j), 0) > 0:
-                        neighbor_comms.add(community[j])
+                neighbor_comms: set[int] = {community[j] for j in neighbors[node]}
 
                 for comm in neighbor_comms:
                     sum_to_comm = sum(
-                        weights.get((node, j), 0) for j in range(n) if community[j] == comm
+                        w for j, w in neighbors[node].items() if community[j] == comm
                     )
 
                     # Calculate modularity gain
@@ -246,7 +248,7 @@ class LouvainClustering:
                 community[node] = best_comm
                 community_weight[best_comm] += node_degree
                 sum_to_best = sum(
-                    weights.get((node, j), 0) for j in range(n) if community[j] == best_comm
+                    w for j, w in neighbors[node].items() if community[j] == best_comm
                 )
                 community_internal[best_comm] += sum_to_best
 
@@ -258,14 +260,21 @@ class LouvainClustering:
         comm_map = {c: i for i, c in enumerate(unique_comms)}
         community = [comm_map[c] for c in community]
 
-        # Calculate final modularity
-        modularity = 0.0
+        # Calculate final modularity using community-based accumulators
+        comm_internal: dict[int, float] = {}
+        comm_degree: dict[int, float] = {}
         for i in range(n):
-            for j in range(n):
-                if community[i] == community[j]:
-                    actual = weights.get((i, j), 0)
-                    expected = degrees[i] * degrees[j] / total_weight
-                    modularity += actual - self.resolution * expected
+            c = community[i]
+            comm_degree[c] = comm_degree.get(c, 0.0) + degrees[i]
+            for j, w in neighbors[i].items():
+                if community[j] == c:
+                    comm_internal[c] = comm_internal.get(c, 0.0) + w
+
+        modularity = 0.0
+        for c in comm_degree:
+            internal = comm_internal.get(c, 0.0)
+            total_deg = comm_degree[c]
+            modularity += internal - self.resolution * total_deg * total_deg / total_weight
 
         modularity /= total_weight
 
