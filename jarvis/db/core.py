@@ -459,6 +459,10 @@ class JarvisDBBase:
                     else:
                         logger.warning("vec_binary migration skipped (extension unavailable): %s", e)
 
+            # Migration v11 -> v12: contact_facts table for knowledge graph
+            # Table is created by SCHEMA_SQL with CREATE TABLE IF NOT EXISTS
+            # No column migrations needed since this is a new table
+
             # Apply schema
             conn.executescript(SCHEMA_SQL)
 

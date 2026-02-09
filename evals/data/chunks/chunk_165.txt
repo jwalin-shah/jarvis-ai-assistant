@@ -1,0 +1,16 @@
+{"id": "archive_5996", "text": "Hahaha but ur chillin"}
+{"id": "archive_5998", "text": "lol ofc"}
+{"id": "archive_5999", "text": "I lied down and i am so comfy now"}
+{"id": "imessage_0", "text": "we call tonight with papa"}
+{"id": "imessage_1", "text": "\ud83d\udc1f he hates me", "thread": ["Mihir Shah: we call tonight with papa"]}
+{"id": "imessage_2", "text": "o", "thread": ["Mihir Shah: we call tonight with papa", "Mihir Shah: \ud83d\udc1f he hates me"]}
+{"id": "imessage_3", "text": "hater", "thread": ["Mihir Shah: we call tonight with papa", "Mihir Shah: \ud83d\udc1f he hates me", "Mihir Shah: o", "me: Also ngl idk about New York"]}
+{"id": "imessage_4", "text": "it\u2019s too soon", "thread": ["Mihir Shah: o", "me: Also ngl idk about New York", "Mihir Shah: hater", "me: I no come", "me: uhh ok too late tho"]}
+{"id": "imessage_5", "text": "don\u2019t die", "thread": ["me: Also ngl idk about New York", "Mihir Shah: hater", "me: I no come", "me: uhh ok too late tho", "Mihir Shah: it\u2019s too soon"]}
+{"id": "imessage_6", "text": "little", "thread": ["Mihir Shah: hater", "me: I no come", "me: uhh ok too late tho", "Mihir Shah: it\u2019s too soon", "Mihir Shah: don\u2019t die"]}
+{"id": "imessage_7", "text": "are you feeling better", "thread": ["me: Like actually 7-8/10", "me: But last night/morning was so bad holy", "me: Worse than I have been in a while", "me: I am less pain", "me: Uhh ok"]}
+{"id": "imessage_8", "text": "ignore me little", "thread": ["me: But last night/morning was so bad holy", "me: Worse than I have been in a while", "me: I am less pain", "me: Uhh ok", "Mihir Shah: are you feeling better"]}
+{"id": "imessage_9", "text": "anywho", "thread": ["me: Worse than I have been in a while", "me: I am less pain", "me: Uhh ok", "Mihir Shah: are you feeling better", "Mihir Shah: ignore me little"]}
+{"id": "imessage_10", "text": "there was some super bowl party that actually looked fun", "thread": ["me: Uhh ok", "Mihir Shah: are you feeling better", "Mihir Shah: ignore me little", "Mihir Shah: anywho", "me: Ok?"]}
+{"id": "imessage_11", "text": "\ud83d\udc1f", "thread": ["Mihir Shah: anywho", "me: Ok?", "Mihir Shah: there was some super bowl party that actually looked fun", "me: Fish?", "me: Huh"]}
+{"id": "imessage_12", "text": "do we have uber one", "thread": ["me: Fish?", "me: Huh", "Mihir Shah: \ud83d\udc1f", "me: We have to activate it", "me: Umm yes why?"]}

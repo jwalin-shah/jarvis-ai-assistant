@@ -320,6 +320,11 @@ class ChatDBWatcher:
                     # handler is persistently broken, we'll retry forever. That's acceptable
                     # since the alternative (skipping messages) loses data.
 
+            # Extract facts from new messages (background, non-blocking)
+            if new_messages:
+                task = asyncio.create_task(self._extract_facts(new_messages))
+                task.add_done_callback(self._log_task_exception)
+
             # Track per-chat message counts for incremental re-segmentation
             chats_to_resegment: list[str] = []
             for msg in new_messages:
@@ -391,6 +396,44 @@ class ChatDBWatcher:
 
         except Exception as e:
             logger.debug("Error indexing new messages: %s", e)
+
+    async def _extract_facts(self, messages: list[dict[str, Any]]) -> None:
+        """Extract and persist facts from new messages (background task)."""
+        try:
+            from jarvis.contacts.fact_extractor import FactExtractor
+            from jarvis.contacts.fact_storage import save_facts
+
+            # Only process incoming messages with text (not from me)
+            incoming = [m for m in messages if m.get("text") and not m.get("is_from_me")]
+            if not incoming:
+                return
+
+            extractor = FactExtractor(use_nli=True, entailment_threshold=0.6)
+
+            # Group by chat_id (proxy for contact)
+            by_chat: dict[str, list[dict[str, Any]]] = {}
+            for msg in incoming:
+                cid = msg.get("chat_id", "")
+                if cid:
+                    by_chat.setdefault(cid, []).append(msg)
+
+            for chat_id, chat_msgs in by_chat.items():
+                try:
+                    facts = await asyncio.to_thread(
+                        extractor.extract_facts, chat_msgs, chat_id
+                    )
+                    if facts:
+                        inserted = await asyncio.to_thread(save_facts, facts, chat_id)
+                        if inserted:
+                            logger.info(
+                                "Extracted %d facts (%d new) for %s",
+                                len(facts), inserted, chat_id[:20],
+                            )
+                except Exception as e:
+                    logger.debug("Fact extraction failed for %s: %s", chat_id[:20], e)
+
+        except Exception as e:
+            logger.debug("Fact extraction pipeline error: %s", e)
 
     async def _get_resegment_lock(self, chat_id: str) -> asyncio.Lock:
         """Get or create a per-chat lock for serializing resegmentation.
