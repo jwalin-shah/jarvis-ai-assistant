@@ -6,7 +6,7 @@ Guidance for Claude Code when working with this repository.
 
 JARVIS is a local-first AI assistant for macOS providing intelligent iMessage management using MLX-based language models on Apple Silicon.
 
-**Default Model**: LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit
+**Default Model**: lfm-1.2b (LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit)
 
 **Documentation:**
 - `docs/HOW_IT_WORKS.md` - How JARVIS works end-to-end (start here)
@@ -72,7 +72,7 @@ make verify         # Full verification (lint + typecheck + test)
 - Loop until criteria met (don't say "should work" without verifying)
 
 ### Performance by Default
-- **Always parallelize**: `n_jobs=2` for scikit-learn (GridSearchCV, cross_val_score) - constrained by 8GB RAM
+- **Always parallelize**: `n_jobs=1` for large datasets (>100MB), `n_jobs=2` only for small datasets - constrained by 8GB RAM
 - **Always batch**: Process lists together, not one-at-a-time loops
 - **Always cache**: Expensive computations (embeddings, model loads)
 - **Vectorized ops**: NumPy/pandas over Python loops
@@ -232,5 +232,5 @@ This system has **8GB RAM**. Large data processing MUST account for this:
 - **Prompts**: All in `jarvis/prompts.py` - nowhere else
 - **Errors**: Inherit from `JarvisError` in `jarvis/errors.py`
 - **Batching**: Use `classify_batch()`, `embedder.encode(list)` - never loop
-- **Parallelization**: `n_jobs=2` for all sklearn operations (memory-constrained)
+- **Parallelization**: `n_jobs=1` for large datasets (>100MB), `n_jobs=2` only for small datasets (memory-constrained)
 - **IPC Protocol**: Use binary encoding (base64) not JSON for large arrays

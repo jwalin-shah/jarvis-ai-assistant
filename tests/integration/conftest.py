@@ -3,7 +3,6 @@
 Provides common mocks and helpers for testing the RAG flow:
 - Mock iMessage reader
 - Mock generator
-- Mock intent classifier
 - Mock context fetcher
 - Sample message data
 """
@@ -11,9 +10,8 @@ Provides common mocks and helpers for testing the RAG flow:
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -23,82 +21,6 @@ from contracts.imessage import Attachment, Conversation, Message, Reaction
 from contracts.models import GenerationResponse
 from core.health import reset_degradation_controller
 from core.memory import reset_memory_controller
-
-# --- Intent Classification Stubs ---
-# These define the expected interface for jarvis/intent.py (not yet implemented)
-
-
-class IntentType(Enum):
-    """Types of user intents for iMessage interactions."""
-
-    REPLY = "reply"  # User wants help replying to a message
-    SUMMARIZE = "summarize"  # User wants a conversation summary
-    SEARCH = "search"  # User wants to find messages
-    QUICK_REPLY = "quick_reply"  # Simple acknowledgment (ok, thanks, etc.)
-    UNKNOWN = "unknown"  # Couldn't determine intent
-
-
-@dataclass
-class IntentResult:
-    """Result of intent classification."""
-
-    intent: IntentType
-    confidence: float
-    extracted_params: dict[str, Any] = field(default_factory=dict)
-
-
-class MockIntentClassifier:
-    """Mock intent classifier for testing.
-
-    In production, this would use NLP/embeddings to classify user intent.
-    """
-
-    def classify(self, user_input: str) -> IntentResult:
-        """Classify user intent from their input."""
-        user_input_lower = user_input.lower()
-
-        # Simple keyword-based classification for testing
-        if any(word in user_input_lower for word in ["reply", "respond", "answer"]):
-            # Extract person name if mentioned
-            person = None
-            for word in user_input.split():
-                if word[0].isupper() and word.lower() not in ["help", "me", "i"]:
-                    person = word.rstrip("'s").rstrip("'s")
-                    break
-            return IntentResult(
-                intent=IntentType.REPLY,
-                confidence=0.9,
-                extracted_params={"person": person} if person else {},
-            )
-
-        if any(word in user_input_lower for word in ["summary", "summarize", "recap"]):
-            return IntentResult(
-                intent=IntentType.SUMMARIZE,
-                confidence=0.85,
-                extracted_params={},
-            )
-
-        if any(word in user_input_lower for word in ["find", "search", "look for"]):
-            return IntentResult(
-                intent=IntentType.SEARCH,
-                confidence=0.8,
-                extracted_params={},
-            )
-
-        # Quick replies - short acknowledgments
-        quick_phrases = ["ok", "okay", "thanks", "thank you", "sounds good", "got it", "sure"]
-        if any(phrase in user_input_lower for phrase in quick_phrases):
-            return IntentResult(
-                intent=IntentType.QUICK_REPLY,
-                confidence=0.95,
-                extracted_params={},
-            )
-
-        return IntentResult(
-            intent=IntentType.UNKNOWN,
-            confidence=0.3,
-            extracted_params={},
-        )
 
 
 # --- Context Fetching Stubs ---
@@ -373,7 +295,4 @@ def mock_work_messages() -> list[Message]:
     ]
 
 
-@pytest.fixture
-def intent_classifier() -> MockIntentClassifier:
-    """Get a mock intent classifier."""
-    return MockIntentClassifier()
+

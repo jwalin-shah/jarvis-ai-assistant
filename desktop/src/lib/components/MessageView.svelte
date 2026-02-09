@@ -523,11 +523,11 @@
     if (!countChanged) return; // loading toggle alone doesn't need recalc
     lastMessageCount = msgCount;
 
-    console.log("[MessageView] Messages changed:", msgCount, "loading:", isLoading);
+    if (import.meta.env.DEV) console.log("[MessageView] Messages changed:", msgCount, "loading:", isLoading);
 
     // Reset needsScrollToBottom if fetch failed (loading finished but no messages and error present)
     if (!isLoading && msgCount === 0 && hasError && needsScrollToBottom) {
-      console.log("[MessageView] Resetting needsScrollToBottom due to fetch error");
+      if (import.meta.env.DEV) console.log("[MessageView] Resetting needsScrollToBottom due to fetch error");
       needsScrollToBottom = false;
       return;
     }
@@ -540,7 +540,7 @@
         virtualTopPadding = visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
         virtualBottomPadding = 0;
 
-        console.log("[MessageView] Initial load - visible range:", visibleStartIndex, "-", visibleEndIndex);
+        if (import.meta.env.DEV) console.log("[MessageView] Initial load - visible range:", visibleStartIndex, "-", visibleEndIndex);
         needsScrollToBottom = false;
 
         // Suppress scroll handler from recalculating virtual range during initial scroll.
@@ -579,7 +579,7 @@
     if (chatId && chatId !== prevSelectedChatId) {
       const oldChatId = prevSelectedChatId;
       prevSelectedChatId = chatId;
-      console.log("[MessageView] Conversation changed, resetting state");
+      if (import.meta.env.DEV) console.log("[MessageView] Conversation changed, resetting state");
       previousMessageCount = 0;
       newMessageIds = new Set();
       hasNewMessagesBelow = false;

@@ -60,6 +60,9 @@ class JarvisDBBase:
             SQLite connection with row_factory set to sqlite3.Row.
         """
         if not hasattr(self._local, "connection") or self._local.connection is None:
+            # Clean up stale connections before creating a new one
+            self._cleanup_stale_connections()
+
             self._local.connection = sqlite3.connect(
                 str(self.db_path),
                 detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
@@ -103,6 +106,30 @@ class JarvisDBBase:
         except Exception:
             conn.rollback()
             raise
+
+    def _cleanup_stale_connections(self) -> None:
+        """Remove connections for threads that are no longer alive.
+    
+        Called periodically during new connection creation to prevent
+        the connection set from growing unbounded.
+        """
+        with self._connections_lock:
+            # Track which connections are still valid
+            active_connections: set[sqlite3.Connection] = set()
+    
+            for conn in self._all_connections:
+                try:
+                    # Try to execute a simple query to check if connection is still valid
+                    conn.execute("SELECT 1")
+                    active_connections.add(conn)
+                except Exception:
+                    # Connection is stale or broken, close it
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+    
+            self._all_connections = active_connections
 
     def close(self) -> None:
         """Close all thread-local connections."""

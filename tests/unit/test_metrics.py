@@ -260,8 +260,11 @@ class TestTTLCache:
         assert found is False
         assert value is None
 
-    def test_ttl_expiration(self):
+    def test_ttl_expiration(self, monkeypatch):
         """Cache entries expire after TTL."""
+        fake_time = [1000.0]
+        monkeypatch.setattr(time, "time", lambda: fake_time[0])
+
         cache = TTLCache(ttl_seconds=0.1)
         cache.set("key", "value")
 
@@ -269,8 +272,8 @@ class TestTTLCache:
         found, _ = cache.get("key")
         assert found is True
 
-        # Wait for expiration
-        time.sleep(0.15)
+        # Advance time past TTL
+        fake_time[0] = 1000.15
 
         found, _ = cache.get("key")
         assert found is False

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from jarvis.metrics import TTLCache
+from jarvis.db.models import TTLCache
 from jarvis.observability.insights import (
     EMOJI_PATTERN,
     analyze_sentiment,

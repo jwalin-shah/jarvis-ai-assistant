@@ -47,7 +47,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, cast
@@ -280,8 +280,10 @@ class FeedbackStore:
                         try:
                             conn.execute(statement)
                         except sqlite3.OperationalError as e:
-                            # Ignore "duplicate column" errors from re-runs
-                            if "duplicate column" not in str(e).lower():
+                            # Only ignore duplicate column errors from re-runs
+                            # Re-raise all other SQLite errors
+                            error_msg = str(e).lower()
+                            if "duplicate column" not in error_msg:
                                 raise
 
             # Create version tracking table if needed
@@ -371,7 +373,7 @@ class FeedbackStore:
                     details={"action": action},
                 )
 
-        timestamp = timestamp or datetime.now()
+        timestamp = timestamp or datetime.now(timezone.utc)
         metadata_json = None
         if metadata:
             metadata_json = json.dumps(metadata)
@@ -451,7 +453,7 @@ class FeedbackStore:
                     if isinstance(action, str):
                         action = FeedbackAction(action)
 
-                    timestamp = item.get("timestamp") or datetime.now()
+                    timestamp = item.get("timestamp") or datetime.now(timezone.utc)
                     metadata = item.get("metadata")
                     metadata_json = json.dumps(metadata) if metadata else None
 
@@ -792,7 +794,7 @@ class FeedbackStore:
         Returns:
             List of DailyStats, one per day with data, ordered by date descending.
         """
-        start_date = datetime.now() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         with self.connection() as conn:
             cursor = conn.execute(
