@@ -66,16 +66,14 @@ export async function initDatabases(): Promise<void> {
   }
 
   try {
-    // Dynamically import the Tauri SQL plugin
-    if (!Database) {
-      const module = await import("@tauri-apps/plugin-sql");
-      Database = module.default;
-    }
-
-    // Resolve home directory via Tauri API (process.env.HOME is undefined in WebView)
-    if (!resolvedHomePath) {
-      const { homeDir } = await import("@tauri-apps/api/path");
-      resolvedHomePath = await homeDir();
+    // Parallelize dynamic imports and home directory resolution
+    const [sqlModule, pathModule] = await Promise.all([
+      Database ? Promise.resolve(null) : import("@tauri-apps/plugin-sql"),
+      resolvedHomePath ? Promise.resolve(null) : import("@tauri-apps/api/path"),
+    ]);
+    if (sqlModule) Database = sqlModule.default;
+    if (pathModule && !resolvedHomePath) {
+      resolvedHomePath = await pathModule.homeDir();
     }
 
     // Open chat.db in read-only mode via URI

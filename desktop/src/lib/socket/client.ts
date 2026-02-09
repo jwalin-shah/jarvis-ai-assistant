@@ -261,6 +261,11 @@ class JarvisSocket {
     if (this.cleanupInterval) return;
 
     this.cleanupInterval = setInterval(() => {
+      // Don't clean up if socket is disconnected (already handled by onclose)
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
       const now = Date.now();
       for (const [requestId, pending] of this.wsPendingRequests) {
         const timeout = pending.isStreaming ? STREAMING_TIMEOUT : REQUEST_TIMEOUT;
@@ -378,6 +383,13 @@ class JarvisSocket {
           this.state = "disconnected";
           this.ws = null;
           this.stopStaleRequestCleanup();
+          // Clear batch timer and reject pending batch requests
+          if (this.batchTimer) {
+            clearTimeout(this.batchTimer);
+            this.batchTimer = null;
+          }
+          this.batchQueue.forEach((req) => req.reject(new Error("WebSocket disconnected")));
+          this.batchQueue = [];
           // Reject all pending requests on disconnect
           for (const [requestId, pending] of this.wsPendingRequests) {
             pending.reject(new Error("WebSocket disconnected"));
@@ -657,6 +669,15 @@ class JarvisSocket {
 
     // Nothing to flush
     if (this.batchQueue.length === 0) {
+      return;
+    }
+
+    // Check if WebSocket is still connected before sending
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn("[JarvisSocket] Cannot flush batch: WebSocket not connected");
+      // Reject all pending batch requests
+      this.batchQueue.forEach((req) => req.reject(new Error("WebSocket not connected")));
+      this.batchQueue = [];
       return;
     }
 

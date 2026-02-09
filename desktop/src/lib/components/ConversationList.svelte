@@ -141,6 +141,7 @@
   let topicsMap: Map<string, Topic[]> = $state(new Map());
   let allTopicsMap: Map<string, Topic[]> = $state(new Map());
   let loadingTopics: Set<string> = $state(new Set());
+  let topicFetchControllers: Map<string, AbortController> = $state(new Map());
 
   let cleanup: (() => void) | null = null;
 
@@ -195,45 +196,73 @@
         URL.revokeObjectURL(url);
       }
     });
+    // Abort all pending topic fetches
+    topicFetchControllers.forEach((controller) => {
+      controller.abort();
+    });
   });
 
-  // Track conversation count to avoid re-fetching topics on every store update
+  // Track conversation count and IDs to avoid re-fetching topics on every store update
   let prevConversationCount = 0;
+  let prevConversationIds = "";
 
-  // Fetch topics when conversations are loaded (only when count changes)
+  // Fetch topics when conversations are loaded (only when actual data changes)
   $effect(() => {
     const count = $conversationsStore.conversations.length;
-    if (count > 0 && count !== prevConversationCount) {
+    // Create a stable string of chat_ids to detect actual changes (not just reference updates)
+    const currentIds = $conversationsStore.conversations.slice(0, 20).map(c => c.chat_id).join(",");
+
+    if (count > 0 && (count !== prevConversationCount || currentIds !== prevConversationIds)) {
       prevConversationCount = count;
+      prevConversationIds = currentIds;
       fetchTopicsForConversations();
     }
   });
 
   async function fetchTopicsForConversations() {
-    // Fetch topics for visible conversations (first 20)
+    // Fetch topics for visible conversations (first 20) in parallel
     const visibleConvs = $conversationsStore.conversations.slice(0, 20);
-    for (const conv of visibleConvs) {
-      if (!topicsMap.has(conv.chat_id) && !loadingTopics.has(conv.chat_id)) {
-        fetchTopicsForChat(conv.chat_id);
-      }
-    }
+    const toFetch = visibleConvs.filter(
+      conv => !topicsMap.has(conv.chat_id) && !loadingTopics.has(conv.chat_id)
+    );
+
+    // Batch fetch in parallel (Promise.all waits for all to complete)
+    await Promise.all(toFetch.map(conv => fetchTopicsForChat(conv.chat_id)));
   }
 
   async function fetchTopicsForChat(chatId: string) {
+    // Cancel any existing fetch for this chat
+    const existingController = topicFetchControllers.get(chatId);
+    if (existingController) {
+      existingController.abort();
+    }
+
+    const controller = new AbortController();
+    topicFetchControllers.set(chatId, controller);
+    topicFetchControllers = topicFetchControllers;
+
     loadingTopics.add(chatId);
     loadingTopics = loadingTopics;
     try {
       const response = await api.getTopics(chatId);
+
+      // Check if request was aborted
+      if (controller.signal.aborted) return;
+
       topicsMap.set(chatId, response.topics);
       allTopicsMap.set(chatId, response.all_topics);
       topicsMap = topicsMap;
       allTopicsMap = allTopicsMap;
     } catch (error) {
+      // Ignore abort errors
+      if (error instanceof Error && error.name === "AbortError") return;
       // Silently fail - topics are optional
       console.debug("Failed to fetch topics for", chatId, error);
     } finally {
       loadingTopics.delete(chatId);
       loadingTopics = loadingTopics;
+      topicFetchControllers.delete(chatId);
+      topicFetchControllers = topicFetchControllers;
     }
   }
 
@@ -255,10 +284,24 @@
     };
   }
 
+  // Semaphore for limiting concurrent avatar loads
+  const MAX_CONCURRENT_AVATARS = 3;
+  let activeAvatarLoads = 0;
+  let avatarQueue: string[] = [];
+
   // Load avatar for a given identifier
   async function loadAvatar(identifier: string) {
     if (avatarStates.get(identifier) === "loading") return;
 
+    // If at capacity, queue the request
+    if (activeAvatarLoads >= MAX_CONCURRENT_AVATARS) {
+      if (!avatarQueue.includes(identifier)) {
+        avatarQueue.push(identifier);
+      }
+      return;
+    }
+
+    activeAvatarLoads++;
     avatarStates.set(identifier, "loading");
     avatarStates = avatarStates; // Trigger reactivity
 
@@ -286,8 +329,24 @@
       avatarStates = avatarStates;
     } catch (error) {
       console.error(`Failed to load avatar for ${identifier}:`, error);
+      // Revoke any existing URL on error and clear it
+      const existingUrl = avatarUrls.get(identifier);
+      if (existingUrl && existingUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(existingUrl);
+      }
+      avatarUrls.delete(identifier);
+      avatarUrls = avatarUrls;
       avatarStates.set(identifier, "error");
       avatarStates = avatarStates;
+    } finally {
+      activeAvatarLoads--;
+      // Process next item in queue
+      if (avatarQueue.length > 0) {
+        const next = avatarQueue.shift();
+        if (next) {
+          loadAvatar(next);
+        }
+      }
     }
   }
 

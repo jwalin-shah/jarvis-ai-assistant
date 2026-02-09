@@ -337,11 +337,109 @@ class VecSearcher:
         Returns:
             Number of segments successfully indexed.
         """
-        count = 0
+        if not segments:
+            return 0
+
+        import json
+
+        # Prepare batch data
+        vec_chunks_batch = []
+
         for segment in segments:
-            if self.index_segment(segment, contact_id, chat_id):
-                count += 1
-        return count
+            if segment.centroid is None or not segment.messages:
+                continue
+
+            # Collect trigger/response text
+            trigger_parts = [m.text for m in segment.messages if not m.is_from_me and m.text]
+            response_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
+
+            trigger_text = "\n".join(trigger_parts) if trigger_parts else None
+            response_text = "\n".join(response_parts) if response_parts else None
+
+            # Skip segments with no response text
+            if not response_text:
+                continue
+
+            int8_blob = self._quantize_embedding(segment.centroid)
+            binary_blob = self._binarize_embedding(segment.centroid)
+
+            vec_chunks_batch.append(
+                (
+                    int8_blob,
+                    contact_id or 0,
+                    chat_id or "",
+                    "",  # response_da_type
+                    segment.start_time.timestamp(),
+                    segment.confidence or 0.0,
+                    segment.topic_label,
+                    trigger_text,
+                    response_text,
+                    segment.text[:500],  # formatted_text preview
+                    json.dumps(segment.keywords) if segment.keywords else None,
+                    segment.message_count,
+                    "chunk",
+                    segment.segment_id,
+                    binary_blob,  # Store for vec_binary insert
+                )
+            )
+
+        if not vec_chunks_batch:
+            return 0
+
+        try:
+            with self.db.connection() as conn:
+                # Batch insert into vec_chunks
+                cursor = conn.executemany(
+                    """
+                    INSERT INTO vec_chunks(
+                        embedding,
+                        contact_id,
+                        chat_id,
+                        response_da_type,
+                        source_timestamp,
+                        quality_score,
+                        topic_label,
+                        trigger_text,
+                        response_text,
+                        formatted_text,
+                        keywords_json,
+                        message_count,
+                        source_type,
+                        source_id
+                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7],
+                      row[8], row[9], row[10], row[11], row[12], row[13])
+                     for row in vec_chunks_batch],
+                )
+
+                # Get rowids of inserted chunks (lastrowid + count)
+                # We'll use the last insert rowid and count backwards
+                last_rowid = cursor.lastrowid
+                count = cursor.rowcount
+                chunk_rowids = list(range(last_rowid - count + 1, last_rowid + 1))
+
+                # Batch insert into vec_binary
+                try:
+                    binary_batch = [
+                        (row[14], chunk_rowid, row[0])  # (binary_blob, chunk_rowid, int8_blob)
+                        for row, chunk_rowid in zip(vec_chunks_batch, chunk_rowids)
+                    ]
+                    conn.executemany(
+                        """
+                        INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8)
+                        VALUES (vec_bit(?), ?, ?)
+                        """,
+                        binary_batch,
+                    )
+                except Exception as e:
+                    logger.debug("vec_binary batch insert skipped: %s", e)
+
+                return count
+
+        except Exception as e:
+            logger.error("Failed to batch index segments: %s", e)
+            return 0
 
     def delete_chunks_for_chat(self, chat_id: str) -> int:
         """Delete all chunks for a chat_id. Returns count deleted."""

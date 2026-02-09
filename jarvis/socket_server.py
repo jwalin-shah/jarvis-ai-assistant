@@ -18,6 +18,7 @@ Features speculative prefetching for near-instant responses:
 """
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -119,6 +120,7 @@ class JarvisSocketServer:
         self._streaming_methods: set[str] = set()  # Methods that support streaming
         self._clients: set[asyncio.StreamWriter] = set()  # Unix socket clients
         self._ws_clients: set[ServerConnection] = set()  # WebSocket clients
+        self._clients_lock = asyncio.Lock()  # Protect client set mutations
         self._ws_auth_token: str | None = None
         self._running = False
         self._enable_watcher = enable_watcher
@@ -278,7 +280,12 @@ class JarvisSocketServer:
             logger.info("Preloading models in background...")
 
             # Load models sequentially to avoid memory spike on 8GB systems
-            for loader in [self._preload_llm, self._preload_embeddings, self._preload_vec_index]:
+            for loader in [
+                self._preload_llm,
+                self._preload_embeddings,
+                self._preload_cross_encoder,
+                self._preload_vec_index,
+            ]:
                 try:
                     await asyncio.to_thread(loader)
                 except Exception as e:
@@ -353,6 +360,18 @@ class JarvisSocketServer:
         except Exception as e:
             logger.debug(f"Embeddings preload skipped: {e}")
 
+    def _preload_cross_encoder(self) -> None:
+        """Preload the cross-encoder reranker model (sync)."""
+        try:
+            from models.cross_encoder import get_cross_encoder
+
+            ce = get_cross_encoder()
+            if ce and not ce.is_loaded:
+                ce.load_model()
+                logger.debug("Cross-encoder model preloaded")
+        except Exception as e:
+            logger.debug(f"Cross-encoder preload skipped: {e}")
+
     def _preload_vec_index(self) -> None:
         """Preload vec searcher and backfill vec_binary if needed (sync)."""
         try:
@@ -404,21 +423,22 @@ class JarvisSocketServer:
             self._preload_task = None
 
         # Close all Unix socket client connections
-        for writer in self._clients.copy():
-            try:
-                writer.close()
-                await writer.wait_closed()
-            except Exception:
-                pass
-        self._clients.clear()
+        async with self._clients_lock:
+            for writer in self._clients.copy():
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+            self._clients.clear()
 
-        # Close all WebSocket client connections
-        for ws in self._ws_clients.copy():
-            try:
-                await ws.close()
-            except Exception:
-                pass
-        self._ws_clients.clear()
+            # Close all WebSocket client connections
+            for ws in self._ws_clients.copy():
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
+            self._ws_clients.clear()
 
         # Stop Unix socket server
         if self._server:
@@ -458,19 +478,20 @@ class JarvisSocketServer:
         )
 
         # Broadcast to Unix socket clients
-        for writer in self._clients.copy():
-            try:
-                writer.write(notification.encode() + b"\n")
-                await writer.drain()
-            except Exception:
-                self._clients.discard(writer)
+        async with self._clients_lock:
+            for writer in self._clients.copy():
+                try:
+                    writer.write(notification.encode() + b"\n")
+                    await writer.drain()
+                except Exception:
+                    self._clients.discard(writer)
 
-        # Broadcast to WebSocket clients
-        for ws in self._ws_clients.copy():
-            try:
-                await ws.send(notification)
-            except Exception:
-                self._ws_clients.discard(ws)
+            # Broadcast to WebSocket clients
+            for ws in self._ws_clients.copy():
+                try:
+                    await ws.send(notification)
+                except Exception:
+                    self._ws_clients.discard(ws)
 
         # Hook into prefetch system for new message events
         if method == "new_message" and self._prefetch_manager:
@@ -494,7 +515,8 @@ class JarvisSocketServer:
             reader: Stream reader
             writer: Stream writer
         """
-        self._clients.add(writer)
+        async with self._clients_lock:
+            self._clients.add(writer)
         peer = writer.get_extra_info("peername")
         logger.debug(f"Client connected: {peer}")
 
@@ -524,11 +546,14 @@ class JarvisSocketServer:
                 except TimeoutError:
                     break  # Client idle timeout
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.debug(f"Client error: {e}")
 
         finally:
-            self._clients.discard(writer)
+            async with self._clients_lock:
+                self._clients.discard(writer)
             try:
                 writer.close()
                 await writer.wait_closed()
@@ -567,7 +592,8 @@ class JarvisSocketServer:
             await websocket.close(4002, "Too many connections")
             return
 
-        self._ws_clients.add(websocket)
+        async with self._clients_lock:
+            self._ws_clients.add(websocket)
         logger.debug(f"WebSocket client connected: {websocket.remote_address}")
 
         try:
@@ -585,12 +611,15 @@ class JarvisSocketServer:
                     if response:  # May be None for streaming (already sent)
                         await websocket.send(response)
 
+        except asyncio.CancelledError:
+            raise
         except websockets.ConnectionClosed:
             pass
         except Exception as e:
             logger.warning(f"WebSocket client error: {e}")
         finally:
-            self._ws_clients.discard(websocket)
+            async with self._clients_lock:
+                self._ws_clients.discard(websocket)
             logger.debug(f"WebSocket client disconnected: {websocket.remote_address}")
 
     async def _process_message(
@@ -627,9 +656,9 @@ class JarvisSocketServer:
             return self._error_response(request_id, METHOD_NOT_FOUND, f"Method not found: {method}")
 
         # Check if streaming is requested and supported
-        # Make a shallow copy to avoid mutating the original params
+        # Make a deep copy to avoid mutating the original params (handles nested dicts/lists)
         if isinstance(params, dict):
-            params = dict(params)
+            params = copy.deepcopy(params)
         stream_requested = isinstance(params, dict) and params.pop("stream", False)
         supports_streaming = method in self._streaming_methods
 
@@ -657,6 +686,8 @@ class JarvisSocketServer:
 
                 return self._success_response(request_id, result)
 
+        except asyncio.CancelledError:
+            raise
         except JsonRpcError as e:
             return self._error_response(request_id, e.code, e.message, e.data)
 

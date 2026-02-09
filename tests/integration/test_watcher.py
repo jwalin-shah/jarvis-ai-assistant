@@ -64,6 +64,7 @@ class TestChatDBWatcherLifecycle:
     """Tests for watcher start/stop lifecycle."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_watcher_start_sets_running(self):
         """Start sets running flag and initializes last_rowid."""
         handler = MockBroadcastHandler()
@@ -77,6 +78,7 @@ class TestChatDBWatcherLifecycle:
         assert watcher._last_rowid == 100
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_watcher_stop_clears_running(self):
         """Stop clears running flag."""
         handler = MockBroadcastHandler()
@@ -95,6 +97,7 @@ class TestChatDBWatcherLifecycle:
         assert watcher._task is None
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_watcher_stop_is_idempotent(self):
         """Stop can be called multiple times safely."""
         handler = MockBroadcastHandler()
@@ -109,6 +112,7 @@ class TestDebouncing:
     """Tests for debounce behavior."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_debounce_coalesces_rapid_changes(self):
         """Rapid changes are coalesced into single check."""
         handler = MockBroadcastHandler()
@@ -135,6 +139,7 @@ class TestDebouncing:
             assert check_count == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_debounce_subsequent_changes_trigger_new_check(self):
         """Changes after debounce window trigger new check."""
         handler = MockBroadcastHandler()
@@ -166,6 +171,7 @@ class TestNewMessageDetection:
     """Tests for new message detection."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_check_new_messages_broadcasts_notification(self):
         """New messages trigger broadcast notifications."""
         handler = MockBroadcastHandler()
@@ -194,6 +200,7 @@ class TestNewMessageDetection:
         assert params["is_from_me"] is False
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_check_new_messages_updates_last_rowid(self):
         """Last ROWID is updated after finding new messages."""
         handler = MockBroadcastHandler()
@@ -234,6 +241,7 @@ class TestNewMessageDetection:
         assert watcher._last_rowid == 105
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_check_new_messages_no_update_when_empty(self):
         """Last ROWID not updated when no new messages."""
         handler = MockBroadcastHandler()
@@ -247,6 +255,7 @@ class TestNewMessageDetection:
         assert len(handler.broadcasts) == 0
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_check_new_messages_handles_errors(self):
         """Errors during check don't crash the watcher."""
         handler = MockBroadcastHandler()
@@ -265,6 +274,7 @@ class TestPollingMode:
     """Tests for polling mode behavior."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_polling_checks_file_modification(self):
         """Polling mode checks file modification time."""
         handler = MockBroadcastHandler()
@@ -290,6 +300,7 @@ class TestPollingMode:
         assert check_count == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_polling_skips_unchanged_file(self):
         """Polling skips check if file hasn't changed."""
         handler = MockBroadcastHandler()
@@ -368,6 +379,7 @@ class TestMultipleMessages:
     """Tests for handling multiple new messages."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_broadcasts_each_message_separately(self):
         """Each new message gets its own broadcast."""
         handler = MockBroadcastHandler()
@@ -412,6 +424,7 @@ class TestMultipleMessages:
         assert "Hello" in texts
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_handles_from_me_messages(self):
         """Messages from user are handled correctly."""
         handler = MockBroadcastHandler()
@@ -441,6 +454,7 @@ class TestFSEventsFallback:
     """Tests for FSEvents to polling fallback."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_fallback_to_polling_on_error(self):
         """Falls back to polling when FSEvents fails."""
         handler = MockBroadcastHandler()
@@ -461,6 +475,7 @@ class TestStopEvent:
     """Tests for the stop event mechanism."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_make_stop_event_sets_when_stopped(self):
         """Stop event is set when running becomes False."""
         handler = MockBroadcastHandler()
@@ -475,7 +490,10 @@ class TestStopEvent:
         # Stop the watcher
         watcher._running = False
 
-        # Wait a bit for the monitor to detect it
-        await asyncio.sleep(0.6)
+        # Poll for event to be set (up to 1 second)
+        for _ in range(20):
+            if event.is_set():
+                break
+            await asyncio.sleep(0.05)
 
         assert event.is_set()

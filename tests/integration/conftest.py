@@ -377,11 +377,3 @@ def mock_work_messages() -> list[Message]:
 def intent_classifier() -> MockIntentClassifier:
     """Get a mock intent classifier."""
     return MockIntentClassifier()
-
-
-@pytest.fixture
-def api_client():
-    """Create a test client for the socket server API."""
-    # The old FastAPI app (jarvis.api) was removed in favor of the socket server.
-    # Integration tests for the API now use test_socket_server.py instead.
-    pytest.skip("jarvis.api was removed; use socket server tests instead")

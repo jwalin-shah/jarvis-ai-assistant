@@ -408,8 +408,14 @@ class MLXModelLoader:
         self._model = None
         self._tokenizer = None
         self._loaded_at = None
+        # Explicitly delete prompt cache before setting to None
+        if self._prompt_cache is not None:
+            del self._prompt_cache
         self._prompt_cache = None
         self._cache_prefix_len = 0
+        # Explicitly delete draft model before setting to None
+        if self._draft_model is not None:
+            del self._draft_model
         self._draft_model = None
         self._draft_config = None
 
@@ -574,20 +580,23 @@ class MLXModelLoader:
         max_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        min_p: float | None = None,
         top_k: int | None = None,
         repetition_penalty: float | None = None,
         stop_sequences: list[str] | None = None,
         timeout_seconds: float | None = None,
         prompt_cache: list[Any] | None = None,
         num_draft_tokens: int | None = None,
+        pre_formatted: bool = False,
     ) -> GenerationResult:
         """Generate text synchronously.
 
         Args:
             prompt: Input prompt text
             max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (LFM optimal: 0.1)
+            temperature: Sampling temperature (LFM optimal: 0.3)
             top_p: Nucleus sampling threshold (LFM optimal: 0.1)
+            min_p: Minimum probability threshold (LFM optimal: 0.15)
             top_k: Top-k sampling limit (LFM optimal: 50)
             repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
             stop_sequences: Strings that stop generation
@@ -631,14 +640,18 @@ class MLXModelLoader:
             effective_timeout = self.config.generation_timeout_seconds
 
         try:
-            # Format prompt for chat template
-            messages = [{"role": "user", "content": prompt}]
-            formatted_prompt = self._tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
+            # Format prompt for chat template (skip if already formatted)
+            if pre_formatted:
+                formatted_prompt = prompt
+            else:
+                messages = [{"role": "user", "content": prompt}]
+                formatted_prompt = self._tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
 
             # Create sampler with LFM-optimal parameters
-            sampler = make_sampler(temp=temperature, top_p=top_p, top_k=top_k)
+            min_p = min_p if min_p is not None else 0.0
+            sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
 
             # Create logits processors for repetition penalty
             logits_processors = None
@@ -781,12 +794,14 @@ class MLXModelLoader:
         max_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        min_p: float | None = None,
         top_k: int | None = None,
         repetition_penalty: float | None = None,
         stop_sequences: list[str] | None = None,
         stop_event: threading.Event | None = None,
         prompt_cache: list[Any] | None = None,
         num_draft_tokens: int | None = None,
+        pre_formatted: bool = False,
     ) -> Any:
         """Generate text with true streaming output (yields tokens as generated).
 
@@ -795,8 +810,9 @@ class MLXModelLoader:
         Args:
             prompt: Input prompt text
             max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (LFM optimal: 0.1)
+            temperature: Sampling temperature (LFM optimal: 0.3)
             top_p: Nucleus sampling threshold (LFM optimal: 0.1)
+            min_p: Minimum probability threshold (LFM optimal: 0.15)
             top_k: Top-k sampling limit (LFM optimal: 50)
             repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
             stop_sequences: Strings that stop generation
@@ -831,14 +847,18 @@ class MLXModelLoader:
         repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
 
         try:
-            # Format prompt for chat template
-            messages = [{"role": "user", "content": prompt}]
-            formatted_prompt = self._tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
+            # Format prompt for chat template (skip if already formatted)
+            if pre_formatted:
+                formatted_prompt = prompt
+            else:
+                messages = [{"role": "user", "content": prompt}]
+                formatted_prompt = self._tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
 
             # Create sampler with LFM-optimal parameters
-            sampler = make_sampler(temp=temperature, top_p=top_p, top_k=top_k)
+            min_p = min_p if min_p is not None else 0.0
+            sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
 
             # Create logits processors for repetition penalty
             logits_processors = None

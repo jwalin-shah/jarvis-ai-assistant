@@ -37,6 +37,7 @@ class TestChatDBWatcher:
         assert watcher._task is None
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_start_stop(self, watcher: ChatDBWatcher) -> None:
         """Watcher can start and stop."""
         with patch.object(watcher, "_validate_schema", return_value=True):
@@ -53,6 +54,7 @@ class TestChatDBWatcher:
                     assert watcher._running is False
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_query_last_rowid(self, watcher: ChatDBWatcher) -> None:
         """Can query the last message ROWID."""
         with patch("jarvis.watcher.CHAT_DB_PATH") as mock_path:
@@ -62,6 +64,7 @@ class TestChatDBWatcher:
             assert result is None
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_query_new_messages_no_db(self, watcher: ChatDBWatcher) -> None:
         """Returns empty list when database doesn't exist."""
         with patch("jarvis.watcher.CHAT_DB_PATH") as mock_path:
@@ -71,6 +74,7 @@ class TestChatDBWatcher:
             assert result == []
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_check_new_messages(
         self, watcher: ChatDBWatcher, handler: MockBroadcastHandler
     ) -> None:
@@ -102,6 +106,7 @@ class TestChatDBWatcher:
             assert watcher._last_rowid == 101
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_check_new_messages_updates_max_rowid(
         self, watcher: ChatDBWatcher, handler: MockBroadcastHandler
     ) -> None:

@@ -35,7 +35,9 @@ pub fn run() {
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         // Hide the window instead of closing
-                        let _ = window_clone.hide();
+                        if let Err(e) = window_clone.hide() {
+                            eprintln!("[App] Failed to hide window on close request: {}", e);
+                        }
                         api.prevent_close();
                     }
                 });
@@ -44,5 +46,5 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("Failed to run JARVIS Tauri application - check that all dependencies are available and the configuration is valid");
 }

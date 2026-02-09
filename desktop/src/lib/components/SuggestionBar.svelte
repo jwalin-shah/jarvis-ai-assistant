@@ -66,6 +66,8 @@
 
   function handleClose() {
     abortController?.abort();
+    streamingText = "";
+    barState = "loading";
     onClose();
   }
 

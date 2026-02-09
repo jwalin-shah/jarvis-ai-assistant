@@ -100,7 +100,14 @@ class PairSearchMixin:
         if pattern_type == "acknowledgment":
             placeholders = ",".join("?" * len(self._ACK_TRIGGERS))
             query = f"""
-                SELECT * FROM pairs
+                SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,
+                       response_timestamp, chat_id, trigger_msg_id, response_msg_id,
+                       trigger_msg_ids_json, response_msg_ids_json, context_text,
+                       quality_score, flags_json, is_group, is_holdout,
+                       gate_a_passed, gate_b_score, gate_c_verdict, validity_status,
+                       trigger_da_type, trigger_da_conf, response_da_type,
+                       response_da_conf, cluster_id
+                FROM pairs
                 WHERE contact_id = ?
                 AND LOWER(TRIM(trigger_text)) IN ({placeholders})
                 AND quality_score >= 0.5
@@ -162,7 +169,14 @@ class PairSearchMixin:
 
             # Use window function to limit per contact
             query = f"""
-                SELECT * FROM (
+                SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,
+                       response_timestamp, chat_id, trigger_msg_id, response_msg_id,
+                       trigger_msg_ids_json, response_msg_ids_json, context_text,
+                       quality_score, flags_json, is_group, is_holdout,
+                       gate_a_passed, gate_b_score, gate_c_verdict, validity_status,
+                       trigger_da_type, trigger_da_conf, response_da_type,
+                       response_da_conf, cluster_id
+                FROM (
                     SELECT *, ROW_NUMBER() OVER (
                         PARTITION BY contact_id ORDER BY trigger_timestamp DESC
                     ) as rn

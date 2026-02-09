@@ -36,6 +36,7 @@ class TestJsonRpcProtocol:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_parse_error_on_invalid_json(self, server):
         """Invalid JSON returns parse error."""
         response = await server._process_message("not valid json")
@@ -47,6 +48,7 @@ class TestJsonRpcProtocol:
         assert "Parse error" in data["error"]["message"]
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_invalid_request_when_not_dict(self, server):
         """Non-dict request returns invalid request error."""
         response = await server._process_message('"just a string"')
@@ -56,6 +58,7 @@ class TestJsonRpcProtocol:
         assert "Invalid request" in data["error"]["message"]
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_invalid_request_when_missing_method(self, server):
         """Missing method returns invalid request error."""
         response = await server._process_message('{"jsonrpc": "2.0", "id": 1}')
@@ -65,6 +68,7 @@ class TestJsonRpcProtocol:
         assert "Missing method" in data["error"]["message"]
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_method_not_found(self, server):
         """Unknown method returns method not found error."""
         request = json.dumps(
@@ -82,6 +86,7 @@ class TestJsonRpcProtocol:
         assert "nonexistent_method" in data["error"]["message"]
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_success_response_format(self, server):
         """Successful request returns properly formatted response."""
         request = json.dumps(
@@ -100,6 +105,7 @@ class TestJsonRpcProtocol:
         assert data["result"]["status"] == "ok"
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_request_id_preserved(self, server):
         """Request ID is preserved in response."""
         request = json.dumps(
@@ -127,6 +133,7 @@ class TestPingMethod:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_ping_returns_ok(self, server):
         """Ping returns ok status."""
         result = await server._ping()
@@ -135,6 +142,7 @@ class TestPingMethod:
         assert "models_ready" in result
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_ping_models_ready_initially_false(self, server):
         """Ping shows models_ready as False initially."""
         result = await server._ping()
@@ -142,6 +150,7 @@ class TestPingMethod:
         assert result["models_ready"] is False
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_ping_via_rpc(self, server):
         """Ping works via JSON-RPC."""
         request = json.dumps(
@@ -170,6 +179,7 @@ class TestBatchOperations:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_batch_empty_requests(self, server):
         """Empty batch returns empty results."""
         result = await server._batch(requests=[])
@@ -177,6 +187,7 @@ class TestBatchOperations:
         assert result == {"results": []}
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_batch_multiple_pings(self, server):
         """Batch multiple ping requests."""
         result = await server._batch(
@@ -193,6 +204,7 @@ class TestBatchOperations:
             assert r["result"]["status"] == "ok"
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_batch_preserves_ids(self, server):
         """Batch preserves request IDs."""
         result = await server._batch(
@@ -206,6 +218,7 @@ class TestBatchOperations:
         assert ids == {"first", "second"}
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_batch_handles_errors(self, server):
         """Batch handles individual errors."""
         result = await server._batch(
@@ -225,6 +238,7 @@ class TestBatchOperations:
         assert result["results"][1]["error"]["code"] == METHOD_NOT_FOUND
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_batch_missing_method_error(self, server):
         """Batch returns error for missing method."""
         result = await server._batch(
@@ -238,6 +252,7 @@ class TestBatchOperations:
         assert result["results"][0]["error"]["code"] == INVALID_REQUEST
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_batch_max_requests_limit(self, server):
         """Batch rejects more than 50 requests."""
         with pytest.raises(JsonRpcError) as exc_info:
@@ -247,6 +262,7 @@ class TestBatchOperations:
         assert "50" in exc_info.value.message
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_batch_runs_in_parallel(self, server):
         """Batch executes requests in parallel."""
         # Track order of execution
@@ -270,7 +286,9 @@ class TestBatchOperations:
         assert len(result["results"]) == 2
         # If parallel, we'd see start, start, end, end
         # If sequential, we'd see start, end, start, end
-        # Due to async timing, just verify all completed
+        # Verify parallel execution: both handlers started before either finished
+        assert execution_order[0] == "start"
+        assert execution_order[1] == "start"
         assert execution_order.count("start") == 2
         assert execution_order.count("end") == 2
 
@@ -287,6 +305,7 @@ class TestMethodRegistration:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_register_custom_method(self, server):
         """Register and call a custom method."""
 
@@ -309,6 +328,7 @@ class TestMethodRegistration:
         assert data["result"]["greeting"] == "Hello, Alice!"
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_register_streaming_method(self, server):
         """Register a streaming method."""
 
@@ -324,6 +344,7 @@ class TestMethodRegistration:
         assert "stream_test" in server._streaming_methods
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_method_invalid_params_error(self, server):
         """Invalid params returns appropriate error."""
 
@@ -346,6 +367,7 @@ class TestMethodRegistration:
         assert data["error"]["code"] == INVALID_PARAMS
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_method_internal_error(self, server):
         """Handler exception returns internal error."""
 
@@ -382,6 +404,7 @@ class TestWebSocketWriter:
         assert writer._buffer == "Hello World"
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_websocket_writer_drain_sends_data(self):
         """WebSocketWriter sends data on drain."""
         mock_ws = AsyncMock()
@@ -394,6 +417,7 @@ class TestWebSocketWriter:
         assert writer._buffer == ""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_websocket_writer_drain_empty_buffer(self):
         """WebSocketWriter drain with empty buffer is no-op."""
         mock_ws = AsyncMock()
@@ -416,12 +440,14 @@ class TestBroadcast:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_broadcast_to_no_clients(self, server):
         """Broadcast with no clients does nothing."""
         # Should not raise
         await server.broadcast("test_event", {"data": "value"})
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_broadcast_format(self, server):
         """Broadcast creates properly formatted notification."""
         # Add a mock client
@@ -454,6 +480,7 @@ class TestStreamingSupport:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_send_stream_token(self, server):
         """Send stream token creates proper notification."""
         mock_writer = AsyncMock()
@@ -471,6 +498,7 @@ class TestStreamingSupport:
         assert notification["params"]["final"] is False
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_send_stream_response(self, server):
         """Send stream response creates proper response."""
         mock_writer = AsyncMock()
@@ -491,6 +519,7 @@ class TestStreamingSupport:
         assert response["result"]["text"] == "Complete response"
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_streaming_removes_stream_param(self, server):
         """Stream param is removed before passing to handler."""
         received_params = []
@@ -520,6 +549,7 @@ class TestServerLifecycle:
     """Tests for server start/stop lifecycle."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_server_creates_with_watcher_disabled(self):
         """Server can be created with watcher disabled."""
         server = JarvisSocketServer(
@@ -532,6 +562,7 @@ class TestServerLifecycle:
         assert server._running is False
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_server_stop_clears_state(self):
         """Server stop clears all state."""
         server = JarvisSocketServer(
@@ -557,6 +588,7 @@ class TestServerLifecycle:
         assert len(server._ws_clients) == 0
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_wait_for_models_returns_immediately_if_ready(self):
         """wait_for_models returns True if models already ready."""
         server = JarvisSocketServer(
@@ -570,6 +602,7 @@ class TestServerLifecycle:
         assert result is True
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_wait_for_models_timeout(self):
         """wait_for_models returns False on timeout."""
         server = JarvisSocketServer(

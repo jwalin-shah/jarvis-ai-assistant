@@ -99,17 +99,25 @@ export const conversationsStore = writable<ConversationsState>(initialState);
 /**
  * Derived store for selected conversation.
  *
- * WARNING: Returns a NEW object reference on every conversationsStore update
- * (even when the selected conversation hasn't changed) because `.find()` returns
- * the array element which is recreated on each store spread.
- *
- * In `$effect` blocks, use `$conversationsStore.selectedChatId` (a string) instead
- * to avoid infinite loops caused by reference inequality triggering re-runs.
+ * Memoized to avoid re-emitting when the conversation data hasn't actually changed.
+ * Compares by chat_id to prevent infinite loops in $effect blocks.
  */
+let prevSelectedConv: { chat_id: string; data: Conversation | null } | null = null;
 export const selectedConversation = derived(
   conversationsStore,
-  ($state) =>
-    $state.conversations.find((c) => c.chat_id === $state.selectedChatId) || null
+  ($state) => {
+    const found = $state.conversations.find((c) => c.chat_id === $state.selectedChatId) || null;
+    const currentChatId = found?.chat_id ?? null;
+
+    // Return cached value if chat_id hasn't changed (same conversation, even if object reference differs)
+    if (prevSelectedConv && prevSelectedConv.chat_id === currentChatId) {
+      return prevSelectedConv.data;
+    }
+
+    // Update cache with new conversation
+    prevSelectedConv = { chat_id: currentChatId!, data: found };
+    return found;
+  }
 );
 
 // Derived store for connection status
@@ -171,6 +179,7 @@ let socketPushActive = false;
 let conversationFetchController: AbortController | null = null;
 let messageFetchController: AbortController | null = null;
 let loadMoreController: AbortController | null = null;
+let pollMessagesController: AbortController | null = null;
 
 /**
  * Update connection status
@@ -253,13 +262,27 @@ export function removeOptimisticMessage(id: string): void {
 }
 
 /**
- * Clear all optimistic messages (e.g., when switching conversations)
+ * Clear all optimistic messages for a specific conversation (e.g., when switching conversations)
+ * If no chatId is provided, clears all optimistic messages.
  */
-export function clearOptimisticMessages(): void {
-  conversationsStore.update((state) => ({
-    ...state,
-    optimisticMessages: [],
-  }));
+export function clearOptimisticMessages(chatId?: string): void {
+  conversationsStore.update((state) => {
+    if (!chatId) {
+      // Clear all optimistic messages
+      return {
+        ...state,
+        optimisticMessages: [],
+      };
+    }
+    // Only clear if we're leaving this conversation (i.e., it's not currently selected)
+    if (state.selectedChatId !== chatId) {
+      return {
+        ...state,
+        optimisticMessages: [],
+      };
+    }
+    return state;
+  });
 }
 
 /**
@@ -393,12 +416,12 @@ export async function pollMessages(): Promise<Message[]> {
     return [];
   }
 
-  // Cancel any in-flight message fetch
-  if (messageFetchController) {
-    messageFetchController.abort();
+  // Cancel any in-flight poll
+  if (pollMessagesController) {
+    pollMessagesController.abort();
   }
-  messageFetchController = new AbortController();
-  const signal = messageFetchController.signal;
+  pollMessagesController = new AbortController();
+  const signal = pollMessagesController.signal;
 
   try {
     // DELTA OPTIMIZATION: Check if any new messages exist globally before fetching
@@ -461,6 +484,12 @@ export async function pollMessages(): Promise<Message[]> {
  * Select a conversation and load its messages
  */
 export async function selectConversation(chatId: string): Promise<void> {
+  // Skip if re-selecting the same conversation (preserves prefetched draft)
+  const currentState = get(conversationsStore);
+  if (currentState.selectedChatId === chatId) {
+    return;
+  }
+
   // Cancel any in-flight message requests when switching conversations
   if (messageFetchController) {
     messageFetchController.abort();
@@ -470,12 +499,13 @@ export async function selectConversation(chatId: string): Promise<void> {
     loadMoreController.abort();
     loadMoreController = null;
   }
+  if (pollMessagesController) {
+    pollMessagesController.abort();
+    pollMessagesController = null;
+  }
 
   // Clear new message indicator when selecting
   clearNewMessageIndicator(chatId);
-
-  // Clear any previous prefetched draft
-  conversationsStore.update((state) => ({ ...state, prefetchedDraft: null }));
 
   // Trigger prefetch and capture response for auto-display
   jarvis
@@ -506,6 +536,7 @@ export async function selectConversation(chatId: string): Promise<void> {
       loadingMore: false,
       loadingMessages: false,
       error: null,
+      prefetchedDraft: null, // Clear draft when displaying cached messages
     }));
     // Start message polling for this conversation
     startMessagePolling();
@@ -540,6 +571,13 @@ export async function selectConversation(chatId: string): Promise<void> {
       console.log("[SelectConversation] Got messages:", messages.length);
     }
 
+    // Check if conversation changed during async fetch
+    const freshState = get(conversationsStore);
+    if (freshState.selectedChatId !== chatId) {
+      console.log("[SelectConversation] Conversation changed during fetch, discarding results");
+      return;
+    }
+
     // Reverse messages so oldest is at top, newest at bottom (API returns newest first)
     const chronologicalMessages = [...messages].reverse();
     // If we got fewer messages than requested, we've reached the end
@@ -556,11 +594,18 @@ export async function selectConversation(chatId: string): Promise<void> {
       messages: chronologicalMessages,
       loadingMessages: false,
       hasMore,
+      prefetchedDraft: null, // Clear draft when displaying fresh messages
     }));
 
     // Start message polling for this conversation
     startMessagePolling();
   } catch (error) {
+    // Check if conversation changed during error handling
+    const freshState = get(conversationsStore);
+    if (freshState.selectedChatId !== chatId) {
+      return;
+    }
+
     console.error("[SelectConversation] Error fetching messages:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch messages";
     conversationsStore.update((state) => ({
@@ -753,6 +798,10 @@ export function stopMessagePolling(): void {
     messageFetchController.abort();
     messageFetchController = null;
   }
+  if (pollMessagesController) {
+    pollMessagesController.abort();
+    pollMessagesController = null;
+  }
 }
 
 /**
@@ -766,11 +815,17 @@ export function setWindowFocused(focused: boolean): void {
 
   if (focused) {
     // Resume polling when window gains focus
-    const state = get(conversationsStore);
     fetchConversations(true);
+    startConversationPolling();
+    const state = get(conversationsStore);
     if (state.selectedChatId) {
       pollMessages();
+      startMessagePolling();
     }
+  } else {
+    // Stop polling when window loses focus to save CPU/battery
+    stopConversationPolling();
+    stopMessagePolling();
   }
 }
 
@@ -1000,18 +1055,22 @@ async function resolveContactNames(): Promise<void> {
  * Call this on app mount
  */
 export function initializePolling(): () => void {
-  // Initialize direct database access (async, non-blocking)
-  initializeDirectAccess();
+  // Initialize DB and socket in parallel for fastest startup
+  // DB init runs concurrently - once ready, subsequent fetches use fast direct SQLite
+  const dbReady = initializeDirectAccess();
 
-  // Initialize socket push notifications (async, non-blocking)
   initializeSocketPush().then(() => {
-    // After socket is connected and first conversations load,
-    // resolve contact names from the backend
     setTimeout(resolveContactNames, 2000);
   });
 
-  // Start conversation polling
+  // Start polling immediately (first fetch uses HTTP fallback if DB not ready yet)
+  // Once DB init completes, re-fetch with direct SQLite for faster data
   startConversationPolling();
+  dbReady.then((available) => {
+    if (available) {
+      fetchConversations(true);
+    }
+  });
 
   // Handle window focus/blur
   const handleFocus = () => setWindowFocused(true);

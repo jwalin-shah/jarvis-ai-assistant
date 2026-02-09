@@ -204,10 +204,16 @@
   }
 
   // Update visible range when scroll or messages change
+  let rafPending = false;
   function updateVirtualScroll() {
-    if (!messagesContainer) return;
-    const { scrollTop, clientHeight } = messagesContainer;
-    calculateVisibleRange(scrollTop, clientHeight);
+    if (!messagesContainer || rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      if (!messagesContainer) return;
+      const { scrollTop, clientHeight } = messagesContainer;
+      calculateVisibleRange(scrollTop, clientHeight);
+    });
   }
 
   // Scroll to a specific message by ID (for search navigation)
@@ -503,15 +509,28 @@
   let lastMessageCount = 0;
 
   // Update virtual scroll when messages change (only run once per actual change)
+  let lastLoadingState = false;
   $effect(() => {
     const msgCount = $conversationsStore.messages.length;
     const isLoading = $conversationsStore.loadingMessages;
+    const hasError = $conversationsStore.error !== null;
 
-    // Only process if count actually changed
-    if (msgCount === lastMessageCount) return;
+    // Skip if neither message count nor loading→loaded transition changed
+    const countChanged = msgCount !== lastMessageCount;
+    const loadingChanged = isLoading !== lastLoadingState;
+    lastLoadingState = isLoading;
+    if (!countChanged && !loadingChanged) return;
+    if (!countChanged) return; // loading toggle alone doesn't need recalc
     lastMessageCount = msgCount;
 
     console.log("[MessageView] Messages changed:", msgCount, "loading:", isLoading);
+
+    // Reset needsScrollToBottom if fetch failed (loading finished but no messages and error present)
+    if (!isLoading && msgCount === 0 && hasError && needsScrollToBottom) {
+      console.log("[MessageView] Resetting needsScrollToBottom due to fetch error");
+      needsScrollToBottom = false;
+      return;
+    }
 
     if (messagesContainer && msgCount > 0 && !isLoading) {
       // If this is initial load, set range to show newest messages (end)
@@ -558,6 +577,7 @@
   $effect(() => {
     const chatId = $conversationsStore.selectedChatId;
     if (chatId && chatId !== prevSelectedChatId) {
+      const oldChatId = prevSelectedChatId;
       prevSelectedChatId = chatId;
       console.log("[MessageView] Conversation changed, resetting state");
       previousMessageCount = 0;
@@ -572,8 +592,10 @@
       visibleEndIndex = MIN_VISIBLE_MESSAGES;
       virtualTopPadding = 0;
       virtualBottomPadding = 0;
-      // Clear optimistic messages when switching conversations
-      clearOptimisticMessages();
+      // Clear optimistic messages for the previous conversation only
+      if (oldChatId) {
+        clearOptimisticMessages(oldChatId);
+      }
     } else if (!chatId) {
       prevSelectedChatId = null;
     }
@@ -799,31 +821,60 @@
     unsubscribeScroll?.();
   });
 
+  // Cache for formatted times and dates
+  let timeFormatCache = new Map<string, string>();
+  let dateFormatCache = new Map<string, string>();
+
   function formatTime(dateStr: string): string {
-    return new Date(dateStr).toLocaleTimeString([], {
+    let cached = timeFormatCache.get(dateStr);
+    if (cached) return cached;
+
+    const formatted = new Date(dateStr).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
+    timeFormatCache.set(dateStr, formatted);
+    return formatted;
   }
 
   function formatDate(dateStr: string): string {
+    let cached = dateFormatCache.get(dateStr);
+    if (cached) return cached;
+
     const date = new Date(dateStr);
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
+    let formatted: string;
     if (date.toDateString() === today.toDateString()) {
-      return "Today";
+      formatted = "Today";
     } else if (date.toDateString() === yesterday.toDateString()) {
-      return "Yesterday";
+      formatted = "Yesterday";
     } else {
-      return date.toLocaleDateString([], {
+      formatted = date.toLocaleDateString([], {
         weekday: "long",
         month: "long",
         day: "numeric",
       });
     }
+
+    dateFormatCache.set(dateStr, formatted);
+    return formatted;
   }
+
+  // Memoized date strings to avoid creating Date objects on every render
+  let messageDateStringCache = new Map<number, string>();
+
+  // Update cache when messages change
+  $effect(() => {
+    const messages = $conversationsStore.messages;
+    for (const msg of messages) {
+      if (!messageDateStringCache.has(msg.id)) {
+        messageDateStringCache.set(msg.id, new Date(msg.date).toDateString());
+      }
+    }
+  });
 
   // Check if date header should show for a message in the visible slice
   // We need to check against the FULL message list, not just visible slice
@@ -836,8 +887,10 @@
     if (actualIndex === 0) return true;
     if (actualIndex >= messages.length) return false;
 
-    const curr = new Date(messages[actualIndex].date).toDateString();
-    const prev = new Date(messages[actualIndex - 1].date).toDateString();
+    const curr = messageDateStringCache.get(messages[actualIndex].id)
+      ?? new Date(messages[actualIndex].date).toDateString();
+    const prev = messageDateStringCache.get(messages[actualIndex - 1].id)
+      ?? new Date(messages[actualIndex - 1].date).toDateString();
     return curr !== prev;
   }
 

@@ -633,9 +633,14 @@ class TestTaskWorker:
         # Wait for task to be processed
         assert handler_called.wait(timeout=2.0)
 
-        # Task should be completed
-        time.sleep(0.2)  # Give time for status update
-        updated = queue.get(task.id)
+        # Task should be completed - poll for status update
+        updated = None
+        for _ in range(10):
+            updated = queue.get(task.id)
+            if updated and updated.status == TaskStatus.COMPLETED:
+                break
+            time.sleep(0.05)
+
         assert updated is not None
         assert updated.status == TaskStatus.COMPLETED
 
@@ -656,11 +661,15 @@ class TestTaskWorker:
         task = queue.enqueue(TaskType.BATCH_EXPORT, max_retries=0)
         worker.start()
 
-        # Wait for task to be processed
-        time.sleep(0.5)
+        # Wait for task to be processed - poll for completion
+        updated = None
+        for _ in range(20):
+            updated = queue.get(task.id)
+            if updated and updated.status == TaskStatus.FAILED:
+                break
+            time.sleep(0.05)
 
         # Task should be failed
-        updated = queue.get(task.id)
         assert updated is not None
         assert updated.status == TaskStatus.FAILED
         assert "Handler error" in str(updated.error_message)
@@ -689,11 +698,15 @@ class TestTaskWorker:
         task = queue.enqueue(TaskType.BATCH_EXPORT, max_retries=3)
         worker.start()
 
-        # Wait for retries
-        time.sleep(1.0)
+        # Wait for retries - poll for completion
+        updated = None
+        for _ in range(40):
+            updated = queue.get(task.id)
+            if updated and updated.status == TaskStatus.COMPLETED:
+                break
+            time.sleep(0.05)
 
         # Task should eventually complete
-        updated = queue.get(task.id)
         assert updated is not None
         assert updated.status == TaskStatus.COMPLETED
         assert call_count == 2
@@ -719,7 +732,11 @@ class TestTaskWorker:
         queue.enqueue(TaskType.BATCH_EXPORT)
         worker.start()
 
-        time.sleep(1.0)
+        # Poll for progress updates to complete
+        for _ in range(40):
+            if len(progress_updates) >= 3:
+                break
+            time.sleep(0.05)
 
         assert len(progress_updates) == 3
         assert progress_updates[-1] == (3, 3, "Step 3")

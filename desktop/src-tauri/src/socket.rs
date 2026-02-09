@@ -13,9 +13,10 @@ use tokio::net::UnixStream;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
 /// Get socket path for JARVIS daemon (~/.jarvis/jarvis.sock)
-fn get_socket_path() -> String {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    format!("{home}/.jarvis/jarvis.sock")
+fn get_socket_path() -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .map_err(|_| "HOME environment variable not set - cannot determine socket path".to_string())?;
+    Ok(format!("{home}/.jarvis/jarvis.sock"))
 }
 
 /// Request ID counter
@@ -36,6 +37,8 @@ pub struct SocketState {
     connected: Arc<RwLock<bool>>,
     /// Reader task handle
     reader_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Whether the writer is dead (marked after write failure)
+    writer_dead: Arc<RwLock<bool>>,
 }
 
 impl Default for SocketState {
@@ -45,6 +48,7 @@ impl Default for SocketState {
             pending: Arc::new(RwLock::new(HashMap::new())),
             connected: Arc::new(RwLock::new(false)),
             reader_task: Arc::new(Mutex::new(None)),
+            writer_dead: Arc::new(RwLock::new(false)),
         }
     }
 }
@@ -114,104 +118,9 @@ pub async fn connect_socket(
     app: AppHandle,
     state: State<'_, SocketState>,
 ) -> Result<bool, String> {
-    // Clone Arc references out of state to avoid lifetime issues
-    let writer_arc = state.writer.clone();
-    let connected_arc = state.connected.clone();
-    let pending_arc = state.pending.clone();
-    let reader_task_arc = state.reader_task.clone();
-
-    // Abort any existing reader task to prevent stale readers
-    {
-        let mut task = reader_task_arc.lock().await;
-        if let Some(handle) = task.take() {
-            handle.abort();
-        }
-    }
-
-    // Close existing writer
-    {
-        let mut w = writer_arc.lock().await;
-        if let Some(ref mut writer) = *w {
-            let _ = writer.shutdown().await;
-        }
-        *w = None;
-    }
-
-    // Reset connected flag
-    {
-        let mut connected = connected_arc.write().await;
-        *connected = false;
-    }
-
-    // Connect to socket
-    let socket_path = get_socket_path();
+    let socket_path = get_socket_path()?;
     println!("[Socket] Connecting to JARVIS socket at: {}", socket_path);
-    let stream = UnixStream::connect(&socket_path)
-        .await
-        .map_err(|e| format!("Failed to connect to socket at {}: {}", socket_path, e))?;
-
-    let (reader, writer) = stream.into_split();
-
-    // Store writer
-    {
-        let mut w = writer_arc.lock().await;
-        *w = Some(BufWriter::new(writer));
-    }
-
-    // Mark as connected
-    {
-        let mut connected = connected_arc.write().await;
-        *connected = true;
-    }
-
-    // Spawn reader task to handle responses and notifications
-    let connected_flag = connected_arc.clone();
-    let app_handle = app.clone();
-
-    let reader_handle = tokio::spawn(async move {
-        let mut buf_reader = BufReader::new(reader);
-        let mut line = String::new();
-
-        loop {
-            line.clear();
-            match buf_reader.read_line(&mut line).await {
-                Ok(0) => {
-                    // Connection closed
-                    break;
-                }
-                Ok(_) => {
-                    // Parse message
-                    if let Ok(msg) = serde_json::from_str::<JsonRpcMessage>(&line) {
-                        handle_message(msg, &pending_arc, &app_handle).await;
-                    } else {
-                        eprintln!("[Socket] Failed to parse message: {}", line.trim());
-                    }
-                }
-                Err(e) => {
-                    eprintln!("[Socket] Read error: {}", e);
-                    break;
-                }
-            }
-        }
-
-        // Mark as disconnected
-        let mut connected = connected_flag.write().await;
-        *connected = false;
-
-        // Emit disconnected event
-        let _ = app_handle.emit("jarvis:disconnected", ());
-    });
-
-    // Store reader task handle
-    {
-        let mut task = reader_task_arc.lock().await;
-        *task = Some(reader_handle);
-    }
-
-    // Emit connected event
-    let _ = app.emit("jarvis:connected", ());
-
-    Ok(true)
+    connect_socket_internal(&app, &state).await
 }
 
 /// Handle incoming JSON-RPC message (response or notification)
@@ -246,7 +155,11 @@ async fn handle_message(
                         final_token: params.get("final").and_then(|v| v.as_bool()).unwrap_or(false),
                         request_id: params.get("request_id").and_then(|v| v.as_u64()).unwrap_or(0),
                     };
-                    let _ = app.emit("jarvis:stream_token", event);
+                    if let Err(e) = app.emit("jarvis:stream_token", event) {
+                        eprintln!("[Socket] Failed to emit stream_token event: {}", e);
+                    }
+                } else {
+                    eprintln!("[Socket] Warning: stream.token notification missing params");
                 }
             }
             "new_message" => {
@@ -258,12 +171,23 @@ async fn handle_message(
                         text_preview: params.get("text").and_then(|v| v.as_str()).map(String::from),
                         is_from_me: params.get("is_from_me").and_then(|v| v.as_bool()).unwrap_or(false),
                     };
-                    let _ = app.emit("jarvis:new_message", event);
+                    if let Err(e) = app.emit("jarvis:new_message", event) {
+                        eprintln!("[Socket] Failed to emit new_message event: {}", e);
+                    }
+                } else {
+                    eprintln!("[Socket] Warning: new_message notification missing params");
                 }
             }
             _ => {
-                // Unknown notification, emit generic event
-                let _ = app.emit(&format!("jarvis:{}", method), msg.params);
+                // Validate method name before emitting
+                if method.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+                    let event_name = format!("jarvis:{}", method);
+                    if let Err(e) = app.emit(&event_name, msg.params) {
+                        eprintln!("[Socket] Failed to emit event '{}': {}", event_name, e);
+                    }
+                } else {
+                    eprintln!("[Socket] Warning: invalid method name for event emission: {}", method);
+                }
             }
         }
     }
@@ -286,11 +210,18 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
         }
     }
 
-    // Close writer
+    // Close writer with timeout
     {
         let mut writer = writer_arc.lock().await;
         if let Some(mut w) = writer.take() {
-            let _ = w.shutdown().await;
+            let shutdown_result = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                w.shutdown()
+            ).await;
+
+            if let Err(_) = shutdown_result {
+                eprintln!("[Socket] Warning: writer shutdown timed out after 5 seconds");
+            }
         }
     }
 
@@ -320,12 +251,21 @@ pub async fn send_message(
     let connected_arc = state.connected.clone();
     let pending_arc = state.pending.clone();
     let writer_arc = state.writer.clone();
+    let writer_dead_arc = state.writer_dead.clone();
 
     // Check if connected
     {
         let connected = connected_arc.read().await;
         if !*connected {
             return Err("Not connected to socket server".to_string());
+        }
+    }
+
+    // Check if writer is dead
+    {
+        let writer_dead = writer_dead_arc.read().await;
+        if *writer_dead {
+            return Err("Writer is dead after previous failure".to_string());
         }
     }
 
@@ -349,37 +289,60 @@ pub async fn send_message(
     };
 
     let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("Failed to serialize request: {}", e))?;
+        .map_err(|e| {
+            // Clean up pending request on error
+            let pending_arc = pending_arc.clone();
+            tokio::spawn(async move {
+                let mut pending = pending_arc.write().await;
+                pending.remove(&id);
+            });
+            format!("Failed to serialize request: {}", e)
+        })?;
 
     {
         let mut writer_guard = writer_arc.lock().await;
         if let Some(writer) = writer_guard.as_mut() {
-            writer
-                .write_all(request_json.as_bytes())
-                .await
-                .map_err(|e| format!("Failed to write request: {}", e))?;
-            writer
-                .write_all(b"\n")
-                .await
-                .map_err(|e| format!("Failed to write newline: {}", e))?;
-            writer
-                .flush()
-                .await
-                .map_err(|e| format!("Failed to flush: {}", e))?;
+            let result = async {
+                writer.write_all(request_json.as_bytes()).await?;
+                writer.write_all(b"\n").await?;
+                writer.flush().await?;
+                Ok::<(), std::io::Error>(())
+            }.await;
+
+            if let Err(e) = result {
+                // Mark writer as dead on write failure
+                let mut writer_dead = writer_dead_arc.write().await;
+                *writer_dead = true;
+
+                // Clean up pending request
+                let mut pending = pending_arc.write().await;
+                pending.remove(&id);
+
+                return Err(format!("Failed to write to socket: {} (writer marked dead)", e));
+            }
         } else {
+            // Clean up pending request
+            let mut pending = pending_arc.write().await;
+            pending.remove(&id);
+
             return Err("Writer not available".to_string());
         }
-    }
+    };
 
     // Wait for response with timeout
-    match tokio::time::timeout(std::time::Duration::from_secs(120), rx.recv()).await {
+    match tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv()).await {
         Ok(Some(result)) => result,
-        Ok(None) => Err("Response channel closed".to_string()),
+        Ok(None) => {
+            // Clean up pending request
+            let mut pending = pending_arc.write().await;
+            pending.remove(&id);
+            Err("Response channel closed".to_string())
+        },
         Err(_) => {
             // Remove pending request on timeout
             let mut pending = pending_arc.write().await;
             pending.remove(&id);
-            Err("Request timed out".to_string())
+            Err("Request timed out after 30 seconds".to_string())
         }
     }
 }
@@ -395,12 +358,21 @@ pub async fn send_streaming_message(
     let connected_arc = state.connected.clone();
     let pending_arc = state.pending.clone();
     let writer_arc = state.writer.clone();
+    let writer_dead_arc = state.writer_dead.clone();
 
     // Check if connected
     {
         let connected = connected_arc.read().await;
         if !*connected {
             return Err("Not connected to socket server".to_string());
+        }
+    }
+
+    // Check if writer is dead
+    {
+        let writer_dead = writer_dead_arc.read().await;
+        if *writer_dead {
+            return Err("Writer is dead after previous failure".to_string());
         }
     }
 
@@ -430,24 +402,42 @@ pub async fn send_streaming_message(
     };
 
     let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("Failed to serialize request: {}", e))?;
+        .map_err(|e| {
+            // Clean up pending request on error
+            let pending_arc = pending_arc.clone();
+            tokio::spawn(async move {
+                let mut pending = pending_arc.write().await;
+                pending.remove(&id);
+            });
+            format!("Failed to serialize request: {}", e)
+        })?;
 
     {
         let mut writer_guard = writer_arc.lock().await;
         if let Some(writer) = writer_guard.as_mut() {
-            writer
-                .write_all(request_json.as_bytes())
-                .await
-                .map_err(|e| format!("Failed to write request: {}", e))?;
-            writer
-                .write_all(b"\n")
-                .await
-                .map_err(|e| format!("Failed to write newline: {}", e))?;
-            writer
-                .flush()
-                .await
-                .map_err(|e| format!("Failed to flush: {}", e))?;
+            let result = async {
+                writer.write_all(request_json.as_bytes()).await?;
+                writer.write_all(b"\n").await?;
+                writer.flush().await?;
+                Ok::<(), std::io::Error>(())
+            }.await;
+
+            if let Err(e) = result {
+                // Mark writer as dead on write failure
+                let mut writer_dead = writer_dead_arc.write().await;
+                *writer_dead = true;
+
+                // Clean up pending request
+                let mut pending = pending_arc.write().await;
+                pending.remove(&id);
+
+                return Err(format!("Failed to write to socket: {} (writer marked dead)", e));
+            }
         } else {
+            // Clean up pending request
+            let mut pending = pending_arc.write().await;
+            pending.remove(&id);
+
             return Err("Writer not available".to_string());
         }
     }
@@ -462,6 +452,183 @@ pub async fn is_socket_connected(state: State<'_, SocketState>) -> Result<bool, 
     let connected_arc = state.connected.clone();
     let connected = connected_arc.read().await;
     Ok(*connected)
+}
+
+/// Attempt to reconnect with exponential backoff
+/// Returns true if connected, false if all retries exhausted
+#[allow(dead_code)]
+pub async fn reconnect_with_backoff(
+    app: &AppHandle,
+    state: &SocketState,
+    max_attempts: u32,
+) -> bool {
+    let mut delay_secs = 1;
+    const MAX_DELAY: u64 = 30;
+
+    for attempt in 1..=max_attempts {
+        println!("[Socket] Reconnection attempt {}/{}", attempt, max_attempts);
+
+        // Try to connect
+        match connect_socket_internal(app, state).await {
+            Ok(_) => {
+                println!("[Socket] Reconnection successful on attempt {}", attempt);
+                return true;
+            }
+            Err(e) => {
+                eprintln!("[Socket] Reconnection attempt {} failed: {}", attempt, e);
+
+                if attempt < max_attempts {
+                    println!("[Socket] Waiting {} seconds before next attempt...", delay_secs);
+                    tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+
+                    // Exponential backoff with max cap
+                    delay_secs = std::cmp::min(delay_secs * 2, MAX_DELAY);
+                }
+            }
+        }
+    }
+
+    eprintln!("[Socket] All reconnection attempts exhausted");
+    false
+}
+
+/// Internal connect logic that can be called by reconnect
+async fn connect_socket_internal(
+    app: &AppHandle,
+    state: &SocketState,
+) -> Result<bool, String> {
+    // Clone Arc references out of state to avoid lifetime issues
+    let writer_arc = state.writer.clone();
+    let connected_arc = state.connected.clone();
+    let pending_arc = state.pending.clone();
+    let reader_task_arc = state.reader_task.clone();
+    let writer_dead_arc = state.writer_dead.clone();
+
+    // Abort any existing reader task to prevent stale readers
+    {
+        let mut task = reader_task_arc.lock().await;
+        if let Some(handle) = task.take() {
+            handle.abort();
+        }
+    }
+
+    // Close existing writer
+    {
+        let mut w = writer_arc.lock().await;
+        if let Some(ref mut writer) = *w {
+            let _ = writer.shutdown().await;
+        }
+        *w = None;
+    }
+
+    // Reset connected flag and writer dead flag
+    {
+        let mut connected = connected_arc.write().await;
+        *connected = false;
+    }
+    {
+        let mut writer_dead = writer_dead_arc.write().await;
+        *writer_dead = false;
+    }
+
+    // Connect to socket
+    let socket_path = get_socket_path()?;
+    let stream = UnixStream::connect(&socket_path)
+        .await
+        .map_err(|e| format!("Failed to connect to socket at {}: {}", socket_path, e))?;
+
+    let (reader, writer) = stream.into_split();
+
+    // Store writer
+    {
+        let mut w = writer_arc.lock().await;
+        *w = Some(BufWriter::new(writer));
+    }
+
+    // Mark as connected
+    {
+        let mut connected = connected_arc.write().await;
+        *connected = true;
+    }
+
+    // Spawn reader task to handle responses and notifications
+    let connected_flag = connected_arc.clone();
+    let app_handle = app.clone();
+
+    // Create a bounded channel for backpressure (max 100 messages queued)
+    let (msg_tx, mut msg_rx) = mpsc::channel::<JsonRpcMessage>(100);
+
+    // Spawn reader task
+    let pending_for_reader = pending_arc.clone();
+    let reader_handle = tokio::spawn(async move {
+        let mut buf_reader = BufReader::new(reader);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            match buf_reader.read_line(&mut line).await {
+                Ok(0) => {
+                    // Connection closed
+                    break;
+                }
+                Ok(_) => {
+                    // Parse message
+                    if let Ok(msg) = serde_json::from_str::<JsonRpcMessage>(&line) {
+                        // Send to processing channel with backpressure
+                        if msg_tx.send(msg).await.is_err() {
+                            eprintln!("[Socket] Message processing channel closed");
+                            break;
+                        }
+                    } else {
+                        eprintln!("[Socket] Failed to parse message: {}", line.trim());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[Socket] Read error: {}", e);
+                    break;
+                }
+            }
+        }
+
+        // Mark as disconnected
+        let mut connected = connected_flag.write().await;
+        *connected = false;
+
+        // Fail all pending requests
+        {
+            let mut pending = pending_for_reader.write().await;
+            for (id, req) in pending.drain() {
+                let _ = req.response_tx.send(Err(format!("Connection lost (request ID: {})", id))).await;
+            }
+        }
+
+        // Emit disconnected event
+        if let Err(e) = app_handle.emit("jarvis:disconnected", ()) {
+            eprintln!("[Socket] Failed to emit disconnected event: {}", e);
+        }
+    });
+
+    // Spawn message processor task
+    let pending_for_processor = pending_arc.clone();
+    let app_for_processor = app.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = msg_rx.recv().await {
+            handle_message(msg, &pending_for_processor, &app_for_processor).await;
+        }
+    });
+
+    // Store reader task handle
+    {
+        let mut task = reader_task_arc.lock().await;
+        *task = Some(reader_handle);
+    }
+
+    // Emit connected event
+    if let Err(e) = app.emit("jarvis:connected", ()) {
+        eprintln!("[Socket] Failed to emit connected event: {}", e);
+    }
+
+    Ok(true)
 }
 
 #[cfg(test)]
