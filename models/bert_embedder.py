@@ -362,8 +362,8 @@ class InProcessEmbedder:
             # CRITICAL: Set MLX memory limit to 1GB to prevent 5GB VMS spike on 8GB systems
             # Without this, MLX allocates 4-5GB virtual memory during batch encoding,
             # triggering swap even though RSS stays low
-            mx.metal.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
-            mx.metal.set_cache_limit(512 * 1024 * 1024)  # 512 MB cache
+            mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
+            mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB cache
 
             self.model = BertModel(self.config, add_pooler=has_pooler)
             load_bert_weights(self.model, weights_path, has_pooler=has_pooler)

@@ -265,7 +265,11 @@ class CategoryClassifier(EmbedderMixin):
 
                 # Predict (pipeline handles scaling automatically)
                 # Model is OneVsRestClassifier(LGBMClassifier) - returns probabilities directly
-                proba = self._pipeline.predict_proba(features)[0]  # shape: (6,)
+                import warnings
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", "X does not have valid feature names")
+                    proba = self._pipeline.predict_proba(features)[0]
 
                 # Get category and confidence
                 category_idx = int(np.argmax(proba))

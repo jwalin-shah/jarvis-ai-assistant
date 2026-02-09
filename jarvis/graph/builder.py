@@ -229,7 +229,7 @@ class GraphBuilder:
         contacts = []
         try:
             db = JarvisDB(self.db_path)
-            with db.connect() as conn:
+            with db.connection() as conn:
                 cursor = conn.execute(
                     """
                     SELECT id, chat_id, display_name, phone_or_email,
