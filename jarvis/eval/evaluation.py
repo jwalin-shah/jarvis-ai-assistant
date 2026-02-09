@@ -33,9 +33,6 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-if TYPE_CHECKING:
-    pass
-
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -43,7 +40,7 @@ FEEDBACK_FILE_NAME = "feedback.jsonl"
 MAX_FEEDBACK_ENTRIES = 10000  # Maximum entries to keep in memory
 
 
-class FeedbackAction(str, Enum):
+class SuggestionAction(str, Enum):
     """Types of user feedback actions on suggestions."""
 
     SENT = "sent"  # User sent the suggestion unchanged
@@ -51,6 +48,10 @@ class FeedbackAction(str, Enum):
     DISMISSED = "dismissed"  # User dismissed the suggestion
     COPIED = "copied"  # User copied but didn't send yet
     WROTE_FROM_SCRATCH = "wrote_from_scratch"  # User ignored suggestion, wrote own
+
+
+# Backward-compatible alias (renamed from FeedbackAction to avoid collision with eval/feedback.py)
+FeedbackAction = SuggestionAction
 
 
 class FailureReason(str, Enum):
@@ -123,7 +124,7 @@ class FeedbackEntry:
     """
 
     timestamp: datetime
-    action: FeedbackAction
+    action: SuggestionAction
     suggestion_id: str
     suggestion_text: str
     edited_text: str | None
@@ -649,7 +650,7 @@ class FeedbackStore:
 
             return FeedbackEntry(
                 timestamp=datetime.fromisoformat(data["timestamp"]),
-                action=FeedbackAction(data["action"]),
+                action=SuggestionAction(data["action"]),
                 suggestion_id=data["suggestion_id"],
                 suggestion_text=data["suggestion_text"],
                 edited_text=data.get("edited_text"),
@@ -695,7 +696,7 @@ class FeedbackStore:
 
     def record_feedback(
         self,
-        action: FeedbackAction,
+        action: SuggestionAction,
         suggestion_text: str,
         chat_id: str,
         context_messages: list[str],
@@ -789,7 +790,7 @@ class FeedbackStore:
                 }
 
             # Count by action
-            action_counts = {action: 0 for action in FeedbackAction}
+            action_counts = {action: 0 for action in SuggestionAction}
             eval_scores: list[EvaluationResult] = []
 
             for entry in self._entries:
@@ -797,11 +798,11 @@ class FeedbackStore:
                 if entry.evaluation:
                     eval_scores.append(entry.evaluation)
 
-            sent = action_counts[FeedbackAction.SENT]
-            edited = action_counts[FeedbackAction.EDITED]
-            dismissed = action_counts[FeedbackAction.DISMISSED]
-            copied = action_counts[FeedbackAction.COPIED]
-            wrote_scratch = action_counts.get(FeedbackAction.WROTE_FROM_SCRATCH, 0)
+            sent = action_counts[SuggestionAction.SENT]
+            edited = action_counts[SuggestionAction.EDITED]
+            dismissed = action_counts[SuggestionAction.DISMISSED]
+            copied = action_counts[SuggestionAction.COPIED]
+            wrote_scratch = action_counts.get(SuggestionAction.WROTE_FROM_SCRATCH, 0)
 
             # Calculate rates
             total_actioned = sent + edited + dismissed + wrote_scratch
@@ -862,7 +863,7 @@ class FeedbackStore:
         with self._lock:
             # Get edited entries with both original and edited text
             edited_entries = [
-                e for e in self._entries if e.action == FeedbackAction.EDITED and e.edited_text
+                e for e in self._entries if e.action == SuggestionAction.EDITED and e.edited_text
             ]
 
             if not edited_entries:
@@ -1003,7 +1004,7 @@ class FeedbackStore:
             failures = [
                 e
                 for e in self._entries
-                if e.action in (FeedbackAction.DISMISSED, FeedbackAction.WROTE_FROM_SCRATCH)
+                if e.action in (SuggestionAction.DISMISSED, SuggestionAction.WROTE_FROM_SCRATCH)
             ]
 
             if not failures:
@@ -1135,7 +1136,8 @@ def reset_evaluation() -> None:
 # Export public symbols
 __all__ = [
     # Enums
-    "FeedbackAction",
+    "SuggestionAction",
+    "FeedbackAction",  # backward-compat alias for SuggestionAction
     "FailureReason",
     # Data classes
     "ToneAnalysis",

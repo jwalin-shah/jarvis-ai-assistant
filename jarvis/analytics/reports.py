@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -284,7 +285,7 @@ class ReportGenerator:
         contact_analytics = self._engine.compute_contact_analytics(
             messages, contact_id, contact_name
         )
-        self._engine.compute_emoji_stats(messages)
+        emoji_stats = self._engine.compute_emoji_stats(messages)  # noqa: F841
         hourly, daily, weekly, monthly = self._engine.compute_time_distributions(messages)
 
         sections = [
@@ -566,11 +567,14 @@ class ReportGenerator:
 
 # Global report generator instance
 _report_generator: ReportGenerator | None = None
+_report_generator_lock = threading.Lock()
 
 
 def get_report_generator() -> ReportGenerator:
     """Get the global report generator instance."""
     global _report_generator
     if _report_generator is None:
-        _report_generator = ReportGenerator()
+        with _report_generator_lock:
+            if _report_generator is None:
+                _report_generator = ReportGenerator()
     return _report_generator

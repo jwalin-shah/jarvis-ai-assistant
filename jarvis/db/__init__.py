@@ -97,9 +97,10 @@ def get_db(db_path: Path | None = None) -> JarvisDB:
 def reset_db() -> None:
     """Reset the singleton database instance (closes any open connections)."""
     global _db
-    if _db is not None:
-        _db.close()
-    _db = None
+    with _db_lock:
+        if _db is not None:
+            _db.close()
+        _db = None
 
 
 __all__ = [

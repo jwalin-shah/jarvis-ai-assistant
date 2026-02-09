@@ -190,10 +190,13 @@ def export_to_svg(
         '<g class="edges">',
     ]
 
+    # Build node lookup for O(1) access
+    node_lookup = {n.id: n for n in graph.nodes}
+
     # Draw edges
     for edge in graph.edges:
-        source_node = next((n for n in graph.nodes if n.id == edge.source), None)
-        target_node = next((n for n in graph.nodes if n.id == edge.target), None)
+        source_node = node_lookup.get(edge.source)
+        target_node = node_lookup.get(edge.target)
 
         if (
             source_node

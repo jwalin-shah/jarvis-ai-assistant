@@ -61,7 +61,9 @@ VALID_CATEGORIES = frozenset({
     "statement",
 })
 
-# Category order from training (for predict_proba index mapping)
+# Category order from training (for predict_proba index mapping).
+# WARNING: This order MUST match the trained model's mlb.classes_ (alphabetical).
+# Used as fallback only when self._mlb is None (missing from model artifact).
 CATEGORIES = [
     "acknowledge",
     "closing",
@@ -126,6 +128,17 @@ class CategoryClassifier(EmbedderMixin):
         # TTL of 60 seconds to avoid stale results during prefetch + actual request
         self._classification_cache: dict[str, tuple[CategoryResult, float]] = {}
         self._cache_ttl = 60.0  # seconds
+        self._cache_max_size = 1000
+
+    def _cache_put(self, key: str, result: CategoryResult) -> None:
+        """Cache a result, evicting oldest entries if over max size."""
+        now = time.time()
+        if len(self._classification_cache) >= self._cache_max_size:
+            # Evict oldest 10% to avoid evicting on every insert
+            entries = sorted(self._classification_cache.items(), key=lambda x: x[1][1])
+            for k, _ in entries[: self._cache_max_size // 10]:
+                del self._classification_cache[k]
+        self._classification_cache[key] = (result, now)
 
     def _load_pipeline(self) -> bool:
         """Load trained Pipeline (with scaler + LightGBM) from disk.
@@ -172,24 +185,6 @@ class CategoryClassifier(EmbedderMixin):
         except Exception as e:
             logger.error("Failed to load pipeline: %s", e)
             return False
-
-    def _apply_heuristics(
-        self,
-        text: str,
-        model_prediction: str,
-        context: list[str],
-        confidence: float,
-    ) -> str:
-        """Apply rule-based corrections to common model errors.
-
-        Returns corrected category (or original if no correction needed).
-
-        NOTE: Keep this minimal - only universal patterns that generalize.
-        Overfitting check showed that specific word lists don't generalize.
-        """
-        # ONLY UNIVERSAL FIX: Reactions are handled in fast path
-        # No heuristic overrides here - let model decide
-        return model_prediction
 
     def classify(
         self,
@@ -241,7 +236,7 @@ class CategoryClassifier(EmbedderMixin):
                 method="fast_path",
             )
             # Cache the result
-            self._classification_cache[cache_key] = (result, time.time())
+            self._cache_put(cache_key, result)
             return result
 
         # Simple acknowledgments → acknowledge
@@ -252,7 +247,7 @@ class CategoryClassifier(EmbedderMixin):
                 method="fast_path",
             )
             # Cache the result
-            self._classification_cache[cache_key] = (result, time.time())
+            self._cache_put(cache_key, result)
             return result
 
         # Layer 1: Pipeline prediction (scaler + LightGBM)
@@ -292,20 +287,15 @@ class CategoryClassifier(EmbedderMixin):
 
                 # Get category and confidence
                 category_idx = int(np.argmax(proba))
-                classes = self._mlb.classes_ if self._mlb is not None else CATEGORIES
+                if self._mlb is not None:
+                    classes = self._mlb.classes_
+                else:
+                    logger.warning("Using hardcoded CATEGORIES fallback (mlb not loaded)")
+                    classes = CATEGORIES
                 category = classes[category_idx]
                 confidence = float(proba[category_idx])
 
-                # Layer 2: Heuristic post-processing (correct common model errors)
-                original_category = category
-                category = self._apply_heuristics(text, category, context, confidence)
-
-                # If heuristics changed the prediction, lower confidence
-                if category != original_category:
-                    confidence = 0.75  # Heuristic override confidence
-                    method = "heuristic"
-                else:
-                    method = "lightgbm"
+                method = "lightgbm"
 
                 result = CategoryResult(
                     category=category,
@@ -313,7 +303,7 @@ class CategoryClassifier(EmbedderMixin):
                     method=method,
                 )
                 # Cache the result
-                self._classification_cache[cache_key] = (result, time.time())
+                self._cache_put(cache_key, result)
                 return result
             except Exception as e:
                 logger.error("Pipeline prediction failed: %s", e, exc_info=True)
@@ -325,7 +315,7 @@ class CategoryClassifier(EmbedderMixin):
             method="default",
         )
         # Cache the result
-        self._classification_cache[cache_key] = (result, time.time())
+        self._cache_put(cache_key, result)
         return result
 
 

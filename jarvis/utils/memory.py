@@ -13,7 +13,6 @@ so "swap used" alone is NOT a good indicator. Memory pressure + page-outs are th
 """
 
 import logging
-import os
 import platform
 import re
 import subprocess
@@ -30,7 +29,11 @@ IS_MACOS = platform.system() == "Darwin"
 
 
 class SwapThresholdExceeded(Exception):
-    """Raised when swap usage exceeds configured threshold."""
+    """Raised when swap usage exceeds configured threshold.
+
+    Note: Does not inherit from JarvisError to avoid circular import
+    (this module is imported early in the boot sequence).
+    """
 
     pass
 
@@ -220,29 +223,6 @@ def track_memory(
 
     try:
         yield snapshots
-
-        # Periodic checks during yield block
-        if monitor_active:
-            while True:
-                elapsed = time.time() - last_check
-                if elapsed >= interval_sec:
-                    info = get_memory_info()
-                    snapshots.append(info)
-                    logger.info(f"{prefix}Memory: {info}")
-
-                    # Check swap threshold
-                    if info.swap_used_mb > swap_threshold_mb:
-                        msg = (
-                            f"{prefix}SWAP THRESHOLD EXCEEDED: "
-                            f"{info.swap_used_mb:.1f}MB > {swap_threshold_mb}MB"
-                        )
-                        if abort_on_threshold:
-                            raise SwapThresholdExceeded(msg)
-                        logger.warning(msg)
-
-                    last_check = time.time()
-                time.sleep(0.5)  # Don't busy-wait
-
     finally:
         end_info = get_memory_info()
         snapshots.append(end_info)

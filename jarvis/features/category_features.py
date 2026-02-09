@@ -250,7 +250,7 @@ class CategoryFeatureExtractor:
         )
         features.append(is_brief_agreement)
 
-        exclamatory = 1.0 if (text.endswith("!") or text.isupper() and total_words <= 5) else 0.0
+        exclamatory = 1.0 if ((text.endswith("!") or text.isupper()) and total_words <= 5) else 0.0
         features.append(exclamatory)
 
         return np.array(features, dtype=np.float32)

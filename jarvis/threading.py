@@ -505,6 +505,12 @@ class ThreadAnalyzer:
                 return None
             embedding = model.encode([text], convert_to_numpy=True)[0]
             embedding = embedding / np.linalg.norm(embedding)
+            # Evict oldest entries if cache exceeds max size
+            if len(self._embeddings_cache) >= 10000:
+                # Remove first 1000 entries (oldest inserted)
+                keys_to_remove = list(self._embeddings_cache.keys())[:1000]
+                for k in keys_to_remove:
+                    del self._embeddings_cache[k]
             self._embeddings_cache[cache_key] = embedding
             return embedding
         except Exception:

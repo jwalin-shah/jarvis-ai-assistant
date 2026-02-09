@@ -29,7 +29,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from jarvis.config import AdaptiveThresholdConfig, get_config
-from jarvis.eval.evaluation import FeedbackAction, FeedbackStore, get_feedback_store
+from jarvis.eval.evaluation import SuggestionAction, FeedbackStore, get_feedback_store
 
 if TYPE_CHECKING:
     from jarvis.eval.evaluation import FeedbackEntry
@@ -322,11 +322,11 @@ class AdaptiveThresholdManager:
                 bucket.avg_similarity * (bucket.total_count - 1) + similarity
             ) / bucket.total_count
 
-            if entry.action == FeedbackAction.SENT:
+            if entry.action == SuggestionAction.SENT:
                 bucket.sent_count += 1
-            elif entry.action == FeedbackAction.EDITED:
+            elif entry.action == SuggestionAction.EDITED:
                 bucket.edited_count += 1
-            elif entry.action in (FeedbackAction.DISMISSED, FeedbackAction.WROTE_FROM_SCRATCH):
+            elif entry.action in (SuggestionAction.DISMISSED, SuggestionAction.WROTE_FROM_SCRATCH):
                 bucket.dismissed_count += 1
             # COPIED is neutral, not counted
 
@@ -496,12 +496,12 @@ class AdaptiveThresholdManager:
 
         # Compute overall stats
         total_feedback = len(entries)
-        total_sent = sum(1 for e in entries if e.action == FeedbackAction.SENT)
-        total_edited = sum(1 for e in entries if e.action == FeedbackAction.EDITED)
+        total_sent = sum(1 for e in entries if e.action == SuggestionAction.SENT)
+        total_edited = sum(1 for e in entries if e.action == SuggestionAction.EDITED)
         total_dismissed = sum(
             1
             for e in entries
-            if e.action in (FeedbackAction.DISMISSED, FeedbackAction.WROTE_FROM_SCRATCH)
+            if e.action in (SuggestionAction.DISMISSED, SuggestionAction.WROTE_FROM_SCRATCH)
         )
 
         acceptance_rate = (

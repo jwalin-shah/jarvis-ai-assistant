@@ -217,6 +217,7 @@ class ContactFrequencyStrategy(PredictionStrategy):
         if not CHAT_DB_PATH.exists():
             return
 
+        conn = None
         try:
             conn = sqlite3.connect(
                 f"file:{CHAT_DB_PATH}?mode=ro",
@@ -265,11 +266,13 @@ class ContactFrequencyStrategy(PredictionStrategy):
 
                 self._contact_scores[chat_id] = (msg_count / max_count) * 50 + recency_boost * 50
 
-            conn.close()
             self._last_update = time.time()
 
         except Exception as e:
             logger.debug(f"Error updating contact scores: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
 
 
 class TimeOfDayStrategy(PredictionStrategy):
@@ -334,6 +337,7 @@ class TimeOfDayStrategy(PredictionStrategy):
         if not CHAT_DB_PATH.exists():
             return
 
+        conn = None
         try:
             conn = sqlite3.connect(
                 f"file:{CHAT_DB_PATH}?mode=ro",
@@ -371,11 +375,13 @@ class TimeOfDayStrategy(PredictionStrategy):
                     hour = datetime.fromtimestamp(unix_ts).hour
                     self._hourly_patterns[hour][chat_id] += 1
 
-            conn.close()
             self._last_update = time.time()
 
         except Exception as e:
             logger.debug(f"Error updating time-of-day patterns: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
 
 
 class ConversationContinuationStrategy(PredictionStrategy):
@@ -416,6 +422,15 @@ class ConversationContinuationStrategy(PredictionStrategy):
     def predict(self, context: PredictionContext) -> list[Prediction]:
         predictions: list[Prediction] = []
         now = time.time()
+
+        # Cleanup stale chat entries to prevent unbounded growth
+        cutoff = now - self._active_window
+        stale_keys = [
+            cid for cid, ts in self._recent_messages.items()
+            if not ts or max(ts) < cutoff
+        ]
+        for cid in stale_keys:
+            del self._recent_messages[cid]
 
         for chat_id, timestamps in self._recent_messages.items():
             if not timestamps:

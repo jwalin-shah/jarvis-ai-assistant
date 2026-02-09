@@ -44,14 +44,13 @@ class RulesEngine:
             tag_manager: TagManager instance for tag lookups.
         """
         self.tag_manager = tag_manager
-        self._cache: dict[int, tuple[datetime, list[str]]] = {}
-        self._cache_ttl = timedelta(seconds=30)
+        # Note: caching removed as it was never populated or used
 
     def evaluate_folder(
         self,
         folder: SmartFolder,
         conversations: list[dict[str, Any]],
-        use_cache: bool = True,
+        use_cache: bool = True,  # noqa: ARG002 - kept for API compat
     ) -> list[dict[str, Any]]:
         """Evaluate a smart folder's rules against conversations.
 
@@ -213,6 +212,14 @@ class RulesEngine:
             elif operator == RuleOperator.IS_NOT_EMPTY.value:
                 return len(field_value.strip()) > 0
 
+        # Boolean comparisons (must be before int/float since bool is subclass of int)
+        if isinstance(field_value, bool):
+            if operator == RuleOperator.EQUALS.value:
+                return field_value == bool(rule_value)
+            elif operator == RuleOperator.NOT_EQUALS.value:
+                return field_value != bool(rule_value)
+            return False
+
         # Numeric comparisons
         if isinstance(field_value, (int, float)):
             try:
@@ -227,13 +234,6 @@ class RulesEngine:
                     return field_value < rule_num
             except (TypeError, ValueError):
                 return False
-
-        # Boolean comparisons
-        if isinstance(field_value, bool):
-            if operator == RuleOperator.EQUALS.value:
-                return field_value == bool(rule_value)
-            elif operator == RuleOperator.NOT_EQUALS.value:
-                return field_value != bool(rule_value)
 
         # Date/time comparisons
         if isinstance(field_value, datetime):

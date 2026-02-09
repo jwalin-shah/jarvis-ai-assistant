@@ -205,8 +205,8 @@ class ContactMixin:
                 cursor = conn.execute(
                     """SELECT id, chat_id, display_name, phone_or_email, relationship,
                               style_notes, handles_json, created_at, updated_at
-                       FROM contacts WHERE LOWER(display_name) LIKE LOWER(?)""",
-                    (f"%{name}%",),
+                       FROM contacts WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'""",
+                    (f"%{name.replace('%', '\\%').replace('_', '\\_')}%",),
                 )
                 row = cursor.fetchone()
 

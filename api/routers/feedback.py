@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from jarvis.eval.evaluation import (
     EvaluationResult,
-    FeedbackAction,
+    SuggestionAction,
     FeedbackEntry,
     get_feedback_store,
     get_response_evaluator,
@@ -541,7 +541,7 @@ def record_feedback(request: RecordFeedbackRequest) -> RecordFeedbackResponse:
     """
     # Validate action
     try:
-        action = FeedbackAction(request.action)
+        action = SuggestionAction(request.action)
     except ValueError:
         raise HTTPException(
             status_code=400,
@@ -550,7 +550,7 @@ def record_feedback(request: RecordFeedbackRequest) -> RecordFeedbackResponse:
         )
 
     # Validate edited text for edit actions
-    if action == FeedbackAction.EDITED and not request.edited_text:
+    if action == SuggestionAction.EDITED and not request.edited_text:
         raise HTTPException(
             status_code=400,
             detail="edited_text is required when action is 'edited'",

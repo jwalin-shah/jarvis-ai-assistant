@@ -505,7 +505,11 @@ class AutoTagger:
             # Find tags that are often used with similar content
             if analysis.keywords:
                 # Look for tags used in conversations with similar keywords
-                keyword_pattern = "|".join(analysis.keywords[:5])
+                safe_keywords = [
+                    k.replace("%", "\\%").replace("_", "\\_")
+                    for k in analysis.keywords[:5]
+                ]
+                keyword_pattern = "|".join(safe_keywords)
                 cursor = conn.execute(
                     """
                     SELECT t.id, t.name, COUNT(*) as count

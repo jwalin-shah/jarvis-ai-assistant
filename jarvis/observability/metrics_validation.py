@@ -16,6 +16,8 @@ from typing import Any
 
 from jarvis.observability.metrics_router import DEFAULT_METRICS_DB_PATH, RoutingMetrics
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_AUDIT_LOG_PATH = Path.home() / ".jarvis" / "metrics_audit.log"
 
 
@@ -65,7 +67,9 @@ class MetricsAuditLogger:
         if not audit_entries:
             return {"missing_count": 0, "total": 0, "match_rate": 1.0}
 
-        db_entries = self._load_db_entries(db_path)
+        # Only load DB entries within the audit time range
+        min_ts = min((a["timestamp"] for a in audit_entries), default=0) - time_window
+        db_entries = self._load_db_entries(db_path, since_timestamp=min_ts)
 
         missing = []
         matched = 0
@@ -106,16 +110,30 @@ class MetricsAuditLogger:
                     continue
         return entries
 
-    def _load_db_entries(self, db_path: Path) -> list[dict]:
-        """Load entries from metrics database."""
+    def _load_db_entries(
+        self, db_path: Path, since_timestamp: float | None = None
+    ) -> list[dict]:
+        """Load entries from metrics database.
+
+        Args:
+            db_path: Path to the metrics database
+            since_timestamp: Only load entries after this timestamp (epoch seconds)
+        """
         if not db_path.exists():
             return []
 
         with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT timestamp, query_hash, routing_decision FROM routing_metrics"
-            ).fetchall()
+            if since_timestamp is not None:
+                rows = conn.execute(
+                    "SELECT timestamp, query_hash, routing_decision "
+                    "FROM routing_metrics WHERE timestamp >= ?",
+                    (since_timestamp,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT timestamp, query_hash, routing_decision FROM routing_metrics"
+                ).fetchall()
             return [dict(row) for row in rows]
 
 

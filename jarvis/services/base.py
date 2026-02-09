@@ -188,6 +188,7 @@ class Service(abc.ABC):
             try:
                 self._start_process()
                 self._start_time = time.time()
+                self._status = ServiceStatus.RUNNING
                 self._start_health_monitor()
                 logger.info("Service %s started (PID: %s)", self.name, self.pid)
             except ServiceStartError:

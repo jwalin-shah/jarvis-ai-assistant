@@ -132,50 +132,35 @@ def get_fallback_draft(context: str | None = None) -> str:
     return "Unable to generate a draft response. Please try again."
 
 
-class ModelLoadError(Exception):
-    """Raised when the AI model fails to load."""
-
-    def __init__(self, message: str = "Failed to load AI model", reason: str | None = None):
-        """Initialize ModelLoadError.
-
-        Args:
-            message: Error message
-            reason: Optional detailed reason for failure
-        """
-        self.message = message
-        self.reason = reason
-        super().__init__(self.message)
+# Backward-compatible error classes (now properly inherit from JarvisError)
+from jarvis.errors import ModelLoadError as _BaseModelLoadError
 
 
-class GenerationTimeoutError(Exception):
-    """Raised when generation exceeds the timeout."""
+class ModelLoadError(_BaseModelLoadError):
+    """Backward-compatible ModelLoadError with reason attribute."""
 
     def __init__(
-        self,
-        message: str = "Generation timed out",
-        timeout_seconds: float | None = None,
-    ):
-        """Initialize GenerationTimeoutError.
-
-        Args:
-            message: Error message
-            timeout_seconds: The timeout value that was exceeded
-        """
-        self.message = message
-        self.timeout_seconds = timeout_seconds
-        super().__init__(self.message)
+        self, message: str = "Failed to load model", **kwargs: object
+    ) -> None:
+        super().__init__(message)
+        self.reason = kwargs.get("reason")
 
 
-class GenerationError(Exception):
-    """Raised when generation fails for any other reason."""
+class GenerationTimeoutError(_BaseModelLoadError):
+    """Raised when generation times out."""
 
-    def __init__(self, message: str = "Generation failed", cause: Exception | None = None):
-        """Initialize GenerationError.
+    def __init__(
+        self, message: str = "Generation timed out", **kwargs: object
+    ) -> None:
+        super().__init__(message)
+        self.timeout_seconds = kwargs.get("timeout_seconds")
 
-        Args:
-            message: Error message
-            cause: The underlying exception that caused the failure
-        """
-        self.message = message
-        self.cause = cause
-        super().__init__(self.message)
+
+class GenerationError(_BaseModelLoadError):
+    """Raised when generation fails."""
+
+    def __init__(
+        self, message: str = "Generation failed", **kwargs: object
+    ) -> None:
+        super().__init__(message)
+        self.cause = kwargs.get("cause")

@@ -122,6 +122,9 @@ temp/
 training_pairs.jsonl
 response_templates.json
 
+# Personal fine-tuning data (extracted from iMessage, private)
+data/personal/
+
 # Intermediate labeling data
 data/*_original*.jsonl
 data/*_clean*.jsonl
@@ -230,6 +233,9 @@ models/category_multilabel_optimal_thresholds.json
 models/category_linearsvc_*.*
 models/category_multilabel_lightgbm.joblib
 models/category_multilabel_lightgbm_metadata.json
+models/category_multilabel_hardclass_metadata.json
+models/category_multilabel_hardclass_optimal_thresholds.json
+models/category_multilabel_logistic_metadata.json
 models/*_imessage_thresholds.json
 
 # Optuna databases
@@ -240,3 +246,23 @@ gemini_reviews_batches/
 
 # Backup files
 *.bak
+.cleanup_backup/
+
+# Fine-tuning configs and adapters (experiment artifacts)
+ft_configs/
+adapters/
+
+# Downloaded model weights
+models/lfm-*/
+
+# Eval results (regeneratable)
+evals/results/
+
+# Multi-agent scratch outputs
+tools/multi-agent/prompts/
+
+# Scratch notes and review drafts
+model_selection_debate.txt
+review_prompt.txt
+set*_*_draft.md
+validation_evaluation_results*.txt

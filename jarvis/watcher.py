@@ -328,6 +328,15 @@ class ChatDBWatcher:
                     # Delete key instead of setting to 0 to prevent unbounded dict growth
                     del self._chat_msg_counts[cid]
 
+            # Periodic cleanup: cap dict size to prevent unbounded growth from
+            # chats that never reach the segment threshold
+            if len(self._chat_msg_counts) > 1000:
+                # Keep only the 500 most recent (highest count) entries
+                sorted_chats = sorted(
+                    self._chat_msg_counts.items(), key=lambda x: x[1], reverse=True
+                )
+                self._chat_msg_counts = dict(sorted_chats[:500])
+
             if chats_to_resegment:
                 task = asyncio.create_task(self._resegment_chats(chats_to_resegment))
                 task.add_done_callback(self._log_task_exception)

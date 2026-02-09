@@ -914,6 +914,11 @@ class MultiTierCache:
             True if removed from any tier.
         """
         with self._lock:
+            # Track size before removal for stats
+            entry = self._l1.get(key) or self._l2.get(key) or self._l3.get(key)
+            if entry:
+                self._stats.total_bytes -= entry.size_bytes
+
             removed = self._l1.remove(key)
             removed |= self._l2.remove(key)
             removed |= self._l3.remove(key)

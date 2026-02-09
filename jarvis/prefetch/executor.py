@@ -600,12 +600,15 @@ class PrefetchExecutor:
                 if msg.text:
                     thread.append(f"{prefix}: {msg.text}")
 
-            # Route and generate
-            result = router.route(
-                incoming=last_incoming,
-                thread=thread[-10:] if thread else None,
-                chat_id=chat_id,
-            )
+            # Route and generate (acquire MLX lock to serialize GPU ops)
+            from models.loader import MLXModelLoader
+
+            with MLXModelLoader._mlx_load_lock:
+                result = router.route(
+                    incoming=last_incoming,
+                    thread=thread[-10:] if thread else None,
+                    chat_id=chat_id,
+                )
 
             return {
                 "suggestions": [
@@ -639,7 +642,10 @@ class PrefetchExecutor:
             from jarvis.embedding_adapter import get_embedder
 
             embedder = get_embedder()
-            embeddings = embedder.encode(texts)
+            from models.loader import MLXModelLoader
+
+            with MLXModelLoader._mlx_load_lock:
+                embeddings = embedder.encode(texts)
 
             return {
                 "embeddings": embeddings,
@@ -702,12 +708,15 @@ class PrefetchExecutor:
             return None
 
         try:
+            from models.loader import MLXModelLoader
+
             if model_type == "llm":
                 from models.loader import get_model
 
                 model = get_model()
                 if model and not model.is_loaded():
-                    model.load()
+                    with MLXModelLoader._mlx_load_lock:
+                        model.load()
                 return {"model": "llm", "warm": True, "prefetch_time": time.time()}
 
             elif model_type == "embeddings":
@@ -715,7 +724,8 @@ class PrefetchExecutor:
 
                 embedder = get_embedder()
                 # Warm up with a test embedding
-                embedder.encode(["warmup test"])
+                with MLXModelLoader._mlx_load_lock:
+                    embedder.encode(["warmup test"])
                 return {"model": "embeddings", "warm": True, "prefetch_time": time.time()}
 
             return None

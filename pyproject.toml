@@ -23,7 +23,7 @@ classifiers = [
 
 dependencies = [
     "mlx>=0.22.0",
-    "mlx-lm>=0.22.0",
+    "mlx-lm>=0.30.6",
     "psutil>=7.0.0",
     "pydantic>=2.10.0",
     "rich>=14.0.0",
