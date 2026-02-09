@@ -1,0 +1,108 @@
+# Scripts Audit - Phase 2
+
+## Total Scripts
+130 files (.py and .sh)
+
+## Production Scripts (KEEP - 10 files)
+Referenced in Makefile/docs or clearly production:
+
+1. launch.sh - Production launch script
+2. finetune_embedder.py - Embedder fine-tuning
+3. generate_preference_pairs.py - Training data generation
+4. label_soc_categories.py - SOC category labeling
+5. prepare_soc_data.py - SOC data preparation
+6. train_category_svm.py - Category classifier training (legacy, but documented)
+7. check_swap.sh - Memory monitoring utility
+8. gen_ref_pages.py - Documentation generation
+9. generate_report.py - Reporting utility
+10. check_training_status.sh - Training monitoring
+
+## Experimental Scripts (DELETE - ~120 files)
+
+### Analysis Scripts (20+)
+- analyze_consensus_labels.py
+- analyze_gemini_disagreements.py
+- analyze_learning_curve*.py
+- analyze_prod_distribution.py
+- analyze_routing_metrics.py
+- compare_all_threshold_strategies.py
+- compare_c_results.py
+- compare_kernels.py
+- compare_linearsvc_features.py
+- eval_normalization.py
+- fair_threshold_comparison.py
+- debug_lf_coverage.py
+
+### Labeling Scripts (25+)
+- add_multilabel_features.py
+- add_personachat_data.py
+- batch_review_llm.py
+- break_consensus_ties.py
+- claude_labels.py
+- claude_manual_labels.py
+- consensus_label_categories.py
+- consensus_label_validation_sets.py
+- create_multilabel_dataset.py
+- create_true_gold_standard.py
+- derive_multilabels_validation.py
+- gemini_review_labels.py
+- interactive_label.py
+- label_aggregation.py
+- label_and_analyze.py
+- label_production_messages.py
+- label_validation_sets_orchestrator.py
+- prepare_unlabeled_data.py
+- relabel_full_dataset.sh
+- relabel_remaining_dataset.sh
+- review_labels_with_gemini.sh
+- review_remaining_batches.sh
+
+### Training/Tuning Scripts (40+)
+- backfill_validation_context*.py (3 files)
+- deploy_linearsvc.py
+- final_experiments.py
+- retrain_with_zeroed_context.py
+- retune_thresholds_imessage.py
+- train_category_lightgbm.py
+- train_lightgbm_category.py
+- train_lightgbm_intensive.py
+- train_lightgbm_ultimate.py
+- train_multilabel_classifier.py
+- train_multilabel_hardclass.py
+- train_multilabel_lightgbm.py
+- train_multilabel_lightgbm_hardclass.py
+- train_multilabel_logistic.py
+- train_multilabel_weighted.py
+- tune_class_weights.py
+- tune_lightgbm_hardclass_thresholds.py
+- tune_lightgbm_thresholds.py
+- tune_linearsvc_hardclass_thresholds.py
+- tune_multilabel_thresholds.py
+- tune_thresholds.py
+- tune_validation_thresholds.py
+
+### Validation/Test Scripts (20+)
+- batch_eval.py
+- evaluate_on_validation_sets.py
+- evaluate_validation_sets.py
+- sample_dailydialog.py
+- test_adaptive_thresholds.py
+- test_class_weight_fast.py
+- test_ensemble.py
+- validate_set4.py
+- verify_linearsvc_features.py
+
+### Benchmark Scripts (10+)
+- benchmark_embedders.py
+- benchmark_faiss_real.py
+- benchmark_faiss.py
+- build_centroids.py
+- check_gates.py
+
+### Synthetic/Generation Scripts (5+)
+- generate_synthetic_examples.py
+- synthesize_clarify_examples.py
+
+## Recommendation
+DELETE all experimental scripts (~120 files)
+KEEP 10 production scripts
