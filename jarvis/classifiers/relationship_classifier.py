@@ -29,7 +29,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -41,6 +41,35 @@ _cache_lock = threading.Lock()
 _CLASSIFICATION_CACHE_MAX_SIZE = 500
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+
+def _is_emoji(text: str) -> bool:
+    """Check if text contains emoji characters using unicode ranges.
+
+    Checks against common emoji ranges to determine if the text
+    should be classified as emoji rather than regular text.
+
+    Args:
+        text: Text to check
+
+    Returns:
+        True if any character in text is an emoji.
+    """
+    for char in text:
+        code = ord(char)
+        # Emoji ranges: 0x1F300-0x1F9FF covers most emoji
+        # 0x2600-0x27BF covers miscellaneous symbols including emoji
+        # 0x1F000-0x1F02F covers mahjong and dominoes
+        if (0x1F300 <= code <= 0x1F9FF or
+            0x2600 <= code <= 0x27BF or
+            0x1F000 <= code <= 0x1F02F):
+            return True
+    return False
 
 
 # =============================================================================
@@ -306,7 +335,7 @@ class RelationshipClassifier:
             emoji_kws = []
             for kw in info["keywords"]:
                 kw_lower = kw.lower()
-                if any(ord(c) > 0x1F300 for c in kw_lower):
+                if _is_emoji(kw_lower):
                     emoji_kws.append(kw_lower)
                 else:
                     text_kws.append(rf"\b{re.escape(kw_lower)}\b")
@@ -317,7 +346,7 @@ class RelationshipClassifier:
             emoji_akws = []
             for kw in info.get("anti_keywords", []):
                 kw_lower = kw.lower()
-                if any(ord(c) > 0x1F300 for c in kw_lower):
+                if _is_emoji(kw_lower):
                     emoji_akws.append(kw_lower)
                 else:
                     text_akws.append(rf"\b{re.escape(kw_lower)}\b")
@@ -380,7 +409,7 @@ class RelationshipClassifier:
                     if date_int:
                         # macOS uses nanoseconds since 2001-01-01
                         timestamp = date_int / 1_000_000_000 + 978307200
-                        date = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                        date = datetime.fromtimestamp(timestamp, tz=UTC)
                     else:
                         date = None
 
@@ -487,8 +516,8 @@ class RelationshipClassifier:
             if msg.date:
                 hours.append(msg.date.hour)
 
-            # Count emojis (simple heuristic)
-            emoji_chars = sum(1 for c in text if ord(c) > 0x1F300)
+            # Count emojis using robust detection
+            emoji_chars = sum(1 for c in text if _is_emoji(c))
             emoji_count += emoji_chars
 
             # Formal vs informal indicators
@@ -865,6 +894,27 @@ class RelationshipClassifier:
 # Convenience Functions
 # =============================================================================
 
+# Module-level singleton instance to avoid repeated initialization
+_classifier_instance: RelationshipClassifier | None = None
+_classifier_lock = threading.Lock()
+
+
+def _get_classifier() -> RelationshipClassifier:
+    """Get or create the singleton RelationshipClassifier instance.
+
+    Ensures only one classifier is instantiated, reducing memory overhead
+    from repeated pattern compilation and initialization.
+
+    Returns:
+        Singleton RelationshipClassifier instance.
+    """
+    global _classifier_instance
+    if _classifier_instance is None:
+        with _classifier_lock:
+            if _classifier_instance is None:
+                _classifier_instance = RelationshipClassifier()
+    return _classifier_instance
+
 
 def clear_classification_cache() -> None:
     """Clear the classification result cache.
@@ -884,7 +934,7 @@ def suggest_relationship(chat_id: str) -> str:
     Returns:
         Relationship label string.
     """
-    classifier = RelationshipClassifier()
+    classifier = _get_classifier()
     result = classifier.classify_contact(chat_id)
     if result.confidence < 0.3:
         return "unknown"
@@ -897,7 +947,7 @@ def classify_top_contacts(n: int = 20) -> None:
     Args:
         n: Number of contacts to classify.
     """
-    classifier = RelationshipClassifier()
+    classifier = _get_classifier()
     results = classifier.classify_all_contacts(limit=n)
 
     print(f"\n{'Contact':<25} {'Relationship':<18} {'Confidence':<12} {'Messages':<10}")

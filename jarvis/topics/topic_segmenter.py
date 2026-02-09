@@ -543,40 +543,8 @@ class TopicSegmenter:
                     score += self.topic_shift_weight
                     primary_reason = SegmentBoundaryReason.TOPIC_SHIFT_MARKER
 
-            # 5. Negative signals: reduce score for patterns that shouldn't create boundaries
-
-            # 5a. Reactions (tapbacks) - "Loved X" shouldn't split from the message
-            raw_text = messages[i].raw_text or messages[i].text or ""
-            if is_reaction(raw_text):
-                score = max(0.0, score - 0.5)
-                logger.debug("Boundary %d: reaction detected, score reduced to %.2f", i, score)
-
-            # 5b. Q&A pairs - questions and their answers should stay together
-            if self._is_qa_pair(messages[i - 1], messages[i]):
-                score = max(0.0, score - 0.4)
-                logger.debug("Boundary %d: Q&A pair detected, score reduced to %.2f", i, score)
-
-            # 5c. Media bursts - multiple attachments in quick succession
-            if self._is_media_burst(messages, i):
-                score = max(0.0, score - 0.4)
-                logger.debug("Boundary %d: media burst detected, score reduced to %.2f", i, score)
-
-            # 5d. Bidirectional check: if forward messages continue old topic, reduce score
-            # This prevents false boundaries when someone briefly mentions something
-            # but then continues the original conversation
-            if score >= self.boundary_threshold:
-                forward_continuity = self._check_forward_continuity(messages, i, window_centroids)
-                if forward_continuity > 0:
-                    # Forward messages continue old topic - reduce score
-                    # Higher continuity = more reduction
-                    reduction = 0.3 * forward_continuity
-                    score = max(0.0, score - reduction)
-                    logger.debug(
-                        "Boundary %d: forward continuity %.2f, score reduced to %.2f",
-                        i,
-                        forward_continuity,
-                        score,
-                    )
+            # 5. Apply negative signal reductions
+            score = self._apply_negative_signals(messages, i, score, window_centroids)
 
             # 6. Create boundary if score exceeds threshold
             if score >= self.boundary_threshold:
@@ -589,6 +557,65 @@ class TopicSegmenter:
                 )
 
         return boundaries
+
+    def _apply_negative_signals(
+        self,
+        messages: list[SegmentMessage],
+        position: int,
+        score: float,
+        window_centroids: NDArray[np.float32] | None,
+    ) -> float:
+        """Apply negative signal reductions to boundary score.
+
+        Reduces score for patterns that shouldn't create boundaries:
+        - Reactions (tapbacks) - "Loved X"
+        - Q&A pairs - questions and answers
+        - Media bursts - multiple attachments
+        - Forward continuity - if following messages continue old topic
+
+        Args:
+            messages: List of messages.
+            position: Index in message list.
+            score: Current boundary score.
+            window_centroids: Pre-computed window centroids for continuity check.
+
+        Returns:
+            Reduced boundary score.
+        """
+        # Reactions (tapbacks) shouldn't split from the message
+        raw_text = messages[position].raw_text or messages[position].text or ""
+        if is_reaction(raw_text):
+            score = max(0.0, score - 0.5)
+            logger.debug("Boundary %d: reaction detected, score reduced to %.2f", position, score)
+
+        # Q&A pairs - questions and their answers should stay together
+        if self._is_qa_pair(messages[position - 1], messages[position]):
+            score = max(0.0, score - 0.4)
+            logger.debug("Boundary %d: Q&A pair detected, score reduced to %.2f", position, score)
+
+        # Media bursts - multiple attachments in quick succession
+        if self._is_media_burst(messages, position):
+            score = max(0.0, score - 0.4)
+            logger.debug("Boundary %d: media burst detected, score reduced to %.2f", position, score)
+
+        # Bidirectional check: if forward messages continue old topic, reduce score
+        # This prevents false boundaries when someone briefly mentions something
+        # but then continues the original conversation
+        if score >= self.boundary_threshold:
+            forward_continuity = self._check_forward_continuity(messages, position, window_centroids)
+            if forward_continuity > 0:
+                # Forward messages continue old topic - reduce score
+                # Higher continuity = more reduction
+                reduction = 0.3 * forward_continuity
+                score = max(0.0, score - reduction)
+                logger.debug(
+                    "Boundary %d: forward continuity %.2f, score reduced to %.2f",
+                    position,
+                    forward_continuity,
+                    score,
+                )
+
+        return score
 
     def _compute_window_centroids(
         self,
