@@ -430,38 +430,27 @@ async def generate_draft_reply(
             detail="Model service unavailable",
         ) from e
 
-    # Generate multiple suggestions with timeout
-    # Use asyncio.gather() to parallelize generation for better performance
+    # Generate suggestions sequentially (MLX/Metal GPU is NOT thread-safe)
     suggestions: list[DraftSuggestion] = []
 
     try:
         async with asyncio.timeout(get_timeout_generation()):
-            # Build all prompts first
-            generation_tasks = []
             for i in range(draft_request.num_suggestions):
                 prompt = _build_reply_prompt(
                     last_message=last_message or "",
                     instruction=draft_request.instruction,
                     suggestion_num=i + 1,
                 )
-                # Create task for parallel execution
-                generation_tasks.append(
-                    run_in_threadpool(
+                try:
+                    result = await run_in_threadpool(
                         _generate_single_suggestion,
                         generator,
                         prompt,
                         context_text,
                         0.7 + (i * 0.1),  # Vary temperature for diversity
                     )
-                )
-
-            # Execute all generations in parallel
-            results = await asyncio.gather(*generation_tasks, return_exceptions=True)
-
-            # Process results
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.warning("Generation %d failed: %s", i, result)
+                except Exception as e:
+                    logger.warning("Generation %d failed: %s", i, e)
                     continue
                 if result:
                     confidence = max(0.5, 0.9 - (i * 0.1))
