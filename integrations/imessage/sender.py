@@ -29,6 +29,49 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _validate_file_path(file_path: Path) -> bool:
+    """Validate file path is within allowed directories.
+
+    SECURITY: Prevents path traversal attacks by ensuring resolved path
+    is within allowed directories (home, temp, common system dirs).
+
+    Args:
+        file_path: Path to validate (should be resolved)
+
+    Returns:
+        True if path is in allowed directory, False otherwise
+    """
+    try:
+        # Resolve to absolute path to handle symlinks and ../ traversal
+        resolved = file_path.resolve()
+
+        # Define allowed base directories
+        allowed_bases = [
+            Path.home(),  # User's home directory
+            Path("/tmp"),  # Temp directory
+            Path("/var/tmp"),  # Alternate temp
+            Path("/private/tmp"),  # macOS temp
+            Path("/Users"),  # macOS user directories
+        ]
+
+        # Check if resolved path is within any allowed base
+        for base in allowed_bases:
+            try:
+                # is_relative_to() checks if path is under base
+                if resolved.is_relative_to(base):
+                    return True
+            except (ValueError, AttributeError):
+                # is_relative_to() not available in Python <3.9, or path issues
+                # Fallback: check if base is in parents
+                if base in resolved.parents or resolved == base:
+                    return True
+
+        return False
+    except (OSError, RuntimeError):
+        # Error resolving path (circular symlink, etc.)
+        return False
+
+
 class TapbackType(Enum):
     """iMessage tapback reaction types."""
 
@@ -112,6 +155,14 @@ class IMessageSender:
         if not path.exists():
             return SendResult(success=False, error=f"File not found: {file_path}")
 
+        # SECURITY: Validate path is within allowed directories to prevent path traversal
+        if not _validate_file_path(path):
+            logger.warning("Rejected file path outside allowed directories: %s", path)
+            return SendResult(
+                success=False,
+                error="File path is outside allowed directories for security reasons",
+            )
+
         # Get absolute POSIX path for AppleScript
         abs_path = str(path.resolve())
         escaped_path = abs_path.replace("\\", "\\\\").replace('"', '\\"')
@@ -142,6 +193,37 @@ end tell
         return self._run_applescript(applescript, f"attachment to {chat_id or recipient}")
 
     @staticmethod
+    def _validate_recipient_format(recipient: str) -> bool:
+        """Validate that recipient is a valid phone number or email address.
+
+        Args:
+            recipient: Phone number or email address to validate
+
+        Returns:
+            True if valid format, False otherwise
+        """
+        import re
+
+        recipient = recipient.strip()
+        if not recipient:
+            return False
+
+        # Check for email format (basic validation)
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if re.match(email_pattern, recipient):
+            return True
+
+        # Check for phone number format (various formats)
+        # Accepts: +1234567890, (123) 456-7890, 123-456-7890, 1234567890
+        phone_pattern = r"^[\+]?[\d\s\(\)\-\.]{10,20}$"
+        if re.match(phone_pattern, recipient):
+            # Ensure it has at least 10 digits
+            digits = re.sub(r"\D", "", recipient)
+            return len(digits) >= 10
+
+        return False
+
+    @staticmethod
     def _escape_for_applescript(text: str) -> str:
         """Escape text for safe embedding in AppleScript strings.
 
@@ -163,9 +245,19 @@ end tell
         return text
 
     def _send_to_individual(self, text: str, recipient: str | None) -> SendResult:
-        """Send a message to an individual recipient."""
+        """Send a message to an individual recipient.
+
+        Validates recipient format before sending to prevent AppleScript errors.
+        """
         if not recipient:
             return SendResult(success=False, error="Recipient is required")
+
+        # Validate recipient format (phone number or email)
+        if not self._validate_recipient_format(recipient):
+            return SendResult(
+                success=False,
+                error=f"Invalid recipient format: {recipient}. Must be phone number or email.",
+            )
 
         # Escape special characters for AppleScript
         escaped_text = self._escape_for_applescript(text)
