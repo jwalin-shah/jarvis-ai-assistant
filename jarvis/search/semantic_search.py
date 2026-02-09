@@ -94,11 +94,16 @@ class EmbeddingCache:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _get_connection(self) -> sqlite3.Connection:
-        """Get or create database connection."""
+        """Get or create database connection.
+
+        Thread-safe: Must be called while holding self._lock.
+        The lock is acquired by all public methods before calling this.
+        This ensures check_same_thread=False is safe.
+        """
         if self._conn is None:
             self._conn = sqlite3.connect(
                 str(self.cache_path),
-                check_same_thread=False,
+                check_same_thread=False,  # Safe because all callers hold _lock
                 timeout=10.0,
             )
             self._conn.row_factory = sqlite3.Row
