@@ -179,7 +179,7 @@ class ReplyRouter:
         return self._db
 
     @property
-    def semantic_searcher(self) -> SemanticSearcher:
+    def semantic_searcher(self) -> SemanticSearcher | None:
         """Get or create the semantic searcher."""
         with self._lock:
             if self._semantic_searcher is None and self.imessage_reader:
@@ -297,7 +297,7 @@ class ReplyRouter:
         contact_id: int | None = None,
         thread: list[str] | None = None,
         chat_id: str | None = None,
-    ) -> RoutingResponse:
+    ) -> dict[str, Any]:
         """Route an incoming message to LLM generation with RAG context.
 
         All non-empty messages go through generation. Response mobilization
@@ -318,7 +318,7 @@ class ReplyRouter:
         """
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
-        cached_embedder = CachedEmbedder(get_embedder())
+        cached_embedder = get_embedder()
 
         # Normalize incoming message early
         incoming = incoming.strip() if incoming else ""
