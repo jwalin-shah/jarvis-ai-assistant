@@ -34,8 +34,7 @@ _WS_AUTH_TOKEN: str | None = os.getenv("JARVIS_WS_TOKEN")
 if _WS_AUTH_TOKEN is None:
     # Generate a random token for this session (log it so it can be used)
     _WS_AUTH_TOKEN = secrets.token_urlsafe(32)
-    logger.info("Generated WebSocket auth token: %s", _WS_AUTH_TOKEN)
-    logger.info("Set JARVIS_WS_TOKEN environment variable to persist across restarts")
+    logger.info("Generated WebSocket auth token (set JARVIS_WS_TOKEN to persist)")
 
 
 def _validate_websocket_auth(websocket: WebSocket) -> bool:

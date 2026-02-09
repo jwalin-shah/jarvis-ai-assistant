@@ -217,7 +217,8 @@ class DefaultMemoryController:
         Args:
             loaded: True if a model is now loaded, False otherwise.
         """
-        self._model_loaded = loaded
+        with self._lock:
+            self._model_loaded = loaded
         logger.debug("Model loaded state updated: %s", loaded)
 
     def _check_pressure_change(self, current_pressure: str) -> None:

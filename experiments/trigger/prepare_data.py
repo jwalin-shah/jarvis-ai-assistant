@@ -104,8 +104,12 @@ def stratified_split(
         random_state=seed,
     )
 
-    # Reconstruct examples
-    text_to_example = {e.text: e for e in examples}
+    # Reconstruct examples (warn if duplicates exist)
+    text_to_example: dict[str, LabeledExample] = {}
+    for e in examples:
+        if e.text in text_to_example and text_to_example[e.text].label != e.label:
+            logger.warning("Duplicate text with conflicting labels: %r", e.text[:80])
+        text_to_example[e.text] = e
     train = [text_to_example[t] for t in train_texts]
     test = [text_to_example[t] for t in test_texts]
 

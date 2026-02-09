@@ -40,13 +40,15 @@ JUDGE_API_KEY_ENV = "GROQ_API_KEY"
 # JUDGE_API_KEY_ENV = "CEREBRAS_API_KEY"
 
 
-def get_judge_api_key() -> str:
-    """Get the judge API key from environment."""
+def get_judge_api_key() -> str | None:
+    """Get the judge API key from environment.
+
+    Returns:
+        The API key string, or None if not configured.
+    """
     key = os.environ.get(JUDGE_API_KEY_ENV, "")
     if not key or key == "your-key-here":
-        print(f"ERROR: {JUDGE_API_KEY_ENV} not set in .env")
-        print("       Required for LLM judge scoring.")
-        sys.exit(1)
+        return None
     return key
 
 

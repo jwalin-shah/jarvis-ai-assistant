@@ -580,12 +580,16 @@ def reset_metrics() -> None:
     with _metrics_lock:
         # CRITICAL: Declare globals INSIDE lock to prevent race conditions (CODE_REVIEW.md #16)
         global _memory_sampler, _request_counter, _latency_histogram, _template_analytics
+        global _conversation_cache, _health_cache, _model_info_cache
         if _memory_sampler:
             _memory_sampler.stop()
             _memory_sampler = None
         _request_counter = None
         _latency_histogram = None
         _template_analytics = None
+        _conversation_cache = None
+        _health_cache = None
+        _model_info_cache = None
 
 
 def force_gc() -> dict[str, Any]:
