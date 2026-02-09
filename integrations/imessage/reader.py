@@ -22,6 +22,7 @@ from jarvis.errors import (
     iMessageAccessError,
     iMessageQueryError,
 )
+from jarvis.utils.latency_tracker import track_latency
 
 from .avatar import ContactAvatarData, get_contact_avatar
 from .parser import (
@@ -1063,81 +1064,82 @@ class ChatDBReader:
         Returns:
             List of Conversation objects, sorted by last message date (newest first)
         """
-        with self._connection_context() as conn:
-            cursor = conn.cursor()
+        with track_latency("conversations_fetch", limit=limit):
+            with self._connection_context() as conn:
+                cursor = conn.cursor()
 
-            # Build params list based on filters
-            params: list[Any] = []
-            if since is not None:
-                params.append(datetime_to_apple_timestamp(since))
-            if before is not None:
-                params.append(datetime_to_apple_timestamp(before))
-            params.append(limit)
+                # Build params list based on filters
+                params: list[Any] = []
+                if since is not None:
+                    params.append(datetime_to_apple_timestamp(since))
+                if before is not None:
+                    params.append(datetime_to_apple_timestamp(before))
+                params.append(limit)
 
-            query = get_query(
-                "conversations",
-                self._schema_version or "v14",
-                with_since_filter=since is not None,
-                with_conversations_before_filter=before is not None,
-            )
-
-            try:
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                logger.warning(f"Query error in get_conversations: {e}")
-                return []
-
-        conversations = []
-        for row in rows:
-            # Parse participants
-            participants_str = row["participants"] or ""
-            participants = [
-                normalized
-                for p in participants_str.split(",")
-                if p.strip() and (normalized := normalize_phone_number(p.strip())) is not None
-            ]
-
-            # Determine if group chat
-            is_group = len(participants) > 1
-
-            # Parse last message date
-            last_message_date = parse_apple_timestamp(row["last_message_date"])
-
-            # Resolve display name from database or contacts
-            display_name = row["display_name"] or None
-
-            # For individual chats without a display name, try to resolve from contacts
-            if not display_name and not is_group and len(participants) == 1:
-                display_name = self._resolve_contact_name(participants[0])
-
-            # Get last message text (may be None if no text messages)
-            # Try text column first, fall back to parsing attributedBody
-            row_keys = row.keys()
-            last_message_text = (
-                row["last_message_text"] if "last_message_text" in row_keys else None
-            )
-            if not last_message_text and "last_message_attributed_body" in row_keys:
-                # Parse attributedBody using existing parser
-                attributed_body = row["last_message_attributed_body"]
-                if attributed_body:
-                    from .parser import parse_attributed_body
-
-                    last_message_text = parse_attributed_body(attributed_body)
-
-            conversations.append(
-                Conversation(
-                    chat_id=row["chat_id"],
-                    participants=participants,
-                    display_name=display_name,
-                    last_message_date=last_message_date,
-                    message_count=row["message_count"],
-                    is_group=is_group,
-                    last_message_text=last_message_text,
+                query = get_query(
+                    "conversations",
+                    self._schema_version or "v14",
+                    with_since_filter=since is not None,
+                    with_conversations_before_filter=before is not None,
                 )
-            )
 
-        return conversations
+                try:
+                    cursor.execute(query, params)
+                    rows = cursor.fetchall()
+                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                    logger.warning(f"Query error in get_conversations: {e}")
+                    return []
+
+            conversations = []
+            for row in rows:
+                # Parse participants
+                participants_str = row["participants"] or ""
+                participants = [
+                    normalized
+                    for p in participants_str.split(",")
+                    if p.strip() and (normalized := normalize_phone_number(p.strip())) is not None
+                ]
+
+                # Determine if group chat
+                is_group = len(participants) > 1
+
+                # Parse last message date
+                last_message_date = parse_apple_timestamp(row["last_message_date"])
+
+                # Resolve display name from database or contacts
+                display_name = row["display_name"] or None
+
+                # For individual chats without a display name, try to resolve from contacts
+                if not display_name and not is_group and len(participants) == 1:
+                    display_name = self._resolve_contact_name(participants[0])
+
+                # Get last message text (may be None if no text messages)
+                # Try text column first, fall back to parsing attributedBody
+                row_keys = row.keys()
+                last_message_text = (
+                    row["last_message_text"] if "last_message_text" in row_keys else None
+                )
+                if not last_message_text and "last_message_attributed_body" in row_keys:
+                    # Parse attributedBody using existing parser
+                    attributed_body = row["last_message_attributed_body"]
+                    if attributed_body:
+                        from .parser import parse_attributed_body
+
+                        last_message_text = parse_attributed_body(attributed_body)
+
+                conversations.append(
+                    Conversation(
+                        chat_id=row["chat_id"],
+                        participants=participants,
+                        display_name=display_name,
+                        last_message_date=last_message_date,
+                        message_count=row["message_count"],
+                        is_group=is_group,
+                        last_message_text=last_message_text,
+                    )
+                )
+
+            return conversations
 
     def get_messages(
         self,
@@ -1160,73 +1162,74 @@ class ChatDBReader:
             logger.debug(f"Invalid chat_id: {chat_id}")
             return []
 
-        with self._connection_context() as conn:
-            cursor = conn.cursor()
+        with track_latency("message_load", chat_id=chat_id, limit=limit):
+            with self._connection_context() as conn:
+                cursor = conn.cursor()
 
-            # Build params list based on filters
-            params: list[Any] = [chat_id]
-            if before is not None:
-                params.append(datetime_to_apple_timestamp(before))
-            params.append(limit)
+                # Build params list based on filters
+                params: list[Any] = [chat_id]
+                if before is not None:
+                    params.append(datetime_to_apple_timestamp(before))
+                params.append(limit)
 
-            query = get_query(
-                "messages",
-                self._schema_version or "v14",
-                with_before_filter=before is not None,
-            )
+                query = get_query(
+                    "messages",
+                    self._schema_version or "v14",
+                    with_before_filter=before is not None,
+                )
 
-            try:
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                # If query fails due to missing columns, use minimal fallback query
-                error_str = str(e).lower()
-                if "no such column" in error_str:
-                    logger.debug(f"Query failed with missing column ({e}), using minimal fallback")
-                    try:
-                        # Use v14 schema and replace all optional columns with NULL
-                        # This handles test databases or older schemas with minimal columns
-                        fallback_query = get_query(
-                            "messages",
-                            "v14",
-                            with_before_filter=before is not None,
-                        )
+                try:
+                    cursor.execute(query, params)
+                    rows = cursor.fetchall()
+                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                    # If query fails due to missing columns, use minimal fallback query
+                    error_str = str(e).lower()
+                    if "no such column" in error_str:
+                        logger.debug(f"Query failed with missing column ({e}), using minimal fallback")
+                        try:
+                            # Use v14 schema and replace all optional columns with NULL
+                            # This handles test databases or older schemas with minimal columns
+                            fallback_query = get_query(
+                                "messages",
+                                "v14",
+                                with_before_filter=before is not None,
+                            )
 
-                        # Replace all optional columns with NULL
-                        fallback_query = (
-                            fallback_query.replace(
-                                "message.date_delivered,",
-                                "NULL as date_delivered,",
+                            # Replace all optional columns with NULL
+                            fallback_query = (
+                                fallback_query.replace(
+                                    "message.date_delivered,",
+                                    "NULL as date_delivered,",
+                                )
+                                .replace(
+                                    "message.date_read,",
+                                    "NULL as date_read,",
+                                )
+                                .replace(
+                                    "message.group_action_type,",
+                                    "NULL as group_action_type,",
+                                )
+                                .replace(
+                                    "affected_handle.id as affected_handle_id",
+                                    "NULL as affected_handle_id",
+                                )
+                                .replace(
+                                    "LEFT JOIN handle AS affected_handle "
+                                    "ON message.other_handle = affected_handle.ROWID",
+                                    "",
+                                )
                             )
-                            .replace(
-                                "message.date_read,",
-                                "NULL as date_read,",
-                            )
-                            .replace(
-                                "message.group_action_type,",
-                                "NULL as group_action_type,",
-                            )
-                            .replace(
-                                "affected_handle.id as affected_handle_id",
-                                "NULL as affected_handle_id",
-                            )
-                            .replace(
-                                "LEFT JOIN handle AS affected_handle "
-                                "ON message.other_handle = affected_handle.ROWID",
-                                "",
-                            )
-                        )
 
-                        cursor.execute(fallback_query, params)
-                        rows = cursor.fetchall()
-                    except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
-                        logger.warning(f"Query error after column fallback: {e2}")
+                            cursor.execute(fallback_query, params)
+                            rows = cursor.fetchall()
+                        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
+                            logger.warning(f"Query error after column fallback: {e2}")
+                            return []
+                    else:
+                        logger.warning(f"Query error in get_messages: {e}")
                         return []
-                else:
-                    logger.warning(f"Query error in get_messages: {e}")
-                    return []
 
-        return self._rows_to_messages(rows, chat_id)
+            return self._rows_to_messages(rows, chat_id)
 
     def get_messages_after(
         self,

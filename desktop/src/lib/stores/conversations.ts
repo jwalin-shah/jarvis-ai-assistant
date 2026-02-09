@@ -411,6 +411,11 @@ export async function fetchConversations(isPolling = false): Promise<void> {
     console.log(
       `[Conversations] Total fetch (${fetchMethod}) took ${totalFetchMs.toFixed(1)}ms`
     );
+    if (totalFetchMs > 100) {
+      console.warn(
+        `[LATENCY WARNING] fetchConversations took ${totalFetchMs.toFixed(1)}ms (threshold: 100ms)`
+      );
+    }
 
     // Check if request was aborted
     if (signal.aborted) return;
@@ -462,6 +467,7 @@ export async function fetchConversations(isPolling = false): Promise<void> {
  * Returns the new messages if any (for polling use)
  */
 export async function fetchMessages(chatId: string): Promise<Message[]> {
+  const startTime = performance.now();
   try {
     let messages: Message[];
 
@@ -477,10 +483,17 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
       messages = await api.getMessages(chatId, PAGE_SIZE);
     }
 
+    const elapsed = performance.now() - startTime;
+    console.log(`[LATENCY] fetchMessages took ${elapsed.toFixed(1)}ms for ${messages.length} messages`);
+    if (elapsed > 100) {
+      console.warn(`[LATENCY WARNING] fetchMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
+    }
+
     // Reverse messages so oldest is at top, newest at bottom (API returns newest first)
     return [...messages].reverse();
   } catch (error) {
-    console.error("Failed to fetch messages:", error);
+    const elapsed = performance.now() - startTime;
+    console.error(`Failed to fetch messages after ${elapsed.toFixed(1)}ms:`, error);
     return [];
   }
 }
@@ -493,6 +506,7 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
  * fetching all messages. This avoids unnecessary DB reads when nothing changed.
  */
 export async function pollMessages(): Promise<Message[]> {
+  const startTime = performance.now();
   const state = get(conversationsStore);
 
   if (!state.selectedChatId || !state.isWindowFocused) {
@@ -554,11 +568,16 @@ export async function pollMessages(): Promise<Message[]> {
       }
     }
 
+    const elapsed = performance.now() - startTime;
+    if (newMessages.length > 0) {
+      console.log(`[LATENCY] pollMessages found ${newMessages.length} new messages in ${elapsed.toFixed(1)}ms`);
+    }
     return newMessages;
   } catch (error) {
     // Ignore abort errors
     if (error instanceof Error && error.name === "AbortError") return [];
-    console.error("Error polling messages:", error);
+    const elapsed = performance.now() - startTime;
+    console.error(`Error polling messages after ${elapsed.toFixed(1)}ms:`, error);
     return [];
   }
 }

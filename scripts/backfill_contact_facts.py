@@ -33,6 +33,7 @@ def backfill(
     max_contacts: int = 50,
     messages_per_contact: int = 500,
     use_nli: bool = True,
+    output_file: str | None = None,
 ) -> None:
     """Extract facts from historical messages for top contacts."""
     from integrations.imessage import ChatDBReader
@@ -111,6 +112,45 @@ def backfill(
     print(f"  New facts saved:    {total_inserted}", flush=True)
     print(f"  Total facts in DB:  {total_in_db}", flush=True)
 
+    # Export to file if requested
+    if output_file:
+        _export_facts(output_file)
+
+
+def _export_facts(output_file: str) -> None:
+    """Export all facts to a readable file for review."""
+    from jarvis.contacts.fact_storage import get_all_facts
+
+    facts = get_all_facts()
+    if not facts:
+        print("No facts to export.", flush=True)
+        return
+
+    # Group by contact
+    by_contact: dict[str, list] = {}
+    for f in facts:
+        by_contact.setdefault(f.contact_id, []).append(f)
+
+    with open(output_file, "w") as fp:
+        fp.write(f"# Contact Facts Export ({len(facts)} total)\n")
+        fp.write(f"# Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+        for contact_id in sorted(by_contact):
+            contact_facts = by_contact[contact_id]
+            fp.write(f"## Contact: {contact_id}\n")
+            for f in contact_facts:
+                fp.write(
+                    f"  [{f.category}] {f.subject} {f.predicate}"
+                    f"{' ' + f.value if f.value else ''}"
+                    f" (conf={f.confidence:.2f})\n"
+                )
+                if f.source_text:
+                    src = f.source_text[:120].replace("\n", " ")
+                    fp.write(f"    src: \"{src}\"\n")
+            fp.write("\n")
+
+    print(f"Exported {len(facts)} facts to {output_file}", flush=True)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backfill contact facts from iMessage history")
@@ -119,12 +159,17 @@ def main() -> None:
         "--messages-per-contact", type=int, default=500, help="Messages per contact"
     )
     parser.add_argument("--no-nli", action="store_true", help="Skip NLI verification")
+    parser.add_argument(
+        "--output", "-o", type=str, default=None,
+        help="Export extracted facts to this file for review",
+    )
     args = parser.parse_args()
 
     backfill(
         max_contacts=args.max_contacts,
         messages_per_contact=args.messages_per_contact,
         use_nli=not args.no_nli,
+        output_file=args.output,
     )
 
 

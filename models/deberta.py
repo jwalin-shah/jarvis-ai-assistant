@@ -130,7 +130,7 @@ class DisentangledAttention(nn.Module):
         mid = self.position_buckets // 2
         abs_pos = mx.minimum(mx.abs(rel_pos), self.max_relative - 1).astype(mx.float32)
 
-        is_small = abs_pos < mid
+        is_small = abs_pos <= mid
         denom = max(math.log((self.max_relative - 1) / mid), 1e-6)
         log_pos = mx.ceil(mx.log(abs_pos / mid + 1e-6) / denom * (mid - 1)) + mid
         log_pos = mx.minimum(log_pos, self.position_buckets - 1)
@@ -241,7 +241,7 @@ class DebertaForSequenceClassification(nn.Module):
     ) -> mx.array:
         """Forward pass returning raw logits of shape (batch, num_labels)."""
         hidden = self.deberta(input_ids, attention_mask)
-        pooled = self.pooler(hidden[:, 0])
+        pooled = nn.gelu(self.pooler(hidden[:, 0]))
         return self.classifier(pooled)
 
 

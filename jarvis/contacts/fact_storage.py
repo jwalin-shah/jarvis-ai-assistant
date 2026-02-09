@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 
 from jarvis.contacts.contact_profile import Fact
+from jarvis.utils.latency_tracker import track_latency
 
 logger = logging.getLogger(__name__)
 
@@ -31,66 +32,67 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
     if not facts:
         return 0
 
-    db = get_db()
-    start_time = time.perf_counter()
+    with track_latency("fact_save", contact_id=contact_id[:16], count=len(facts)):
+        db = get_db()
+        start_time = time.perf_counter()
 
-    # PERF FIX: Use batch INSERT with executemany() instead of loop
-    # Before: 50 individual INSERT statements = ~150ms
-    # After: 1 batch INSERT = ~3ms
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # PERF FIX: Use batch INSERT with executemany() instead of loop
+        # Before: 50 individual INSERT statements = ~150ms
+        # After: 1 batch INSERT = ~3ms
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Prepare all fact data as tuples for batch insert
-    fact_data = [
-        (
-            contact_id,
-            fact.category,
-            fact.subject,
-            fact.predicate,
-            fact.value or "",
-            fact.confidence,
-            fact.source_message_id,
-            fact.source_text[:500] if fact.source_text else "",
-            current_time,
-        )
-        for fact in facts
-    ]
+        # Prepare all fact data as tuples for batch insert
+        fact_data = [
+            (
+                contact_id,
+                fact.category,
+                fact.subject,
+                fact.predicate,
+                fact.value or "",
+                fact.confidence,
+                fact.source_message_id,
+                fact.source_text[:500] if fact.source_text else "",
+                current_time,
+            )
+            for fact in facts
+        ]
 
-    with db.connection() as conn:
-        # Get initial count to calculate how many were actually inserted
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
-            (contact_id,),
-        )
-        count_before = cursor.fetchone()[0]
+        with db.connection() as conn:
+            # Get initial count to calculate how many were actually inserted
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
+                (contact_id,),
+            )
+            count_before = cursor.fetchone()[0]
 
-        # Batch insert all facts at once
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO contact_facts
-            (contact_id, category, subject, predicate, value, confidence,
-             source_message_id, source_text, extracted_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            fact_data,
-        )
+            # Batch insert all facts at once
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO contact_facts
+                (contact_id, category, subject, predicate, value, confidence,
+                 source_message_id, source_text, extracted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                fact_data,
+            )
 
-        # Get final count to see how many were inserted (executemany rowcount is unreliable)
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
-            (contact_id,),
-        )
-        count_after = cursor.fetchone()[0]
-        inserted = count_after - count_before
+            # Get final count to see how many were inserted (executemany rowcount is unreliable)
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
+                (contact_id,),
+            )
+            count_after = cursor.fetchone()[0]
+            inserted = count_after - count_before
 
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
-    if inserted:
-        logger.info(
-            "Saved %d new facts for %s in %.1fms (batch insert)",
-            inserted,
-            contact_id[:16],
-            elapsed_ms,
-        )
-    return inserted
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        if inserted:
+            logger.info(
+                "Saved %d new facts for %s in %.1fms (batch insert)",
+                inserted,
+                contact_id[:16],
+                elapsed_ms,
+            )
+        return inserted
 
 
 def get_facts_for_contact(contact_id: str) -> list[Fact]:

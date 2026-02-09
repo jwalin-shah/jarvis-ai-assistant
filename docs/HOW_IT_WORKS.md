@@ -92,6 +92,43 @@ Incoming: "Want to grab lunch tomorrow?"
 
 ---
 
+### Phase 3: Fact Extraction (Background)
+
+When new messages arrive, the watcher also extracts structured facts in a background task:
+
+```
+Incoming: "My sister Sarah just started at Google in Austin"
+    │
+    ├─→ 1. Rule-based regex patterns
+    │      ├─→ Relationship: "sister Sarah" (is_family_of)
+    │      ├─→ Work: "started at Google" (works_at)
+    │      └─→ Location: "in Austin" (lives_in)
+    │
+    ├─→ 2. NLI verification (optional, via MLX DeBERTa-v3)
+    │      ├─→ "Sarah is a family member" → entailment (0.94) ✓
+    │      ├─→ "Someone works at Google" → entailment (0.88) ✓
+    │      └─→ "Someone lives in Austin" → entailment (0.91) ✓
+    │
+    └─→ 3. Persist to contact_facts table (dedup by UNIQUE constraint)
+           └─→ Knowledge graph queries now return these facts
+```
+
+**NLI Model**: `cross-encoder/nli-deberta-v3-xsmall` (22M params, 87.77% MNLI accuracy, ~90MB in memory). Implemented as a pure MLX DeBERTa-v3 with disentangled attention. We chose this over using the LLM for entailment because:
+- Dedicated NLI models are more accurate for entailment tasks than zero-shot LLM prompting
+- 90MB memory footprint vs 1.2GB LLM (can run alongside other models)
+- Batch inference is fast (~5ms per pair on M-series chips)
+- No prompt engineering required; trained specifically on SNLI + MultiNLI
+
+```bash
+# Backfill facts from historical messages
+uv run python scripts/backfill_contact_facts.py --max-contacts 50
+
+# Without NLI verification (faster, less precise)
+uv run python scripts/backfill_contact_facts.py --no-nli
+```
+
+---
+
 ## Key Components
 
 ### Topic Chunks (Not Pairs)
