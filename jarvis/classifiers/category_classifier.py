@@ -52,14 +52,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-VALID_CATEGORIES = frozenset({
-    "closing",
-    "acknowledge",
-    "question",
-    "request",
-    "emotion",
-    "statement",
-})
+VALID_CATEGORIES = frozenset(
+    {
+        "closing",
+        "acknowledge",
+        "question",
+        "request",
+        "emotion",
+        "statement",
+    }
+)
 
 # Category order from training (for predict_proba index mapping).
 # WARNING: This order MUST match the trained model's mlb.classes_ (alphabetical).
@@ -99,10 +101,7 @@ class CategoryResult:
     method: str  # "fast_path", "lightgbm", "heuristic", "default"
 
     def __repr__(self) -> str:
-        return (
-            f"CategoryResult({self.category}, "
-            f"conf={self.confidence:.2f}, method={self.method})"
-        )
+        return f"CategoryResult({self.category}, conf={self.confidence:.2f}, method={self.method})"
 
 
 # ---------------------------------------------------------------------------
@@ -160,8 +159,8 @@ class CategoryClassifier(EmbedderMixin):
         try:
             # Model is saved as dict with 'model' and 'mlb' keys
             model_dict = joblib.load(model_path)
-            self._pipeline = model_dict['model']
-            self._mlb = model_dict.get('mlb')
+            self._pipeline = model_dict["model"]
+            self._mlb = model_dict.get("mlb")
 
             # Validate loaded classes match expected categories
             if self._mlb is not None:
@@ -175,7 +174,8 @@ class CategoryClassifier(EmbedderMixin):
                     return False
                 logger.info(
                     "Loaded category pipeline from %s (classes: %s)",
-                    model_path, list(self._mlb.classes_),
+                    model_path,
+                    list(self._mlb.classes_),
                 )
             else:
                 logger.warning("No mlb in model artifact, using hardcoded CATEGORIES")

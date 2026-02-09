@@ -1985,9 +1985,16 @@ class TemplateMatcher:
 
         Returns:
             Query embedding as numpy array (normalized)
+
+        Raises:
+            TypeError: If embedder doesn't implement the Embedder protocol
         """
-        # If external embedder provided, use it directly (it handles its own caching)
+        # SECURITY: Validate embedder implements the required protocol before calling encode()
         if embedder is not None:
+            if not isinstance(embedder, Embedder):
+                raise TypeError(
+                    f"embedder must implement Embedder protocol, got {type(embedder).__name__}"
+                )
             embedding_result = embedder.encode([query], normalize=True)[0]
             return np.asarray(embedding_result)
 
@@ -2026,7 +2033,16 @@ class TemplateMatcher:
         Returns:
             TemplateMatch if similarity >= threshold, None otherwise.
             Returns None if sentence model fails to load (falls back to model generation).
+
+        Raises:
+            TypeError: If embedder doesn't implement the Embedder protocol
         """
+        # SECURITY: Validate embedder type early before any processing
+        if embedder is not None and not isinstance(embedder, Embedder):
+            raise TypeError(
+                f"embedder must implement Embedder protocol, got {type(embedder).__name__}"
+            )
+
         analytics = get_template_analytics() if track_analytics else None
 
         try:

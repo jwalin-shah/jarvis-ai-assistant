@@ -7,9 +7,9 @@ positioning nodes in relationship graphs.
 from __future__ import annotations
 
 import logging
-from collections import deque
 import math
 import random
+from collections import deque
 from dataclasses import dataclass
 from typing import Literal
 

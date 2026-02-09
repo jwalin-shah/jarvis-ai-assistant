@@ -46,6 +46,26 @@ logger = logging.getLogger(__name__)
 # Default database path (same directory as main jarvis.db)
 TAGS_DB_PATH = Path.home() / ".jarvis" / "jarvis.db"
 
+
+def _validate_placeholders(placeholders: str) -> None:
+    """Validate SQL placeholder string contains only safe characters.
+
+    SECURITY: Ensures placeholder strings like "?,?,?" don't contain SQL injection.
+    Raises ValueError if placeholders contain anything other than '?' and ','.
+
+    Args:
+        placeholders: The placeholder string to validate (e.g., "?,?,?")
+
+    Raises:
+        ValueError: If placeholders contain invalid characters
+    """
+    if not placeholders:
+        return
+    allowed_chars = set("?,")
+    if not set(placeholders).issubset(allowed_chars):
+        raise ValueError(f"Invalid characters in SQL placeholders: {placeholders}")
+
+
 # Schema SQL for tags system
 TAGS_SCHEMA_SQL = """
 -- Tags table with hierarchical support
@@ -413,6 +433,9 @@ class TagManager:
             if not include_system:
                 conditions.append("is_system = FALSE")
 
+            # SECURITY: where_clause is built from hardcoded, safe SQL fragments only.
+            # All conditions use parameterized queries ("parent_id = ?", "is_system = FALSE").
+            # No user input is interpolated into the SQL string.
             where_clause = " AND ".join(conditions) if conditions else "1=1"
             cursor = conn.execute(
                 f"SELECT * FROM tags WHERE {where_clause} ORDER BY sort_order, name",
@@ -488,6 +511,9 @@ class TagManager:
                 params.append(datetime.now(UTC))
                 params.append(tag_id)
 
+                # SECURITY: updates list contains only hardcoded SQL fragments ("name = ?", etc).
+                # All values are passed through parameterized queries. No user input is
+                # interpolated into column names.
                 conn.execute(
                     f"UPDATE tags SET {', '.join(updates)} WHERE id = ?",
                     params,
@@ -665,6 +691,8 @@ class TagManager:
 
         with self.connection() as conn:
             placeholders = ",".join("?" * len(tag_ids))
+            # SECURITY: Validate placeholders only contain "?" and "," before SQL interpolation
+            _validate_placeholders(placeholders)
 
             if match_all:
                 cursor = conn.execute(
@@ -732,6 +760,9 @@ class TagManager:
         with self.connection() as conn:
             chat_placeholders = ",".join("?" * len(chat_ids))
             tag_placeholders = ",".join("?" * len(tag_ids))
+            # SECURITY: Validate placeholders only contain "?" and "," before SQL interpolation
+            _validate_placeholders(chat_placeholders)
+            _validate_placeholders(tag_placeholders)
 
             cursor = conn.execute(
                 f"""

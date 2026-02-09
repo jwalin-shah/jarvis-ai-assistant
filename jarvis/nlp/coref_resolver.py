@@ -53,6 +53,23 @@ class CorefResolver:
         self._init_attempted = False
         self._available = False
 
+    def _detect_device(self) -> str:
+        """Detect the best available device for the model.
+
+        Returns:
+            Device string: "mps", "cuda", or "cpu".
+        """
+        try:
+            import torch
+
+            if torch.backends.mps.is_available():
+                return "mps"
+            elif torch.cuda.is_available():
+                return "cuda"
+        except (ImportError, AttributeError):
+            pass
+        return "cpu"
+
     def _initialize(self) -> None:
         """Initialize the FastCoref model.
 
@@ -70,9 +87,11 @@ class CorefResolver:
             try:
                 from fastcoref import FCoref
 
-                self._model = FCoref(device="mps")  # Use MPS on Apple Silicon
+                # Auto-detect device (MPS on Apple Silicon, CUDA on Nvidia, CPU fallback)
+                device = self._detect_device()
+                self._model = FCoref(device=device)
                 self._available = True
-                logger.info("FastCoref model loaded: %s", self.model_name)
+                logger.info("FastCoref model loaded: %s on %s", self.model_name, device)
 
             except ImportError:
                 logger.info(
@@ -116,9 +135,14 @@ class CorefResolver:
 
         try:
             preds = self._model.predict(texts=[text])
-            if preds and len(preds) > 0:
-                resolved: str = preds[0].get_resolved_text()
-                return resolved
+            # Validate predictions array and first element
+            if preds and len(preds) > 0 and preds[0] is not None:
+                try:
+                    resolved: str = preds[0].get_resolved_text()
+                    return resolved if resolved else text
+                except (AttributeError, TypeError) as e:
+                    logger.warning("Invalid prediction object: %s", e)
+                    return text
             return text
 
         except Exception as e:
@@ -154,11 +178,25 @@ class CorefResolver:
         try:
             preds = self._model.predict(texts=non_empty_texts)
 
+            # Validate predictions array length matches input
+            if not preds or len(preds) != len(non_empty_texts):
+                logger.warning(
+                    "Prediction count mismatch: expected %d, got %d",
+                    len(non_empty_texts),
+                    len(preds) if preds else 0,
+                )
+                return list(texts)
+
             # Build result list with resolved texts in correct positions
             result = list(texts)
             for idx, pred in zip(non_empty_indices, preds):
-                if pred:
-                    result[idx] = pred.get_resolved_text()
+                if pred is not None:
+                    try:
+                        resolved = pred.get_resolved_text()
+                        if resolved:
+                            result[idx] = resolved
+                    except (AttributeError, TypeError) as e:
+                        logger.warning("Invalid prediction object at index %d: %s", idx, e)
 
             return result
 

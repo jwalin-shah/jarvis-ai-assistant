@@ -36,20 +36,16 @@ class CandidateExchange(Protocol):
     """Minimal interface for a candidate exchange to validate."""
 
     @property
-    def trigger_text(self) -> str:
-        ...
+    def trigger_text(self) -> str: ...
 
     @property
-    def response_text(self) -> str:
-        ...
+    def response_text(self) -> str: ...
 
     @property
-    def time_gap_minutes(self) -> float:
-        ...
+    def time_gap_minutes(self) -> float: ...
 
     @property
-    def response_span(self) -> list[Any]:
-        ...
+    def response_span(self) -> list[Any]: ...
 
 
 logger = logging.getLogger(__name__)
@@ -225,10 +221,14 @@ class ValidityGate:
         if is_reaction(response_text):
             return False, "reaction_only"
 
-        # Also check individual response messages
-        for msg in exchange.response_span:
-            if "reaction" in msg.flags:
-                return False, "reaction_only"
+        # Also check individual response messages (validate iterable first)
+        if hasattr(exchange, "response_span") and hasattr(exchange.response_span, "__iter__"):
+            try:
+                for msg in exchange.response_span:
+                    if hasattr(msg, "flags") and "reaction" in msg.flags:
+                        return False, "reaction_only"
+            except (TypeError, AttributeError) as e:
+                logger.debug("Could not iterate response_span: %s", e)
 
         # 2. Response is ack-only AND trigger expects content
         if is_acknowledgment_only(response_text) and trigger_expects_content(trigger_text):
@@ -261,6 +261,9 @@ class ValidityGate:
         # (Response asking question when trigger didn't - may be unrelated)
         if is_question(response_text) and not is_question(trigger_text):
             # Only reject if response is short (short questions often unrelated)
+            # Note: response_words may have been calculated earlier, but ensure it's defined
+            if "response_words" not in locals():
+                response_words = len(response_text.split())
             if response_words <= 5:
                 return False, "short_question_to_statement"
 
@@ -402,9 +405,22 @@ class ValidityGate:
             if isinstance(logits, (float, int)):
                 return float(logits)
 
+            # Validate logits is array-like before softmax
+            if not hasattr(logits, "__len__"):
+                logger.warning("NLI model returned non-array logits: %s", type(logits))
+                return 0.0
+
             # Convert logits to probabilities via softmax
             exp_logits = np.exp(logits - np.max(logits))
             probs = exp_logits / exp_logits.sum()
+
+            # Validate array has expected 3-class output (contradiction, neutral, entailment)
+            if len(probs) < 3:
+                logger.warning(
+                    "NLI model returned %d classes, expected 3 (contradiction/neutral/entailment)",
+                    len(probs),
+                )
+                return 0.0
 
             # Return entailment probability (index 2 for contradiction/neutral/entailment)
             return float(probs[2])

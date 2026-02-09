@@ -15,6 +15,7 @@ import logging
 import os
 import threading
 import time
+import types
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -516,7 +517,7 @@ class _TimerContext:
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any,
+        exc_tb: types.TracebackType | None,
     ) -> None:
         duration = time.perf_counter() - self._start
         self._histogram.observe(self._operation, duration)
@@ -572,9 +573,13 @@ def get_latency_histogram() -> LatencyHistogram:
 
 
 def reset_metrics() -> None:
-    """Reset all global metrics instances."""
-    global _memory_sampler, _request_counter, _latency_histogram, _template_analytics
+    """Reset all global metrics instances.
+
+    Thread-safe: Acquires lock before modifying globals to prevent race conditions.
+    """
     with _metrics_lock:
+        # CRITICAL: Declare globals INSIDE lock to prevent race conditions (CODE_REVIEW.md #16)
+        global _memory_sampler, _request_counter, _latency_histogram, _template_analytics
         if _memory_sampler:
             _memory_sampler.stop()
             _memory_sampler = None

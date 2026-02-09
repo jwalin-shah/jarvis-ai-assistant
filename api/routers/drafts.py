@@ -72,6 +72,47 @@ def _format_messages_for_context(messages: list[Message]) -> str:
     return "\n".join(lines)
 
 
+def _sanitize_instruction(instruction: str | None) -> str:
+    """Sanitize user instruction to prevent prompt injection.
+
+    Removes potentially malicious patterns that could override system prompts.
+
+    Args:
+        instruction: Raw user instruction
+
+    Returns:
+        Sanitized instruction string
+    """
+    if not instruction:
+        return "None"
+
+    # Limit length to prevent excessive prompts
+    instruction = instruction[:200]
+
+    # Remove common prompt injection patterns
+    dangerous_patterns = [
+        "ignore previous",
+        "ignore above",
+        "disregard",
+        "system:",
+        "assistant:",
+        "user:",
+        "<|im_start|>",
+        "<|im_end|>",
+        "###",
+    ]
+
+    lower_instruction = instruction.lower()
+    for pattern in dangerous_patterns:
+        if pattern in lower_instruction:
+            # Replace dangerous patterns with safe placeholder
+            instruction = instruction.replace(pattern, "[removed]")
+            instruction = instruction.replace(pattern.upper(), "[removed]")
+            instruction = instruction.replace(pattern.title(), "[removed]")
+
+    return instruction.strip()
+
+
 def _build_reply_prompt(
     last_message: str,
     instruction: str | None,
@@ -81,13 +122,15 @@ def _build_reply_prompt(
 
     Args:
         last_message: The last message in the conversation
-        instruction: Optional user instruction for reply tone/content
+        instruction: Optional user instruction for reply tone/content (will be sanitized)
         suggestion_num: Which suggestion number (1, 2, 3...) for variety
 
     Returns:
         Formatted prompt string
     """
-    base_prompt = f"Last message: '{last_message}'\nInstruction: {instruction or 'None'}"
+    # Sanitize instruction to prevent prompt injection
+    safe_instruction = _sanitize_instruction(instruction)
+    base_prompt = f"Last message: '{last_message}'\nInstruction: {safe_instruction}"
 
     # Add variety hints for different suggestions
     variety_hints = [
@@ -391,31 +434,43 @@ async def generate_draft_reply(
         ) from e
 
     # Generate multiple suggestions with timeout
+    # Use asyncio.gather() to parallelize generation for better performance
     suggestions: list[DraftSuggestion] = []
 
     try:
         async with asyncio.timeout(get_timeout_generation()):
+            # Build all prompts first
+            generation_tasks = []
             for i in range(draft_request.num_suggestions):
                 prompt = _build_reply_prompt(
                     last_message=last_message or "",
                     instruction=draft_request.instruction,
                     suggestion_num=i + 1,
                 )
-
-                # Run generation in threadpool (CPU-bound)
-                text = await run_in_threadpool(
-                    _generate_single_suggestion,
-                    generator,
-                    prompt,
-                    context_text,
-                    0.7 + (i * 0.1),  # Vary temperature for diversity
+                # Create task for parallel execution
+                generation_tasks.append(
+                    run_in_threadpool(
+                        _generate_single_suggestion,
+                        generator,
+                        prompt,
+                        context_text,
+                        0.7 + (i * 0.1),  # Vary temperature for diversity
+                    )
                 )
 
-                if text:
+            # Execute all generations in parallel
+            results = await asyncio.gather(*generation_tasks, return_exceptions=True)
+
+            # Process results
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.warning("Generation %d failed: %s", i, result)
+                    continue
+                if result:
                     confidence = max(0.5, 0.9 - (i * 0.1))
                     suggestions.append(
                         DraftSuggestion(
-                            text=text,
+                            text=result,
                             confidence=confidence,
                         )
                     )

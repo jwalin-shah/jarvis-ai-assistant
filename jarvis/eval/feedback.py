@@ -47,7 +47,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, cast
@@ -373,7 +373,7 @@ class FeedbackStore:
                     details={"action": action},
                 )
 
-        timestamp = timestamp or datetime.now(timezone.utc)
+        timestamp = timestamp or datetime.now(UTC)
         metadata_json = None
         if metadata:
             metadata_json = json.dumps(metadata)
@@ -453,7 +453,7 @@ class FeedbackStore:
                     if isinstance(action, str):
                         action = FeedbackAction(action)
 
-                    timestamp = item.get("timestamp") or datetime.now(timezone.utc)
+                    timestamp = item.get("timestamp") or datetime.now(UTC)
                     metadata = item.get("metadata")
                     metadata_json = json.dumps(metadata) if metadata else None
 
@@ -794,7 +794,7 @@ class FeedbackStore:
         Returns:
             List of DailyStats, one per day with data, ordered by date descending.
         """
-        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+        start_date = datetime.now(UTC) - timedelta(days=days)
 
         with self.connection() as conn:
             cursor = conn.execute(

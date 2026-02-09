@@ -399,9 +399,11 @@ class ConversationContinuationStrategy(PredictionStrategy):
         self,
         active_window_minutes: int = 30,
         response_probability_threshold: float = 0.3,
+        max_tracked_chats: int = 1000,
     ) -> None:
         self._active_window = active_window_minutes * 60  # Convert to seconds
         self._threshold = response_probability_threshold
+        self._max_tracked_chats = max_tracked_chats  # Prevent unbounded memory growth
         self._recent_messages: dict[str, list[float]] = defaultdict(list)  # chat_id -> timestamps
 
     def record_message(self, chat_id: str, is_from_me: bool) -> None:
@@ -426,11 +428,24 @@ class ConversationContinuationStrategy(PredictionStrategy):
         # Cleanup stale chat entries to prevent unbounded growth
         cutoff = now - self._active_window
         stale_keys = [
-            cid for cid, ts in self._recent_messages.items()
-            if not ts or max(ts) < cutoff
+            cid for cid, ts in self._recent_messages.items() if not ts or max(ts) < cutoff
         ]
         for cid in stale_keys:
             del self._recent_messages[cid]
+
+        # Enforce max tracked chats limit - remove oldest inactive chats
+        if len(self._recent_messages) > self._max_tracked_chats:
+            # Sort by most recent message timestamp, keep most active chats
+            sorted_chats = sorted(
+                self._recent_messages.items(),
+                key=lambda x: max(x[1]) if x[1] else 0,
+                reverse=True,
+            )
+            # Keep only the most recent max_tracked_chats
+            chats_to_keep = {cid for cid, _ in sorted_chats[: self._max_tracked_chats]}
+            chats_to_remove = [cid for cid in self._recent_messages if cid not in chats_to_keep]
+            for cid in chats_to_remove:
+                del self._recent_messages[cid]
 
         for chat_id, timestamps in self._recent_messages.items():
             if not timestamps:

@@ -274,7 +274,9 @@ class PairSearchMixin:
                 for i in range(0, len(holdout_contacts), 900):
                     chunk = holdout_contacts[i : i + 900]
                     placeholders = ",".join("?" * len(chunk))
-                    query = f"UPDATE pairs SET is_holdout = TRUE WHERE contact_id IN ({placeholders})"
+                    query = (
+                        f"UPDATE pairs SET is_holdout = TRUE WHERE contact_id IN ({placeholders})"
+                    )
                     conn.execute(query, chunk)
 
             # Get final counts

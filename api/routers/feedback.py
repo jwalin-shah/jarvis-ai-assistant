@@ -16,8 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from jarvis.eval.evaluation import (
     EvaluationResult,
-    SuggestionAction,
     FeedbackEntry,
+    SuggestionAction,
     get_feedback_store,
     get_response_evaluator,
 )

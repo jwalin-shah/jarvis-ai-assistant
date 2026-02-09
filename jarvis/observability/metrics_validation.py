@@ -110,9 +110,7 @@ class MetricsAuditLogger:
                     continue
         return entries
 
-    def _load_db_entries(
-        self, db_path: Path, since_timestamp: float | None = None
-    ) -> list[dict]:
+    def _load_db_entries(self, db_path: Path, since_timestamp: float | None = None) -> list[dict]:
         """Load entries from metrics database.
 
         Args:

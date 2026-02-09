@@ -139,9 +139,7 @@ from jarvis.errors import ModelLoadError as _BaseModelLoadError
 class ModelLoadError(_BaseModelLoadError):
     """Backward-compatible ModelLoadError with reason attribute."""
 
-    def __init__(
-        self, message: str = "Failed to load model", **kwargs: object
-    ) -> None:
+    def __init__(self, message: str = "Failed to load model", **kwargs: object) -> None:
         super().__init__(message)
         self.reason = kwargs.get("reason")
 
@@ -149,9 +147,7 @@ class ModelLoadError(_BaseModelLoadError):
 class GenerationTimeoutError(_BaseModelLoadError):
     """Raised when generation times out."""
 
-    def __init__(
-        self, message: str = "Generation timed out", **kwargs: object
-    ) -> None:
+    def __init__(self, message: str = "Generation timed out", **kwargs: object) -> None:
         super().__init__(message)
         self.timeout_seconds = kwargs.get("timeout_seconds")
 
@@ -159,8 +155,6 @@ class GenerationTimeoutError(_BaseModelLoadError):
 class GenerationError(_BaseModelLoadError):
     """Raised when generation fails."""
 
-    def __init__(
-        self, message: str = "Generation failed", **kwargs: object
-    ) -> None:
+    def __init__(self, message: str = "Generation failed", **kwargs: object) -> None:
         super().__init__(message)
         self.cause = kwargs.get("cause")

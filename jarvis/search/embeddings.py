@@ -544,9 +544,7 @@ class EmbeddingStore:
                     f"SELECT message_id FROM message_embeddings"
                     f" WHERE message_id IN ({placeholders})"
                 )
-                existing.update(
-                    row[0] for row in conn.execute(query, chunk).fetchall()
-                )
+                existing.update(row[0] for row in conn.execute(query, chunk).fetchall())
 
             # Filter to only new messages
             new_messages = [m for m in valid_messages if m.id not in existing]

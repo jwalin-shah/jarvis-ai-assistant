@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from jarvis.contacts.contact_profile_context import ContactProfileContext
 
 if TYPE_CHECKING:
+    from contracts.imessage import Message
     from jarvis.classifiers.response_mobilization import MobilizationResult
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
@@ -1134,11 +1135,11 @@ def _get_thread_examples(topic_name: str) -> list[FewShotExample]:
     return THREAD_EXAMPLES.get(key, CATCHING_UP_THREAD_EXAMPLES)
 
 
-def _format_thread_context(messages: Sequence[Any]) -> str:
+def _format_thread_context(messages: Sequence[Message | str]) -> str:
     """Format thread messages for prompt context.
 
     Args:
-        messages: List of Message objects
+        messages: List of Message objects or strings
 
     Returns:
         Formatted string of messages
