@@ -16,7 +16,7 @@ When a new message arrives:
    │             question/request/statement    │
    └──────────────────────────────────────────┘
 
-3. FAISS SIMILARITY SEARCH (~5-10ms)
+3. sqlite-vec SIMILARITY SEARCH (~5-10ms)
    Query embedding → Top-K similar (trigger, response) pairs
 
 4. ROUTING DECISION

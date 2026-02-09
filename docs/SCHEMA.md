@@ -127,6 +127,7 @@ JARVIS uses the `sqlite-vec` extension for high-performance vector search direct
 ### JARVIS Primary Database
 
 **Location**: `~/.jarvis/jarvis.db`
+**Current Schema Version**: 11
 
 #### `contacts`
 Stores contact relationship metadata and handle mappings.
@@ -134,24 +135,165 @@ Stores contact relationship metadata and handle mappings.
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER | Primary key |
-| chat_id | TEXT | Primary iMessage chat_id |
+| chat_id | TEXT | Primary iMessage chat_id (unique) |
 | display_name | TEXT | Resolved name |
-| relationship | TEXT | sister, coworker, boss, etc. |
-| handles_json | TEXT | JSON list of associated handles |
+| phone_or_email | TEXT | Primary contact method |
+| handles_json | TEXT | JSON array of associated handles |
+| relationship | TEXT | sister, coworker, friend, boss |
+| style_notes | TEXT | e.g. "casual, uses emojis" |
+| created_at | TIMESTAMP | Record creation time |
+| updated_at | TIMESTAMP | Last update time |
+
+#### `contact_style_targets`
+Computed style targets from a contact's message pairs.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| contact_id | INTEGER | FK to contacts(id) |
+| median_reply_length | INTEGER | Median word count |
+| punctuation_rate | REAL | Fraction with ending punctuation |
+| emoji_rate | REAL | Fraction containing emojis |
+| greeting_rate | REAL | Fraction starting with greeting |
+| updated_at | TIMESTAMP | Last update time |
+
+#### `pairs`
+Extracted message pairs (trigger + response) from iMessage history.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| contact_id | INTEGER | FK to contacts(id) |
+| trigger_text | TEXT | What they said |
+| response_text | TEXT | What you said |
+| trigger_timestamp | TIMESTAMP | Timestamp of trigger message |
+| response_timestamp | TIMESTAMP | Timestamp of response message |
+| chat_id | TEXT | Source conversation |
+| trigger_msg_id | INTEGER | Primary trigger message ID |
+| response_msg_id | INTEGER | Primary response message ID |
+| trigger_msg_ids_json | TEXT | JSON array for multi-message triggers |
+| response_msg_ids_json | TEXT | JSON array for multi-message responses |
+| context_text | TEXT | Previous messages before trigger |
+| quality_score | REAL | 0.0-1.0 quality rating |
+| flags_json | TEXT | JSON: {"attachment_only":true, ...} |
+| is_group | BOOLEAN | True if from group chat |
+| is_holdout | BOOLEAN | True if reserved for evaluation |
+| gate_a_passed | BOOLEAN | Rule gate result (v6+) |
+| gate_b_score | REAL | Embedding similarity score (v6+) |
+| gate_c_verdict | TEXT | NLI verdict: accept/reject/uncertain (v6+) |
+| validity_status | TEXT | Final: valid/invalid/uncertain (v6+) |
+| trigger_da_type | TEXT | Dialogue act type, e.g. WH_QUESTION (v7+) |
+| trigger_da_conf | REAL | Dialogue act classifier confidence (v7+) |
+| response_da_type | TEXT | Response dialogue act type (v7+) |
+| response_da_conf | REAL | Response dialogue act confidence (v7+) |
+| cluster_id | INTEGER | HDBSCAN cluster assignment (v7+) |
+| usage_count | INTEGER | Times this pair was used for generation |
+| last_used_at | TIMESTAMP | Last time pair was used |
+| source_timestamp | TIMESTAMP | Original message timestamp (for decay) |
+| content_hash | TEXT | MD5 of normalized trigger\|response for dedup (v9+) |
+
+#### `pair_artifacts`
+Heavy artifacts split from pairs to keep the main table lean.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| pair_id | INTEGER | FK to pairs(id) |
+| context_json | TEXT | Structured context window (JSON list) |
+| gate_a_reason | TEXT | Why Gate A rejected (if rejected) |
+| gate_c_scores_json | TEXT | Raw NLI scores (JSON dict) |
+| raw_trigger_text | TEXT | Original text before normalization |
+| raw_response_text | TEXT | Original text before normalization |
+
+#### `clusters`
+Clustered intent groups for analytics.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| name | TEXT | e.g. INVITATION, GREETING, SCHEDULE |
+| description | TEXT | Cluster description |
+| example_triggers | TEXT | JSON array |
+| example_responses | TEXT | JSON array |
+
+#### `pair_embeddings`
+Links pairs to vector index positions. (`faiss_id` column name is legacy; now backed by sqlite-vec.)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| pair_id | INTEGER | FK to pairs(id) |
+| faiss_id | INTEGER | Position in vector index (legacy name) |
+| cluster_id | INTEGER | FK to clusters(id) |
+| index_version | TEXT | Which index version this belongs to |
+
+#### `index_versions`
+Tracks vector index rebuilds for safe swaps.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| version_id | TEXT | e.g. "20240115-143022" |
+| model_name | TEXT | e.g. "BAAI/bge-small-en-v1.5" |
+| embedding_dim | INTEGER | e.g. 384 |
+| num_vectors | INTEGER | Total vectors in index |
+| index_path | TEXT | Relative path to index file |
+| is_active | BOOLEAN | Whether this is the active index |
+| normalized | BOOLEAN | Whether vectors are normalized |
 
 #### `scheduled_drafts`
-Stores automated and scheduled messages (formerly `scheduler.json`).
+Stores automated and scheduled messages (v8+).
 
 | Column | Type | Description |
 |--------|------|-------------|
 | id | TEXT | UUID primary key |
+| draft_id | TEXT | Reference to the draft |
+| contact_id | INTEGER | FK to contacts(id) |
 | chat_id | TEXT | Target conversation |
 | message_text | TEXT | Content to send |
 | send_at | TIMESTAMP | Scheduled execution time |
-| status | TEXT | pending, queued, sent, failed |
+| priority | TEXT | urgent/normal/low |
+| status | TEXT | pending/queued/sending/sent/failed/cancelled/expired |
+| timezone | TEXT | Contact's timezone (IANA format) |
+| depends_on | TEXT | ID of item this depends on |
+| retry_count | INTEGER | Number of retry attempts |
+| max_retries | INTEGER | Maximum retries allowed |
+| expires_at | TIMESTAMP | When this schedule expires |
+| result_json | TEXT | JSON with send result details |
+| metadata_json | TEXT | Additional metadata |
+
+#### `contact_timing_prefs`
+Contact timing preferences for smart scheduling (v8+).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| contact_id | INTEGER | FK to contacts(id) |
+| timezone | TEXT | Contact's timezone (IANA format) |
+| quiet_hours_json | TEXT | JSON with quiet hours config |
+| preferred_hours_json | TEXT | JSON array of preferred hours (0-23) |
+| optimal_weekdays_json | TEXT | JSON array of preferred weekdays (0-6) |
+| avg_response_time_mins | REAL | Average response time in minutes |
+| last_interaction | TIMESTAMP | Last interaction timestamp |
+
+#### `send_queue`
+Tracks message delivery status (v8+).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT | UUID primary key |
+| scheduled_draft_id | TEXT | FK to scheduled_drafts(id) |
+| status | TEXT | pending/sending/sent/failed |
+| queued_at | TIMESTAMP | When queued |
+| sent_at | TIMESTAMP | When actually sent |
+| error | TEXT | Error message if failed |
+| attempts | INTEGER | Number of send attempts |
+| next_retry_at | TIMESTAMP | When to retry next |
+
+### Embeddings Database
+
+**Location**: `~/.jarvis/embeddings/<model_name>/embeddings.db`
+
+Per-model embedding cache with its own schema, managed by `jarvis/search/embeddings.py`.
 
 #### `relationship_profiles`
-Aggregated communication patterns (cached in model-specific `embeddings.db`).
+Aggregated communication patterns cached per model.
 
 | Column | Type | Description |
 |--------|------|-------------|

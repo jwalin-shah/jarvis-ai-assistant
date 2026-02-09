@@ -1,6 +1,6 @@
 """Database schema SQL and migration constants for JARVIS."""
 
-# Schema SQL - Version 6 with validity gates and split tables
+# Schema SQL - Version 11 (validity gates, dialogue acts, scheduling, sqlite-vec)
 SCHEMA_SQL = """
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -94,15 +94,16 @@ CREATE TABLE IF NOT EXISTS clusters (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Links pairs to FAISS vectors (keyed by pair_id for stability)
+-- Links pairs to vector index positions (keyed by pair_id for stability)
+-- Note: faiss_id column name is legacy; now backed by sqlite-vec
 CREATE TABLE IF NOT EXISTS pair_embeddings (
     pair_id INTEGER PRIMARY KEY REFERENCES pairs(id),
-    faiss_id INTEGER UNIQUE,          -- position in FAISS index (can change)
+    faiss_id INTEGER UNIQUE,          -- position in vector index (legacy name)
     cluster_id INTEGER REFERENCES clusters(id),
     index_version TEXT                -- which index version this belongs to
 );
 
--- FAISS index versions for safe rebuilds
+-- Vector index versions for safe rebuilds
 CREATE TABLE IF NOT EXISTS index_versions (
     id INTEGER PRIMARY KEY,
     version_id TEXT UNIQUE NOT NULL,  -- e.g., "20240115-143022"
