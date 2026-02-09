@@ -74,9 +74,35 @@ def analyze_style(replies: list[str]) -> str:
 
     # Abbreviation detection
     abbrevs = {
-        "u", "ur", "r", "y", "k", "kk", "bc", "cuz", "gonna", "wanna",
-        "gotta", "thx", "ty", "pls", "plz", "idk", "nvm", "brb", "ttyl",
-        "omw", "lol", "lmao", "omg", "tbh", "imo", "ikr", "rn", "atm", "btw",
+        "u",
+        "ur",
+        "r",
+        "y",
+        "k",
+        "kk",
+        "bc",
+        "cuz",
+        "gonna",
+        "wanna",
+        "gotta",
+        "thx",
+        "ty",
+        "pls",
+        "plz",
+        "idk",
+        "nvm",
+        "brb",
+        "ttyl",
+        "omw",
+        "lol",
+        "lmao",
+        "omg",
+        "tbh",
+        "imo",
+        "ikr",
+        "rn",
+        "atm",
+        "btw",
     }
     all_words = set()
     for r in replies:
@@ -267,9 +293,7 @@ def main() -> None:
         choices=["category_aware", "raw_style"],
         help="Which variant to prepare",
     )
-    parser.add_argument(
-        "--both", action="store_true", help="Prepare both variants"
-    )
+    parser.add_argument("--both", action="store_true", help="Prepare both variants")
     parser.add_argument(
         "--input", default="data/personal/quality_pairs.jsonl", help="Input JSONL path"
     )

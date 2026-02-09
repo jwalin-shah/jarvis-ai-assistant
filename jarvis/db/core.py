@@ -84,8 +84,8 @@ class JarvisDBBase:
 
                 sqlite_vec.load(self._local.connection)
                 self._local.connection.enable_load_extension(False)
-            except Exception as e:
-                logger.debug("sqlite-vec extension not loaded: %s", e)
+            except (ImportError, sqlite3.Error) as e:
+                logger.debug("sqlite-vec extension not available: %s", e)
 
             # Track this connection for cleanup
             with self._connections_lock:
@@ -109,26 +109,27 @@ class JarvisDBBase:
 
     def _cleanup_stale_connections(self) -> None:
         """Remove connections for threads that are no longer alive.
-    
+
         Called periodically during new connection creation to prevent
         the connection set from growing unbounded.
         """
         with self._connections_lock:
             # Track which connections are still valid
             active_connections: set[sqlite3.Connection] = set()
-    
+
             for conn in self._all_connections:
                 try:
                     # Try to execute a simple query to check if connection is still valid
                     conn.execute("SELECT 1")
                     active_connections.add(conn)
-                except Exception:
+                except sqlite3.DatabaseError as e:
                     # Connection is stale or broken, close it
+                    logger.debug("Stale connection detected, closing: %s", e)
                     try:
                         conn.close()
-                    except Exception:
-                        pass
-    
+                    except sqlite3.Error as close_err:
+                        logger.debug("Error closing stale connection: %s", close_err)
+
             self._all_connections = active_connections
 
     def close(self) -> None:
@@ -138,8 +139,8 @@ class JarvisDBBase:
             for conn in self._all_connections:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except sqlite3.Error as e:
+                    logger.debug("Error closing connection during shutdown: %s", e)
             self._all_connections.clear()
 
         # Clear current thread's reference
@@ -239,8 +240,8 @@ class JarvisDBBase:
                 )
                 logger.info("Created vec_binary table")
 
-        except Exception as e:
-            logger.warning("Could not create vec tables: %s", e)
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+            logger.warning("Could not create vec tables (sqlite-vec unavailable): %s", e)
 
     def init_schema(self) -> bool:
         """Initialize database schema.
@@ -323,6 +324,10 @@ class JarvisDBBase:
                     if col_type not in VALID_COLUMN_TYPES:
                         raise ValueError(f"Invalid migration column type: {col_type}")
                     try:
+                        # SECURITY: f-string is safe here because both col_name and col_type
+                        # are validated against strict allow-lists (VALID_MIGRATION_COLUMNS
+                        # and VALID_COLUMN_TYPES). SQLite's ALTER TABLE doesn't support
+                        # parameterized column names/types, so validation is the correct approach.
                         conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
                         logger.info("Added %s column to pairs table", col_name)
                     except sqlite3.OperationalError as e:
@@ -350,6 +355,10 @@ class JarvisDBBase:
                     if col_type not in VALID_COLUMN_TYPES:
                         raise ValueError(f"Invalid migration column type: {col_type}")
                     try:
+                        # SECURITY: f-string is safe here because both col_name and col_type
+                        # are validated against strict allow-lists (VALID_MIGRATION_COLUMNS
+                        # and VALID_COLUMN_TYPES). SQLite's ALTER TABLE doesn't support
+                        # parameterized column names/types, so validation is the correct approach.
                         conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
                         logger.info("Added %s column to pairs table", col_name)
                     except sqlite3.OperationalError as e:
@@ -423,11 +432,11 @@ class JarvisDBBase:
                     logger.info(
                         "Created sqlite-vec virtual tables (vec_chunks, vec_messages, vec_binary)"
                     )
-                except Exception as e:
+                except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
                     if "already exists" in str(e).lower():
                         logger.debug("vec tables already exist")
                     else:
-                        logger.warning("sqlite-vec migration skipped: %s", e)
+                        logger.warning("sqlite-vec migration skipped (extension unavailable): %s", e)
 
             # Migration v10 -> v11: Recreate vec_binary with aux columns
             if current_version == 10:
@@ -444,11 +453,11 @@ class JarvisDBBase:
                     """
                     )
                     logger.info("Recreated vec_binary with chunk_rowid + embedding_int8 columns")
-                except Exception as e:
+                except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
                     if "already exists" in str(e).lower():
                         logger.debug("vec_binary already has new schema")
                     else:
-                        logger.warning("vec_binary migration skipped: %s", e)
+                        logger.warning("vec_binary migration skipped (extension unavailable): %s", e)
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)

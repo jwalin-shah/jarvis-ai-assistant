@@ -333,12 +333,12 @@ class ReplyRouter:
         logger.info("ROUTE START | input: %s", incoming[:80] if incoming else "(empty)")
 
         def record_and_return(
-            result: RoutingResponse,
+            result: dict[str, Any],
             similarity_score: float,
             vec_candidates: int = 0,
             model_loaded: bool = False,
             decision: str | None = None,
-        ) -> RoutingResponse:
+        ) -> dict[str, Any]:
             latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
             routing_decision = decision or (
                 "generate" if result.get("type") == "generated" else "clarify"

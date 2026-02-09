@@ -296,26 +296,39 @@ class Service(abc.ABC):
             venv_bin = self.config.venv_path / "bin"
             env["PATH"] = f"{venv_bin}:{env['PATH']}"
 
-        # Start process
+        # Start process with platform-specific settings
+        # preexec_fn is Unix-only (creates new process group for clean shutdown)
+        preexec_fn = None
+        if hasattr(os, "setsid"):  # Unix/Linux/macOS
+            preexec_fn = os.setsid
+
         self._process = subprocess.Popen(
             self.config.command,
             cwd=self.config.working_dir,
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            preexec_fn=preexec_fn,
         )
 
     def _stop_process(self) -> None:
-        """Stop the process gracefully."""
+        """Stop the process gracefully.
+
+        Uses platform-specific process group termination on Unix/Linux/macOS
+        for cleaner shutdown. Falls back to direct process termination on Windows.
+        """
         if not self._process:
             return
 
         try:
             # Try graceful shutdown first
-            if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+            # On Unix: kill entire process group (includes child processes)
+            # On Windows: terminate single process
+            if hasattr(os, "killpg") and hasattr(os, "getpgid") and hasattr(signal, "SIGTERM"):
+                # Unix/Linux/macOS: send SIGTERM to process group
                 os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
             else:
+                # Windows or fallback: terminate process directly
                 self._process.terminate()
 
             # Wait for graceful shutdown
@@ -324,9 +337,11 @@ class Service(abc.ABC):
             except subprocess.TimeoutExpired:
                 # Force kill if graceful shutdown failed
                 logger.warning("Force killing service %s", self.name)
-                if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+                if hasattr(os, "killpg") and hasattr(os, "getpgid") and hasattr(signal, "SIGKILL"):
+                    # Unix/Linux/macOS: send SIGKILL to process group
                     os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
                 else:
+                    # Windows or fallback: kill process directly
                     self._process.kill()
                 self._process.wait()
 

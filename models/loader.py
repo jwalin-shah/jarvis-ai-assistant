@@ -28,7 +28,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 # Disable HuggingFace hub network checks after initial download
 # This prevents slow version checks on every model load/generate call
@@ -193,17 +193,19 @@ class MLXModelLoader:
             config: Model configuration. Uses defaults if not provided.
         """
         self.config = config or ModelConfig()
+        # MLX model returned by mlx_lm.load() - typed as Any due to external library complexity
         self._model: Any = None
+        # Tokenizer returned by mlx_lm.load() - typed as Any due to external library complexity
         self._tokenizer: Any = None
         self._loaded_at: float | None = None
         self._preload_thread: threading.Thread | None = None
         self._preload_error: Exception | None = None
-        # KV cache for static prompt prefix reuse
-        self._prompt_cache: list[Any] | None = None
+        # KV cache for static prompt prefix reuse (MLX cache structure, opaque)
+        self._prompt_cache: Any | None = None
         self._cache_prefix_len: int = 0
         self.last_load_time_ms: float | None = None
         # Speculative decoding draft model
-        self._draft_model: Any = None
+        self._draft_model: Any = None  # MLX model
         self._draft_config: ModelConfig | None = None
 
     def is_loaded(self) -> bool:
@@ -419,11 +421,12 @@ class MLXModelLoader:
         self._draft_model = None
         self._draft_config = None
 
-        # Clear Metal GPU memory
+        # Clear Metal GPU memory (using current API, not deprecated mx.metal.clear_cache)
+        # This is critical for 8GB RAM systems to avoid GPU memory accumulation
         try:
-            mx.metal.clear_cache()
+            mx.clear_cache()
         except Exception:
-            logger.debug("Metal cache clear not available")
+            logger.debug("Cache clear not available")
 
         # Force garbage collection
         gc.collect()
@@ -600,7 +603,10 @@ class MLXModelLoader:
             top_k: Top-k sampling limit (LFM optimal: 50)
             repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
             stop_sequences: Strings that stop generation
-            timeout_seconds: Timeout for generation (overrides config if provided)
+            timeout_seconds: Timeout for generation (overrides config if provided).
+                WARNING: Timeout cannot stop running MLX computation. If timeout
+                is reached, the generation thread may continue running in background
+                until completion. This is a limitation of MLX's synchronous API.
             prompt_cache: Optional pre-computed KV cache from prefill_prompt_cache().
                 If provided, passed through to mlx_lm.generate() for prefix reuse.
 
@@ -610,6 +616,11 @@ class MLXModelLoader:
         Raises:
             ModelGenerationError: If model is not loaded, prompt is invalid,
                 generation fails, or timeout is exceeded.
+
+        Note:
+            Due to MLX's synchronous generation API, timeouts are best-effort only.
+            The generation thread cannot be forcefully stopped and may continue
+            consuming GPU resources until the model completes or hits max_tokens.
         """
         if not prompt or not prompt.strip():
             raise ModelGenerationError(

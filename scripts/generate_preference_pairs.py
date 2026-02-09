@@ -39,8 +39,10 @@ if _env_path.exists():
 
 from evals.judge_config import (  # noqa: E402
     JUDGE_BASE_URL,
-    JUDGE_MODEL as GEMINI_MODEL,
     get_judge_api_key,
+)
+from evals.judge_config import (
+    JUDGE_MODEL as GEMINI_MODEL,
 )
 
 

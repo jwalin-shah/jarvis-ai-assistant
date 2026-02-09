@@ -258,6 +258,10 @@ class CacheInvalidator:
         self._lock = threading.RLock()
         self._event_handlers: list[Callable[[InvalidationEvent], None]] = []
 
+        # Prefix index for O(1) pattern matching (chat_id -> set of keys)
+        # Avoids O(n) iteration over all cache keys for chat-specific invalidation
+        self._chat_prefix_index: dict[str, set[str]] = defaultdict(set)
+
         # Register default rules
         self._register_default_rules()
 
@@ -335,6 +339,22 @@ class CacheInvalidator:
         """
         self._dependencies.add_dependency(dependent_key, dependency_key)
 
+    def track_key(self, key: str) -> None:
+        """Track a cache key in the prefix index for efficient pattern matching.
+
+        Args:
+            key: Cache key to track (e.g., "draft:chat123", "embed:ctx:chat456").
+        """
+        with self._lock:
+            # Extract chat_id from key patterns like "draft:chat_id" or "embed:ctx:chat_id"
+            if ":" in key:
+                parts = key.split(":")
+                # For "draft:chat_id" or "embed:ctx:chat_id"
+                if len(parts) >= 2:
+                    # Last part is typically the chat_id
+                    chat_id = parts[-1]
+                    self._chat_prefix_index[chat_id].add(key)
+
     def invalidate(self, event: InvalidationEvent) -> int:
         """Process an invalidation event.
 
@@ -383,10 +403,25 @@ class CacheInvalidator:
                 count += self._cache.invalidate_by_tag(tag)
 
             # Invalidate by pattern (for chat-specific invalidation)
+            # Use prefix index for O(1) lookup instead of O(n) pattern matching
             chat_id = event.metadata.get("chat_id")
             if chat_id:
-                count += self._cache.invalidate_by_pattern(f"draft:{chat_id}")
-                count += self._cache.invalidate_by_pattern(f"embed:ctx:{chat_id}")
+                # Fast path: use index if available
+                if chat_id in self._chat_prefix_index:
+                    indexed_keys = self._chat_prefix_index[chat_id].copy()
+                    for key in indexed_keys:
+                        if self._cache.remove(key):
+                            count += 1
+                            self._dependencies.remove_key(key)
+                            # Remove from index
+                            self._chat_prefix_index[chat_id].discard(key)
+                    # Clean up empty index entries
+                    if not self._chat_prefix_index[chat_id]:
+                        del self._chat_prefix_index[chat_id]
+                else:
+                    # Fallback: use cache's pattern matching if key not in index
+                    count += self._cache.invalidate_by_pattern(f"draft:{chat_id}")
+                    count += self._cache.invalidate_by_pattern(f"embed:ctx:{chat_id}")
 
             # Update stats
             self._stats.record(event, count)
