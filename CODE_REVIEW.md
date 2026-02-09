@@ -1,808 +1,893 @@
 # JARVIS AI Assistant - Comprehensive Code Review
 
 **Review Date:** 2026-02-09
-**Reviewer:** Claude (Comprehensive Analysis)
-**Scope:** 355 Python files (~98,000 lines of code)
-**Total Issues Found:** 264
+**Reviewer:** Claude Code (Opus 4.6)
+**Scope:** Full codebase (~355 Python files, ~98K LOC)
 
 ---
 
 ## Executive Summary
 
-This comprehensive code review analyzed the entire JARVIS codebase (355 Python files, ~98K LOC) for bugs, security vulnerabilities, performance issues, dead code, error handling problems, type safety concerns, and code quality issues.
+Comprehensive review of the entire JARVIS codebase covering: `jarvis/`, `api/`, `core/`, `contracts/`, `models/`, `integrations/`, `evals/`, `experiments/`, `scripts/`, and root-level files. Each file was read and analyzed for bugs, security, dead code, error handling, performance, type safety, and code quality.
 
-### Key Findings
+### Findings by Severity
 
-| Severity | Count | Percentage |
-|----------|-------|------------|
-| **Critical** | 13 | 5% |
-| **High** | 52 | 20% |
-| **Medium** | 105 | 40% |
-| **Low** | 94 | 35% |
-| **Total** | **264** | **100%** |
-
-### By Category
-
-| Category | Count |
+| Severity | Count |
 |----------|-------|
-| **Bugs & Logic Errors** | 48 |
-| **Security** | 23 |
-| **Performance** | 67 |
-| **Error Handling** | 38 |
-| **Type Safety** | 31 |
-| **Code Quality** | 42 |
-| **Dead Code** | 8 |
-| **Concurrency** | 7 |
-
-### Overall Assessment
-
-**Strengths:**
-- ✅ Comprehensive error hierarchy with custom exceptions
-- ✅ Strong type hints in most files
-- ✅ Well-structured module organization
-- ✅ Good use of thread-safe singletons with locks
-- ✅ Extensive documentation and docstrings
-- ✅ No pickle deserialization vulnerabilities
-- ✅ Proper HTML escaping in exports
-
-**Critical Concerns:**
-- ⚠️ Memory leaks (MLX cache management, unbounded caches)
-- ⚠️ SQL injection risks (dynamic query construction)
-- ⚠️ Race conditions (double-checked locking, lock scope issues)
-- ⚠️ No WebSocket authentication
-- ⚠️ Resource exhaustion vulnerabilities
-- ⚠️ Missing input validation on multiple endpoints
+| **Critical** | 7 |
+| **High** | 22 |
+| **Medium** | 38 |
+| **Low** | 43 |
+| **Total** | **110** |
 
 ---
 
-## Critical Issues (13 total)
+## Critical Issues (7)
 
-### 1. **SQL Injection in Config Migrations**
-**File:** `jarvis/config.py`
-**Lines:** 324-325
-**Severity:** CRITICAL
-**Category:** Security
+### C-1. NameError: `logger` undefined in text_normalizer.py
+**File:** `jarvis/text_normalizer.py:319`
+**Category:** Bug (Runtime Crash)
 
-**Description:** ALTER TABLE uses f-string interpolation with column names and types, creating SQL injection risk despite allowlist validation.
+`logger.warning(...)` is called but `logger` is never defined in this module. No `import logging` or `logger = logging.getLogger(...)` exists. **Will raise `NameError` at runtime** when the spell checker fails to load.
 
-```python
-conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
-```
-
-**Fix:** Use parameterized queries or add explicit SQL escaping validation.
+**Proposed fix:** Add `import logging` and `logger = logging.getLogger(__name__)` at the top of the file.
 
 ---
 
-### 2. **MLX Memory Leak - Deprecated API**
-**File:** `models/loader.py`
-**Lines:** 423-426
-**Severity:** CRITICAL
-**Category:** Performance, Memory Leak
+### C-2. get_imessage_reader() called directly instead of via Depends()
+**File:** `api/routers/priority.py:446`
+**Category:** Bug (Runtime Crash)
 
-**Description:** Uses deprecated `mx.metal.clear_cache()` which silently fails in recent MLX versions, causing GPU memory accumulation.
+`get_imessage_reader()` is called directly as a function instead of via FastAPI's `Depends()`. Since `get_imessage_reader` is a generator function (uses `yield`), calling it directly returns a generator object, NOT a `ChatDBReader`. Every method call on `reader` (e.g., `reader.check_access()` at line 449, `reader.get_conversations()` at line 458) **will fail with `AttributeError`**. The reader will also never be closed since the generator's `finally` block is never triggered.
 
-```python
-try:
-    mx.metal.clear_cache()  # DEPRECATED - will fail silently
-except Exception:
-    logger.debug("Metal cache clear not available")
-```
-
-**Fix:** Replace with current API:
-```python
-try:
-    mx.clear_cache()  # Current API
-except Exception:
-    logger.debug("Cache clear not available")
-```
+**Proposed fix:** Change the endpoint signature to accept `reader` via `Depends(get_imessage_reader)`.
 
 ---
 
-### 3. **Double Model Load - Memory Waste**
-**File:** `models/bert_embedder.py`
-**Lines:** 212-265
-**Severity:** CRITICAL
-**Category:** Performance, Bug
+### C-3. Deadlock in TemplateAnalytics.get_stats()
+**File:** `jarvis/metrics.py:812-813`
+**Category:** Bug (Deadlock)
 
-**Description:** Loads weights into memory twice - once in `mx.load()`, once in `model.load_weights()`, violating "Never Load Twice" principle from CLAUDE.md.
+`get_stats()` acquires `self._lock` (line 805), then calls `self.get_hit_rate()` and `self.get_cache_hit_rate()` which each also try to acquire `self._lock`. Since `threading.Lock` is non-reentrant, **this will deadlock** on every call to `get_stats()`.
 
-**Fix:** Load once and reuse the same data structure.
+**Proposed fix:** Use `threading.RLock()` instead of `threading.Lock()`, or inline the hit rate calculations directly in `get_stats()` to avoid nested lock acquisition.
 
 ---
 
-### 4. **Race Condition in Degradation Controller**
-**File:** `core/health/degradation.py`
-**Line:** 119
-**Severity:** CRITICAL
+### C-4. AppleScript injection via unescaped chat_id
+**File:** `jarvis/scheduler/executor.py:311`
+**Category:** Security (Code Injection)
+
+`chat_id` is interpolated directly into an AppleScript string without escaping. A malformed `chat_id` containing `"` characters could break the script or execute arbitrary AppleScript (which can run shell commands via `do shell script`).
+
+**Proposed fix:** Apply the same escaping to `chat_id` as is applied to `escaped_text` on lines 301-303.
+
+---
+
+### C-5. AppleScript injection in calendar reader
+**File:** `integrations/calendar/reader.py:183`
+**Category:** Security (Code Injection)
+
+`calendar_id` is interpolated into AppleScript via `.format(calendar_id=calendar_id)` without escaping. The template at line 69 uses `'set targetCalendars to (calendars whose id is "{calendar_id}")'`. A malicious `calendar_id` containing `"` followed by AppleScript commands could escape the string literal and execute arbitrary code.
+
+**Proposed fix:** Apply `_escape_applescript()` to `calendar_id` before interpolation.
+
+---
+
+### C-6. AppleScript injection in calendar writer
+**File:** `integrations/calendar/writer.py:144`
+**Category:** Security (Code Injection)
+
+`calendar_id` and `title` are interpolated into AppleScript template via `template.format()` without escaping. Other fields (`location`, `notes`, `url`) are properly escaped via `self._escape_applescript()` at lines 130-134, but `calendar_id` and `title` are passed raw.
+
+**Proposed fix:** Escape both: `calendar_id=self._escape_applescript(calendar_id), title=self._escape_applescript(title)`.
+
+---
+
+### C-7. Protocol/implementation callback signature mismatch
+**File:** `contracts/memory.py:157` vs `core/memory/controller.py:186`
+**Category:** Bug (Type Contract Violation)
+
+Protocol defines `register_pressure_callback(callback: Callable[[], None])` (zero args), but the implementation defines `register_pressure_callback(callback: Callable[[str], None])` (receives pressure level string). Code written against the Protocol will crash when the controller invokes callbacks with a string argument via `_notify_callbacks()` at line 239.
+
+**Proposed fix:** Update Protocol in `contracts/memory.py:157` to `Callable[[str], None]` to match the implementation.
+
+---
+
+## High Severity Issues (22)
+
+### H-1. Race condition in get_generator() double-checked locking
+**File:** `models/__init__.py:115-134`
 **Category:** Concurrency
 
-**Description:** `_features` dict read outside lock after release, causing race when features are registered/unregistered concurrently.
+The unprotected check `if _generator is None` at line 115 races with `reset_generator()` which sets `_generator = None` under lock. The `else` branch can return `None` instead of an `MLXGenerator`.
 
-**Fix:** Extend lock scope or copy data while holding lock.
-
----
-
-### 5. **Timeout Doesn't Stop MLX Generation**
-**File:** `models/loader.py`
-**Lines:** 726-741
-**Severity:** CRITICAL
-**Category:** Resource Leak
-
-**Description:** `future.cancel()` cannot stop running MLX computation - generation continues consuming GPU after timeout.
-
-**Fix:** Implement process isolation or document limitation prominently.
+**Proposed fix:** Always acquire the lock before inspecting `_generator`.
 
 ---
 
-### 6. **Unvalidated External Input in Templates**
-**File:** `models/templates.py`
-**Lines:** 2010-2085
-**Severity:** CRITICAL
-**Category:** Security
+### H-2. Lock initialized as None (race condition)
+**File:** `api/routers/search.py:44-45`
+**Category:** Concurrency
 
-**Description:** No validation on `embedder` parameter - could pass malicious object with arbitrary code execution in `encode()` method.
+`_searcher_lock` is initialized as `None` and conditionally set inside `_get_searcher()`. Two threads could simultaneously see `None`, each create their own lock, and both enter the critical section.
 
-**Fix:** Add runtime type validation before calling embedder methods.
+**Proposed fix:** Initialize at module level: `_searcher_lock = threading.Lock()`.
 
 ---
 
-### 7. **SQL Injection in Tags Manager**
-**File:** `jarvis/tags/manager.py`
-**Lines:** 418, 492, 680, 739
-**Severity:** CRITICAL
-**Category:** Security
+### H-3. Lock created inside function (useless)
+**File:** `api/routers/search.py:413, 457`
+**Category:** Concurrency
 
-**Description:** f-strings build SQL queries with `where_clause` constructed from user input.
+`_cache_stats_lock = threading.Lock()` is created INSIDE `get_cache_stats()`, meaning a **new lock per call**. Same at line 457 with `_cache_clear_lock`.
 
-**Fix:** Use safer SQL construction with validated components.
+**Proposed fix:** Move both lock definitions to module level.
 
 ---
 
-### 8. **Path Traversal Vulnerability**
-**File:** `integrations/imessage/sender.py`
-**Lines:** 111-117
-**Severity:** CRITICAL
-**Category:** Security
-
-**Description:** User-provided `file_path` converted to absolute path without validation against allowlist - attacker could send arbitrary files.
-
-**Fix:** Validate resolved path is within allowed directories.
-
----
-
-### 9. **Undefined Variable Bug**
-**File:** `jarvis/nlp/validity_gate.py`
-**Lines:** 261-265
-**Severity:** CRITICAL
+### H-4. Route ordering: DELETE /completed/clear shadowed
+**File:** `api/routers/tasks.py:515`
 **Category:** Bug
 
-**Description:** Variable `response_words` used before definition, causing NameError.
+`DELETE /completed/clear` is registered AFTER `DELETE /{task_id}` at line 412. FastAPI matches in registration order, so `DELETE /tasks/completed/clear` matches `/{task_id}` with `task_id="completed"` first. **The clear endpoint is unreachable.**
 
-```python
-if is_question(response_text) and not is_question(trigger_text):
-    if response_words <= 5:  # BUG: response_words not defined!
-        return False, "short_question_to_statement"
-```
-
-**Fix:** Define variable before use:
-```python
-response_words = len(response_text.split())
-```
+**Proposed fix:** Move `/completed/clear` route before `/{task_id}`.
 
 ---
 
-### 10. **SQL Injection Risk in Metrics Router**
-**File:** `jarvis/observability/metrics_router.py`
-**Lines:** 433-434
-**Severity:** CRITICAL
-**Category:** Security, Bug
+### H-5. Settings partial update overwrites all fields
+**File:** `api/routers/settings.py:361-366`
+**Category:** Bug
 
-**Description:** Variable `where` is undefined but used in SQL query construction.
+Partial update for generation/behavior settings replaces the entire sub-object with `model_dump()`. Sending `{"generation": {"temperature": 0.8}}` will reset `max_tokens_reply` and `max_tokens_summary` to Pydantic defaults, overwriting the user's saved values.
 
-**Fix:** Define `where` variable based on parameters.
+**Proposed fix:** Merge with `model_dump(exclude_unset=True)` instead of full replacement.
 
 ---
 
-### 11. **WebSocket No Authentication**
-**File:** `api/routers/websocket.py`
-**Lines:** 629-681
-**Severity:** CRITICAL
+### H-6. WebSocket auth token logged at INFO level
+**File:** `api/routers/websocket.py:37`
 **Category:** Security
 
-**Description:** WebSocket endpoint has no authentication - anyone on localhost can connect and consume resources.
+`logger.info("Generated WebSocket auth token: %s", _WS_AUTH_TOKEN)` exposes the authentication credential in log files.
 
-**Fix:** Add token-based authentication before accepting connections.
-
----
-
-### 12. **Incomplete Socket Read - Data Corruption**
-**File:** `jarvis/nlp/ner_client.py`
-**Lines:** 121-123
-**Severity:** CRITICAL
-**Category:** Bug, Security
-
-**Description:** `sock.recv(4)` may return fewer than 4 bytes, causing incorrect length parsing.
-
-**Fix:** Loop until all 4 bytes received.
+**Proposed fix:** Log that a token was generated without the actual value, or use DEBUG level.
 
 ---
 
-### 13. **SQL Injection in Vector Search**
-**File:** `jarvis/search/vec_search.py`
-**Lines:** 459, 669
-**Severity:** CRITICAL
+### H-7. Arbitrary file path in send_attachment
+**File:** `api/routers/conversations.py:690`
 **Category:** Security
 
-**Description:** f-string SQL with `placeholders` variable - dangerous pattern.
+`send_attachment` accepts arbitrary `file_path` with no validation. A caller could specify `/etc/passwd` or `~/.ssh/id_rsa` and have it sent via iMessage, enabling data exfiltration.
 
-**Fix:** Validate input strictly or use safer patterns.
-
----
-
-## High Severity Issues (52 total)
-
-### Memory & Performance (18 issues)
-
-**14. Thread Safety Violation - SQLite**
-- **File:** `jarvis/search/semantic_search.py` (99-109)
-- **Issue:** `check_same_thread=False` without proper locking → DB corruption risk
-- **Fix:** Use thread-local connections or wrap all DB ops in locks
-
-**15. Unbounded Cache Growth**
-- **File:** `jarvis/threading.py` (507-517)
-- **Issue:** Embedding cache grows to 10K entries (~15MB) before eviction
-- **Fix:** Use LRU cache with lower limit (1000 entries)
-
-**16. Global Variable Mutation Without Lock**
-- **File:** `jarvis/metrics.py` (576)
-- **Issue:** `reset_metrics()` sets globals without acquiring lock
-- **Fix:** Acquire `_metrics_lock` before modification
-
-**17. N+1 Query Pattern**
-- **File:** `api/routers/priority.py` (470-477)
-- **Issue:** 15 separate database queries in loop
-- **Fix:** Batch fetch messages in single query
-
-**18. Sequential Generation**
-- **File:** `api/routers/drafts.py` (398-421)
-- **Issue:** Generates suggestions sequentially instead of parallel
-- **Fix:** Use `asyncio.gather()` for parallel generation
-
-**19. Race Condition in Connection Pool**
-- **File:** `integrations/imessage/reader.py` (154, 465-471, 705-708)
-- **Issue:** Shared cache accessed without consistent locking
-- **Fix:** Ensure cache initialization uses pool's lock
-
-**20. Unbounded Batch Query**
-- **File:** `integrations/imessage/reader.py` (1387-1392, 1434-1438)
-- **Issue:** Builds SQL IN clauses with 10,000+ IDs
-- **Fix:** Batch in chunks of 500-1000
-
-**21. Excessive Contact Loading**
-- **File:** `integrations/imessage/reader.py` (779-788)
-- **Issue:** Loads all AddressBook contacts synchronously with no timeout
-- **Fix:** Add timeout or load asynchronously
-
-**22. Memory Limit Set Too Late**
-- **File:** `models/bert_embedder.py` (365)
-- **Issue:** MLX memory limit set AFTER model creation
-- **Fix:** Set limits before model instantiation
-
-**23. Resource Leak - Thread Not Joined**
-- **File:** `jarvis/prefetch/executor.py` (306-308)
-- **Issue:** Thread marked as None even if still running after timeout
-- **Fix:** Check `thread.is_alive()` before setting to None
-
-**24. Unbounded Memory Growth**
-- **File:** `jarvis/prefetch/predictor.py` (405-433)
-- **Issue:** `_recent_messages` dict grows unbounded for inactive chats
-- **Fix:** Add periodic global cleanup
-
-**25. WebSocket Race Condition**
-- **File:** `api/routers/websocket.py` (240-254)
-- **Issue:** Accesses `_clients` outside lock after releasing
-- **Fix:** Store client references while holding lock
-
-**26. No Resource Reuse**
-- **File:** `api/routers/search.py` (328-342)
-- **Issue:** Creates new SemanticSearcher for every search
-- **Fix:** Use singleton pattern
-
-**27. Broadcast Not Parallelized**
-- **File:** `api/routers/websocket.py` (148-161)
-- **Issue:** Sends messages to clients sequentially
-- **Fix:** Use `asyncio.gather()` for parallel sends
-
-**28. Config Read on Every Call**
-- **File:** `api/ratelimit.py` (72-95, 227-250)
-- **Issue:** Reads config file on every rate limit check
-- **Fix:** Cache config with TTL
-
-**29. Inefficient Dict Iteration**
-- **File:** `jarvis/prefetch/invalidation.py` (959-974)
-- **Issue:** O(n) pattern matching across all cache keys
-- **Fix:** Use prefix tree or secondary index
-
-**30. Unbounded Cache Growth**
-- **File:** `models/templates.py` (1926)
-- **Issue:** Query cache with MD5 hash has no eviction
-- **Fix:** Use LRU cache with size limit
-
-**31. Memory Scaling Risk**
-- **File:** `jarvis/search/embeddings.py` (656-662)
-- **Issue:** Loads all candidate embeddings into memory via `np.vstack`
-- **Fix:** Process in batches
-
-### Security (12 issues)
-
-**32. CORS Too Permissive**
-- **File:** `api/main.py` (311-323)
-- **Issue:** `allow_methods=["*"]` and `allow_headers=["*"]`
-- **Fix:** Explicitly whitelist methods and headers
-
-**33. Hardcoded Secrets Risk**
-- **File:** `scripts/label_soc_categories.py`, `generate_preference_pairs.py`
-- **Issue:** No validation on API credentials from env vars
-- **Fix:** Validate keys before use, never log full keys
-
-**34. No Per-Client Rate Limiting**
-- **File:** `api/routers/websocket.py` (597-604)
-- **Issue:** Connected clients can spam unlimited generation requests
-- **Fix:** Add per-client rate limiting (5 req/min)
-
-**35. Information Disclosure**
-- **File:** `api/routers/websocket.py` (460, 576)
-- **Issue:** Error responses expose internal exception details
-- **Fix:** Use generic error messages, log details server-side
-
-**36. No Prompt Injection Protection**
-- **File:** `api/routers/drafts.py` (288-291)
-- **Issue:** User instruction passed to prompt without sanitization
-- **Fix:** Validate and sanitize instruction text
-
-**37. Platform-Specific Code**
-- **File:** `jarvis/services/base.py` (306, 317, 328)
-- **Issue:** Uses Unix-only syscalls - crashes on Windows
-- **Fix:** Add platform checks
-
-**38. Hardcoded Device Platform**
-- **File:** `jarvis/nlp/coref_resolver.py` (73)
-- **Issue:** `device="mps"` only works on Apple Silicon
-- **Fix:** Detect available device dynamically
-
-**39. Weak Client Identification**
-- **File:** `api/ratelimit.py` (52-60)
-- **Issue:** User-agent hash modulo 10000 - collision prone
-- **Fix:** Use cryptographic hash
-
-**40. Missing Timeout on HTTP**
-- **File:** `scripts/label_soc_categories.py` (250), `generate_preference_pairs.py` (79)
-- **Issue:** OpenAI calls have no timeout
-- **Fix:** Add 60s timeout
-
-**41. SQL Injection in Auto-Tagger**
-- **File:** `jarvis/tags/auto_tagger.py` (509-528)
-- **Issue:** Keywords used in SQL LIKE without proper parameterization
-- **Fix:** Use FTS or safer matching
-
-**42. No Input Validation**
-- **File:** `integrations/imessage/sender.py` (62-90, 165-169)
-- **Issue:** Recipient not validated for phone/email format
-- **Fix:** Validate format before AppleScript execution
-
-**43. Generic Exception Handler Disabled**
-- **File:** `api/errors.py` (363-366)
-- **Issue:** Commented out - may expose stack traces
-- **Fix:** Enable generic exception handler
-
-### Bugs (22 issues)
-
-**44. Index Out of Bounds**
-- **File:** `jarvis/features/category_features.py` (Multiple: 292, 309, 483, 506, 556, 575, 616, 622)
-- **Issue:** Accessing `doc[0]`, `doc[i+1]` without length checks
-- **Fix:** Add bounds checking before array access
-
-**45. Silent Schema Fallback**
-- **File:** `integrations/imessage/queries.py` (380-386)
-- **Issue:** Falls back to v14 on unknown schema - could return wrong data
-- **Fix:** Raise exception instead of silent fallback
-
-**46. Fragile AppleScript Parsing**
-- **File:** `integrations/calendar/reader.py` (258-296, 376-383)
-- **Issue:** String splitting on `"}, {"` fails if in event title
-- **Fix:** Use more robust parsing
-
-**47. Phone Number Normalization**
-- **File:** `integrations/imessage/parser.py` (508-513)
-- **Issue:** Assumes all 10-digit numbers are US
-- **Fix:** Require explicit country code
-
-**48. Timezone Data Loss**
-- **File:** `jarvis/db/models.py` (100-106)
-- **Issue:** Intentionally discards timezone offset
-- **Fix:** Use timezone-aware datetimes consistently
-
-**49. Incomplete Migration Error Handling**
-- **File:** `jarvis/eval/feedback.py` (280-287)
-- **Issue:** Only checks for "duplicate column" error
-- **Fix:** Track migration state more explicitly
-
-**50. Floating Point Precision**
-- **File:** `jarvis/eval/adaptive_thresholds.py` (296-305, 313-314)
-- **Issue:** Multiple rounding operations could accumulate error
-- **Fix:** Use integer arithmetic or Decimal type
-
-**51. Missing Null Checks**
-- **File:** `jarvis/analytics/aggregator.py` (91, 144, 210, 280)
-- **Issue:** Assumes `msg.date` always exists
-- **Fix:** Add defensive checks
-
-**52. Reimplemented Statistics**
-- **File:** `jarvis/eval/experiments.py` (520-652)
-- **Issue:** Chi-squared test reimplemented instead of using scipy
-- **Fix:** Use scipy.stats for statistical functions
-
-**53. Variant Weight Validation**
-- **File:** `jarvis/eval/experiments.py` (400-410)
-- **Issue:** Weights could sum to <100, causing allocation gaps
-- **Fix:** Validate weights sum to 100
-
-**54. Silent Data Loss**
-- **File:** `scripts/filter_quality_pairs.py` (106-109)
-- **Issue:** Deduplication drops data without warning
-- **Fix:** Log count of duplicates removed
-
-**55. Incorrect Swap Detection**
-- **File:** `scripts/train_category_svm.py` (135)
-- **Issue:** 200MB swap threshold too high per CLAUDE.md
-- **Fix:** Use <50MB threshold
-
-**56. Unsafe Array Access**
-- **File:** `jarvis/nlp/coref_resolver.py` (119-120, 159)
-- **Issue:** Accessing list elements without validation
-- **Fix:** Check for None before access
-
-**57. Unsafe NLI Assumptions**
-- **File:** `jarvis/nlp/validity_gate.py` (399-410)
-- **Issue:** Assumes 3-class output without validation
-- **Fix:** Validate array size before indexing
-
-**58. Confusing Fallback Logic**
-- **File:** `jarvis/context.py` (262-266)
-- **Issue:** Returns current time for empty messages
-- **Fix:** Return None or raise ValueError
-
-**59. Emoji Counting Logic**
-- **File:** `jarvis/eval/evaluation.py` (241-243)
-- **Issue:** Counts characters instead of emoji symbols
-- **Fix:** Count emoji_group as single unit
-
-**60. Confusing Status Logic**
-- **File:** `jarvis/services/base.py` (266-270)
-- **Issue:** Sets HEALTHY status for STOPPED service
-- **Fix:** Only set HEALTHY if running
-
-**61. In-Place Parameter Modification**
-- **File:** `jarvis/tasks/worker.py` (453, 467)
-- **Issue:** Modifies `task.params` dict in place
-- **Fix:** Create a copy
-
-**62. Missing Progress Indicators**
-- **Files:** Multiple scripts (prepare_soc_data.py, finetune_embedder.py, etc.)
-- **Issue:** Long operations have no progress (violates CLAUDE.md)
-- **Fix:** Add tqdm progress bars
-
-**63. Silent Failure on Model Loading**
-- **File:** `jarvis/eval/evaluation.py` (340-346)
-- **Issue:** Returns None without error when model unavailable
-- **Fix:** Raise exception or document fallback
-
-**64. No Validation on Experiment Weights**
-- **File:** `jarvis/eval/experiments.py` (400-410)
-- **Issue:** Variant weights not validated
-- **Fix:** Validate sum equals 100
-
-**65. Missing Error Propagation**
-- **File:** `models/cross_encoder.py` (229-242)
-- **Issue:** Auto-download silently swallows exceptions
-- **Fix:** Propagate errors to caller
+**Proposed fix:** Validate path against an allow-list of directories.
 
 ---
 
-## Medium Severity Issues (105 total)
+### H-8. Arbitrary output_dir in batch export
+**File:** `api/routers/batch.py:53`
+**Category:** Security
 
-*Due to space constraints, showing first 20 of 105 medium-severity issues:*
+`output_dir` field accepts arbitrary filesystem paths with no validation.
 
-**66. Inefficient Reverse Iteration**
-- **File:** `jarvis/context.py` (228-231)
-- **Issue:** Creates reversed list unnecessarily
-- **Fix:** Use range with negative step
-
-**67. Empty String Check Issue**
-- **File:** `jarvis/router.py` (331-337)
-- **Issue:** Passes `incoming=""` instead of stripped value
-- **Fix:** Pass stripped value
-
-**68. Broad Exception Catching**
-- **File:** `jarvis/db/core.py` (126-130)
-- **Issue:** Double bare except silently swallows errors
-- **Fix:** Log exceptions at DEBUG level
-
-**69. Missing Timeout Validation**
-- **File:** `jarvis/services/manager.py` (89, 117)
-- **Issue:** Timeout not validated for reasonable values
-- **Fix:** Add range validation (0 < timeout <= 600)
-
-**70. Variable Shadowing**
-- **File:** `jarvis/services/ner.py` (44), `jarvis/services/socket.py` (41)
-- **Issue:** Local variable `sock` shadows socket module
-- **Fix:** Rename to `client_sock`
-
-**71. Inconsistent Optional Handling**
-- **File:** `jarvis/scheduler/timing.py` (332-334)
-- **Issue:** Defensive type check reveals uncertainty
-- **Fix:** Guarantee return type in method signature
-
-**72. Magic Numbers**
-- **Files:** Multiple (topics, prefetch, etc.)
-- **Issue:** Hardcoded weights/thresholds scattered throughout
-- **Fix:** Extract to named constants
-
-**73. Swallowed Exceptions in Callbacks**
-- **File:** `jarvis/scheduler/scheduler.py` (186-188, 195-197)
-- **Issue:** Callback exceptions logged but don't stop execution
-- **Fix:** Consider critical vs optional callback contract
-
-**74. Repeated Timestamp Calculations**
-- **File:** `jarvis/topics/topic_segmenter.py` (509-511)
-- **Issue:** Converting timedelta multiple times
-- **Fix:** Pre-compute all time gaps once
-
-**75. Missing Response Span Validation**
-- **File:** `jarvis/nlp/validity_gate.py` (229-232)
-- **Issue:** Iterates without checking if iterable
-- **Fix:** Add hasattr check
-
-**76. Unused Variable Assignment**
-- **File:** `jarvis/analytics/aggregator.py` (126)
-- **Issue:** `stables` calculated but never used
-- **Fix:** Remove or use in calculation
-
-**77. Magic Number in Parameters**
-- **File:** `jarvis/db/pairs.py` (283)
-- **Issue:** Hardcoded 900 for SQLite limits
-- **Fix:** Define `SQLITE_MAX_PARAMS = 999`
-
-**78. No Transaction Batching**
-- **File:** `jarvis/eval/feedback.py` (428-492)
-- **Issue:** Bulk insert commits after each item
-- **Fix:** Use executemany
-
-**79. Inefficient Pattern Matching**
-- **File:** `jarvis/db/search.py` (100-122)
-- **Issue:** Hardcoded tuple requires code changes
-- **Fix:** Load patterns from config
-
-**80. Complex Deduplication Logic**
-- **File:** `jarvis/db/pairs.py` (96-202)
-- **Issue:** Nested logic hard to test
-- **Fix:** Extract into separate method
-
-**81. Missing Cache Eviction Strategy**
-- **File:** `jarvis/db/core.py` (41-43)
-- **Issue:** No documented eviction strategy
-- **Fix:** Document behavior or use smaller cache
-
-**82. Thread Safety Documentation**
-- **File:** `jarvis/tags/manager.py` (206)
-- **Issue:** `check_same_thread=False` strategy unclear
-- **Fix:** Add comment explaining safety
-
-**83. get_client() Not Thread-Safe**
-- **File:** `api/routers/websocket.py` (177-186)
-- **Issue:** Reads shared dict without lock
-- **Fix:** Add lock or document limitation
-
-**84. Cache Operations Not Thread-Safe**
-- **File:** `api/routers/search.py` (383-387, 419-428)
-- **Issue:** Concurrent cache operations could conflict
-- **Fix:** Use locking
-
-**85. Missing Pagination Offset**
-- **File:** `api/routers/conversations.py` (359-471)
-- **Issue:** Limit but no offset for pagination
-- **Fix:** Add offset parameter
-
-*(Plus 85 more medium-severity issues documented in individual agent reports)*
+**Proposed fix:** Validate against an allow-list or restrict to `~/.jarvis/exports/`.
 
 ---
 
-## Low Severity Issues (94 total)
+### H-9. Singleton searcher holds closed reader
+**File:** `api/routers/search.py:362`
+**Category:** Bug (Resource Leak)
 
-*Showing first 10 of 94 low-severity issues:*
+Singleton `_searcher_instance` is created with a `reader` from dependency injection. That reader is closed when the request ends (DI's `finally` block). The singleton then holds a closed DB connection; subsequent searches fail.
 
-**186. Inconsistent Naming Conventions**
-- Multiple files use inconsistent private attribute naming
-- **Fix:** Standardize on `_private_attribute` pattern
-
-**187. Missing Docstrings**
-- Many helper methods lack documentation
-- **Fix:** Add docstrings to all non-trivial methods
-
-**188. Missing Return Type Annotations**
-- Some functions lack return types
-- **Fix:** Add return types to all signatures
-
-**189. Redundant List Comprehensions**
-- **File:** `jarvis/topics/topic_segmenter.py` (616-617)
-- **Fix:** Use numpy operations
-
-**190. Large Function Size**
-- **File:** `jarvis/topics/topic_segmenter.py` (456-587)
-- 130+ line function
-- **Fix:** Extract sub-methods
-
-**191. RLock Usage**
-- **File:** `jarvis/tasks/queue.py` (60)
-- No clear justification for RLock vs Lock
-- **Fix:** Document or use Lock
-
-**192. Logger String Formatting**
-- **File:** `jarvis/graph/builder.py` (258, 351)
-- F-strings instead of lazy %
-- **Fix:** Use `logger.warning("%s", e)`
-
-**193. Weak Emoji Detection**
-- **File:** `jarvis/classifiers/relationship_classifier.py` (309, 491)
-- `ord(c) > 0x1F300` is heuristic
-- **Fix:** Use emoji library
-
-**194. Inefficient Classifier Instantiation**
-- **File:** `jarvis/classifiers/relationship_classifier.py` (886-891)
-- Creates new instance every call
-- **Fix:** Use singleton pattern
-
-**195. Wasteful Conversation Fetch**
-- **File:** `api/routers/priority.py` (457, 472)
-- Fetches 20, uses 15
-- **Fix:** Only fetch needed amount
-
-*(Plus 84 more low-severity issues)*
+**Proposed fix:** Create a dedicated reader for the singleton (not from DI), or recreate per-request.
 
 ---
 
-## Summary by Module
+### H-10. reset_metrics() doesn't reset TTL caches
+**File:** `jarvis/metrics.py:582`
+**Category:** Bug
 
-| Module | Critical | High | Medium | Low | Total |
-|--------|----------|------|--------|-----|-------|
-| **Core (jarvis/)** | 1 | 8 | 18 | 14 | 41 |
-| **API (api/)** | 3 | 5 | 12 | 7 | 27 |
-| **Models** | 4 | 12 | 28 | 24 | 68 |
-| **Integrations** | 2 | 5 | 8 | 5 | 20 |
-| **Database** | 1 | 4 | 19 | 23 | 47 |
-| **Search** | 2 | 3 | 15 | 9 | 29 |
-| **Classifiers** | 1 | 3 | 7 | 6 | 17 |
-| **Scripts** | 1 | 5 | 4 | 2 | 12 |
-| **Tests** | 0 | 1 | 2 | 0 | 3 |
-| **Total** | **13** | **52** | **105** | **94** | **264** |
+`reset_metrics()` resets `_template_analytics` but NOT the TTL cache globals (`_conversation_cache`, `_health_cache`, `_model_info_cache`). A "full reset" leaves stale cached data.
+
+**Proposed fix:** Add these caches to the reset function.
 
 ---
 
-## Recommendations by Priority
+### H-11. Debug print() statements in production code
+**File:** `models/bert_embedder.py:219-280, 384-411`
+**Category:** Code Quality
 
-### 🔴 Immediate Action Required (Critical)
+Ten `print()` statements with `[BERT]` prefix dump verbose memory diagnostics to stdout on every BERT model load. Uses `import psutil` solely for these debug prints.
 
-1. **Fix SQL injection vulnerabilities** (Issues #1, #7, #10, #13, #41)
-2. **Fix memory leaks** (Issues #2, #3, #22, #28, #30)
-3. **Add WebSocket authentication** (Issue #11)
-4. **Fix undefined variable bugs** (Issues #9, #10)
-5. **Fix path traversal vulnerability** (Issue #8)
-6. **Fix incomplete socket reads** (Issue #12)
-7. **Add input validation** (Issues #6, #36, #38)
-
-### 🟠 High Priority (1-2 weeks)
-
-1. **Address race conditions** (Issues #4, #14, #19, #25)
-2. **Fix N+1 query patterns** (Issues #17, #20)
-3. **Add resource limits** (Issues #21, #23, #33, #34)
-4. **Improve error handling** (Issues #35, #37, #43, #44)
-5. **Add progress indicators** (Issue #62 - MANDATORY per CLAUDE.md)
-6. **Fix thread safety issues** (Issues #16, #26, #83, #84)
-
-### 🟡 Medium Priority (2-4 weeks)
-
-1. **Extract magic numbers to constants** (Issue #72)
-2. **Add missing pagination** (Issue #85)
-3. **Improve cache strategies** (Issues #81, #82)
-4. **Add transaction batching** (Issue #78)
-5. **Fix variable shadowing** (Issue #70)
-6. **Improve type safety** (Issues #69, #71, #75)
-
-### ⚪ Low Priority (Ongoing)
-
-1. **Standardize naming conventions** (Issue #186)
-2. **Add comprehensive docstrings** (Issue #187)
-3. **Add return type annotations** (Issue #188)
-4. **Break down large functions** (Issue #190)
-5. **Optimize logger calls** (Issue #192)
+**Proposed fix:** Remove all debug `print()` calls and the `psutil` imports. Use `logger.debug()` if needed.
 
 ---
 
-## Testing Recommendations
+### H-12. Thread-unsafe write in memory controller
+**File:** `core/memory/controller.py:220`
+**Category:** Concurrency
 
-1. **Add integration tests** for:
-   - WebSocket authentication and rate limiting
-   - SQL injection attack vectors
-   - Memory leak scenarios (long-running processes)
-   - Concurrent access to shared resources
+`set_model_loaded()` writes `self._model_loaded = loaded` without lock protection. Called from external components (any thread).
 
-2. **Add stress tests** for:
-   - Cache eviction under load
-   - WebSocket connection limits
-   - Database query performance with large datasets
-
-3. **Add security tests** for:
-   - Path traversal attempts
-   - Prompt injection patterns
-   - Rate limit bypasses
+**Proposed fix:** Wrap in `self._lock`.
 
 ---
 
-## Positive Observations
+### H-13. Unreliable __del__ for resource cleanup
+**File:** `jarvis/router.py:251-253`
+**Category:** Resource Leak
 
-The codebase demonstrates many excellent practices:
+`__del__` calls `self.close()` but `__del__` is unreliable in Python - may never be called, or may run during interpreter shutdown when referenced objects are already gone.
 
-✅ **Architecture**
-- Well-structured module organization with clear separation of concerns
-- Proper use of protocols and contracts for loose coupling
-- Comprehensive error hierarchy with 120+ custom error types
-- Good layering (API → Core → Integrations)
+**Proposed fix:** Remove `__del__` and rely on explicit `close()` calls.
 
-✅ **Code Quality**
-- Extensive type hints (>90% coverage)
-- Comprehensive docstrings on public APIs
-- Proper use of dataclasses for data modeling
-- Good logging throughout
+---
 
-✅ **Security**
-- No pickle deserialization vulnerabilities
-- Proper HTML escaping in SVG exports
-- SHA-256 for hashing (not MD5 in security contexts)
-- Allow pickle=False in numpy loads
+### H-14. reset_reply_router() leaks iMessage reader
+**File:** `jarvis/router.py:478-486`
+**Category:** Resource Leak
 
-✅ **Performance**
-- Thread-safe singletons with double-checked locking
-- TTL-based caching for performance
-- Speculative prefetching system
-- Memory-aware mode switching
+Sets `_router = None` without calling `close()` on the existing router instance. The iMessage reader DB connection leaks.
 
-✅ **Testing**
-- Comprehensive test suite (70 files, 31K LOC)
-- Unit, integration, and property-based tests
-- Good use of fixtures and mocking
+**Proposed fix:** Call `_router.close()` before setting `_router = None`.
+
+---
+
+### H-15. Hard import of optional mem0 dependency
+**File:** `jarvis/memory_layer.py:12`
+**Category:** Bug (Import Crash)
+
+`from mem0 import Memory` at module level will crash any module that imports `memory_layer` if `mem0` is not installed.
+
+**Proposed fix:** Wrap in try/except or make lazy import.
+
+---
+
+### H-16. O(n^2) Louvain implementation
+**File:** `jarvis/graph/clustering.py:215-249`
+**Category:** Performance
+
+Inner loops iterate all nodes for `sum_to_current`, neighbor communities, and `sum_to_comm` calculations. Inside a `while improved` loop (up to 100 iterations), effective complexity is O(100 * n^2).
+
+**Proposed fix:** Pre-build neighbor adjacency dict; only iterate non-zero weight neighbors.
+
+---
+
+### H-17. O(n^2) modularity calculation
+**File:** `jarvis/graph/clustering.py:263-268`
+**Category:** Performance
+
+Double `for i in range(n): for j in range(n):` loop over all node pairs for final modularity.
+
+**Proposed fix:** Compute incrementally using community_weight accumulators.
+
+---
+
+### H-18. O(n^2) force-directed layout
+**File:** `jarvis/graph/layout.py:127-152`
+**Category:** Performance
+
+Nested all-pairs repulsion per iteration (100 iterations default). O(100 * n^2).
+
+**Proposed fix:** Barnes-Hut approximation or spatial hashing for >100 nodes.
+
+---
+
+### H-19. O(n*m) cross-reference scan
+**File:** `jarvis/observability/metrics_validation.py:77-84`
+**Category:** Performance
+
+For each audit entry, every DB entry is scanned linearly.
+
+**Proposed fix:** Build dict keyed by `query_hash` for O(1) lookup.
+
+---
+
+### H-20. Inconsistent error handling for missing API key
+**File:** `evals/judge_config.py:43-49 vs 53-63`
+**Category:** Error Handling
+
+`get_judge_api_key()` calls `sys.exit(1)` (hard crash), while `get_judge_client()` returns `None` for the same condition.
+
+**Proposed fix:** Make `get_judge_api_key()` return `None` or raise an exception instead of `sys.exit(1)`.
+
+---
+
+### H-21. WebSocket auth token via URL query parameter
+**File:** `jarvis/socket_server.py:577`
+**Category:** Security
+
+Auth token passed via `?token=...`. Query parameters appear in access logs, browser history, and referrer headers.
+
+**Proposed fix:** Use WebSocket subprotocol header or first-message authentication.
+
+---
+
+### H-22. Duplicate text silently dropped in prepare_data
+**File:** `experiments/trigger/prepare_data.py:108`
+**Category:** Bug
+
+Building `text_to_example` dict silently drops duplicate texts with different labels.
+
+**Proposed fix:** Detect and warn on duplicates before overwriting.
+
+---
+
+## Medium Severity Issues (38)
+
+### M-1. Prompt injection sanitization has gaps
+**File:** `api/routers/drafts.py:106-113`
+**Category:** Security
+
+Detection uses `lower_instruction` (case-insensitive) but replacement uses `instruction.replace(pattern, ...)` (case-sensitive). Mixed-case patterns like `"Ignore previous"` won't be replaced.
+
+**Proposed fix:** Use `re.sub()` with `re.IGNORECASE` flag.
+
+---
+
+### M-2. WebSocket auth via query parameter logged
+**File:** `api/routers/websocket.py:65`
+**Category:** Security
+
+Auth token in query params appears in server access logs, proxy logs, and referrer headers.
+
+**Proposed fix:** Document header-based auth (`X-WS-Token`) as preferred; deprecate query param auth.
+
+---
+
+### M-3. WebSocket get_client() reads without lock
+**File:** `api/routers/websocket.py:248`
+**Category:** Concurrency
+
+Accesses `self._clients` dict without acquiring the async lock while mutations use the lock.
+
+**Proposed fix:** Acquire `self._lock` in `get_client()`.
+
+---
+
+### M-4. Generic exception handler disabled
+**File:** `api/errors.py:366`
+**Category:** Security
+
+Generic handler is commented out. Unhandled exceptions may expose stack traces.
+
+**Proposed fix:** Uncomment or set `debug=False` on the app.
+
+---
+
+### M-5. Timezone-naive datetime throughout codebase
+**Files:** `api/routers/embeddings.py:311`, `api/routers/calendar.py:137`, `jarvis/priority.py:566`, `jarvis/watcher.py:614`, `jarvis/graph/builder.py:468`, `models/templates.py:262-263`
+**Category:** Bug
+
+`datetime.now()` and `datetime.fromtimestamp()` used without timezone info. Mixing with timezone-aware values raises `TypeError`.
+
+**Proposed fix:** Use `datetime.now(UTC)` and `datetime.fromtimestamp(ts, tz=UTC)` consistently.
+
+---
+
+### M-6. Thread API contract violation
+**File:** `api/routers/threads.py:380-383`
+**Category:** Bug
+
+Returns empty list when thread not found, but OpenAPI spec declares 404. API contract violation.
+
+**Proposed fix:** Raise `HTTPException(status_code=404)` or remove 404 from OpenAPI spec.
+
+---
+
+### M-7. Batch export format not validated
+**File:** `api/routers/batch.py:49`
+**Category:** Bug
+
+`format` is a plain `str` with default `"json"`. No validation against supported formats.
+
+**Proposed fix:** Use an enum or validator to restrict to `["json", "csv", "txt"]`.
+
+---
+
+### M-8. O(n) conversation scan for single chat_id
+**Files:** `api/routers/stats.py:537-542`, `api/routers/export.py:69-74`
+**Category:** Performance
+
+Fetches 100-500 conversations via `get_conversations()` then linearly scans for target `chat_id`.
+
+**Proposed fix:** Add `get_conversation(chat_id)` method for direct lookup.
+
+---
+
+### M-9. NER service stderr to DEVNULL
+**File:** `jarvis/_cli_main.py:359`
+**Category:** Error Handling
+
+NER subprocess started with stderr to DEVNULL, making startup failure diagnosis impossible.
+
+**Proposed fix:** Redirect stderr to `~/.jarvis/ner_server.log`.
+
+---
+
+### M-10. Config file written without restricted permissions
+**File:** `jarvis/config.py:807`
+**Category:** Security
+
+`~/.jarvis/config.json` may be readable by other users on multi-user systems.
+
+**Proposed fix:** Set `os.chmod(path, 0o600)` after writing.
+
+---
+
+### M-11. ValidationError shadows Pydantic's
+**File:** `jarvis/errors.py:449`
+**Category:** Code Quality
+
+`jarvis.errors.ValidationError` shadows `pydantic.ValidationError` used in `jarvis/config.py:29`.
+
+**Proposed fix:** Rename to `InputValidationError` or `JarvisValidationError`.
+
+---
+
+### M-12. Unsynchronized embeddings cache access
+**File:** `jarvis/threading.py:508-511`
+**Category:** Concurrency
+
+`_embeddings_cache` (OrderedDict) read/written without lock. Concurrent calls can corrupt it.
+
+**Proposed fix:** Wrap in `self._lock`.
+
+---
+
+### M-13. Thread-unsafe _handled_items mutation
+**File:** `jarvis/priority.py:651`
+**Category:** Concurrency
+
+`mark_handled` modifies `self._handled_items` set without `self._lock`.
+
+**Proposed fix:** Wrap mutations/reads with `self._lock`.
+
+---
+
+### M-14. Thread-unsafe optimized programs singleton
+**File:** `jarvis/prompts.py:1746-1748`
+**Category:** Concurrency
+
+`_optimized_programs` accessed without lock. Two threads could trigger double initialization.
+
+**Proposed fix:** Add `threading.Lock()` around initialization.
+
+---
+
+### M-15. Fragile locals() check
+**File:** `jarvis/nlp/validity_gate.py:265`
+**Category:** Bug
+
+`if "response_words" not in locals()` depends on control flow analysis.
+
+**Proposed fix:** Initialize `response_words` unconditionally at method start.
+
+---
+
+### M-16. Single-letter slang false positives
+**File:** `jarvis/nlp/slang.py:23-24`
+**Category:** Bug
+
+Entries like `"y"`, `"n"`, `"b"`, `"c"`, `"k"` cause aggressive false-positive expansions. `"I got a B in math"` → `"I got a be in math"`.
+
+**Proposed fix:** Remove single-letter entries or add context-aware filtering.
+
+---
+
+### M-17. Private lock access across classes
+**File:** `jarvis/prefetch/executor.py:609, 650, 721, 730`
+**Category:** Coupling
+
+Accesses `MLXModelLoader._mlx_load_lock` (private) from another class.
+
+**Proposed fix:** Expose a public `MLXModelLoader.gpu_lock()` accessor.
+
+---
+
+### M-18. Duplicated serialize/deserialize logic
+**File:** `jarvis/prefetch/cache.py:472-531, 742-783`
+**Category:** Code Quality
+
+`L2Cache._serialize()` and `L3Cache._serialize()` are identical. Same for `_deserialize()`.
+
+**Proposed fix:** Extract shared utility function.
+
+---
+
+### M-19. Global RNG state mutation
+**Files:** `jarvis/graph/clustering.py:136`, `jarvis/graph/layout.py:70`
+**Category:** Bug
+
+`random.seed()` mutates global `random` state. Multi-threaded or concurrent calls produce unpredictable results.
+
+**Proposed fix:** Use `random.Random(seed)` for isolated RNG.
+
+---
+
+### M-20. Deprecated preexec_fn
+**File:** `jarvis/services/base.py:311`
+**Category:** Deprecation
+
+Uses `preexec_fn` in `subprocess.Popen()`, deprecated in Python 3.12.
+
+**Proposed fix:** Use `process_group=0` on Python 3.11+.
+
+---
+
+### M-21. ProcessLookupError race
+**File:** `jarvis/services/base.py:329, 342`
+**Category:** Bug
+
+`os.getpgid(self._process.pid)` can raise `ProcessLookupError` if process exited between check and kill.
+
+**Proposed fix:** Wrap `os.killpg()` in `try/except ProcessLookupError`.
+
+---
+
+### M-22. Memory-unbounded backfill
+**File:** `jarvis/search/vec_search.py:770-789`
+**Category:** Performance
+
+Accumulates ALL rows in `batch` list before `executemany`. For large tables, loads everything into memory.
+
+**Proposed fix:** Chunk batches into groups of ~1000.
+
+---
+
+### M-23. signal.SIGALRM is Unix-only and main-thread-only
+**File:** `integrations/imessage/reader.py:790-796`
+**Category:** Portability/Bug
+
+`signal.SIGALRM` raises `AttributeError` on non-Unix platforms and `ValueError` when called from non-main threads (e.g., web server worker threads).
+
+**Proposed fix:** Use `threading.Timer` or `concurrent.futures` with timeout.
+
+---
+
+### M-24. Schema detection holds lock during I/O
+**File:** `core/health/schema.py:72-166`
+**Category:** Performance
+
+`detect()` holds `self._lock` for the entire method including SQLite connect/query/close. Serializes concurrent first-time calls.
+
+**Proposed fix:** Do I/O outside the lock; re-check cache inside lock.
+
+---
+
+### M-25. O(n^2) valid_indices check
+**File:** `models/reranker.py:91`
+**Category:** Performance
+
+`if i in valid_indices` scans a list per iteration.
+
+**Proposed fix:** Use a `set` for O(1) membership check.
+
+---
+
+### M-26. StopIteration on empty snapshots dir
+**Files:** `models/cross_encoder.py:198`, `models/bert_embedder.py:335`
+**Category:** Bug
+
+`next(snapshots_dir.iterdir())` raises `StopIteration` if directory is empty.
+
+**Proposed fix:** `snapshots = list(dir.iterdir()); if not snapshots: raise FileNotFoundError(...)`.
+
+---
+
+### M-27. Double-wrapped CachedEmbedder
+**File:** `jarvis/reply_service.py:423`
+**Category:** Performance
+
+Creates `CachedEmbedder(get_embedder())` but `get_embedder()` already returns a `CachedEmbedder`. Double-wrapping wastes memory.
+
+**Proposed fix:** Use `get_embedder()` directly.
+
+---
+
+### M-28. Approximate token count for DSPy
+**File:** `jarvis/dspy_client.py:71`
+**Category:** Bug
+
+`completion_tokens = len(text.split())` counts words, not tokens. DSPy relies on accurate counts.
+
+**Proposed fix:** Use tokenizer or document as approximation.
+
+---
+
+### M-29. Temp file leak on exception
+**File:** `jarvis/embedding_adapter.py:259`
+**Category:** Resource Leak
+
+`tempfile.NamedTemporaryFile(delete=False)` only cleaned at method end (line 307). Exception during processing leaks the file.
+
+**Proposed fix:** Use `try/finally` or `contextlib.ExitStack`.
+
+---
+
+### M-30. Race in model_warmer unload
+**File:** `jarvis/model_warmer.py:343-348`
+**Category:** Concurrency
+
+`unload()` checks `generator.is_loaded()` and calls `generator.unload()` without holding lock.
+
+**Proposed fix:** Wrap check-and-unload in `with self._lock:`.
+
+---
+
+### M-31. Private message text in debug logs
+**File:** `jarvis/watcher.py:307`
+**Category:** Security
+
+Debug log includes `msg['text'][:50]`, exposing private iMessage content.
+
+**Proposed fix:** Log message hash/length instead of content.
+
+---
+
+### M-32. WebSocket connection limit TOCTOU
+**File:** `jarvis/socket_server.py:590`
+**Category:** Concurrency
+
+Connection limit check outside lock; multiple connections could bypass simultaneously.
+
+**Proposed fix:** Move check inside `async with self._clients_lock:`.
+
+---
+
+### M-33. In-place request dict mutation
+**File:** `jarvis/socket_server.py:1313-1316`
+**Category:** Bug
+
+`params.pop("stream", None)` mutates the caller's request dict.
+
+**Proposed fix:** Copy params before popping keys.
+
+---
+
+### M-34. Docstring defaults don't match actual defaults
+**File:** `experiments/scripts/prepare_data.py:56-69`
+**Category:** Documentation/Bug
+
+Docstring says `confidence_threshold` defaults to 0.90 but actual default is 0.80. Same for `minority_threshold`.
+
+**Proposed fix:** Update docstrings to match actual defaults.
+
+---
+
+### M-35. Division by zero risk
+**File:** `evals/eval_pipeline.py:292`
+**Category:** Bug
+
+`cat_matches / n * 100` crashes if `n == 0`.
+
+**Proposed fix:** Guard: `if n == 0: return`.
+
+---
+
+### M-36. Exception hierarchy conflation
+**File:** `jarvis/fallbacks.py:147-153, 155-160`
+**Category:** Design
+
+`GenerationTimeoutError` and `GenerationError` both inherit from `ModelLoadError`. Catching `ModelLoadError` also catches timeouts.
+
+**Proposed fix:** Create a common `GenerationError` base class instead.
+
+---
+
+### M-37. Non-reproducible bootstrap CI
+**File:** `experiments/trigger/final_eval.py:135`
+**Category:** Bug
+
+`bootstrap_ci` uses `random_state=None`, making CI bounds non-reproducible.
+
+**Proposed fix:** Use seeded RNG.
+
+---
+
+### M-38. Stale data on resume in LLM labeling
+**File:** `llm_label_dialog_clean.py:151-156`
+**Category:** Bug
+
+File mode logic always appends after first batch, even on fresh runs that could have stale data from prior interrupted runs.
+
+**Proposed fix:** Truncate file on fresh runs (when existing_count == 0).
+
+---
+
+## Low Severity Issues (43)
+
+### L-1. Duplicate emojis in frozenset
+**File:** `jarvis/observability/insights.py:200,222`
+Duplicates "😰" and "😭" in NEGATIVE_EMOJIS. Remove duplicates.
+
+### L-2. MD5 for non-security hashing
+**File:** `jarvis/search/embeddings.py:475`, `jarvis/threading.py:507`
+Uses MD5 where blake2b would be faster. Replace for consistency.
+
+### L-3. Misleading comment about lock scope
+**File:** `jarvis/observability/metrics_router.py:253-254`
+Comment says "write outside lock" but write is inside lock. Update comment.
+
+### L-4. Non-deterministic cluster colors
+**File:** `jarvis/graph/clustering.py:85-86`
+`random.random()` in `get_cluster_colors()` is not seeded. Accept optional RNG parameter.
+
+### L-5. Assumes contiguous rowid allocation
+**File:** `jarvis/search/vec_search.py:453-455`
+Computes chunk_rowids from range. Could fail under concurrent writers.
+
+### L-6. Dead code: unused rate limit functions
+**File:** `api/ratelimit.py:93-126`
+`_rate_limit_enabled()` and `_get_rate_limit()` never called.
+
+### L-7. Dead code: empty TYPE_CHECKING blocks
+**Files:** `api/errors.py:38-39`, `api/routers/calendar.py:36-37`, `contracts/memory.py:13-14`, `contracts/health.py:13-14`, `contracts/latency.py:11-12`
+Empty `if TYPE_CHECKING: pass` blocks.
+
+### L-8. Private attribute access
+**Files:** `api/routers/settings.py:125,165` (`generator._model`), `api/routers/priority.py:764` (`scorer._important_contacts`), `api/routers/health.py:98` (`generator._loader`), `jarvis/socket_server.py:343` (`generator._loader`)
+Access private attrs instead of public methods.
+
+### L-9. f-strings in logger calls
+**Files:** `api/routers/settings.py:96,595,721`, `api/routers/attachments.py:360,400,457`, `integrations/imessage/reader.py:183`, `jarvis/graph/builder.py:258,351`
+Eager f-string evaluation even when log level disabled. Use `%s` formatting.
+
+### L-10. Missing exception chain (from e)
+**Files:** `api/routers/attachments.py:355`, `api/routers/feedback.py:546`
+`raise HTTPException(...)` inside except without `from e`.
+
+### L-11. Redundant slice
+**File:** `api/routers/priority.py:474`
+`conversations[:15]` redundant since already fetched with `limit=15`.
+
+### L-12. Duplicate fallback logic
+**File:** `api/routers/priority.py:487-494`
+Outer except re-executes identical loop as inner fallback.
+
+### L-13. Read timeout used for write operation
+**File:** `api/routers/conversations.py:565, 686`
+`send_message` uses `get_timeout_read()` instead of write timeout.
+
+### L-14. Dead code: unused RouteResult and RoutingResponse
+**File:** `jarvis/router.py:77-131`
+TypedDicts defined but never used as return types.
+
+### L-15. Missing jitter in RetryContext
+**File:** `jarvis/retry.py:211`
+No jitter unlike decorator versions. Susceptible to thundering herd.
+
+### L-16. Incorrect async type annotations
+**File:** `jarvis/retry.py:97`
+Return type should use `Awaitable[T]` or `Coroutine` for async wrapper.
+
+### L-17. Duplicate docstring parameter
+**File:** `jarvis/prompts.py:1496-1516`
+`contact_context` listed twice in Args section.
+
+### L-18. No-op migration function
+**File:** `jarvis/config.py:695-697`
+`_migrate_v12_to_v13` returns data unchanged.
+
+### L-19. Silent save failure during migration
+**File:** `jarvis/config.py:780-782`
+If `save_config` fails during migration, failure silently ignored.
+
+### L-20. O(n) participant lookup
+**File:** `jarvis/context.py:99-106`
+Linear scan through cached conversations. Build dict for O(1) lookup.
+
+### L-21. Loose phone number matching
+**File:** `jarvis/context.py:340-348`
+Short digit sequences like "1234" match too many numbers.
+
+### L-22. O(N^2) message grouping
+**File:** `jarvis/priority.py:636`
+Builds filtered list per message. Pre-group by chat_id.
+
+### L-23. Overly broad emoji regex
+**File:** `jarvis/relationships.py:53`
+Range `\U000024c2-\U0001f251` includes many non-emoji characters.
+
+### L-24. list[Any] instead of list[Message]
+**File:** `jarvis/relationships.py:480,512,629,643,663,690,705,735,756,777`
+Multiple functions lose type safety with `list[Any]`.
+
+### L-25. Inline import in function body
+**File:** `jarvis/relationships.py:807`
+`import heapq` inside function runs every call.
+
+### L-26. capitalize() lowercases subsequent chars
+**File:** `jarvis/relationships.py:1220`
+`guide.capitalize()` lowercases all except first char.
+
+### L-27. Double CachedEmbedder wrapping in class import
+**File:** `jarvis/reply_service.py:643`
+Class-level import at definition time.
+
+### L-28. Empty prompt sent to model
+**File:** `jarvis/dspy_client.py:127-128`
+When both `prompt` and `messages` are empty, sends empty string.
+
+### L-29. Thread-unsafe computation counter
+**File:** `jarvis/embedding_adapter.py:414`
+`self._computations += len(missing_texts)` not protected by lock.
+
+### L-30. No-op string replacement
+**File:** `models/cross_encoder.py:107`
+`name = hf_name.replace("bert.", "bert.")` replaces with itself.
+
+### L-31. Ambiguous variable name 'l'
+**File:** `models/cross_encoder.py:290`
+`[-l for l in lengths]` confusable with digit `1`.
+
+### L-32. Missing rerank_score on empty filter
+**File:** `models/reranker.py:78`
+Returns candidates without `rerank_score` field when all are filtered.
+
+### L-33. Fragile delegation in ThreadAwareGenerator
+**File:** `models/generator.py:654-685`
+Manual delegation of 5 methods; new methods on inner class won't be forwarded.
+
+### L-34. ParagraphStyle created per message
+**File:** `jarvis/pdf_generator.py:418-423`
+New style per message in loop. Create once and reuse.
+
+### L-35. sys.path manipulation
+**Files:** `scripts/generate_preference_pairs.py:29`, `scripts/label_soc_categories.py:36`, `scripts/evaluate_personal_ft.py:26`
+Fragile `sys.path.insert(0, ...)`.
+
+### L-36. Makefile typo
+**File:** `Makefile:424`
+`mlx_lm_lora.lora` should be `mlx_lm.lora`.
+
+### L-37. ANTI_AI_PHRASES duplicated
+**Files:** `evals/eval_pipeline.py:34-44`, `evals/batch_eval.py:41-51`
+Identical list in two files.
+
+### L-38. Unused CATEGORIES list
+**File:** `evals/batch_eval.py:54-59`
+Defined but never used for validation.
+
+### L-39. Wrong API key in error message
+**File:** `evals/rag_eval.py:345`
+Says "CEREBRAS_API_KEY" but should reference actual key from judge_config.
+
+### L-40. Inconsistent version bounds
+**File:** `pyproject.toml:84-85`
+Training extras have lower bounds than main deps for xgboost/lightgbm.
+
+### L-41. Return type annotation mismatch
+**File:** `experiments/scripts/dailydialog_sweep.py:65`
+Says returns 4-tuple but returns 7 values.
+
+### L-42. Duplicate .env loading logic
+**Files:** `evals/batch_eval.py:26-32`, `evals/eval_pipeline.py:26-32`, `evals/rag_eval.py:30-37`, `scripts/generate_preference_pairs.py:32-38`
+Same hand-rolled parser duplicated 4+ times.
+
+### L-43. Missing KeyError guard for cache files
+**File:** `experiments/scripts/coarse_search.py:59-61`
+No validation of required keys in embeddings cache file.
 
 ---
 
 ## Resolution Tracking
 
-After fixes are applied, update this section:
-
-| Issue # | Status | Notes |
-|---------|--------|-------|
-| 1-13 | Pending | Critical issues awaiting fix |
-| 14-65 | Pending | High priority issues |
-| 66-170 | Pending | Medium priority issues |
-| 171-264 | Pending | Low priority issues |
-
----
-
-## References
-
-- Full agent reports stored in review artifacts
-- CLAUDE.md behavioral requirements
-- Python security best practices (OWASP)
-- MLX memory management docs
-- FastAPI security guidelines
+| Issue | Severity | Status | Notes |
+|-------|----------|--------|-------|
+| C-1 | Critical | Pending | |
+| C-2 | Critical | Pending | |
+| C-3 | Critical | Pending | |
+| C-4 | Critical | Pending | |
+| C-5 | Critical | Pending | |
+| C-6 | Critical | Pending | |
+| C-7 | Critical | Pending | |
+| H-1 through H-22 | High | Pending | |
+| M-1 through M-38 | Medium | Pending | |
+| L-1 through L-43 | Low | Pending | |
 
 ---
 
