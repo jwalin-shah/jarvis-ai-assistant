@@ -361,9 +361,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     # Register timeout handler for asyncio.TimeoutError
     app.add_exception_handler(TimeoutError, timeout_error_handler)  # type: ignore[arg-type]
 
-    # Optionally register a generic exception handler for unexpected errors
-    # Uncomment the following line to catch all unhandled exceptions:
-    # app.add_exception_handler(Exception, generic_exception_handler)
+    # Register a generic exception handler for unexpected errors
+    app.add_exception_handler(Exception, generic_exception_handler)  # type: ignore[arg-type]
 
     logger.debug("Registered JARVIS exception handlers")
 

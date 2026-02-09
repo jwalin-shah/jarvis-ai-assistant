@@ -772,6 +772,7 @@ class VecSearcher:
 
             count = 0
             batch = []
+            batch_size = 1000
             for row in cursor:
                 chunk_rowid = row["rowid"]
                 int8_blob = row["embedding"]
@@ -781,12 +782,22 @@ class VecSearcher:
                 binary_blob = self._binarize_embedding(float_arr)
                 batch.append((binary_blob, chunk_rowid, int8_blob))
 
-            conn.executemany(
-                "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
-                "VALUES (vec_bit(?), ?, ?)",
-                batch,
-            )
-            count = len(batch)
+                if len(batch) >= batch_size:
+                    conn.executemany(
+                        "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
+                        "VALUES (vec_bit(?), ?, ?)",
+                        batch,
+                    )
+                    count += len(batch)
+                    batch = []
+
+            if batch:
+                conn.executemany(
+                    "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
+                    "VALUES (vec_bit(?), ?, ?)",
+                    batch,
+                )
+                count += len(batch)
             logger.info("Backfilled %d rows into vec_binary", count)
             return count
 

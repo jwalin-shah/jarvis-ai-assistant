@@ -355,11 +355,14 @@ def cmd_ner(args: argparse.Namespace) -> int:
             return 1
 
         console.print("[bold]Starting NER service...[/bold]")
-        # Start in background
+        # Start in background, logging stderr to file for debugging
+        ner_log_path = Path.home() / ".jarvis" / "ner_server.log"
+        ner_log_path.parent.mkdir(parents=True, exist_ok=True)
+        ner_log_file = open(ner_log_path, "a")  # noqa: SIM115
         process = subprocess.Popen(
             [str(python_path), str(server_script)],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=ner_log_file,
             start_new_session=True,
         )
 

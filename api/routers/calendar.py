@@ -6,7 +6,7 @@ retrieving events, and creating calendar entries.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -134,7 +134,7 @@ def get_events(
 
     Returns events from the specified date range, sorted by start time.
     """
-    start = datetime.now()
+    start = datetime.now(tz=UTC)
     end = start + timedelta(days=days)
 
     events = reader.get_events(

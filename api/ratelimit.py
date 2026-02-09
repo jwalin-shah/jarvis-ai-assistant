@@ -90,42 +90,6 @@ def get_remote_address(request: Request) -> str:
     return ip
 
 
-def _rate_limit_enabled() -> bool:
-    """Check if rate limiting is enabled in config.
-
-    Uses caching to avoid reading config file on every call.
-    """
-    return _get_cached_config_value(
-        "rate_limit_enabled",
-        lambda: get_config().rate_limit.enabled,
-        True,  # Default: enabled
-    )
-
-
-def _get_rate_limit(limit_type: str) -> str:
-    """Get rate limit string based on type and config.
-
-    Uses caching to avoid reading config file on every call.
-
-    Args:
-        limit_type: Either "generation" or "read"
-
-    Returns:
-        Rate limit string like "10/minute" or "60/minute"
-    """
-    requests_per_minute = _get_cached_config_value(
-        "rate_limit_rpm",
-        lambda: get_config().rate_limit.requests_per_minute,
-        60,  # Default
-    )
-
-    if limit_type == "generation":
-        # Generation endpoints get 1/6 of the read rate
-        return f"{max(1, requests_per_minute // 6)}/minute"
-    else:
-        return f"{requests_per_minute}/minute"
-
-
 # Create the limiter instance
 # Key function extracts client identifier from request
 limiter = Limiter(

@@ -342,7 +342,7 @@ def main() -> int:
 
     client = get_judge_client()
     if client is None:
-        print("ERROR: CEREBRAS_API_KEY not set in .env")
+        print("ERROR: Judge API key not set in .env")
         print("       Required for judge scoring.")
         return 1
 

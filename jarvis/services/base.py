@@ -297,19 +297,17 @@ class Service(abc.ABC):
             env["PATH"] = f"{venv_bin}:{env['PATH']}"
 
         # Start process with platform-specific settings
-        # preexec_fn is Unix-only (creates new process group for clean shutdown)
-        preexec_fn = None
+        # Use process_group (Python 3.11+) instead of deprecated preexec_fn
+        popen_kwargs: dict[str, Any] = {
+            "cwd": self.config.working_dir,
+            "env": env,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+        }
         if hasattr(os, "setsid"):  # Unix/Linux/macOS
-            preexec_fn = os.setsid
+            popen_kwargs["process_group"] = 0
 
-        self._process = subprocess.Popen(
-            self.config.command,
-            cwd=self.config.working_dir,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            preexec_fn=preexec_fn,
-        )
+        self._process = subprocess.Popen(self.config.command, **popen_kwargs)
 
     def _stop_process(self) -> None:
         """Stop the process gracefully.
@@ -326,7 +324,10 @@ class Service(abc.ABC):
             # On Windows: terminate single process
             if hasattr(os, "killpg") and hasattr(os, "getpgid") and hasattr(signal, "SIGTERM"):
                 # Unix/Linux/macOS: send SIGTERM to process group
-                os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
+                try:
+                    os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass  # Process already exited
             else:
                 # Windows or fallback: terminate process directly
                 self._process.terminate()
@@ -339,7 +340,10 @@ class Service(abc.ABC):
                 logger.warning("Force killing service %s", self.name)
                 if hasattr(os, "killpg") and hasattr(os, "getpgid") and hasattr(signal, "SIGKILL"):
                     # Unix/Linux/macOS: send SIGKILL to process group
-                    os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
+                    try:
+                        os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass  # Process already exited
                 else:
                     # Windows or fallback: kill process directly
                     self._process.kill()

@@ -251,7 +251,7 @@ class RoutingMetricsStore:
         self._last_flush_time = time.monotonic()
 
         # Write outside the lock to minimize contention
-        # (we've already cleared the buffer, so new records can be added)
+        # (buffer was cleared above, so new records can be added concurrently)
         try:
             with sqlite3.connect(self._db_path, timeout=30.0) as conn:
                 # WAL mode already enabled during init, but set pragmas for this connection too

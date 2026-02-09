@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -102,13 +103,9 @@ def _sanitize_instruction(instruction: str | None) -> str:
         "###",
     ]
 
-    lower_instruction = instruction.lower()
     for pattern in dangerous_patterns:
-        if pattern in lower_instruction:
-            # Replace dangerous patterns with safe placeholder
-            instruction = instruction.replace(pattern, "[removed]")
-            instruction = instruction.replace(pattern.upper(), "[removed]")
-            instruction = instruction.replace(pattern.title(), "[removed]")
+        if re.search(re.escape(pattern), instruction, re.IGNORECASE):
+            instruction = re.sub(re.escape(pattern), "[removed]", instruction, flags=re.IGNORECASE)
 
     return instruction.strip()
 

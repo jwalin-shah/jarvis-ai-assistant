@@ -783,17 +783,26 @@ class ChatDBReader:
         @contextmanager
         def timeout_context(seconds: int):
             """Context manager with timeout for I/O operations."""
+            import threading as _threading
 
             def timeout_handler(signum, frame):
                 raise TimeoutError("Contact loading timed out")
 
-            # Set signal handler (Unix only)
-            try:
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(seconds)
+            # Use signal.SIGALRM only on Unix and from main thread
+            use_signal = (
+                hasattr(signal, "SIGALRM")
+                and _threading.current_thread() is _threading.main_thread()
+            )
+            if use_signal:
+                try:
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(seconds)
+                    yield
+                finally:
+                    signal.alarm(0)  # Disable alarm
+            else:
+                # Fallback: no timeout enforcement (safe for non-main threads)
                 yield
-            finally:
-                signal.alarm(0)  # Disable alarm
 
         # Load into a local dict first to avoid partial cache state
         new_cache: dict[str, str] = {}

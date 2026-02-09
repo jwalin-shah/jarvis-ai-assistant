@@ -234,17 +234,18 @@ class ValidityGate:
         if is_acknowledgment_only(response_text) and trigger_expects_content(trigger_text):
             return False, "ack_to_content_trigger"
 
+        # Pre-compute word counts used in multiple checks below
+        trigger_words = len(trigger_text.split())
+        response_words = len(response_text.split())
+
         # 3. Response starts with topic-shift marker AND is short
         # (Short topic-shift responses are likely unrelated to trigger)
         if starts_new_topic(response_text):
-            response_words = len(response_text.split())
             if response_words <= 10:
                 return False, "short_topic_shift"
 
         # 4. Trigger is very short ack AND response is long content-heavy
         # (The long response is probably to something else not captured)
-        trigger_words = len(trigger_text.split())
-        response_words = len(response_text.split())
         if trigger_words <= 2 and is_acknowledgment_only(trigger_text):
             if response_words >= 15:
                 return False, "ack_trigger_long_response"
@@ -261,9 +262,6 @@ class ValidityGate:
         # (Response asking question when trigger didn't - may be unrelated)
         if is_question(response_text) and not is_question(trigger_text):
             # Only reject if response is short (short questions often unrelated)
-            # Note: response_words may have been calculated earlier, but ensure it's defined
-            if "response_words" not in locals():
-                response_words = len(response_text.split())
             if response_words <= 5:
                 return False, "short_question_to_statement"
 

@@ -126,13 +126,14 @@ def load_test_data():
     return embeddings, labels
 
 
-def bootstrap_ci(y_true, y_pred, n_bootstrap: int = 1000, ci: float = 0.95):
+def bootstrap_ci(y_true, y_pred, n_bootstrap: int = 1000, ci: float = 0.95, seed: int = 42):
     """Compute bootstrap confidence interval for macro F1."""
+    rng = np.random.RandomState(seed)
     scores = []
     n = len(y_true)
 
-    for _ in range(n_bootstrap):
-        indices = resample(range(n), n_samples=n, random_state=None)
+    for i in range(n_bootstrap):
+        indices = resample(range(n), n_samples=n, random_state=rng)
         y_true_boot = [y_true[i] for i in indices]
         y_pred_boot = [y_pred[i] for i in indices]
         score = f1_score(y_true_boot, y_pred_boot, average="macro")

@@ -20,11 +20,6 @@ SLANG_MAP: dict[str, str] = {
     "u": "you",
     "ur": "your",
     "r": "are",
-    "y": "why",
-    "n": "and",
-    "b": "be",
-    "c": "see",
-    "k": "okay",
     # Common abbreviations
     "rn": "right now",
     "nvm": "never mind",

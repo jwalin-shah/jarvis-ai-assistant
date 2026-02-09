@@ -10,7 +10,7 @@ import asyncio
 import logging
 import sqlite3
 from collections import OrderedDict
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -304,8 +304,9 @@ class ChatDBWatcher:
                     self._last_rowid = max(self._last_rowid or 0, msg["id"])
 
                     logger.debug(
-                        f"New message in {msg['chat_id']}: "
-                        f"{msg['text'][:50] if msg['text'] else '[no text]'}..."
+                        "New message in %s (length=%d)",
+                        msg["chat_id"],
+                        len(msg["text"]) if msg["text"] else 0,
                     )
                 except Exception as e:
                     logger.warning(
@@ -611,7 +612,7 @@ class ChatDBWatcher:
                     date = None
                     if row["date"]:
                         unix_ts = (row["date"] / 1_000_000_000) + APPLE_EPOCH_OFFSET
-                        date = datetime.fromtimestamp(unix_ts).isoformat()
+                        date = datetime.fromtimestamp(unix_ts, tz=UTC).isoformat()
 
                     messages.append(
                         {

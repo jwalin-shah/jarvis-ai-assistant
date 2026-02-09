@@ -132,8 +132,7 @@ class LouvainClustering:
             random_seed: Seed for reproducibility
         """
         self.resolution = resolution
-        if random_seed is not None:
-            random.seed(random_seed)
+        self._rng = random.Random(random_seed)
 
     def detect(self, graph: GraphData) -> ClusterResult:
         """Detect communities in the graph.
@@ -209,7 +208,7 @@ class LouvainClustering:
 
             # Randomize node order
             nodes_order = list(range(n))
-            random.shuffle(nodes_order)
+            self._rng.shuffle(nodes_order)
 
             for node in nodes_order:
                 current_comm = community[node]

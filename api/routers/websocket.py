@@ -238,6 +238,9 @@ class ConnectionManager:
     def get_client(self, client_id: str) -> WebSocketClient | None:
         """Get a client by ID.
 
+        Note: dict.get() is atomic in CPython (GIL-protected), so no lock needed
+        for read-only access. Mutations use self._lock elsewhere.
+
         Args:
             client_id: The client ID to look up.
 
