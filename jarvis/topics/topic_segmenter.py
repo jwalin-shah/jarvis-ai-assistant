@@ -479,6 +479,12 @@ class TopicSegmenter:
         # Pre-compute entity sets for each message
         entity_sets = [_entities_to_label_set(m.entities) for m in messages]
 
+        # Pre-compute all time gaps to avoid repeated calculations
+        time_gaps_mins = [0.0]  # No gap before first message
+        for i in range(1, len(messages)):
+            gap_mins = (messages[i].timestamp - messages[i - 1].timestamp).total_seconds() / 60.0
+            time_gaps_mins.append(gap_mins)
+
         # Compute sliding window centroids for embedding drift detection
         window_centroids = self._compute_window_centroids(messages)
 
@@ -505,10 +511,8 @@ class TopicSegmenter:
                 if entity_discontinuity > embedding_drift:
                     primary_reason = SegmentBoundaryReason.ENTITY_DISCONTINUITY
 
-            # 3. Time gap penalty
-            time_gap_mins = (
-                messages[i].timestamp - messages[i - 1].timestamp
-            ).total_seconds() / 60.0
+            # 3. Time gap penalty (use pre-computed gaps)
+            time_gap_mins = time_gaps_mins[i]
 
             # Hard boundary for large time gaps
             if time_gap_mins >= self.time_gap_minutes:

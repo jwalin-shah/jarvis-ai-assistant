@@ -135,7 +135,6 @@ def aggregate_by_day(
             "received": 0,
             "contacts": set(),
             "hourly": Counter(),
-            "emojis": 0,
             "attachments": 0,
         }
     )
@@ -174,7 +173,7 @@ def aggregate_by_day(
                 avg_sentiment=round(avg_sentiment, 3),
                 unique_contacts=len(data["contacts"]),
                 hourly_breakdown=dict(data["hourly"]),
-                emoji_count=data["emojis"],
+                emoji_count=0,
                 attachment_count=data["attachments"],
             )
         )
