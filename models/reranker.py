@@ -77,8 +77,12 @@ class CrossEncoderReranker:
         if not pairs:
             return candidates[:top_k]
 
-        ce = self._get_cross_encoder()
-        scores = ce.predict(pairs)
+        try:
+            ce = self._get_cross_encoder()
+            scores = ce.predict(pairs)
+        except (FileNotFoundError, OSError) as e:
+            logger.warning("Cross-encoder unavailable, skipping reranking: %s", e)
+            return candidates[:top_k]
 
         # Assign scores back to candidates
         scored = []

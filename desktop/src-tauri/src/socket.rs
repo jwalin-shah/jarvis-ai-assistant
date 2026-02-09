@@ -120,12 +120,27 @@ pub async fn connect_socket(
     let pending_arc = state.pending.clone();
     let reader_task_arc = state.reader_task.clone();
 
-    // Check if already connected
+    // Abort any existing reader task to prevent stale readers
     {
-        let connected = connected_arc.read().await;
-        if *connected {
-            return Ok(true);
+        let mut task = reader_task_arc.lock().await;
+        if let Some(handle) = task.take() {
+            handle.abort();
         }
+    }
+
+    // Close existing writer
+    {
+        let mut w = writer_arc.lock().await;
+        if let Some(ref mut writer) = *w {
+            let _ = writer.shutdown().await;
+        }
+        *w = None;
+    }
+
+    // Reset connected flag
+    {
+        let mut connected = connected_arc.write().await;
+        *connected = false;
     }
 
     // Connect to socket

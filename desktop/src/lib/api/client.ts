@@ -1092,7 +1092,7 @@ class ApiClient {
   }
 
   async getCustomTemplateUsageStats(): Promise<CustomTemplateUsageStats> {
-    return this.request<CustomTemplateUsageStats>("/templates/stats");
+    return this.request<CustomTemplateUsageStats>("/templates/stats/usage");
   }
 
   async exportCustomTemplates(
