@@ -22,7 +22,6 @@ from contracts.models import GenerationResponse
 from core.health import reset_degradation_controller
 from core.memory import reset_memory_controller
 
-
 # --- Context Fetching Stubs ---
 # These define the expected interface for jarvis/context.py (not yet implemented)
 
@@ -293,6 +292,3 @@ def mock_work_messages() -> list[Message]:
             date=datetime(2024, 1, 15, 9, 35),
         ),
     ]
-
-
-

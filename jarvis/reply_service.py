@@ -8,10 +8,14 @@ Consolidates logic from:
 from __future__ import annotations
 
 import logging
+import random
 import threading
 import time
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
+from jarvis.classifiers.category_classifier import classify_category
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
@@ -19,11 +23,6 @@ from jarvis.classifiers.response_mobilization import (
 )
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
-import random
-
-import numpy as np
-
-from jarvis.classifiers.category_classifier import classify_category
 from jarvis.errors import ErrorCode, JarvisError
 from jarvis.observability.metrics_router import (
     RoutingMetrics,
@@ -256,7 +255,9 @@ class ReplyService:
 
         # 1b. Category classification and routing
 
-        category_result = classify_category(incoming, context=thread or [], mobilization=mobilization)
+        category_result = classify_category(
+            incoming, context=thread or [], mobilization=mobilization
+        )
         category_config = get_category_config(category_result.category)
 
         # If closing/acknowledge category, skip SLM and return template
@@ -331,7 +332,7 @@ class ReplyService:
         chat_id: str | None,
         mobilization: MobilizationResult,
         instruction: str | None = None,
-        category_result = None,
+        category_result=None,
     ) -> GenerationRequest:
         """Build a GenerationRequest through the full pipeline.
 
@@ -351,7 +352,7 @@ class ReplyService:
             A GenerationRequest ready for generate() or generate_stream().
         """
         from contracts.models import GenerationRequest
-        from jarvis.prompts import build_rag_reply_prompt, get_category_config
+        from jarvis.prompts import get_category_config
 
         # Build context with category-specific depth
         if category_result:
@@ -364,7 +365,9 @@ class ReplyService:
         if thread:
             context_messages = thread[-context_depth:] if context_depth > 0 else []
         elif chat_id and context_depth > 0:
-            context_messages = self.context_service.fetch_conversation_context(chat_id, limit=context_depth)
+            context_messages = self.context_service.fetch_conversation_context(
+                chat_id, limit=context_depth
+            )
 
         context = "\n".join(context_messages) + f"\n[Incoming]: {incoming}"
 
@@ -381,7 +384,9 @@ class ReplyService:
         )
 
         category = resolve_category(
-            incoming, context=context_messages, mobilization=mobilization,
+            incoming,
+            context=context_messages,
+            mobilization=mobilization,
         )
 
         # Use MIPRO-compiled instruction if available, else category hint
@@ -415,7 +420,7 @@ class ReplyService:
         ]
 
         # Deduplicate semantically similar examples
-        cached_embedder = CachedEmbedder(get_embedder())
+        cached_embedder = get_embedder()
         all_exchanges = self._dedupe_examples(all_exchanges, cached_embedder)
 
         # Limit to 5 total examples
@@ -555,7 +560,7 @@ class ReplyService:
         thread: list[str] | None,
         chat_id: str | None,
         mobilization: MobilizationResult,
-        category_result = None,
+        category_result=None,
     ) -> dict[str, Any]:
         # Pre-generation gate: skip when no response is needed and no examples found
         if mobilization.pressure == ResponsePressure.NONE and not search_results:
@@ -568,7 +573,12 @@ class ReplyService:
 
         try:
             request = self.build_generation_request(
-                incoming, search_results, contact, thread, chat_id, mobilization,
+                incoming,
+                search_results,
+                contact,
+                thread,
+                chat_id,
+                mobilization,
                 category_result=category_result,
             )
             response = self.generator.generate(request)
@@ -649,8 +659,11 @@ class ReplyService:
         if tokenizer is None or not hasattr(tokenizer, "apply_chat_template"):
             # Fallback to raw prompt if no chat template
             from jarvis.prompts import build_rag_reply_prompt
+
             return build_rag_reply_prompt(
-                context="", last_message=incoming, contact_name="them",
+                context="",
+                last_message=incoming,
+                contact_name="them",
                 instruction=instruction,
             )
 
@@ -674,7 +687,9 @@ class ReplyService:
         messages.append({"role": "user", "content": incoming})
 
         return tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
     def _record_metrics(

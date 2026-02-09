@@ -5,7 +5,7 @@ Contains schemas for sending messages, generating draft replies, and summaries.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SendMessageRequest(BaseModel):
@@ -90,6 +90,18 @@ class SendAttachmentRequest(BaseModel):
         default=False,
         description="Set to true for group chats (uses chat_id from path)",
     )
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, v: str) -> str:
+        """Validate file path is within user home directory."""
+        from pathlib import Path
+
+        resolved = Path(v).resolve()
+        home = Path.home()
+        if not str(resolved).startswith(str(home)):
+            raise ValueError(f"file_path must be within user home directory ({home})")
+        return str(resolved)
 
 
 class SendMessageResponse(BaseModel):

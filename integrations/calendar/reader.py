@@ -180,7 +180,8 @@ class CalendarReaderImpl:
 
         # Build calendar filter
         if calendar_id:
-            cal_filter = SPECIFIC_CALENDAR_FILTER.format(calendar_id=calendar_id)
+            safe_id = calendar_id.replace("\\", "\\\\").replace('"', '\\"')
+            cal_filter = SPECIFIC_CALENDAR_FILTER.format(calendar_id=safe_id)
         else:
             cal_filter = ALL_CALENDARS_FILTER
 

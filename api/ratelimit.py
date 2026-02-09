@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -34,6 +35,35 @@ logger = logging.getLogger(__name__)
 
 # Type for decorator functions
 F = TypeVar("F", bound=Callable[..., Any])
+
+# Config cache with 60-second TTL to avoid reading on every call
+_config_cache: dict[str, tuple[Any, float]] = {}
+_CONFIG_CACHE_TTL = 60.0  # seconds
+
+
+def _get_cached_config_value(key: str, getter: Callable[[], Any], default: Any) -> Any:
+    """Get config value with caching.
+
+    Args:
+        key: Cache key
+        getter: Function to get the value if cache miss
+        default: Default value if getter fails
+
+    Returns:
+        Config value
+    """
+    now = time.time()
+    if key in _config_cache:
+        value, timestamp = _config_cache[key]
+        if now - timestamp < _CONFIG_CACHE_TTL:
+            return value
+
+    try:
+        value = getter()
+        _config_cache[key] = (value, now)
+        return value
+    except Exception:
+        return default
 
 
 def get_remote_address(request: Request) -> str:
@@ -58,40 +88,6 @@ def get_remote_address(request: Request) -> str:
         return f"{ip}:{hash(user_agent) % 10000}"
 
     return ip
-
-
-def _rate_limit_enabled() -> bool:
-    """Check if rate limiting is enabled in config."""
-    try:
-        config = get_config()
-        return config.rate_limit.enabled
-    except Exception:
-        return True
-
-
-def _get_rate_limit(limit_type: str) -> str:
-    """Get rate limit string based on type and config.
-
-    Args:
-        limit_type: Either "generation" or "read"
-
-    Returns:
-        Rate limit string like "10/minute" or "60/minute"
-    """
-    try:
-        config = get_config()
-        requests_per_minute = config.rate_limit.requests_per_minute
-
-        if limit_type == "generation":
-            # Generation endpoints get 1/6 of the read rate
-            return f"{max(1, requests_per_minute // 6)}/minute"
-        else:
-            return f"{requests_per_minute}/minute"
-    except Exception:
-        # Defaults
-        if limit_type == "generation":
-            return "10/minute"
-        return "60/minute"
 
 
 # Create the limiter instance
@@ -227,27 +223,31 @@ def run_in_threadpool(func: Callable[..., Any]) -> Callable[..., Awaitable[Any]]
 def get_timeout_generation() -> float:
     """Get generation timeout from config.
 
+    Uses caching to avoid reading config file on every call.
+
     Returns:
         Timeout in seconds for generation operations.
     """
-    try:
-        config = get_config()
-        return config.rate_limit.generation_timeout_seconds
-    except Exception:
-        return 30.0  # Default fallback
+    return _get_cached_config_value(
+        "timeout_generation",
+        lambda: get_config().rate_limit.generation_timeout_seconds,
+        30.0,  # Default fallback
+    )
 
 
 def get_timeout_read() -> float:
     """Get read timeout from config.
 
+    Uses caching to avoid reading config file on every call.
+
     Returns:
         Timeout in seconds for read operations.
     """
-    try:
-        config = get_config()
-        return config.rate_limit.read_timeout_seconds
-    except Exception:
-        return 10.0  # Default fallback
+    return _get_cached_config_value(
+        "timeout_read",
+        lambda: get_config().rate_limit.read_timeout_seconds,
+        10.0,  # Default fallback
+    )
 
 
 # TIMEOUT_GENERATION and TIMEOUT_READ were removed (they froze at import time).

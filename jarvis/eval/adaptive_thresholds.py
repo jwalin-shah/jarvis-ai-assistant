@@ -29,7 +29,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from jarvis.config import AdaptiveThresholdConfig, get_config
-from jarvis.eval.evaluation import SuggestionAction, FeedbackStore, get_feedback_store
+from jarvis.eval.evaluation import FeedbackStore, SuggestionAction, get_feedback_store
 
 if TYPE_CHECKING:
     from jarvis.eval.evaluation import FeedbackEntry

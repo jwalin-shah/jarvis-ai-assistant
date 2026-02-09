@@ -201,12 +201,13 @@ class ContactMixin:
             row = cursor.fetchone()
 
             if not row:
-                # Try partial match
+                # Try partial match - escape wildcards for LIKE
+                escaped_name = name.replace("%", "\\%").replace("_", "\\_")
                 cursor = conn.execute(
                     """SELECT id, chat_id, display_name, phone_or_email, relationship,
                               style_notes, handles_json, created_at, updated_at
                        FROM contacts WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'""",
-                    (f"%{name.replace('%', '\\%').replace('_', '\\_')}%",),
+                    (f"%{escaped_name}%",),
                 )
                 row = cursor.fetchone()
 

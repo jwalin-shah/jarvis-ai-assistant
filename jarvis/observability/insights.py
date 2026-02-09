@@ -219,7 +219,6 @@ NEGATIVE_EMOJIS = frozenset(
         "👎",
         "😱",
         "😨",
-        "😰",
         "🥵",
         "🥶",
         "😳",

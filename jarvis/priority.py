@@ -16,7 +16,7 @@ import logging
 import re
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -563,7 +563,8 @@ class MessagePriorityScorer:
                 last_their_msg = max(sender_messages, key=lambda m: m.date)
                 if last_their_msg.date > last_my_msg.date:
                     # They messaged after our last message
-                    hours_since = (datetime.now() - last_my_msg.date).total_seconds() / 3600
+                    delta = datetime.now(tz=UTC) - last_my_msg.date
+                    hours_since = delta.total_seconds() / 3600
                     if hours_since > 4:
                         context_score += 0.3
                         reasons.append(PriorityReason.AWAITING_RESPONSE)
@@ -648,7 +649,8 @@ class MessagePriorityScorer:
             chat_id: Conversation ID
             message_id: Message ID
         """
-        self._handled_items.add((chat_id, message_id))
+        with self._lock:
+            self._handled_items.add((chat_id, message_id))
         logger.debug("Marked message %d in chat %s as handled", message_id, chat_id)
 
     def unmark_handled(self, chat_id: str, message_id: int) -> None:

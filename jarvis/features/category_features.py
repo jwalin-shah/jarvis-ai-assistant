@@ -57,99 +57,200 @@ PROFESSIONAL_KEYWORDS_RE = re.compile(
 REACTION_PATTERNS = ["Laughed at", "Loved", "Liked", "Disliked", "Emphasized", "Questioned"]
 EMOTIONAL_MARKERS = ["lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"]
 QUESTION_STARTERS = {
-    "what", "why", "how", "when", "where", "who",
-    "did", "do", "does", "can", "could", "would", "will", "should"
+    "what",
+    "why",
+    "how",
+    "when",
+    "where",
+    "who",
+    "did",
+    "do",
+    "does",
+    "can",
+    "could",
+    "would",
+    "will",
+    "should",
 }
 IMPERATIVE_VERBS = {
-    "make", "send", "get", "tell", "show", "give",
-    "come", "take", "call", "help", "let"
+    "make",
+    "send",
+    "get",
+    "tell",
+    "show",
+    "give",
+    "come",
+    "take",
+    "call",
+    "help",
+    "let",
 }
-BRIEF_AGREEMENTS = {
-    "ok", "okay", "k", "yeah", "yep", "yup",
-    "sure", "cool", "bet", "fs", "aight"
-}
+BRIEF_AGREEMENTS = {"ok", "okay", "k", "yeah", "yep", "yup", "sure", "cool", "bet", "fs", "aight"}
 
 # New hand-crafted feature patterns (from error analysis)
 CLAUSE_AFTER_AGREEMENT_RE = re.compile(
     r"\b(ok|okay|sure|yeah|yep|yup|cool|bet|sounds good)\b.*\b(but|though|however|if|when|"
     r"because|since|as long as|unless|after|before)\b",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 GREETING_PATTERN_RE = re.compile(
-    r"^(hey|hi|hello|yo|sup|what's up|wassup|heyy|hiya|heya)\b",
-    re.IGNORECASE
+    r"^(hey|hi|hello|yo|sup|what's up|wassup|heyy|hiya|heya)\b", re.IGNORECASE
 )
 
 ELONGATED_WORD_RE = re.compile(r"(\w)\1{2,}")  # e.g., "yaasss", "nooo", "omgggg"
 
 # Proposal patterns from text_normalizer
 PROPOSAL_PATTERNS_RE = re.compile(
-    r"\b(how about|what about|should we|shall we|let's|lets|we could)\b",
-    re.IGNORECASE
+    r"\b(how about|what about|should we|shall we|let's|lets|we could)\b", re.IGNORECASE
 )
 
 # Implicit request patterns
 IMPLICIT_REQUEST_RE = re.compile(
-    r"\b(i need|i want|i wanna|i gotta|i have to)\b.*\b(you|your|help|know)\b",
-    re.IGNORECASE
+    r"\b(i need|i want|i wanna|i gotta|i have to)\b.*\b(you|your|help|know)\b", re.IGNORECASE
 )
 
 # === HARD-CLASS FEATURES (for closing and request) ===
 
 # Closing-specific patterns
 GOODBYE_PHRASES = {
-    "bye", "goodbye", "later", "ttyl", "talk to you later", "gotta go", "gtg",
-    "see you", "see ya", "catch you", "peace", "cya", "l8r", "take care",
-    "talk soon", "talk later", "goodnight", "gnight", "nite", "sleep well"
+    "bye",
+    "goodbye",
+    "later",
+    "ttyl",
+    "talk to you later",
+    "gotta go",
+    "gtg",
+    "see you",
+    "see ya",
+    "catch you",
+    "peace",
+    "cya",
+    "l8r",
+    "take care",
+    "talk soon",
+    "talk later",
+    "goodnight",
+    "gnight",
+    "nite",
+    "sleep well",
 }
 
 CLOSING_EMOJIS = {"👋", "✌️", "✌", "💯", "✨", "🙏", "😴", "😊", "💤"}
 
 TIME_CONSTRAINT_PHRASES = {
-    "gotta run", "gtg", "g2g", "have to go", "running late", "in a hurry",
-    "gotta jet", "about to leave"
+    "gotta run",
+    "gtg",
+    "g2g",
+    "have to go",
+    "running late",
+    "in a hurry",
+    "gotta jet",
+    "about to leave",
 }
 
 # Request-specific patterns
-POLITE_REQUEST_MODAL_RE = re.compile(
-    r"^(can|could|would|will)\s+(you|u)\s+",
-    re.IGNORECASE
-)
+POLITE_REQUEST_MODAL_RE = re.compile(r"^(can|could|would|will)\s+(you|u)\s+", re.IGNORECASE)
 
-IMPERATIVE_WITH_PLEASE_RE = re.compile(
-    r"^(please\s+\w+|(\w+\s+)*please)",
-    re.IGNORECASE
-)
+IMPERATIVE_WITH_PLEASE_RE = re.compile(r"^(please\s+\w+|(\w+\s+)*please)", re.IGNORECASE)
 
 CONDITIONAL_REQUEST_RE = re.compile(
     r"\b(if you (could|can|would)|when you (can|get a chance|have time)|whenever you)\b",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 NEED_WANT_YOU_RE = re.compile(
-    r"\b(i need you to|i want you to|i'd like you to|need you to|want you to)\b",
-    re.IGNORECASE
+    r"\b(i need you to|i want you to|i'd like you to|need you to|want you to)\b", re.IGNORECASE
 )
 
 # Additional feature patterns (context overlap, question types, thanks/apology, urgency, emoji sentiment)
 THANKS_MARKERS = {"thanks", "thank you", "thx", "ty", "tysm", "appreciate", "appreciated"}
 APOLOGY_MARKERS = {"sorry", "my bad", "apologize", "apologies", "oops", "whoops", "my fault"}
-URGENCY_MARKERS = {"asap", "urgent", "quick", "quickly", "hurry", "rush", "rushing", "now", "right now", "immediately"}
-FUTURE_TIME_MARKERS = {"later", "tomorrow", "tonight", "next week", "next time", "soon", "eventually"}
+URGENCY_MARKERS = {
+    "asap",
+    "urgent",
+    "quick",
+    "quickly",
+    "hurry",
+    "rush",
+    "rushing",
+    "now",
+    "right now",
+    "immediately",
+}
+FUTURE_TIME_MARKERS = {
+    "later",
+    "tomorrow",
+    "tonight",
+    "next week",
+    "next time",
+    "soon",
+    "eventually",
+}
 
 # Emoji sentiment sets (common emotional emojis)
 POSITIVE_EMOJIS = {
-    "😊", "😀", "😁", "😂", "🤣", "😃", "😄", "😆", "😉", "😍", "🥰", "😘", "❤️", "💕", "💖",
-    "👍", "👏", "🙌", "🎉", "🎊", "✨", "💯", "🔥", "😎", "🤩", "😇", "🥳", "💪", "🙏", "💗"
+    "😊",
+    "😀",
+    "😁",
+    "😂",
+    "🤣",
+    "😃",
+    "😄",
+    "😆",
+    "😉",
+    "😍",
+    "🥰",
+    "😘",
+    "❤️",
+    "💕",
+    "💖",
+    "👍",
+    "👏",
+    "🙌",
+    "🎉",
+    "🎊",
+    "✨",
+    "💯",
+    "🔥",
+    "😎",
+    "🤩",
+    "😇",
+    "🥳",
+    "💪",
+    "🙏",
+    "💗",
 }
 NEGATIVE_EMOJIS = {
-    "😢", "😭", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "😤", "😠", "😡",
-    "🤬", "💔", "😰", "😨", "😱", "😥", "😪", "🤦", "🤷", "💀", "😒", "🙄"
+    "😢",
+    "😭",
+    "😞",
+    "😔",
+    "😟",
+    "😕",
+    "🙁",
+    "☹️",
+    "😣",
+    "😖",
+    "😫",
+    "😩",
+    "😤",
+    "😠",
+    "😡",
+    "🤬",
+    "💔",
+    "😰",
+    "😨",
+    "😱",
+    "😥",
+    "😪",
+    "🤦",
+    "🤷",
+    "💀",
+    "😒",
+    "🙄",
 }
-NEUTRAL_EMOJIS = {
-    "🤔", "🙃", "😐", "😑", "🤨", "🧐", "😶", "👀", "💬", "🗣️", "👋", "✌️"
-}
+NEUTRAL_EMOJIS = {"🤔", "🙃", "😐", "😑", "🤨", "🧐", "😶", "👀", "💬", "🗣️", "👋", "✌️"}
 
 
 class CategoryFeatureExtractor:
@@ -245,8 +346,7 @@ class CategoryFeatureExtractor:
         features.append(imperative_first)
 
         is_brief_agreement = (
-            1.0 if total_words <= 3 and any(w.lower() in BRIEF_AGREEMENTS for w in words)
-            else 0.0
+            1.0 if total_words <= 3 and any(w.lower() in BRIEF_AGREEMENTS for w in words) else 0.0
         )
         features.append(is_brief_agreement)
 
@@ -294,13 +394,29 @@ class CategoryFeatureExtractor:
         features.append(has_imperative)
 
         # 2. you_modal
-        you_modal = 1.0 if any(
-            p in text_lower for p in ["can you", "could you", "would you", "will you", "should you"]
-        ) else 0.0
+        you_modal = (
+            1.0
+            if any(
+                p in text_lower
+                for p in ["can you", "could you", "would you", "will you", "should you"]
+            )
+            else 0.0
+        )
         features.append(you_modal)
 
         # 3. request_verb
-        request_verbs = {"send", "give", "help", "tell", "show", "let", "call", "get", "make", "take"}
+        request_verbs = {
+            "send",
+            "give",
+            "help",
+            "tell",
+            "show",
+            "let",
+            "call",
+            "get",
+            "make",
+            "take",
+        }
         has_request = 1.0 if any(token.lemma_ in request_verbs for token in doc) else 0.0
         features.append(has_request)
 
@@ -315,9 +431,11 @@ class CategoryFeatureExtractor:
         features.append(directive_q)
 
         # 6. i_will
-        i_will = 1.0 if any(
-            p in text_lower for p in ["i'll", "i will", "i'm gonna", "ima", "imma"]
-        ) else 0.0
+        i_will = (
+            1.0
+            if any(p in text_lower for p in ["i'll", "i will", "i'm gonna", "ima", "imma"])
+            else 0.0
+        )
         features.append(i_will)
 
         # 7. promise_verb
@@ -332,7 +450,18 @@ class CategoryFeatureExtractor:
         features.append(float(first_person))
 
         # 9. agreement
-        agreement_words = {"sure", "okay", "ok", "yes", "yeah", "yep", "yup", "sounds good", "bet", "fs"}
+        agreement_words = {
+            "sure",
+            "okay",
+            "ok",
+            "yes",
+            "yeah",
+            "yep",
+            "yup",
+            "sounds good",
+            "bet",
+            "fs",
+        }
         has_agreement = 1.0 if any(word in text_lower for word in agreement_words) else 0.0
         features.append(has_agreement)
 
@@ -355,15 +484,26 @@ class CategoryFeatureExtractor:
         features.append(has_neg)
 
         # 14. is_interrogative
-        is_question = 1.0 if "?" in text or any(
-            token.tag_ in ("WDT", "WP", "WP$", "WRB") for token in doc
-        ) else 0.0
+        is_question = (
+            1.0
+            if "?" in text or any(token.tag_ in ("WDT", "WP", "WP$", "WRB") for token in doc)
+            else 0.0
+        )
         features.append(is_question)
 
         # === NEW 55 FEATURES ===
 
         # POS ratios (8): VERB, NOUN, ADJ, ADV, PRON, DET, ADP, INTJ
-        pos_counts = {"VERB": 0, "NOUN": 0, "ADJ": 0, "ADV": 0, "PRON": 0, "DET": 0, "ADP": 0, "INTJ": 0}
+        pos_counts = {
+            "VERB": 0,
+            "NOUN": 0,
+            "ADJ": 0,
+            "ADV": 0,
+            "PRON": 0,
+            "DET": 0,
+            "ADP": 0,
+            "INTJ": 0,
+        }
         for token in doc:
             if token.pos_ in pos_counts:
                 pos_counts[token.pos_] += 1
@@ -372,23 +512,63 @@ class CategoryFeatureExtractor:
             features.append(pos_counts[pos] / max(total_tokens, 1))
 
         # Fine-grained tags (12): Binary presence of specific tags
-        target_tags = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "MD", "WDT", "WP", "WRB", "UH", "JJR"]
+        target_tags = [
+            "VB",
+            "VBD",
+            "VBG",
+            "VBN",
+            "VBP",
+            "VBZ",
+            "MD",
+            "WDT",
+            "WP",
+            "WRB",
+            "UH",
+            "JJR",
+        ]
         tag_set = {token.tag_ for token in doc}
         for tag in target_tags:
             features.append(1.0 if tag in tag_set else 0.0)
 
         # Dependency counts (15): 10 original + 5 new (ccomp, xcomp, acl, relcl, mark)
         dep_counts = {
-            "nsubj": 0, "dobj": 0, "ROOT": 0, "aux": 0, "neg": 0,
-            "advmod": 0, "amod": 0, "prep": 0, "pobj": 0, "conj": 0,
-            "ccomp": 0, "xcomp": 0, "acl": 0, "relcl": 0, "mark": 0
+            "nsubj": 0,
+            "dobj": 0,
+            "ROOT": 0,
+            "aux": 0,
+            "neg": 0,
+            "advmod": 0,
+            "amod": 0,
+            "prep": 0,
+            "pobj": 0,
+            "conj": 0,
+            "ccomp": 0,
+            "xcomp": 0,
+            "acl": 0,
+            "relcl": 0,
+            "mark": 0,
         }
         for token in doc:
             if token.dep_ in dep_counts:
                 dep_counts[token.dep_] += 1
 
-        for dep in ["nsubj", "dobj", "ROOT", "aux", "neg", "advmod", "amod", "prep", "pobj", "conj",
-                    "ccomp", "xcomp", "acl", "relcl", "mark"]:
+        for dep in [
+            "nsubj",
+            "dobj",
+            "ROOT",
+            "aux",
+            "neg",
+            "advmod",
+            "amod",
+            "prep",
+            "pobj",
+            "conj",
+            "ccomp",
+            "xcomp",
+            "acl",
+            "relcl",
+            "mark",
+        ]:
             features.append(dep_counts[dep] / max(total_tokens, 1))
 
         # Named entities (21): 6 original + 15 new entity types
@@ -442,7 +622,9 @@ class CategoryFeatureExtractor:
         digit_count = sum(1 for token in doc if token.is_digit)
         features.append(digit_count / max(total_tokens, 1))
 
-        avg_word_len = float(np.mean([len(token.text) for token in doc])) if total_tokens > 0 else 0.0
+        avg_word_len = (
+            float(np.mean([len(token.text) for token in doc])) if total_tokens > 0 else 0.0
+        )
         features.append(avg_word_len)
 
         punct_count = sum(1 for token in doc if token.is_punct)
@@ -480,14 +662,16 @@ class CategoryFeatureExtractor:
         # Imperative mood (VB at start or standalone VB ROOT)
         has_imperative_mood = 0.0
         if len(doc) > 0:
-            if doc[0].tag_ == "VB" or any(token.tag_ == "VB" and token.dep_ == "ROOT" for token in doc):
+            if doc[0].tag_ == "VB" or any(
+                token.tag_ == "VB" and token.dep_ == "ROOT" for token in doc
+            ):
                 has_imperative_mood = 1.0
         features.append(has_imperative_mood)
 
         # Conditional (modal + if/would)
-        has_conditional = 1.0 if modal_count > 0 and any(
-            w in text_lower for w in ["if", "would"]
-        ) else 0.0
+        has_conditional = (
+            1.0 if modal_count > 0 and any(w in text_lower for w in ["if", "would"]) else 0.0
+        )
         features.append(has_conditional)
 
         # Person (1st/2nd/3rd person pronoun ratio)
@@ -497,16 +681,29 @@ class CategoryFeatureExtractor:
         second_person_ratio = second_person / max(total_tokens, 1)
         features.append(second_person_ratio)
 
-        third_person_pronouns = {"he", "she", "it", "they", "him", "her", "them", "his", "hers", "their"}
+        third_person_pronouns = {
+            "he",
+            "she",
+            "it",
+            "they",
+            "him",
+            "her",
+            "them",
+            "his",
+            "hers",
+            "their",
+        }
         third_person = sum(1 for token in doc if token.text.lower() in third_person_pronouns)
         features.append(third_person / max(total_tokens, 1))
 
         # Passive voice (heuristic: aux be + VBN)
         has_passive = 0.0
-        for i in range(len(doc) - 1):
-            if doc[i].lemma_ == "be" and doc[i].dep_ == "auxpass" and doc[i+1].tag_ == "VBN":
-                has_passive = 1.0
-                break
+        # Add bounds check: need at least 2 tokens to check doc[i+1]
+        if len(doc) >= 2:
+            for i in range(len(doc) - 1):
+                if doc[i].lemma_ == "be" and doc[i].dep_ == "auxpass" and doc[i + 1].tag_ == "VBN":
+                    has_passive = 1.0
+                    break
         features.append(has_passive)
 
         return np.array(features, dtype=np.float32)
@@ -643,7 +840,9 @@ class CategoryFeatureExtractor:
         has_urgency = 1.0 if any(marker in text_lower for marker in URGENCY_MARKERS) else 0.0
         features.append(has_urgency)
 
-        has_future_time = 1.0 if any(marker in text_lower for marker in FUTURE_TIME_MARKERS) else 0.0
+        has_future_time = (
+            1.0 if any(marker in text_lower for marker in FUTURE_TIME_MARKERS) else 0.0
+        )
         features.append(has_future_time)
 
         # 17-19. Emoji sentiment (positive, negative, neutral counts)
@@ -701,9 +900,9 @@ class CategoryFeatureExtractor:
         features.append(has_closing_emoji)
 
         # 3. has_time_constraint
-        has_time_constraint = 1.0 if any(
-            phrase in text_lower for phrase in TIME_CONSTRAINT_PHRASES
-        ) else 0.0
+        has_time_constraint = (
+            1.0 if any(phrase in text_lower for phrase in TIME_CONSTRAINT_PHRASES) else 0.0
+        )
         features.append(has_time_constraint)
 
         # 4. ends_with_exclamation
@@ -730,7 +929,6 @@ class CategoryFeatureExtractor:
 
         return np.array(features, dtype=np.float32)
 
-
     def extract_multilabel_indicators(
         self,
         text: str,
@@ -752,18 +950,18 @@ class CategoryFeatureExtractor:
         words = text.split()
 
         # 1. num_sentences (normalized)
-        num_sentences = max(1, text.count('.') + text.count('?') + text.count('!'))
+        num_sentences = max(1, text.count(".") + text.count("?") + text.count("!"))
         features.append(min(num_sentences / 3.0, 1.0))  # Cap at 3
 
         # 2. has_conjunction
-        conjunctions = ['but', 'and', 'also', 'though', 'however', 'plus']
-        has_conj = 1.0 if any(f' {c} ' in text_lower for c in conjunctions) else 0.0
+        conjunctions = ["but", "and", "also", "though", "however", "plus"]
+        has_conj = 1.0 if any(f" {c} " in text_lower for c in conjunctions) else 0.0
         features.append(has_conj)
 
         # 3. mixed_punctuation
-        has_question = '?' in text
-        has_exclamation = '!' in text
-        has_period = '.' in text and not text.strip().endswith('...')
+        has_question = "?" in text
+        has_exclamation = "!" in text
+        has_period = "." in text and not text.strip().endswith("...")
         mixed_punct = 1.0 if sum([has_question, has_exclamation, has_period]) >= 2 else 0.0
         features.append(mixed_punct)
 
@@ -776,22 +974,24 @@ class CategoryFeatureExtractor:
         features.append(is_long)
 
         # 6. punctuation_diversity
-        punct_types = sum([
-            '?' in text,
-            '!' in text,
-            ',' in text,
-            '.' in text,
-            ';' in text,
-        ])
+        punct_types = sum(
+            [
+                "?" in text,
+                "!" in text,
+                "," in text,
+                "." in text,
+                ";" in text,
+            ]
+        )
         features.append(min(punct_types / 3.0, 1.0))
 
         # 7. has_thanks_plus_more
-        has_thanks = any(word in text_lower for word in ['thanks', 'thank you', 'thx'])
+        has_thanks = any(word in text_lower for word in ["thanks", "thank you", "thx"])
         thanks_plus_more = 1.0 if (has_thanks and len(words) > 3) else 0.0
         features.append(thanks_plus_more)
 
         # 8. question_with_context (long question might include statement)
-        question_with_context = 1.0 if ('?' in text and len(words) > 12) else 0.0
+        question_with_context = 1.0 if ("?" in text and len(words) > 12) else 0.0
         features.append(question_with_context)
 
         # 9. words_per_sentence
@@ -799,8 +999,12 @@ class CategoryFeatureExtractor:
         features.append(min(words_per_sentence / 15.0, 1.0))  # Normalize
 
         # 10. has_discourse_marker (transitions between intents)
-        discourse_markers = ['so', 'anyway', 'well', 'btw', 'also', 'oh']
-        has_marker = 1.0 if any(f'{m} ' in text_lower or f' {m}' in text_lower for m in discourse_markers) else 0.0
+        discourse_markers = ["so", "anyway", "well", "btw", "also", "oh"]
+        has_marker = (
+            1.0
+            if any(f"{m} " in text_lower or f" {m}" in text_lower for m in discourse_markers)
+            else 0.0
+        )
         features.append(has_marker)
 
         return np.array(features, dtype=np.float32)
@@ -877,7 +1081,9 @@ class FeatureConfig:
     # [384:768] = context BERT (passthrough, already normalized)
     # [768:775] = mobilization one-hots within hand-crafted (passthrough, binary)
     # Everything else gets scaled
-    BINARY_INDICES = list(range(HAND_CRAFTED_START + 5, HAND_CRAFTED_START + 12))  # Mobilization one-hots
+    BINARY_INDICES = list(
+        range(HAND_CRAFTED_START + 5, HAND_CRAFTED_START + 12)
+    )  # Mobilization one-hots
 
     @classmethod
     def get_scaling_indices(cls) -> tuple[list[int], list[int], list[int]]:
@@ -896,7 +1102,6 @@ class FeatureConfig:
         bert_indices = list(range(cls.BERT_START, cls.CONTEXT_BERT_END))
         binary_indices = cls.BINARY_INDICES
         scale_indices = [
-            i for i in range(cls.TOTAL_DIM)
-            if i not in bert_indices and i not in binary_indices
+            i for i in range(cls.TOTAL_DIM) if i not in bert_indices and i not in binary_indices
         ]
         return bert_indices, binary_indices, scale_indices

@@ -89,7 +89,7 @@ def train(
         }
         y_train = np.array([label_mapping.get(label, label) for label in y_train])
         y_test = np.array([label_mapping.get(label, label) for label in y_test])
-        print(f"Applied 3-class label mapping (directive+commissive → action)")
+        print("Applied 3-class label mapping (directive+commissive → action)")
 
     embedding_dims = metadata["embedding_dims"]
     hand_crafted_dims = metadata["hand_crafted_dims"]
@@ -100,9 +100,11 @@ def train(
 
     # Initial memory check
     swap_info = get_swap_info()
-    print(f"\nInitial swap: {swap_info['used_mb']:.1f}MB / {swap_info['total_mb']:.1f}MB "
-          f"({swap_info['percent']:.1f}%)")
-    if swap_info['used_mb'] > 500:
+    print(
+        f"\nInitial swap: {swap_info['used_mb']:.1f}MB / {swap_info['total_mb']:.1f}MB "
+        f"({swap_info['percent']:.1f}%)"
+    )
+    if swap_info["used_mb"] > 500:
         print("⚠️  WARNING: Already using significant swap before training started")
         print("Consider closing other applications to free up memory")
 
@@ -117,10 +119,12 @@ def train(
         ],
     )
 
-    pipeline = Pipeline([
-        ("preprocessor", preprocessor),
-        ("svm", LinearSVC(class_weight="balanced", max_iter=5000, random_state=seed)),
-    ])
+    pipeline = Pipeline(
+        [
+            ("preprocessor", preprocessor),
+            ("svm", LinearSVC(class_weight="balanced", max_iter=5000, random_state=seed)),
+        ]
+    )
 
     # GridSearchCV over C values
     param_grid = {"svm__C": [0.01, 0.1, 1.0, 10.0]}
@@ -132,7 +136,7 @@ def train(
     # Adaptive n_jobs based on current swap state
     # Each worker: ~350MB data + 200-300MB optimizer buffers = 550MB
     # n_jobs=2 would use 1.1GB + main process = risk of swapping
-    current_swap = get_swap_info()['used_mb']
+    current_swap = get_swap_info()["used_mb"]
     if current_swap < 200 and X_train.shape[0] < 100000:  # Low swap + reasonable dataset size
         n_jobs = 2
         print(f"✓ Low swap ({current_swap:.0f}MB) - using n_jobs=2 for faster training")
@@ -181,12 +185,16 @@ def train(
         if monitor.peak_swap_mb > 500:
             print("\n⚠️  HIGH SWAP USAGE DETECTED")
             swap_info = get_swap_info()
-            print(f"System swap: {swap_info['used_mb']:.1f}MB / {swap_info['total_mb']:.1f}MB "
-                  f"({swap_info['percent']:.1f}%)")
+            print(
+                f"System swap: {swap_info['used_mb']:.1f}MB / {swap_info['total_mb']:.1f}MB "
+                f"({swap_info['percent']:.1f}%)"
+            )
             print("\nTop memory-consuming processes:")
             for proc in get_top_memory_processes(limit=5):
-                print(f"  PID {proc['pid']}: {proc['name']:20s} - "
-                      f"RSS: {proc['rss_mb']:8.1f}MB, VMS: {proc['vms_mb']:8.1f}MB")
+                print(
+                    f"  PID {proc['pid']}: {proc['name']:20s} - "
+                    f"RSS: {proc['rss_mb']:8.1f}MB, VMS: {proc['vms_mb']:8.1f}MB"
+                )
             print()
 
     print(f"\nBest C: {search.best_params_['svm__C']}")
@@ -194,10 +202,10 @@ def train(
 
     # Show all C values and their scores
     print("\nAll C values tested:")
-    for i in range(len(search.cv_results_['params'])):
-        c_val = search.cv_results_['params'][i]['svm__C']
-        mean_score = search.cv_results_['mean_test_score'][i]
-        std_score = search.cv_results_['std_test_score'][i]
+    for i in range(len(search.cv_results_["params"])):
+        c_val = search.cv_results_["params"][i]["svm__C"]
+        mean_score = search.cv_results_["mean_test_score"][i]
+        std_score = search.cv_results_["std_test_score"][i]
         print(f"  C={c_val:6.2f}: {mean_score:.4f} (+/- {std_score:.4f})")
 
     # Evaluate on test set
@@ -240,11 +248,11 @@ def train(
 
     # Save all C value results for comparison
     cv_results = {
-        str(search.cv_results_['params'][i]['svm__C']): {
-            "mean_score": float(search.cv_results_['mean_test_score'][i]),
-            "std_score": float(search.cv_results_['std_test_score'][i]),
+        str(search.cv_results_["params"][i]["svm__C"]): {
+            "mean_score": float(search.cv_results_["mean_test_score"][i]),
+            "std_score": float(search.cv_results_["std_test_score"][i]),
         }
-        for i in range(len(search.cv_results_['params']))
+        for i in range(len(search.cv_results_["params"]))
     }
 
     model_metadata = {
@@ -255,9 +263,7 @@ def train(
         "test_macro_f1": float(report["macro avg"]["f1-score"]),
         "test_accuracy": float(report["accuracy"]),
         "per_class_f1": {
-            label: float(report[label]["f1-score"])
-            for label in labels
-            if label in report
+            label: float(report[label]["f1-score"]) for label in labels if label in report
         },
         "cv_results_all_C": cv_results,  # All C values tested
         "feature_dims": int(X_train.shape[1]),

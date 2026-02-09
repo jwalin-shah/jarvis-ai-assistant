@@ -505,36 +505,52 @@ class AutoTagger:
             # Find tags that are often used with similar content
             if analysis.keywords:
                 # Look for tags used in conversations with similar keywords
-                safe_keywords = [
-                    k.replace("%", "\\%").replace("_", "\\_")
-                    for k in analysis.keywords[:5]
-                ]
-                keyword_pattern = "|".join(safe_keywords)
-                cursor = conn.execute(
-                    """
-                    SELECT t.id, t.name, COUNT(*) as count
-                    FROM tags t
-                    JOIN conversation_tags ct ON t.id = ct.tag_id
-                    JOIN tag_usage_history h ON t.id = h.tag_id
-                    WHERE h.action = 'add'
-                    AND h.context_json LIKE ?
-                    AND t.name NOT IN (SELECT name FROM tags WHERE id IN (
-                        SELECT tag_id FROM conversation_tags WHERE chat_id = ?
-                    ))
-                    GROUP BY t.id
-                    ORDER BY count DESC
-                    LIMIT 3
-                    """,
-                    (f"%{keyword_pattern}%", chat_id),
-                )
+                # Use safer approach: check each keyword individually instead of concatenating
+                tag_scores: dict[int, tuple[str, int]] = {}  # tag_id -> (name, count)
 
-                for row in cursor:
-                    if row["name"].lower() not in existing_names:
+                for keyword in analysis.keywords[:5]:
+                    # Escape wildcards for LIKE matching
+                    safe_keyword = keyword.replace("%", "\\%").replace("_", "\\_")
+                    cursor = conn.execute(
+                        """
+                        SELECT t.id, t.name, COUNT(*) as count
+                        FROM tags t
+                        JOIN conversation_tags ct ON t.id = ct.tag_id
+                        JOIN tag_usage_history h ON t.id = h.tag_id
+                        WHERE h.action = 'add'
+                        AND h.context_json LIKE ? ESCAPE '\\'
+                        AND t.id NOT IN (
+                            SELECT tag_id FROM conversation_tags WHERE chat_id = ?
+                        )
+                        GROUP BY t.id
+                        ORDER BY count DESC
+                        LIMIT 5
+                        """,
+                        (f"%{safe_keyword}%", chat_id),
+                    )
+
+                    for row in cursor:
+                        tag_id = row["id"]
+                        if tag_id in tag_scores:
+                            # Accumulate count if seen in multiple keyword matches
+                            tag_scores[tag_id] = (row["name"], tag_scores[tag_id][1] + row["count"])
+                        else:
+                            tag_scores[tag_id] = (row["name"], row["count"])
+
+                # Convert to sorted list and take top 3
+                sorted_tags = sorted(
+                    [(tag_id, name, count) for tag_id, (name, count) in tag_scores.items()],
+                    key=lambda x: x[2],
+                    reverse=True,
+                )[:3]
+
+                for tag_id, name, count in sorted_tags:
+                    if name.lower() not in existing_names:
                         suggestions.append(
                             TagSuggestion(
-                                tag_id=row["id"],
-                                tag_name=row["name"],
-                                confidence=min(0.7, 0.4 + row["count"] * 0.1),
+                                tag_id=tag_id,
+                                tag_name=name,
+                                confidence=min(0.7, 0.4 + count * 0.1),
                                 reason="Often used with similar content",
                                 source="history",
                             )

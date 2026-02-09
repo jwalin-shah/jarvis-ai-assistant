@@ -305,7 +305,11 @@ class PrefetchExecutor:
         # Wait for worker thread
         if self._worker_thread:
             self._worker_thread.join(timeout=timeout)
-            self._worker_thread = None
+            # Only clear reference if thread actually stopped
+            if not self._worker_thread.is_alive():
+                self._worker_thread = None
+            else:
+                logger.warning("Worker thread did not stop within timeout, still running")
 
         # Shutdown thread pool
         if self._executor:
@@ -364,9 +368,8 @@ class PrefetchExecutor:
                     draft_cid = prediction.params.get("chat_id", "")
                     if draft_cid:
                         for active_key in self._active_tasks:
-                            if (
-                                active_key.startswith("draft:")
-                                and active_key.endswith(f":{draft_cid}")
+                            if active_key.startswith("draft:") and active_key.endswith(
+                                f":{draft_cid}"
                             ):
                                 return False
 

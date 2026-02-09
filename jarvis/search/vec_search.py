@@ -39,6 +39,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _validate_placeholders(placeholders: str) -> None:
+    """Validate SQL placeholder string contains only safe characters.
+
+    SECURITY: Ensures placeholder strings like "?,?,?" don't contain SQL injection.
+    Raises ValueError if placeholders contain anything other than '?' and ','.
+
+    Args:
+        placeholders: The placeholder string to validate (e.g., "?,?,?")
+
+    Raises:
+        ValueError: If placeholders contain invalid characters
+    """
+    if not placeholders:
+        return
+    allowed_chars = set("?,")
+    if not set(placeholders).issubset(allowed_chars):
+        raise ValueError(f"Invalid characters in SQL placeholders: {placeholders}")
+
+
 @dataclass
 class VecSearchResult:
     """Result from vector search."""
@@ -408,9 +427,25 @@ class VecSearcher:
                         source_id
                     ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    [(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7],
-                      row[8], row[9], row[10], row[11], row[12], row[13])
-                     for row in vec_chunks_batch],
+                    [
+                        (
+                            row[0],
+                            row[1],
+                            row[2],
+                            row[3],
+                            row[4],
+                            row[5],
+                            row[6],
+                            row[7],
+                            row[8],
+                            row[9],
+                            row[10],
+                            row[11],
+                            row[12],
+                            row[13],
+                        )
+                        for row in vec_chunks_batch
+                    ],
                 )
 
                 # Get rowids of inserted chunks (lastrowid + count)
@@ -455,6 +490,8 @@ class VecSearcher:
                     # Delete from vec_binary by chunk_rowid
                     try:
                         placeholders = ",".join("?" * len(rowids))
+                        # SECURITY: Validate placeholders only contain "?" and "," before SQL interpolation
+                        _validate_placeholders(placeholders)
                         conn.execute(
                             f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",
                             rowids,
@@ -665,6 +702,8 @@ class VecSearcher:
                 dist_by_rowid = {r[0]: r[1] for r in top}
 
                 placeholders = ",".join("?" * len(chunk_rowids))
+                # SECURITY: Validate placeholders only contain "?" and "," before SQL interpolation
+                _validate_placeholders(placeholders)
                 meta_rows = conn.execute(
                     f"""
                     SELECT rowid, chat_id, trigger_text, response_text,
@@ -733,6 +772,7 @@ class VecSearcher:
 
             count = 0
             batch = []
+            batch_size = 1000
             for row in cursor:
                 chunk_rowid = row["rowid"]
                 int8_blob = row["embedding"]
@@ -742,12 +782,22 @@ class VecSearcher:
                 binary_blob = self._binarize_embedding(float_arr)
                 batch.append((binary_blob, chunk_rowid, int8_blob))
 
-            conn.executemany(
-                "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
-                "VALUES (vec_bit(?), ?, ?)",
-                batch,
-            )
-            count = len(batch)
+                if len(batch) >= batch_size:
+                    conn.executemany(
+                        "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
+                        "VALUES (vec_bit(?), ?, ?)",
+                        batch,
+                    )
+                    count += len(batch)
+                    batch = []
+
+            if batch:
+                conn.executemany(
+                    "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
+                    "VALUES (vec_bit(?), ?, ?)",
+                    batch,
+                )
+                count += len(batch)
             logger.info("Backfilled %d rows into vec_binary", count)
             return count
 

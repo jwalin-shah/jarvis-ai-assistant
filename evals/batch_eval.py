@@ -35,7 +35,8 @@ if _env_path.exists():
 # Constants
 # ---------------------------------------------------------------------------
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client as _get_judge_client  # noqa: E402
+from evals.judge_config import JUDGE_MODEL  # noqa: E402
+from evals.judge_config import get_judge_client as _get_judge_client
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",

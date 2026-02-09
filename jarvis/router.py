@@ -25,7 +25,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
@@ -51,8 +51,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-
-
 # =============================================================================
 # Exceptions
 # =============================================================================
@@ -72,8 +70,41 @@ class IndexNotAvailableError(RouterError):
 
 
 # =============================================================================
-# Data Classes
+# Data Classes & Type Definitions
 # =============================================================================
+
+
+class RoutingResponse(TypedDict, total=False):
+    """Typed dictionary for routing response.
+
+    Attributes:
+        type: Response type ('generated' or 'clarify')
+        response: The response text
+        confidence: Confidence level ('high', 'medium', 'low')
+        similarity_score: Best similarity score from vector search
+        cluster_name: Name of matched cluster
+        contact_style: Style notes for the contact
+        similar_triggers: List of similar past triggers
+        reason: Reason for clarification (if type='clarify')
+    """
+
+    type: str
+    response: str
+    confidence: str
+    similarity_score: float
+    cluster_name: str | None
+    contact_style: str | None
+    similar_triggers: list[str] | None
+    reason: str
+
+
+class StatsResponse(TypedDict, total=False):
+    """Typed dictionary for routing statistics response."""
+
+    db_stats: dict[str, Any]
+    index_available: bool
+    index_vectors: int
+    index_type: str
 
 
 @dataclass
@@ -148,7 +179,7 @@ class ReplyRouter:
         return self._db
 
     @property
-    def semantic_searcher(self) -> SemanticSearcher:
+    def semantic_searcher(self) -> SemanticSearcher | None:
         """Get or create the semantic searcher."""
         with self._lock:
             if self._semantic_searcher is None and self.imessage_reader:
@@ -217,9 +248,6 @@ class ReplyRouter:
                 logger.debug("Error closing iMessage reader: %s", e)
             self._imessage_reader = None
 
-    def __del__(self) -> None:
-        """Clean up on deletion."""
-        self.close()
 
     @staticmethod
     def _build_mobilization_hint(mobilization: MobilizationResult) -> str | None:
@@ -287,10 +315,13 @@ class ReplyRouter:
         """
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
-        cached_embedder = CachedEmbedder(get_embedder())
+        cached_embedder = get_embedder()
+
+        # Normalize incoming message early
+        incoming = incoming.strip() if incoming else ""
 
         # Precompute embedding (reused by vec search)
-        if incoming and incoming.strip():
+        if incoming:
             embed_start = time.perf_counter()
             cached_embedder.encode(incoming)
             latency_ms["embedding_precompute"] = (time.perf_counter() - embed_start) * 1000
@@ -328,8 +359,8 @@ class ReplyRouter:
             logger.info("=" * 60)
             return result
 
-        # Empty message check
-        if not incoming or not incoming.strip():
+        # Empty message check (incoming already normalized/stripped above)
+        if not incoming:
             # ReplyService.generate_reply handles empty/error cases
             result = self.reply_service.generate_reply(
                 incoming="",
@@ -390,13 +421,13 @@ class ReplyRouter:
             decision="generate",
         )
 
-    def get_routing_stats(self) -> dict[str, Any]:
+    def get_routing_stats(self) -> StatsResponse:
         """Get statistics about the router's index and database.
 
         Returns:
             Dict with index and database statistics.
         """
-        stats: dict[str, Any] = {
+        stats: StatsResponse = {
             "db_stats": self.db.get_stats(),
             "index_available": False,
         }
@@ -449,6 +480,8 @@ def reset_reply_router() -> None:
     global _router
 
     with _router_lock:
+        if _router is not None:
+            _router.close()
         _router = None
 
 

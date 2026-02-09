@@ -36,20 +36,16 @@ class CandidateExchange(Protocol):
     """Minimal interface for a candidate exchange to validate."""
 
     @property
-    def trigger_text(self) -> str:
-        ...
+    def trigger_text(self) -> str: ...
 
     @property
-    def response_text(self) -> str:
-        ...
+    def response_text(self) -> str: ...
 
     @property
-    def time_gap_minutes(self) -> float:
-        ...
+    def time_gap_minutes(self) -> float: ...
 
     @property
-    def response_span(self) -> list[Any]:
-        ...
+    def response_span(self) -> list[Any]: ...
 
 
 logger = logging.getLogger(__name__)
@@ -225,26 +221,31 @@ class ValidityGate:
         if is_reaction(response_text):
             return False, "reaction_only"
 
-        # Also check individual response messages
-        for msg in exchange.response_span:
-            if "reaction" in msg.flags:
-                return False, "reaction_only"
+        # Also check individual response messages (validate iterable first)
+        if hasattr(exchange, "response_span") and hasattr(exchange.response_span, "__iter__"):
+            try:
+                for msg in exchange.response_span:
+                    if hasattr(msg, "flags") and "reaction" in msg.flags:
+                        return False, "reaction_only"
+            except (TypeError, AttributeError) as e:
+                logger.debug("Could not iterate response_span: %s", e)
 
         # 2. Response is ack-only AND trigger expects content
         if is_acknowledgment_only(response_text) and trigger_expects_content(trigger_text):
             return False, "ack_to_content_trigger"
 
+        # Pre-compute word counts used in multiple checks below
+        trigger_words = len(trigger_text.split())
+        response_words = len(response_text.split())
+
         # 3. Response starts with topic-shift marker AND is short
         # (Short topic-shift responses are likely unrelated to trigger)
         if starts_new_topic(response_text):
-            response_words = len(response_text.split())
             if response_words <= 10:
                 return False, "short_topic_shift"
 
         # 4. Trigger is very short ack AND response is long content-heavy
         # (The long response is probably to something else not captured)
-        trigger_words = len(trigger_text.split())
-        response_words = len(response_text.split())
         if trigger_words <= 2 and is_acknowledgment_only(trigger_text):
             if response_words >= 15:
                 return False, "ack_trigger_long_response"
@@ -402,9 +403,22 @@ class ValidityGate:
             if isinstance(logits, (float, int)):
                 return float(logits)
 
+            # Validate logits is array-like before softmax
+            if not hasattr(logits, "__len__"):
+                logger.warning("NLI model returned non-array logits: %s", type(logits))
+                return 0.0
+
             # Convert logits to probabilities via softmax
             exp_logits = np.exp(logits - np.max(logits))
             probs = exp_logits / exp_logits.sum()
+
+            # Validate array has expected 3-class output (contradiction, neutral, entailment)
+            if len(probs) < 3:
+                logger.warning(
+                    "NLI model returned %d classes, expected 3 (contradiction/neutral/entailment)",
+                    len(probs),
+                )
+                return 0.0
 
             # Return entailment probability (index 2 for contradiction/neutral/entailment)
             return float(probs[2])

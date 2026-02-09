@@ -378,9 +378,7 @@ def get_thread_messages(
             break
 
     if target_thread is None:
-        # Thread not found - return empty list
-        # Could also raise 404 but empty list is more graceful
-        return []
+        raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
 
     # Get message IDs in thread
     thread_message_ids = set(target_thread.messages)

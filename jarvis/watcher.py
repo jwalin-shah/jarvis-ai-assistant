@@ -10,7 +10,7 @@ import asyncio
 import logging
 import sqlite3
 from collections import OrderedDict
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -119,7 +119,7 @@ class ChatDBWatcher:
                 self._task = asyncio.create_task(self._watch_polling())
 
         except Exception as e:
-            logger.error(f"Watcher startup failed: {e}")
+            logger.error("Watcher startup failed: %s", e)
             self._running = False
             # Clean up any partially initialized state
             if self._task:
@@ -185,7 +185,8 @@ class ChatDBWatcher:
                             consecutive_errors += 1
                             logger.warning(
                                 "Error processing DB change (consecutive: %d): %s",
-                                consecutive_errors, check_error,
+                                consecutive_errors,
+                                check_error,
                             )
                             # Backoff on consecutive errors
                             if consecutive_errors >= 5:
@@ -196,7 +197,7 @@ class ChatDBWatcher:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.warning(f"FSEvents watcher error, falling back to polling: {e}")
+            logger.warning("FSEvents watcher error, falling back to polling: %s", e)
             # Fall back to polling on error
             if self._running:
                 self._use_fsevents = False
@@ -266,10 +267,10 @@ class ChatDBWatcher:
                 break
             except Exception as e:
                 consecutive_errors += 1
-                logger.warning(f"Watcher error (consecutive: {consecutive_errors}): {e}")
+                logger.warning("Watcher error (consecutive: %d): %s", consecutive_errors, e)
 
                 # Exponential backoff: 2s, 4s, 8s, max 30s
-                backoff_delay = min(self._poll_interval * (2 ** consecutive_errors), 30.0)
+                backoff_delay = min(self._poll_interval * (2**consecutive_errors), 30.0)
                 await asyncio.sleep(backoff_delay)
 
     async def _check_new_messages(self) -> None:
@@ -303,8 +304,9 @@ class ChatDBWatcher:
                     self._last_rowid = max(self._last_rowid or 0, msg["id"])
 
                     logger.debug(
-                        f"New message in {msg['chat_id']}: "
-                        f"{msg['text'][:50] if msg['text'] else '[no text]'}..."
+                        "New message in %s (length=%d)",
+                        msg["chat_id"],
+                        len(msg["text"]) if msg["text"] else 0,
                     )
                 except Exception as e:
                     logger.warning(
@@ -342,7 +344,7 @@ class ChatDBWatcher:
                 task.add_done_callback(self._log_task_exception)
 
         except Exception as e:
-            logger.warning(f"Error checking new messages: {e}")
+            logger.warning("Error checking new messages: %s", e)
 
     def _log_task_exception(self, task: asyncio.Task[Any]) -> None:
         """Log exceptions from background tasks."""
@@ -351,7 +353,7 @@ class ChatDBWatcher:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.warning(f"Background task failed: {e}")
+            logger.warning("Background task failed: %s", e)
 
     async def _index_new_messages(self, messages: list[dict[str, Any]]) -> None:
         """Index new messages into vec_messages for semantic search.
@@ -490,7 +492,7 @@ class ChatDBWatcher:
                 required_tables = {"message", "chat", "handle", "chat_message_join"}
                 missing_tables = required_tables - tables
                 if missing_tables:
-                    logger.error(f"chat.db missing required tables: {missing_tables}")
+                    logger.error("chat.db missing required tables: %s", missing_tables)
                     return False
 
                 # Check required columns in message table (only what we query)
@@ -500,14 +502,14 @@ class ChatDBWatcher:
                 required_columns = {"text", "date", "is_from_me", "handle_id"}
                 missing_columns = required_columns - columns
                 if missing_columns:
-                    logger.error(f"chat.db message table missing columns: {missing_columns}")
+                    logger.error("chat.db message table missing columns: %s", missing_columns)
                     return False
 
                 return True
             finally:
                 conn.close()
         except Exception as e:
-            logger.error(f"chat.db schema validation error: {e}")
+            logger.error("chat.db schema validation error: %s", e)
             return False
 
     async def _get_last_rowid(self) -> int | None:
@@ -533,7 +535,7 @@ class ChatDBWatcher:
             finally:
                 conn.close()
         except Exception as e:
-            logger.debug(f"Error getting last ROWID: {e}")
+            logger.debug("Error getting last ROWID: %s", e)
             return None
 
     async def _get_new_messages(self) -> list[dict[str, Any]]:
@@ -610,7 +612,7 @@ class ChatDBWatcher:
                     date = None
                     if row["date"]:
                         unix_ts = (row["date"] / 1_000_000_000) + APPLE_EPOCH_OFFSET
-                        date = datetime.fromtimestamp(unix_ts).isoformat()
+                        date = datetime.fromtimestamp(unix_ts, tz=UTC).isoformat()
 
                     messages.append(
                         {
@@ -629,7 +631,7 @@ class ChatDBWatcher:
                 conn.close()
 
         except Exception as e:
-            logger.warning(f"Error querying new messages: {e}")
+            logger.warning("Error querying new messages: %s", e)
             return []
 
 

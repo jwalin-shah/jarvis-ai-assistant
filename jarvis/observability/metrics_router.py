@@ -34,6 +34,20 @@ DEFAULT_METRICS_DB_PATH = Path.home() / ".jarvis" / "metrics.db"
 DEFAULT_BUFFER_SIZE = 100  # Flush after this many metrics
 DEFAULT_FLUSH_INTERVAL_SECONDS = 5.0  # Flush at least this often
 
+# SECURITY: Allow-list for migration column names to prevent SQL injection
+VALID_METRICS_COLUMNS = {
+    "generation_time_ms",
+    "tokens_per_second",
+    "speculative_enabled",
+    "draft_acceptance_rate",
+}
+
+# SECURITY: Allow-list for migration column types to prevent SQL injection
+VALID_METRICS_COLUMN_TYPES = {
+    "REAL NOT NULL DEFAULT 0.0",
+    "INTEGER NOT NULL DEFAULT 0",
+}
+
 
 @dataclass
 class RoutingMetrics:
@@ -143,7 +157,15 @@ class RoutingMetricsStore:
                 ("speculative_enabled", "INTEGER NOT NULL DEFAULT 0"),
                 ("draft_acceptance_rate", "REAL NOT NULL DEFAULT 0.0"),
             ]:
+                # SECURITY: Validate column name and type against allow-lists before SQL execution
+                if col not in VALID_METRICS_COLUMNS:
+                    raise ValueError(f"Invalid migration column name: {col}")
+                if typ not in VALID_METRICS_COLUMN_TYPES:
+                    raise ValueError(f"Invalid migration column type: {typ}")
                 try:
+                    # SECURITY: f-string is safe here because col and typ are validated
+                    # against strict allow-lists. SQLite ALTER TABLE doesn't support
+                    # parameterized column names/types.
                     conn.execute(f"ALTER TABLE routing_metrics ADD COLUMN {col} {typ}")
                 except sqlite3.OperationalError:
                     pass  # Column already exists
@@ -229,7 +251,7 @@ class RoutingMetricsStore:
         self._last_flush_time = time.monotonic()
 
         # Write outside the lock to minimize contention
-        # (we've already cleared the buffer, so new records can be added)
+        # (buffer was cleared above, so new records can be added concurrently)
         try:
             with sqlite3.connect(self._db_path, timeout=30.0) as conn:
                 # WAL mode already enabled during init, but set pragmas for this connection too
@@ -372,16 +394,18 @@ class RoutingMetricsStore:
                     "       generation_time_ms, tokens_per_second",
                     "FROM routing_metrics",
                 ]
+                # Build WHERE clause for count query
                 if since is not None:
                     query_parts.append("WHERE timestamp >= ?")
                     params.append(since)
+                    where = "WHERE timestamp >= ?"
+                else:
+                    where = ""
                 query_parts.append("ORDER BY timestamp DESC")
                 query_parts.append("LIMIT ?")
                 params.append(limit)
 
-                rows = conn.execute(
-                    " ".join(query_parts), params
-                ).fetchall()
+                rows = conn.execute(" ".join(query_parts), params).fetchall()
 
                 recent = []
                 total_latencies: list[float] = []
@@ -429,9 +453,12 @@ class RoutingMetricsStore:
                     avg_lat = p50_lat = p95_lat = cache_rate = 0.0
 
                 # Total count (all time)
+                # SECURITY: Build WHERE clause safely using parameterized query
+                where_clause = "WHERE timestamp >= ?" if since is not None else ""
+                where_params = [since] if since is not None else []
                 count_row = conn.execute(
-                    f"SELECT COUNT(*) as cnt FROM routing_metrics {where}",
-                    params,
+                    f"SELECT COUNT(*) as cnt FROM routing_metrics {where_clause}",
+                    where_params,
                 ).fetchone()
                 total_count = count_row["cnt"] if count_row else 0
 

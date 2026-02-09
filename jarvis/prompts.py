@@ -10,6 +10,7 @@ Import prompts from here, not from other modules.
 from __future__ import annotations
 
 import re
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from jarvis.contacts.contact_profile_context import ContactProfileContext
 
 if TYPE_CHECKING:
+    from contracts.imessage import Message
     from jarvis.classifiers.response_mobilization import MobilizationResult
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
@@ -1134,11 +1136,11 @@ def _get_thread_examples(topic_name: str) -> list[FewShotExample]:
     return THREAD_EXAMPLES.get(key, CATCHING_UP_THREAD_EXAMPLES)
 
 
-def _format_thread_context(messages: Sequence[Any]) -> str:
+def _format_thread_context(messages: Sequence[Message | str]) -> str:
     """Format thread messages for prompt context.
 
     Args:
-        messages: List of Message objects
+        messages: List of Message objects or strings
 
     Returns:
         Formatted string of messages
@@ -1512,7 +1514,6 @@ def build_rag_reply_prompt(
         user_messages: Optional list of user's own messages for style analysis.
             If provided, the prompt will include explicit instructions to match
             the user's texting style (length, formality, abbreviations, etc.).
-        contact_context: Optional typed context derived from contact profiles.
 
     Returns:
         Formatted prompt string ready for model input
@@ -1674,6 +1675,7 @@ class OptimizedCategoryProgram:
 
 # Cache of loaded programs
 _optimized_programs: dict[str, OptimizedCategoryProgram] | None = None
+_optimized_programs_lock = threading.Lock()
 
 # Path to per-category compiled programs
 _CATEGORY_DIR = Path(__file__).parent.parent / "evals" / "optimized_categories"
@@ -1744,7 +1746,9 @@ def get_optimized_program(category: str) -> OptimizedCategoryProgram | None:
     """
     global _optimized_programs
     if _optimized_programs is None:
-        _optimized_programs = _load_optimized_programs()
+        with _optimized_programs_lock:
+            if _optimized_programs is None:
+                _optimized_programs = _load_optimized_programs()
     return _optimized_programs.get(category)
 
 

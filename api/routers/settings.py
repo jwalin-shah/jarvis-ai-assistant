@@ -357,13 +357,17 @@ async def update_settings(
         config.model_path = spec.path
         save_config(config)
 
-    # Update generation settings if provided
+    # Update generation settings if provided (merge, don't replace)
     if settings_request.generation is not None:
-        settings["generation"] = settings_request.generation.model_dump()
+        existing_gen = settings.get("generation", {})
+        existing_gen.update(settings_request.generation.model_dump(exclude_unset=True))
+        settings["generation"] = existing_gen
 
-    # Update behavior settings if provided
+    # Update behavior settings if provided (merge, don't replace)
     if settings_request.behavior is not None:
-        settings["behavior"] = settings_request.behavior.model_dump()
+        existing_beh = settings.get("behavior", {})
+        existing_beh.update(settings_request.behavior.model_dump(exclude_unset=True))
+        settings["behavior"] = existing_beh
 
     # Save updated settings
     _save_settings(settings)

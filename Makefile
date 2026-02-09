@@ -421,7 +421,7 @@ generate-prefs:
 
 # Step 6: ORPO preference alignment on SFT-fused model
 finetune-orpo:
-	uv run mlx_lm_lora.lora \
+	uv run mlx_lm.lora \
 		--model models/lfm-1.2b-soc-fused \
 		--data data/soc_orpo \
 		--train \

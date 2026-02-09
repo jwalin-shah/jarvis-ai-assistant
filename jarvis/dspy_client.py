@@ -68,7 +68,9 @@ class _CompletionResponse:
         self.choices = [_Choice(text)]
         self.model = model
         self.created = int(time.time())
-        self.usage = _Usage(completion_tokens=len(text.split()))
+        # Approximate token count: ~1.3 tokens per word for English text
+        word_count = len(text.split())
+        self.usage = _Usage(completion_tokens=int(word_count * 1.3))
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)

@@ -80,14 +80,16 @@ def load_eval_dataset(path: Path) -> list[EvalExample]:
         if not line:
             continue
         data = json.loads(line)
-        examples.append(EvalExample(
-            category=data["category"],
-            context=data["context"],
-            last_message=data["last_message"],
-            ideal_response=data["ideal_response"],
-            contact_style=data.get("contact_style", "casual"),
-            notes=data.get("notes", ""),
-        ))
+        examples.append(
+            EvalExample(
+                category=data["category"],
+                context=data["context"],
+                last_message=data["last_message"],
+                ideal_response=data["ideal_response"],
+                contact_style=data.get("contact_style", "casual"),
+                notes=data.get("notes", ""),
+            )
+        )
     return examples
 
 
@@ -117,7 +119,10 @@ def main() -> int:
     print(f"Examples:    {len(examples)}", flush=True)
     print(f"Categories:  {', '.join(CATEGORIES)}", flush=True)
     print(f"Judge:       {'enabled' if args.judge else 'disabled (use --judge)'}", flush=True)
-    print(f"Similarity:  {'enabled' if args.similarity else 'disabled (use --similarity)'}", flush=True)
+    print(
+        f"Similarity:  {'enabled' if args.similarity else 'disabled (use --similarity)'}",
+        flush=True,
+    )
     print(flush=True)
 
     # Initialize components
@@ -128,6 +133,7 @@ def main() -> int:
     # Initialize reply service for generation
     print("Loading reply service...", flush=True)
     from jarvis.reply_service import ReplyService
+
     reply_service = ReplyService()
 
     # Optional: BERT embedder for similarity
@@ -135,12 +141,14 @@ def main() -> int:
     if args.similarity:
         print("Loading embedder for similarity...", flush=True)
         from jarvis.embedding_adapter import get_embedder
+
         embedder = get_embedder()
 
     # Optional: judge
     judge_client = None
     if args.judge:
         from evals.judge_config import JUDGE_MODEL, get_judge_client
+
         judge_client = get_judge_client()
         if judge_client is None:
             print("WARNING: Judge API key not set, skipping judge", flush=True)
@@ -161,7 +169,9 @@ def main() -> int:
         # 1. Classify category
         mobilization = classify_response_pressure(ex.last_message)
         category_result = classify_category(
-            ex.last_message, context=ex.context, mobilization=mobilization,
+            ex.last_message,
+            context=ex.context,
+            mobilization=mobilization,
         )
         predicted_category = category_result.category
 
@@ -188,11 +198,13 @@ def main() -> int:
         if embedder and generated and not generated.startswith("[ERROR"):
             try:
                 import numpy as np
+
                 emb_gen = embedder.encode([generated])[0]
                 emb_ideal = embedder.encode([ex.ideal_response])[0]
-                sim_score = float(np.dot(emb_gen, emb_ideal) / (
-                    np.linalg.norm(emb_gen) * np.linalg.norm(emb_ideal)
-                ))
+                sim_score = float(
+                    np.dot(emb_gen, emb_ideal)
+                    / (np.linalg.norm(emb_gen) * np.linalg.norm(emb_ideal))
+                )
             except Exception:
                 pass
 
@@ -253,8 +265,10 @@ def main() -> int:
         sim_str = f"sim={sim_score:.2f}" if sim_score is not None else ""
         judge_str = f"judge={j_score:.0f}/10" if j_score is not None else ""
         print(f'  Response: "{generated[:60]}"', flush=True)
-        print(f"  Cat: {cat_status} | {ai_status} | {latency_ms:.0f}ms {sim_str} {judge_str}",
-              flush=True)
+        print(
+            f"  Cat: {cat_status} | {ai_status} | {latency_ms:.0f}ms {sim_str} {judge_str}",
+            flush=True,
+        )
 
     total_ms = (time.perf_counter() - total_start) * 1000
 
@@ -267,13 +281,17 @@ def main() -> int:
     print("=" * 70, flush=True)
 
     n = len(results)
+    if n == 0:
+        print("No results to summarize.", flush=True)
+        return 0
+
     cat_matches = sum(1 for r in results if r.category_match)
     ai_clean = sum(1 for r in results if not r.anti_ai_violations)
     latencies = [r.latency_ms for r in results]
-    avg_lat = sum(latencies) / n if n else 0
+    avg_lat = sum(latencies) / n
     sorted_lat = sorted(latencies)
-    p50 = sorted_lat[n // 2] if n else 0
-    p95 = sorted_lat[min(int(n * 0.95), n - 1)] if n else 0
+    p50 = sorted_lat[n // 2]
+    p95 = sorted_lat[min(int(n * 0.95), n - 1)]
 
     print(f"Category accuracy:  {cat_matches}/{n} ({cat_matches / n * 100:.0f}%)", flush=True)
     print(f"Anti-AI clean:      {ai_clean}/{n} ({ai_clean / n * 100:.0f}%)", flush=True)
@@ -294,8 +312,10 @@ def main() -> int:
         avg_j = sum(scores) / len(scores)
         pass_7 = sum(1 for s in scores if s >= 7)
         print(f"Judge avg:          {avg_j:.1f}/10", flush=True)
-        print(f"Judge pass (>=7):   {pass_7}/{len(scores)} ({pass_7 / len(scores) * 100:.0f}%)",
-              flush=True)
+        print(
+            f"Judge pass (>=7):   {pass_7}/{len(scores)} ({pass_7 / len(scores) * 100:.0f}%)",
+            flush=True,
+        )
 
     # Per-category breakdown
     print(flush=True)
@@ -328,8 +348,10 @@ def main() -> int:
         print("CATEGORY MISCLASSIFICATIONS", flush=True)
         print("-" * 70, flush=True)
         for r in misses:
-            print(f"  [{r.example.category} -> {r.predicted_category}] "
-                  f"{r.example.last_message[:50]}", flush=True)
+            print(
+                f"  [{r.example.category} -> {r.predicted_category}] {r.example.last_message[:50]}",
+                flush=True,
+            )
 
     # Anti-AI violations
     violations = [r for r in results if r.anti_ai_violations]
@@ -349,8 +371,11 @@ def main() -> int:
             print("-" * 70, flush=True)
             for r in low:
                 if r.judge_score < 7:
-                    print(f"  [{r.example.category}] {r.judge_score:.0f}/10 - "
-                          f'"{r.generated_response[:50]}" - {r.judge_reasoning}', flush=True)
+                    print(
+                        f"  [{r.example.category}] {r.judge_score:.0f}/10 - "
+                        f'"{r.generated_response[:50]}" - {r.judge_reasoning}',
+                        flush=True,
+                    )
 
     # Save results
     output_path = PROJECT_ROOT / "results" / "eval_pipeline_baseline.json"
