@@ -1568,15 +1568,23 @@ Summary:"""
             return {"status": "error", "error": str(e)}
 
 
-async def main() -> None:
-    """Run the socket server."""
+async def main(preload_models: bool = True) -> None:
+    """Run the socket server.
+
+    Args:
+        preload_models: Whether to preload models on startup (default True).
+                       Set to False to defer loading until first use.
+    """
     # Set up logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    server = JarvisSocketServer()
+    logger.info(
+        f"Starting socket server (preload_models={preload_models})..."
+    )
+    server = JarvisSocketServer(enable_watcher=True, preload_models=preload_models)
 
     # Handle shutdown signals
     loop = asyncio.get_event_loop()
@@ -1597,7 +1605,15 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    import sys
+
+    # Parse command line arguments
+    preload_models = True
+    if "--no-preload" in sys.argv:
+        preload_models = False
+        logger.info("Models will load on-demand (not preloaded)")
+
     try:
-        asyncio.run(main())
+        asyncio.run(main(preload_models=preload_models))
     except KeyboardInterrupt:
         pass

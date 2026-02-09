@@ -163,18 +163,26 @@ main() {
     fi
 
     # Step 4: Start the socket server for direct desktop communication
-    log_info "Starting socket server..."
+    # Use --no-preload to avoid blocking startup with model loading
+    # Models will load on-demand when first used (first message generation, etc.)
+    log_info "Starting socket server (models load on-demand)..."
     cd "$PROJECT_ROOT"
-    uv run python -m jarvis.socket_server &
+    uv run python -m jarvis.socket_server --no-preload &
     SOCKET_PID=$!
     log_info "Socket server started (PID: $SOCKET_PID)"
 
-    # Wait briefly for socket to be ready
-    sleep 1
+    # Wait up to 5 seconds for socket to be ready
+    # If socket takes longer, app will use direct SQLite and retry in background
+    local socket_wait=0
+    while [ $socket_wait -lt 50 ] && [ ! -e "$SOCKET_PATH" ]; do
+        sleep 0.1
+        socket_wait=$((socket_wait + 1))
+    done
+
     if [ -e "$SOCKET_PATH" ]; then
-        log_success "Socket server is ready at $SOCKET_PATH"
+        log_success "Socket server ready at $SOCKET_PATH (${socket_wait}00ms)"
     else
-        log_warn "Socket server may not be ready yet"
+        log_warn "Socket server starting in background (app will use SQLite fallback)"
     fi
 
     # Step 5: Start the Tauri desktop app
