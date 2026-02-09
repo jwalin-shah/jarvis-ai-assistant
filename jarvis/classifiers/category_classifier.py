@@ -31,7 +31,9 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -120,6 +122,10 @@ class CategoryClassifier(EmbedderMixin):
         self._pipeline = None
         self._mlb = None
         self._pipeline_loaded = False
+        # Classification cache: hash(text) -> (CategoryResult, timestamp)
+        # TTL of 60 seconds to avoid stale results during prefetch + actual request
+        self._classification_cache: dict[str, tuple[CategoryResult, float]] = {}
+        self._cache_ttl = 60.0  # seconds
 
     def _load_pipeline(self) -> bool:
         """Load trained Pipeline (with scaler + LightGBM) from disk.
@@ -203,6 +209,13 @@ class CategoryClassifier(EmbedderMixin):
         """
         context = context or []
 
+        # Check cache first (hash of text only, not context, for prefetch coherence)
+        cache_key = hashlib.md5(text.encode()).hexdigest()
+        if cache_key in self._classification_cache:
+            cached_result, cached_time = self._classification_cache[cache_key]
+            if time.time() - cached_time < self._cache_ttl:
+                return cached_result
+
         # Layer 0: Fast path for reactions and acknowledgments
         # iMessage reactions - categorize by intent
         if is_reaction(text):
@@ -222,19 +235,25 @@ class CategoryClassifier(EmbedderMixin):
                 # Default for unknown reactions
                 category = "emotion"
 
-            return CategoryResult(
+            result = CategoryResult(
                 category=category,
                 confidence=1.0,
                 method="fast_path",
             )
+            # Cache the result
+            self._classification_cache[cache_key] = (result, time.time())
+            return result
 
         # Simple acknowledgments → acknowledge
         if is_acknowledgment_only(text):
-            return CategoryResult(
+            result = CategoryResult(
                 category="acknowledge",
                 confidence=1.0,
                 method="fast_path",
             )
+            # Cache the result
+            self._classification_cache[cache_key] = (result, time.time())
+            return result
 
         # Layer 1: Pipeline prediction (scaler + LightGBM)
         if self._load_pipeline():
@@ -288,20 +307,26 @@ class CategoryClassifier(EmbedderMixin):
                 else:
                     method = "lightgbm"
 
-                return CategoryResult(
+                result = CategoryResult(
                     category=category,
                     confidence=confidence,
                     method=method,
                 )
+                # Cache the result
+                self._classification_cache[cache_key] = (result, time.time())
+                return result
             except Exception as e:
                 logger.error("Pipeline prediction failed: %s", e, exc_info=True)
 
         # Fallback: statement with low confidence
-        return CategoryResult(
+        result = CategoryResult(
             category="statement",
             confidence=0.30,
             method="default",
         )
+        # Cache the result
+        self._classification_cache[cache_key] = (result, time.time())
+        return result
 
 
 # ---------------------------------------------------------------------------

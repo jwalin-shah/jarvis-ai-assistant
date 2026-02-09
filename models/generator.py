@@ -179,6 +179,7 @@ class MLXGenerator:
                 repetition_penalty=request.repetition_penalty,
                 stop_sequences=request.stop_sequences,
                 prompt_cache=prompt_cache,
+                pre_formatted=True,
             )
 
             # Trim cache back to prefix for next call
@@ -322,6 +323,7 @@ class MLXGenerator:
             # Use a queue to bridge sync generator and async iteration
             token_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
             generation_error: list[Exception] = []
+            generation_error_event = threading.Event()
 
             def producer() -> None:
                 """Run in thread: generate tokens and put in queue."""
@@ -332,6 +334,7 @@ class MLXGenerator:
                         temperature=request.temperature,
                         stop_sequences=request.stop_sequences,
                         prompt_cache=stream_prompt_cache,
+                        pre_formatted=True,
                     ):
                         token_queue.put(
                             {
@@ -343,6 +346,7 @@ class MLXGenerator:
                     token_queue.put(None)  # Signal completion
                 except Exception as e:
                     generation_error.append(e)
+                    generation_error_event.set()
                     token_queue.put(None)
 
             # Start generation in background thread

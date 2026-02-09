@@ -359,7 +359,7 @@ class InProcessEmbedder:
             import psutil
             proc = psutil.Process()
 
-            # CRITICAL: Set MLX memory limit to 1GB to prevent 5GB VMS spike on 8GB systems
+            # CRITICAL: Set MLX memory limit BEFORE model creation to prevent 5GB VMS spike on 8GB systems
             # Without this, MLX allocates 4-5GB virtual memory during batch encoding,
             # triggering swap even though RSS stays low
             mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
@@ -433,12 +433,13 @@ class InProcessEmbedder:
         # and the Rust tokenizer is not thread-safe for concurrent access.
         with self._encode_lock:
             # Tokenize without padding to get lengths
-            self.tokenizer.no_padding()
-            encodings = self.tokenizer.encode_batch(texts)
-            lengths = [len(e.ids) for e in encodings]
-
-            # Re-enable padding for batch processing
-            self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
+            try:
+                self.tokenizer.no_padding()
+                encodings = self.tokenizer.encode_batch(texts)
+                lengths = [len(e.ids) for e in encodings]
+            finally:
+                # Re-enable padding for batch processing (always restore state)
+                self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
 
             # Sort by length (longest first) to minimize padding waste
             sorted_indices = np.argsort([-length for length in lengths])
@@ -483,6 +484,7 @@ class InProcessEmbedder:
                 output_embeddings.append(batch_emb_np)
 
                 # Clear MLX cache every 100 batches to prevent accumulation
+                # Do this OUTSIDE the GPU lock to reduce lock contention
                 if (batch_end // batch_size) % 100 == 0:
                     if hasattr(mx, "clear_cache"):
                         mx.clear_cache()

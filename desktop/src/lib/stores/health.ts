@@ -30,6 +30,9 @@ const initialState: HealthState = {
 
 export const healthStore = writable<HealthState>(initialState);
 
+// Cache connection state to avoid redundant updates
+let cachedConnectionState: Pick<HealthState, "connected" | "source"> | null = null;
+
 /**
  * Check API connection - uses socket when available
  */
@@ -42,12 +45,19 @@ export async function checkApiConnection(): Promise<boolean> {
       const connected = await jarvis.connect();
       if (connected) {
         const result = await jarvis.ping();
-        healthStore.update((state) => ({
-          ...state,
-          connected: true,
-          loading: false,
-          source: "socket",
-        }));
+        const newState = { connected: true, source: "socket" as const };
+        // Only update if connection state actually changed
+        if (!cachedConnectionState || cachedConnectionState.connected !== newState.connected || cachedConnectionState.source !== newState.source) {
+          cachedConnectionState = newState;
+          healthStore.update((state) => ({
+            ...state,
+            connected: true,
+            loading: false,
+            source: "socket",
+          }));
+        } else {
+          healthStore.update((state) => ({ ...state, loading: false }));
+        }
         return true;
       }
     } catch {
@@ -58,22 +68,34 @@ export async function checkApiConnection(): Promise<boolean> {
   // Fall back to HTTP
   try {
     await api.ping();
-    healthStore.update((state) => ({
-      ...state,
-      connected: true,
-      loading: false,
-      source: "http",
-    }));
+    const newState = { connected: true, source: "http" as const };
+    if (!cachedConnectionState || cachedConnectionState.connected !== newState.connected || cachedConnectionState.source !== newState.source) {
+      cachedConnectionState = newState;
+      healthStore.update((state) => ({
+        ...state,
+        connected: true,
+        loading: false,
+        source: "http",
+      }));
+    } else {
+      healthStore.update((state) => ({ ...state, loading: false }));
+    }
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Connection failed";
-    healthStore.update((state) => ({
-      ...state,
-      connected: false,
-      loading: false,
-      error: message,
-      source: null,
-    }));
+    const newState = { connected: false, source: null };
+    if (!cachedConnectionState || cachedConnectionState.connected !== newState.connected) {
+      cachedConnectionState = newState;
+      healthStore.update((state) => ({
+        ...state,
+        connected: false,
+        loading: false,
+        error: message,
+        source: null,
+      }));
+    } else {
+      healthStore.update((state) => ({ ...state, loading: false, error: message }));
+    }
     return false;
   }
 }

@@ -1001,11 +1001,10 @@ class TestConfigThreadSafety:
 class TestErrorHandlerIntegration:
     """Tests for error handler integration with the app."""
 
+    @pytest.mark.skip(reason="Covered indirectly by endpoint tests and unit tests in test_errors.py")
     def test_jarvis_error_returns_proper_response(self, app, client):
         """JarvisError subclasses return proper HTTP responses."""
-        # This is tested indirectly through endpoints that raise errors
-        # For direct testing, we'd need to add a test endpoint
-        pass  # Covered by unit tests in test_errors.py
+        pass
 
     def test_validation_error_returns_422(self, client):
         """Pydantic validation errors return 422 Unprocessable Entity."""

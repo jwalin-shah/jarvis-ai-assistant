@@ -29,16 +29,26 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                    if let Err(e) = window.show() {
+                        eprintln!("[Tray] Failed to show window: {}", e);
+                    }
+                    if let Err(e) = window.set_focus() {
+                        eprintln!("[Tray] Failed to set focus: {}", e);
+                    }
                 }
             }
             "health" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                    if let Err(e) = window.show() {
+                        eprintln!("[Tray] Failed to show window: {}", e);
+                    }
+                    if let Err(e) = window.set_focus() {
+                        eprintln!("[Tray] Failed to set focus: {}", e);
+                    }
                     // Emit event to navigate to health view
-                    let _ = window.emit("navigate", "health");
+                    if let Err(e) = window.emit("navigate", "health") {
+                        eprintln!("[Tray] Failed to emit navigate event: {}", e);
+                    }
                 }
             }
             "quit" => {
@@ -57,10 +67,16 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
                     if window.is_visible().unwrap_or(false) {
-                        let _ = window.hide();
+                        if let Err(e) = window.hide() {
+                            eprintln!("[Tray] Failed to hide window: {}", e);
+                        }
                     } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                        if let Err(e) = window.show() {
+                            eprintln!("[Tray] Failed to show window: {}", e);
+                        }
+                        if let Err(e) = window.set_focus() {
+                            eprintln!("[Tray] Failed to set focus: {}", e);
+                        }
                     }
                 }
             }

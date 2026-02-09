@@ -239,7 +239,11 @@ class TestModelWarmer:
 
             warmer.stop()
             assert warmer._started is False
-            time.sleep(0.2)  # Give thread time to stop
+            # Poll for thread to stop
+            for _ in range(10):
+                if warmer._monitor_thread is None or not warmer._monitor_thread.is_alive():
+                    break
+                time.sleep(0.05)
             assert warmer._monitor_thread is None or not warmer._monitor_thread.is_alive()
 
     def test_start_is_idempotent(self, mock_generator, mock_memory_controller):

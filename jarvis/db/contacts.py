@@ -123,7 +123,12 @@ class ContactMixin:
             return cached
 
         with self.connection() as conn:
-            cursor = conn.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
+            cursor = conn.execute(
+                """SELECT id, chat_id, display_name, phone_or_email, relationship,
+                          style_notes, handles_json, created_at, updated_at
+                   FROM contacts WHERE id = ?""",
+                (contact_id,),
+            )
             row = cursor.fetchone()
             result = self._row_to_contact(row) if row else None
             self._contact_cache.set(cache_key, result)
@@ -144,14 +149,24 @@ class ContactMixin:
 
         with self.connection() as conn:
             # Try exact match first
-            cursor = conn.execute("SELECT * FROM contacts WHERE chat_id = ?", (chat_id,))
+            cursor = conn.execute(
+                """SELECT id, chat_id, display_name, phone_or_email, relationship,
+                          style_notes, handles_json, created_at, updated_at
+                   FROM contacts WHERE chat_id = ?""",
+                (chat_id,),
+            )
             row = cursor.fetchone()
 
             # If no match and chat_id has iMessage/SMS prefix, extract the identifier
             if row is None and ";" in chat_id:
                 identifier = chat_id.rsplit(";", 1)[-1]
                 if identifier:
-                    cursor = conn.execute("SELECT * FROM contacts WHERE chat_id = ?", (identifier,))
+                    cursor = conn.execute(
+                        """SELECT id, chat_id, display_name, phone_or_email, relationship,
+                                  style_notes, handles_json, created_at, updated_at
+                           FROM contacts WHERE chat_id = ?""",
+                        (identifier,),
+                    )
                     row = cursor.fetchone()
 
             result = self._row_to_contact(row) if row else None
@@ -165,7 +180,9 @@ class ContactMixin:
         """
         with self.connection() as conn:
             cursor = conn.execute(
-                "SELECT * FROM contacts WHERE chat_id = ? OR phone_or_email = ?",
+                """SELECT id, chat_id, display_name, phone_or_email, relationship,
+                          style_notes, handles_json, created_at, updated_at
+                   FROM contacts WHERE chat_id = ? OR phone_or_email = ?""",
                 (handle, handle),
             )
             row = cursor.fetchone()
@@ -176,14 +193,19 @@ class ContactMixin:
         with self.connection() as conn:
             # Try exact match first
             cursor = conn.execute(
-                "SELECT * FROM contacts WHERE LOWER(display_name) = LOWER(?)", (name,)
+                """SELECT id, chat_id, display_name, phone_or_email, relationship,
+                          style_notes, handles_json, created_at, updated_at
+                   FROM contacts WHERE LOWER(display_name) = LOWER(?)""",
+                (name,),
             )
             row = cursor.fetchone()
 
             if not row:
                 # Try partial match
                 cursor = conn.execute(
-                    "SELECT * FROM contacts WHERE LOWER(display_name) LIKE LOWER(?)",
+                    """SELECT id, chat_id, display_name, phone_or_email, relationship,
+                              style_notes, handles_json, created_at, updated_at
+                       FROM contacts WHERE LOWER(display_name) LIKE LOWER(?)""",
                     (f"%{name}%",),
                 )
                 row = cursor.fetchone()
@@ -195,7 +217,12 @@ class ContactMixin:
     def list_contacts(self: JarvisDBBase, limit: int = 100) -> list[Contact]:
         """List all contacts."""
         with self.connection() as conn:
-            cursor = conn.execute("SELECT * FROM contacts ORDER BY display_name LIMIT ?", (limit,))
+            cursor = conn.execute(
+                """SELECT id, chat_id, display_name, phone_or_email, relationship,
+                          style_notes, handles_json, created_at, updated_at
+                   FROM contacts ORDER BY display_name LIMIT ?""",
+                (limit,),
+            )
             return [self._row_to_contact(row) for row in cursor]
 
     def delete_contact(self: JarvisDBBase, contact_id: int) -> bool:

@@ -297,20 +297,26 @@ class InProcessCrossEncoder:
                 batch_end = min(batch_start + batch_size, len(pairs))
                 batch_indices = sorted_indices[batch_start:batch_end]
 
-                # Re-encode batch with padding
+                # Re-encode batch with padding to uniform length
                 batch_encodings = [
                     self.tokenizer.encode(pairs[i][0], pairs[i][1])
                     for i in batch_indices
                 ]
-
+                # Pad all sequences in this batch to the same length
+                max_len = max(len(e.ids) for e in batch_encodings)
                 input_ids = np.array(
-                    [e.ids for e in batch_encodings], dtype=np.int32
+                    [e.ids + [0] * (max_len - len(e.ids)) for e in batch_encodings],
+                    dtype=np.int32,
                 )
                 attention_mask = np.array(
-                    [e.attention_mask for e in batch_encodings], dtype=np.int32
+                    [e.attention_mask + [0] * (max_len - len(e.attention_mask))
+                     for e in batch_encodings],
+                    dtype=np.int32,
                 )
                 token_type_ids = np.array(
-                    [e.type_ids for e in batch_encodings], dtype=np.int32
+                    [e.type_ids + [0] * (max_len - len(e.type_ids))
+                     for e in batch_encodings],
+                    dtype=np.int32,
                 )
 
                 input_ids_mx = mx.array(input_ids)

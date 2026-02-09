@@ -224,7 +224,14 @@ class PairMixin:
             params.append(limit)
 
             cursor = conn.execute(
-                f"SELECT * FROM pairs WHERE {where_clause} ORDER BY trigger_timestamp DESC LIMIT ?",
+                f"""SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,
+                           response_timestamp, chat_id, trigger_msg_id, response_msg_id,
+                           trigger_msg_ids_json, response_msg_ids_json, context_text,
+                           quality_score, flags_json, is_group, is_holdout,
+                           gate_a_passed, gate_b_score, gate_c_verdict, validity_status,
+                           trigger_da_type, trigger_da_conf, response_da_type,
+                           response_da_conf, cluster_id
+                    FROM pairs WHERE {where_clause} ORDER BY trigger_timestamp DESC LIMIT ?""",
                 params,
             )
             return [self._row_to_pair(row) for row in cursor]
@@ -239,7 +246,17 @@ class PairMixin:
             The Pair if found, None otherwise.
         """
         with self.connection() as conn:
-            cursor = conn.execute("SELECT * FROM pairs WHERE id = ?", (pair_id,))
+            cursor = conn.execute(
+                """SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,
+                          response_timestamp, chat_id, trigger_msg_id, response_msg_id,
+                          trigger_msg_ids_json, response_msg_ids_json, context_text,
+                          quality_score, flags_json, is_group, is_holdout,
+                          gate_a_passed, gate_b_score, gate_c_verdict, validity_status,
+                          trigger_da_type, trigger_da_conf, response_da_type,
+                          response_da_conf, cluster_id
+                   FROM pairs WHERE id = ?""",
+                (pair_id,),
+            )
             row = cursor.fetchone()
             if row:
                 return self._row_to_pair(row)
@@ -267,7 +284,14 @@ class PairMixin:
                 chunk = pair_ids[i : i + 900]
                 placeholders = ",".join("?" * len(chunk))
                 cursor = conn.execute(
-                    f"SELECT * FROM pairs WHERE id IN ({placeholders})",
+                    f"""SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,
+                               response_timestamp, chat_id, trigger_msg_id, response_msg_id,
+                               trigger_msg_ids_json, response_msg_ids_json, context_text,
+                               quality_score, flags_json, is_group, is_holdout,
+                               gate_a_passed, gate_b_score, gate_c_verdict, validity_status,
+                               trigger_da_type, trigger_da_conf, response_da_type,
+                               response_da_conf, cluster_id
+                        FROM pairs WHERE id IN ({placeholders})""",
                     chunk,
                 )
                 for row in cursor:

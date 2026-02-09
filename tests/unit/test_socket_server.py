@@ -57,6 +57,7 @@ class TestJarvisSocketServer:
         assert "custom_method" in server._methods
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_ping(self, server: JarvisSocketServer) -> None:
         """Ping method returns ok status with models_ready flag."""
         result = await server._ping()
@@ -64,6 +65,7 @@ class TestJarvisSocketServer:
         assert "models_ready" in result
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_process_valid_request(self, server: JarvisSocketServer) -> None:
         """Valid JSON-RPC request returns result."""
         message = json.dumps({"jsonrpc": "2.0", "method": "ping", "params": {}, "id": 1})
@@ -77,6 +79,7 @@ class TestJarvisSocketServer:
         assert "error" not in data
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_process_invalid_json(self, server: JarvisSocketServer) -> None:
         """Invalid JSON returns parse error."""
         response = await server._process_message("not json")
@@ -86,6 +89,7 @@ class TestJarvisSocketServer:
         assert "Parse error" in data["error"]["message"]
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_process_missing_method(self, server: JarvisSocketServer) -> None:
         """Request without method returns invalid request."""
         message = json.dumps({"jsonrpc": "2.0", "params": {}, "id": 1})
@@ -96,6 +100,7 @@ class TestJarvisSocketServer:
         assert "Missing method" in data["error"]["message"]
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_process_unknown_method(self, server: JarvisSocketServer) -> None:
         """Unknown method returns method not found."""
         message = json.dumps({"jsonrpc": "2.0", "method": "unknown_method", "params": {}, "id": 1})
@@ -106,6 +111,7 @@ class TestJarvisSocketServer:
         assert "Method not found" in data["error"]["message"]
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_process_invalid_params(self, server: JarvisSocketServer) -> None:
         """Invalid params returns error."""
 
@@ -121,6 +127,7 @@ class TestJarvisSocketServer:
         assert data["error"]["code"] == INVALID_PARAMS
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_broadcast(self, server: JarvisSocketServer) -> None:
         """Broadcast sends notification to all clients."""
         # Create mock writers
@@ -142,6 +149,7 @@ class TestJarvisSocketServer:
         assert notification["params"] == {"text": "hello"}
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_broadcast_removes_disconnected_clients(self, server: JarvisSocketServer) -> None:
         """Broadcast removes clients that fail to receive."""
         writer1 = AsyncMock()
@@ -188,6 +196,7 @@ class TestSocketServerMethods:
         return JarvisSocketServer(enable_watcher=False, preload_models=False)
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(10)
     async def test_get_smart_replies(self, server: JarvisSocketServer) -> None:
         """Smart replies returns suggestions."""
         with patch("jarvis.router.get_reply_router") as mock_get_router:

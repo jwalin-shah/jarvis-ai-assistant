@@ -284,6 +284,9 @@
       .replace(/'/g, "&#039;");
   }
 
+  // Cache for compiled regex patterns
+  let regexCache = new Map<string, RegExp>();
+
   function highlightMatch(text: string, searchQuery: string): string {
     if (!searchQuery.trim() || !text) return escapeHtml(text);
 
@@ -293,8 +296,15 @@
     // Escape HTML in user text first to prevent XSS, then highlight
     const safeText = escapeHtml(text);
     const safeQuery = escapeHtml(searchQuery);
-    const escaped = safeQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`(${escaped})`, "gi");
+
+    // Check cache before creating new RegExp
+    let regex = regexCache.get(safeQuery);
+    if (!regex) {
+      const escaped = safeQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      regex = new RegExp(`(${escaped})`, "gi");
+      regexCache.set(safeQuery, regex);
+    }
+
     return safeText.replace(regex, '<mark class="highlight">$1</mark>');
   }
 

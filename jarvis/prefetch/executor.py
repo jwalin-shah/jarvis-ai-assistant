@@ -426,6 +426,8 @@ class PrefetchExecutor:
 
     def _worker_loop(self) -> None:
         """Main worker loop that processes tasks."""
+        consecutive_errors = 0
+
         while not self._shutdown_event.is_set():
             try:
                 # Check state
@@ -456,9 +458,19 @@ class PrefetchExecutor:
                 if self._executor:
                     self._executor.submit(self._execute_task, task)
 
+                # Reset error counter on success
+                consecutive_errors = 0
+
             except Exception as e:
-                logger.warning(f"Worker loop error: {e}")
-                time.sleep(self._tick_interval)
+                consecutive_errors += 1
+                logger.warning(f"Worker loop error (consecutive: {consecutive_errors}): {e}")
+
+                # Add backoff delay if consecutive errors exceed threshold
+                if consecutive_errors >= 5:
+                    backoff_delay = min((consecutive_errors - 4) * self._tick_interval, 5.0)
+                    time.sleep(backoff_delay)
+                else:
+                    time.sleep(self._tick_interval)
 
     def _execute_task(self, task: PrefetchTask) -> None:
         """Execute a single prefetch task.
