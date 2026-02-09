@@ -14,10 +14,11 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.dependencies import get_imessage_reader
+from integrations.imessage import ChatDBReader
 from jarvis.priority import (
     PriorityLevel,
     get_priority_scorer,
@@ -408,6 +409,7 @@ def get_priority_inbox(
             description="Minimum priority level to include (critical, high, medium, low)",
         ),
     ] = None,
+    reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> PriorityInboxResponse:
     """Get prioritized messages sorted by importance.
 
@@ -443,14 +445,7 @@ def get_priority_inbox(
     Returns:
         PriorityInboxResponse with prioritized messages and counts
     """
-    reader = get_imessage_reader()
     scorer = get_priority_scorer()
-
-    if not reader.check_access():
-        raise HTTPException(
-            status_code=503,
-            detail="iMessage database access unavailable. Grant Full Disk Access permission.",
-        )
 
     # Get recent conversations and their messages
     # Fetch only conversations we'll actually analyze (15) to avoid wasted fetches

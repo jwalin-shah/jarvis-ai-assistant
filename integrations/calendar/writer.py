@@ -140,9 +140,10 @@ class CalendarWriterImpl:
         # Select template based on all-day flag
         template = CREATE_ALLDAY_EVENT_SCRIPT_TEMPLATE if all_day else CREATE_EVENT_SCRIPT_TEMPLATE
 
-        # Build script
+        # Build script - escape calendar_id for AppleScript safety
+        safe_calendar_id = self._escape_applescript(calendar_id)
         script = template.format(
-            calendar_id=calendar_id,
+            calendar_id=safe_calendar_id,
             title=title,
             start_date=start_str,
             end_date=end_str,
