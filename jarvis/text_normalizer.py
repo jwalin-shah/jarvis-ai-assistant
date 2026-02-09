@@ -10,9 +10,12 @@ Usage:
     features = extract_text_features("btw, are you free?")  # {"starts_new_topic": True, ...}
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from jarvis.nlp.ner_client import Entity

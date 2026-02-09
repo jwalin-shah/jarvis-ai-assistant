@@ -621,7 +621,7 @@ class TemplateAnalytics:
 
     def __init__(self) -> None:
         """Initialize the template analytics collector."""
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._start_time = datetime.now(UTC)
 
         # Core counters

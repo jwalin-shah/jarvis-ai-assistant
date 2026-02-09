@@ -299,11 +299,18 @@ class SendExecutor:
             # Build AppleScript command
             # Escape the message text for AppleScript
             escaped_text = (
-                item.message_text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+                item.message_text.replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
             )
 
             # Determine if chat_id is a phone number or email
-            chat_id = item.chat_id
+            chat_id = (
+                item.chat_id.replace("\\", "\\\\")
+                .replace('"', '\\"')
+            )
 
             script = f"""
             tell application "Messages"
