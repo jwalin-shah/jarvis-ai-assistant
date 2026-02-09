@@ -22,7 +22,10 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import dspy
+try:
+    import dspy
+except ImportError:
+    dspy = None  # type: ignore[assignment]
 
 from models.loader import get_model
 
@@ -71,7 +74,10 @@ class _CompletionResponse:
         return getattr(self, key)
 
 
-class DSPYMLXClient(dspy.BaseLM):
+_BaseLM = dspy.BaseLM if dspy is not None else object
+
+
+class DSPYMLXClient(_BaseLM):  # type: ignore[misc]
     """Adapter that exposes the local MLX model as a DSPy BaseLM."""
 
     def __init__(
@@ -81,6 +87,8 @@ class DSPYMLXClient(dspy.BaseLM):
         temperature: float = 0.1,
         **kwargs: Any,
     ):
+        if dspy is None:
+            raise ImportError("DSPy is not installed. Install it with: pip install dspy-ai")
         super().__init__(
             model=model_name,
             model_type="chat",

@@ -14,7 +14,8 @@
         benchmark-spec \
         prepare-data finetune-sft finetune-draft fuse-models \
         generate-prefs finetune-orpo fuse-orpo finetune-embedder \
-        prepare-dailydialog dailydialog-sweep dailydialog-sweep-quick dailydialog-analyze train-category-svm
+        prepare-dailydialog dailydialog-sweep dailydialog-sweep-quick dailydialog-analyze train-category-svm \
+        personalize extract-personal prepare-personal generate-ft-configs finetune-personal evaluate-personal personalize-report fuse-personal
 
 # ============================================================================
 # HELP
@@ -165,7 +166,7 @@ format-check:
 	uv run ruff format --check .
 
 typecheck:
-	uv run mypy core/ models/ integrations/ benchmarks/ api/ --ignore-missing-imports
+	uv run mypy jarvis/ core/ models/ integrations/ benchmarks/ api/ --ignore-missing-imports
 
 check: lint format-check typecheck
 	@echo ""
@@ -440,6 +441,59 @@ fuse-orpo:
 # Step 8: Fine-tune BGE-small embedder
 finetune-embedder:
 	uv run python scripts/finetune_embedder.py
+
+# ============================================================================
+# PERSONAL FINE-TUNING PIPELINE
+# ============================================================================
+
+# Full pipeline: extract -> prepare -> generate configs -> fine-tune -> evaluate
+personalize: extract-personal prepare-personal generate-ft-configs finetune-personal evaluate-personal
+	@echo "Personalization complete! Run 'make personalize-report' for results."
+
+# Step 1: Extract iMessage pairs
+extract-personal:
+	uv run python scripts/extract_personal_data.py
+
+# Step 2: Prepare training data (both variants)
+prepare-personal:
+	uv run python scripts/prepare_personal_data.py --both
+
+# Step 3: Generate fine-tuning configs
+generate-ft-configs:
+	uv run python scripts/generate_ft_configs.py
+
+# Step 4: Fine-tune all variants
+finetune-personal:
+	@echo "Fine-tuning all personal variants..."
+	@for config in ft_configs/personal_*.yaml; do \
+		echo ""; \
+		echo "========================================"; \
+		echo "Training: $$config"; \
+		echo "========================================"; \
+		uv run python scripts/train_personal.py --config "$$config" || echo "FAILED: $$config"; \
+	done
+
+# Step 5: Evaluate all variants
+evaluate-personal:
+	uv run python scripts/evaluate_personal_ft.py
+
+# View evaluation results
+personalize-report:
+	uv run python scripts/evaluate_personal_ft.py --report-only
+
+# Fuse adapters into base models for fast inference
+fuse-personal:
+	@for adapter_dir in adapters/personal/*/; do \
+		adapter_name=$$(basename "$$adapter_dir"); \
+		echo "Fusing $$adapter_name..."; \
+		config_file=$$(ls ft_configs/personal_*$$(echo "$$adapter_name" | sed 's/-/_/g')*.yaml 2>/dev/null | head -1); \
+		if [ -n "$$config_file" ]; then \
+			model=$$(grep '^model:' "$$config_file" | sed 's/model: *//; s/"//g'); \
+			uv run mlx_lm.fuse --model "$$model" --adapter-path "$$adapter_dir" --save-path "models/personal/$$adapter_name" || echo "FAILED: $$adapter_name"; \
+		else \
+			echo "  No config found for $$adapter_name, skipping"; \
+		fi; \
+	done
 
 # ============================================================================
 # DailyDialog Dialog Acts Experiments

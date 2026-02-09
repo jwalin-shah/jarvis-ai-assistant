@@ -9,6 +9,7 @@
   import TemplateBuilder from "./lib/components/TemplateBuilder.svelte";
   import RelationshipGraph from "./lib/components/graph/RelationshipGraph.svelte";
   import GlobalSearch from "./lib/components/GlobalSearch.svelte";
+  import ErrorBoundary from "./lib/components/ErrorBoundary.svelte";
   import KeyboardShortcuts from "./lib/components/KeyboardShortcuts.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
   import Toast from "./lib/components/Toast.svelte";
@@ -212,36 +213,38 @@
 <main class="app">
   <Sidebar bind:currentView bind:collapsed={sidebarCollapsed} />
 
-  {#if currentView === "dashboard"}
-    <Dashboard onNavigate={(view) => (currentView = view)} />
-  {:else if currentView === "health"}
-    <HealthStatus />
-  {:else if currentView === "settings"}
-    <Settings />
-  {:else if currentView === "templates"}
-    <TemplateBuilder />
-  {:else if currentView === "network"}
-    <div class="network-container">
-      <RelationshipGraph />
-    </div>
-  {:else}
-    <div class="messages-container">
-      <div class="search-bar">
-        <button class="search-button" onclick={openSearch} title="Search messages (Cmd+K)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
-          </svg>
-          <span>Search messages...</span>
-          <kbd>⌘K</kbd>
-        </button>
+  <ErrorBoundary>
+    {#if currentView === "dashboard"}
+      <Dashboard onNavigate={(view) => (currentView = view)} />
+    {:else if currentView === "health"}
+      <HealthStatus />
+    {:else if currentView === "settings"}
+      <Settings />
+    {:else if currentView === "templates"}
+      <TemplateBuilder />
+    {:else if currentView === "network"}
+      <div class="network-container">
+        <RelationshipGraph />
       </div>
-      <div class="messages-content">
-        <ConversationList />
-        <MessageView />
+    {:else}
+      <div class="messages-container">
+        <div class="search-bar">
+          <button class="search-button" onclick={openSearch} title="Search messages (Cmd+K)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <span>Search messages...</span>
+            <kbd>⌘K</kbd>
+          </button>
+        </div>
+        <div class="messages-content">
+          <ConversationList />
+          <MessageView />
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
+  </ErrorBoundary>
 </main>
 
 {#if showSearch}

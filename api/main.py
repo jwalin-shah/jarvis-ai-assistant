@@ -239,7 +239,7 @@ API_TAGS_METADATA = [
 
 API_CONTACT = {
     "name": "JARVIS Support",
-    "url": "https://github.com/jarvis-ai/jarvis",
+    "url": "https://github.com/jwalinshah/jarvis-ai-assistant",
 }
 
 API_LICENSE = {
@@ -280,7 +280,7 @@ def custom_openapi() -> dict[str, Any]:
     # Add external documentation
     openapi_schema["externalDocs"] = {
         "description": "Full documentation and user guide",
-        "url": "https://github.com/jarvis-ai/jarvis/docs",
+        "url": "https://github.com/jwalinshah/jarvis-ai-assistant/docs",
     }
 
     app.openapi_schema = openapi_schema

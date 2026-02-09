@@ -693,20 +693,7 @@ def _migrate_v11_to_v12(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _migrate_v12_to_v13(data: dict[str, Any]) -> dict[str, Any]:
-    """Migrate from v12 to v13: Update socket path from /tmp to ~/.jarvis."""
-    if "embedding" not in data:
-        data["embedding"] = {}
-
-    embedding = data["embedding"]
-    # Update socket path from /tmp to ~/.jarvis for security
-    if (
-        "mlx_service_socket" in embedding
-        and embedding["mlx_service_socket"] == "/tmp/jarvis-embed.sock"
-    ):
-        new_socket_path = str(Path.home() / ".jarvis" / "jarvis-embed.sock")
-        logger.info(f"Migrating socket path from /tmp to {new_socket_path}")
-        embedding["mlx_service_socket"] = new_socket_path
-
+    """Migrate from v12 to v13: No-op (socket path migration done in v8->v9)."""
     return data
 
 

@@ -563,7 +563,7 @@ class MessagePriorityScorer:
                 last_their_msg = max(sender_messages, key=lambda m: m.date)
                 if last_their_msg.date > last_my_msg.date:
                     # They messaged after our last message
-                    hours_since = (datetime.now() - last_their_msg.date).total_seconds() / 3600
+                    hours_since = (datetime.now() - last_my_msg.date).total_seconds() / 3600
                     if hours_since > 4:
                         context_score += 0.3
                         reasons.append(PriorityReason.AWAITING_RESPONSE)

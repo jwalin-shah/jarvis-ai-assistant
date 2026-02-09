@@ -98,22 +98,23 @@ class PairSearchMixin:
             return cached
 
         if pattern_type == "acknowledgment":
+            # Build query with parameterized placeholders
             placeholders = ",".join("?" * len(self._ACK_TRIGGERS))
-            query = f"""
-                SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,
-                       response_timestamp, chat_id, trigger_msg_id, response_msg_id,
-                       trigger_msg_ids_json, response_msg_ids_json, context_text,
-                       quality_score, flags_json, is_group, is_holdout,
-                       gate_a_passed, gate_b_score, gate_c_verdict, validity_status,
-                       trigger_da_type, trigger_da_conf, response_da_type,
-                       response_da_conf, cluster_id
-                FROM pairs
-                WHERE contact_id = ?
-                AND LOWER(TRIM(trigger_text)) IN ({placeholders})
-                AND quality_score >= 0.5
-                ORDER BY trigger_timestamp DESC
-                LIMIT ?
-            """
+            query = (
+                "SELECT id, contact_id, trigger_text, response_text, trigger_timestamp, "
+                "response_timestamp, chat_id, trigger_msg_id, response_msg_id, "
+                "trigger_msg_ids_json, response_msg_ids_json, context_text, "
+                "quality_score, flags_json, is_group, is_holdout, "
+                "gate_a_passed, gate_b_score, gate_c_verdict, validity_status, "
+                "trigger_da_type, trigger_da_conf, response_da_type, "
+                "response_da_conf, cluster_id "
+                "FROM pairs "
+                "WHERE contact_id = ? "
+                f"AND LOWER(TRIM(trigger_text)) IN ({placeholders}) "
+                "AND quality_score >= 0.5 "
+                "ORDER BY trigger_timestamp DESC "
+                "LIMIT ?"
+            )
             with self.connection() as conn:
                 cursor = conn.execute(query, (contact_id, *self._ACK_TRIGGERS, limit))
                 result = [self._row_to_pair(row) for row in cursor]
@@ -168,24 +169,24 @@ class PairSearchMixin:
             trigger_placeholders = ",".join("?" * len(self._ACK_TRIGGERS))
 
             # Use window function to limit per contact
-            query = f"""
-                SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,
-                       response_timestamp, chat_id, trigger_msg_id, response_msg_id,
-                       trigger_msg_ids_json, response_msg_ids_json, context_text,
-                       quality_score, flags_json, is_group, is_holdout,
-                       gate_a_passed, gate_b_score, gate_c_verdict, validity_status,
-                       trigger_da_type, trigger_da_conf, response_da_type,
-                       response_da_conf, cluster_id
-                FROM (
-                    SELECT *, ROW_NUMBER() OVER (
-                        PARTITION BY contact_id ORDER BY trigger_timestamp DESC
-                    ) as rn
-                    FROM pairs
-                    WHERE contact_id IN ({contact_placeholders})
-                    AND LOWER(TRIM(trigger_text)) IN ({trigger_placeholders})
-                    AND quality_score >= 0.5
-                ) WHERE rn <= ?
-            """
+            query = (
+                "SELECT id, contact_id, trigger_text, response_text, trigger_timestamp, "
+                "response_timestamp, chat_id, trigger_msg_id, response_msg_id, "
+                "trigger_msg_ids_json, response_msg_ids_json, context_text, "
+                "quality_score, flags_json, is_group, is_holdout, "
+                "gate_a_passed, gate_b_score, gate_c_verdict, validity_status, "
+                "trigger_da_type, trigger_da_conf, response_da_type, "
+                "response_da_conf, cluster_id "
+                "FROM ( "
+                "SELECT *, ROW_NUMBER() OVER ( "
+                "PARTITION BY contact_id ORDER BY trigger_timestamp DESC "
+                ") as rn "
+                "FROM pairs "
+                f"WHERE contact_id IN ({contact_placeholders}) "
+                f"AND LOWER(TRIM(trigger_text)) IN ({trigger_placeholders}) "
+                "AND quality_score >= 0.5 "
+                ") WHERE rn <= ?"
+            )
 
             with self.connection() as conn:
                 cursor = conn.execute(query, (*chunk, *self._ACK_TRIGGERS, limit_per_contact))
@@ -273,10 +274,8 @@ class PairSearchMixin:
                 for i in range(0, len(holdout_contacts), 900):
                     chunk = holdout_contacts[i : i + 900]
                     placeholders = ",".join("?" * len(chunk))
-                    conn.execute(
-                        f"UPDATE pairs SET is_holdout = TRUE WHERE contact_id IN ({placeholders})",
-                        chunk,
-                    )
+                    query = f"UPDATE pairs SET is_holdout = TRUE WHERE contact_id IN ({placeholders})"
+                    conn.execute(query, chunk)
 
             # Get final counts
             cursor = conn.execute("SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = FALSE")
@@ -567,7 +566,7 @@ class PairSearchMixin:
     def get_high_quality_exemplars(
         self: JarvisDBBase,
         response_da: str,
-        min_quality: float = 6.0,
+        min_quality: float = 0.7,
         min_conf: float = 0.7,
         limit: int = 50,
     ) -> list[Pair]:
@@ -578,7 +577,7 @@ class PairSearchMixin:
 
         Args:
             response_da: Response dialogue act type.
-            min_quality: Minimum quality score (default 6.0 for high quality).
+            min_quality: Minimum quality score (default 0.7 on 0-1 scale).
             min_conf: Minimum DA classifier confidence (default 0.7).
             limit: Maximum exemplars to return.
 

@@ -12,7 +12,8 @@ When a new message arrives:
    ┌──────────────────────────────────────────┐
    │ LightGBM CATEGORY CLASSIFIER             │
    │ (BERT embeddings + hand-crafted features) │
-   │ Categories: clarify/warm/brief/social     │
+   │ Categories: acknowledge/closing/emotion/   │
+   │             question/request/statement    │
    └──────────────────────────────────────────┘
 
 3. FAISS SIMILARITY SEARCH (~5-10ms)
@@ -47,25 +48,28 @@ The category classifier uses a LightGBM model with heuristic post-processing:
 
 ```
 LAYER 1: LightGBM CLASSIFIER (~15-30ms)
-├─ Input: BERT embedding (768d) + hand-crafted features (147d)
+├─ Input: BERT embedding (384d) + context BERT (384d) + hand-crafted (147d) = 915 features
 ├─ OneVsRestClassifier(LGBMClassifier) for multi-label
-├─ Categories: clarify, warm, brief, social
-└─ Trained on DailyDialog + SAMSum with LLM-generated labels
+├─ Categories: acknowledge, closing, emotion, question, request, statement
+└─ Context BERT zeroed at inference (auxiliary supervision during training only)
 
 LAYER 2: HEURISTIC POST-PROCESSING
-├─ Context gap detection (deictic pronouns + thin context → clarify)
-├─ Stale thread detection (old conversations → clarify)
-└─ Confidence-based overrides
+├─ Fast path: reactions/acknowledgments → acknowledge
+├─ Reaction messages ("Laughed at", "Loved") → emotion
+├─ Imperative verbs at start → request
+└─ Brief agreements → acknowledge
 ```
 
 ### Categories
 
 | Category | Description | Example |
 |----------|-------------|---------|
-| **clarify** | Need more context to respond | "What do you mean?" / ambiguous references |
-| **warm** | Emotional/supportive response needed | "I'm so sorry to hear that" |
-| **brief** | Short acknowledgment sufficient | "Got it", "Sounds good" |
-| **social** | Social/casual conversation | "How's it going?", planning hangouts |
+| **acknowledge** | Short acknowledgment/agreement | "Got it", "Sounds good", "OK" |
+| **closing** | Conversation ending | "Talk later", "Bye", "See you" |
+| **emotion** | Emotional/expressive response | "lol", "I'm so sorry", reactions |
+| **question** | Questions requiring answers | "Want to grab lunch?", "How are you?" |
+| **request** | Action requests/commands | "Can you send that?", "Let me know" |
+| **statement** | Informational statements | "I'm on my way", "That was great" |
 
 ## Routing Thresholds Explained
 
