@@ -38,7 +38,6 @@ if _env_path.exists():
 
 from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -82,7 +81,6 @@ class PairAuditResult:
 # ---------------------------------------------------------------------------
 # Judge client
 # ---------------------------------------------------------------------------
-
 
 
 # get_judge_client imported from evals.judge_config
@@ -344,7 +342,7 @@ def main() -> int:
 
     client = get_judge_client()
     if client is None:
-        print("ERROR: CEREBRAS_API_KEY not set in .env")
+        print("ERROR: Judge API key not set in .env")
         print("       Required for judge scoring.")
         return 1
 

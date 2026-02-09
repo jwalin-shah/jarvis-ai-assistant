@@ -60,9 +60,7 @@ def load_test_data(data_dir: str) -> list[dict]:
     return examples
 
 
-def compute_metrics(
-    generated: list[str], references: list[str]
-) -> dict[str, float]:
+def compute_metrics(generated: list[str], references: list[str]) -> dict[str, float]:
     """Compute evaluation metrics between generated and reference replies."""
     if not generated or not references:
         return {}
@@ -77,16 +75,12 @@ def compute_metrics(
     # Emoji match rate
     gen_has_emoji = [1 if EMOJI_PAT.search(g) else 0 for g in generated]
     ref_has_emoji = [1 if EMOJI_PAT.search(r) else 0 for r in references]
-    emoji_match = sum(
-        1 for g, r in zip(gen_has_emoji, ref_has_emoji) if g == r
-    ) / len(generated)
+    emoji_match = sum(1 for g, r in zip(gen_has_emoji, ref_has_emoji) if g == r) / len(generated)
 
     # Case match (lowercase tendency)
     gen_lower = [1 if g and g[0].islower() else 0 for g in generated]
     ref_lower = [1 if r and r[0].islower() else 0 for r in references]
-    case_match = sum(
-        1 for g, r in zip(gen_lower, ref_lower) if g == r
-    ) / len(generated)
+    case_match = sum(1 for g, r in zip(gen_lower, ref_lower) if g == r) / len(generated)
 
     # Simple word overlap (pseudo-BLEU)
     overlaps = []
@@ -101,9 +95,14 @@ def compute_metrics(
 
     # Clean output rate (no AI-isms)
     ai_phrases = [
-        "i understand", "let me know", "i hope this helps",
-        "is there anything", "happy to help", "feel free",
-        "i'm here to", "as an ai",
+        "i understand",
+        "let me know",
+        "i hope this helps",
+        "is there anything",
+        "happy to help",
+        "feel free",
+        "i'm here to",
+        "as an ai",
     ]
     clean_count = 0
     for g in generated:
@@ -186,9 +185,7 @@ def evaluate_config(config_path: Path, max_examples: int = 50) -> dict | None:
                 prompt = "\n".join(m["content"] for m in prompt_messages)
 
             start = time.time()
-            result = generate(
-                model, tokenizer, prompt=prompt, max_tokens=100, verbose=False
-            )
+            result = generate(model, tokenizer, prompt=prompt, max_tokens=100, verbose=False)
             elapsed = time.time() - start
             total_time += elapsed
 
@@ -243,7 +240,7 @@ def print_leaderboard(results: list[dict]) -> None:
 
     for i, r in enumerate(results):
         print(
-            f"{i+1:<5} {r['config']:<40} {r.get('word_overlap', 0):<10.3f} "
+            f"{i + 1:<5} {r['config']:<40} {r.get('word_overlap', 0):<10.3f} "
             f"{r.get('clean_output_rate', 0):<8.3f} {r.get('length_ratio', 0):<10.3f} "
             f"{r.get('emoji_match_rate', 0):<8.3f} {r.get('avg_time_per_example', 0):<8.3f}s"
         )

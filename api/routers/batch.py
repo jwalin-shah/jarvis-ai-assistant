@@ -5,7 +5,7 @@ All batch operations are executed as background tasks.
 """
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.routers.tasks import TaskResponse, _task_to_response
 from jarvis.tasks import TaskType, get_task_queue, get_worker, start_worker
@@ -49,11 +49,26 @@ class BatchExportRequest(BaseModel):
     format: str = Field(
         default="json",
         description="Export format (json, csv, txt)",
+        pattern="^(json|csv|txt)$",
     )
     output_dir: str | None = Field(
         default=None,
-        description="Directory to save export files (optional)",
+        description="Directory to save export files (must be within user home)",
     )
+
+    @field_validator("output_dir")
+    @classmethod
+    def validate_output_dir(cls, v: str | None) -> str | None:
+        """Validate output_dir is within user home directory."""
+        if v is None:
+            return v
+        from pathlib import Path
+
+        resolved = Path(v).resolve()
+        home = Path.home()
+        if not str(resolved).startswith(str(home)):
+            raise ValueError(f"output_dir must be within user home directory ({home})")
+        return str(resolved)
 
 
 class BatchExportAllRequest(BaseModel):

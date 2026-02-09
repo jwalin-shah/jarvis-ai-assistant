@@ -39,12 +39,60 @@ SEED = 42
 
 # Low-signal replies to skip
 LOW_SIGNAL = {
-    "ok", "okay", "k", "kk", "lol", "haha", "hahaha", "lmao", "yes", "no",
-    "yeah", "yep", "nope", "yup", "sure", "thanks", "thank you", "thx", "ty",
-    "np", "cool", "nice", "bet", "word", "facts", "true", "same", "fr",
-    "good", "great", "perfect", "awesome", "sounds good", "got it", "alright",
-    "bye", "later", "ttyl", "gn", "gm", "hey", "hi", "hello", "yo", "sup",
-    "omg", "wow", "damn", "bruh", "bro", "ugh", "smh", "idk", "nvm",
+    "ok",
+    "okay",
+    "k",
+    "kk",
+    "lol",
+    "haha",
+    "hahaha",
+    "lmao",
+    "yes",
+    "no",
+    "yeah",
+    "yep",
+    "nope",
+    "yup",
+    "sure",
+    "thanks",
+    "thank you",
+    "thx",
+    "ty",
+    "np",
+    "cool",
+    "nice",
+    "bet",
+    "word",
+    "facts",
+    "true",
+    "same",
+    "fr",
+    "good",
+    "great",
+    "perfect",
+    "awesome",
+    "sounds good",
+    "got it",
+    "alright",
+    "bye",
+    "later",
+    "ttyl",
+    "gn",
+    "gm",
+    "hey",
+    "hi",
+    "hello",
+    "yo",
+    "sup",
+    "omg",
+    "wow",
+    "damn",
+    "bruh",
+    "bro",
+    "ugh",
+    "smh",
+    "idk",
+    "nvm",
 }
 
 # Emoji-only pattern
@@ -97,7 +145,9 @@ def filter_pairs(input_path: Path, output_path: Path) -> None:
 
     # Phase 1: Quality filter
     quality = [p for p in pairs if is_quality_reply(p["reply"])]
-    log.info("After quality filter: %d pairs (%.1f%%)", len(quality), 100 * len(quality) / len(pairs))
+    log.info(
+        "After quality filter: %d pairs (%.1f%%)", len(quality), 100 * len(quality) / len(pairs)
+    )
 
     # Phase 2: Deduplicate by reply text
     seen_replies: set[str] = set()

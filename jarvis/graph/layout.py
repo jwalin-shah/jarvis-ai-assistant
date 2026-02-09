@@ -7,9 +7,9 @@ positioning nodes in relationship graphs.
 from __future__ import annotations
 
 import logging
-from collections import deque
 import math
 import random
+from collections import deque
 from dataclasses import dataclass
 from typing import Literal
 
@@ -66,8 +66,7 @@ class LayoutEngine:
             config: Layout configuration (uses defaults if None)
         """
         self.config = config or LayoutConfig()
-        if self.config.random_seed is not None:
-            random.seed(self.config.random_seed)
+        self._rng = random.Random(self.config.random_seed)
 
     def force_directed(self, graph: GraphData) -> GraphData:
         """Apply force-directed layout to the graph.
@@ -99,8 +98,8 @@ class LayoutEngine:
             # Start in a circle if node has no position
             if node.x is None or node.y is None:
                 angle = 2 * math.pi * i / len(graph.nodes)
-                x = center_x + radius * math.cos(angle) * random.uniform(0.8, 1.2)
-                y = center_y + radius * math.sin(angle) * random.uniform(0.8, 1.2)
+                x = center_x + radius * math.cos(angle) * self._rng.uniform(0.8, 1.2)
+                y = center_y + radius * math.sin(angle) * self._rng.uniform(0.8, 1.2)
             else:
                 x, y = node.x, node.y
 

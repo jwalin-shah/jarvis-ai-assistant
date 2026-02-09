@@ -118,9 +118,13 @@ def _send_request(request: dict[str, Any]) -> dict[str, Any]:
         sock.sendall(len(data).to_bytes(4, "big") + data)
 
         # Receive response (length-prefixed)
-        length_bytes = sock.recv(4)
-        if not length_bytes:
-            raise ConnectionError("Connection closed by server")
+        # Loop until all 4 bytes are received (sock.recv may return fewer)
+        length_bytes = b""
+        while len(length_bytes) < 4:
+            chunk = sock.recv(4 - len(length_bytes))
+            if not chunk:
+                raise ConnectionError("Connection closed by server")
+            length_bytes += chunk
         length = int.from_bytes(length_bytes, "big")
 
         response_data = b""

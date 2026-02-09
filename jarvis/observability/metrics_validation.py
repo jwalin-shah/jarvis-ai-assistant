@@ -74,11 +74,16 @@ class MetricsAuditLogger:
         missing = []
         matched = 0
 
+        # Build dict keyed by query_hash for O(1) lookup instead of O(n*m) scan
+        db_by_hash: dict[str, list[dict]] = {}
+        for db_entry in db_entries:
+            db_by_hash.setdefault(db_entry["query_hash"], []).append(db_entry)
+
         for audit in audit_entries:
             found = False
-            for db_entry in db_entries:
+            for db_entry in db_by_hash.get(audit["query_hash"], []):
                 time_diff = abs(audit["timestamp"] - db_entry["timestamp"])
-                if time_diff <= time_window and audit["query_hash"] == db_entry["query_hash"]:
+                if time_diff <= time_window:
                     found = True
                     matched += 1
                     break
@@ -110,9 +115,7 @@ class MetricsAuditLogger:
                     continue
         return entries
 
-    def _load_db_entries(
-        self, db_path: Path, since_timestamp: float | None = None
-    ) -> list[dict]:
+    def _load_db_entries(self, db_path: Path, since_timestamp: float | None = None) -> list[dict]:
         """Load entries from metrics database.
 
         Args:

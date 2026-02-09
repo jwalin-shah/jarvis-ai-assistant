@@ -376,14 +376,13 @@ def get_query(
     Raises:
         KeyError: If query name not found
     """
-    # Fall back to v14 if version unknown
+    # Raise exception if version unknown - don't silently fall back
     if version not in QUERIES:
-        logger.warning(
-            "Unknown schema version '%s', falling back to v14 queries. "
-            "Some queries may fail or return incorrect results.",
-            version,
+        raise ValueError(
+            f"Unknown schema version '{version}'. Supported versions: {list(QUERIES.keys())}. "
+            "Cannot safely execute query without knowing schema structure. "
+            "Update integrations/imessage/queries.py to support this version."
         )
-        version = "v14"
 
     query = QUERIES[version][name]
 

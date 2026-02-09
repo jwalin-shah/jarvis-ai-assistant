@@ -154,10 +154,11 @@ class MemoryController(Protocol):
         """
         ...
 
-    def register_pressure_callback(self, callback: Callable[[], None]) -> None:
+    def register_pressure_callback(self, callback: Callable[[str], None]) -> None:
         """Register callback for memory pressure events.
 
         Args:
             callback: Function to call when memory pressure is detected.
+                Receives a pressure level string ("green", "yellow", "red", "critical").
         """
         ...

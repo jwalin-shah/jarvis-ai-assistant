@@ -463,9 +463,18 @@ class ChatDBReader:
 
     @property
     def _guid_to_rowid_cache(self) -> LRUCache[str, int]:
-        """Get the GUID to ROWID cache (shared if using pool)."""
+        """Get the GUID to ROWID cache (shared if using pool).
+
+        Thread-safe: Uses pool's cache lock when in pool mode to prevent race conditions.
+        """
         if self._use_pool:
-            return self._get_pool()._guid_to_rowid_cache
+            pool = self._get_pool()
+            # Use cache lock to ensure atomic initialization
+            with pool._cache_lock:
+                if pool._guid_to_rowid_cache is None:
+                    pool._guid_to_rowid_cache = LRUCache(maxsize=10000)
+                return pool._guid_to_rowid_cache
+        # Non-pool mode: single-threaded, no lock needed
         if self.__guid_to_rowid_cache is None:
             self.__guid_to_rowid_cache = LRUCache(maxsize=10000)
         return self.__guid_to_rowid_cache
@@ -765,7 +774,36 @@ class ChatDBReader:
         This attempts to read from ALL macOS AddressBook SQLite databases
         (iCloud, Google, On My Mac, etc.) in the Sources directory.
         If unavailable (no Full Disk Access or different OS), cache remains empty.
+
+        Includes timeout protection to prevent hanging on large contact databases.
         """
+        import signal
+        from contextlib import contextmanager
+
+        @contextmanager
+        def timeout_context(seconds: int):
+            """Context manager with timeout for I/O operations."""
+            import threading as _threading
+
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Contact loading timed out")
+
+            # Use signal.SIGALRM only on Unix and from main thread
+            use_signal = (
+                hasattr(signal, "SIGALRM")
+                and _threading.current_thread() is _threading.main_thread()
+            )
+            if use_signal:
+                try:
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(seconds)
+                    yield
+                finally:
+                    signal.alarm(0)  # Disable alarm
+            else:
+                # Fallback: no timeout enforcement (safe for non-main threads)
+                yield
+
         # Load into a local dict first to avoid partial cache state
         new_cache: dict[str, str] = {}
 
@@ -777,15 +815,22 @@ class ChatDBReader:
 
         try:
             # Load from ALL AddressBook source databases (iCloud, Google, etc.)
+            # with 5-second timeout to prevent hanging
             loaded_count = 0
-            for source_dir in ADDRESSBOOK_DB_PATH.iterdir():
-                if not source_dir.is_dir():
-                    continue
-                ab_db = source_dir / "AddressBook-v22.abcddb"
-                if ab_db.exists():
-                    self._load_contacts_from_db_to_dict(ab_db, new_cache)
-                    loaded_count += 1
+            with timeout_context(5):
+                for source_dir in ADDRESSBOOK_DB_PATH.iterdir():
+                    if not source_dir.is_dir():
+                        continue
+                    ab_db = source_dir / "AddressBook-v22.abcddb"
+                    if ab_db.exists():
+                        self._load_contacts_from_db_to_dict(ab_db, new_cache)
+                        loaded_count += 1
             logger.debug(f"Loaded contacts from {loaded_count} AddressBook sources")
+        except TimeoutError:
+            logger.warning(
+                "Contact loading timed out after 5s. Using partial cache with %d contacts.",
+                len(new_cache),
+            )
         except PermissionError:
             logger.debug("Permission denied accessing AddressBook directory")
         except OSError as e:
@@ -1369,6 +1414,8 @@ class ChatDBReader:
     ) -> dict[int, list[Attachment]]:
         """Batch-fetch attachments for multiple messages in one query.
 
+        Processes in chunks of 500 to avoid SQLite parameter limits.
+
         Args:
             message_ids: List of message ROWIDs
 
@@ -1383,25 +1430,30 @@ class ChatDBReader:
             version = self._schema_version or "v14"
 
             result: dict[int, list[Attachment]] = {}
-            try:
-                placeholders = ",".join("?" * len(message_ids))
-                query = get_query("attachments_batch", version).format(
-                    placeholders=placeholders,
-                )
-                cursor.execute(query, message_ids)
-                rows = cursor.fetchall()
-                for row in rows:
-                    try:
-                        row_dict = dict(row)
-                        mid = row_dict.pop("message_id")
-                        attachments = parse_attachments([row_dict])
-                        if mid not in result:
-                            result[mid] = []
-                        result[mid].extend(attachments)
-                    except (IndexError, TypeError, KeyError):
-                        continue
-            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                logger.debug(f"Error batch-fetching attachments: {e}")
+
+            # Process in chunks of 500 to avoid SQLite limits (max ~999 parameters)
+            CHUNK_SIZE = 500
+            for i in range(0, len(message_ids), CHUNK_SIZE):
+                chunk = message_ids[i : i + CHUNK_SIZE]
+                try:
+                    placeholders = ",".join("?" * len(chunk))
+                    query = get_query("attachments_batch", version).format(
+                        placeholders=placeholders,
+                    )
+                    cursor.execute(query, chunk)
+                    rows = cursor.fetchall()
+                    for row in rows:
+                        try:
+                            row_dict = dict(row)
+                            mid = row_dict.pop("message_id")
+                            attachments = parse_attachments([row_dict])
+                            if mid not in result:
+                                result[mid] = []
+                            result[mid].extend(attachments)
+                        except (IndexError, TypeError, KeyError):
+                            continue
+                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                    logger.debug(f"Error batch-fetching attachments (chunk {i}): {e}")
 
             return result
 
@@ -1412,7 +1464,7 @@ class ChatDBReader:
         """Batch-fetch reactions for multiple messages in one query.
 
         First looks up GUIDs for all message IDs, then fetches reactions
-        for all GUIDs at once.
+        for all GUIDs at once. Processes in chunks to avoid SQLite limits.
 
         Args:
             message_ids: List of message ROWIDs
@@ -1429,54 +1481,64 @@ class ChatDBReader:
 
             result: dict[int, list[Reaction]] = {}
 
-            try:
-                # Step 1: Batch-fetch GUIDs for all message IDs
-                placeholders = ",".join("?" * len(message_ids))
-                guid_query = get_query("message_guids_batch", version).format(
-                    placeholders=placeholders,
-                )
-                cursor.execute(guid_query, message_ids)
-                guid_rows = cursor.fetchall()
+            # Process in chunks of 500 to avoid SQLite limits (max ~999 parameters)
+            CHUNK_SIZE = 500
 
-                id_to_guid: dict[int, str] = {}
-                guid_to_id: dict[str, int] = {}
-                for row in guid_rows:
-                    mid = row["id"]
-                    guid = row["guid"]
-                    if guid:
-                        id_to_guid[mid] = guid
-                        guid_to_id[guid] = mid
+            # Step 1: Batch-fetch GUIDs for all message IDs in chunks
+            id_to_guid: dict[int, str] = {}
+            guid_to_id: dict[str, int] = {}
 
-                if not guid_to_id:
-                    return result
+            for i in range(0, len(message_ids), CHUNK_SIZE):
+                chunk = message_ids[i : i + CHUNK_SIZE]
+                try:
+                    placeholders = ",".join("?" * len(chunk))
+                    guid_query = get_query("message_guids_batch", version).format(
+                        placeholders=placeholders,
+                    )
+                    cursor.execute(guid_query, chunk)
+                    guid_rows = cursor.fetchall()
 
-                # Step 2: Batch-fetch reactions for all GUIDs
-                guids = list(guid_to_id.keys())
-                placeholders = ",".join("?" * len(guids))
-                rx_query = get_query("reactions_batch", version).format(
-                    placeholders=placeholders,
-                )
-                cursor.execute(rx_query, guids)
-                rx_rows = cursor.fetchall()
+                    for row in guid_rows:
+                        mid = row["id"]
+                        guid = row["guid"]
+                        if guid:
+                            id_to_guid[mid] = guid
+                            guid_to_id[guid] = mid
+                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                    logger.debug(f"Error batch-fetching GUIDs (chunk {i}): {e}")
 
-                for row in rx_rows:
-                    row_dict = dict(row)
-                    assoc_guid = row_dict.get("associated_message_guid")
-                    if assoc_guid and assoc_guid in guid_to_id:
-                        mid = guid_to_id[assoc_guid]
-                        reactions = parse_reactions([row_dict])
-                        # Resolve sender names
-                        for reaction in reactions:
-                            if reaction.sender != "me":
-                                reaction.sender_name = self._resolve_contact_name(
-                                    reaction.sender,
-                                )
-                        if mid not in result:
-                            result[mid] = []
-                        result[mid].extend(reactions)
+            if not guid_to_id:
+                return result
 
-            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                logger.debug(f"Error batch-fetching reactions: {e}")
+            # Step 2: Batch-fetch reactions for all GUIDs in chunks
+            all_guids = list(guid_to_id.keys())
+            for i in range(0, len(all_guids), CHUNK_SIZE):
+                chunk_guids = all_guids[i : i + CHUNK_SIZE]
+                try:
+                    placeholders = ",".join("?" * len(chunk_guids))
+                    rx_query = get_query("reactions_batch", version).format(
+                        placeholders=placeholders,
+                    )
+                    cursor.execute(rx_query, chunk_guids)
+                    rx_rows = cursor.fetchall()
+
+                    for row in rx_rows:
+                        row_dict = dict(row)
+                        assoc_guid = row_dict.get("associated_message_guid")
+                        if assoc_guid and assoc_guid in guid_to_id:
+                            mid = guid_to_id[assoc_guid]
+                            reactions = parse_reactions([row_dict])
+                            # Resolve sender names
+                            for reaction in reactions:
+                                if reaction.sender != "me":
+                                    reaction.sender_name = self._resolve_contact_name(
+                                        reaction.sender,
+                                    )
+                            if mid not in result:
+                                result[mid] = []
+                            result[mid].extend(reactions)
+                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                    logger.debug(f"Error batch-fetching reactions (chunk {i}): {e}")
 
         return result
 

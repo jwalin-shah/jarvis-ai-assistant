@@ -38,8 +38,11 @@ def can_use_llm() -> tuple[bool, str]:
         return True, ""
 
     except Exception as e:
-        logger.warning("Failed to check memory state: %s", str(e))
-        # If we can't check memory, err on the side of caution
+        logger.warning(
+            "Failed to check memory state (assuming LLM is available): %s", str(e)
+        )
+        # If we can't check memory, err on the side of caution by allowing use
+        # (the alternative would be to disable all generation if monitoring fails)
         return True, ""
 
 
@@ -52,7 +55,8 @@ def get_generation_status() -> dict[str, Any]:
     try:
         generator = get_generator()
         model_loaded = generator.is_loaded()
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to check model status: %s", e)
         model_loaded = False
 
     can_generate, reason = can_use_llm()
@@ -60,7 +64,8 @@ def get_generation_status() -> dict[str, Any]:
     try:
         mem = get_memory_controller()
         memory_mode = mem.get_mode().value
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to check memory mode: %s", e)
         memory_mode = "unknown"
 
     return {

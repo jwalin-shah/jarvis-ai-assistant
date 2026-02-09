@@ -7,6 +7,7 @@ Uses the all-MiniLM-L6-v2 model for encoding messages and queries,
 then finds matches by cosine similarity rather than keyword matching.
 """
 
+import threading
 from datetime import datetime
 from typing import Any
 
@@ -20,6 +21,37 @@ from integrations.imessage import ChatDBReader
 from jarvis.search.semantic_search import SearchFilters, SemanticSearcher
 
 router = APIRouter(prefix="/search", tags=["search"])
+
+# Singleton searcher instance for resource reuse
+_searcher_instance: SemanticSearcher | None = None
+_searcher_lock = threading.Lock()
+_cache_ops_lock = threading.Lock()
+
+
+def _get_searcher(reader: ChatDBReader, threshold: float) -> SemanticSearcher:
+    """Get or create singleton SemanticSearcher instance.
+
+    Reuses searcher across requests to avoid repeated model loading.
+    Creates a dedicated reader for the singleton to avoid holding a DI reader.
+
+    Args:
+        reader: iMessage database reader (used only for first creation)
+        threshold: Similarity threshold
+
+    Returns:
+        SemanticSearcher instance
+    """
+    global _searcher_instance
+
+    with _searcher_lock:
+        if _searcher_instance is None:
+            # Create a dedicated reader for the singleton so it isn't closed by DI
+            dedicated_reader = ChatDBReader()
+            _searcher_instance = SemanticSearcher(
+                reader=dedicated_reader,
+                similarity_threshold=threshold,
+            )
+    return _searcher_instance
 
 
 class SemanticSearchRequest(BaseModel):
@@ -327,10 +359,8 @@ async def semantic_search(
 
     def _do_search() -> list[Any]:
         """Perform blocking search operation in thread pool."""
-        searcher = SemanticSearcher(
-            reader=reader,
-            similarity_threshold=request.threshold,
-        )
+        # Use singleton searcher for resource reuse
+        searcher = _get_searcher(reader, request.threshold)
         return searcher.search(
             query=request.query,
             filters=search_filters,
@@ -379,12 +409,13 @@ async def get_cache_stats() -> CacheStatsResponse:
     from jarvis.search.semantic_search import EmbeddingCache
 
     def _get_stats() -> dict[str, Any]:
-        """Get cache stats in thread pool (file I/O)."""
-        cache = EmbeddingCache()
-        try:
-            return cache.stats()
-        finally:
-            cache.close()
+        """Get cache stats in thread pool (file I/O) with locking."""
+        with _cache_ops_lock:
+            cache = EmbeddingCache()
+            try:
+                return cache.stats()
+            finally:
+                cache.close()
 
     stats = await run_in_threadpool(_get_stats)
     return CacheStatsResponse(
@@ -417,14 +448,15 @@ async def clear_cache() -> dict[str, str]:
     from jarvis.search.semantic_search import EmbeddingCache
 
     def _clear_cache() -> dict[str, Any]:
-        """Clear cache in thread pool (file I/O)."""
-        cache = EmbeddingCache()
-        try:
-            stats_before = cache.stats()
-            cache.clear()
-            return stats_before
-        finally:
-            cache.close()
+        """Clear cache in thread pool (file I/O) with locking."""
+        with _cache_ops_lock:
+            cache = EmbeddingCache()
+            try:
+                stats_before = cache.stats()
+                cache.clear()
+                return stats_before
+            finally:
+                cache.close()
 
     stats_before = await run_in_threadpool(_clear_cache)
     return {

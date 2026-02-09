@@ -8,6 +8,7 @@ Usage:
     uv run python evals/run_comparison.py --tests 0,1,2
     uv run python evals/run_comparison.py --temps 0.1,0.7 --top-ps 0.5,0.95
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,7 +22,8 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import psutil
-from models.loader import ModelConfig, MLXModelLoader
+
+from models.loader import MLXModelLoader, ModelConfig
 
 
 def mem_mb() -> str:
@@ -42,8 +44,14 @@ TEST_CASES = [
     {"ctx": "[17:30] Lisa: I'm at the restaurant, where should I park?", "label": "logistics"},
     {"ctx": "[20:15] Mike: what's the wifi password", "label": "info_request"},
     # Emotional / support
-    {"ctx": "[20:00] Mike: Work was brutal today\n[20:01] Mike: Boss dumped a project on me last minute", "label": "venting"},
-    {"ctx": "[15:00] John: Didn't get the job. Thought the interview went well", "label": "bad_news"},
+    {
+        "ctx": "[20:00] Mike: Work was brutal today\n[20:01] Mike: Boss dumped a project on me last minute",
+        "label": "venting",
+    },
+    {
+        "ctx": "[15:00] John: Didn't get the job. Thought the interview went well",
+        "label": "bad_news",
+    },
     {"ctx": "[10:00] Lisa: Just landed in Tokyo!!", "label": "excitement"},
     {"ctx": "[22:00] Sarah: I miss you", "label": "sentimental"},
     # Ambiguous / low-context
@@ -58,8 +66,14 @@ TEST_CASES = [
     {"ctx": "[19:30] Dad: Love you kid, have a good night", "label": "goodnight"},
     {"ctx": "[08:00] Mom: Good morning sweetheart! Have a great day!", "label": "good_morning"},
     # Multi-turn
-    {"ctx": "[18:00] Jake: yo\n[18:00] Jake: you free tonight?\n[18:01] Jake: thinking about hitting up that new bar", "label": "multi_invite"},
-    {"ctx": "[14:00] Sarah: hey did you hear about the party?\n[14:01] You: no what party\n[14:01] Sarah: at Jake's this Saturday", "label": "multi_followup"},
+    {
+        "ctx": "[18:00] Jake: yo\n[18:00] Jake: you free tonight?\n[18:01] Jake: thinking about hitting up that new bar",
+        "label": "multi_invite",
+    },
+    {
+        "ctx": "[14:00] Sarah: hey did you hear about the party?\n[14:01] You: no what party\n[14:01] Sarah: at Jake's this Saturday",
+        "label": "multi_followup",
+    },
     # Requests / favors
     {"ctx": "[11:00] Roommate: can you pick up milk on the way home", "label": "favor"},
     {"ctx": "[15:00] Mom: Can you call me when you get a chance?", "label": "call_request"},
@@ -71,34 +85,51 @@ PROMPTS: dict[str, callable] = {}
 
 def prompt(name: str):
     """Decorator to register a prompt strategy."""
+
     def decorator(fn):
         PROMPTS[name] = fn
         return fn
+
     return decorator
 
 
 # --- Bare completions ---
 
+
 @prompt("bare_reply")
-def _(ctx): return f"{ctx}\nReply:"
+def _(ctx):
+    return f"{ctx}\nReply:"
+
 
 @prompt("bare_me")
-def _(ctx): return f"{ctx}\nMe:"
+def _(ctx):
+    return f"{ctx}\nMe:"
+
 
 @prompt("bare_arrow")
-def _(ctx): return f"{ctx}\n>"
+def _(ctx):
+    return f"{ctx}\n>"
+
 
 @prompt("bare_you")
-def _(ctx): return f"{ctx}\nYou:"
+def _(ctx):
+    return f"{ctx}\nYou:"
+
 
 @prompt("bare_dash")
-def _(ctx): return f"{ctx}\n-"
+def _(ctx):
+    return f"{ctx}\n-"
+
 
 @prompt("bare_sent")
-def _(ctx): return f"{ctx}\nSent:"
+def _(ctx):
+    return f"{ctx}\nSent:"
+
 
 @prompt("bare_newline")
-def _(ctx): return f"{ctx}\n"
+def _(ctx):
+    return f"{ctx}\n"
+
 
 # --- Few-shot ---
 
@@ -113,25 +144,38 @@ Jordan: you coming tonight?
 
 """
 
+
 @prompt("fs_reply")
-def _(ctx): return _FS.format(tag="Reply:") + f"{ctx}\nReply:"
+def _(ctx):
+    return _FS.format(tag="Reply:") + f"{ctx}\nReply:"
+
 
 @prompt("fs_me")
-def _(ctx): return _FS.format(tag="Me:") + f"{ctx}\nMe:"
+def _(ctx):
+    return _FS.format(tag="Me:") + f"{ctx}\nMe:"
+
 
 @prompt("fs_arrow")
-def _(ctx): return _FS.format(tag=">") + f"{ctx}\n>"
+def _(ctx):
+    return _FS.format(tag=">") + f"{ctx}\n>"
+
 
 @prompt("fs_you")
-def _(ctx): return _FS.format(tag="You:") + f"{ctx}\nYou:"
+def _(ctx):
+    return _FS.format(tag="You:") + f"{ctx}\nYou:"
+
 
 @prompt("fs_dash")
-def _(ctx): return _FS.format(tag="-") + f"{ctx}\n-"
+def _(ctx):
+    return _FS.format(tag="-") + f"{ctx}\n-"
+
 
 # --- Few-shot varied ---
 
+
 @prompt("fs_varied")
-def _(ctx): return f"""Friend: you up?
+def _(ctx):
+    return f"""Friend: you up?
 Reply: yeah what's good
 
 Boss: Meeting moved to 3pm
@@ -146,8 +190,10 @@ Reply: will do
 {ctx}
 Reply:"""
 
+
 @prompt("fs_emoji")
-def _(ctx): return f"""Friend: happy birthday!!
+def _(ctx):
+    return f"""Friend: happy birthday!!
 Reply: tyy 🥳
 
 Roommate: left food in the fridge for u
@@ -159,27 +205,41 @@ Reply: down 🍻
 {ctx}
 Reply:"""
 
+
 # --- Instruction-based ---
 
+
 @prompt("inst_short")
-def _(ctx): return f"Reply to this text in under 10 words:\n\n{ctx}\n\nReply:"
+def _(ctx):
+    return f"Reply to this text in under 10 words:\n\n{ctx}\n\nReply:"
+
 
 @prompt("inst_no_ai")
-def _(ctx): return f"You're a real person texting. NOT an AI. Reply naturally, one line max.\n\n{ctx}\n\nReply:"
+def _(ctx):
+    return f"You're a real person texting. NOT an AI. Reply naturally, one line max.\n\n{ctx}\n\nReply:"
+
 
 @prompt("inst_complete")
-def _(ctx): return f"Complete the next message in this text conversation. Output ONLY the reply.\n\n{ctx}\n\nReply:"
+def _(ctx):
+    return f"Complete the next message in this text conversation. Output ONLY the reply.\n\n{ctx}\n\nReply:"
+
 
 @prompt("inst_mimic")
-def _(ctx): return f"Read this text thread and write what you'd text back. Keep it real. Max 1 sentence.\n\n{ctx}\n\nYour reply:"
+def _(ctx):
+    return f"Read this text thread and write what you'd text back. Keep it real. Max 1 sentence.\n\n{ctx}\n\nYour reply:"
+
 
 @prompt("inst_terse")
-def _(ctx): return f"Respond. 1-5 words only.\n\n{ctx}\n\n>"
+def _(ctx):
+    return f"Respond. 1-5 words only.\n\n{ctx}\n\n>"
+
 
 # --- Few-shot + instruction combo ---
 
+
 @prompt("fsi_brief")
-def _(ctx): return f"""Reply to texts briefly. Match the vibe.
+def _(ctx):
+    return f"""Reply to texts briefly. Match the vibe.
 
 Alex: wanna get food?
 Reply: ya im down, where?
@@ -190,8 +250,10 @@ Reply: k
 {ctx}
 Reply:"""
 
+
 @prompt("fsi_no_ai")
-def _(ctx): return f"""You're texting a friend. Keep it real and short.
+def _(ctx):
+    return f"""You're texting a friend. Keep it real and short.
 
 them: you free tonight?
 you: yeah what time
@@ -202,8 +264,10 @@ you: ah ok no worries
 {ctx}
 you:"""
 
+
 @prompt("fsi_persona")
-def _(ctx): return f"""You text like a normal 20-something. Short, casual, no AI vibes.
+def _(ctx):
+    return f"""You text like a normal 20-something. Short, casual, no AI vibes.
 
 them: wanna hang?
 me: ye when
@@ -214,13 +278,18 @@ me: all good take ur time
 {ctx}
 me:"""
 
+
 # --- Script / structured ---
 
+
 @prompt("script")
-def _(ctx): return f"INT. TEXT CONVERSATION\n\n{ctx}\nME: "
+def _(ctx):
+    return f"INT. TEXT CONVERSATION\n\n{ctx}\nME: "
+
 
 @prompt("script_fs")
-def _(ctx): return f"""INT. TEXT CONVERSATION
+def _(ctx):
+    return f"""INT. TEXT CONVERSATION
 
 Alex: wanna get food?
 ME: ya im down, where?
@@ -231,19 +300,28 @@ ME: k
 {ctx}
 ME: """
 
+
 @prompt("chat_template")
-def _(ctx): return f"User: {ctx}\nReply as a real person texting. One sentence max.\nAssistant:"
+def _(ctx):
+    return f"User: {ctx}\nReply as a real person texting. One sentence max.\nAssistant:"
+
 
 @prompt("qa")
-def _(ctx): return f"Q: What would you text back to this?\n{ctx}\nA:"
+def _(ctx):
+    return f"Q: What would you text back to this?\n{ctx}\nA:"
+
 
 @prompt("qa_short")
-def _(ctx): return f"Q: Reply in 1-5 words.\n{ctx}\nA:"
+def _(ctx):
+    return f"Q: Reply in 1-5 words.\n{ctx}\nA:"
+
 
 # --- Bracket / tag ---
 
+
 @prompt("bracket")
-def _(ctx): return f"""[them] wanna get food?
+def _(ctx):
+    return f"""[them] wanna get food?
 [me] ya im down, where?
 
 [them] Call me when you get home
@@ -252,25 +330,39 @@ def _(ctx): return f"""[them] wanna get food?
 {ctx}
 [me]"""
 
+
 @prompt("xml_reply")
-def _(ctx): return f"<conversation>\n{ctx}\n</conversation>\n<reply>"
+def _(ctx):
+    return f"<conversation>\n{ctx}\n</conversation>\n<reply>"
+
 
 @prompt("xml_short")
-def _(ctx): return f"<conversation>\n{ctx}\n</conversation>\n<reply max_words=\"10\">"
+def _(ctx):
+    return f'<conversation>\n{ctx}\n</conversation>\n<reply max_words="10">'
+
 
 # --- Dialogue continuation ---
 
+
 @prompt("dialogue")
-def _(ctx): return f"The following is a text conversation. Write ONLY the next reply.\n\n{ctx}\n\n"
+def _(ctx):
+    return f"The following is a text conversation. Write ONLY the next reply.\n\n{ctx}\n\n"
+
 
 @prompt("roleplay")
-def _(ctx): return f"[You are casually texting. Reply to the last message.]\n\n{ctx}\n\nYou:"
+def _(ctx):
+    return f"[You are casually texting. Reply to the last message.]\n\n{ctx}\n\nYou:"
+
 
 @prompt("texting_sim")
-def _(ctx): return f"--- iMessage ---\n{ctx}\n📱 Your reply: "
+def _(ctx):
+    return f"--- iMessage ---\n{ctx}\n📱 Your reply: "
+
 
 @prompt("social_media")
-def _(ctx): return f"💬 DM thread:\n{ctx}\n\nYou replied:"
+def _(ctx):
+    return f"💬 DM thread:\n{ctx}\n\nYou replied:"
+
 
 # ── Sampling configs ──────────────────────────────────────────────────────────
 # Each is a dict of kwargs passed to generate_sync
@@ -291,20 +383,29 @@ DEFAULT_MODELS = [
 DEFAULT_PROMPTS = list(PROMPTS.keys())
 
 
-def run(models: list[str], prompt_names: list[str], test_indices: list[int],
-        temps: list[float], top_ps: list[float], min_ps: list[float],
-        max_tokens: int) -> None:
+def run(
+    models: list[str],
+    prompt_names: list[str],
+    test_indices: list[int],
+    temps: list[float],
+    top_ps: list[float],
+    min_ps: list[float],
+    max_tokens: int,
+) -> None:
     tests = [TEST_CASES[i] for i in test_indices]
     sampling_configs = list(product(temps, top_ps, min_ps))
 
     n_calls = len(models) * len(prompt_names) * len(tests) * len(sampling_configs)
-    print(f"\n{len(models)} models x {len(prompt_names)} prompts x {len(tests)} tests x {len(sampling_configs)} sampling configs = {n_calls} generations", flush=True)
+    print(
+        f"\n{len(models)} models x {len(prompt_names)} prompts x {len(tests)} tests x {len(sampling_configs)} sampling configs = {n_calls} generations",
+        flush=True,
+    )
 
     # results[model][f"t{temp}_p{top_p}"][prompt_name][test_label] = output_text
     all_results: dict = {}
 
     for model_id in models:
-        print(f"\n{'='*70}", flush=True)
+        print(f"\n{'=' * 70}", flush=True)
         print(f"[{mem_mb()}] Loading {model_id}...", flush=True)
 
         try:
@@ -347,7 +448,10 @@ def run(models: list[str], prompt_names: list[str], test_indices: list[int],
                         text = result.text.strip().replace("\n", " ↵ ")
                         tps = result.tokens_generated / elapsed if elapsed > 0 else 0
                         display = text[:55] if len(text) > 55 else text
-                        print(f"  {pname:>18} | {tc['label']:>14} | {display:<55} | {tps:.0f}t/s", flush=True)
+                        print(
+                            f"  {pname:>18} | {tc['label']:>14} | {display:<55} | {tps:.0f}t/s",
+                            flush=True,
+                        )
                         prompt_results[tc["label"]] = {
                             "text": text,
                             "tps": round(tps, 1),
@@ -356,7 +460,12 @@ def run(models: list[str], prompt_names: list[str], test_indices: list[int],
                         }
                     except Exception as e:
                         print(f"  {pname:>18} | {tc['label']:>14} | ERROR: {e}", flush=True)
-                        prompt_results[tc["label"]] = {"text": f"[ERROR: {e}]", "tps": 0, "tokens": 0, "elapsed_ms": 0}
+                        prompt_results[tc["label"]] = {
+                            "text": f"[ERROR: {e}]",
+                            "tps": 0,
+                            "tokens": 0,
+                            "elapsed_ms": 0,
+                        }
 
                 sampling_results[pname] = prompt_results
 
@@ -370,27 +479,43 @@ def run(models: list[str], prompt_names: list[str], test_indices: list[int],
     out_path = PROJECT_ROOT / "evals" / "results" / "comparison-raw.json"
     out_path.parent.mkdir(exist_ok=True)
     with open(out_path, "w") as f:
-        json.dump({
-            "models": models,
-            "prompts": prompt_names,
-            "tests": [tc["label"] for tc in tests],
-            "sampling_configs": [{"temp": t, "top_p": p, "min_p": mp} for t, p, mp in sampling_configs],
-            "results": all_results,
-        }, f, indent=2)
+        json.dump(
+            {
+                "models": models,
+                "prompts": prompt_names,
+                "tests": [tc["label"] for tc in tests],
+                "sampling_configs": [
+                    {"temp": t, "top_p": p, "min_p": mp} for t, p, mp in sampling_configs
+                ],
+                "results": all_results,
+            },
+            f,
+            indent=2,
+        )
     print(f"\nResults saved to {out_path}", flush=True)
     print(f"Total generations: {n_calls}", flush=True)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Model x prompt x sampling comparison for human eval")
+    parser = argparse.ArgumentParser(
+        description="Model x prompt x sampling comparison for human eval"
+    )
     parser.add_argument("--models", default=None, help="Comma-separated model IDs")
     parser.add_argument("--prompts", default=None, help="Comma-separated prompt names")
     parser.add_argument("--tests", default=None, help="Comma-separated test indices (0-23)")
-    parser.add_argument("--temps", default=None, help="Comma-separated temperatures (default: 0.1,0.5,0.7,1.0)")
-    parser.add_argument("--top-ps", default=None, help="Comma-separated top_p values (default: 0.1,0.9)")
-    parser.add_argument("--min-ps", default=None, help="Comma-separated min_p values (default: 0.0,0.15)")
+    parser.add_argument(
+        "--temps", default=None, help="Comma-separated temperatures (default: 0.1,0.5,0.7,1.0)"
+    )
+    parser.add_argument(
+        "--top-ps", default=None, help="Comma-separated top_p values (default: 0.1,0.9)"
+    )
+    parser.add_argument(
+        "--min-ps", default=None, help="Comma-separated min_p values (default: 0.0,0.15)"
+    )
     parser.add_argument("--max-tokens", type=int, default=20, help="Max tokens (default: 20)")
-    parser.add_argument("--list-prompts", action="store_true", help="List all prompt names and exit")
+    parser.add_argument(
+        "--list-prompts", action="store_true", help="List all prompt names and exit"
+    )
     parser.add_argument("--list-tests", action="store_true", help="List all test cases and exit")
     args = parser.parse_args()
 
@@ -409,7 +534,9 @@ if __name__ == "__main__":
 
     models = args.models.split(",") if args.models else DEFAULT_MODELS
     prompt_names = args.prompts.split(",") if args.prompts else DEFAULT_PROMPTS
-    test_indices = [int(i) for i in args.tests.split(",")] if args.tests else list(range(len(TEST_CASES)))
+    test_indices = (
+        [int(i) for i in args.tests.split(",")] if args.tests else list(range(len(TEST_CASES)))
+    )
     temps = [float(t) for t in args.temps.split(",")] if args.temps else DEFAULT_TEMPS
     top_ps = [float(p) for p in args.top_ps.split(",")] if args.top_ps else DEFAULT_TOP_PS
     min_ps = [float(p) for p in args.min_ps.split(",")] if args.min_ps else DEFAULT_MIN_PS

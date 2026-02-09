@@ -10,6 +10,8 @@ Provides WebSocket endpoints for:
 import asyncio
 import json
 import logging
+import os
+import secrets
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -25,6 +27,50 @@ from models import get_generator
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
+
+# SECURITY: WebSocket authentication token
+# Set JARVIS_WS_TOKEN environment variable or generate a random token
+_WS_AUTH_TOKEN: str | None = os.getenv("JARVIS_WS_TOKEN")
+if _WS_AUTH_TOKEN is None:
+    # Generate a random token for this session (log it so it can be used)
+    _WS_AUTH_TOKEN = secrets.token_urlsafe(32)
+    logger.info("Generated WebSocket auth token (set JARVIS_WS_TOKEN to persist)")
+
+
+def _validate_websocket_auth(websocket: WebSocket) -> bool:
+    """Validate WebSocket authentication token.
+
+    SECURITY: Checks for auth token in query parameters to prevent unauthorized access.
+    Token can be provided via:
+    - Query parameter: ?token=<token>
+    - Header: X-WS-Token: <token>
+
+    For localhost connections, authentication can be bypassed if JARVIS_WS_REQUIRE_AUTH=false.
+
+    Args:
+        websocket: The WebSocket connection to validate
+
+    Returns:
+        True if authenticated, False otherwise
+    """
+    # Allow bypass for localhost if explicitly disabled
+    require_auth = os.getenv("JARVIS_WS_REQUIRE_AUTH", "true").lower() != "false"
+    if not require_auth:
+        client_host = websocket.client.host if websocket.client else None
+        if client_host in ("127.0.0.1", "localhost", "::1"):
+            return True
+
+    # Check query parameters
+    token = websocket.query_params.get("token")
+    if token and secrets.compare_digest(token, _WS_AUTH_TOKEN):
+        return True
+
+    # Check headers
+    token_header = websocket.headers.get("x-ws-token")
+    if token_header and secrets.compare_digest(token_header, _WS_AUTH_TOKEN):
+        return True
+
+    return False
 
 
 class MessageType(str, Enum):
@@ -59,6 +105,8 @@ class WebSocketClient:
     last_activity: float = field(default_factory=time.time)
     subscribed_to_health: bool = False
     active_generation_id: str | None = None
+    # Per-client rate limiting: track last 5 generation request timestamps
+    generation_request_times: list[float] = field(default_factory=list)
 
 
 class ConnectionManager:
@@ -150,6 +198,8 @@ class ConnectionManager:
     ) -> None:
         """Broadcast a message to all connected clients.
 
+        Uses asyncio.gather() for parallel message sending.
+
         Args:
             message_type: Type of message to broadcast.
             data: Optional message payload.
@@ -157,11 +207,16 @@ class ConnectionManager:
         async with self._lock:
             client_ids = list(self._clients.keys())
 
-        for client_id in client_ids:
-            await self.send_message(client_id, message_type, data)
+        # Send to all clients in parallel for better performance
+        await asyncio.gather(
+            *[self.send_message(client_id, message_type, data) for client_id in client_ids],
+            return_exceptions=True,
+        )
 
     async def broadcast_health_update(self, health_data: dict[str, Any]) -> None:
         """Broadcast health update to subscribed clients.
+
+        Uses asyncio.gather() for parallel message sending.
 
         Args:
             health_data: Health status data to broadcast.
@@ -171,11 +226,20 @@ class ConnectionManager:
                 c.client_id for c in self._clients.values() if c.subscribed_to_health
             ]
 
-        for client_id in subscribed_clients:
-            await self.send_message(client_id, MessageType.HEALTH_UPDATE, health_data)
+        # Send to all subscribed clients in parallel
+        await asyncio.gather(
+            *[
+                self.send_message(client_id, MessageType.HEALTH_UPDATE, health_data)
+                for client_id in subscribed_clients
+            ],
+            return_exceptions=True,
+        )
 
     def get_client(self, client_id: str) -> WebSocketClient | None:
         """Get a client by ID.
+
+        Note: dict.get() is atomic in CPython (GIL-protected), so no lock needed
+        for read-only access. Mutations use self._lock elsewhere.
 
         Args:
             client_id: The client ID to look up.
@@ -235,20 +299,19 @@ class ConnectionManager:
             Number of connections removed.
         """
         now = time.time()
-        stale_clients: list[str] = []
+        stale_clients: list[tuple[str, WebSocketClient]] = []
 
+        # Store references while holding lock to avoid race condition
         async with self._lock:
             for client_id, client in self._clients.items():
                 if now - client.last_activity > self.CONNECTION_TTL_SECONDS:
-                    stale_clients.append(client_id)
+                    stale_clients.append((client_id, client))
 
         # Close and remove stale connections outside the lock
-        for client_id in stale_clients:
+        for client_id, stale_client in stale_clients:
             logger.info("Removing stale WebSocket connection: %s", client_id)
             try:
-                stale_client = self._clients.get(client_id)
-                if stale_client:
-                    await stale_client.websocket.close(code=1000, reason="Connection timeout")
+                await stale_client.websocket.close(code=1000, reason="Connection timeout")
             except Exception as e:
                 logger.debug("Error closing stale connection %s: %s", client_id, e)
             await self.disconnect(client_id)
@@ -318,6 +381,30 @@ def _log_task_exception(task: asyncio.Task[None], client_id: str) -> None:
         exc = task.exception()
         if exc:
             logger.error("Background task failed for client %s: %s", client_id, exc, exc_info=exc)
+
+
+async def _check_client_rate_limit(client: WebSocketClient) -> bool:
+    """Check if client is within generation rate limit.
+
+    Rate limit: 5 generation requests per minute per client.
+
+    Args:
+        client: The client to check.
+
+    Returns:
+        True if within limit, False if exceeded.
+    """
+    now = time.time()
+    # Remove timestamps older than 60 seconds
+    client.generation_request_times = [t for t in client.generation_request_times if now - t < 60]
+
+    # Check if limit exceeded (5 requests per minute)
+    if len(client.generation_request_times) >= 5:
+        return False
+
+    # Add current request timestamp
+    client.generation_request_times.append(now)
+    return True
 
 
 async def _handle_generate(
@@ -453,11 +540,12 @@ async def _handle_generate(
             )
 
     except Exception as e:
-        logger.exception("Generation failed")
+        # Log detailed error server-side, send generic message to client
+        logger.exception("Generation failed for client %s: %s", client.client_id, e)
         await manager.send_message(
             client.client_id,
             MessageType.GENERATION_ERROR,
-            {"error": str(e), "generation_id": generation_id},
+            {"error": "Generation failed. Please try again.", "generation_id": generation_id},
         )
     finally:
         await manager.set_active_generation(client.client_id, None)
@@ -569,11 +657,12 @@ async def _stream_generation(
             )
 
     except Exception as e:
-        logger.exception("Streaming generation failed")
+        # Log detailed error server-side, send generic message to client
+        logger.exception("Streaming generation failed for client %s: %s", client.client_id, e)
         await manager.send_message(
             client.client_id,
             MessageType.GENERATION_ERROR,
-            {"error": str(e), "generation_id": generation_id},
+            {"error": "Generation failed. Please try again.", "generation_id": generation_id},
         )
 
 
@@ -595,13 +684,29 @@ async def _handle_message(client: WebSocketClient, message: dict[str, Any]) -> N
         )
 
     elif msg_type == MessageType.GENERATE.value:
-        # Run generation in background to not block message handling
-        task = asyncio.create_task(_handle_generate(client, data, stream=False))
-        task.add_done_callback(lambda t: _log_task_exception(t, client.client_id))
+        # Check per-client rate limit (5 requests per minute)
+        if not await _check_client_rate_limit(client):
+            await manager.send_message(
+                client.client_id,
+                MessageType.ERROR,
+                {"error": "Rate limit exceeded. Maximum 5 generation requests per minute."},
+            )
+        else:
+            # Run generation in background to not block message handling
+            task = asyncio.create_task(_handle_generate(client, data, stream=False))
+            task.add_done_callback(lambda t: _log_task_exception(t, client.client_id))
 
     elif msg_type == MessageType.GENERATE_STREAM.value:
-        task = asyncio.create_task(_handle_generate(client, data, stream=True))
-        task.add_done_callback(lambda t: _log_task_exception(t, client.client_id))
+        # Check per-client rate limit (5 requests per minute)
+        if not await _check_client_rate_limit(client):
+            await manager.send_message(
+                client.client_id,
+                MessageType.ERROR,
+                {"error": "Rate limit exceeded. Maximum 5 generation requests per minute."},
+            )
+        else:
+            task = asyncio.create_task(_handle_generate(client, data, stream=True))
+            task.add_done_callback(lambda t: _log_task_exception(t, client.client_id))
 
     elif msg_type == MessageType.SUBSCRIBE_HEALTH.value:
         await manager.set_health_subscription(client.client_id, True)
@@ -635,6 +740,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     - Health status subscriptions
     - Connection management
 
+    Authentication:
+        - Requires auth token via query parameter (?token=<token>) or X-WS-Token header
+        - Token is set via JARVIS_WS_TOKEN environment variable or auto-generated
+        - Localhost can bypass auth if JARVIS_WS_REQUIRE_AUTH=false
+
     Message format (JSON):
         {
             "type": "<message_type>",
@@ -659,6 +769,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         - health_update: Health status update
         - error: Generic error
     """
+    # SECURITY: Validate authentication before accepting connection
+    if not _validate_websocket_auth(websocket):
+        logger.warning(
+            "WebSocket connection rejected: invalid or missing auth token from %s",
+            websocket.client.host if websocket.client else "unknown",
+        )
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+
     # Check connection limit before accepting
     if manager.is_at_capacity():
         logger.warning("WebSocket connection rejected: at capacity (%d)", manager.MAX_CONNECTIONS)

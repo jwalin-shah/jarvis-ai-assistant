@@ -14,6 +14,7 @@ Profile storage: ~/.jarvis/relationships/{contact_hash}.json
 
 from __future__ import annotations
 
+import heapq
 import json
 import logging
 import re
@@ -804,7 +805,6 @@ def _extract_common_phrases(messages: list[Any], min_count: int = 3) -> list[str
             phrase_counter[f"{w1} {w2} {w3}"] += 1
 
     # Filter and return top phrases using heapq for efficiency
-    import heapq
 
     filtered = [(c, p) for p, c in phrase_counter.items() if c >= min_count]
     top_5 = heapq.nlargest(5, filtered)
@@ -1217,7 +1217,7 @@ def generate_style_guide(profile: RelationshipProfile) -> str:
             guide += f", {part}"
     guide += "."
 
-    return guide.capitalize()
+    return guide[0].upper() + guide[1:] if guide else guide
 
 
 def get_voice_guidance(profile: RelationshipProfile) -> dict[str, Any]:

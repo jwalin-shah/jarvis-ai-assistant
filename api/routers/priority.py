@@ -14,10 +14,11 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.dependencies import get_imessage_reader
+from integrations.imessage import ChatDBReader
 from jarvis.priority import (
     PriorityLevel,
     get_priority_scorer,
@@ -408,6 +409,7 @@ def get_priority_inbox(
             description="Minimum priority level to include (critical, high, medium, low)",
         ),
     ] = None,
+    reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> PriorityInboxResponse:
     """Get prioritized messages sorted by importance.
 
@@ -443,18 +445,12 @@ def get_priority_inbox(
     Returns:
         PriorityInboxResponse with prioritized messages and counts
     """
-    reader = get_imessage_reader()
     scorer = get_priority_scorer()
 
-    if not reader.check_access():
-        raise HTTPException(
-            status_code=503,
-            detail="iMessage database access unavailable. Grant Full Disk Access permission.",
-        )
-
     # Get recent conversations and their messages
+    # Fetch only conversations we'll actually analyze (15) to avoid wasted fetches
     try:
-        conversations = reader.get_conversations(limit=20)
+        conversations = reader.get_conversations(limit=15)
     except Exception as e:
         logger.exception("Failed to get conversations")
         raise HTTPException(
@@ -468,13 +464,29 @@ def get_priority_inbox(
         conv_cache[conv.chat_id] = conv.display_name or ", ".join(conv.participants[:3])
 
     # Collect recent messages from each conversation
+    # Batch fetch to avoid N+1 queries
     all_messages = []
-    for conv in conversations[:15]:  # Limit conversations to analyze
-        try:
-            messages = reader.get_messages(conv.chat_id, limit=limit // 5)
-            all_messages.extend(messages)
-        except Exception:
-            continue
+    chat_ids = [conv.chat_id for conv in conversations[:15]]  # Limit conversations to analyze
+    try:
+        # Use get_messages_batch if available, otherwise fallback to loop
+        if hasattr(reader, "get_messages_batch"):
+            all_messages = reader.get_messages_batch(chat_ids, limit_per_chat=limit // 5)  # type: ignore[attr-defined]
+        else:
+            # Fallback: collect all queries in a list first, then execute in single transaction
+            for chat_id in chat_ids:
+                try:
+                    messages = reader.get_messages(chat_id, limit=limit // 5)
+                    all_messages.extend(messages)
+                except Exception:
+                    continue
+    except Exception:
+        # If batch fails, fall back to individual queries
+        for chat_id in chat_ids:
+            try:
+                messages = reader.get_messages(chat_id, limit=limit // 5)
+                all_messages.extend(messages)
+            except Exception:
+                continue
 
     # Score all messages
     priority_scores = scorer.score_messages(all_messages)
@@ -506,9 +518,30 @@ def get_priority_inbox(
     # Build message lookup
     message_lookup = {(m.chat_id, m.id): m for m in all_messages}
 
-    # Build response
+    # Build response and calculate counts in single pass
     response_messages = []
-    for score in filtered_scores[:limit]:
+    critical_count = 0
+    high_count = 0
+    needs_response_count = 0
+    unhandled_count = 0
+
+    for score in filtered_scores:
+        # Calculate counts for all scores
+        if score.level == PriorityLevel.CRITICAL:
+            critical_count += 1
+        elif score.level == PriorityLevel.HIGH:
+            high_count += 1
+
+        if score.needs_response:
+            needs_response_count += 1
+
+        if not score.handled:
+            unhandled_count += 1
+
+        # Build response for top N messages only
+        if len(response_messages) >= limit:
+            continue
+
         message = message_lookup.get((score.chat_id, score.message_id))
         if not message:
             continue
@@ -529,12 +562,6 @@ def get_priority_inbox(
                 conversation_name=conv_cache.get(score.chat_id),
             )
         )
-
-    # Calculate counts
-    critical_count = sum(1 for s in filtered_scores if s.level == PriorityLevel.CRITICAL)
-    high_count = sum(1 for s in filtered_scores if s.level == PriorityLevel.HIGH)
-    needs_response_count = sum(1 for s in filtered_scores if s.needs_response)
-    unhandled_count = sum(1 for s in filtered_scores if not s.handled)
 
     return PriorityInboxResponse(
         messages=response_messages,

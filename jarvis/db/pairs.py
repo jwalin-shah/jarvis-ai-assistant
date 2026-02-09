@@ -12,9 +12,53 @@ from jarvis.db.models import Pair
 if TYPE_CHECKING:
     from jarvis.db.core import JarvisDBBase
 
+# SQLite parameter limit (typically 999, using 900 for safety margin)
+SQLITE_MAX_PARAMS = 900
+
 
 class PairMixin:
     """Mixin providing pair CRUD and bulk operations."""
+
+    def _deduplicate_pairs(
+        self: JarvisDBBase,
+        processed: list[dict[str, Any]],
+    ) -> list[tuple]:
+        """Deduplicate pairs by content hash.
+
+        Filters out pairs that already exist in the database and removes
+        duplicates within the batch itself.
+
+        Args:
+            processed: List of processed pair data dicts with content_hash.
+
+        Returns:
+            List of data tuples ready for INSERT.
+        """
+        # Get unique hashes from input batch
+        unique_hashes = list({p["content_hash"] for p in processed})
+
+        # Find which ones already exist in DB (chunked to avoid SQLite parameter limits)
+        existing_hashes = set()
+        with self.connection() as conn:
+            for i in range(0, len(unique_hashes), SQLITE_MAX_PARAMS):
+                chunk = unique_hashes[i : i + SQLITE_MAX_PARAMS]
+                placeholders = ",".join("?" * len(chunk))
+                cursor = conn.execute(
+                    f"SELECT content_hash FROM pairs WHERE content_hash IN ({placeholders})",
+                    chunk,
+                )
+                existing_hashes.update(row["content_hash"] for row in cursor)
+
+        # Filter batch: skip existing in DB and duplicates within the batch itself
+        seen_in_batch = set()
+        final_batch = []
+        for p in processed:
+            h = p["content_hash"]
+            if h not in existing_hashes and h not in seen_in_batch:
+                final_batch.append(p["data"])
+                seen_in_batch.add(h)
+
+        return final_batch
 
     def add_pair(
         self: JarvisDBBase,
@@ -154,36 +198,16 @@ class PairMixin:
                 }
             )
 
+        # Deduplicate if requested
+        if dedupe_by_content:
+            final_batch = self._deduplicate_pairs(processed)
+        else:
+            final_batch = [p["data"] for p in processed]
+
+        # Batch insert all pairs at once
         added = 0
-        with self.connection() as conn:
-            # Efficient content deduplication
-            if dedupe_by_content:
-                # Get unique hashes from input batch
-                unique_hashes = list({p["content_hash"] for p in processed})
-
-                # Find which ones already exist in DB (chunked to avoid SQLite parameter limits)
-                existing_hashes = set()
-                for i in range(0, len(unique_hashes), 900):
-                    chunk = unique_hashes[i : i + 900]
-                    placeholders = ",".join("?" * len(chunk))
-                    cursor = conn.execute(
-                        f"SELECT content_hash FROM pairs WHERE content_hash IN ({placeholders})",
-                        chunk,
-                    )
-                    existing_hashes.update(row["content_hash"] for row in cursor)
-
-                # Filter batch: skip existing in DB and duplicates within the batch itself
-                seen_in_batch = set()
-                final_batch = []
-                for p in processed:
-                    h = p["content_hash"]
-                    if h not in existing_hashes and h not in seen_in_batch:
-                        final_batch.append(p["data"])
-                        seen_in_batch.add(h)
-            else:
-                final_batch = [p["data"] for p in processed]
-
-            if final_batch:
+        if final_batch:
+            with self.connection() as conn:
                 # Use executemany with INSERT OR IGNORE for high-performance batch insertion
                 # IGNORE handles UNIQUE(trigger_msg_id, response_msg_id) violations
                 cursor = conn.executemany(
@@ -279,9 +303,9 @@ class PairMixin:
 
         result = {}
         with self.connection() as conn:
-            # Chunk the IDs to avoid SQLite's limit on host parameters (often 999)
-            for i in range(0, len(pair_ids), 900):
-                chunk = pair_ids[i : i + 900]
+            # Chunk the IDs to avoid SQLite's limit on host parameters
+            for i in range(0, len(pair_ids), SQLITE_MAX_PARAMS):
+                chunk = pair_ids[i : i + SQLITE_MAX_PARAMS]
                 placeholders = ",".join("?" * len(chunk))
                 cursor = conn.execute(
                     f"""SELECT id, contact_id, trigger_text, response_text, trigger_timestamp,

@@ -24,8 +24,7 @@ def main() -> None:
     mx.set_cache_limit(512 * 1024 * 1024)
 
     print(
-        f"MLX memory limit: 1GB, cache limit: 512MB "
-        f"(device: {mx.default_device()})",
+        f"MLX memory limit: 1GB, cache limit: 512MB (device: {mx.default_device()})",
         flush=True,
     )
 

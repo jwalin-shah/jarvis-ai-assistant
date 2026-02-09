@@ -17,9 +17,9 @@ import platform
 import re
 import subprocess
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator
 
 import psutil
 
@@ -52,8 +52,10 @@ class MacOSMemoryPressure:
     compressed_ratio: float  # Compression ratio (compressed/compressor)
 
     def __str__(self) -> str:
-        status = "GOOD" if self.pressure_level == 0 else (
-            "WARNING" if self.pressure_level < 100 else "CRITICAL"
+        status = (
+            "GOOD"
+            if self.pressure_level == 0
+            else ("WARNING" if self.pressure_level < 100 else "CRITICAL")
         )
         return (
             f"Pressure: {self.pressure_level} ({status}), "
@@ -109,16 +111,13 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
             # Extract from "page size of 16384 bytes"
             for line in vm_stat.splitlines():
                 if "page size" in line:
-                    match = re.search(r'(\d+)\s+bytes', line)
+                    match = re.search(r"(\d+)\s+bytes", line)
                     if match:
                         page_size = int(match.group(1))
                         break
 
         # Get sysctl metrics
-        sysctl = subprocess.check_output(
-            ["sysctl", "vm.memory_pressure"],
-            text=True
-        ).strip()
+        sysctl = subprocess.check_output(["sysctl", "vm.memory_pressure"], text=True).strip()
         pressure_level = int(sysctl.split(":")[-1].strip())
 
         # Calculate metrics

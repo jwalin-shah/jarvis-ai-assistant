@@ -180,21 +180,33 @@ class DraftScheduler:
 
         if result.success:
             self._queue.mark_sent(item.id)
-            # Notify callbacks
-            for callback in self._on_send_callbacks:
+            # Notify callbacks (failures are logged but don't prevent other callbacks)
+            for i, callback in enumerate(self._on_send_callbacks):
                 try:
                     callback(item)
                 except Exception as e:
-                    logger.exception(f"Send callback error: {e}")
+                    logger.error(
+                        "Send callback %d failed for item %s: %s",
+                        i,
+                        item.id,
+                        e,
+                        exc_info=True,
+                    )
         else:
             error = result.error or "Unknown error"
             self._queue.mark_failed(item.id, error)
-            # Notify callbacks
-            for callback in self._on_fail_callbacks:
+            # Notify callbacks (failures are logged but don't prevent other callbacks)
+            for i, callback in enumerate(self._on_fail_callbacks):
                 try:
                     callback(item, error)
                 except Exception as e:
-                    logger.exception(f"Fail callback error: {e}")
+                    logger.error(
+                        "Fail callback %d failed for item %s: %s",
+                        i,
+                        item.id,
+                        e,
+                        exc_info=True,
+                    )
 
     def schedule_draft(
         self,
@@ -238,12 +250,18 @@ class DraftScheduler:
 
         self._queue.add(item)
 
-        # Notify callbacks
-        for callback in self._on_schedule_callbacks:
+        # Notify callbacks (failures are logged but don't prevent other callbacks)
+        for i, callback in enumerate(self._on_schedule_callbacks):
             try:
                 callback(item)
             except Exception as e:
-                logger.exception(f"Schedule callback error: {e}")
+                logger.error(
+                    "Schedule callback %d failed for item %s: %s",
+                    i,
+                    item.id,
+                    e,
+                    exc_info=True,
+                )
 
         logger.info(f"Draft scheduled: {item.id} for {send_at}")
         return item

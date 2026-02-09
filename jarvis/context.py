@@ -3,10 +3,13 @@
 Retrieves and formats iMessage data for use in LLM prompts.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
 from contracts.imessage import Conversation, Message, iMessageReader
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -218,14 +221,14 @@ class ContextFetcher:
         messages = self._reader.get_messages(chat_id, limit=num_messages)
 
         # Messages come newest-first, reverse for chronological order
-        messages = list(reversed(messages))
+        messages = messages[::-1]
 
         participant_names = self._get_participant_names(chat_id)
         formatted = self._format_messages(messages, participant_names)
 
-        # Find last received message (not from me)
+        # Find last received message (not from me) - iterate backwards
         last_received: Message | None = None
-        for msg in reversed(messages):
+        for msg in messages[::-1]:
             if not msg.is_from_me:
                 last_received = msg
                 break
@@ -253,7 +256,7 @@ class ContextFetcher:
         messages = self._reader.get_messages(chat_id, limit=num_messages)
 
         # Messages come newest-first, reverse for chronological order
-        messages = list(reversed(messages))
+        messages = messages[::-1]
 
         participant_names = self._get_participant_names(chat_id)
         formatted = self._format_messages(messages, participant_names)
@@ -262,6 +265,9 @@ class ContextFetcher:
         if messages:
             date_range = (messages[0].date, messages[-1].date)
         else:
+            # Fallback: no messages found, use current time
+            # This preserves the original behavior while documenting the edge case
+            logger.debug("No messages found for summary context (chat_id=%s), using current time as fallback", chat_id)
             now = datetime.now()
             date_range = (now, now)
 

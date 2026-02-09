@@ -409,6 +409,18 @@ def get_task(task_id: str) -> TaskResponse:
     return _task_to_response(task)
 
 
+@router.delete("/completed/clear")
+def clear_completed_tasks() -> dict[str, Any]:
+    """Clear all completed tasks from the queue.
+
+    Returns:
+        Number of tasks removed.
+    """
+    queue = get_task_queue()
+    count = queue.clear_completed()
+    return {"success": True, "tasks_removed": count}
+
+
 @router.delete("/{task_id}")
 def cancel_task(task_id: str) -> dict[str, Any]:
     """Cancel a pending task.
@@ -510,15 +522,3 @@ def stop_task_worker() -> dict[str, Any]:
 
     stop_worker()
     return {"success": True, "message": "Worker stopped"}
-
-
-@router.delete("/completed/clear")
-def clear_completed_tasks() -> dict[str, Any]:
-    """Clear all completed tasks from the queue.
-
-    Returns:
-        Number of tasks removed.
-    """
-    queue = get_task_queue()
-    count = queue.clear_completed()
-    return {"success": True, "tasks_removed": count}

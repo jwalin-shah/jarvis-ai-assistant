@@ -16,6 +16,7 @@ import hashlib
 import logging
 import re
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -25,6 +26,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from contracts.imessage import Message
+    from jarvis.embedding_adapter import CachedEmbedder
 
 logger = logging.getLogger(__name__)
 
@@ -442,12 +444,15 @@ class ThreadAnalyzer:
             config: Threading configuration options
         """
         self.config = config or ThreadingConfig()
-        self._sentence_model: Any | None = None
+        self._sentence_model: CachedEmbedder | None = None
         self._topic_embeddings: dict[ThreadTopic, np.ndarray] | None = None
         self._lock = threading.Lock()
-        self._embeddings_cache: dict[str, np.ndarray] = {}
+        # LRU cache for embeddings with 1000 entry limit (per CODE_REVIEW.md #15)
+        # Prevents unbounded memory growth on 8GB systems
+        self._embeddings_cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._cache_maxsize = 1000
 
-    def _get_sentence_model(self) -> Any:
+    def _get_sentence_model(self) -> CachedEmbedder | None:
         """Get the sentence transformer model with lazy loading."""
         if self._sentence_model is not None:
             return self._sentence_model
@@ -491,29 +496,39 @@ class ThreadAnalyzer:
             return True
 
     def _compute_embedding(self, text: str) -> np.ndarray | None:
-        """Compute embedding for a text string with caching."""
+        """Compute embedding for a text string with LRU caching.
+
+        Cache is bounded to 1000 entries to prevent memory growth on 8GB systems.
+        Uses LRU eviction: most recently accessed entries are kept.
+        """
         if not text or not text.strip():
             return None
 
         cache_key = hashlib.md5(text.encode()).hexdigest()
-        if cache_key in self._embeddings_cache:
-            return self._embeddings_cache[cache_key]
+        with self._lock:
+            if cache_key in self._embeddings_cache:
+                # Move to end (mark as recently used) for LRU eviction
+                self._embeddings_cache.move_to_end(cache_key)
+                return self._embeddings_cache[cache_key]
 
         try:
             model = self._get_sentence_model()
             if not model:
                 return None
-            embedding = model.encode([text], convert_to_numpy=True)[0]
+            embeddings = model.encode([text], convert_to_numpy=True)
+            embedding: np.ndarray = embeddings[0]
             embedding = embedding / np.linalg.norm(embedding)
-            # Evict oldest entries if cache exceeds max size
-            if len(self._embeddings_cache) >= 10000:
-                # Remove first 1000 entries (oldest inserted)
-                keys_to_remove = list(self._embeddings_cache.keys())[:1000]
-                for k in keys_to_remove:
-                    del self._embeddings_cache[k]
-            self._embeddings_cache[cache_key] = embedding
+
+            # Store in cache with LRU eviction
+            with self._lock:
+                self._embeddings_cache[cache_key] = embedding
+                if len(self._embeddings_cache) > self._cache_maxsize:
+                    # Remove oldest (least recently used) entry
+                    self._embeddings_cache.popitem(last=False)
+
             return embedding
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to compute embedding for text: %s", e)
             return None
 
     def _compute_similarity(self, text1: str, text2: str) -> float:

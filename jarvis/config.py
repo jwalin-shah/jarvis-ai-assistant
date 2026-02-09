@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -806,6 +807,9 @@ def save_config(config: JarvisConfig, config_path: Path | None = None) -> bool:
         # Write config with pretty formatting
         with path.open("w") as f:
             json.dump(config.model_dump(), f, indent=2)
+
+        # Restrict permissions to owner-only (config may contain sensitive settings)
+        os.chmod(path, 0o600)
 
         logger.debug(f"Configuration saved to {path}")
         return True

@@ -42,12 +42,16 @@ def predict_with_adaptive_thresholds(
     if text:
         words = text.split()
         num_words = len(words)
-        has_conjunction = any(word in text.lower() for word in ['but', 'and', 'also', 'though', 'however'])
-        num_punctuation_types = sum([
-            '?' in text,
-            '!' in text,
-            '.' in text and not text.strip().endswith('...'),
-        ])
+        has_conjunction = any(
+            word in text.lower() for word in ["but", "and", "also", "though", "however"]
+        )
+        num_punctuation_types = sum(
+            [
+                "?" in text,
+                "!" in text,
+                "." in text and not text.strip().endswith("..."),
+            ]
+        )
 
         # Indicators of single-label message
         if num_words < 5:  # Very short

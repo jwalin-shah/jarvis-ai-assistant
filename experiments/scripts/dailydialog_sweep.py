@@ -88,11 +88,7 @@ def load_data_once() -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     print(f"Embeddings: {embedding_dims}d, Hand-crafted: {hand_crafted_dims}d")
     print(f"Labels: {sorted(set(y_train))}")
 
-    return (
-        X_train_emb, X_train_hc, y_train,
-        X_test_emb, X_test_hc, y_test,
-        metadata
-    )
+    return (X_train_emb, X_train_hc, y_train, X_test_emb, X_test_hc, y_test, metadata)
 
 
 def apply_label_mapping(
@@ -191,7 +187,9 @@ def run_single_experiment(
     # 5-fold cross-validation (n_jobs=1 for 8GB RAM constraint)
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
     cv_scores = cross_val_score(
-        svm, X_train, y_train,
+        svm,
+        X_train,
+        y_train,
         cv=cv,
         scoring="f1_macro",
         n_jobs=1,
@@ -205,11 +203,7 @@ def run_single_experiment(
     # Per-class F1 on test set
     report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
     labels = sorted(set(y_test))
-    per_class_f1 = {
-        label: report[label]["f1-score"]
-        for label in labels
-        if label in report
-    }
+    per_class_f1 = {label: report[label]["f1-score"] for label in labels if label in report}
 
     return {
         "cv_mean_f1": float(np.mean(cv_scores)),
@@ -225,11 +219,9 @@ def run_sweep(quick: bool = False) -> list[dict]:
     Returns list of experiment results.
     """
     # Load data once
-    (
-        X_train_emb, X_train_hc, y_train_raw,
-        X_test_emb, X_test_hc, y_test_raw,
-        metadata
-    ) = load_data_once()
+    (X_train_emb, X_train_hc, y_train_raw, X_test_emb, X_test_hc, y_test_raw, metadata) = (
+        load_data_once()
+    )
 
     # Generate all configurations
     experiments = []
@@ -243,13 +235,15 @@ def run_sweep(quick: bool = False) -> list[dict]:
             for balance_strat in balancing_strategies:
                 for C in C_VALUES:
                     for class_weight in CLASS_WEIGHTS:
-                        experiments.append({
-                            "category_config": cat_config,
-                            "feature_set": feat_set,
-                            "balancing": balance_strat,
-                            "C": C,
-                            "class_weight": class_weight,
-                        })
+                        experiments.append(
+                            {
+                                "category_config": cat_config,
+                                "feature_set": feat_set,
+                                "balancing": balance_strat,
+                                "C": C,
+                                "class_weight": class_weight,
+                            }
+                        )
 
     total = len(experiments)
     logger.info("Generated %d experiment configurations", total)
@@ -266,12 +260,8 @@ def run_sweep(quick: bool = False) -> list[dict]:
         y_test = apply_label_mapping(y_test_raw, config["category_config"])
 
         # Select features
-        X_train_features = select_features(
-            X_train_emb, X_train_hc, config["feature_set"]
-        )
-        X_test_features = select_features(
-            X_test_emb, X_test_hc, config["feature_set"]
-        )
+        X_train_features = select_features(X_train_emb, X_train_hc, config["feature_set"])
+        X_test_features = select_features(X_test_emb, X_test_hc, config["feature_set"])
 
         # Apply balancing
         X_train_balanced, y_train_balanced = apply_balancing(
@@ -280,8 +270,10 @@ def run_sweep(quick: bool = False) -> list[dict]:
 
         # Run experiment
         metrics = run_single_experiment(
-            X_train_balanced, y_train_balanced,
-            X_test_features, y_test,
+            X_train_balanced,
+            y_train_balanced,
+            X_test_features,
+            y_test,
             C=config["C"],
             class_weight=config["class_weight"],
         )
@@ -303,7 +295,8 @@ def run_sweep(quick: bool = False) -> list[dict]:
 
         logger.info(
             "[%3d/%3d] %s | CV F1: %.3f ± %.3f | Test F1: %.3f | %.1fs (ETA: %.0fm)",
-            i + 1, total,
+            i + 1,
+            total,
             _config_str(config),
             metrics["cv_mean_f1"],
             metrics["cv_std_f1"],
@@ -365,7 +358,8 @@ def main() -> int:
         description="Run systematic experiment sweep for DailyDialog classifier"
     )
     parser.add_argument(
-        "--quick", action="store_true",
+        "--quick",
+        action="store_true",
         help="Quick mode: 3-class combined features only (32 experiments)",
     )
     args = parser.parse_args()
@@ -379,7 +373,14 @@ def main() -> int:
     logger.info("=" * 120)
     logger.info(
         "%-6s  %-10s  %-8s  %6s  %-8s  %8s  %8s  %8s",
-        "Cat", "Features", "Balance", "C", "Weight", "CV F1", "CV Std", "Test F1",
+        "Cat",
+        "Features",
+        "Balance",
+        "C",
+        "Weight",
+        "CV F1",
+        "CV Std",
+        "Test F1",
     )
     logger.info("-" * 120)
 

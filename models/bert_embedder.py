@@ -211,16 +211,7 @@ class BertModel(nn.Module):
 
 def load_bert_weights(model: BertModel, weights_path: Path, has_pooler: bool = True) -> None:
     """Load weights from HuggingFace safetensors into our model."""
-    import psutil
-    proc = psutil.Process()
-
-    mem_before = proc.memory_info()
-    print(f"[BERT] BEFORE mx.load: RSS={mem_before.rss/1024/1024:.1f} MB, VMS={mem_before.vms/1024/1024:.1f} MB")
-
     hf_weights = mx.load(str(weights_path))
-
-    mem_after = proc.memory_info()
-    print(f"[BERT] AFTER mx.load: RSS={mem_after.rss/1024/1024:.1f} MB (+{(mem_after.rss-mem_before.rss)/1024/1024:.1f}), VMS={mem_after.vms/1024/1024:.1f} MB (+{(mem_after.vms-mem_before.vms)/1024/1024:.1f})")
 
     new_weights = {}
 
@@ -250,19 +241,14 @@ def load_bert_weights(model: BertModel, weights_path: Path, has_pooler: bool = T
 
         new_weights[name] = weight
 
-    mem_before_load = proc.memory_info()
-    print(f"[BERT] BEFORE model.load_weights: RSS={mem_before_load.rss/1024/1024:.1f} MB, VMS={mem_before_load.vms/1024/1024:.1f} MB")
+    # CRITICAL: Delete original weights dict BEFORE loading into model to reduce peak memory
+    # This prevents holding 2 copies (hf_weights + model params) simultaneously on 8GB systems
+    del hf_weights
 
     model.load_weights(list(new_weights.items()))
 
-    mem_after_load = proc.memory_info()
-    print(f"[BERT] AFTER model.load_weights: RSS={mem_after_load.rss/1024/1024:.1f} MB (+{(mem_after_load.rss-mem_before_load.rss)/1024/1024:.1f}), VMS={mem_after_load.vms/1024/1024:.1f} MB (+{(mem_after_load.vms-mem_before_load.vms)/1024/1024:.1f})")
-
-    # FREE MEMORY: Delete weight dicts immediately (they're copied into model params)
-    del hf_weights, new_weights
-
-    mem_after_del = proc.memory_info()
-    print(f"[BERT] AFTER deleting weight dicts: RSS={mem_after_del.rss/1024/1024:.1f} MB, VMS={mem_after_del.vms/1024/1024:.1f} MB")
+    # FREE MEMORY: Delete new_weights dict (hf_weights already deleted above)
+    del new_weights
 
 
 # =============================================================================
@@ -311,6 +297,13 @@ class InProcessEmbedder:
             )
 
         with self._get_gpu_lock():
+            # CRITICAL: Set MLX memory limit BEFORE any MLX operations to prevent 5GB VMS spike on 8GB systems
+            # Without this, MLX allocates 4-5GB virtual memory during batch encoding,
+            # triggering swap even though RSS stays low
+            # Must be set immediately after acquiring GPU lock, before model creation or weight loading
+            mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
+            mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB cache
+
             # Double-check after acquiring lock
             if self.model_name == model_name:
                 return
@@ -331,7 +324,10 @@ class InProcessEmbedder:
 
             # Find snapshot
             snapshots_dir = model_dir / "snapshots"
-            snapshot = next(snapshots_dir.iterdir())
+            snapshots = list(snapshots_dir.iterdir())
+            if not snapshots:
+                raise FileNotFoundError(f"No snapshots found in {snapshots_dir}")
+            snapshot = snapshots[0]
 
             # Load config
             config_path = snapshot / "config.json"
@@ -352,37 +348,22 @@ class InProcessEmbedder:
             layers = self.config["num_hidden_layers"]
             logger.info(
                 "Loading %s (hidden=%d, layers=%d, pooler=%s)",
-                model_name, hidden, layers, has_pooler,
+                model_name,
+                hidden,
+                layers,
+                has_pooler,
             )
             start = time.time()
-
-            import psutil
-            proc = psutil.Process()
-
-            # CRITICAL: Set MLX memory limit BEFORE model creation to prevent 5GB VMS spike on 8GB systems
-            # Without this, MLX allocates 4-5GB virtual memory during batch encoding,
-            # triggering swap even though RSS stays low
-            mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
-            mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB cache
 
             self.model = BertModel(self.config, add_pooler=has_pooler)
             load_bert_weights(self.model, weights_path, has_pooler=has_pooler)
 
-            mem_before_eval = proc.memory_info()
-            print(f"[BERT] BEFORE mx.eval: RSS={mem_before_eval.rss/1024/1024:.1f} MB, VMS={mem_before_eval.vms/1024/1024:.1f} MB")
-
             mx.eval(self.model.parameters())
-
-            mem_after_eval = proc.memory_info()
-            print(f"[BERT] AFTER mx.eval: RSS={mem_after_eval.rss/1024/1024:.1f} MB (+{(mem_after_eval.rss-mem_before_eval.rss)/1024/1024:.1f}), VMS={mem_after_eval.vms/1024/1024:.1f} MB (+{(mem_after_eval.vms-mem_before_eval.vms)/1024/1024:.1f})")
 
             # Clear cache after loading to free temp GPU buffers
             gc.collect()
             if hasattr(mx, "clear_cache"):
                 mx.clear_cache()
-
-            mem_after_clear = proc.memory_info()
-            print(f"[BERT] AFTER mx.clear_cache: RSS={mem_after_clear.rss/1024/1024:.1f} MB, VMS={mem_after_clear.vms/1024/1024:.1f} MB")
 
             self.model_name = model_name
             logger.info("Model loaded in %.2fs", time.time() - start)
@@ -470,9 +451,7 @@ class InProcessEmbedder:
                     batch_emb = hidden_states[:, 0, :]
 
                     if normalize:
-                        norms = mx.maximum(
-                            mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9
-                        )
+                        norms = mx.maximum(mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9)
                         batch_emb = batch_emb / norms
 
                     mx.eval(batch_emb)

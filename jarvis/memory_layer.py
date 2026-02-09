@@ -9,7 +9,10 @@ from __future__ import annotations
 import logging
 import threading
 
-from mem0 import Memory
+try:
+    from mem0 import Memory
+except ImportError:
+    Memory = None  # type: ignore[assignment,misc]
 
 __all__ = ["JARVISMemory", "get_memory"]
 
@@ -20,6 +23,10 @@ class JARVISMemory:
     """Memory layer wrapper for JARVIS using Mem0."""
 
     def __init__(self, user_id: str = "default_user") -> None:
+        if Memory is None:
+            raise ImportError(
+                "mem0 is required for JARVISMemory. Install with: pip install mem0ai"
+            )
         self.user_id = user_id
         # Configure Mem0 for local operation
         # Note: By default it uses local storage if no API key provided

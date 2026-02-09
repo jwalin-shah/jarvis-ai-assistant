@@ -114,13 +114,13 @@ class GracefulDegradationController:
             KeyError: If feature is not registered
         """
         # Acquire registration once, outside the critical path
+        # Copy needed data while holding lock to prevent race conditions
         with self._lock:
             if feature_name not in self._features:
                 raise KeyError(f"Feature '{feature_name}' is not registered")
             registration = self._features[feature_name]
-
-        policy = registration.policy
-        circuit = registration.circuit_breaker
+            policy = registration.policy
+            circuit = registration.circuit_breaker
 
         # Determine which callable to use as primary
         callable_func = primary or registration.primary_callable

@@ -586,13 +586,12 @@ class JarvisSocketServer:
                 await websocket.close(4001, "Unauthorized")
                 return
 
-        # Enforce connection limit
-        if len(self._ws_clients) >= MAX_WS_CONNECTIONS:
-            logger.warning("WebSocket connection limit reached (%d)", MAX_WS_CONNECTIONS)
-            await websocket.close(4002, "Too many connections")
-            return
-
+        # Enforce connection limit (check inside lock to avoid TOCTOU race)
         async with self._clients_lock:
+            if len(self._ws_clients) >= MAX_WS_CONNECTIONS:
+                logger.warning("WebSocket connection limit reached (%d)", MAX_WS_CONNECTIONS)
+                await websocket.close(4002, "Too many connections")
+                return
             self._ws_clients.add(websocket)
         logger.debug(f"WebSocket client connected: {websocket.remote_address}")
 
@@ -1311,9 +1310,11 @@ Summary:"""
             try:
                 if isinstance(params, dict):
                     # Remove streaming params - batch doesn't support streaming
-                    params.pop("stream", None)
-                    params.pop("_writer", None)
-                    params.pop("_request_id", None)
+                    params = {
+                        k: v
+                        for k, v in params.items()
+                        if k not in ("stream", "_writer", "_request_id")
+                    }
                     result = await handler(**params)
                 elif isinstance(params, list):
                     result = await handler(*params)
