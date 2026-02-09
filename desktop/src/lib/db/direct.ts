@@ -296,15 +296,111 @@ export async function getMessages(
   params.push(limit);
 
   try {
+    const startTime = performance.now();
     const rows = await chatDb.select<MessageRow[]>(query, params);
-    const messages: Message[] = [];
 
+    // PERF FIX: Batch prefetch attachments and reactions to avoid N+1 queries
+    // Before: 100 messages × (1 attachment query + 1 reaction query) = 201 queries
+    // After: 1 message query + 1 batch attachment query + 1 batch reaction query = 3 queries
+    const messageIds = rows.map((row) => row.id);
+    const messageGuids = rows.map((row) => row.guid);
+
+    // Prefetch all attachments in a single query
+    const attachmentsByMessageId = new Map<number, Attachment[]>();
+    if (messageIds.length > 0) {
+      const attachmentQuery = `
+        SELECT
+          message_attachment_join.message_id,
+          attachment.ROWID as attachment_id,
+          attachment.filename,
+          attachment.mime_type,
+          attachment.total_bytes as file_size,
+          attachment.transfer_name
+        FROM message_attachment_join
+        JOIN attachment ON message_attachment_join.attachment_id = attachment.ROWID
+        WHERE message_attachment_join.message_id IN (${messageIds.map(() => "?").join(",")})
+      `;
+      const attachmentRows = await chatDb.select<(AttachmentRow & { message_id: number })[]>(
+        attachmentQuery,
+        messageIds
+      );
+
+      for (const row of attachmentRows) {
+        const msgId = row.message_id;
+        if (!attachmentsByMessageId.has(msgId)) {
+          attachmentsByMessageId.set(msgId, []);
+        }
+        attachmentsByMessageId.get(msgId)!.push({
+          filename: row.transfer_name || row.filename || "attachment",
+          file_path: row.filename,
+          mime_type: row.mime_type,
+          file_size: row.file_size,
+        });
+      }
+    }
+
+    // Prefetch all reactions in a single query
+    const reactionsByMessageGuid = new Map<string, Reaction[]>();
+    if (messageGuids.length > 0 && messageGuids.some((g) => g)) {
+      const validGuids = messageGuids.filter((g) => g);
+      if (validGuids.length > 0) {
+        const reactionQuery = `
+          SELECT
+            associated_message.guid as message_guid,
+            reaction.ROWID as id,
+            reaction.associated_message_type,
+            reaction.date,
+            reaction.is_from_me,
+            COALESCE(handle.id, 'me') as sender
+          FROM message AS reaction
+          JOIN message AS associated_message ON reaction.associated_message_guid = associated_message.guid
+          LEFT JOIN handle ON reaction.handle_id = handle.ROWID
+          WHERE associated_message.guid IN (${validGuids.map(() => "?").join(",")})
+            AND reaction.associated_message_type IS NOT NULL
+        `;
+        const reactionRows = await chatDb.select<(ReactionRow & { message_guid: string })[]>(
+          reactionQuery,
+          validGuids
+        );
+
+        for (const row of reactionRows) {
+          const reactionType = parseReactionType(row.associated_message_type);
+          if (!reactionType || reactionType.startsWith("remove_")) {
+            continue;
+          }
+
+          const guid = row.message_guid;
+          if (!reactionsByMessageGuid.has(guid)) {
+            reactionsByMessageGuid.set(guid, []);
+          }
+
+          const sender = normalizePhoneNumber(row.sender) || row.sender;
+          reactionsByMessageGuid.get(guid)!.push({
+            type: reactionType,
+            sender,
+            sender_name: row.is_from_me ? null : resolveContactName(sender),
+            date: formatDate(parseAppleTimestamp(row.date)) || "",
+          });
+        }
+      }
+    }
+
+    // Convert rows to messages using prefetched data
+    const messages: Message[] = [];
     for (const row of rows) {
-      const message = await rowToMessage(row, chatId);
+      const message = await rowToMessage(
+        row,
+        chatId,
+        attachmentsByMessageId.get(row.id) || [],
+        reactionsByMessageGuid.get(row.guid) || []
+      );
       if (message) {
         messages.push(message);
       }
     }
+
+    const elapsed = performance.now() - startTime;
+    console.log(`[DirectDB] getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`);
 
     return messages;
   } catch (error) {
@@ -401,10 +497,17 @@ export async function getNewMessagesSince(
 
 /**
  * Convert a database row to a Message object
+ *
+ * @param row - Message row from database
+ * @param chatId - Chat identifier
+ * @param prefetchedAttachments - Optional prefetched attachments (to avoid N+1 query)
+ * @param prefetchedReactions - Optional prefetched reactions (to avoid N+1 query)
  */
 async function rowToMessage(
   row: MessageRow,
-  chatId: string
+  chatId: string,
+  prefetchedAttachments?: Attachment[],
+  prefetchedReactions?: Reaction[]
 ): Promise<Message | null> {
   // Get sender and resolve name
   const sender = normalizePhoneNumber(row.sender) || row.sender;
@@ -446,8 +549,10 @@ async function rowToMessage(
     text = parseAttributedBody(row.attributedBody) || "";
   }
 
-  // Get attachments
-  const attachments = await getAttachmentsForMessage(row.id);
+  // Get attachments (use prefetched if available to avoid N+1 query)
+  const attachments = prefetchedAttachments !== undefined
+    ? prefetchedAttachments
+    : await getAttachmentsForMessage(row.id);
 
   // Skip messages with no content
   if (!text && attachments.length === 0) {
@@ -460,8 +565,10 @@ async function rowToMessage(
     replyToId = await getMessageRowidByGuid(row.reply_to_guid);
   }
 
-  // Get reactions
-  const reactions = await getReactionsForMessage(row.guid);
+  // Get reactions (use prefetched if available to avoid N+1 query)
+  const reactions = prefetchedReactions !== undefined
+    ? prefetchedReactions
+    : await getReactionsForMessage(row.guid);
 
   // Parse delivery/read receipts
   let dateDelivered: string | null = null;

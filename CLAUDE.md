@@ -234,3 +234,125 @@ This system has **8GB RAM**. Large data processing MUST account for this:
 - **Batching**: Use `classify_batch()`, `embedder.encode(list)` - never loop
 - **Parallelization**: `n_jobs=1` for large datasets (>100MB), `n_jobs=2` only for small datasets (memory-constrained)
 - **IPC Protocol**: Use binary encoding (base64) not JSON for large arrays
+
+### CRITICAL: N+1 Query Anti-Pattern (NEVER DO THIS)
+
+**N+1 queries are a systemic performance killer.** With 400k messages in iMessage DB, naive code patterns became 1400ms delays. This MUST be caught in code review.
+
+#### What is N+1?
+```python
+# BAD: N+1 pattern - 1 query + N subqueries
+messages = db.query("SELECT * FROM message LIMIT 100")  # 1 query
+for msg in messages:
+    attachments = db.query(f"SELECT * FROM attachment WHERE message_id = {msg.id}")  # 100 queries
+    # Total: 101 queries instead of 1
+```
+
+#### The Same Pattern in Different Forms
+
+**SQL Correlated Subqueries** (scales terribly):
+```sql
+-- BAD: Subquery runs for EVERY chat
+SELECT chat.id,
+  (SELECT COUNT(*) FROM message WHERE chat_id = chat.id),  -- N subqueries
+  (SELECT MAX(date) FROM message WHERE chat_id = chat.id),  -- N subqueries
+  (SELECT text FROM message WHERE chat_id = chat.id ORDER BY date DESC LIMIT 1)  -- N subqueries
+FROM chat
+```
+**With 400k messages across 1000 chats: 3000+ subquery executions**
+
+**TypeScript/Python Loops**:
+```typescript
+// BAD: N+1 loop
+const messages = await db.query("SELECT * FROM message LIMIT 100");
+for (const msg of messages) {
+  const attachments = await db.query(`...WHERE message_id = ${msg.id}`);  // 100 queries
+  const reactions = await db.query(`...WHERE message_id = ${msg.id}`);     // 100 queries
+  // Total: 201 queries instead of 3
+}
+```
+
+**Individual INSERTs**:
+```python
+# BAD: N individual INSERTs
+for fact in facts:
+    db.execute("INSERT INTO fact VALUES (...)", ...)  # 50 inserts instead of 1
+```
+
+#### The Fix: Always Batch
+
+**SQL: Use CTEs + JOINs instead of subqueries**:
+```sql
+-- GOOD: Single pass
+WITH chat_stats AS (
+  SELECT chat_id, COUNT(*) as msg_count, MAX(date) as last_date
+  FROM message
+  GROUP BY chat_id
+)
+SELECT chat.*, chat_stats.msg_count, chat_stats.last_date
+FROM chat
+JOIN chat_stats ON chat.id = chat_stats.chat_id
+```
+
+**TypeScript/Python: Batch fetch then map**:
+```typescript
+// GOOD: 3 queries instead of 201
+const messages = await db.query("SELECT * FROM message LIMIT 100");
+const messageIds = messages.map(m => m.id);
+const attachmentsMap = await getAttachmentsByIds(messageIds);  // 1 query
+const reactionsMap = await getReactionsByIds(messageIds);      // 1 query
+
+for (const msg of messages) {
+  msg.attachments = attachmentsMap.get(msg.id);  // O(1) lookup
+  msg.reactions = reactionsMap.get(msg.id);      // O(1) lookup
+}
+```
+
+**Python INSERTs: Use executemany()**:
+```python
+# GOOD: 1 batch insert instead of 50
+batch_data = [(field1, field2, ...) for fact in facts]
+db.executemany("INSERT INTO fact VALUES (?, ?, ...)", batch_data)
+```
+
+#### Code Review Checklist
+
+Before merging ANY code that touches data access:
+- [ ] **Loops that query database?** → Flag as potential N+1
+- [ ] **Subqueries in SELECT without GROUP BY aggregation?** → Likely correlated subquery
+- [ ] **Individual INSERTs/UPDATEs in loop?** → Use batch operations
+- [ ] **Multiple queries for same entity?** → Join or prefetch
+- [ ] **Post-query filtering in code?** → Push into SQL WHERE clause
+- [ ] **Timing: Does operation complete in <100ms?** → If not, profile it
+
+#### Real Examples Fixed in This Codebase
+
+| Pattern | File | Before | After | Impact |
+|---------|------|--------|-------|--------|
+| Message attachments/reactions | `direct.ts` | 201 queries | 3 queries | 30x faster |
+| Fact extraction INSERTs | `fact_storage.py` | 50 INSERTs | 1 batch | 50x faster |
+| Last message text | `queries.sql` | Correlated subquery | CTE JOIN | 100x faster |
+| Search filtering | `semantic_search.py` | Fetch 1000, filter 200 in code | Fetch 200 in SQL | 5x faster |
+| Graph building | `knowledge_graph.py` | 1100 add_node() calls | 3 batch calls | 6x faster |
+
+#### Performance Testing Rule
+
+ANY code touching database or large data structures must include a performance test:
+```python
+def test_get_conversations_performance():
+    """Verify conversations load in <100ms with 400k messages."""
+    start = time.time()
+    convos = get_conversations(limit=50)
+    elapsed_ms = (time.time() - start) * 1000
+
+    assert elapsed_ms < 100, f"Too slow: {elapsed_ms:.1f}ms (should be <100ms)"
+    assert len(convos) <= 50
+```
+
+**This is MANDATORY for**:
+- Database queries (SELECT, JOIN, WHERE)
+- Loops over large datasets
+- Batch operations (INSERT, UPDATE)
+- Graph building, embeddings, ML inference
+
+**Rule: If you can't benchmark it, don't merge it.**

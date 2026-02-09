@@ -104,7 +104,7 @@ class DisentangledAttention(nn.Module):
             idx_t = mx.broadcast_to(
                 rel_idx.transpose(1, 0)[None, None], (B, self.num_heads, S, S)
             )
-            scores = scores + mx.take_along_axis(p2c_all, idx_t, axis=-1)
+            scores = scores + mx.take_along_axis(p2c_all, idx_t, axis=-1).transpose(0, 1, 3, 2)
 
         scores = scores * self._scale
         if attention_mask is not None:
@@ -136,8 +136,8 @@ class DisentangledAttention(nn.Module):
         log_pos = mx.minimum(log_pos, self.position_buckets - 1)
 
         bucket = mx.where(is_small, abs_pos, log_pos)
-        indices = (sign * bucket).astype(mx.int32) + (self.position_buckets - 1)
-        return mx.clip(indices, 0, 2 * self.position_buckets - 2)
+        indices = (sign * bucket).astype(mx.int32) + self.position_buckets
+        return mx.clip(indices, 0, 2 * self.position_buckets - 1)
 
 
 # ---------------------------------------------------------------------------
