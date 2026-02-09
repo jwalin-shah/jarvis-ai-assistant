@@ -255,7 +255,7 @@ class GraphBuilder:
                         }
                     )
         except Exception as e:
-            logger.warning(f"Error fetching contacts: {e}")
+            logger.warning("Error fetching contacts: %s", e)
 
         return contacts
 
@@ -348,7 +348,7 @@ class GraphBuilder:
                             stats[participant]["last_contact"] = last_str
 
         except Exception as e:
-            logger.warning(f"Error getting message stats: {e}")
+            logger.warning("Error getting message stats: %s", e)
 
         return stats
 
