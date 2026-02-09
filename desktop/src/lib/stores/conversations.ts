@@ -318,44 +318,99 @@ export async function fetchConversations(isPolling = false): Promise<void> {
 
   try {
     let conversations: Conversation[];
+    const fetchStartTime = performance.now();
+    let fetchMethod = "unknown";
 
     // 1. Try socket first (fastest in Tauri context)
     if (isTauri) {
       try {
+        const socketStartTime = performance.now();
         const result = await jarvis.call<{ conversations: Conversation[] }>(
           "list_conversations",
           { limit: 50 }
         );
+        const socketMs = performance.now() - socketStartTime;
         conversations = result.conversations;
-        console.log("[Conversations] Using socket for conversations");
+        fetchMethod = "socket";
+        console.log(
+          `[Conversations] Socket fetch took ${socketMs.toFixed(1)}ms ` +
+          `(${conversations.length} conversations)`
+        );
       } catch (socketError) {
         console.warn("[Conversations] Socket call failed, trying direct SQLite:", socketError);
 
         // 2. Fall back to direct SQLite
         if (isDirectAccessAvailable()) {
           try {
+            const directStartTime = performance.now();
             conversations = await getConversationsDirect(50);
+            const directMs = performance.now() - directStartTime;
+            fetchMethod = "directSQL";
+            console.log(
+              `[Conversations] Direct SQLite fetch took ${directMs.toFixed(1)}ms ` +
+              `(${conversations.length} conversations)`
+            );
           } catch (directError) {
             console.warn("[Conversations] Direct read failed, falling back to HTTP:", directError);
+            const httpStartTime = performance.now();
             conversations = await api.getConversations();
+            const httpMs = performance.now() - httpStartTime;
+            fetchMethod = "http";
+            console.log(
+              `[Conversations] HTTP fetch took ${httpMs.toFixed(1)}ms ` +
+              `(${conversations.length} conversations)`
+            );
           }
         } else {
+          const httpStartTime = performance.now();
           conversations = await api.getConversations();
+          const httpMs = performance.now() - httpStartTime;
+          fetchMethod = "http";
+          console.log(
+            `[Conversations] HTTP fetch took ${httpMs.toFixed(1)}ms ` +
+            `(${conversations.length} conversations)`
+          );
         }
       }
     } else {
       // Browser mode: try direct SQLite then HTTP (no socket in browser)
       if (isDirectAccessAvailable()) {
         try {
+          const directStartTime = performance.now();
           conversations = await getConversationsDirect(50);
+          const directMs = performance.now() - directStartTime;
+          fetchMethod = "directSQL";
+          console.log(
+            `[Conversations] Direct SQLite fetch took ${directMs.toFixed(1)}ms ` +
+            `(${conversations.length} conversations)`
+          );
         } catch (directError) {
           console.warn("[Conversations] Direct read failed, falling back to HTTP:", directError);
+          const httpStartTime = performance.now();
           conversations = await api.getConversations();
+          const httpMs = performance.now() - httpStartTime;
+          fetchMethod = "http";
+          console.log(
+            `[Conversations] HTTP fetch took ${httpMs.toFixed(1)}ms ` +
+            `(${conversations.length} conversations)`
+          );
         }
       } else {
+        const httpStartTime = performance.now();
         conversations = await api.getConversations();
+        const httpMs = performance.now() - httpStartTime;
+        fetchMethod = "http";
+        console.log(
+          `[Conversations] HTTP fetch took ${httpMs.toFixed(1)}ms ` +
+          `(${conversations.length} conversations)`
+        );
       }
     }
+
+    const totalFetchMs = performance.now() - fetchStartTime;
+    console.log(
+      `[Conversations] Total fetch (${fetchMethod}) took ${totalFetchMs.toFixed(1)}ms`
+    );
 
     // Check if request was aborted
     if (signal.aborted) return;
@@ -1084,6 +1139,8 @@ async function resolveContactNames(): Promise<void> {
  */
 export function initializePolling(): () => void {
   // Initialize DB and socket in parallel for fastest startup
+  const initStartTime = performance.now();
+  console.log("[Conversations] Starting initialization...");
   const dbReady = initializeDirectAccess();
 
   initializeSocketPush().then(() => {
@@ -1093,7 +1150,11 @@ export function initializePolling(): () => void {
   // Wait for DB to be ready before starting polling (prevents wasteful HTTP fallback)
   // First fetch will use socket → direct SQLite → HTTP fallback
   dbReady.then((available) => {
-    console.log(`[Conversations] DB ready (available: ${available}), starting polling`);
+    const dbInitMs = performance.now() - initStartTime;
+    console.log(
+      `[Conversations] DB ready (available: ${available}) after ${dbInitMs.toFixed(1)}ms, ` +
+      `starting polling`
+    );
     startConversationPolling();
   });
 

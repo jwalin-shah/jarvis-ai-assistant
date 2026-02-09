@@ -22,13 +22,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Possessive relationship patterns: "my sister Sarah", "my friend John"
+# Name group requires uppercase start (no IGNORECASE - "my/My" both matched by [Mm]y)
 RELATIONSHIP_PATTERN = re.compile(
-    r"\bmy\s+(sister|brother|mom|mother|dad|father|wife|husband|"
+    r"\b[Mm]y\s+(sister|brother|mom|mother|dad|father|wife|husband|"
     r"girlfriend|boyfriend|partner|daughter|son|cousin|aunt|uncle|"
-    r"grandma|grandmother|grandpa|grandfather|friend|best friend|"
+    r"[Gg]randma|[Gg]randmother|[Gg]randpa|[Gg]randfather|friend|best friend|"
     r"roommate|fiancée?|boss|coworker|colleague|neighbor)\s+"
     r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
-    re.IGNORECASE,
 )
 
 # Location patterns: "moved to Austin", "live in NYC", "going to Paris"
@@ -46,10 +46,11 @@ WORK_PATTERN = re.compile(
 )
 
 # Preference patterns: "hate cilantro", "love sushi", "allergic to"
+# Stop at conjunctions (and, but, or) and punctuation to avoid over-capture
 PREFERENCE_PATTERN = re.compile(
     r"\b(?:hate[sd]?|love[sd]?|can't\s+stand|allergic\s+to|"
     r"obsessed\s+with|addicted\s+to|favorite\s+\w+\s+is)\s+"
-    r"(\w+(?:\s+\w+){0,2})",
+    r"(\w+(?:\s+(?!and\b|but\b|or\b)\w+){0,2})",
     re.IGNORECASE,
 )
 
@@ -100,7 +101,7 @@ class FactExtractor:
         """Extract facts from a list of messages.
 
         Args:
-            messages: Message objects with .text attribute.
+            messages: Message objects with .text attribute, or dicts with "text" key.
             contact_id: ID of the contact these messages belong to.
 
         Returns:
@@ -110,15 +111,23 @@ class FactExtractor:
         facts: list[Fact] = []
 
         for msg in messages:
-            text = getattr(msg, "text", None) or ""
+            text = msg.get("text", "") if isinstance(msg, dict) else (getattr(msg, "text", None) or "")
+            msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
             if not text or len(text) < 5:
                 continue
 
-            # Rule-based extraction (cheap, no model needed)
-            facts.extend(self._extract_rule_based(text, contact_id, now))
+            extracted = self._extract_rule_based(text, contact_id, now)
+            # Attach source message ID
+            for fact in extracted:
+                fact.source_message_id = msg_id
+            facts.extend(extracted)
 
         # Deduplicate
         facts = self._deduplicate(facts)
+
+        # NLI verification pass
+        if self.use_nli and facts:
+            facts = self._verify_facts_nli(facts)
 
         logger.info(
             "Extracted %d facts from %d messages for %s",
@@ -127,6 +136,39 @@ class FactExtractor:
             contact_id[:16],
         )
         return facts
+
+    def _verify_facts_nli(self, facts: list[Fact]) -> list[Fact]:
+        """Filter facts by NLI entailment verification (batched)."""
+        try:
+            from jarvis.nlp.entailment import (
+                fact_to_hypothesis,
+                verify_entailment_batch,
+            )
+
+            # Build (premise, hypothesis) pairs for batch scoring
+            pairs: list[tuple[str, str]] = []
+            for fact in facts:
+                hypothesis = fact_to_hypothesis(
+                    fact.category, fact.subject, fact.predicate, fact.value
+                )
+                pairs.append((fact.source_text, hypothesis))
+
+            results = verify_entailment_batch(pairs, threshold=self.threshold)
+
+            verified: list[Fact] = []
+            for fact, (is_entailed, score) in zip(facts, results):
+                if is_entailed:
+                    fact.confidence = score
+                    verified.append(fact)
+                else:
+                    logger.debug(
+                        "NLI rejected fact: %s/%s (score=%.2f)",
+                        fact.category, fact.subject, score,
+                    )
+            return verified
+        except Exception as e:
+            logger.warning("NLI verification failed, returning unverified facts: %s", e)
+            return facts
 
     def _extract_rule_based(self, text: str, contact_id: str, timestamp: str) -> list[Fact]:
         """Extract facts using regex patterns."""

@@ -30,6 +30,26 @@ if TYPE_CHECKING:
 
     from contracts.imessage import Message
 
+
+# =============================================================================
+# Fact Data Class (used by fact_extractor, fact_storage, knowledge_graph)
+# =============================================================================
+
+
+@dataclass
+class Fact:
+    """A structured fact extracted from a message."""
+
+    category: str  # relationship, location, work, preference, event
+    subject: str  # entity name (e.g., "Sarah", "Austin", "Google")
+    predicate: str  # relationship type (e.g., "is_family_of", "lives_in", "works_at")
+    value: str = ""  # optional detail (e.g., "sister")
+    source_text: str = ""  # the message text this was extracted from
+    confidence: float = 0.8  # 0-1 confidence score
+    contact_id: str = ""  # which contact this fact belongs to
+    extracted_at: str = ""  # ISO timestamp
+    source_message_id: int | None = None  # optional message ROWID
+
 logger = logging.getLogger(__name__)
 
 # Storage

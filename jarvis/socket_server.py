@@ -1396,6 +1396,9 @@ Summary:"""
         Returns:
             Dict with conversations list and count
         """
+        import time
+        start_time = time.time()
+
         try:
             from datetime import datetime
 
@@ -1405,15 +1408,18 @@ Summary:"""
             since_dt = datetime.fromtimestamp(since) if since else None
             before_dt = datetime.fromtimestamp(before) if before else None
 
+            db_start = time.time()
             with ChatDBReader() as reader:
                 conversations = reader.get_conversations(
                     limit=limit,
                     since=since_dt,
                     before=before_dt,
                 )
+            db_elapsed_ms = (time.time() - db_start) * 1000
 
             # Convert Conversation objects to dicts for JSON serialization
-            return {
+            serialize_start = time.time()
+            result = {
                 "conversations": [
                     {
                         "chat_id": c.chat_id,
@@ -1428,9 +1434,19 @@ Summary:"""
                 ],
                 "total": len(conversations),
             }
+            serialize_elapsed_ms = (time.time() - serialize_start) * 1000
+            total_elapsed_ms = (time.time() - start_time) * 1000
+
+            logger.info(
+                f"[list_conversations] returned {len(conversations)} convos in "
+                f"{total_elapsed_ms:.1f}ms (db={db_elapsed_ms:.1f}ms, "
+                f"serialize={serialize_elapsed_ms:.1f}ms)"
+            )
+            return result
 
         except Exception as e:
-            logger.exception("Error listing conversations")
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.exception(f"Error listing conversations (failed after {elapsed_ms:.1f}ms)")
             raise JsonRpcError(INTERNAL_ERROR, "Failed to list conversations") from e
 
     # ========== Metrics ==========

@@ -182,6 +182,24 @@ CREATE TABLE IF NOT EXISTS send_queue (
     next_retry_at TIMESTAMP             -- When to retry next
 );
 
+-- Contact facts for knowledge graph (v12+)
+CREATE TABLE IF NOT EXISTS contact_facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    predicate TEXT NOT NULL,
+    value TEXT DEFAULT '',
+    confidence REAL DEFAULT 1.0,
+    source_message_id INTEGER,
+    source_text TEXT DEFAULT '',
+    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(contact_id, category, subject, predicate)
+);
+
+CREATE INDEX IF NOT EXISTS idx_facts_contact ON contact_facts(contact_id);
+CREATE INDEX IF NOT EXISTS idx_facts_category ON contact_facts(category);
+
 -- Indexes for scheduling tables
 CREATE INDEX IF NOT EXISTS idx_scheduled_contact ON scheduled_drafts(contact_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_drafts(status);
@@ -214,9 +232,12 @@ EXPECTED_INDICES = {
     "idx_scheduled_priority",
     "idx_send_queue_status",
     "idx_send_queue_scheduled",
+    # Contact facts indexes (v12+)
+    "idx_facts_contact",
+    "idx_facts_category",
 }
 
-CURRENT_SCHEMA_VERSION = 11  # vec_binary with chunk_rowid + embedding_int8 aux columns
+CURRENT_SCHEMA_VERSION = 12  # contact_facts table for knowledge graph
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {
