@@ -8,13 +8,12 @@ When a new message arrives:
 1. MESSAGE DETECTION
    chat.db → File Watcher → Push via Unix Socket (instant)
 
-2. PARALLEL CLASSIFICATION (~15-30ms)
-   ┌─────────────────────┐    ┌─────────────────────┐
-   │ MESSAGE CLASSIFIER  │    │ TRIGGER CLASSIFIER  │
-   │ (what message IS)   │    │ (what response NEEDS)│
-   │ QUESTION/STATEMENT/ │    │ COMMITMENT/QUESTION/ │
-   │ ACKNOWLEDGMENT/etc  │    │ REACTION/SOCIAL/etc │
-   └─────────────────────┘    └─────────────────────┘
+2. CATEGORY CLASSIFICATION (~15-30ms)
+   ┌──────────────────────────────────────────┐
+   │ LightGBM CATEGORY CLASSIFIER             │
+   │ (BERT embeddings + hand-crafted features) │
+   │ Categories: clarify/warm/brief/social     │
+   └──────────────────────────────────────────┘
 
 3. FAISS SIMILARITY SEARCH (~5-10ms)
    Query embedding → Top-K similar (trigger, response) pairs
@@ -42,46 +41,31 @@ text = " ".join(text.split())                # Collapse whitespace/newlines
 
 See [TEXT_NORMALIZATION.md](./TEXT_NORMALIZATION.md) for details.
 
-## Three-Layer Hybrid Classification
+## Two-Layer Hybrid Classification
 
-Both classifiers use the same pattern:
+The category classifier uses a LightGBM model with heuristic post-processing:
 
 ```
-LAYER 1: STRUCTURAL PATTERNS (Regex, <1ms)
-├─ r"^(yes|yeah|yep)[\\s!.]*$" → AGREE (0.95)
-├─ r"^(no|nope|nah)[\\s!.]*$" → DECLINE (0.95)
-└─ r"\\?\\s*$" → QUESTION (0.60)
+LAYER 1: LightGBM CLASSIFIER (~15-30ms)
+├─ Input: BERT embedding (768d) + hand-crafted features (147d)
+├─ OneVsRestClassifier(LGBMClassifier) for multi-label
+├─ Categories: clarify, warm, brief, social
+└─ Trained on DailyDialog + SAMSum with LLM-generated labels
 
-LAYER 2: CENTROID VERIFICATION (Semantic check)
-├─ Compute embedding distance to ALL class centroids
-├─ If hint_similarity >= 0.65: CONFIRM structural hint
-└─ If other class significantly closer: OVERRIDE hint
-
-LAYER 3: SVM FALLBACK (For ambiguous cases)
-└─ Per-class confidence thresholds (tuned on validation)
+LAYER 2: HEURISTIC POST-PROCESSING
+├─ Context gap detection (deictic pronouns + thin context → clarify)
+├─ Stale thread detection (old conversations → clarify)
+└─ Confidence-based overrides
 ```
 
-### Why Centroids?
+### Categories
 
-Structural patterns have edge cases:
-
-| Text | Structural Hint | Reality | Centroid Override |
-|------|-----------------|---------|-------------------|
-| "No way!" | DECLINE | REACT_POSITIVE | Yes |
-| "Yeah right" | AGREE | Sarcastic DECLINE | Yes |
-| "Sure..." | AGREE | Reluctant DEFER | Yes |
-
-### Per-Class SVM Thresholds
-
-```python
-SVM_THRESHOLDS = {
-    TriggerType.COMMITMENT: 0.50,  # High stakes
-    TriggerType.QUESTION: 0.35,    # Clear from structure
-    TriggerType.REACTION: 0.40,    # Moderate
-    TriggerType.SOCIAL: 0.25,      # Strong patterns
-    TriggerType.STATEMENT: 0.30,   # Catch-all
-}
-```
+| Category | Description | Example |
+|----------|-------------|---------|
+| **clarify** | Need more context to respond | "What do you mean?" / ambiguous references |
+| **warm** | Emotional/supportive response needed | "I'm so sorry to hear that" |
+| **brief** | Short acknowledgment sufficient | "Got it", "Sounds good" |
+| **social** | Social/casual conversation | "How's it going?", planning hangouts |
 
 ## Routing Thresholds Explained
 

@@ -9,10 +9,11 @@ JARVIS is a local-first AI assistant for macOS providing intelligent iMessage ma
 **Default Model**: LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit
 
 **Documentation:**
-- `docs/DESIGN.md` - Comprehensive design doc with rationale and decisions (start here)
+- `docs/HOW_IT_WORKS.md` - How JARVIS works end-to-end (start here)
 - `docs/ARCHITECTURE.md` - Technical implementation status
-- `docs/ARCHITECTURE_V2.md` - Unix socket + direct SQLite optimizations
-- `docs/CLI_GUIDE.md` - CLI usage
+- `docs/design/V2_ARCHITECTURE.md` - Unix socket + direct SQLite optimizations
+- `docs/design/PIPELINE.md` - Classification & routing pipeline
+- `docs/SCHEMA.md` - Database schema
 
 ## Quick Reference
 
@@ -162,6 +163,7 @@ This system has **8GB RAM**. Large data processing MUST account for this:
   - Reduce batch size or stream to disk
 
 - **MLX memory management**:
+  - Use `mx.set_memory_limit()` and `mx.set_cache_limit()` (not deprecated `mx.metal.*` variants)
   - `mx.clear_cache()` forces GPU sync - NEVER call per-batch (kills throughput)
   - Call cache clear only: when switching models, or every ~10 batches max
   - `del array` doesn't free MLX memory immediately - GC timing is unpredictable
