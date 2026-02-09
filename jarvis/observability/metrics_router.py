@@ -363,26 +363,24 @@ class RoutingMetricsStore:
             with sqlite3.connect(self._db_path, timeout=10.0) as conn:
                 conn.row_factory = sqlite3.Row
 
-                # Build WHERE clause
-                where = ""
+                # Build query with parameterized WHERE clause
                 params: list[Any] = []
+                query_parts = [
+                    "SELECT timestamp, query_hash, routing_decision,",
+                    "       similarity_score, cache_hit, model_loaded,",
+                    "       embedding_computations, faiss_candidates, latency_json,",
+                    "       generation_time_ms, tokens_per_second",
+                    "FROM routing_metrics",
+                ]
                 if since is not None:
-                    where = "WHERE timestamp >= ?"
+                    query_parts.append("WHERE timestamp >= ?")
                     params.append(since)
+                query_parts.append("ORDER BY timestamp DESC")
+                query_parts.append("LIMIT ?")
+                params.append(limit)
 
-                # Recent requests
                 rows = conn.execute(
-                    f"""
-                    SELECT timestamp, query_hash, routing_decision,
-                           similarity_score, cache_hit, model_loaded,
-                           embedding_computations, faiss_candidates, latency_json,
-                           generation_time_ms, tokens_per_second
-                    FROM routing_metrics
-                    {where}
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                    """,
-                    params + [limit],
+                    " ".join(query_parts), params
                 ).fetchall()
 
                 recent = []

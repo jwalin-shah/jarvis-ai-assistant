@@ -5,6 +5,7 @@ transiently, such as network requests or model loading.
 """
 
 import logging
+import random
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -55,7 +56,7 @@ def retry_with_backoff(
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_retries - 1:
-                        delay = min(base_delay * (2**attempt), max_delay)
+                        delay = min(base_delay * (2**attempt), max_delay) * random.uniform(0.5, 1.5)
                         logger.warning(
                             "Retry %d/%d for %s after %.1fs: %s",
                             attempt + 1,
@@ -121,7 +122,7 @@ def retry_async_with_backoff(
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_retries - 1:
-                        delay = min(base_delay * (2**attempt), max_delay)
+                        delay = min(base_delay * (2**attempt), max_delay) * random.uniform(0.5, 1.5)
                         logger.warning(
                             "Async retry %d/%d for %s after %.1fs: %s",
                             attempt + 1,

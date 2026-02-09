@@ -213,8 +213,8 @@ class ReplyRouter:
         if self._imessage_reader is not None:
             try:
                 self._imessage_reader.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Error closing iMessage reader: %s", e)
             self._imessage_reader = None
 
     def __del__(self) -> None:

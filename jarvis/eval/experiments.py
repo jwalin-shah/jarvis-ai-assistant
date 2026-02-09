@@ -40,7 +40,7 @@ import json
 import logging
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -442,7 +442,7 @@ class ExperimentManager:
             variant_id=variant_id,
             contact_id=contact_id,
             action=action,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
         with self._lock:
@@ -685,7 +685,7 @@ class ExperimentManager:
             enabled=enabled,
             variants=variant_configs,
             description=description,
-            created_at=datetime.utcnow().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
 
         with self._lock:

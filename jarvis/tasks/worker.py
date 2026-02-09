@@ -450,7 +450,7 @@ class TaskWorker:
         if not chat_id:
             return TaskResult(success=False, error="No chat_id provided")
 
-        task.params["chat_ids"] = [chat_id]
+        task.params = {**task.params, "chat_ids": [chat_id]}
         return self._handle_batch_export(task, update_progress)
 
     def _handle_single_summarize(
@@ -464,7 +464,7 @@ class TaskWorker:
         if not chat_id:
             return TaskResult(success=False, error="No chat_id provided")
 
-        task.params["chat_ids"] = [chat_id]
+        task.params = {**task.params, "chat_ids": [chat_id]}
         return self._handle_batch_summarize(task, update_progress)
 
     def _handle_single_generate_reply(
@@ -478,7 +478,7 @@ class TaskWorker:
         if not chat_id:
             return TaskResult(success=False, error="No chat_id provided")
 
-        task.params["chat_ids"] = [chat_id]
+        task.params = {**task.params, "chat_ids": [chat_id]}
         return self._handle_batch_generate_replies(task, update_progress)
 
 

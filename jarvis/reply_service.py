@@ -19,12 +19,18 @@ from jarvis.classifiers.response_mobilization import (
 )
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
+import random
+
+import numpy as np
+
+from jarvis.classifiers.category_classifier import classify_category
 from jarvis.errors import ErrorCode, JarvisError
 from jarvis.observability.metrics_router import (
     RoutingMetrics,
     get_routing_metrics_store,
     hash_query,
 )
+from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES, get_category_config
 from jarvis.services.context_service import ContextService
 
 if TYPE_CHECKING:
@@ -197,7 +203,12 @@ class ReplyService:
         if example_diversity < 0.3:
             base_confidence *= 0.9
 
-        confidence = "high" if base_confidence >= 0.7 else "medium" if base_confidence >= 0.45 else "low"
+        if base_confidence >= 0.7:
+            confidence = "high"
+        elif base_confidence >= 0.45:
+            confidence = "medium"
+        else:
+            confidence = "low"
 
         metadata = {
             "confidence": confidence,
@@ -244,9 +255,6 @@ class ReplyService:
             mobilization = classify_response_pressure(incoming)
 
         # 1b. Category classification and routing
-        from jarvis.classifiers.category_classifier import classify_category
-        from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES, get_category_config
-        import random
 
         category_result = classify_category(incoming, context=thread or [], mobilization=mobilization)
         category_config = get_category_config(category_result.category)
@@ -376,11 +384,13 @@ class ReplyService:
             incoming, context=context_messages, mobilization=mobilization,
         )
 
-        # Use MIPRO-compiled instruction if available, else mobilization hint
+        # Use MIPRO-compiled instruction if available, else category hint
         if instruction is None:
             optimized_instruction = get_optimized_instruction(category)
             if optimized_instruction:
                 instruction = optimized_instruction
+            elif category_result and category_config.system_prompt:
+                instruction = category_config.system_prompt
             else:
                 instruction = self._build_mobilization_hint(mobilization)
 
@@ -411,17 +421,14 @@ class ReplyService:
         # Limit to 5 total examples
         all_exchanges = all_exchanges[:5]
 
-        prompt = build_rag_reply_prompt(
-            context=context,
-            last_message=incoming,
-            contact_name=contact.display_name if contact else "them",
-            similar_exchanges=all_exchanges if all_exchanges else None,
-            relationship_profile=relationship_profile,
-            contact_context=contact_context,
+        # Build prompt using chat template (multi-turn few-shot)
+        prompt = self._build_chat_prompt(
+            incoming=incoming,
             instruction=instruction,
+            exchanges=all_exchanges,
         )
 
-        max_tokens = 20 if mobilization.pressure == ResponsePressure.NONE else 100
+        max_tokens = 20 if mobilization.pressure == ResponsePressure.NONE else 40
 
         return GenerationRequest(
             prompt=prompt,
@@ -529,8 +536,6 @@ class ReplyService:
             for j in range(i + 1, len(examples)):
                 if not keep[j]:
                     continue
-                import numpy as np
-
                 sim = float(np.dot(embeddings[i], embeddings[j]))
                 if sim > 0.85:
                     # Keep the one with more context
@@ -623,6 +628,54 @@ class ReplyService:
         elif mobilization.pressure == ResponsePressure.LOW:
             return "Keep the response brief and casual."
         return "A brief acknowledgment is fine."
+
+    # Imported from jarvis.prompts - single source of truth for all prompts
+    from jarvis.prompts import CHAT_SYSTEM_PROMPT as _CHAT_SYSTEM_PROMPT
+
+    def _build_chat_prompt(
+        self,
+        incoming: str,
+        instruction: str | None = None,
+        exchanges: list[tuple[str, str]] | None = None,
+    ) -> str:
+        """Build a chat-template prompt with multi-turn few-shot examples.
+
+        Uses the tokenizer's chat template for proper instruct formatting,
+        which produces dramatically better results than raw XML prompts
+        on small instruct models.
+        """
+        tokenizer = getattr(self.generator, "_loader", None)
+        tokenizer = getattr(tokenizer, "_tokenizer", None) if tokenizer else None
+        if tokenizer is None or not hasattr(tokenizer, "apply_chat_template"):
+            # Fallback to raw prompt if no chat template
+            from jarvis.prompts import build_rag_reply_prompt
+            return build_rag_reply_prompt(
+                context="", last_message=incoming, contact_name="them",
+                instruction=instruction,
+            )
+
+        system_msg = self._CHAT_SYSTEM_PROMPT
+        if instruction:
+            system_msg = f"{system_msg} {instruction}"
+
+        messages: list[dict[str, str]] = [{"role": "system", "content": system_msg}]
+
+        # Add few-shot examples as multi-turn conversation
+        if exchanges:
+            for trigger, response in exchanges[:4]:
+                # Strip context prefixes, just use the core message
+                trigger_clean = trigger.strip()
+                if len(trigger_clean) > 150:
+                    trigger_clean = trigger_clean[-150:]
+                messages.append({"role": "user", "content": trigger_clean})
+                messages.append({"role": "assistant", "content": response.strip()})
+
+        # Add the actual message to reply to
+        messages.append({"role": "user", "content": incoming})
+
+        return tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+        )
 
     def _record_metrics(
         self,

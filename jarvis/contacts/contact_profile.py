@@ -858,10 +858,10 @@ def get_contact_profile(contact_id: str) -> ContactProfile | None:
     return _cached_load(contact_id)
 
 
-def invalidate_profile_cache(contact_id: str | None = None) -> None:
-    """Clear the profile LRU cache.
+def invalidate_profile_cache() -> None:
+    """Clear the entire profile LRU cache.
 
-    Args:
-        contact_id: If None, clears entire cache. Otherwise clears just that entry.
+    Note: lru_cache does not support per-key invalidation,
+    so this always clears the entire cache.
     """
     _cached_load.cache_clear()

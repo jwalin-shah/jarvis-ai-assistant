@@ -533,13 +533,20 @@ class EmbeddingStore:
             return stats
 
         with self._get_connection() as conn:
-            # Get existing message IDs
+            # Get existing message IDs (chunked to stay under SQLite 999 param limit)
             message_ids = [m.id for m in valid_messages]
-            placeholders = ",".join("?" * len(message_ids))
-            query = (
-                f"SELECT message_id FROM message_embeddings WHERE message_id IN ({placeholders})"
-            )
-            existing = set(row[0] for row in conn.execute(query, message_ids).fetchall())
+            existing: set[int] = set()
+            chunk_size = 900
+            for ci in range(0, len(message_ids), chunk_size):
+                chunk = message_ids[ci : ci + chunk_size]
+                placeholders = ",".join("?" * len(chunk))
+                query = (
+                    f"SELECT message_id FROM message_embeddings"
+                    f" WHERE message_id IN ({placeholders})"
+                )
+                existing.update(
+                    row[0] for row in conn.execute(query, chunk).fetchall()
+                )
 
             # Filter to only new messages
             new_messages = [m for m in valid_messages if m.id not in existing]

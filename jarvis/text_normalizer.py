@@ -315,8 +315,8 @@ def _get_spell_checker():
                 "frequency_dictionary_en_82_765.txt"
             )
             _SPELL_CHECKER.load_dictionary(str(dict_path), term_index=0, count_index=1)
-        except Exception:
-            # If SymSpell fails to load, return None
+        except Exception as e:
+            logger.warning("Failed to load spell checker: %s", e)
             return None
     return _SPELL_CHECKER
 

@@ -1123,15 +1123,17 @@ def segment_for_extraction(
 
     # Map segment messages back to original messages by timestamp
     # Build a lookup from timestamp to original message
-    msg_by_time: dict[datetime, Message] = {m.date: m for m in messages}
+    # Use defaultdict(list) to handle duplicate timestamps
+    msg_by_time: dict[datetime, list[Message]] = {}
+    for m in messages:
+        msg_by_time.setdefault(m.date, []).append(m)
 
     result: list[list[Message]] = []
     for segment in segments:
         group: list[Message] = []
         for seg_msg in segment.messages:
-            orig_msg = msg_by_time.get(seg_msg.timestamp)
-            if orig_msg:
-                group.append(orig_msg)
+            orig_msgs = msg_by_time.get(seg_msg.timestamp, [])
+            group.extend(orig_msgs)
         if group:
             result.append(group)
 

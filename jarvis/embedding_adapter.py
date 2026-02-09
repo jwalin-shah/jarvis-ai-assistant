@@ -256,7 +256,11 @@ class MLXEmbedder:
         if use_memmap:
             import tempfile
 
-            memmap_path = tempfile.mktemp(suffix=".mmap", prefix="jarvis_embed_")
+            _tmp = tempfile.NamedTemporaryFile(
+                suffix=".mmap", prefix="jarvis_embed_", delete=False
+            )
+            memmap_path = _tmp.name
+            _tmp.close()
             memmap_array = np.memmap(
                 memmap_path,
                 dtype=np.float32,

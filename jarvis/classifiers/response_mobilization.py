@@ -327,6 +327,16 @@ GREETING_PATTERNS = [
     r"^(good morning|good afternoon|good evening|good night|gm|gn)\b",
 ]
 
+# Pre-compiled pattern lists for _detect_features performance
+_COMPILED_SPEAKER_ORIENTED = [re.compile(p) for p in SPEAKER_ORIENTED_PATTERNS]
+_COMPILED_RECIPIENT_ORIENTED = [re.compile(p) for p in RECIPIENT_ORIENTED_PATTERNS]
+_COMPILED_REQUEST = [re.compile(p) for p in REQUEST_PATTERNS]
+_COMPILED_REACTIVE = [re.compile(p) for p in REACTIVE_PATTERNS]
+_COMPILED_RHETORICAL = [re.compile(p) for p in RHETORICAL_PATTERNS]
+_COMPILED_OPINION = [re.compile(p) for p in OPINION_PATTERNS]
+_COMPILED_TELLING = [re.compile(p) for p in TELLING_PATTERNS]
+_COMPILED_INFO_QUESTION = [re.compile(p) for p in INFO_QUESTION_PATTERNS]
+_COMPILED_GREETING = [re.compile(p) for p in GREETING_PATTERNS]
 
 # =============================================================================
 # Classification Functions
@@ -381,19 +391,19 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
             features["has_aux_inversion"] = True
 
     # Epistemic stance
-    for pattern in SPEAKER_ORIENTED_PATTERNS:
-        if re.match(pattern, text_lower):
+    for pattern in _COMPILED_SPEAKER_ORIENTED:
+        if pattern.match(text_lower):
             features["is_speaker_oriented"] = True
             break
 
-    for pattern in RECIPIENT_ORIENTED_PATTERNS:
-        if re.match(pattern, text_lower):
+    for pattern in _COMPILED_RECIPIENT_ORIENTED:
+        if pattern.match(text_lower):
             features["is_recipient_oriented"] = True
             break
 
     # Request patterns
-    for pattern in REQUEST_PATTERNS:
-        if re.search(pattern, text_lower):
+    for pattern in _COMPILED_REQUEST:
+        if pattern.search(text_lower):
             features["is_request"] = True
             break
 
@@ -402,26 +412,26 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
         features["is_imperative"] = True
 
     # Reactive
-    for pattern in REACTIVE_PATTERNS:
-        if re.search(pattern, text_lower):
+    for pattern in _COMPILED_REACTIVE:
+        if pattern.search(text_lower):
             features["is_reactive"] = True
             break
 
     # Rhetorical
-    for pattern in RHETORICAL_PATTERNS:
-        if re.match(pattern, text_lower):
+    for pattern in _COMPILED_RHETORICAL:
+        if pattern.match(text_lower):
             features["is_rhetorical"] = True
             break
 
     # Opinion
-    for pattern in OPINION_PATTERNS:
-        if re.match(pattern, text_lower):
+    for pattern in _COMPILED_OPINION:
+        if pattern.match(text_lower):
             features["is_opinion"] = True
             break
 
     # Telling
-    for pattern in TELLING_PATTERNS:
-        if re.match(pattern, text_lower):
+    for pattern in _COMPILED_TELLING:
+        if pattern.match(text_lower):
             features["is_telling"] = True
             break
 
@@ -431,8 +441,8 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
         features["is_backchannel"] = True
 
     # Greeting
-    for pattern in GREETING_PATTERNS:
-        if re.match(pattern, text_lower):
+    for pattern in _COMPILED_GREETING:
+        if pattern.match(text_lower):
             features["is_greeting"] = True
             break
 
@@ -583,8 +593,8 @@ def classify_response_pressure(text: str) -> MobilizationResult:
     if features["has_wh_word"] and not features["has_question_mark"]:
         # Direct info-seeking WH-questions (even without ?)
         # "What time is the game" "Where are you" "When does it start"
-        for pattern in INFO_QUESTION_PATTERNS:
-            if re.match(pattern, text_lower):
+        for pattern in _COMPILED_INFO_QUESTION:
+            if pattern.match(text_lower):
                 return MobilizationResult(
                     pressure=ResponsePressure.HIGH,
                     response_type=ResponseType.ANSWER,

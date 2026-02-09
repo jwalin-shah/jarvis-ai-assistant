@@ -29,9 +29,8 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -40,9 +39,6 @@ _CLASSIFICATION_CACHE_TTL_SECONDS = 300
 _classification_cache: dict[str, tuple[float, ClassificationResult]] = {}
 _cache_lock = threading.Lock()
 _CLASSIFICATION_CACHE_MAX_SIZE = 500
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +341,7 @@ class RelationshipClassifier:
             List of ChatMessage objects.
         """
         if not self.chat_db_path.exists():
-            logger.warning(f"Chat database not found: {self.chat_db_path}")
+            logger.warning("Chat database not found: %s", self.chat_db_path)
             return []
 
         messages = []
@@ -384,7 +380,7 @@ class RelationshipClassifier:
                     if date_int:
                         # macOS uses nanoseconds since 2001-01-01
                         timestamp = date_int / 1_000_000_000 + 978307200
-                        date = datetime.fromtimestamp(timestamp)
+                        date = datetime.fromtimestamp(timestamp, tz=timezone.utc)
                     else:
                         date = None
 
@@ -398,7 +394,7 @@ class RelationshipClassifier:
                     )
 
         except Exception as e:
-            logger.error(f"Failed to get messages for chat {chat_id}: {e}")
+            logger.error("Failed to get messages for chat %s: %s", chat_id, e)
 
         return messages
 
@@ -445,7 +441,7 @@ class RelationshipClassifier:
                     chats.append((chat_id, display_name))
 
         except Exception as e:
-            logger.error(f"Failed to get chats: {e}")
+            logger.error("Failed to get chats: %s", e)
 
         return chats
 
@@ -736,7 +732,7 @@ class RelationshipClassifier:
                 scores[cat] += bonus
 
         # Find best match
-        best_category = max(scores, key=scores.get)  # type: ignore
+        best_category = max(scores, key=lambda k: scores[k])
         best_score = scores[best_category]
 
         # Normalize confidence (0-1)

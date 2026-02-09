@@ -158,8 +158,8 @@ def initialize_system() -> tuple[bool, list[str]]:
         DegradationPolicy(
             feature_name=FEATURE_CHAT,
             health_check=lambda: True,  # Always healthy for now
-            degraded_behavior=lambda prompt: _template_only_response(prompt),
-            fallback_behavior=lambda prompt: _fallback_response(),
+            degraded_behavior=_template_only_response,
+            fallback_behavior=lambda _prompt: _fallback_response(),
             recovery_check=lambda: True,
             max_failures=3,
         )
@@ -170,8 +170,8 @@ def initialize_system() -> tuple[bool, list[str]]:
         DegradationPolicy(
             feature_name=FEATURE_IMESSAGE,
             health_check=_check_imessage_access,
-            degraded_behavior=lambda query: _imessage_degraded(query),
-            fallback_behavior=lambda query: _imessage_fallback(),
+            degraded_behavior=_imessage_degraded,
+            fallback_behavior=lambda _query: _imessage_fallback(),
             recovery_check=_check_imessage_access,
             max_failures=3,
         )

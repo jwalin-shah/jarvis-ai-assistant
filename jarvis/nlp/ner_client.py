@@ -64,14 +64,15 @@ def is_service_running() -> bool:
     if not SOCKET_PATH.exists():
         return False
 
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.settimeout(CONNECT_TIMEOUT)
         sock.connect(str(SOCKET_PATH))
-        sock.close()
         return True
     except OSError:
         return False
+    finally:
+        sock.close()
 
 
 def get_pid() -> int | None:

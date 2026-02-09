@@ -128,7 +128,7 @@ class PairMixin:
             trigger_normalized = pair["trigger_text"].lower().strip()
             response_normalized = pair["response_text"].lower().strip()
             content_str = f"{trigger_normalized}|{response_normalized}"
-            content_hash = hashlib.md5(content_str.encode()).hexdigest()
+            content_hash = hashlib.md5(content_str.encode(), usedforsecurity=False).hexdigest()
 
             processed.append(
                 {

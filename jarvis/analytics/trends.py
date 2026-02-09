@@ -123,7 +123,7 @@ def detect_trend(
         confidence = decreases / total_changes
     else:
         # For stable, confidence is based on low variance
-        total_changes - increases - decreases
+        stables = total_changes - increases - decreases  # noqa: F841
         confidence = max(
             0.5,
             1.0 - (abs(pct_change) / 100),

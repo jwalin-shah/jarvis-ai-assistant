@@ -1054,7 +1054,7 @@ def save_profile(profile: RelationshipProfile) -> bool:
         with profile_path.open("w", encoding="utf-8") as f:
             json.dump(profile.to_dict(), f, indent=2)
         return True
-    except (OSError, json.JSONDecodeError):
+    except (OSError, TypeError):
         return False
 
 

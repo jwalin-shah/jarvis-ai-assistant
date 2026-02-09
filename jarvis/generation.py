@@ -5,11 +5,12 @@ to use the LLM, with automatic fallback on failure.
 """
 
 import logging
+from typing import Any
 
 from contracts.memory import MemoryMode
 from contracts.models import GenerationRequest, GenerationResponse
 from core.memory import get_memory_controller
-from jarvis.fallbacks import ModelLoadError
+from jarvis.errors import ModelLoadError
 from models import get_generator
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def can_use_llm() -> tuple[bool, str]:
         return True, ""
 
 
-def get_generation_status() -> dict[str, object]:
+def get_generation_status() -> dict[str, Any]:
     """Get the current status of the generation system.
 
     Returns:

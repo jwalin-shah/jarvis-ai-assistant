@@ -7,6 +7,7 @@ positioning nodes in relationship graphs.
 from __future__ import annotations
 
 import logging
+from collections import deque
 import math
 import random
 from dataclasses import dataclass
@@ -255,6 +256,9 @@ class LayoutEngine:
         if not graph.nodes:
             return graph
 
+        # Build node lookup for O(1) access
+        node_lookup = {n.id: n for n in graph.nodes}
+
         # Find root node (highest degree if not specified)
         if root_id is None:
             degree: dict[str, int] = {n.id: 0 for n in graph.nodes}
@@ -276,10 +280,10 @@ class LayoutEngine:
         # BFS to assign levels
         levels: dict[str, int] = {}
         visited: set[str] = set()
-        queue = [(root_id, 0)]
+        queue: deque[tuple[str, int]] = deque([(root_id, 0)])
 
         while queue:
-            node_id, level = queue.pop(0)
+            node_id, level = queue.popleft()
             if node_id in visited:
                 continue
 
@@ -336,12 +340,10 @@ class LayoutEngine:
                     x = (1 - y_pos) * self.config.width
                     y = x_pos * self.config.height
 
-                # Find and update node
-                for node in graph.nodes:
-                    if node.id == node_id:
-                        node.x = round(x, 2)
-                        node.y = round(y, 2)
-                        break
+                # Update node position
+                if node_id in node_lookup:
+                    node_lookup[node_id].x = round(x, 2)
+                    node_lookup[node_id].y = round(y, 2)
 
         graph.metadata["layout"] = "hierarchical"
         graph.metadata["direction"] = direction
@@ -368,6 +370,9 @@ class LayoutEngine:
         if not graph.nodes:
             return graph
 
+        # Build node lookup for O(1) access
+        radial_node_lookup = {n.id: n for n in graph.nodes}
+
         # Find center node
         if center_id is None:
             # Look for "me" node first
@@ -393,10 +398,10 @@ class LayoutEngine:
         # BFS to assign distance rings
         distances: dict[str, int] = {}
         visited: set[str] = set()
-        queue = [(center_id, 0)]
+        queue: deque[tuple[str, int]] = deque([(center_id, 0)])
 
         while queue:
-            node_id, dist = queue.pop(0)
+            node_id, dist = queue.popleft()
             if node_id in visited:
                 continue
 
@@ -434,12 +439,10 @@ class LayoutEngine:
                     x = center_x + radius * math.cos(angle)
                     y = center_y + radius * math.sin(angle)
 
-                # Find and update node
-                for node in graph.nodes:
-                    if node.id == node_id:
-                        node.x = round(x, 2)
-                        node.y = round(y, 2)
-                        break
+                # Update node position
+                if node_id in radial_node_lookup:
+                    radial_node_lookup[node_id].x = round(x, 2)
+                    radial_node_lookup[node_id].y = round(y, 2)
 
         graph.metadata["layout"] = "radial"
         graph.metadata["center"] = center_id

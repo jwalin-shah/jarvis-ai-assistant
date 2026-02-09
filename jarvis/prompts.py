@@ -559,7 +559,6 @@ PROFESSIONAL_INDICATORS: set[str] = {
     "eod",
     "eow",
     "asap",
-    "fyi",
     "cc",
     "per",
     "via",
@@ -1016,7 +1015,7 @@ def build_reply_prompt(
     # Format custom instruction
     custom_instruction = ""
     if instruction:
-        custom_instruction = f"- Additional guidance: {instruction}"
+        custom_instruction = instruction
 
     # Add relationship-based style guidance if profile is available
     if relationship_profile and relationship_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
@@ -1285,7 +1284,7 @@ def build_threaded_reply_prompt(
     # Format custom instruction
     custom_instruction = ""
     if instruction:
-        custom_instruction = f"- Additional guidance: {instruction}"
+        custom_instruction = instruction
 
     # Truncate context if needed
     truncated_context = _truncate_context(context, max_chars=2000)
@@ -1566,7 +1565,7 @@ def build_rag_reply_prompt(
     # Format custom instruction
     custom_instruction = ""
     if instruction:
-        custom_instruction = f"- Additional guidance: {instruction}"
+        custom_instruction = instruction
 
     # Truncate context if needed
     truncated_context = _truncate_context(context)
@@ -1789,13 +1788,20 @@ def get_optimized_instruction(category: str) -> str | None:
     return None
 
 
+# System prompt for chat-based reply generation
+CHAT_SYSTEM_PROMPT = (
+    "Generate a casual text message reply. One short sentence max. "
+    'No AI phrases like "I understand" or "Let me know". '
+    "No emojis unless they used them first."
+)
+
+
 # Category mapping: map old/runtime signals to new 6-category schema
 CATEGORY_MAP: dict[str, str] = {
     # Old 5-category schema -> new 6-category
     "ack": "acknowledge",
     "info": "request",
     "emotional": "emotion",
-    "clarify": "question",
     "social": "statement",
     # Old 4-category schema -> new 6-category
     "brief": "request",
@@ -1811,7 +1817,6 @@ CATEGORY_MAP: dict[str, str] = {
     "professional": "request",
     "mixed": "statement",
     "celebration": "social",
-    "professional": "brief",
     # Ambiguous / low context
     "clarify": "clarify",
     "edge_case": "clarify",
@@ -2236,25 +2241,25 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         skip_slm=False,
         prompt="reply_generation",
         context_depth=5,
-        system_prompt="Answer the question directly and helpfully. Be clear and informative.",
+        system_prompt="They asked a question. Just answer it, keep it short.",
     ),
     "request": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
         context_depth=5,
-        system_prompt="Respond to the request. Confirm, commit, or clarify what's needed.",
+        system_prompt="They're asking you to do something. Say yes, no, or ask a follow-up.",
     ),
     "emotion": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
         context_depth=3,
-        system_prompt="Be empathetic and supportive. Show you care, match their emotional tone.",
+        system_prompt="They're sharing something emotional. Be a good friend, not a therapist.",
     ),
     "statement": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
         context_depth=3,
-        system_prompt="Engage naturally. React, comment, or share thoughts.",
+        system_prompt="They're sharing or chatting. React naturally like a friend would.",
     ),
 }
 

@@ -64,9 +64,11 @@ def _read_all_source_dbs() -> list[dict]:
 
         try:
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(ALL_CONTACTS_QUERY).fetchall()
-            conn.close()
+            try:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(ALL_CONTACTS_QUERY).fetchall()
+            finally:
+                conn.close()
 
             for row in rows:
                 all_rows.append(
@@ -78,7 +80,7 @@ def _read_all_source_dbs() -> list[dict]:
                     }
                 )
         except Exception as e:
-            logger.debug("Skipping source %s: %s", source_dir.name, e)
+            logger.warning("Skipping source %s: %s", source_dir.name, e)
 
     return all_rows
 

@@ -26,7 +26,7 @@ class EmbeddingService(Service):
         service_dir: Path | None = None,
     ) -> None:
         if socket_path is None:
-            socket_path = Path("/tmp/jarvis-embed.sock")
+            socket_path = Path.home() / ".jarvis" / "jarvis-embed.sock"
         if service_dir is None:
             service_dir = Path.home() / ".jarvis" / "venvs" / "embedding"
         if venv_path is None:

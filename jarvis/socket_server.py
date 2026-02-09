@@ -1086,18 +1086,21 @@ Summary:"""
 
         def producer():
             try:
-                for stream_token in model.generate_stream(
-                    prompt, max_tokens=300, stop_event=stop_event
-                ):
-                    token_queue.put(
-                        (
-                            stream_token.token,
-                            stream_token.token_index,
-                            stream_token.is_final,
+                from models.loader import MLXModelLoader
+
+                with MLXModelLoader._mlx_load_lock:
+                    for stream_token in model.generate_stream(
+                        prompt, max_tokens=300, stop_event=stop_event
+                    ):
+                        token_queue.put(
+                            (
+                                stream_token.token,
+                                stream_token.token_index,
+                                stream_token.is_final,
+                            )
                         )
-                    )
-                    if stop_event.is_set():
-                        break
+                        if stop_event.is_set():
+                            break
             except Exception as e:
                 generation_error.append(e)
             finally:

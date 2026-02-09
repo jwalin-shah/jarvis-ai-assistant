@@ -728,15 +728,12 @@ class VecSearcher:
                 logger.info("vec_binary already has %d rows, skipping backfill", existing)
                 return 0
 
-            # Read all chunk embeddings (int8 blobs stored via vec_int8)
-            rows = conn.execute("SELECT rowid, embedding FROM vec_chunks").fetchall()
-
-            if not rows:
-                return 0
+            # Read chunk embeddings via cursor iteration (avoids loading all into RAM)
+            cursor = conn.execute("SELECT rowid, embedding FROM vec_chunks")
 
             count = 0
             batch = []
-            for row in rows:
+            for row in cursor:
                 chunk_rowid = row["rowid"]
                 int8_blob = row["embedding"]
                 # Convert int8 blob to float for binarization
