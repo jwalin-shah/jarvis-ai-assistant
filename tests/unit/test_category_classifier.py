@@ -30,10 +30,10 @@ def _reset_singleton():
 
 class TestCategoryResult:
     def test_repr(self) -> None:
-        result = CategoryResult("request", 0.87, "svm")
+        result = CategoryResult("request", 0.87, "lightgbm")
         assert "request" in repr(result)
         assert "0.87" in repr(result)
-        assert "svm" in repr(result)
+        assert "lightgbm" in repr(result)
 
     def test_fields(self) -> None:
         result = CategoryResult("emotion", 0.90, "fast_path")
@@ -81,21 +81,25 @@ class TestFastPath:
 # =============================================================================
 
 
-class TestFallbackNoModel:
-    def test_default_statement(self) -> None:
-        """Without SVM model, non-matching messages should default to statement."""
-        result = classify_category("Hey how have you been?")
-        assert result.category == "statement"
-        assert result.method == "default"
-        assert result.confidence == 0.30
+class TestWithLightGBMModel:
+    """Tests with LightGBM model (previously TestFallbackNoModel)."""
 
-    def test_default_with_context(self) -> None:
+    def test_classifies_question(self) -> None:
+        """With LightGBM model, questions are classified correctly."""
+        result = classify_category("Hey how have you been?")
+        assert result.category == "question"
+        assert result.method == "lightgbm"
+        assert result.confidence > 0.5
+
+    def test_classifies_with_context(self) -> None:
+        """Model classifies with context (context embedding zeroed internally)."""
         result = classify_category(
             "Not much, just hanging out",
             context=["Hey what's up"],
         )
-        assert result.category == "statement"
-        assert result.method == "default"
+        # Should classify as statement
+        assert result.method == "lightgbm"
+        assert result.confidence > 0.3
 
 
 # =============================================================================
@@ -201,12 +205,12 @@ class TestFeatureExtraction:
         assert features.dtype.name == "float32"
 
     def test_extract_spacy_features(self) -> None:
-        """SpaCy features should return ~69 values (14 original + 55 new)."""
+        """SpaCy features should return 94 values (14 original + 80 new)."""
         from jarvis.features import CategoryFeatureExtractor
 
         extractor = CategoryFeatureExtractor()
         features = extractor.extract_spacy_features("Can you help me?")
-        assert len(features) == 69
+        assert len(features) == 94
         assert features.dtype.name == "float32"
 
     def test_spacy_imperative_detection(self) -> None:

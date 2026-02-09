@@ -2,11 +2,17 @@
 
 Three-layer classification (fast path + ML model + heuristics):
 1. Fast path: reactions/acknowledgments → `acknowledge` (100% precision)
-2. Trained SVM: BERT (384) + hand-crafted (26) + spaCy (14) = 424 features → category
+2. Trained LightGBM: BERT (384) + context BERT (384) + hand-crafted (147) = 915 features → category
 3. Heuristic post-processing: Rule-based corrections for common errors
 4. Fallback: `statement` (default)
 
-Categories: closing, acknowledge, question, request, emotion, statement
+Categories: acknowledge, closing, emotion, question, request, statement
+
+**Zero-Context-at-Inference Strategy**:
+Model trained WITH context features (915 dims), but context BERT embedding (indices 384:768)
+is ZEROED at inference. Context features during training act as "auxiliary supervision" -
+they help the model learn better representations in the other 531 features.
+Result: F1 0.7111 (samples) vs 0.7021 without context in training.
 
 Heuristic corrections:
 - Reaction messages ("Laughed at", "Loved") → emotion
@@ -53,6 +59,16 @@ VALID_CATEGORIES = frozenset({
     "statement",
 })
 
+# Category order from training (for predict_proba index mapping)
+CATEGORIES = [
+    "acknowledge",
+    "closing",
+    "emotion",
+    "question",
+    "request",
+    "statement",
+]
+
 # Feature extractor singleton
 _feature_extractor = None
 
@@ -76,7 +92,7 @@ class CategoryResult:
 
     category: str
     confidence: float
-    method: str  # "fast_path", "svm", "default"
+    method: str  # "fast_path", "lightgbm", "heuristic", "default"
 
     def __repr__(self) -> str:
         return (
@@ -95,7 +111,8 @@ class CategoryClassifier(EmbedderMixin):
 
     Layers:
     1. Fast path: reactions/acknowledgments → `acknowledge`
-    2. SVM prediction (BERT + hand-crafted + spaCy features)
+    2. LightGBM prediction (BERT + context BERT + hand-crafted + spaCy features)
+       - Context BERT is ZEROED at inference (auxiliary supervision strategy)
     3. Fallback: `statement` (conf=0.30)
     """
 
@@ -104,19 +121,25 @@ class CategoryClassifier(EmbedderMixin):
         self._pipeline_loaded = False
 
     def _load_pipeline(self) -> bool:
-        """Load trained Pipeline (with scaler + SVM) from disk."""
+        """Load trained Pipeline (with scaler + LightGBM) from disk.
+
+        Model: OneVsRestClassifier(LGBMClassifier) trained with 915 features.
+        Strategy: Trained WITH context embeddings, but zeroed at inference for better generalization.
+        """
         if self._pipeline_loaded:
             return self._pipeline is not None
 
         self._pipeline_loaded = True
-        model_path = Path("models/category_svm_v2.joblib")
+        model_path = Path("models/category_multilabel_lightgbm_hardclass.joblib")
 
         if not model_path.exists():
             logger.warning("No pipeline at %s - using fallback only", model_path)
             return False
 
         try:
-            self._pipeline = joblib.load(model_path)
+            # Model is saved as dict with 'model' and 'mlb' keys
+            model_dict = joblib.load(model_path)
+            self._pipeline = model_dict['model']
             logger.info("Loaded category pipeline from %s", model_path)
             return True
         except Exception as e:
@@ -126,11 +149,11 @@ class CategoryClassifier(EmbedderMixin):
     def _apply_heuristics(
         self,
         text: str,
-        svm_prediction: str,
+        model_prediction: str,
         context: list[str],
         confidence: float,
     ) -> str:
-        """Apply rule-based corrections to common SVM errors.
+        """Apply rule-based corrections to common model errors.
 
         Returns corrected category (or original if no correction needed).
 
@@ -138,8 +161,8 @@ class CategoryClassifier(EmbedderMixin):
         Overfitting check showed that specific word lists don't generalize.
         """
         # ONLY UNIVERSAL FIX: Reactions are handled in fast path
-        # No heuristic overrides here - let SVM decide
-        return svm_prediction
+        # No heuristic overrides here - let model decide
+        return model_prediction
 
     def classify(
         self,
@@ -192,7 +215,7 @@ class CategoryClassifier(EmbedderMixin):
                 method="fast_path",
             )
 
-        # Layer 1: Pipeline prediction (scaler + SVM)
+        # Layer 1: Pipeline prediction (scaler + LightGBM)
         if self._load_pipeline():
             try:
                 # Extract mobilization features
@@ -202,41 +225,33 @@ class CategoryClassifier(EmbedderMixin):
                 # Get feature extractor
                 extractor = _get_feature_extractor()
 
-                # 1. BERT embedding (384) - FIXED: use normalize=True to match training
+                # 1. Current message BERT embedding (384) - use normalize=True to match training
                 embedding = self.embedder.encode([text], normalize=True)[0]
 
-                # 2. All non-BERT features (~103)
+                # 2. Context BERT embedding (384) - ALWAYS ZERO at inference
+                # Zero-context-at-inference strategy: model trained WITH context for auxiliary
+                # supervision, but we zero it out at inference for better generalization.
+                # The 3 hand-crafted context stats in non-BERT features still use context.
+                context_embedding = np.zeros(384, dtype=np.float32)
+
+                # 3. All non-BERT features (147) - still pass context for hand-crafted features
+                # These include 3 context stats + context_lexical_overlap (minimal contribution)
                 non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
 
-                # 3. Concatenate (384 BERT + ~103 = ~487 total)
-                features = np.concatenate([embedding, non_bert_features])
+                # 4. Concatenate: [current_bert(384) + context_bert(384) + non_bert(147)] = 915
+                features = np.concatenate([embedding, context_embedding, non_bert_features])
                 features = features.reshape(1, -1)
 
                 # Predict (pipeline handles scaling automatically)
-                category = self._pipeline.predict(features)[0]
+                # Model is OneVsRestClassifier(LGBMClassifier) - returns probabilities directly
+                proba = self._pipeline.predict_proba(features)[0]  # shape: (6,)
 
-                # Get confidence via decision function from the SVM step
-                svm = self._pipeline.named_steps.get('svm', self._pipeline.steps[-1][1])
-                decision_values = svm.decision_function(
-                    self._pipeline.named_steps.get('preprocess', lambda x: x).transform(features)
-                )[0]
+                # Get category and confidence
+                category_idx = int(np.argmax(proba))
+                category = CATEGORIES[category_idx]
+                confidence = float(proba[category_idx])
 
-                # For multi-class SVM, decision_values is an array
-                # Confidence = softmax of decision values
-                if hasattr(decision_values, '__len__'):
-                    # Multi-class: use softmax
-                    exp_vals = np.exp(decision_values - np.max(decision_values))
-                    probs = exp_vals / exp_vals.sum()
-                    confidence = float(probs.max())
-                else:
-                    # Binary (shouldn't happen with 6 classes)
-                    confidence = float(1 / (1 + np.exp(-decision_values)))
-
-                # Handle LightGBM label encoding (if present)
-                if hasattr(svm, 'label_encoder_'):
-                    category = svm.label_encoder_.inverse_transform([category])[0]
-
-                # Layer 2: Heuristic post-processing (correct common SVM errors)
+                # Layer 2: Heuristic post-processing (correct common model errors)
                 original_category = category
                 category = self._apply_heuristics(text, category, context, confidence)
 
@@ -245,7 +260,7 @@ class CategoryClassifier(EmbedderMixin):
                     confidence = 0.75  # Heuristic override confidence
                     method = "heuristic"
                 else:
-                    method = "svm"
+                    method = "lightgbm"
 
                 return CategoryResult(
                     category=category,

@@ -1,0 +1,14 @@
+{
+  "thresholds": {
+    "acknowledge": 0.39999999999999997,
+    "closing": 0.25,
+    "emotion": 0.39999999999999997,
+    "question": 0.7,
+    "request": 0.25,
+    "statement": 0.3
+  },
+  "tuned_f1_macro": 0.7608402809949197,
+  "tuned_f1_samples": 0.7933329976333149,
+  "baseline_threshold": 0.5,
+  "note": "Thresholds for LightGBM + hard-class (495 features)"
+}
