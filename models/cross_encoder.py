@@ -104,7 +104,7 @@ def load_cross_encoder_weights(model: BertForSequenceClassification, weights_pat
         if "position_ids" in hf_name:
             continue
 
-        name = hf_name.replace("bert.", "bert.")  # keep bert. prefix for our model
+        name = hf_name  # keep bert. prefix for our model
 
         # Map HF names to our model structure (prefixed with "bert.")
         name_inner = hf_name.replace("bert.", "")
@@ -195,7 +195,10 @@ class InProcessCrossEncoder:
 
             # Find snapshot
             snapshots_dir = model_dir / "snapshots"
-            snapshot = next(snapshots_dir.iterdir())
+            snapshots = list(snapshots_dir.iterdir())
+            if not snapshots:
+                raise FileNotFoundError(f"No snapshots found in {snapshots_dir}")
+            snapshot = snapshots[0]
 
             # Load config
             with open(snapshot / "config.json") as f:
@@ -287,7 +290,7 @@ class InProcessCrossEncoder:
             self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
 
             # Sort by length for efficient batching
-            sorted_indices = np.argsort([-l for l in lengths])
+            sorted_indices = np.argsort([-length for length in lengths])
             all_scores: list[np.ndarray] = []
 
             for batch_start in range(0, len(pairs), batch_size):

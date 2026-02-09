@@ -324,7 +324,10 @@ class InProcessEmbedder:
 
             # Find snapshot
             snapshots_dir = model_dir / "snapshots"
-            snapshot = next(snapshots_dir.iterdir())
+            snapshots = list(snapshots_dir.iterdir())
+            if not snapshots:
+                raise FileNotFoundError(f"No snapshots found in {snapshots_dir}")
+            snapshot = snapshots[0]
 
             # Load config
             config_path = snapshot / "config.json"

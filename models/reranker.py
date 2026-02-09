@@ -67,12 +67,12 @@ class CrossEncoderReranker:
 
         # Build (query, doc) pairs
         pairs = []
-        valid_indices = []
+        valid_indices: set[int] = set()
         for i, cand in enumerate(candidates):
             text = cand.get(text_key, "")
             if text:
                 pairs.append((query, text))
-                valid_indices.append(i)
+                valid_indices.add(i)
 
         if not pairs:
             return candidates[:top_k]

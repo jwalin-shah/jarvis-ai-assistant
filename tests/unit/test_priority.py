@@ -5,7 +5,7 @@ action items, and time-sensitive content, as well as singleton patterns
 and handled status tracking.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -43,7 +43,7 @@ class MockMessage:
         self.sender = sender
         self.sender_name = sender_name
         self.text = text
-        self.date = date or datetime.now()
+        self.date = date or datetime.now(tz=UTC)
         self.is_from_me = is_from_me
         self.is_system_message = is_system_message
         self.attachments: list = []
@@ -542,7 +542,7 @@ class TestContextualScoring:
 
     def test_multiple_unanswered_messages(self, scorer: MessagePriorityScorer) -> None:
         """Test that multiple unanswered messages increases priority."""
-        now = datetime.now()
+        now = datetime.now(tz=UTC)
         sender = "+1234567890"
         chat_id = "chat123"
 
@@ -577,7 +577,7 @@ class TestContextualScoring:
 
     def test_awaiting_response(self, scorer: MessagePriorityScorer) -> None:
         """Test detection of awaiting response situation."""
-        now = datetime.now()
+        now = datetime.now(tz=UTC)
         sender = "+1234567890"
         chat_id = "chat123"
 

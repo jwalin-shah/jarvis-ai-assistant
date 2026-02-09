@@ -69,8 +69,8 @@ def auto_label_with_embeddings(
     to capture more examples of rare classes.
 
     Args:
-        confidence_threshold: Minimum confidence for majority classes (default 0.90)
-        minority_threshold: Minimum confidence for minority classes (default 0.50)
+        confidence_threshold: Minimum confidence for majority classes (default 0.80)
+        minority_threshold: Minimum confidence for minority classes (default 0.80)
         batch_size: Batch size for embedding computation
 
     Returns:

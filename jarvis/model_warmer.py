@@ -340,12 +340,13 @@ class ModelWarmer:
 
         Records unload in statistics. Does not stop the warmer.
         """
-        generator = self._get_generator()
-        if generator.is_loaded():
+        with self._lock:
+            generator = self._get_generator()
+            if not generator.is_loaded():
+                return
             generator.unload()
-            with self._lock:
-                self._stats.total_unloads += 1
-                self._stats.last_unload_time = time.time()
+            self._stats.total_unloads += 1
+            self._stats.last_unload_time = time.time()
 
             # Update memory controller state
             try:

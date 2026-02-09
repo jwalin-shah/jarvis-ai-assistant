@@ -505,10 +505,11 @@ class ThreadAnalyzer:
             return None
 
         cache_key = hashlib.md5(text.encode()).hexdigest()
-        if cache_key in self._embeddings_cache:
-            # Move to end (mark as recently used) for LRU eviction
-            self._embeddings_cache.move_to_end(cache_key)
-            return self._embeddings_cache[cache_key]
+        with self._lock:
+            if cache_key in self._embeddings_cache:
+                # Move to end (mark as recently used) for LRU eviction
+                self._embeddings_cache.move_to_end(cache_key)
+                return self._embeddings_cache[cache_key]
 
         try:
             model = self._get_sentence_model()
@@ -519,10 +520,11 @@ class ThreadAnalyzer:
             embedding = embedding / np.linalg.norm(embedding)
 
             # Store in cache with LRU eviction
-            self._embeddings_cache[cache_key] = embedding
-            if len(self._embeddings_cache) > self._cache_maxsize:
-                # Remove oldest (least recently used) entry
-                self._embeddings_cache.popitem(last=False)
+            with self._lock:
+                self._embeddings_cache[cache_key] = embedding
+                if len(self._embeddings_cache) > self._cache_maxsize:
+                    # Remove oldest (least recently used) entry
+                    self._embeddings_cache.popitem(last=False)
 
             return embedding
         except Exception as e:

@@ -542,12 +542,12 @@ def record_feedback(request: RecordFeedbackRequest) -> RecordFeedbackResponse:
     # Validate action
     try:
         action = SuggestionAction(request.action)
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid action: {request.action}. "
             "Must be one of: sent, edited, dismissed, copied",
-        )
+        ) from e
 
     # Validate edited text for edit actions
     if action == SuggestionAction.EDITED and not request.edited_text:

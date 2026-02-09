@@ -420,7 +420,7 @@ class ReplyService:
         ]
 
         # Deduplicate semantically similar examples
-        cached_embedder = CachedEmbedder(get_embedder())
+        cached_embedder = get_embedder()
         all_exchanges = self._dedupe_examples(all_exchanges, cached_embedder)
 
         # Limit to 5 total examples

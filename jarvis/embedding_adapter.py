@@ -273,41 +273,55 @@ class MLXEmbedder:
 
         # Process in batches
         all_embeddings: list[np.ndarray] = []
-        for i in range(0, len(texts), MLX_BATCH_SIZE):
-            batch = texts[i : i + MLX_BATCH_SIZE]
-            batch_embeddings = self._mlx_embedder.encode(batch, normalize=normalize)
+        try:
+            for i in range(0, len(texts), MLX_BATCH_SIZE):
+                batch = texts[i : i + MLX_BATCH_SIZE]
+                batch_embeddings = self._mlx_embedder.encode(batch, normalize=normalize)
+
+                if use_memmap and memmap_array is not None:
+                    batch_embeddings = batch_embeddings.astype(np.float32)
+                    batch_len = len(batch_embeddings)
+                    memmap_array[memmap_offset : memmap_offset + batch_len] = batch_embeddings
+                    memmap_offset += batch_len
+                else:
+                    all_embeddings.append(batch_embeddings)
+
+                # Log progress for large batches
+                if len(texts) > 1000 and (i + MLX_BATCH_SIZE) % 1000 == 0:
+                    logger.debug(
+                        "Encoded %d/%d texts (%.1f%%)",
+                        min(i + MLX_BATCH_SIZE, len(texts)),
+                        len(texts),
+                        100 * min(i + MLX_BATCH_SIZE, len(texts)) / len(texts),
+                    )
 
             if use_memmap and memmap_array is not None:
-                batch_embeddings = batch_embeddings.astype(np.float32)
-                batch_len = len(batch_embeddings)
-                memmap_array[memmap_offset : memmap_offset + batch_len] = batch_embeddings
-                memmap_offset += batch_len
-            else:
-                all_embeddings.append(batch_embeddings)
+                # Flush memmap and return as regular array, then clean up temp file
+                memmap_array.flush()
+                result = np.array(memmap_array[:memmap_offset])
+                del memmap_array
+                if memmap_path:
+                    import os
 
-            # Log progress for large batches
-            if len(texts) > 1000 and (i + MLX_BATCH_SIZE) % 1000 == 0:
-                logger.debug(
-                    "Encoded %d/%d texts (%.1f%%)",
-                    min(i + MLX_BATCH_SIZE, len(texts)),
-                    len(texts),
-                    100 * min(i + MLX_BATCH_SIZE, len(texts)) / len(texts),
-                )
-
-        if use_memmap and memmap_array is not None:
-            # Flush memmap and return as regular array, then clean up temp file
-            memmap_array.flush()
-            result = np.array(memmap_array[:memmap_offset])
-            del memmap_array
+                    try:
+                        os.unlink(memmap_path)
+                    except OSError:
+                        pass
+                return result
+            return np.vstack(all_embeddings)
+        finally:
+            # Ensure temp file cleanup even on exception
             if memmap_path:
                 import os
 
                 try:
+                    del memmap_array
+                except NameError:
+                    pass
+                try:
                     os.unlink(memmap_path)
                 except OSError:
                     pass
-            return result
-        return np.vstack(all_embeddings)
 
     def unload(self) -> None:
         """Unload the in-process embedding model to free GPU memory."""

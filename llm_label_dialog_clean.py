@@ -72,9 +72,13 @@ def label_set(input_file, output_file):
     existing_count = 0
     if Path(output_file).exists():
         with open(output_file) as f:
-            existing_count = sum(1 for _ in f)
-        print(f"Resuming from {existing_count} existing results", flush=True)
-        data = data[existing_count:]
+            existing_count = sum(1 for line in f if line.strip())
+        if existing_count > 0:
+            print(f"Resuming from {existing_count} existing results", flush=True)
+            data = data[existing_count:]
+        else:
+            # Truncate empty/stale file from prior interrupted run
+            Path(output_file).unlink()
 
     results = []
     error_count = 0

@@ -281,13 +281,17 @@ def main() -> int:
     print("=" * 70, flush=True)
 
     n = len(results)
+    if n == 0:
+        print("No results to summarize.", flush=True)
+        return 0
+
     cat_matches = sum(1 for r in results if r.category_match)
     ai_clean = sum(1 for r in results if not r.anti_ai_violations)
     latencies = [r.latency_ms for r in results]
-    avg_lat = sum(latencies) / n if n else 0
+    avg_lat = sum(latencies) / n
     sorted_lat = sorted(latencies)
-    p50 = sorted_lat[n // 2] if n else 0
-    p95 = sorted_lat[min(int(n * 0.95), n - 1)] if n else 0
+    p50 = sorted_lat[n // 2]
+    p95 = sorted_lat[min(int(n * 0.95), n - 1)]
 
     print(f"Category accuracy:  {cat_matches}/{n} ({cat_matches / n * 100:.0f}%)", flush=True)
     print(f"Anti-AI clean:      {ai_clean}/{n} ({ai_clean / n * 100:.0f}%)", flush=True)

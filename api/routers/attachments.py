@@ -351,11 +351,11 @@ def get_thumbnail(
         resolved_base = attachments_base.resolve()
         # Use relative_to to ensure path is within base directory
         resolved_path.relative_to(resolved_base)
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
             status_code=403,
             detail="Access denied: path outside attachments directory",
-        )
+        ) from e
     except Exception as e:
         logger.warning(f"Path resolution error: {e}")
         raise HTTPException(
@@ -448,11 +448,11 @@ def download_attachment(
         resolved_base = attachments_base.resolve()
         # Use relative_to to ensure path is within base directory
         resolved_path.relative_to(resolved_base)
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
             status_code=403,
             detail="Access denied: path outside attachments directory",
-        )
+        ) from e
     except Exception as e:
         logger.warning(f"Path resolution error: {e}")
         raise HTTPException(

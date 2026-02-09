@@ -186,6 +186,11 @@ class MLXModelLoader:
 
     _mlx_load_lock = threading.Lock()
 
+    @classmethod
+    def gpu_lock(cls) -> threading.Lock:
+        """Public accessor for the GPU serialization lock."""
+        return cls._mlx_load_lock
+
     def __init__(self, config: ModelConfig | None = None) -> None:
         """Initialize the loader.
 
