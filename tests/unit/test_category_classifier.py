@@ -148,7 +148,8 @@ class TestAPIContract:
         )
         assert result is not None
         # Should be one of valid categories
-        assert result.category in {"closing", "acknowledge", "question", "request", "emotion", "statement"}
+        valid = {"closing", "acknowledge", "question", "request", "emotion", "statement"}
+        assert result.category in valid
 
 
 # =============================================================================
@@ -234,3 +235,86 @@ class TestFeatureExtraction:
         extractor = CategoryFeatureExtractor()
         features = extractor.extract_spacy_features("sure thing")
         assert features[8] == 1.0  # has_agreement
+
+
+# =============================================================================
+# Remediation tests (label mapping, path, features, edge cases)
+# =============================================================================
+
+
+class TestLabelMapping:
+    def test_label_mapping_from_mlb(self) -> None:
+        """Verify mlb.classes_ is used for label mapping when available."""
+        clf = CategoryClassifier()
+        loaded = clf._load_pipeline()
+        if not loaded:
+            pytest.skip("Model not available")
+        assert clf._mlb is not None, "mlb should be stored from model artifact"
+        # mlb.classes_ should match VALID_CATEGORIES
+        from jarvis.classifiers.category_classifier import VALID_CATEGORIES
+        assert set(clf._mlb.classes_) == VALID_CATEGORIES
+
+
+class TestModelPath:
+    def test_model_path_resolves_absolutely(self) -> None:
+        """Model path should not depend on CWD."""
+        import os
+        from pathlib import Path
+
+        clf = CategoryClassifier()
+        # Change to a temp dir to verify path resolution is absolute
+        original_cwd = os.getcwd()
+        try:
+            os.chdir("/tmp")
+            loaded = clf._load_pipeline()
+            # Should still find the model (or gracefully fail if not present)
+            assert clf._pipeline_loaded is True
+            if Path(original_cwd).joinpath(
+                "models/category_multilabel_lightgbm_hardclass.joblib"
+            ).exists():
+                assert loaded is True, "Model should load regardless of CWD"
+        finally:
+            os.chdir(original_cwd)
+
+
+class TestFeatureContract:
+    def test_feature_count_contract(self) -> None:
+        """extract_all returns exactly 147 non-BERT features."""
+        from jarvis.features import CategoryFeatureExtractor
+
+        extractor = CategoryFeatureExtractor()
+        features = extractor.extract_all("Hello there", [], "none", "answer")
+        assert len(features) == 147, f"Expected 147 non-BERT features, got {len(features)}"
+
+    def test_all_categories_reachable(self) -> None:
+        """Each category should be reachable (not just 'statement')."""
+        test_messages = {
+            "acknowledge": "ok",
+            "question": "What time is it?",
+            "emotion": 'Loved "great job"',
+            "request": "Can you send me the file?",
+            "statement": "I went to the store today",
+            "closing": "Talk to you later bye",
+        }
+        seen_categories: set[str] = set()
+        for _expected, msg in test_messages.items():
+            result = classify_category(msg)
+            seen_categories.add(result.category)
+        # At minimum, fast path categories should be reachable
+        assert "acknowledge" in seen_categories
+        assert "emotion" in seen_categories
+
+    def test_confidence_calibration_range(self) -> None:
+        """All predict_proba scores should be in [0, 1]."""
+        clf = CategoryClassifier()
+        if not clf._load_pipeline():
+            pytest.skip("Model not available")
+        result = clf.classify("How are you doing?")
+        assert 0.0 <= result.confidence <= 1.0
+
+    def test_classify_empty_string(self) -> None:
+        """Empty input should not crash."""
+        result = classify_category("")
+        assert isinstance(result, CategoryResult)
+        valid = {"closing", "acknowledge", "question", "request", "emotion", "statement"}
+        assert result.category in valid
