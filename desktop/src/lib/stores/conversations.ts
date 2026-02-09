@@ -22,6 +22,9 @@ import {
 import { jarvis, type ConnectionState as SocketConnectionState } from "../socket";
 import type { DraftSuggestion } from "../api/types";
 
+/** Check if running in Tauri context */
+const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+
 /** Default number of messages to fetch per page */
 const PAGE_SIZE = 20;
 
@@ -316,17 +319,42 @@ export async function fetchConversations(isPolling = false): Promise<void> {
   try {
     let conversations: Conversation[];
 
-    // Try direct SQLite read first (much faster)
-    if (isDirectAccessAvailable()) {
+    // 1. Try socket first (fastest in Tauri context)
+    if (isTauri) {
       try {
-        conversations = await getConversationsDirect(50);
-      } catch (directError) {
-        console.warn("[Conversations] Direct read failed, falling back to HTTP:", directError);
-        conversations = await api.getConversations();
+        const result = await jarvis.call<{ conversations: Conversation[] }>(
+          "list_conversations",
+          { limit: 50 }
+        );
+        conversations = result.conversations;
+        console.log("[Conversations] Using socket for conversations");
+      } catch (socketError) {
+        console.warn("[Conversations] Socket call failed, trying direct SQLite:", socketError);
+
+        // 2. Fall back to direct SQLite
+        if (isDirectAccessAvailable()) {
+          try {
+            conversations = await getConversationsDirect(50);
+          } catch (directError) {
+            console.warn("[Conversations] Direct read failed, falling back to HTTP:", directError);
+            conversations = await api.getConversations();
+          }
+        } else {
+          conversations = await api.getConversations();
+        }
       }
     } else {
-      // Fall back to HTTP API
-      conversations = await api.getConversations();
+      // Browser mode: try direct SQLite then HTTP (no socket in browser)
+      if (isDirectAccessAvailable()) {
+        try {
+          conversations = await getConversationsDirect(50);
+        } catch (directError) {
+          console.warn("[Conversations] Direct read failed, falling back to HTTP:", directError);
+          conversations = await api.getConversations();
+        }
+      } else {
+        conversations = await api.getConversations();
+      }
     }
 
     // Check if request was aborted
@@ -1056,20 +1084,17 @@ async function resolveContactNames(): Promise<void> {
  */
 export function initializePolling(): () => void {
   // Initialize DB and socket in parallel for fastest startup
-  // DB init runs concurrently - once ready, subsequent fetches use fast direct SQLite
   const dbReady = initializeDirectAccess();
 
   initializeSocketPush().then(() => {
     setTimeout(resolveContactNames, 2000);
   });
 
-  // Start polling immediately (first fetch uses HTTP fallback if DB not ready yet)
-  // Once DB init completes, re-fetch with direct SQLite for faster data
-  startConversationPolling();
+  // Wait for DB to be ready before starting polling (prevents wasteful HTTP fallback)
+  // First fetch will use socket → direct SQLite → HTTP fallback
   dbReady.then((available) => {
-    if (available) {
-      fetchConversations(true);
-    }
+    console.log(`[Conversations] DB ready (available: ${available}), starting polling`);
+    startConversationPolling();
   });
 
   // Handle window focus/blur

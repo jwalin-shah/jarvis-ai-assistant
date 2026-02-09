@@ -159,6 +159,9 @@ class JarvisSocketServer:
         # Contact resolution
         self.register("resolve_contacts", self._resolve_contacts)
 
+        # Conversation methods
+        self.register("list_conversations", self._list_conversations)
+
         # Metrics
         self.register("get_routing_metrics", self._get_routing_metrics)
 
@@ -1376,6 +1379,59 @@ Summary:"""
         except Exception as e:
             logger.warning(f"Contact resolution failed: {e}")
             return {}
+
+    async def _list_conversations(
+        self,
+        limit: int = 50,
+        since: float | None = None,
+        before: float | None = None,
+    ) -> dict[str, Any]:
+        """List recent conversations via socket (fast, no HTTP overhead).
+
+        Args:
+            limit: Maximum number of conversations (default 50)
+            since: Unix timestamp - only return convos with messages after this
+            before: Unix timestamp - only return convos with last message before this
+
+        Returns:
+            Dict with conversations list and count
+        """
+        try:
+            from datetime import datetime
+
+            from integrations.imessage import ChatDBReader
+
+            # Convert Unix timestamps to datetime if provided
+            since_dt = datetime.fromtimestamp(since) if since else None
+            before_dt = datetime.fromtimestamp(before) if before else None
+
+            with ChatDBReader() as reader:
+                conversations = reader.get_conversations(
+                    limit=limit,
+                    since=since_dt,
+                    before=before_dt,
+                )
+
+            # Convert Conversation objects to dicts for JSON serialization
+            return {
+                "conversations": [
+                    {
+                        "chat_id": c.chat_id,
+                        "participants": c.participants,
+                        "display_name": c.display_name,
+                        "last_message_date": c.last_message_date.isoformat(),
+                        "message_count": c.message_count,
+                        "is_group": c.is_group,
+                        "last_message_text": c.last_message_text,
+                    }
+                    for c in conversations
+                ],
+                "total": len(conversations),
+            }
+
+        except Exception as e:
+            logger.exception("Error listing conversations")
+            raise JsonRpcError(INTERNAL_ERROR, "Failed to list conversations") from e
 
     # ========== Metrics ==========
 
