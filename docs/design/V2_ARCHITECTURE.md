@@ -41,7 +41,26 @@ Desktop App ←─ HTTP (50-150ms) ─→ FastAPI Server
 
 ## Unix Socket Protocol
 
-JSON-RPC 2.0 over newline-delimited JSON:
+JSON-RPC 2.0 over newline-delimited JSON.
+
+### Available Methods
+
+| Method | Streaming | Description |
+|--------|-----------|-------------|
+| `ping` | No | Health check |
+| `generate_draft` | Yes | Generate reply draft for a conversation |
+| `summarize` | Yes | Summarize a conversation |
+| `get_smart_replies` | No | Get quick reply suggestions |
+| `semantic_search` | No | Search message history by meaning |
+| `batch` | No | Execute multiple RPC calls in one request |
+| `resolve_contacts` | No | Resolve contact info from handles |
+| `get_routing_metrics` | No | Get routing/classification metrics |
+| `prefetch_stats` | No | Get prefetch cache statistics |
+| `prefetch_invalidate` | No | Invalidate prefetch cache entries |
+| `prefetch_focus` | No | Signal that a conversation is focused |
+| `prefetch_hover` | No | Signal that a conversation is hovered |
+
+### Message Format
 
 ```json
 // Request
