@@ -6,9 +6,10 @@ Eliminates train/serve skew by using identical feature extraction.
 Features:
 - 384 BERT embeddings (via embedder.encode, normalized)
 - 26 hand-crafted features (structure, mobilization, context, reactions)
-- ~69 spaCy features (14 original + 55 new targeted features)
-- 8 new hand-crafted features (from error analysis)
-Total: ~487 features
+- 94 spaCy features (14 original + 80 new: NER, deps, tokens, morphology)
+- 19 new hand-crafted features (8 error-analysis + 11 high-value additions)
+- 8 hard-class features (closing/request specific)
+Total: 531 non-BERT features (147 without BERT, 531 with BERT)
 
 Usage:
     from jarvis.features.category_features import CategoryFeatureExtractor
@@ -93,6 +94,62 @@ IMPLICIT_REQUEST_RE = re.compile(
     r"\b(i need|i want|i wanna|i gotta|i have to)\b.*\b(you|your|help|know)\b",
     re.IGNORECASE
 )
+
+# === HARD-CLASS FEATURES (for closing and request) ===
+
+# Closing-specific patterns
+GOODBYE_PHRASES = {
+    "bye", "goodbye", "later", "ttyl", "talk to you later", "gotta go", "gtg",
+    "see you", "see ya", "catch you", "peace", "cya", "l8r", "take care",
+    "talk soon", "talk later", "goodnight", "gnight", "nite", "sleep well"
+}
+
+CLOSING_EMOJIS = {"👋", "✌️", "✌", "💯", "✨", "🙏", "😴", "😊", "💤"}
+
+TIME_CONSTRAINT_PHRASES = {
+    "gotta run", "gtg", "g2g", "have to go", "running late", "in a hurry",
+    "gotta jet", "about to leave"
+}
+
+# Request-specific patterns
+POLITE_REQUEST_MODAL_RE = re.compile(
+    r"^(can|could|would|will)\s+(you|u)\s+",
+    re.IGNORECASE
+)
+
+IMPERATIVE_WITH_PLEASE_RE = re.compile(
+    r"^(please\s+\w+|(\w+\s+)*please)",
+    re.IGNORECASE
+)
+
+CONDITIONAL_REQUEST_RE = re.compile(
+    r"\b(if you (could|can|would)|when you (can|get a chance|have time)|whenever you)\b",
+    re.IGNORECASE
+)
+
+NEED_WANT_YOU_RE = re.compile(
+    r"\b(i need you to|i want you to|i'd like you to|need you to|want you to)\b",
+    re.IGNORECASE
+)
+
+# Additional feature patterns (context overlap, question types, thanks/apology, urgency, emoji sentiment)
+THANKS_MARKERS = {"thanks", "thank you", "thx", "ty", "tysm", "appreciate", "appreciated"}
+APOLOGY_MARKERS = {"sorry", "my bad", "apologize", "apologies", "oops", "whoops", "my fault"}
+URGENCY_MARKERS = {"asap", "urgent", "quick", "quickly", "hurry", "rush", "rushing", "now", "right now", "immediately"}
+FUTURE_TIME_MARKERS = {"later", "tomorrow", "tonight", "next week", "next time", "soon", "eventually"}
+
+# Emoji sentiment sets (common emotional emojis)
+POSITIVE_EMOJIS = {
+    "😊", "😀", "😁", "😂", "🤣", "😃", "😄", "😆", "😉", "😍", "🥰", "😘", "❤️", "💕", "💖",
+    "👍", "👏", "🙌", "🎉", "🎊", "✨", "💯", "🔥", "😎", "🤩", "😇", "🥳", "💪", "🙏", "💗"
+}
+NEGATIVE_EMOJIS = {
+    "😢", "😭", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "😤", "😠", "😡",
+    "🤬", "💔", "😰", "😨", "😱", "😥", "😪", "🤦", "🤷", "💀", "😒", "🙄"
+}
+NEUTRAL_EMOJIS = {
+    "🤔", "🙃", "😐", "😑", "🤨", "🧐", "😶", "👀", "💬", "🗣️", "👋", "✌️"
+}
 
 
 class CategoryFeatureExtractor:
@@ -203,14 +260,23 @@ class CategoryFeatureExtractor:
         text: str,
         doc: spacy.tokens.Doc | None = None,
     ) -> NDArray[np.float32]:
-        """Extract ~69 spaCy linguistic features (14 original + 55 new).
+        """Extract 94 spaCy linguistic features (14 original + 80 new).
+
+        New features:
+        - 8 POS ratios
+        - 12 fine-grained tags
+        - 15 dependency relations (10 original + 5 new)
+        - 21 named entity types (6 original + 15 new)
+        - 5 sentence structure
+        - 11 token properties (6 original + 5 new)
+        - 8 morphology features
 
         Args:
             text: Message text
             doc: Optional pre-parsed spaCy doc (reuse to avoid re-parsing)
 
         Returns:
-            ~69-dim feature array
+            94-dim feature array
         """
         if doc is None:
             doc = self.nlp(text)
@@ -311,26 +377,45 @@ class CategoryFeatureExtractor:
         for tag in target_tags:
             features.append(1.0 if tag in tag_set else 0.0)
 
-        # Dependency counts (10): nsubj, dobj, ROOT, aux, neg, advmod, amod, prep, pobj, conj
+        # Dependency counts (15): 10 original + 5 new (ccomp, xcomp, acl, relcl, mark)
         dep_counts = {
             "nsubj": 0, "dobj": 0, "ROOT": 0, "aux": 0, "neg": 0,
-            "advmod": 0, "amod": 0, "prep": 0, "pobj": 0, "conj": 0
+            "advmod": 0, "amod": 0, "prep": 0, "pobj": 0, "conj": 0,
+            "ccomp": 0, "xcomp": 0, "acl": 0, "relcl": 0, "mark": 0
         }
         for token in doc:
             if token.dep_ in dep_counts:
                 dep_counts[token.dep_] += 1
 
-        for dep in ["nsubj", "dobj", "ROOT", "aux", "neg", "advmod", "amod", "prep", "pobj", "conj"]:
+        for dep in ["nsubj", "dobj", "ROOT", "aux", "neg", "advmod", "amod", "prep", "pobj", "conj",
+                    "ccomp", "xcomp", "acl", "relcl", "mark"]:
             features.append(dep_counts[dep] / max(total_tokens, 1))
 
-        # Named entities (6): has_PERSON, has_DATE, has_TIME, has_GPE, entity_count, entity_ratio
+        # Named entities (21): 6 original + 15 new entity types
         ent_labels = {ent.label_ for ent in doc.ents}
+        # Original 6
         features.append(1.0 if "PERSON" in ent_labels else 0.0)
         features.append(1.0 if "DATE" in ent_labels else 0.0)
         features.append(1.0 if "TIME" in ent_labels else 0.0)
         features.append(1.0 if "GPE" in ent_labels else 0.0)
         features.append(float(len(doc.ents)))
         features.append(len(doc.ents) / max(total_tokens, 1))
+        # New 15 entity types
+        features.append(1.0 if "MONEY" in ent_labels else 0.0)
+        features.append(1.0 if "CARDINAL" in ent_labels else 0.0)
+        features.append(1.0 if "ORDINAL" in ent_labels else 0.0)
+        features.append(1.0 if "PERCENT" in ent_labels else 0.0)
+        features.append(1.0 if "QUANTITY" in ent_labels else 0.0)
+        features.append(1.0 if "FAC" in ent_labels else 0.0)
+        features.append(1.0 if "PRODUCT" in ent_labels else 0.0)
+        features.append(1.0 if "EVENT" in ent_labels else 0.0)
+        features.append(1.0 if "LANGUAGE" in ent_labels else 0.0)
+        features.append(1.0 if "LAW" in ent_labels else 0.0)
+        features.append(1.0 if "WORK_OF_ART" in ent_labels else 0.0)
+        features.append(1.0 if "NORP" in ent_labels else 0.0)
+        features.append(1.0 if "LOC" in ent_labels else 0.0)
+        features.append(1.0 if "ORG" in ent_labels else 0.0)
+        features.append(1.0 if ("CARDINAL" in ent_labels or "MONEY" in ent_labels) else 0.0)
 
         # Sentence structure (5): sent_count, avg_sent_len, max_sent_len, noun_chunk_count, noun_chunk_ratio
         sents = list(doc.sents)
@@ -347,7 +432,7 @@ class CategoryFeatureExtractor:
         features.append(float(len(noun_chunks)))
         features.append(len(noun_chunks) / max(total_tokens, 1))
 
-        # Token properties (6): stop_word_ratio, alpha_ratio, digit_ratio, avg_word_len, punct_ratio, like_url_count
+        # Token properties (11): 6 original + 5 new
         stop_count = sum(1 for token in doc if token.is_stop)
         features.append(stop_count / max(total_tokens, 1))
 
@@ -365,6 +450,22 @@ class CategoryFeatureExtractor:
 
         url_count = sum(1 for token in doc if token.like_url)
         features.append(float(url_count))
+
+        # New 5 token attributes
+        like_num_count = sum(1 for token in doc if token.like_num)
+        features.append(like_num_count / max(total_tokens, 1))
+
+        like_email_count = sum(1 for token in doc if token.like_email)
+        features.append(float(like_email_count))
+
+        is_currency_count = sum(1 for token in doc if token.is_currency)
+        features.append(float(is_currency_count))
+
+        is_quote_count = sum(1 for token in doc if token.is_quote)
+        features.append(float(is_quote_count))
+
+        like_url_ratio = url_count / max(total_tokens, 1)
+        features.append(like_url_ratio)
 
         # Morphology (8): past_tense_ratio, present_tense_ratio, has_imperative_mood, has_conditional,
         # person_1/2/3, has_passive
@@ -416,7 +517,17 @@ class CategoryFeatureExtractor:
         doc: spacy.tokens.Doc | None = None,
         context: list[str] | None = None,
     ) -> NDArray[np.float32]:
-        """Extract 8 new hand-crafted features from error analysis.
+        """Extract 19 new hand-crafted features (8 error analysis + 11 additional).
+
+        Error analysis features (8):
+        - Clause after agreement, aux inversion, emotional marker position, etc.
+
+        Additional features (11):
+        - Context lexical overlap (1)
+        - Question types (3): yes/no, wh, tag
+        - Thanks/apology markers (2)
+        - Urgency/temporal markers (2)
+        - Emoji sentiment (3): positive, negative, neutral
 
         Args:
             text: Message text
@@ -424,7 +535,7 @@ class CategoryFeatureExtractor:
             context: Previous messages in conversation
 
         Returns:
-            8-dim feature array
+            19-dim feature array
         """
         if doc is None:
             doc = self.nlp(text)
@@ -487,6 +598,211 @@ class CategoryFeatureExtractor:
         proposal_pattern = 1.0 if PROPOSAL_PATTERNS_RE.search(text_lower) else 0.0
         features.append(proposal_pattern)
 
+        # === ADDITIONAL 11 FEATURES ===
+
+        # 9. context_lexical_overlap - Strong signal for acknowledgment
+        context_overlap = 0.0
+        if context and len(context) >= 1:
+            text_words = set(text_lower.split())
+            context_words = set(" ".join(context[-2:]).lower().split())
+            if text_words:
+                overlap = len(text_words & context_words)
+                context_overlap = overlap / len(text_words)
+        features.append(context_overlap)
+
+        # 10-12. Question type classification (3 features)
+        # Yes/no question: starts with modal/aux
+        is_yes_no_q = 0.0
+        if len(doc) > 0 and doc[0].tag_ in ("MD", "VBP", "VBZ", "VBD") and "?" in text:
+            is_yes_no_q = 1.0
+        features.append(is_yes_no_q)
+
+        # Wh-question: starts with wh-word
+        is_wh_q = 0.0
+        if len(doc) > 0 and doc[0].tag_ in ("WDT", "WP", "WP$", "WRB"):
+            is_wh_q = 1.0
+        features.append(is_wh_q)
+
+        # Tag question: ends with pattern like "right?", "yeah?", "isn't it?"
+        is_tag_q = 0.0
+        if text.endswith("?"):
+            last_words = " ".join(words[-3:]).lower()
+            tag_patterns = ["right?", "yeah?", "ok?", "no?", "yes?", "huh?", "eh?"]
+            if any(pattern in last_words for pattern in tag_patterns):
+                is_tag_q = 1.0
+        features.append(is_tag_q)
+
+        # 13-14. Thanks and apology markers
+        has_thanks = 1.0 if any(marker in text_lower for marker in THANKS_MARKERS) else 0.0
+        features.append(has_thanks)
+
+        has_apology = 1.0 if any(marker in text_lower for marker in APOLOGY_MARKERS) else 0.0
+        features.append(has_apology)
+
+        # 15-16. Urgency and future time markers
+        has_urgency = 1.0 if any(marker in text_lower for marker in URGENCY_MARKERS) else 0.0
+        features.append(has_urgency)
+
+        has_future_time = 1.0 if any(marker in text_lower for marker in FUTURE_TIME_MARKERS) else 0.0
+        features.append(has_future_time)
+
+        # 17-19. Emoji sentiment (positive, negative, neutral counts)
+        positive_emoji_count = sum(1 for char in text if char in POSITIVE_EMOJIS)
+        features.append(float(positive_emoji_count))
+
+        negative_emoji_count = sum(1 for char in text if char in NEGATIVE_EMOJIS)
+        features.append(float(negative_emoji_count))
+
+        neutral_emoji_count = sum(1 for char in text if char in NEUTRAL_EMOJIS)
+        features.append(float(neutral_emoji_count))
+
+        return np.array(features, dtype=np.float32)
+
+    def extract_hard_class_features(
+        self,
+        text: str,
+        doc: spacy.tokens.Doc | None = None,
+    ) -> NDArray[np.float32]:
+        """Extract 8 features targeting hard classes (closing, request).
+
+        Closing features (4):
+        - has_goodbye_phrase: explicit goodbye/farewell words
+        - has_closing_emoji: emoji commonly used in farewells
+        - has_time_constraint: mentions of urgency/needing to leave
+        - ends_with_exclamation: "later!" vs "later" (more definitive)
+
+        Request features (4):
+        - has_polite_modal_start: "can/could/would you" at message start
+        - has_imperative_with_please: politeness marker with command
+        - has_conditional_request: "if you could", "when you can"
+        - has_need_want_you: "I need/want you to" direct request
+
+        Args:
+            text: Message text
+            doc: Optional pre-parsed spaCy doc
+
+        Returns:
+            8-dim feature array
+        """
+        if doc is None:
+            doc = self.nlp(text)
+
+        features: list[float] = []
+        text_lower = text.lower()
+
+        # === CLOSING FEATURES ===
+
+        # 1. has_goodbye_phrase
+        has_goodbye = 1.0 if any(phrase in text_lower for phrase in GOODBYE_PHRASES) else 0.0
+        features.append(has_goodbye)
+
+        # 2. has_closing_emoji
+        has_closing_emoji = 1.0 if any(emoji in text for emoji in CLOSING_EMOJIS) else 0.0
+        features.append(has_closing_emoji)
+
+        # 3. has_time_constraint
+        has_time_constraint = 1.0 if any(
+            phrase in text_lower for phrase in TIME_CONSTRAINT_PHRASES
+        ) else 0.0
+        features.append(has_time_constraint)
+
+        # 4. ends_with_exclamation
+        ends_with_exclamation = 1.0 if text.rstrip().endswith("!") else 0.0
+        features.append(ends_with_exclamation)
+
+        # === REQUEST FEATURES ===
+
+        # 5. has_polite_modal_start
+        has_polite_modal = 1.0 if POLITE_REQUEST_MODAL_RE.search(text) else 0.0
+        features.append(has_polite_modal)
+
+        # 6. has_imperative_with_please
+        has_please = 1.0 if IMPERATIVE_WITH_PLEASE_RE.search(text) else 0.0
+        features.append(has_please)
+
+        # 7. has_conditional_request
+        has_conditional = 1.0 if CONDITIONAL_REQUEST_RE.search(text) else 0.0
+        features.append(has_conditional)
+
+        # 8. has_need_want_you
+        has_need_want = 1.0 if NEED_WANT_YOU_RE.search(text) else 0.0
+        features.append(has_need_want)
+
+        return np.array(features, dtype=np.float32)
+
+
+    def extract_multilabel_indicators(
+        self,
+        text: str,
+        doc: spacy.tokens.Doc | None = None,
+    ) -> NDArray[np.float32]:
+        """Extract 10 features indicating multi-label likelihood.
+
+        These help the model learn when a message has multiple intents
+        vs a single clear intent.
+
+        Returns:
+            10-dim feature array
+        """
+        if doc is None:
+            doc = self.nlp(text)
+
+        features: list[float] = []
+        text_lower = text.lower()
+        words = text.split()
+
+        # 1. num_sentences (normalized)
+        num_sentences = max(1, text.count('.') + text.count('?') + text.count('!'))
+        features.append(min(num_sentences / 3.0, 1.0))  # Cap at 3
+
+        # 2. has_conjunction
+        conjunctions = ['but', 'and', 'also', 'though', 'however', 'plus']
+        has_conj = 1.0 if any(f' {c} ' in text_lower for c in conjunctions) else 0.0
+        features.append(has_conj)
+
+        # 3. mixed_punctuation
+        has_question = '?' in text
+        has_exclamation = '!' in text
+        has_period = '.' in text and not text.strip().endswith('...')
+        mixed_punct = 1.0 if sum([has_question, has_exclamation, has_period]) >= 2 else 0.0
+        features.append(mixed_punct)
+
+        # 4. is_very_short (<4 words → likely single-label)
+        is_very_short = 1.0 if len(words) < 4 else 0.0
+        features.append(is_very_short)
+
+        # 5. is_long (>25 words → might be multi-label)
+        is_long = 1.0 if len(words) > 25 else 0.0
+        features.append(is_long)
+
+        # 6. punctuation_diversity
+        punct_types = sum([
+            '?' in text,
+            '!' in text,
+            ',' in text,
+            '.' in text,
+            ';' in text,
+        ])
+        features.append(min(punct_types / 3.0, 1.0))
+
+        # 7. has_thanks_plus_more
+        has_thanks = any(word in text_lower for word in ['thanks', 'thank you', 'thx'])
+        thanks_plus_more = 1.0 if (has_thanks and len(words) > 3) else 0.0
+        features.append(thanks_plus_more)
+
+        # 8. question_with_context (long question might include statement)
+        question_with_context = 1.0 if ('?' in text and len(words) > 12) else 0.0
+        features.append(question_with_context)
+
+        # 9. words_per_sentence
+        words_per_sentence = len(words) / max(num_sentences, 1)
+        features.append(min(words_per_sentence / 15.0, 1.0))  # Normalize
+
+        # 10. has_discourse_marker (transitions between intents)
+        discourse_markers = ['so', 'anyway', 'well', 'btw', 'also', 'oh']
+        has_marker = 1.0 if any(f'{m} ' in text_lower or f' {m}' in text_lower for m in discourse_markers) else 0.0
+        features.append(has_marker)
+
         return np.array(features, dtype=np.float32)
 
     def extract_all(
@@ -496,9 +812,15 @@ class CategoryFeatureExtractor:
         mob_pressure: str = "none",
         mob_type: str = "answer",
     ) -> NDArray[np.float32]:
-        """Extract all ~103 non-BERT features.
+        """Extract all 147 non-BERT features.
 
         Parse spaCy doc ONCE, reuse for all extraction methods.
+
+        Feature breakdown:
+        - 26 hand-crafted (structure, mobilization, context, reactions)
+        - 94 spaCy (POS, tags, deps, NER, tokens, morphology)
+        - 19 new hand-crafted (error analysis + high-value additions)
+        - 8 hard-class (closing/request specific)
 
         Args:
             text: Message text
@@ -507,7 +829,7 @@ class CategoryFeatureExtractor:
             mob_type: Mobilization response type
 
         Returns:
-            ~103-dim feature array (26 + ~69 + 8)
+            147-dim feature array (26 + 94 + 19 + 8)
         """
         # Parse once, reuse
         doc = self.nlp(text)
@@ -516,9 +838,10 @@ class CategoryFeatureExtractor:
         hand_crafted = self.extract_hand_crafted(text, context, mob_pressure, mob_type)
         spacy_feats = self.extract_spacy_features(text, doc)
         new_hand_crafted = self.extract_new_hand_crafted(text, doc, context)
+        hard_class_feats = self.extract_hard_class_features(text, doc)
 
         # Concatenate
-        return np.concatenate([hand_crafted, spacy_feats, new_hand_crafted])
+        return np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats])
 
 
 class FeatureConfig:
@@ -526,37 +849,51 @@ class FeatureConfig:
 
     # Feature group sizes
     BERT_DIM = 384
+    CONTEXT_BERT_DIM = 384  # NEW: Context embeddings
     HAND_CRAFTED_DIM = 26
-    SPACY_DIM = 69  # 14 original + 55 new
-    NEW_HAND_CRAFTED_DIM = 8
-    TOTAL_NON_BERT = HAND_CRAFTED_DIM + SPACY_DIM + NEW_HAND_CRAFTED_DIM  # 103
-    TOTAL_DIM = BERT_DIM + TOTAL_NON_BERT  # 487
+    SPACY_DIM = 94  # 14 original + 80 new (15 NER + 5 deps + 5 tokens + 55 from before)
+    NEW_HAND_CRAFTED_DIM = 19  # 8 error-analysis + 11 high-value additions
+    HARD_CLASS_DIM = 8
+    MULTILABEL_INDICATOR_DIM = 10  # Closing + request specific features (unused in hardclass)
+    TOTAL_NON_BERT = HAND_CRAFTED_DIM + SPACY_DIM + NEW_HAND_CRAFTED_DIM + HARD_CLASS_DIM  # 147
+    TOTAL_DIM = BERT_DIM + CONTEXT_BERT_DIM + TOTAL_NON_BERT  # 915
 
     # Feature index ranges (for ColumnTransformer)
     BERT_START = 0
     BERT_END = BERT_DIM
-    HAND_CRAFTED_START = BERT_END
+    CONTEXT_BERT_START = BERT_END
+    CONTEXT_BERT_END = CONTEXT_BERT_START + CONTEXT_BERT_DIM
+    HAND_CRAFTED_START = CONTEXT_BERT_END
     HAND_CRAFTED_END = HAND_CRAFTED_START + HAND_CRAFTED_DIM
     SPACY_START = HAND_CRAFTED_END
     SPACY_END = SPACY_START + SPACY_DIM
     NEW_HAND_CRAFTED_START = SPACY_END
     NEW_HAND_CRAFTED_END = NEW_HAND_CRAFTED_START + NEW_HAND_CRAFTED_DIM
+    HARD_CLASS_START = NEW_HAND_CRAFTED_END
+    HARD_CLASS_END = HARD_CLASS_START + HARD_CLASS_DIM
 
     # Binary feature indices (no scaling needed)
-    # Hand-crafted: mobilization one-hots (indices 5-11), tone flags (12-13),
-    # is_no_context (15), reaction flags (16, 18, 20, 21, 22, 23)
-    # SpaCy: many binary (has_imperative, you_modal, etc.)
-    # For simplicity: scale all non-BERT features except one-hot encoded mobilization
+    # [0:384] = current BERT (passthrough, already normalized)
+    # [384:768] = context BERT (passthrough, already normalized)
+    # [768:775] = mobilization one-hots within hand-crafted (passthrough, binary)
+    # Everything else gets scaled
     BINARY_INDICES = list(range(HAND_CRAFTED_START + 5, HAND_CRAFTED_START + 12))  # Mobilization one-hots
 
     @classmethod
     def get_scaling_indices(cls) -> tuple[list[int], list[int], list[int]]:
         """Get feature indices for ColumnTransformer scaling.
 
+        Feature layout:
+        - [0:384] = current BERT → passthrough (already L2-normalized)
+        - [384:768] = context BERT → passthrough (already L2-normalized)
+        - [768:775] = mobilization one-hots → passthrough (binary)
+        - [775:915] = everything else → StandardScaler
+
         Returns:
             (bert_indices, binary_indices, scale_indices)
         """
-        bert_indices = list(range(cls.BERT_START, cls.BERT_END))
+        # Both BERT embeddings (current + context) are already normalized
+        bert_indices = list(range(cls.BERT_START, cls.CONTEXT_BERT_END))
         binary_indices = cls.BINARY_INDICES
         scale_indices = [
             i for i in range(cls.TOTAL_DIM)
