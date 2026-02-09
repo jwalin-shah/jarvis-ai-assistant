@@ -118,19 +118,21 @@ class CategoryClassifier(EmbedderMixin):
 
     def __init__(self) -> None:
         self._pipeline = None
+        self._mlb = None
         self._pipeline_loaded = False
 
     def _load_pipeline(self) -> bool:
         """Load trained Pipeline (with scaler + LightGBM) from disk.
 
         Model: OneVsRestClassifier(LGBMClassifier) trained with 915 features.
-        Strategy: Trained WITH context embeddings, but zeroed at inference for better generalization.
+        Strategy: Trained WITH context embeddings, zeroed at inference.
         """
         if self._pipeline_loaded:
             return self._pipeline is not None
 
         self._pipeline_loaded = True
-        model_path = Path("models/category_multilabel_lightgbm_hardclass.joblib")
+        _project_root = Path(__file__).resolve().parent.parent.parent
+        model_path = _project_root / "models" / "category_multilabel_lightgbm_hardclass.joblib"
 
         if not model_path.exists():
             logger.warning("No pipeline at %s - using fallback only", model_path)
@@ -140,7 +142,26 @@ class CategoryClassifier(EmbedderMixin):
             # Model is saved as dict with 'model' and 'mlb' keys
             model_dict = joblib.load(model_path)
             self._pipeline = model_dict['model']
-            logger.info("Loaded category pipeline from %s", model_path)
+            self._mlb = model_dict.get('mlb')
+
+            # Validate loaded classes match expected categories
+            if self._mlb is not None:
+                loaded_cats = set(self._mlb.classes_)
+                if loaded_cats != VALID_CATEGORIES:
+                    logger.error(
+                        "Model categories %s != expected %s", loaded_cats, VALID_CATEGORIES
+                    )
+                    self._pipeline = None
+                    self._mlb = None
+                    return False
+                logger.info(
+                    "Loaded category pipeline from %s (classes: %s)",
+                    model_path, list(self._mlb.classes_),
+                )
+            else:
+                logger.warning("No mlb in model artifact, using hardcoded CATEGORIES")
+                logger.info("Loaded category pipeline from %s", model_path)
+
             return True
         except Exception as e:
             logger.error("Failed to load pipeline: %s", e)
@@ -248,7 +269,8 @@ class CategoryClassifier(EmbedderMixin):
 
                 # Get category and confidence
                 category_idx = int(np.argmax(proba))
-                category = CATEGORIES[category_idx]
+                classes = self._mlb.classes_ if self._mlb is not None else CATEGORIES
+                category = classes[category_idx]
                 confidence = float(proba[category_idx])
 
                 # Layer 2: Heuristic post-processing (correct common model errors)
