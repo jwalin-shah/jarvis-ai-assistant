@@ -49,6 +49,7 @@ class Fact:
     contact_id: str = ""  # which contact this fact belongs to
     extracted_at: str = ""  # ISO timestamp
     source_message_id: int | None = None  # optional message ROWID
+    linked_contact_id: str | None = None  # resolved contact ID (from NER person linking)
 
 logger = logging.getLogger(__name__)
 

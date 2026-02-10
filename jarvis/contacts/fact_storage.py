@@ -53,6 +53,7 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 fact.source_message_id,
                 fact.source_text[:500] if fact.source_text else "",
                 current_time,
+                fact.linked_contact_id,
             )
             for fact in facts
         ]
@@ -70,8 +71,8 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 """
                 INSERT OR IGNORE INTO contact_facts
                 (contact_id, category, subject, predicate, value, confidence,
-                 source_message_id, source_text, extracted_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 source_message_id, source_text, extracted_at, linked_contact_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 fact_data,
             )
