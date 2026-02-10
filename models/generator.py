@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from contracts.models import GenerationRequest, GenerationResponse
 from models.loader import MLXModelLoader, ModelConfig
 from models.prompt_builder import PromptBuilder
+from models.resilience import get_fallback_response, should_skip_model_load
 from models.templates import Embedder, TemplateMatcher
 
 if TYPE_CHECKING:
@@ -143,9 +144,29 @@ class MLXGenerator:
         try:
             # Ensure model is loaded
             if not self._loader.is_loaded():
+                # Check memory pressure before attempting a load
+                if should_skip_model_load():
+                    logger.warning("Skipping model load due to memory pressure, returning fallback")
+                    return GenerationResponse(
+                        text=get_fallback_response(),
+                        tokens_used=0,
+                        generation_time_ms=0.0,
+                        model_name="fallback",
+                        used_template=False,
+                        template_name=None,
+                        finish_reason="memory_pressure",
+                    )
                 if not self._loader.load():
-                    msg = "Failed to load model"
-                    raise RuntimeError(msg)
+                    logger.warning("Model load failed, returning fallback response")
+                    return GenerationResponse(
+                        text=get_fallback_response(),
+                        tokens_used=0,
+                        generation_time_ms=0.0,
+                        model_name="fallback",
+                        used_template=False,
+                        template_name=None,
+                        finish_reason="load_failed",
+                    )
                 loaded_for_this_call = True
                 # Prefill cache after first load
                 self._ensure_prompt_cache()
@@ -198,13 +219,24 @@ class MLXGenerator:
                 finish_reason="stop",
             )
 
-        except Exception:
+        except Exception as e:
             # If we loaded the model for this call and generation failed,
             # unload to free memory and prevent inconsistent state
             if loaded_for_this_call:
                 logger.warning("Generation failed, unloading model loaded for this request")
                 self._loader.unload()
-            raise
+            # Return fallback instead of crashing
+            logger.error("Model generation failed, returning fallback: %s", e)
+            total_time = (time.perf_counter() - start_time) * 1000
+            return GenerationResponse(
+                text=get_fallback_response(),
+                tokens_used=0,
+                generation_time_ms=total_time,
+                model_name="fallback",
+                used_template=False,
+                template_name=None,
+                finish_reason="error",
+            )
 
     def _ensure_prompt_cache(self) -> None:
         """Prefill the KV cache with the system prompt prefix if not already done."""
@@ -297,9 +329,23 @@ class MLXGenerator:
         try:
             # Ensure model is loaded
             if not self._loader.is_loaded():
+                # Check memory pressure before attempting a load
+                if should_skip_model_load():
+                    logger.warning("Skipping stream model load due to memory pressure")
+                    yield {
+                        "token": get_fallback_response(),
+                        "token_index": 0,
+                        "is_final": True,
+                    }
+                    return
                 if not self._loader.load():
-                    msg = "Failed to load model"
-                    raise RuntimeError(msg)
+                    logger.warning("Stream model load failed, returning fallback")
+                    yield {
+                        "token": get_fallback_response(),
+                        "token_index": 0,
+                        "is_final": True,
+                    }
+                    return
                 loaded_for_this_call = True
                 self._ensure_prompt_cache()
 
