@@ -23,6 +23,10 @@ from jarvis.graph.export import (
     export_to_json,
     export_to_svg,
 )
+from jarvis.graph.knowledge_graph import (
+    KnowledgeGraph,
+    KnowledgeGraphData,
+)
 from jarvis.graph.layout import (
     LayoutEngine,
     compute_force_layout,
@@ -45,6 +49,9 @@ __all__ = [
     "LayoutEngine",
     "compute_force_layout",
     "compute_hierarchical_layout",
+    # Knowledge Graph
+    "KnowledgeGraph",
+    "KnowledgeGraphData",
     # Export
     "export_to_json",
     "export_to_graphml",
