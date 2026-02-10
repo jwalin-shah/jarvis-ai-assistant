@@ -54,6 +54,8 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 fact.source_text[:500] if fact.source_text else "",
                 current_time,
                 fact.linked_contact_id,
+                fact.valid_from,
+                fact.valid_until,
             )
             for fact in facts
         ]
@@ -71,8 +73,9 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 """
                 INSERT OR IGNORE INTO contact_facts
                 (contact_id, category, subject, predicate, value, confidence,
-                 source_message_id, source_text, extracted_at, linked_contact_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 source_message_id, source_text, extracted_at, linked_contact_id,
+                 valid_from, valid_until)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 fact_data,
             )
@@ -106,7 +109,8 @@ def get_facts_for_contact(contact_id: str) -> list[Fact]:
         rows = conn.execute(
             """
             SELECT category, subject, predicate, value, confidence,
-                   source_text, source_message_id, extracted_at
+                   source_text, source_message_id, extracted_at,
+                   valid_from, valid_until
             FROM contact_facts
             WHERE contact_id = ?
             ORDER BY confidence DESC
@@ -125,6 +129,8 @@ def get_facts_for_contact(contact_id: str) -> list[Fact]:
             source_message_id=row["source_message_id"],
             contact_id=contact_id,
             extracted_at=row["extracted_at"] or "",
+            valid_from=row["valid_from"],
+            valid_until=row["valid_until"],
         )
         for row in rows
     ]
@@ -140,7 +146,8 @@ def get_all_facts() -> list[Fact]:
         rows = conn.execute(
             """
             SELECT contact_id, category, subject, predicate, value,
-                   confidence, source_text, source_message_id, extracted_at
+                   confidence, source_text, source_message_id, extracted_at,
+                   valid_from, valid_until
             FROM contact_facts
             ORDER BY confidence DESC
             """,
@@ -157,6 +164,8 @@ def get_all_facts() -> list[Fact]:
             source_message_id=row["source_message_id"],
             contact_id=row["contact_id"],
             extracted_at=row["extracted_at"] or "",
+            valid_from=row["valid_from"],
+            valid_until=row["valid_until"],
         )
         for row in rows
     ]

@@ -38,3 +38,69 @@
   - `<type>: <short description>` with optional body.
   - Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - PR flow: branch from `main`, run `make verify`, push, open PR, ensure CI passes, request review.
+
+## Performance Checklist for New Code
+
+The codebase targets Apple Silicon with 8GB RAM. All code must respect these constraints:
+
+### Critical Performance Rules
+
+- [ ] **Batch Everything**: Use `embedder.encode(list)` not `for x: embedder.encode(x)`
+- [ ] **Batch DB Operations**: Use `executemany()` not loops with `execute()`
+- [ ] **Binary for Embeddings**: Use `embedding.tobytes()` / `np.frombuffer()`, never JSON float lists
+- [ ] **Singleton Models**: Load models once via double-check locking, never per-request
+- [ ] **Memory Limits**: Set MLX memory limits (`mx.set_memory_limit()`) before model operations
+- [ ] **Stream Large Data**: Use `np.memmap` for datasets >500MB
+- [ ] **Lazy Imports**: Import heavy modules (sklearn, torch, mlx) inside functions, not at module level
+- [ ] **Vectorized Operations**: Prefer NumPy/pandas over Python loops
+- [ ] **Cache Expensive Ops**: Cache embeddings, classification results, DB queries with TTL
+- [ ] **Reuse Connections**: Don't open/close DB connections per operation
+
+### Anti-Patterns to Avoid
+
+```python
+# ❌ BAD: Unbatched embedding
+for text in texts:
+    emb = embedder.encode(text)  # N round trips
+
+# ✅ GOOD: Batched embedding
+embeddings = embedder.encode(texts)  # 1 round trip
+
+# ❌ BAD: JSON for embeddings
+json.dumps(embedding.tolist())  # 2MB for 500 embeddings
+
+# ✅ GOOD: Binary for embeddings
+embedding.astype(np.float32).tobytes()  # 300KB for 500 embeddings
+
+# ❌ BAD: Row-by-row DB inserts
+for row in rows:
+    conn.execute("INSERT ...", row)
+
+# ✅ GOOD: Bulk insert
+conn.executemany("INSERT ...", rows)
+
+# ❌ BAD: Module-level heavy imports
+import torch  # Slows startup even if unused
+
+# ✅ GOOD: Lazy imports
+def process():
+    import torch  # Only when needed
+```
+
+### Memory Constraints (8GB System)
+
+- Keep working set under 500MB for batch operations
+- Use `n_jobs=1` for datasets >100MB (parallel = swap thrashing)
+- Clear MLX cache after large operations: `mx.clear_cache()`
+- Monitor swap: 0% CPU + high RAM = swapping = 10-100x slower
+
+### Performance Review Checklist
+
+Before submitting PRs with data processing or ML code:
+
+1. Is anything loaded/computed twice?
+2. Are there loops that could be batched/vectorized?
+3. Is JSON being used where binary would be faster?
+4. Are connections/resources reused or reopened each time?
+5. Could this blow past 500MB RAM?
+6. Is there visible progress for long operations?

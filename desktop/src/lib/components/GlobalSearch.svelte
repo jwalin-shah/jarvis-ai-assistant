@@ -3,7 +3,6 @@
   import { api, APIError } from "../api/client";
   import type { Message, SearchFilters, SemanticSearchResultItem } from "../api/types";
   import { navigateToMessage, conversationsStore } from "../stores/conversations";
-  import { get } from "svelte/store";
 
   interface Props {
     onClose: () => void;
@@ -219,10 +218,9 @@
 
   /** Snapshot conversation names from the store once, after results arrive */
   function populateConversationNameCache(chatIds: string[]) {
-    const state = get(conversationsStore);
     for (const chatId of chatIds) {
       if (!conversationNameCache.has(chatId)) {
-        const conv = state.conversations.find(c => c.chat_id === chatId);
+        const conv = conversationsStore.conversations.find(c => c.chat_id === chatId);
         if (conv) {
           conversationNameCache.set(
             chatId,

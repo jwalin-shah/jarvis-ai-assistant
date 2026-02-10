@@ -23,7 +23,7 @@
   });
 
   let totalMessages = $derived(
-    $conversationsStore.conversations.reduce(
+    conversationsStore.conversations.reduce(
       (sum, c) => sum + c.message_count,
       0
     )
@@ -86,7 +86,7 @@
       </div>
       <div class="card-content">
         <h3>Conversations</h3>
-        <p class="stat">{$conversationsStore.conversations.length}</p>
+        <p class="stat">{conversationsStore.conversations.length}</p>
         <p class="sub">{totalMessages.toLocaleString()} total messages</p>
       </div>
     </button>

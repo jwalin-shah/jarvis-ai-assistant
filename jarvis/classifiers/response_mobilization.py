@@ -138,6 +138,7 @@ RECIPIENT_ORIENTED_PATTERNS = [
 
 # === REQUEST/INVITATION PATTERNS (HIGH - COMMITMENT) ===
 REQUEST_PATTERNS = [
+    r"^(wanna|down)\??$",  # "wanna?" / "down?"
     r"^(can|could|would|will) (you|u|ya)\s+\w+",  # "Can you help?"
     r"^(wanna|want to|down to|tryna)\s+",  # "Wanna grab lunch?"
     r"^(let'?s|lets)\s+",  # "Let's go"
@@ -146,6 +147,11 @@ REQUEST_PATTERNS = [
     r"\b(pick (me|us) up|give (me|us) a ride)\b",  # "Pick me up"
     r"^(want me to|should i|shall i|can i)\b",  # Offers requiring decision
     r"^(anyone|anybody|any of y'?all|y'?all) (wanna|want to|down to)\b",  # Group invitations
+]
+
+# Explicit boundaries that shut down messaging/request flow
+NEGATED_REQUEST_PATTERNS = [
+    r"^(do not|don't|dont)\s+(text|call|ping|message|dm)\s+me\b",
 ]
 
 # Imperative verbs at start (commands/requests)
@@ -182,12 +188,25 @@ IMPERATIVE_VERBS = {
 # === QUESTION PATTERNS (HIGH - ANSWER) ===
 # Direct information-seeking questions
 INFO_QUESTION_PATTERNS = [
+    r"^(wya|wyd|hbu)\b",  # slang: where you at / what you doing / how about you
+    r"^what about (you|u)\b",  # "what about you"
+    r"^thoughts\??$",  # one-word opinion request
     r"^what (time|day|is|are|was|were|did|does|do|happened)\b",
     r"^where (is|are|did|do|does|should|can|were|was|you|u|ya)\b",  # includes "where you at"
     r"^when (is|are|did|do|does|should|can|will)\b",
     r"^who (is|are|did|was|were|does|do)\b",
     r"^how (much|many|long|far|often|do|did|does|is|are|can|should)\b",
     r"^which (one|is|are|do|does|did|should)\b",
+]
+
+SLANG_QUESTION_PATTERNS = [
+    r"^wya\??$",
+    r"^wyd\??$",
+    r"^hbu\??$",
+    r"^thoughts\??$",
+    r"^(you|u|ya) free\??$",
+    r"^what about (you|u)\??$",
+    r"^how about (you|u)\??$",
 ]
 
 # === REACTIVE PATTERNS (MEDIUM - EMOTIONAL) ===
@@ -331,11 +350,13 @@ GREETING_PATTERNS = [
 _COMPILED_SPEAKER_ORIENTED = [re.compile(p) for p in SPEAKER_ORIENTED_PATTERNS]
 _COMPILED_RECIPIENT_ORIENTED = [re.compile(p) for p in RECIPIENT_ORIENTED_PATTERNS]
 _COMPILED_REQUEST = [re.compile(p) for p in REQUEST_PATTERNS]
+_COMPILED_NEGATED_REQUEST = [re.compile(p) for p in NEGATED_REQUEST_PATTERNS]
 _COMPILED_REACTIVE = [re.compile(p) for p in REACTIVE_PATTERNS]
 _COMPILED_RHETORICAL = [re.compile(p) for p in RHETORICAL_PATTERNS]
 _COMPILED_OPINION = [re.compile(p) for p in OPINION_PATTERNS]
 _COMPILED_TELLING = [re.compile(p) for p in TELLING_PATTERNS]
 _COMPILED_INFO_QUESTION = [re.compile(p) for p in INFO_QUESTION_PATTERNS]
+_COMPILED_SLANG_QUESTION = [re.compile(p) for p in SLANG_QUESTION_PATTERNS]
 _COMPILED_GREETING = [re.compile(p) for p in GREETING_PATTERNS]
 
 # =============================================================================
@@ -364,6 +385,7 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
         "is_speaker_oriented": False,
         "is_recipient_oriented": False,
         "is_request": False,
+        "is_negated_request": False,
         "is_imperative": False,
         "is_reactive": False,
         "is_rhetorical": False,
@@ -371,6 +393,7 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
         "is_telling": False,
         "is_backchannel": False,
         "is_greeting": False,
+        "is_slang_question": False,
         "has_multiple_exclamation": False,
     }
 
@@ -407,6 +430,11 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
             features["is_request"] = True
             break
 
+    for pattern in _COMPILED_NEGATED_REQUEST:
+        if pattern.match(text_lower):
+            features["is_negated_request"] = True
+            break
+
     # Imperative
     if first_word in IMPERATIVE_VERBS:
         features["is_imperative"] = True
@@ -433,6 +461,11 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
     for pattern in _COMPILED_TELLING:
         if pattern.match(text_lower):
             features["is_telling"] = True
+            break
+
+    for pattern in _COMPILED_SLANG_QUESTION:
+        if pattern.match(text_lower):
+            features["is_slang_question"] = True
             break
 
     # Backchannel
@@ -473,11 +506,19 @@ def classify_response_pressure(text: str) -> MobilizationResult:
     features = _detect_features(text, text_lower)
 
     # === NONE: Backchannels and greetings ===
+    if features["is_negated_request"]:
+        return MobilizationResult(
+            pressure=ResponsePressure.NONE,
+            response_type=ResponseType.CLOSING,
+            confidence=0.98,
+            features=features,
+        )
+
     if features["is_backchannel"]:
         return MobilizationResult(
             pressure=ResponsePressure.NONE,
             response_type=ResponseType.CLOSING,
-            confidence=0.95,
+            confidence=0.98,
             features=features,
         )
 
@@ -496,6 +537,14 @@ def classify_response_pressure(text: str) -> MobilizationResult:
             pressure=ResponsePressure.HIGH,
             response_type=ResponseType.COMMITMENT,
             confidence=0.95,
+            features=features,
+        )
+
+    if features["is_slang_question"]:
+        return MobilizationResult(
+            pressure=ResponsePressure.HIGH,
+            response_type=ResponseType.ANSWER,
+            confidence=0.90,
             features=features,
         )
 
@@ -608,6 +657,17 @@ def classify_response_pressure(text: str) -> MobilizationResult:
             confidence=0.70,
             features=features,
         )
+
+    # === Short-form direct questions without WH-word ===
+    # Covers common slang that still expects an answer.
+    for pattern in _COMPILED_INFO_QUESTION:
+        if pattern.match(text_lower):
+            return MobilizationResult(
+                pressure=ResponsePressure.HIGH,
+                response_type=ResponseType.ANSWER,
+                confidence=0.80,
+                features=features,
+            )
 
     # === DEFAULT: LOW (most casual chat is low-pressure) ===
     return MobilizationResult(

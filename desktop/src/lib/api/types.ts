@@ -31,6 +31,28 @@ export interface Message {
   date_delivered: string | null;
   date_read: string | null;
   is_system_message: boolean;
+  // View-specific fields (for optimistic UI)
+  _optimistic?: boolean;
+  _optimisticId?: string;
+  _optimisticStatus?: "sending" | "sent" | "failed" | null;
+  _optimisticError?: string;
+}
+
+/** Pagination state for a conversation */
+export interface PaginationState {
+  hasMore: boolean;
+  loadingMore: boolean;
+}
+
+export type ConnectionStatus = "connected" | "disconnected" | "connecting";
+
+/** Optimistic message for immediate UI feedback during send */
+export interface OptimisticMessage {
+  id: string; // Temporary ID (e.g., "optimistic-{timestamp}")
+  text: string;
+  status: "sending" | "sent" | "failed";
+  error?: string;
+  timestamp: number;
 }
 
 // Conversation types

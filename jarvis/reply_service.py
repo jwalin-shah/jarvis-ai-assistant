@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.category_classifier import classify_category
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
-    classify_response_pressure,
 )
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
@@ -169,7 +169,7 @@ class ReplyService:
         contact = self.context_service.get_contact(None, chat_id)
 
         # 3. Classify mobilization
-        mobilization = classify_response_pressure(incoming)
+        mobilization = classify_with_cascade(incoming)
 
         # 4. Search similar examples
         search_results = self.context_service.search_examples(incoming, chat_id=chat_id)
@@ -251,7 +251,7 @@ class ReplyService:
 
         # 1. Context and classification
         if mobilization is None:
-            mobilization = classify_response_pressure(incoming)
+            mobilization = classify_with_cascade(incoming)
 
         # 1b. Category classification and routing
 
@@ -368,8 +368,6 @@ class ReplyService:
             context_messages = self.context_service.fetch_conversation_context(
                 chat_id, limit=context_depth
             )
-
-        context = "\n".join(context_messages) + f"\n[Incoming]: {incoming}"
 
         # Relationship profile
         relationship_profile, contact_context = self.context_service.get_relationship_profile(

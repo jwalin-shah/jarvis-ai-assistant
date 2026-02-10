@@ -27,10 +27,10 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
 
+from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
-    classify_response_pressure,
 )
 from jarvis.db import JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
@@ -372,7 +372,7 @@ class ReplyRouter:
 
         # Classify response pressure
         mobilization_start = time.perf_counter()
-        mobilization = classify_response_pressure(incoming)
+        mobilization = classify_with_cascade(incoming)
         latency_ms["mobilization"] = (time.perf_counter() - mobilization_start) * 1000
         logger.debug(
             "Mobilization: pressure=%s type=%s conf=%.2f",

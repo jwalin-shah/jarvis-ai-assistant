@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from jarvis.contacts.contact_profile import Fact
+from jarvis.contacts.junk_filters import is_bot_message, is_professional_message
 
 if TYPE_CHECKING:
     pass
@@ -31,8 +32,34 @@ RELATIONSHIP_PATTERN = re.compile(
     r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
 )
 
-# Location patterns: "moved to Austin", "live in NYC", "going to Paris"
-# Improved: capture more complete location names
+# Temporal markers for fact dating
+PAST_MARKERS = {"was", "were", "had", "used to", "grew up", "previously", "before", "last year"}
+PRESENT_MARKERS = {"am", "is", "are", "currently", "now", "these days", "lately"}
+FUTURE_MARKERS = {"will", "going to", "planning to", "moving to", "starting at", "next week"}
+
+# Location patterns with temporal awareness
+# Past: "moved from NYC", "grew up in Texas"
+# Present: "live in Austin", "based in SF"
+# Future: "moving to LA", "heading to Paris"
+LOCATION_PAST_PATTERN = re.compile(
+    r"\b(?:moved?\s+from|grew\s+up\s+in|was\s+based\s+in|lived\s+in|from)\s+"
+    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
+    re.IGNORECASE,
+)
+
+LOCATION_PRESENT_PATTERN = re.compile(
+    r"\b(?:live[sd]?\s+in|living\s+in|based\s+in|currently\s+in)\s+"
+    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
+    re.IGNORECASE,
+)
+
+LOCATION_FUTURE_PATTERN = re.compile(
+    r"\b(?:moving\s+to|relocating\s+to|heading\s+to|going\s+to|travel(?:ing|ed)?\s+to|"
+    r"visiting)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
+    re.IGNORECASE,
+)
+
+# Legacy pattern (keep for compatibility)
 LOCATION_PATTERN = re.compile(
     r"\b(?:moved?\s+to|live[sd]?\s+in|living\s+in|from|based\s+in|"
     r"heading\s+to|going\s+to|visiting|relocated\s+to|travel(?:ing|ed)?\s+to)\s+"
@@ -196,28 +223,8 @@ class FactExtractor:
         return False
 
     def _is_professional_message(self, text: str) -> bool:
-        """Detect professional/business emails that should not be processed.
-
-        Markers:
-        - Formal greetings: "Dear", "Hello from", "Hi, ... from [Company]"
-        - Professional signoffs: "Regards", "Sincerely", "Best regards"
-        - Business patterns: "from [Company]", "Reminder:", "[Company] recruiting"
-        """
-        professional_markers = [
-            r"\bdear\s",
-            r"hello from",
-            r"reminder:\s",
-            r"\bregards\b",
-            r"\bsincerely\b",
-            r"\bbest regards\b",
-            r"i appreciate",
-            r"opportunity",
-            r"from\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Inc|LLC|Ltd|Corp|Hyundai|Recruiting|Marketing|Healthcare|Hospital)",
-        ]
-        for marker in professional_markers:
-            if re.search(marker, text, re.IGNORECASE):
-                return True
-        return False
+        """Delegate to shared junk filter. See jarvis.contacts.junk_filters."""
+        return is_professional_message(text)
 
     def _is_coherent_subject(self, subject: str) -> bool:
         """Reject subjects that are vague pronouns or incomplete fragments.
@@ -272,54 +279,8 @@ class FactExtractor:
         return True
 
     def _is_bot_message(self, text: str, chat_id: str = "") -> bool:
-        """Detect high-confidence bot messages (spam, automated replies).
-
-        High-confidence indicators (any 1 match = reject):
-        - CVS Pharmacy, Rx Ready (pharmacy bots)
-        - "Check out this job at" (LinkedIn spam)
-        - Sender is 5-6 digit short code (SMS;-;898287)
-
-        Medium-confidence (any 3 matches = reject):
-        - URL + "job" + capitalized company
-        - "apply" + "now"
-        - >50% all-caps text
-        """
-        # High-confidence single indicators
-        high_confidence_patterns = [
-            r"CVS Pharmacy",
-            r"Rx Ready",
-            r"Check out this job at",
-        ]
-        for pattern in high_confidence_patterns:
-            if re.search(pattern, text, re.IGNORECASE):
-                return True
-
-        # Check for SMS short codes (5-6 digit only in chat_id)
-        if chat_id and re.match(r"SMS;-;\d{5,6}$", chat_id):
-            return True
-
-        # Medium-confidence multi-factor detection
-        medium_factors = 0
-
-        # Factor 1: URL + job keyword + capitalized word
-        if re.search(r"https?://", text) and re.search(r"\bjob\b", text, re.IGNORECASE):
-            if re.search(r"\b[A-Z][a-z]+\s+[A-Z]", text):
-                medium_factors += 1
-
-        # Factor 2: "apply" + "now"
-        if re.search(r"\bapply\b", text, re.IGNORECASE) and re.search(
-            r"\bnow\b", text, re.IGNORECASE
-        ):
-            medium_factors += 1
-
-        # Factor 3: >50% all caps
-        letters = [c for c in text if c.isalpha()]
-        if letters:
-            caps_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
-            if caps_ratio > 0.5:
-                medium_factors += 1
-
-        return medium_factors >= 3
+        """Delegate to shared junk filter. See jarvis.contacts.junk_filters."""
+        return is_bot_message(text, chat_id)
 
     def _is_vague_subject(self, subject: str) -> bool:
         """Reject vague subjects that are pronouns losing context.
@@ -546,21 +507,79 @@ class FactExtractor:
                 )
             )
 
-        # Location patterns
-        for match in LOCATION_PATTERN.finditer(text):
+        # Location patterns - temporal aware
+        # Present locations (highest confidence - current residence)
+        for match in LOCATION_PRESENT_PATTERN.finditer(text):
             location = self._clean_subject(match.group(1))
-            if location:  # Only add if non-empty after cleaning
+            if location:
                 facts.append(
                     Fact(
                         category="location",
                         subject=location,
                         predicate="lives_in",
                         source_text=text[:200],
-                        confidence=0.7,
+                        confidence=0.85,  # Higher confidence for present tense
                         contact_id=contact_id,
                         extracted_at=timestamp,
+                        valid_from=timestamp,  # Current location
                     )
                 )
+
+        # Future locations (moving to)
+        for match in LOCATION_FUTURE_PATTERN.finditer(text):
+            location = self._clean_subject(match.group(1))
+            if location:
+                facts.append(
+                    Fact(
+                        category="location",
+                        subject=location,
+                        predicate="moving_to",
+                        source_text=text[:200],
+                        confidence=0.6,
+                        contact_id=contact_id,
+                        extracted_at=timestamp,
+                        valid_from=timestamp,  # Will be valid from now
+                    )
+                )
+
+        # Past locations (grew up in, moved from)
+        for match in LOCATION_PAST_PATTERN.finditer(text):
+            location = self._clean_subject(match.group(1))
+            if location:
+                facts.append(
+                    Fact(
+                        category="location",
+                        subject=location,
+                        predicate="lived_in",
+                        source_text=text[:200],
+                        confidence=0.5,  # Lower confidence for past
+                        contact_id=contact_id,
+                        extracted_at=timestamp,
+                        valid_until=timestamp,  # No longer valid
+                    )
+                )
+
+        # Legacy pattern (fallback)
+        for match in LOCATION_PATTERN.finditer(text):
+            location = self._clean_subject(match.group(1))
+            if location:
+                # Check if already extracted by temporal patterns
+                already_extracted = any(
+                    f.category == "location" and f.subject.lower() == location.lower()
+                    for f in facts
+                )
+                if not already_extracted:
+                    facts.append(
+                        Fact(
+                            category="location",
+                            subject=location,
+                            predicate="lives_in",
+                            source_text=text[:200],
+                            confidence=0.7,
+                            contact_id=contact_id,
+                            extracted_at=timestamp,
+                        )
+                    )
 
         # Work patterns
         for match in WORK_PATTERN.finditer(text):
