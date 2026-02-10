@@ -7,11 +7,11 @@ Consolidates logic from:
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 import random
 import threading
 import time
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -83,7 +83,6 @@ class ReplyService:
         self._semantic_searcher: SemanticSearcher | None = None
         self._context_service: ContextService | None = None
         self._reranker = None
-        self._resilient_server = None
         self._lock = threading.RLock()
 
     @property
@@ -135,16 +134,6 @@ class ReplyService:
                     semantic_searcher=self.semantic_searcher,
                 )
             return self._context_service
-
-    @property
-    def resilient_server(self):
-        """Get or create the resilient model server (lazy-loaded)."""
-        with self._lock:
-            if self._resilient_server is None:
-                from models.resilience import ResilientModelServer
-
-                self._resilient_server = ResilientModelServer(generator=self.generator)
-            return self._resilient_server
 
     @property
     def reranker(self):
@@ -527,9 +516,7 @@ class ReplyService:
         similar_exchanges = [
             (str(r.get("trigger_text", "")), str(r.get("response_text", ""))) for r in top_results
         ]
-        rag_rerank_scores = [
-            self._safe_float(r.get("rerank_score"), default=0.0) for r in top_results
-        ]
+        rag_rerank_scores = [self._safe_float(r.get("rerank_score"), default=0.0) for r in top_results]
 
         all_exchanges = similar_exchanges + [
             ex for ex in category_exchanges if ex not in similar_exchanges
@@ -556,7 +543,9 @@ class ReplyService:
                     score=self._safe_float(result.get("similarity"), default=0.0),
                     metadata={
                         "response_text": str(result.get("response_text", "")),
-                        "rerank_score": self._safe_float(result.get("rerank_score"), default=0.0),
+                        "rerank_score": self._safe_float(
+                            result.get("rerank_score"), default=0.0
+                        ),
                     },
                 )
             )
@@ -740,7 +729,8 @@ class ReplyService:
                 avg_per_ex = []
                 for i in range(n):
                     s = sum(
-                        float(np.dot(kept_embs[i], kept_embs[j])) for j in range(n) if j != i
+                        float(np.dot(kept_embs[i], kept_embs[j]))
+                        for j in range(n) if j != i
                     ) / (n - 1)
                     avg_per_ex.append(s)
                 drop_idx = int(np.argmax(avg_per_ex))
@@ -794,7 +784,7 @@ class ReplyService:
 
         try:
             model_request = self._to_model_generation_request(request)
-            response = self.resilient_server.generate(model_request)
+            response = self.generator.generate(model_request)
             text = response.text.strip()
 
             if text.lower() in self._UNCERTAIN_SIGNALS:
