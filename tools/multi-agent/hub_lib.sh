@@ -117,9 +117,9 @@ with open('$STATE_FILE', 'w') as f:
     cat > "$STATE_FILE" << STATEEOF
 {
     "lanes": {
-        "a": {"status": "idle", "agent": "${LANE_A_AGENT:-codex}", "pid": null, "last_commit": null},
-        "b": {"status": "idle", "agent": "${LANE_B_AGENT:-claude}", "pid": null, "last_commit": null},
-        "c": {"status": "idle", "agent": "${LANE_C_AGENT:-gemini}", "pid": null, "last_commit": null}
+        "a": {"status": "idle", "agent": "${LANE_A_AGENT:-codex}", "pid": null, "last_commit": null, "started_at": null, "finished_at": null, "retries": 0},
+        "b": {"status": "idle", "agent": "${LANE_B_AGENT:-claude}", "pid": null, "last_commit": null, "started_at": null, "finished_at": null, "retries": 0},
+        "c": {"status": "idle", "agent": "${LANE_C_AGENT:-gemini}", "pid": null, "last_commit": null, "started_at": null, "finished_at": null, "retries": 0}
     },
     "tasks": [],
     "reviews": {},
@@ -226,6 +226,83 @@ with open('$STATE_FILE', 'w') as f:
 "
 }
 
+# ── Notifications ────────────────────────────────────────────────────────────
+
+# Send macOS notification
+notify() {
+    local title=$1
+    local message=$2
+    local sound=${3:-"Glass"}
+
+    # macOS native notification
+    osascript -e "display notification \"$message\" with title \"$title\" sound name \"$sound\"" 2>/dev/null &
+
+    # Also log to events
+    echo "[$(date '+%H:%M:%S')] NOTIFY: $title - $message" >> "$LOGS_DIR/hub_events.log" 2>&1
+}
+
+# ── Log Summary Extraction ───────────────────────────────────────────────────
+
+# Extract a short summary from an agent's log file
+extract_log_summary() {
+    local log_file=$1
+    local max_lines=${2:-5}
+
+    if [[ ! -f "$log_file" ]] || [[ ! -s "$log_file" ]]; then
+        echo "(empty log)"
+        return
+    fi
+
+    # Get last meaningful lines, skip blank lines
+    tail -20 "$log_file" 2>/dev/null | grep -v '^$' | tail -"$max_lines"
+}
+
+# Extract token/cost info from agent logs (best-effort parsing)
+extract_token_usage() {
+    local log_file=$1
+
+    if [[ ! -f "$log_file" ]]; then
+        echo "tokens: unknown"
+        return
+    fi
+
+    # Try to find token counts in various formats
+    local tokens
+    tokens=$(grep -iE "tokens?[: ]+[0-9]|total.*(tokens|cost)|usage" "$log_file" 2>/dev/null | tail -3)
+    if [[ -n "$tokens" ]]; then
+        echo "$tokens"
+    else
+        # Fallback: log file size as rough proxy
+        local size
+        size=$(wc -c < "$log_file" 2>/dev/null | tr -d ' ')
+        echo "log size: ${size} bytes (token count unavailable)"
+    fi
+}
+
+# ── Duration Formatting ──────────────────────────────────────────────────────
+
+format_duration() {
+    local started=$1
+    local ended=${2:-"now"}
+
+    python3 -c "
+from datetime import datetime, timezone
+started = datetime.fromisoformat('$started'.replace('Z', '+00:00'))
+if '$ended' == 'now':
+    ended = datetime.now(timezone.utc)
+else:
+    ended = datetime.fromisoformat('$ended'.replace('Z', '+00:00'))
+delta = ended - started
+secs = int(delta.total_seconds())
+if secs < 60:
+    print(f'{secs}s')
+elif secs < 3600:
+    print(f'{secs // 60}m {secs % 60}s')
+else:
+    print(f'{secs // 3600}h {(secs % 3600) // 60}m')
+" 2>/dev/null || echo "?"
+}
+
 set_review_result() {
     local source_lane=$1
     local reviewer_lane=$2
@@ -307,6 +384,19 @@ on_lane_exit() {
         set_lane_status "$lane" "done"
         echo "[$(date '+%H:%M:%S')] Lane ${lane^^} exited (no .agent-done sentinel)" >> "$LOGS_DIR/hub_events.log" 2>&1
     fi
+
+    # Record finish time
+    python3 -c "
+import json, time
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+state['lanes']['$lane']['finished_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null
+
+    # macOS notification
+    notify "Hub: Lane ${lane^^} Done" "${LANE_LABELS[$lane]} finished"
 
     # Auto-trigger review if HUB_AUTO_REVIEW=1
     if [[ "${HUB_AUTO_REVIEW:-1}" == "1" ]]; then
@@ -421,9 +511,11 @@ if len(results) == len(needed):
             if [[ "$all_in" == "all_approved" ]]; then
                 set_lane_status "$lane" "approved"
                 echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: ALL REVIEWS APPROVED" >> "$LOGS_DIR/hub_events.log" 2>&1
+                notify "Hub: Lane ${lane^^} APPROVED" "All reviewers approved - ready to merge" "Hero"
             elif [[ "$all_in" == "has_rejections" ]]; then
                 set_lane_status "$lane" "needs_revision"
                 echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: NEEDS REVISION - triggering auto-rework" >> "$LOGS_DIR/hub_events.log" 2>&1
+                notify "Hub: Lane ${lane^^} REJECTED" "Auto-reworking with feedback" "Basso"
 
                 # Auto-rework if enabled and under retry limit
                 if [[ "${HUB_AUTO_REWORK:-1}" == "1" ]]; then
@@ -555,7 +647,8 @@ with open('$STATE_FILE', 'w') as f:
 # Called after a standalone task agent exits to auto-update state
 on_task_exit() {
     local task_id=$1
-    python3 -c "
+    local log_file
+    log_file=$(python3 -c "
 import json, time
 with open('$STATE_FILE') as f:
     state = json.load(f)
@@ -563,11 +656,33 @@ for t in state.get('tasks', []):
     if t['id'] == $task_id:
         t['status'] = 'finished'
         t['finished_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        # Extract summary from log
+        log = t.get('log', '')
+        print(log)
         break
 with open('$STATE_FILE', 'w') as f:
     json.dump(state, f, indent=4)
-" 2>/dev/null
-    hub_log "Task #$task_id finished" >> "$LOGS_DIR/hub_events.log" 2>&1
+" 2>/dev/null)
+
+    echo "[$(date '+%H:%M:%S')] Task #$task_id finished" >> "$LOGS_DIR/hub_events.log" 2>&1
+
+    # Save summary
+    if [[ -n "$log_file" ]] && [[ -f "$log_file" ]]; then
+        extract_log_summary "$log_file" 3 > "$LOGS_DIR/task_${task_id}_summary.txt" 2>/dev/null
+    fi
+
+    # macOS notification
+    local desc
+    desc=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+for t in state.get('tasks', []):
+    if t['id'] == $task_id:
+        print(t.get('description', 'Task')[:50])
+        break
+" 2>/dev/null)
+    notify "Hub: Task #$task_id Done" "$desc"
 }
 
 # ── Ownership Enforcement ─────────────────────────────────────────────────────

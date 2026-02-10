@@ -37,6 +37,7 @@ Commands:
   review                          Cross-review completed lanes (ownership + agent review)
   rework <lane>                   Re-dispatch a lane with rejection feedback
   merge                           Merge all approved lanes to main (runs make verify)
+  summary                         Show session stats: agent usage, token/cost estimates, events
   teardown                        Remove worktrees and clean up state
 
 Agents: claude, codex, gemini, kimi, opencode
@@ -220,6 +221,17 @@ IMPORTANT:
         set_lane_status "$lane" "working"
         set_lane_pid "$lane" "$pid"
 
+        # Record start time
+        python3 -c "
+import json, time
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+state['lanes']['$lane']['started_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+state['lanes']['$lane']['finished_at'] = None
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null
+
         lane_log "$lane" "Agent PID: $pid, log: $log_file"
         dispatched=$((dispatched + 1))
     done
@@ -245,17 +257,20 @@ cmd_run() {
         exit 1
     fi
 
-    # Parse optional -m model flag
+    # Parse optional flags: -m model, -l label
     local model="default"
-    if [[ "${1:-}" == "-m" ]]; then
-        shift
-        model="${1:-default}"
-        shift || true
-    fi
+    local label=""
+    while [[ "${1:-}" == -* ]]; do
+        case "${1}" in
+            -m) shift; model="${1:-default}"; shift || true ;;
+            -l) shift; label="${1:-}"; shift || true ;;
+            *) break ;;
+        esac
+    done
 
     local prompt="${*}"
     if [[ -z "$prompt" ]]; then
-        hub_error "Usage: hub.sh run <agent> [-m model] <prompt>"
+        hub_error "Usage: hub.sh run <agent> [-m model] [-l label] <prompt>"
         exit 1
     fi
 
@@ -277,7 +292,7 @@ if 'tasks' not in state:
 " 2>/dev/null
 
     local log_file="$LOGS_DIR/${agent}_task_$(date +%Y%m%d_%H%M%S).log"
-    local short_desc="${prompt:0:60}"
+    local short_desc="${label:-${prompt:0:60}}"
 
     hub_log "Running $agent${model:+ ($model)}: $short_desc..."
 
@@ -350,9 +365,9 @@ cmd_status() {
     fi
 
     echo -e "${BOLD}Hub Status${NC}"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    printf "%-8s %-10s %-10s %-8s %-30s %s\n" "LANE" "STATUS" "AGENT" "PID" "LAST COMMIT" "DONE?"
-    echo "────────────────────────────────────────────────────────────────"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    printf "%-6s %-12s %-10s %-8s %-8s %s\n" "LANE" "STATUS" "AGENT" "PID" "TIME" "LAST COMMIT"
+    echo "──────────────────────────────────────────────────────────────────────────────"
 
     for lane in $ALL_LANES; do
         local status
@@ -417,8 +432,32 @@ print(p if p else '')
             merged)          status_colored="${GREEN}merged${NC}" ;;
         esac
 
-        printf "%-8s %-20b %-10s %-8s %-30s %s\n" \
-            "${lane^^}" "$status_colored" "$agent" "$pid_info" "$last_commit" "$done_flag"
+        # Duration
+        local duration="-"
+        local started_at
+        started_at=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    s = json.load(f)
+print(s['lanes']['$lane'].get('started_at') or '')
+" 2>/dev/null)
+        if [[ -n "$started_at" ]]; then
+            local finished_at
+            finished_at=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    s = json.load(f)
+print(s['lanes']['$lane'].get('finished_at') or '')
+" 2>/dev/null)
+            if [[ -n "$finished_at" ]]; then
+                duration=$(format_duration "$started_at" "$finished_at")
+            else
+                duration=$(format_duration "$started_at")
+            fi
+        fi
+
+        printf "%-6s %-22b %-10s %-8s %-8s %s\n" \
+            "${lane^^}" "$status_colored" "$agent" "$pid_info" "$duration" "$last_commit"
     done
 
     echo ""
@@ -449,17 +488,29 @@ if reviews:
     # Show standalone tasks
     local task_output
     task_output=$(python3 -c "
-import json, os, signal
+import json, os, time
+from datetime import datetime, timezone
+
 with open('$STATE_FILE') as f:
     state = json.load(f)
 tasks = state.get('tasks', [])
 if not tasks:
     exit(0)
+
+def fmt_duration(started, finished=None):
+    try:
+        s = datetime.fromisoformat(started.replace('Z', '+00:00'))
+        e = datetime.fromisoformat(finished.replace('Z', '+00:00')) if finished else datetime.now(timezone.utc)
+        secs = int((e - s).total_seconds())
+        if secs < 60: return f'{secs}s'
+        if secs < 3600: return f'{secs // 60}m {secs % 60}s'
+        return f'{secs // 3600}h {(secs % 3600) // 60}m'
+    except: return '?'
+
 print('TASKS')
 for t in tasks:
     pid = t.get('pid')
     status = t.get('status', 'unknown')
-    # Check if process is still running
     if status == 'working' and pid:
         try:
             os.kill(pid, 0)
@@ -468,24 +519,26 @@ for t in tasks:
             pid_info = 'done'
             status = 'finished'
             t['status'] = 'finished'
+            t['finished_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
     else:
         pid_info = str(pid) if pid else '-'
     agent = t.get('agent', '?')
     model = t.get('model', 'default')
-    desc = t.get('description', '')[:50]
+    desc = t.get('description', '')[:45]
     task_id = t.get('id', '?')
     model_str = f' ({model})' if model != 'default' else ''
-    print(f'  #{task_id:<4} {status:<12} {agent}{model_str:<16} {pid_info:<8} {desc}')
-# Save updated statuses
+    agent_str = f'{agent}{model_str}'
+    dur = fmt_duration(t.get('started_at', ''), t.get('finished_at'))
+    print(f'  #{task_id:<4} {status:<12} {agent_str:<16} {pid_info:<8} {dur:<8} {desc}')
 with open('$STATE_FILE', 'w') as f:
     json.dump(state, f, indent=4)
 " 2>/dev/null)
 
     if [[ -n "$task_output" ]]; then
         echo -e "${BOLD}Standalone Tasks${NC}"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        printf "  %-6s %-12s %-18s %-8s %s\n" "ID" "STATUS" "AGENT" "PID" "DESCRIPTION"
-        echo "  ──────────────────────────────────────────────────────────────"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        printf "  %-6s %-12s %-16s %-8s %-8s %s\n" "ID" "STATUS" "AGENT" "PID" "TIME" "DESCRIPTION"
+        echo "  ──────────────────────────────────────────────────────────────────────────"
         echo "$task_output" | tail -n +2
         echo ""
     fi
@@ -961,6 +1014,97 @@ cmd_merge() {
     hub_success "All lanes merged and verified successfully"
 }
 
+# ── Command: summary ──────────────────────────────────────────────────────────
+
+cmd_summary() {
+    if [[ ! -f "$STATE_FILE" ]]; then
+        hub_error "No hub state found."
+        exit 1
+    fi
+
+    echo -e "${BOLD}Session Summary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    python3 -c "
+import json, os
+from datetime import datetime, timezone
+
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+
+# Count by status
+lanes = state.get('lanes', {})
+tasks = state.get('tasks', [])
+
+lane_statuses = {}
+for l in lanes.values():
+    s = l.get('status', 'idle')
+    lane_statuses[s] = lane_statuses.get(s, 0) + 1
+
+task_statuses = {}
+for t in tasks:
+    s = t.get('status', 'unknown')
+    task_statuses[s] = task_statuses.get(s, 0) + 1
+
+print(f'Lanes: {len(lanes)} total', end='')
+for s, c in sorted(lane_statuses.items()):
+    print(f', {c} {s}', end='')
+print()
+
+print(f'Tasks: {len(tasks)} total', end='')
+for s, c in sorted(task_statuses.items()):
+    print(f', {c} {s}', end='')
+print()
+print()
+
+# Agent usage breakdown
+agent_counts = {}
+agent_logs_size = {}
+for l in lanes.values():
+    a = l.get('agent', '?')
+    agent_counts[a] = agent_counts.get(a, 0) + 1
+for t in tasks:
+    a = t.get('agent', '?')
+    m = t.get('model', 'default')
+    key = f'{a} ({m})' if m != 'default' else a
+    agent_counts[key] = agent_counts.get(key, 0) + 1
+    log = t.get('log', '')
+    if log and os.path.exists(log):
+        agent_logs_size[key] = agent_logs_size.get(key, 0) + os.path.getsize(log)
+
+print('Agent Usage:')
+for agent, count in sorted(agent_counts.items(), key=lambda x: -x[1]):
+    size = agent_logs_size.get(agent, 0)
+    size_str = f' ({size // 1024}KB logs)' if size > 0 else ''
+    print(f'  {agent:<20} {count} tasks{size_str}')
+print()
+
+# Reviews
+reviews = state.get('reviews', {})
+if reviews:
+    approves = sum(1 for v in reviews.values() if v.get('result') == 'approve')
+    rejects = sum(1 for v in reviews.values() if v.get('result') == 'reject')
+    print(f'Reviews: {len(reviews)} total ({approves} approved, {rejects} rejected)')
+    print()
+
+# Log sizes
+total_log_size = 0
+for f in os.listdir('$LOGS_DIR'):
+    fp = os.path.join('$LOGS_DIR', f)
+    if os.path.isfile(fp):
+        total_log_size += os.path.getsize(fp)
+print(f'Total log output: {total_log_size // 1024}KB across {len(os.listdir(\"$LOGS_DIR\"))} files')
+" 2>/dev/null
+
+    # Show event log tail
+    if [[ -f "$LOGS_DIR/hub_events.log" ]]; then
+        echo ""
+        echo -e "${BOLD}Recent Events${NC}"
+        echo "────────────────────────────────────────────────────────────────"
+        tail -10 "$LOGS_DIR/hub_events.log"
+    fi
+}
+
 # ── Command: teardown ──────────────────────────────────────────────────────────
 
 cmd_teardown() {
@@ -1061,6 +1205,9 @@ case "$COMMAND" in
         ;;
     merge)
         cmd_merge
+        ;;
+    summary)
+        cmd_summary
         ;;
     teardown)
         cmd_teardown
