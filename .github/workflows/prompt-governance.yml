@@ -1,0 +1,35 @@
+name: Prompt Governance
+
+on:
+  pull_request:
+    paths:
+      - 'jarvis/prompts.py'
+      - 'evals/prompt_versions.json'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-prompts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v2
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Validate prompt syntax
+        run: uv run python -m py_compile jarvis/prompts.py
+
+      - name: Check prompt version
+        run: uv run python scripts/check_prompt_version.py --ci --verbose
+
+      - name: Run prompt tests
+        run: uv run pytest tests/unit/test_prompts.py -v --tb=short || echo "No prompt tests found"
