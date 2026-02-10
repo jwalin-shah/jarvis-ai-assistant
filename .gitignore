@@ -245,6 +245,9 @@ optuna_bayesian.db
 # Gemini review batches
 gemini_reviews_batches/
 
+# Generated reports (regeneratable by scripts/agents)
+docs/generated/
+
 # Backup files
 *.bak
 .cleanup_backup/
@@ -255,6 +258,7 @@ adapters/
 
 # Downloaded model weights
 models/lfm-*/
+models/nuextract-*/
 
 # Eval results (regeneratable)
 evals/results/
