@@ -32,25 +32,28 @@ RELATIONSHIP_PATTERN = re.compile(
 )
 
 # Location patterns: "moved to Austin", "live in NYC", "going to Paris"
+# Improved: capture more complete location names
 LOCATION_PATTERN = re.compile(
     r"\b(?:moved?\s+to|live[sd]?\s+in|living\s+in|from|based\s+in|"
-    r"heading\s+to|going\s+to|visiting)\s+"
-    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})",
+    r"heading\s+to|going\s+to|visiting|relocated\s+to|travel(?:ing|ed)?\s+to)\s+"
+    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
 )
 
 # Work patterns: "work at Google", "started at Meta", "job at Apple"
+# Improved: better company name capture
 WORK_PATTERN = re.compile(
-    r"\b(?:work(?:s|ing|ed)?\s+(?:at|for)|job\s+at|started\s+at|"
-    r"joined|hired\s+(?:at|by))\s+"
-    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})",
+    r"\b(?:work(?:s|ing|ed)?\s+(?:at|for)|job\s+(?:at|with)|started\s+(?:at|with)|"
+    r"joined|hired\s+(?:at|by|with)|employed\s+(?:at|by))\s+"
+    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
 )
 
 # Preference patterns: "hate cilantro", "love sushi", "allergic to"
-# Stop at conjunctions (and, but, or) and punctuation to avoid over-capture
+# Improved: capture more complete phrases (4-5 words max to avoid runaway)
 PREFERENCE_PATTERN = re.compile(
     r"\b(?:hate[sd]?|love[sd]?|can't\s+stand|allergic\s+to|"
-    r"obsessed\s+with|addicted\s+to|favorite\s+\w+\s+is)\s+"
-    r"(\w+(?:\s+(?!and\b|but\b|or\b)\w+){0,2})",
+    r"obsessed\s+with|addicted\s+to|favorite\s+(?:food|thing|person|place|movie|band)\s+is|"
+    r"dislike[sd]?|enjoy[s]?|prefer|like[sd]?)\s+"
+    r"([A-Za-z\s]+?)(?:\s+(?:and|but|or|because|when|if|since)\b|\.|\,|!|\?|$)",
     re.IGNORECASE,
 )
 
@@ -185,28 +188,51 @@ class FactExtractor:
     def _is_coherent_subject(self, subject: str) -> bool:
         """Reject subjects that are vague pronouns or incomplete fragments.
 
-        Rejects:
-        - Single pronouns: "it", "that", "this"
-        - Pronoun phrases without clear antecedent: "it in", "that in"
-        - Fragments that are clearly incomplete
+        Checks:
+        - Single pronouns: "it", "that", "this", "them", "there"
+        - Pronoun phrases: "it in", "that in", "it there"
+        - Incomplete infinitives: "to call this", "to have you"
+        - Bare prepositions: "in august", "at night"
+        - Too many abbreviations: "sm rn" (slang overload)
+        - Malformed: missing spaces, consecutive capitals
         """
-        # Fragments that are clearly incomplete
-        incoherent_patterns = {
-            "it",
-            "that",
-            "this",
-            "it in",
-            "that in",
-            "in august",
-            "in spring",
-            "in summer",
-            "in winter",
+        subject_lower = subject.lower().strip()
+
+        # Single pronouns or vague words
+        vague_words = {
+            "it", "that", "this", "them", "there", "those",
+            "these", "what", "when", "where", "why", "how"
         }
-        if subject.lower().strip() in incoherent_patterns:
+        if subject_lower in vague_words:
             return False
 
-        # Reject if starts with pronoun + preposition (indicates missing context)
-        if re.match(r"^(it|that|this)\s+(in|at|on)\s+", subject, re.IGNORECASE):
+        # Pronoun + preposition (fragment pattern) - but NOT full NP with content
+        # "it in August" is bad, "cilantro in my food" is good
+        if re.match(r"^(it|that|this|them|there)\s+(in|at|on|for|to)", subject_lower):
+            return False
+
+        # Incomplete infinitive phrase (to + verb + object cutoff)
+        if re.match(r"^to\s+\w+\s+(this|that|these|those|me|you|him|her|it)$", subject_lower):
+            return False
+
+        # Bare time/location prepositions (nothing before the preposition)
+        if re.match(r"^(in|at|on)\s+(august|spring|summer|winter|night|day|morning|afternoon)$", subject_lower):
+            return False
+
+        # Too many abbreviations (>50% of words are 1-2 chars)
+        words = subject.split()
+        if len(words) > 1:
+            short_words = sum(1 for w in words if len(w) <= 2 and w.lower() not in {"i", "a", "to", "of", "in", "at", "on"})
+            if len(words) >= 2 and short_words / len(words) > 0.5:
+                return False
+
+        # Malformed: word spacing issues (e.g., "ofmetal" instead of "of metal")
+        # Check for lowercase after uppercase in non-standard way
+        if re.search(r"[a-z]{2,}[A-Z][a-z]+", subject):
+            return False
+
+        # Must have at least 2 characters and contain a letter
+        if len(subject) < 2 or not any(c.isalpha() for c in subject):
             return False
 
         return True
@@ -273,16 +299,35 @@ class FactExtractor:
         """Reject facts with subjects too short for category.
 
         Category-specific thresholds:
-        - preference: require min 3 words (context crucial)
-        - relationship/work/location: min 2 words
+        - preference: require min 3 words (context crucial: "driving in sf")
+        - relationship: allow names (1+ word): "Sarah", "Mom"
+        - work/location: allow names (1+ word for proper nouns)
+        - event: require 2+ words
+
+        Exceptions:
+        - Single proper nouns are always OK (Company, Name, City)
+        - Subjects starting with capital letter get leniency
         """
         word_count = len(subject.split())
 
+        # Preference needs full context
         if category == "preference":
             return word_count < 3
 
-        # relationship, work, location, event
-        if category in ("relationship", "work", "location", "event"):
+        # Relationship allows single names
+        if category == "relationship":
+            return word_count < 1  # Always allow
+
+        # Work/location allow single proper nouns (capitalized)
+        if category in ("work", "location"):
+            # Single word is OK if it's a proper noun (starts with capital)
+            if word_count == 1:
+                return not subject[0].isupper()  # OK if uppercase, too short if lowercase
+            # Multi-word is always OK
+            return False
+
+        # Event requires context
+        if category == "event":
             return word_count < 2
 
         return False
@@ -412,6 +457,21 @@ class FactExtractor:
             logger.warning("NLI verification failed, returning unverified facts: %s", e)
             return facts
 
+    def _clean_subject(self, subject: str) -> str:
+        """Clean extracted subject: strip trailing prepositions, conjunctions, etc."""
+        subject = subject.strip()
+
+        # Remove trailing prepositions and conjunctions
+        trailing_words = [
+            r"\s+(and|but|or|because|when|if|since|unless|while|though|although)$",
+            r"\s+(is|are|was|were|be|been)$",
+        ]
+        for pattern in trailing_words:
+            subject = re.sub(pattern, "", subject, flags=re.IGNORECASE)
+
+        # Remove trailing whitespace again
+        return subject.strip()
+
     def _extract_rule_based(self, text: str, contact_id: str, timestamp: str) -> list[Fact]:
         """Extract facts using regex patterns."""
         facts: list[Fact] = []
@@ -419,7 +479,7 @@ class FactExtractor:
         # Relationship patterns
         for match in RELATIONSHIP_PATTERN.finditer(text):
             rel_type = match.group(1).lower()
-            person = match.group(2)
+            person = match.group(2).strip()
             facts.append(
                 Fact(
                     category="relationship",
@@ -458,37 +518,42 @@ class FactExtractor:
 
         # Location patterns
         for match in LOCATION_PATTERN.finditer(text):
-            location = match.group(1)
-            facts.append(
-                Fact(
-                    category="location",
-                    subject=location,
-                    predicate="lives_in",
-                    source_text=text[:200],
-                    confidence=0.7,
-                    contact_id=contact_id,
-                    extracted_at=timestamp,
+            location = self._clean_subject(match.group(1))
+            if location:  # Only add if non-empty after cleaning
+                facts.append(
+                    Fact(
+                        category="location",
+                        subject=location,
+                        predicate="lives_in",
+                        source_text=text[:200],
+                        confidence=0.7,
+                        contact_id=contact_id,
+                        extracted_at=timestamp,
+                    )
                 )
-            )
 
         # Work patterns
         for match in WORK_PATTERN.finditer(text):
-            org = match.group(1)
-            facts.append(
-                Fact(
-                    category="work",
-                    subject=org,
-                    predicate="works_at",
-                    source_text=text[:200],
-                    confidence=0.7,
-                    contact_id=contact_id,
-                    extracted_at=timestamp,
+            org = self._clean_subject(match.group(1))
+            if org:  # Only add if non-empty after cleaning
+                facts.append(
+                    Fact(
+                        category="work",
+                        subject=org,
+                        predicate="works_at",
+                        source_text=text[:200],
+                        confidence=0.7,
+                        contact_id=contact_id,
+                        extracted_at=timestamp,
+                    )
                 )
-            )
 
         # Preference patterns
         for match in PREFERENCE_PATTERN.finditer(text):
-            thing = match.group(1).strip()
+            thing = self._clean_subject(match.group(1))
+            if not thing:  # Skip if empty after cleaning
+                continue
+
             # Determine sentiment
             match_text = match.group(0).lower()
             if any(w in match_text for w in NEGATIVE_PREF):

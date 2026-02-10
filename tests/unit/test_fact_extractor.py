@@ -154,23 +154,30 @@ class TestShortPhraseFiltering:
         assert extractor._is_too_short("preference", "driving sf")  # 2 words
         assert not extractor._is_too_short("preference", "driving in sf")  # 3 words
 
-    def test_relationship_requires_2_words(self) -> None:
-        """Relationship facts need 2+ words."""
+    def test_relationship_allows_names(self) -> None:
+        """Relationship facts allow single names (proper nouns)."""
         extractor = FactExtractor()
-        assert extractor._is_too_short("relationship", "Sarah")  # 1 word
-        assert not extractor._is_too_short("relationship", "Sarah Jones")  # 2 words
+        # Names are proper nouns - should be allowed
+        assert not extractor._is_too_short("relationship", "Sarah")  # 1 word name OK
+        assert not extractor._is_too_short("relationship", "Sarah Jones")  # 2 words OK
 
-    def test_work_requires_2_words(self) -> None:
-        """Work facts need 2+ words."""
+    def test_work_allows_proper_nouns(self) -> None:
+        """Work facts allow single proper nouns (company names)."""
         extractor = FactExtractor()
-        assert extractor._is_too_short("work", "Google")  # 1 word
-        assert not extractor._is_too_short("work", "Google Inc")  # 2 words
+        # Capital company names should be allowed
+        assert not extractor._is_too_short("work", "Google")  # 1 word proper noun OK
+        assert not extractor._is_too_short("work", "Google Inc")  # 2 words OK
+        # Lowercase single word should still fail
+        assert extractor._is_too_short("work", "startup")  # lowercase, no context
 
-    def test_location_requires_2_words(self) -> None:
-        """Location facts need 2+ words."""
+    def test_location_allows_proper_nouns(self) -> None:
+        """Location facts allow single proper nouns (place names)."""
         extractor = FactExtractor()
-        assert extractor._is_too_short("location", "SF")  # 1 word
-        assert not extractor._is_too_short("location", "San Francisco")  # 2 words
+        # Capital place names should be allowed
+        assert not extractor._is_too_short("location", "Austin")  # 1 word proper noun OK
+        assert not extractor._is_too_short("location", "San Francisco")  # 2 words OK
+        # Lowercase single word should still fail
+        assert extractor._is_too_short("location", "city")  # lowercase, no context
 
     def test_event_requires_2_words(self) -> None:
         """Event facts need 2+ words."""
