@@ -26,10 +26,11 @@ NC='\033[0m'
 
 # ── Lane Definitions ──────────────────────────────────────────────────────────
 
+# Default agent assignments (override via env: LANE_A_AGENT=kimi hub.sh dispatch ...)
 declare -A LANE_AGENTS=(
-    [a]="codex"
-    [b]="claude"
-    [c]="gemini"
+    [a]="${LANE_A_AGENT:-codex}"
+    [b]="${LANE_B_AGENT:-claude}"
+    [c]="${LANE_C_AGENT:-gemini}"
 )
 
 declare -A LANE_BRANCHES=(
