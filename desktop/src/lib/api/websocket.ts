@@ -6,6 +6,12 @@
  * - Streaming generation support
  * - Health status subscriptions
  * - Connection state management
+ * - Secure authentication via Sec-WebSocket-Protocol header
+ *
+ * Authentication:
+ * - Set VITE_WS_TOKEN environment variable or use setAuthToken() method
+ * - Token is sent via Sec-WebSocket-Protocol header (browser-compatible)
+ * - More secure than query parameters which are logged by proxies/servers
  */
 
 import { getApiWebSocketBaseUrl } from "../config/runtime";
@@ -147,6 +153,7 @@ export interface WebSocketEventHandlers {
 class JarvisWebSocket {
   private ws: WebSocket | null = null;
   private url: string;
+  private authToken: string | null = null;
   private handlers: WebSocketEventHandlers = {};
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
@@ -160,6 +167,8 @@ class JarvisWebSocket {
 
   constructor(baseUrl: string = WS_BASE) {
     this.url = `${baseUrl}/ws`;
+    // Read auth token from environment variable (optional)
+    this.authToken = import.meta.env.VITE_WS_TOKEN || null;
   }
 
   /**
@@ -191,6 +200,14 @@ class JarvisWebSocket {
   }
 
   /**
+   * Set authentication token
+   * Note: Must be called before connect() to take effect
+   */
+  setAuthToken(token: string | null): void {
+    this.authToken = token;
+  }
+
+  /**
    * Connect to the WebSocket server
    */
   connect(): void {
@@ -202,7 +219,13 @@ class JarvisWebSocket {
     this.setState("connecting");
 
     try {
-      this.ws = new WebSocket(this.url);
+      // Use Sec-WebSocket-Protocol for authentication (browser-compatible)
+      // This is more secure than query parameters which get logged
+      if (this.authToken) {
+        this.ws = new WebSocket(this.url, [this.authToken]);
+      } else {
+        this.ws = new WebSocket(this.url);
+      }
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;

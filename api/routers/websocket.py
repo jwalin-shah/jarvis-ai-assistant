@@ -40,10 +40,11 @@ if _WS_AUTH_TOKEN is None:
 def _validate_websocket_auth(websocket: WebSocket) -> bool:
     """Validate WebSocket authentication token.
 
-    SECURITY: Checks for auth token in query parameters to prevent unauthorized access.
-    Token can be provided via:
-    - Query parameter: ?token=<token>
-    - Header: X-WS-Token: <token>
+    SECURITY: Checks for auth token to prevent unauthorized access.
+    Token can be provided via (in order of preference):
+    1. Header: X-WS-Token: <token> (RECOMMENDED - most secure)
+    2. Sec-WebSocket-Protocol: <token> (browser-compatible fallback)
+    3. Query parameter: ?token=<token> (DEPRECATED - logs exposure risk)
 
     For localhost connections, authentication can be bypassed if JARVIS_WS_REQUIRE_AUTH=false.
 
@@ -60,14 +61,30 @@ def _validate_websocket_auth(websocket: WebSocket) -> bool:
         if client_host in ("127.0.0.1", "localhost", "::1"):
             return True
 
-    # Check query parameters
-    token = websocket.query_params.get("token")
-    if token and secrets.compare_digest(token, _WS_AUTH_TOKEN):
-        return True
-
-    # Check headers
+    # Check X-WS-Token header (RECOMMENDED)
     token_header = websocket.headers.get("x-ws-token")
     if token_header and secrets.compare_digest(token_header, _WS_AUTH_TOKEN):
+        return True
+
+    # Check Sec-WebSocket-Protocol header (browser-compatible fallback)
+    # Browsers can set this during handshake when custom headers aren't allowed
+    ws_protocol = websocket.headers.get("sec-websocket-protocol")
+    if ws_protocol:
+        # Protocol may contain multiple comma-separated values; check each
+        protocols = [p.strip() for p in ws_protocol.split(",")]
+        for protocol in protocols:
+            if secrets.compare_digest(protocol, _WS_AUTH_TOKEN):
+                return True
+
+    # Check query parameters (DEPRECATED - security risk)
+    token = websocket.query_params.get("token")
+    if token and secrets.compare_digest(token, _WS_AUTH_TOKEN):
+        logger.warning(
+            "WebSocket auth via query parameter is DEPRECATED and will be removed. "
+            "Use X-WS-Token header or Sec-WebSocket-Protocol instead. "
+            "Query params are logged by proxies/servers. Client: %s",
+            websocket.client.host if websocket.client else "unknown",
+        )
         return True
 
     return False
@@ -741,7 +758,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     - Connection management
 
     Authentication:
-        - Requires auth token via query parameter (?token=<token>) or X-WS-Token header
+        - Requires auth token (in order of preference):
+          1. X-WS-Token header (recommended)
+          2. Sec-WebSocket-Protocol header (browser-compatible)
+          3. Query parameter ?token=<token> (DEPRECATED - security risk)
         - Token is set via JARVIS_WS_TOKEN environment variable or auto-generated
         - Localhost can bypass auth if JARVIS_WS_REQUIRE_AUTH=false
 

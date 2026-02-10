@@ -93,6 +93,23 @@ class ErrorCode(str, Enum):
     FBK_INVALID_ACTION = "FBK_INVALID_ACTION"
     FBK_STORE_ERROR = "FBK_STORE_ERROR"
 
+    # Graph errors (GRF_*)
+    GRF_BUILD_FAILED = "GRF_BUILD_FAILED"
+    GRF_CONTACT_NOT_FOUND = "GRF_CONTACT_NOT_FOUND"
+
+    # Database errors (DB_*)
+    DB_CONNECTION_FAILED = "DB_CONNECTION_FAILED"
+    DB_QUERY_FAILED = "DB_QUERY_FAILED"
+    DB_INTEGRITY_ERROR = "DB_INTEGRITY_ERROR"
+
+    # Export errors (EXPORT_*)
+    EXPORT_GENERATION_FAILED = "EXPORT_GENERATION_FAILED"
+    EXPORT_INVALID_FORMAT = "EXPORT_INVALID_FORMAT"
+
+    # Embedding errors (EMB_*)
+    EMB_ENCODING_FAILED = "EMB_ENCODING_FAILED"
+    EMB_INDEX_NOT_READY = "EMB_INDEX_NOT_READY"
+
     # Generic errors
     UNKNOWN = "UNKNOWN"
 
@@ -950,6 +967,150 @@ class FeedbackInvalidActionError(FeedbackError):
     default_code = ErrorCode.FBK_INVALID_ACTION
 
 
+# Graph Errors
+
+
+class GraphError(JarvisError):
+    """Base class for knowledge graph-related errors.
+
+    Raised when graph building or querying operations fail.
+    """
+
+    default_message = "Graph operation failed"
+    default_code = ErrorCode.GRF_BUILD_FAILED
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        contact_id: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize a graph error.
+
+        Args:
+            message: Human-readable error message.
+            contact_id: Contact ID involved in the operation.
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if contact_id:
+            details["contact_id"] = contact_id
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
+# Database Errors
+
+
+class DatabaseError(JarvisError):
+    """Base class for database-related errors.
+
+    Raised when database operations fail.
+    """
+
+    default_message = "Database operation failed"
+    default_code = ErrorCode.DB_QUERY_FAILED
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        query: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize a database error.
+
+        Args:
+            message: Human-readable error message.
+            query: The query that failed (may be truncated).
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if query is not None:
+            details["query_preview"] = query[:200] + "..." if len(query) > 200 else query
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
+# Export Errors
+
+
+class ExportError(JarvisError):
+    """Base class for export-related errors.
+
+    Raised when export generation fails.
+    """
+
+    default_message = "Export operation failed"
+    default_code = ErrorCode.EXPORT_GENERATION_FAILED
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        export_format: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize an export error.
+
+        Args:
+            message: Human-readable error message.
+            export_format: The export format that was requested.
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if export_format:
+            details["export_format"] = export_format
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
+# Embedding Errors
+
+
+class EmbeddingError(JarvisError):
+    """Base class for embedding-related errors.
+
+    Raised when embedding encoding or indexing fails.
+    """
+
+    default_message = "Embedding operation failed"
+    default_code = ErrorCode.EMB_ENCODING_FAILED
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        model_name: str | None = None,
+        code: ErrorCode | None = None,
+        details: dict[str, Any] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize an embedding error.
+
+        Args:
+            message: Human-readable error message.
+            model_name: Name of the embedding model.
+            code: Error code for programmatic handling.
+            details: Additional context as key-value pairs.
+            cause: Original exception that caused this error.
+        """
+        details = details or {}
+        if model_name:
+            details["model_name"] = model_name
+        super().__init__(message, code=code, details=details, cause=cause)
+
+
 # Convenience functions for common error scenarios
 
 
@@ -1171,6 +1332,14 @@ __all__ = [
     "FeedbackError",
     "FeedbackNotFoundError",
     "FeedbackInvalidActionError",
+    # Graph errors
+    "GraphError",
+    # Database errors
+    "DatabaseError",
+    # Export errors
+    "ExportError",
+    # Embedding errors
+    "EmbeddingError",
     # Convenience functions
     "model_not_found",
     "model_out_of_memory",

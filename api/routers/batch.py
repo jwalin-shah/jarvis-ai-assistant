@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.routers.tasks import TaskResponse, _task_to_response
+from jarvis.errors import iMessageQueryError
 from jarvis.tasks import TaskType, get_task_queue, get_worker, start_worker
 
 router = APIRouter(prefix="/batch", tags=["batch"])
@@ -325,10 +326,10 @@ def batch_export_all(request: BatchExportAllRequest) -> BatchResponse:
     try:
         chat_ids = _get_all_chat_ids(limit=request.limit)
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get conversations: {e}",
-        ) from e
+        raise iMessageQueryError(
+            "Failed to fetch conversations for batch operation",
+            cause=e,
+        )
 
     if not chat_ids:
         raise HTTPException(
@@ -398,10 +399,10 @@ def batch_summarize_recent(request: BatchSummarizeRecentRequest) -> BatchRespons
     try:
         chat_ids = _get_all_chat_ids(limit=request.limit)
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get conversations: {e}",
-        ) from e
+        raise iMessageQueryError(
+            "Failed to fetch conversations for batch operation",
+            cause=e,
+        )
 
     if not chat_ids:
         raise HTTPException(

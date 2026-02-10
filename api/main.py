@@ -23,38 +23,6 @@ from slowapi.errors import RateLimitExceeded
 
 from api.errors import register_exception_handlers
 from api.ratelimit import limiter, rate_limit_exceeded_handler
-from api.routers import (
-    analytics_router,
-    attachments_router,
-    batch_router,
-    calendar_router,
-    contacts_router,
-    conversations_router,
-    custom_templates_router,
-    debug_router,
-    drafts_router,
-    embeddings_router,
-    experiments_router,
-    export_router,
-    feedback_router,
-    graph_router,
-    health_router,
-    metrics_router,
-    pdf_export_router,
-    priority_router,
-    relationships_router,
-    scheduler_router,
-    search_router,
-    settings_router,
-    stats_router,
-    suggestions_router,
-    tags_router,
-    tasks_router,
-    template_analytics_router,
-    threads_router,
-    topics_router,
-    websocket_router,
-)
 from jarvis.metrics import get_latency_histogram, get_request_counter
 
 # API metadata for OpenAPI documentation
@@ -248,143 +216,212 @@ API_LICENSE = {
 }
 
 
-def custom_openapi() -> dict[str, Any]:
-    """Generate custom OpenAPI schema with enhanced documentation."""
-    if app.openapi_schema:
-        return app.openapi_schema
+def _create_openapi_generator(app_instance: FastAPI) -> callable:  # type: ignore[valid-type]
+    """Create a custom OpenAPI schema generator for the given app instance."""
 
-    openapi_schema = get_openapi(
-        title=API_TITLE,
-        version=API_VERSION,
-        description=API_DESCRIPTION,
-        routes=app.routes,
-        tags=API_TAGS_METADATA,
+    def custom_openapi() -> dict[str, Any]:
+        """Generate custom OpenAPI schema with enhanced documentation."""
+        if app_instance.openapi_schema:
+            return app_instance.openapi_schema
+
+        openapi_schema = get_openapi(
+            title=API_TITLE,
+            version=API_VERSION,
+            description=API_DESCRIPTION,
+            routes=app_instance.routes,
+            tags=API_TAGS_METADATA,
+        )
+
+        # Add contact and license info
+        openapi_schema["info"]["contact"] = API_CONTACT
+        openapi_schema["info"]["license"] = API_LICENSE
+
+        # Add server information
+        openapi_schema["servers"] = [
+            {
+                "url": "http://localhost:8742",
+                "description": "Local development server",
+            },
+            {
+                "url": "http://127.0.0.1:8742",
+                "description": "Local development server (alternative)",
+            },
+        ]
+
+        # Add external documentation
+        openapi_schema["externalDocs"] = {
+            "description": "Full documentation and user guide",
+            "url": "https://github.com/jwalinshah/jarvis-ai-assistant/docs",
+        }
+
+        app_instance.openapi_schema = openapi_schema
+        return app_instance.openapi_schema
+
+    return custom_openapi
+
+
+def _configure_middleware(app_instance: FastAPI) -> None:
+    """Configure middleware for the FastAPI application."""
+    # Configure CORS for Tauri and development
+    app_instance.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "tauri://localhost",  # Tauri production
+            "http://localhost:5173",  # Vite dev server
+            "http://localhost:1420",  # Tauri dev server
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:1420",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
-    # Add contact and license info
-    openapi_schema["info"]["contact"] = API_CONTACT
-    openapi_schema["info"]["license"] = API_LICENSE
+    # Enable GZip compression for responses (50-75% bandwidth savings for large JSON responses)
+    app_instance.add_middleware(GZipMiddleware, minimum_size=500)
 
-    # Add server information
-    openapi_schema["servers"] = [
-        {
-            "url": "http://localhost:8742",
-            "description": "Local development server",
-        },
-        {
-            "url": "http://127.0.0.1:8742",
-            "description": "Local development server (alternative)",
-        },
-    ]
+    # Request timing middleware
+    @app_instance.middleware("http")
+    async def metrics_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+        """Middleware to track request timing and counts."""
+        start_time = time.perf_counter()
 
-    # Add external documentation
-    openapi_schema["externalDocs"] = {
-        "description": "Full documentation and user guide",
-        "url": "https://github.com/jwalinshah/jarvis-ai-assistant/docs",
-    }
+        # Process the request
+        response = await call_next(request)
 
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
+        # Record metrics
+        duration = time.perf_counter() - start_time
+        endpoint = request.url.path
+        method = request.method
 
+        # Skip metrics endpoints to avoid infinite recursion in monitoring
+        if not endpoint.startswith("/metrics"):
+            counter = get_request_counter()
+            histogram = get_latency_histogram()
 
-# Create FastAPI app
-app = FastAPI(
-    title=API_TITLE,
-    description=API_DESCRIPTION,
-    version=API_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    openapi_tags=API_TAGS_METADATA,
-    contact=API_CONTACT,
-    license_info=API_LICENSE,
-)
+            counter.increment(endpoint, method)
+            histogram.observe(f"{method} {endpoint}", duration)
 
-# Configure rate limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
+        # Add timing header
+        response.headers["X-Response-Time"] = f"{duration:.4f}s"
 
-# Use custom OpenAPI schema
-app.openapi = custom_openapi  # type: ignore[method-assign]
-
-# Configure CORS for Tauri and development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "tauri://localhost",  # Tauri production
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:1420",  # Tauri dev server
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:1420",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Enable GZip compression for responses (50-75% bandwidth savings for large JSON responses)
-app.add_middleware(GZipMiddleware, minimum_size=500)
+        return response
 
 
-# Request timing middleware
-@app.middleware("http")
-async def metrics_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
-    """Middleware to track request timing and counts."""
-    start_time = time.perf_counter()
+def _register_routers(app_instance: FastAPI) -> None:
+    """Register all API routers explicitly.
 
-    # Process the request
-    response = await call_next(request)
+    Imports routers on-demand to avoid eager loading at module import time.
+    This improves testability and reduces import-time coupling.
+    """
+    # Import routers locally to avoid module-level coupling
+    from api.routers.analytics import router as analytics_router
+    from api.routers.attachments import router as attachments_router
+    from api.routers.batch import router as batch_router
+    from api.routers.calendar import router as calendar_router
+    from api.routers.contacts import router as contacts_router
+    from api.routers.conversations import router as conversations_router
+    from api.routers.custom_templates import router as custom_templates_router
+    from api.routers.debug import router as debug_router
+    from api.routers.drafts import router as drafts_router
+    from api.routers.embeddings import router as embeddings_router
+    from api.routers.experiments import router as experiments_router
+    from api.routers.export import router as export_router
+    from api.routers.feedback import router as feedback_router
+    from api.routers.graph import router as graph_router
+    from api.routers.health import router as health_router
+    from api.routers.metrics import router as metrics_router
+    from api.routers.pdf_export import router as pdf_export_router
+    from api.routers.priority import router as priority_router
+    from api.routers.relationships import router as relationships_router
+    from api.routers.scheduler import router as scheduler_router
+    from api.routers.search import router as search_router
+    from api.routers.settings import router as settings_router
+    from api.routers.stats import router as stats_router
+    from api.routers.suggestions import router as suggestions_router
+    from api.routers.tags import router as tags_router
+    from api.routers.tasks import router as tasks_router
+    from api.routers.template_analytics import router as template_analytics_router
+    from api.routers.threads import router as threads_router
+    from api.routers.topics import router as topics_router
+    from api.routers.websocket import router as websocket_router
 
-    # Record metrics
-    duration = time.perf_counter() - start_time
-    endpoint = request.url.path
-    method = request.method
+    # Register routers in logical order
+    app_instance.include_router(health_router)
+    app_instance.include_router(debug_router)
+    app_instance.include_router(attachments_router)
+    app_instance.include_router(calendar_router)
+    app_instance.include_router(contacts_router)
+    app_instance.include_router(conversations_router)
+    app_instance.include_router(custom_templates_router)
+    app_instance.include_router(drafts_router)
+    app_instance.include_router(embeddings_router)
+    app_instance.include_router(export_router)
+    app_instance.include_router(pdf_export_router)
+    app_instance.include_router(search_router)
+    app_instance.include_router(suggestions_router)
+    app_instance.include_router(settings_router)
+    app_instance.include_router(stats_router)
+    app_instance.include_router(metrics_router)
+    app_instance.include_router(template_analytics_router)
+    app_instance.include_router(threads_router)
+    app_instance.include_router(topics_router)
+    app_instance.include_router(websocket_router)
+    app_instance.include_router(tasks_router)
+    app_instance.include_router(batch_router)
+    app_instance.include_router(priority_router)
+    app_instance.include_router(scheduler_router)
+    app_instance.include_router(feedback_router)
+    app_instance.include_router(experiments_router)
+    app_instance.include_router(relationships_router)
+    app_instance.include_router(tags_router)
+    app_instance.include_router(analytics_router)
+    app_instance.include_router(graph_router)
 
-    # Skip metrics endpoints to avoid infinite recursion in monitoring
-    if not endpoint.startswith("/metrics"):
-        counter = get_request_counter()
-        histogram = get_latency_histogram()
 
-        counter.increment(endpoint, method)
-        histogram.observe(f"{method} {endpoint}", duration)
+def create_app() -> FastAPI:
+    """Application factory for creating configured FastAPI instances.
 
-    # Add timing header
-    response.headers["X-Response-Time"] = f"{duration:.4f}s"
+    This factory pattern allows:
+    - Explicit router registration without import-time coupling
+    - Easy creation of test apps with subset of routers
+    - Better testability and modularity
 
-    return response
+    Returns:
+        Configured FastAPI application instance
+    """
+    # Create FastAPI app
+    app_instance = FastAPI(
+        title=API_TITLE,
+        description=API_DESCRIPTION,
+        version=API_VERSION,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        openapi_tags=API_TAGS_METADATA,
+        contact=API_CONTACT,
+        license_info=API_LICENSE,
+    )
+
+    # Configure rate limiting
+    app_instance.state.limiter = limiter
+    app_instance.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+    # Use custom OpenAPI schema
+    app_instance.openapi = _create_openapi_generator(app_instance)  # type: ignore[method-assign]
+
+    # Configure middleware
+    _configure_middleware(app_instance)
+
+    # Register all routers
+    _register_routers(app_instance)
+
+    # Register JARVIS exception handlers for standardized error responses
+    register_exception_handlers(app_instance)
+
+    return app_instance
 
 
-# Include routers
-app.include_router(health_router)
-app.include_router(debug_router)
-app.include_router(attachments_router)
-app.include_router(calendar_router)
-app.include_router(contacts_router)
-app.include_router(conversations_router)
-app.include_router(custom_templates_router)
-app.include_router(drafts_router)
-app.include_router(embeddings_router)
-app.include_router(export_router)
-app.include_router(pdf_export_router)
-app.include_router(search_router)
-app.include_router(suggestions_router)
-app.include_router(settings_router)
-app.include_router(stats_router)
-app.include_router(metrics_router)
-app.include_router(template_analytics_router)
-app.include_router(threads_router)
-app.include_router(topics_router)
-app.include_router(websocket_router)
-app.include_router(tasks_router)
-app.include_router(batch_router)
-app.include_router(priority_router)
-app.include_router(scheduler_router)
-app.include_router(feedback_router)
-app.include_router(experiments_router)
-app.include_router(relationships_router)
-app.include_router(tags_router)
-app.include_router(analytics_router)
-app.include_router(graph_router)
-
-# Register JARVIS exception handlers for standardized error responses
-register_exception_handlers(app)
+# Create the default app instance for backward compatibility
+# This allows existing code to import `app` from `api.main`
+app = create_app()

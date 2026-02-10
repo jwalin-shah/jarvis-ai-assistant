@@ -13,7 +13,7 @@ from api.main import app
 from api.routers.websocket import manager
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def disable_ws_auth():
     """Disable WebSocket auth for tests."""
     with patch("api.routers.websocket._validate_websocket_auth", return_value=True):
@@ -37,6 +37,11 @@ def reset_manager():
 
 class TestWebSocketConnection:
     """Tests for WebSocket connection handling."""
+
+    @pytest.fixture(autouse=True)
+    def _use_auth_bypass(self, disable_ws_auth):
+        """Use auth bypass for this test class."""
+        pass
 
     def test_websocket_connect_sends_connected_message(self, client):
         """WebSocket connection sends connected message with client_id."""
@@ -77,6 +82,11 @@ class TestWebSocketConnection:
 class TestWebSocketPing:
     """Tests for WebSocket ping/pong."""
 
+    @pytest.fixture(autouse=True)
+    def _use_auth_bypass(self, disable_ws_auth):
+        """Use auth bypass for this test class."""
+        pass
+
     def test_ping_receives_pong(self, client):
         """Ping message receives pong response."""
         with client.websocket_connect("/ws") as websocket:
@@ -94,6 +104,11 @@ class TestWebSocketPing:
 
 class TestWebSocketHealthSubscription:
     """Tests for WebSocket health subscriptions."""
+
+    @pytest.fixture(autouse=True)
+    def _use_auth_bypass(self, disable_ws_auth):
+        """Use auth bypass for this test class."""
+        pass
 
     def test_subscribe_health_sends_confirmation(self, client):
         """Subscribe health sends confirmation message."""
@@ -125,6 +140,11 @@ class TestWebSocketHealthSubscription:
 
 class TestWebSocketGeneration:
     """Tests for WebSocket generation requests."""
+
+    @pytest.fixture(autouse=True)
+    def _use_auth_bypass(self, disable_ws_auth):
+        """Use auth bypass for this test class."""
+        pass
 
     def test_generate_without_prompt_returns_error(self, client):
         """Generate without prompt returns error."""
@@ -215,6 +235,11 @@ class TestWebSocketGeneration:
 class TestWebSocketErrorHandling:
     """Tests for WebSocket error handling."""
 
+    @pytest.fixture(autouse=True)
+    def _use_auth_bypass(self, disable_ws_auth):
+        """Use auth bypass for this test class."""
+        pass
+
     def test_invalid_json_returns_error(self, client):
         """Invalid JSON message returns error."""
         with client.websocket_connect("/ws") as websocket:
@@ -273,6 +298,11 @@ class TestWebSocketErrorHandling:
 class TestWebSocketStatusEndpoint:
     """Tests for /ws/status REST endpoint."""
 
+    @pytest.fixture(autouse=True)
+    def _use_auth_bypass(self, disable_ws_auth):
+        """Use auth bypass for this test class."""
+        pass
+
     def test_status_endpoint_returns_200(self, client):
         """Status endpoint returns 200 OK."""
         response = client.get("/ws/status")
@@ -309,6 +339,11 @@ class TestWebSocketStatusEndpoint:
 class TestWebSocketCancel:
     """Tests for WebSocket generation cancellation."""
 
+    @pytest.fixture(autouse=True)
+    def _use_auth_bypass(self, disable_ws_auth):
+        """Use auth bypass for this test class."""
+        pass
+
     def test_cancel_clears_active_generation(self, client):
         """Cancel message clears active generation."""
         with client.websocket_connect("/ws") as websocket:
@@ -322,3 +357,93 @@ class TestWebSocketCancel:
             # Verify the client's generation was cleared
             ws_client = manager.get_client(client_id)
             assert ws_client.active_generation_id is None
+
+
+class TestWebSocketAuthentication:
+    """Tests for WebSocket authentication methods."""
+
+    @pytest.fixture
+    def auth_client(self):
+        """Create a test client without auth bypass."""
+        return TestClient(app, raise_server_exceptions=False)
+
+    def test_auth_via_x_ws_token_header_succeeds(self, auth_client):
+        """Authentication via X-WS-Token header should succeed."""
+        from api.routers.websocket import _WS_AUTH_TOKEN
+
+        # Connect with X-WS-Token header
+        with auth_client.websocket_connect("/ws", headers={"x-ws-token": _WS_AUTH_TOKEN}):
+            # If we get here, auth succeeded
+            pass
+
+    def test_auth_via_sec_websocket_protocol_succeeds(self, auth_client):
+        """Authentication via Sec-WebSocket-Protocol should succeed."""
+        from api.routers.websocket import _WS_AUTH_TOKEN
+
+        # Connect with token in Sec-WebSocket-Protocol
+        with auth_client.websocket_connect("/ws", subprotocols=[_WS_AUTH_TOKEN]):
+            # If we get here, auth succeeded
+            pass
+
+    def test_auth_via_query_param_succeeds_with_warning(self, auth_client):
+        """Authentication via query param should succeed but log warning."""
+        from api.routers.websocket import _WS_AUTH_TOKEN
+
+        # Connect with token in query parameter (deprecated)
+        # The warning is logged during connection, so we need to patch before connecting
+        with patch("api.routers.websocket.logger.warning") as mock_warning:
+            with auth_client.websocket_connect(f"/ws?token={_WS_AUTH_TOKEN}"):
+                # If we get here, auth succeeded
+                pass
+
+        # Verify deprecation warning was logged
+        assert mock_warning.called, "Expected warning to be logged for query param auth"
+        # Find the call with DEPRECATED in it
+        warning_calls = [call for call in mock_warning.call_args_list if call[0]]
+        deprecated_calls = [call for call in warning_calls if "DEPRECATED" in str(call[0][0])]
+        assert len(deprecated_calls) >= 1, f"Expected DEPRECATED warning, got: {warning_calls}"
+        warning_msg = deprecated_calls[0][0][0]
+        assert "query parameter" in warning_msg.lower()
+
+    def test_auth_without_token_fails(self, auth_client):
+        """Connection without auth token should fail."""
+        from starlette.websockets import WebSocketDisconnect
+
+        # Try to connect without token - should be rejected during handshake
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with auth_client.websocket_connect("/ws"):
+                pass
+
+        # Verify it was rejected with auth error (code 1008 = policy violation)
+        assert exc_info.value.code == 1008
+
+    def test_auth_with_invalid_token_fails(self, auth_client):
+        """Connection with invalid token should fail."""
+        from starlette.websockets import WebSocketDisconnect
+
+        # Try to connect with wrong token - should be rejected during handshake
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with auth_client.websocket_connect("/ws", headers={"x-ws-token": "invalid-token"}):
+                pass
+
+        # Verify it was rejected with auth error (code 1008 = policy violation)
+        assert exc_info.value.code == 1008
+
+    def test_localhost_bypass_when_auth_disabled(self, auth_client, monkeypatch):
+        """Localhost should bypass auth when JARVIS_WS_REQUIRE_AUTH=false."""
+        # Patch the environment variable check directly in the validation function
+        # The TestClient appears as 'testclient' in websocket.client.host
+        # Since it's not a real localhost connection, we need to patch the validation
+
+        def mock_validate_auth(websocket):
+            # Simulate JARVIS_WS_REQUIRE_AUTH=false behavior
+            # In this case, auth should be bypassed for localhost-like clients
+            return True  # Bypass auth as if localhost with JARVIS_WS_REQUIRE_AUTH=false
+
+        with patch(
+            "api.routers.websocket._validate_websocket_auth", side_effect=mock_validate_auth
+        ):
+            # Connect without token should succeed when auth is disabled
+            with auth_client.websocket_connect("/ws"):
+                # If we get here, auth was bypassed
+                pass

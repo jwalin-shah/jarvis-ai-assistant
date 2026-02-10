@@ -14,11 +14,12 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.dependencies import get_imessage_reader
 from integrations.imessage import ChatDBReader
+from jarvis.errors import iMessageQueryError
 from jarvis.priority import (
     PriorityLevel,
     get_priority_scorer,
@@ -453,10 +454,10 @@ def get_priority_inbox(
         conversations = reader.get_conversations(limit=15)
     except Exception as e:
         logger.exception("Failed to get conversations")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Failed to read conversations: {e}",
-        ) from e
+        raise iMessageQueryError(
+            "Failed to read conversations for priority inbox",
+            cause=e,
+        )
 
     # Build conversation name cache
     conv_cache: dict[str, str] = {}

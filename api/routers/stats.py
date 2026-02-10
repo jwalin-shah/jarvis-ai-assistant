@@ -25,7 +25,7 @@ from api.schemas import (
     WordFrequency,
 )
 from integrations.imessage import ChatDBReader
-from jarvis.metrics import TTLCache
+from jarvis.cache import TTLCache
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 

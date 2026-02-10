@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from jarvis.db.models import TTLCache
+from jarvis.cache import TTLCache
 from jarvis.observability.insights import (
     EMOJI_PATTERN,
     analyze_sentiment,
@@ -174,9 +174,8 @@ class AnalyticsEngine:
         # Response time calculation
         avg_response = self._compute_avg_response_time(sorted_msgs)
 
-        # Sentiment
-        all_text = " ".join(m.text for m in sorted_msgs if m.text)
-        sentiment = analyze_sentiment(all_text)
+        # Sentiment - analyze individually and aggregate instead of concatenating all text
+        sentiment = self._compute_aggregate_sentiment(sorted_msgs)
 
         # Peak times
         hour_counts: Counter[int] = Counter(m.date.hour for m in sorted_msgs)
@@ -230,9 +229,8 @@ class AnalyticsEngine:
         # Response time
         avg_response = self._compute_avg_response_time(sorted_msgs)
 
-        # Sentiment
-        all_text = " ".join(m.text for m in sorted_msgs if m.text)
-        sentiment = analyze_sentiment(all_text)
+        # Sentiment - analyze individually and aggregate instead of concatenating all text
+        sentiment = self._compute_aggregate_sentiment(sorted_msgs)
 
         # Message trend (compare first half to second half)
         trend = self._compute_message_trend(sorted_msgs)
@@ -470,6 +468,54 @@ class AnalyticsEngine:
             return None
 
         return round(sum(response_times) / len(response_times), 1)
+
+    def _compute_aggregate_sentiment(self, messages: list[Message]) -> Any:
+        """Compute aggregate sentiment by analyzing messages individually.
+
+        More memory-efficient than concatenating all text into one string.
+        Samples up to 1000 messages for performance.
+
+        Returns:
+            SentimentScore aggregate
+        """
+        from jarvis.observability.insights import SentimentScore
+
+        if not messages:
+            return SentimentScore(score=0.0, neutral_count=1)
+
+        # Sample messages if there are too many (for performance)
+        sample_msgs = messages if len(messages) <= 1000 else messages[:: len(messages) // 1000]
+
+        # Analyze each message individually and aggregate
+        total_positive = 0
+        total_negative = 0
+        total_neutral = 0
+
+        for msg in sample_msgs:
+            if not msg.text:
+                total_neutral += 1
+                continue
+
+            sentiment = analyze_sentiment(msg.text)
+            total_positive += sentiment.positive_count
+            total_negative += sentiment.negative_count
+            total_neutral += sentiment.neutral_count
+
+        # Calculate aggregate score
+        total_signals = total_positive + total_negative
+        if total_signals == 0:
+            return SentimentScore(score=0.0, neutral_count=total_neutral)
+
+        # Average sentiment score
+        score = (total_positive - total_negative) / (total_positive + total_negative + 1)
+        score = max(-1.0, min(1.0, score))
+
+        return SentimentScore(
+            score=round(score, 3),
+            positive_count=total_positive,
+            negative_count=total_negative,
+            neutral_count=total_neutral,
+        )
 
     def _compute_message_trend(self, messages: list[Message]) -> str:
         """Compute message trend direction."""

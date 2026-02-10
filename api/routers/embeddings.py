@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from api.dependencies import get_imessage_reader
 from integrations.imessage import ChatDBReader
 from jarvis.contacts.contact_profile import ContactProfile, get_contact_profile
+from jarvis.errors import EmbeddingError
 from jarvis.search.vec_search import VecSearcher, get_vec_searcher
 
 router = APIRouter(prefix="/embeddings", tags=["embeddings"])
@@ -255,9 +256,9 @@ def index_conversation(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to index conversation: {e}",
+        raise EmbeddingError(
+            "Failed to index conversation",
+            cause=e,
         ) from e
 
 
@@ -320,9 +321,9 @@ def semantic_search(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Search failed: {e}",
+        raise EmbeddingError(
+            "Semantic search failed",
+            cause=e,
         ) from e
 
 
@@ -351,9 +352,9 @@ def get_profile(contact_id: str) -> RelationshipProfileResponse:
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get relationship profile: {e}",
+        raise EmbeddingError(
+            "Failed to get relationship profile",
+            cause=e,
         ) from e
 
 
@@ -375,7 +376,7 @@ def get_index_stats() -> IndexStatsResponse:
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get index stats: {e}",
+        raise EmbeddingError(
+            "Failed to get embedding index statistics",
+            cause=e,
         ) from e
