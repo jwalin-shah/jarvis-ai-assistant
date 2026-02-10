@@ -34,6 +34,8 @@ from pathlib import Path
 
 import numpy as np
 
+from jarvis.contracts.pipeline import Relationship as ContractRelationship
+
 # Cache TTL for classification results (5 minutes)
 _CLASSIFICATION_CACHE_TTL_SECONDS = 300
 _classification_cache: dict[str, tuple[float, ClassificationResult]] = {}
@@ -264,6 +266,15 @@ class ClassificationResult:
     signals: dict[str, float] = field(default_factory=dict)
     sample_size: int = 0
     features: dict[str, float] = field(default_factory=dict)
+
+    def to_contract_relationship(self) -> ContractRelationship:
+        """Convert to pipeline Relationship contract type."""
+        return ContractRelationship(
+            source_entity=self.display_name or self.chat_id,
+            target_entity="user",
+            relation_type=self.relationship,
+            confidence=self.confidence,
+        )
 
 
 @dataclass

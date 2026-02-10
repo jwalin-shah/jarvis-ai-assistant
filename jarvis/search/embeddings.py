@@ -55,6 +55,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from contracts.imessage import Message
+from jarvis.contracts.pipeline import RAGDocument
 from jarvis.embedding_adapter import get_embedder
 from jarvis.errors import ErrorCode, JarvisError
 
@@ -119,6 +120,20 @@ class SimilarMessage:
     timestamp: datetime
     is_from_me: bool
     similarity: float
+
+    def to_rag_document(self) -> RAGDocument:
+        """Convert to pipeline RAGDocument contract type."""
+        return RAGDocument(
+            content=self.text,
+            source=f"{self.chat_id}:{self.message_id}",
+            score=self.similarity,
+            metadata={
+                "sender": self.sender,
+                "sender_name": self.sender_name,
+                "timestamp": self.timestamp.isoformat(),
+                "is_from_me": self.is_from_me,
+            },
+        )
 
 
 @dataclass
@@ -1109,6 +1124,32 @@ def find_similar_messages(
     )
 
 
+def find_similar_as_rag(
+    query: str,
+    contact_id: str | None = None,
+    limit: int = 10,
+    min_similarity: float = 0.3,
+) -> list[RAGDocument]:
+    """Find messages similar to a query, returned as RAGDocument contract types.
+
+    Args:
+        query: Query text to find similar messages for
+        contact_id: Optional chat ID to filter by
+        limit: Maximum number of results
+        min_similarity: Minimum similarity threshold (0-1)
+
+    Returns:
+        List of RAGDocument objects sorted by score
+    """
+    results = find_similar_messages(
+        query=query,
+        contact_id=contact_id,
+        limit=limit,
+        min_similarity=min_similarity,
+    )
+    return [r.to_rag_document() for r in results]
+
+
 def find_similar_situations(
     context: str,
     contact_id: str | None = None,
@@ -1168,6 +1209,7 @@ __all__ = [
     "reset_embedding_store",
     # Convenience functions
     "find_similar_messages",
+    "find_similar_as_rag",
     "find_similar_situations",
     "get_relationship_profile",
 ]
