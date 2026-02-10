@@ -125,6 +125,11 @@ class FactExtractor:
                 logger.debug("Skipping bot message: %s", text[:50])
                 continue
 
+            # Skip professional messages (emails, formal correspondence)
+            if self._is_professional_message(text):
+                logger.debug("Skipping professional message: %s", text[:50])
+                continue
+
             extracted = self._extract_rule_based(text, contact_id, now)
             # Attach source message ID
             for fact in extracted:
@@ -152,6 +157,59 @@ class FactExtractor:
     # =========================================================================
     # Quality Filtering Methods
     # =========================================================================
+
+    def _is_professional_message(self, text: str) -> bool:
+        """Detect professional/business emails that should not be processed.
+
+        Markers:
+        - Formal greetings: "Dear", "Hello from", "Hi, ... from [Company]"
+        - Professional signoffs: "Regards", "Sincerely", "Best regards"
+        - Business patterns: "from [Company]", "Reminder:", "[Company] recruiting"
+        """
+        professional_markers = [
+            r"\bdear\s",
+            r"hello from",
+            r"reminder:\s",
+            r"\bregards\b",
+            r"\bsincerely\b",
+            r"\bbest regards\b",
+            r"i appreciate",
+            r"opportunity",
+            r"from\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Inc|LLC|Ltd|Corp|Hyundai|Recruiting|Marketing|Healthcare|Hospital)",
+        ]
+        for marker in professional_markers:
+            if re.search(marker, text, re.IGNORECASE):
+                return True
+        return False
+
+    def _is_coherent_subject(self, subject: str) -> bool:
+        """Reject subjects that are vague pronouns or incomplete fragments.
+
+        Rejects:
+        - Single pronouns: "it", "that", "this"
+        - Pronoun phrases without clear antecedent: "it in", "that in"
+        - Fragments that are clearly incomplete
+        """
+        # Fragments that are clearly incomplete
+        incoherent_patterns = {
+            "it",
+            "that",
+            "this",
+            "it in",
+            "that in",
+            "in august",
+            "in spring",
+            "in summer",
+            "in winter",
+        }
+        if subject.lower().strip() in incoherent_patterns:
+            return False
+
+        # Reject if starts with pronoun + preposition (indicates missing context)
+        if re.match(r"^(it|that|this)\s+(in|at|on)\s+", subject, re.IGNORECASE):
+            return False
+
+        return True
 
     def _is_bot_message(self, text: str, chat_id: str = "") -> bool:
         """Detect high-confidence bot messages (spam, automated replies).
@@ -266,6 +324,16 @@ class FactExtractor:
         filtered: list[Fact] = []
 
         for fact in facts:
+            # Check coherence (new)
+            is_coherent = self._is_coherent_subject(fact.subject)
+            if not is_coherent:
+                logger.debug(
+                    "Rejecting incoherent subject: %s (category=%s)",
+                    fact.subject,
+                    fact.category,
+                )
+                continue
+
             # Check vague subject
             is_vague = self._is_vague_subject(fact.subject)
             if is_vague:
