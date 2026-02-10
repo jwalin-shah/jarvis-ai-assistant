@@ -7,6 +7,7 @@ Consolidates logic from:
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 import random
 import threading
@@ -15,11 +16,23 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.category_classifier import classify_category
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
+    ResponseType,
+)
+from jarvis.contracts.pipeline import (
+    CategoryType,
+    ClassificationResult,
+    GenerationRequest,
+    GenerationResponse,
+    IntentType,
+    MessageContext,
+    RAGDocument,
+    UrgencyLevel,
 )
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
@@ -29,11 +42,15 @@ from jarvis.observability.metrics_router import (
     get_routing_metrics_store,
     hash_query,
 )
-from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES, get_category_config
+from jarvis.prompts import (
+    ACKNOWLEDGE_TEMPLATES,
+    CLOSING_TEMPLATES,
+    build_prompt_from_request,
+    get_category_config,
+)
 from jarvis.services.context_service import ContextService
 
 if TYPE_CHECKING:
-    from contracts.models import GenerationRequest
     from integrations.imessage.reader import ChatDBReader
     from jarvis.search.semantic_search import SemanticSearcher
     from models import MLXGenerator
@@ -134,68 +151,155 @@ class ReplyService:
 
         return check_health()
 
+    @staticmethod
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _to_intent_type(category: str) -> IntentType:
+        mapping = {
+            "question": IntentType.QUESTION,
+            "request": IntentType.REQUEST,
+            "statement": IntentType.STATEMENT,
+            "emotion": IntentType.STATEMENT,
+            "closing": IntentType.STATEMENT,
+            "acknowledge": IntentType.STATEMENT,
+        }
+        return mapping.get(category, IntentType.UNKNOWN)
+
+    @staticmethod
+    def _pressure_from_classification(classification: ClassificationResult) -> ResponsePressure:
+        pressure_raw = classification.metadata.get("mobilization_pressure")
+        if isinstance(pressure_raw, str):
+            try:
+                return ResponsePressure(pressure_raw)
+            except ValueError:
+                pass
+        if classification.category in {
+            CategoryType.ACKNOWLEDGE,
+            CategoryType.CLOSING,
+            CategoryType.OFF_TOPIC,
+        }:
+            return ResponsePressure.NONE
+        if classification.urgency == UrgencyLevel.HIGH:
+            return ResponsePressure.HIGH
+        if classification.urgency == UrgencyLevel.MEDIUM:
+            return ResponsePressure.MEDIUM
+        return ResponsePressure.LOW
+
+    @staticmethod
+    def _max_tokens_for_pressure(pressure: ResponsePressure) -> int:
+        return 20 if pressure == ResponsePressure.NONE else 40
+
+    def _build_classification_result(
+        self,
+        incoming: str,
+        thread: list[str],
+        mobilization: MobilizationResult,
+    ) -> ClassificationResult:
+        category_result = classify_category(
+            incoming,
+            context=thread,
+            mobilization=mobilization,
+        )
+
+        if category_result.category == "closing":
+            category = CategoryType.CLOSING
+        elif category_result.category == "acknowledge":
+            category = CategoryType.ACKNOWLEDGE
+        else:
+            category = CategoryType.FULL_RESPONSE
+
+        if mobilization.pressure == ResponsePressure.HIGH:
+            urgency = UrgencyLevel.HIGH
+        elif mobilization.pressure == ResponsePressure.MEDIUM:
+            urgency = UrgencyLevel.MEDIUM
+        else:
+            urgency = UrgencyLevel.LOW
+
+        return ClassificationResult(
+            intent=self._to_intent_type(category_result.category),
+            category=category,
+            urgency=urgency,
+            confidence=min(1.0, (mobilization.confidence + category_result.confidence) / 2.0),
+            requires_knowledge=category_result.category in {"question", "request"},
+            metadata={
+                "category_name": category_result.category,
+                "category_confidence": category_result.confidence,
+                "category_method": category_result.method,
+                "mobilization_pressure": mobilization.pressure.value,
+                "mobilization_response_type": mobilization.response_type.value,
+                "mobilization_confidence": mobilization.confidence,
+                "mobilization_method": mobilization.method,
+            },
+        )
+
     def prepare_streaming_context(
         self,
         incoming: str,
         thread: list[str] | None = None,
         chat_id: str | None = None,
         instruction: str | None = None,
-    ) -> tuple[GenerationRequest, dict[str, Any]]:
-        """Prepare a GenerationRequest through the full pipeline for streaming.
+    ) -> tuple[ModelGenerationRequest, dict[str, Any]]:
+        """Prepare a model GenerationRequest through the typed pipeline for streaming.
 
         Runs all the same steps as the non-streaming path (health check, contact
-        lookup, mobilization classification, RAG search, prompt assembly) but
-        returns the request instead of generating. Designed to be called via
+        lookup, classification, RAG search, prompt assembly) but returns the
+        model request instead of generating. Designed to be called via
         asyncio.to_thread() before streaming tokens.
-
-        Args:
-            incoming: The incoming message text to respond to.
-            thread: Optional recent conversation messages for context.
-            chat_id: Optional chat ID for context and contact lookup.
-            instruction: Optional user-provided instruction.
-
-        Returns:
-            Tuple of (GenerationRequest, metadata_dict).
-
-        Raises:
-            ReplyServiceError: If LLM health check fails.
         """
-        # 1. Health check
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
             raise ReplyServiceError(f"LLM unavailable: {health_reason}")
 
-        # 2. Get contact from chat_id
+        normalized_incoming = incoming.strip()
+        thread_messages = [msg for msg in (thread or []) if isinstance(msg, str)]
         contact = self.context_service.get_contact(None, chat_id)
-
-        # 3. Classify mobilization
-        mobilization = classify_with_cascade(incoming)
-
-        # 4. Search similar examples
-        search_results = self.context_service.search_examples(incoming, chat_id=chat_id)
-
-        # 5. Build request through full pipeline
-        request = self.build_generation_request(
-            incoming=incoming,
-            search_results=search_results,
-            contact=contact,
-            thread=thread,
+        mobilization = classify_with_cascade(normalized_incoming)
+        classification = self._build_classification_result(
+            normalized_incoming,
+            thread_messages,
+            mobilization,
+        )
+        search_results = self.context_service.search_examples(
+            normalized_incoming,
             chat_id=chat_id,
-            mobilization=mobilization,
-            instruction=instruction,
+            contact_id=contact.id if contact else None,
         )
 
-        # 6. Build metadata with improved confidence scoring
+        message_context = MessageContext(
+            chat_id=chat_id or "",
+            message_text=normalized_incoming,
+            is_from_me=False,
+            timestamp=datetime.utcnow(),
+            metadata={
+                "thread": thread_messages,
+            },
+        )
+
+        pipeline_request = self.build_generation_request(
+            context=message_context,
+            classification=classification,
+            search_results=search_results,
+            contact=contact,
+            thread=thread_messages,
+            instruction=instruction,
+        )
+        model_request = self._to_model_generation_request(pipeline_request)
+
         similarity = search_results[0]["similarity"] if search_results else 0.0
         example_diversity = self._compute_example_diversity(search_results)
+        pressure = self._pressure_from_classification(classification)
 
-        # For streaming, we don't have the reply yet, so use pressure-based confidence
         base_confidence = {
             ResponsePressure.HIGH: 0.85,
             ResponsePressure.MEDIUM: 0.65,
             ResponsePressure.LOW: 0.45,
             ResponsePressure.NONE: 0.30,
-        }[mobilization.pressure]
+        }[pressure]
 
         if similarity < 0.5:
             base_confidence *= 0.8
@@ -213,102 +317,110 @@ class ReplyService:
             "confidence": confidence,
             "similarity_score": similarity,
             "example_diversity": example_diversity,
-            "mobilization_pressure": mobilization.pressure.value,
+            "mobilization_pressure": pressure.value,
         }
 
-        return request, metadata
+        return model_request, metadata
 
     def generate_reply(
         self,
-        incoming: str,
-        contact: Contact | None = None,
+        context: MessageContext,
+        classification: ClassificationResult,
         search_results: list[dict[str, Any]] | None = None,
         thread: list[str] | None = None,
-        chat_id: str | None = None,
-        mobilization: MobilizationResult | None = None,
+        contact: Contact | None = None,
         cached_embedder: CachedEmbedder | None = None,
-    ) -> dict[str, Any]:
-        """Generate a single best reply using RAG and LLM.
-
-        This is the primary method for high-quality generation.
-
-        Args:
-            cached_embedder: Optional pre-warmed embedder to reuse. Avoids
-                recomputing embeddings that the caller already computed.
-        """
+    ) -> GenerationResponse:
+        """Generate a reply from contract types."""
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
         if cached_embedder is None:
-            cached_embedder = CachedEmbedder(get_embedder())
+            cached_embedder = get_embedder()
 
+        incoming = context.message_text.strip()
         if not incoming or not incoming.strip():
-            return {
-                "type": "clarify",
-                "response": "I received an empty message. Could you tell me what you need?",
-                "confidence": "low",
-                "reason": "empty_message",
-            }
+            return GenerationResponse(
+                response="I received an empty message. Could you tell me what you need?",
+                confidence=0.2,
+                metadata={"type": "clarify", "reason": "empty_message", "similarity_score": 0.0},
+            )
 
-        # 1. Context and classification
-        if mobilization is None:
-            mobilization = classify_with_cascade(incoming)
+        chat_id = context.chat_id or None
+        thread_messages = thread
+        if thread_messages is None:
+            metadata_thread = context.metadata.get("thread", [])
+            if isinstance(metadata_thread, list):
+                thread_messages = [msg for msg in metadata_thread if isinstance(msg, str)]
+            else:
+                thread_messages = []
 
-        # 1b. Category classification and routing
-
-        category_result = classify_category(
-            incoming, context=thread or [], mobilization=mobilization
+        category_name = str(
+            classification.metadata.get("category_name", classification.category.value)
         )
-        category_config = get_category_config(category_result.category)
+        category_config = get_category_config(category_name)
 
-        # If closing/acknowledge category, skip SLM and return template
         if category_config.skip_slm:
-            if category_result.category == "closing":
+            if category_name == "closing":
                 template_response = random.choice(CLOSING_TEMPLATES)
-            else:  # acknowledge
+            else:
                 template_response = random.choice(ACKNOWLEDGE_TEMPLATES)
 
-            return {
-                "type": category_result.category,
-                "response": template_response,
-                "confidence": "high",
-                "reason": f"category={category_result.category}",
-                "category": category_result.category,
-            }
+            return GenerationResponse(
+                response=template_response,
+                confidence=0.95,
+                metadata={
+                    "type": category_name,
+                    "reason": f"category={category_name}",
+                    "category": category_name,
+                    "similarity_score": 0.0,
+                    "vec_candidates": 0,
+                },
+            )
 
-        # 2. Search for similar examples
         if search_results is None:
             search_start = time.perf_counter()
-            search_results = self.context_service.search_examples(incoming, chat_id=chat_id)
+            search_results = self.context_service.search_examples(
+                incoming,
+                chat_id=chat_id,
+                contact_id=contact.id if contact else None,
+                embedder=cached_embedder,
+            )
             latency_ms["context_search"] = (time.perf_counter() - search_start) * 1000
 
-        # 3. Generate response
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
             logger.warning("FALLBACK | reason=%s | returning empty response", health_reason)
-            return {
-                "type": "fallback",
-                "response": "",
-                "confidence": "none",
-                "reason": health_reason,
-            }
+            return GenerationResponse(
+                response="",
+                confidence=0.0,
+                metadata={
+                    "type": "fallback",
+                    "reason": health_reason,
+                    "similarity_score": 0.0,
+                    "vec_candidates": len(search_results),
+                },
+            )
 
         gen_start = time.perf_counter()
-        result = self._generate_llm_reply(
-            incoming,
-            search_results,
-            contact,
-            thread,
-            chat_id=chat_id,
-            mobilization=mobilization,
-            category_result=category_result,
+        request = self.build_generation_request(
+            context=context,
+            classification=classification,
+            search_results=search_results,
+            contact=contact,
+            thread=thread_messages,
         )
+        result = self._generate_llm_reply(request, search_results, thread_messages)
         latency_ms["generation"] = (time.perf_counter() - gen_start) * 1000
 
-        # 4. Finalize result
         latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-        similarity = search_results[0]["similarity"] if search_results else 0.0
+        similarity = self._safe_float(
+            result.metadata.get(
+                "similarity_score",
+                search_results[0]["similarity"] if search_results else 0.0,
+            ),
+            default=0.0,
+        )
 
-        # Record metrics
         self._record_metrics(
             incoming=incoming,
             decision="generate",
@@ -325,43 +437,25 @@ class ReplyService:
 
     def build_generation_request(
         self,
-        incoming: str,
+        context: MessageContext,
+        classification: ClassificationResult,
         search_results: list[dict[str, Any]],
         contact: Contact | None,
-        thread: list[str] | None,
-        chat_id: str | None,
-        mobilization: MobilizationResult,
+        thread: list[str] | None = None,
         instruction: str | None = None,
-        category_result=None,
     ) -> GenerationRequest:
-        """Build a GenerationRequest through the full pipeline.
+        """Build a typed GenerationRequest with context, classification, and RAG docs."""
+        from jarvis.prompts import get_optimized_examples, get_optimized_instruction
 
-        Does context building, relationship profile lookup, mobilization hinting,
-        RAG prompt assembly, and GenerationRequest construction.
+        incoming = context.message_text.strip()
+        chat_id = context.chat_id or None
+        category_name = str(
+            classification.metadata.get("category_name", classification.category.value)
+        )
+        category_config = get_category_config(category_name)
+        context_depth = category_config.context_depth
 
-        Args:
-            incoming: The incoming message text.
-            search_results: Similar examples from vector search.
-            contact: Contact info for personalization.
-            thread: Recent conversation messages.
-            chat_id: Chat ID for context lookup.
-            mobilization: Response mobilization classification.
-            instruction: Optional user-provided instruction override.
-
-        Returns:
-            A GenerationRequest ready for generate() or generate_stream().
-        """
-        from contracts.models import GenerationRequest
-        from jarvis.prompts import get_category_config
-
-        # Build context with category-specific depth
-        if category_result:
-            category_config = get_category_config(category_result.category)
-            context_depth = category_config.context_depth
-        else:
-            context_depth = 5  # default
-
-        context_messages = []
+        context_messages: list[str] = []
         if thread:
             context_messages = thread[-context_depth:] if context_depth > 0 else []
         elif chat_id and context_depth > 0:
@@ -369,35 +463,44 @@ class ReplyService:
                 chat_id, limit=context_depth
             )
 
-        # Relationship profile
         relationship_profile, contact_context = self.context_service.get_relationship_profile(
             contact, chat_id
         )
+        context.metadata["context_messages"] = context_messages
+        context.metadata["relationship_profile"] = relationship_profile
+        context.metadata["contact_context"] = contact_context
+        if contact and contact.display_name:
+            context.metadata.setdefault("contact_name", contact.display_name)
 
-        # Category routing: classify message and use MIPRO-optimized programs
-        from jarvis.prompts import (
-            get_optimized_examples,
-            get_optimized_instruction,
-            resolve_category,
-        )
-
-        category = resolve_category(
-            incoming,
-            context=context_messages,
-            mobilization=mobilization,
-        )
-
-        # Use MIPRO-compiled instruction if available, else category hint
         if instruction is None:
-            optimized_instruction = get_optimized_instruction(category)
+            optimized_instruction = get_optimized_instruction(category_name)
             if optimized_instruction:
                 instruction = optimized_instruction
-            elif category_result and category_config.system_prompt:
+            elif category_config.system_prompt:
                 instruction = category_config.system_prompt
             else:
-                instruction = self._build_mobilization_hint(mobilization)
+                pressure = self._pressure_from_classification(classification)
+                response_type_value = str(
+                    classification.metadata.get(
+                        "mobilization_response_type",
+                        ResponseType.OPTIONAL.value,
+                    )
+                )
+                try:
+                    response_type = ResponseType(response_type_value)
+                except ValueError:
+                    response_type = ResponseType.OPTIONAL
+                instruction = self._build_mobilization_hint(
+                    MobilizationResult(
+                        pressure=pressure,
+                        response_type=response_type,
+                        confidence=classification.confidence,
+                        features={},
+                        method="contract_bridge",
+                    )
+                )
+        context.metadata["instruction"] = instruction or ""
 
-        # Rerank search results for better relevance
         if len(search_results) > 1:
             search_results = self.reranker.rerank(
                 query=incoming,
@@ -406,46 +509,68 @@ class ReplyService:
                 top_k=5,
             )
 
-        # Use category-specific few-shot examples if available
-        optimized_examples = get_optimized_examples(category)
+        optimized_examples = get_optimized_examples(category_name)
         category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
 
         top_results = search_results[:3]
-        similar_exchanges = [(r["trigger_text"], r["response_text"]) for r in top_results]
-        rag_rerank_scores = [r.get("rerank_score", 0.0) for r in top_results]
+        similar_exchanges = [
+            (str(r.get("trigger_text", "")), str(r.get("response_text", ""))) for r in top_results
+        ]
+        rag_rerank_scores = [self._safe_float(r.get("rerank_score"), default=0.0) for r in top_results]
 
-        # Merge: RAG-retrieved examples first, then category-specific (up to 5 total)
         all_exchanges = similar_exchanges + [
             ex for ex in category_exchanges if ex not in similar_exchanges
         ]
-        # Extend rerank scores with 0.0 for category examples
         all_rerank_scores = rag_rerank_scores + [0.0] * (
             len(all_exchanges) - len(similar_exchanges)
         )
 
-        # Deduplicate semantically similar examples
         cached_embedder = get_embedder()
         all_exchanges = self._dedupe_examples(
             all_exchanges, cached_embedder, rerank_scores=all_rerank_scores
         )
-
-        # Limit to 5 total examples
         all_exchanges = all_exchanges[:5]
 
-        # Build prompt using chat template (multi-turn few-shot)
-        prompt = self._build_chat_prompt(
-            incoming=incoming,
-            instruction=instruction,
-            exchanges=all_exchanges,
-        )
-
-        max_tokens = 20 if mobilization.pressure == ResponsePressure.NONE else 40
+        rag_documents: list[RAGDocument] = []
+        for result in top_results:
+            trigger_text = str(result.get("trigger_text", "")).strip()
+            if not trigger_text:
+                continue
+            rag_documents.append(
+                RAGDocument(
+                    content=trigger_text,
+                    source=str(result.get("topic") or chat_id or "rag"),
+                    score=self._safe_float(result.get("similarity"), default=0.0),
+                    metadata={
+                        "response_text": str(result.get("response_text", "")),
+                        "rerank_score": self._safe_float(
+                            result.get("rerank_score"), default=0.0
+                        ),
+                    },
+                )
+            )
 
         return GenerationRequest(
+            context=context,
+            classification=classification,
+            extraction=None,
+            retrieved_docs=rag_documents,
+            few_shot_examples=[
+                {
+                    "input": ctx,
+                    "output": response,
+                }
+                for ctx, response in all_exchanges
+                if ctx and response
+            ],
+        )
+
+    def _to_model_generation_request(self, request: GenerationRequest) -> ModelGenerationRequest:
+        pressure = self._pressure_from_classification(request.classification)
+        prompt = build_prompt_from_request(request)
+        return ModelGenerationRequest(
             prompt=prompt,
-            context_documents=[],  # Already baked into RAG prompt
-            few_shot_examples=[],  # Already baked into RAG prompt
-            max_tokens=max_tokens,
+            max_tokens=self._max_tokens_for_pressure(pressure),
         )
 
     # Responses that signal the model is uncertain / lacks context
@@ -615,71 +740,80 @@ class ReplyService:
 
     def _generate_llm_reply(
         self,
-        incoming: str,
+        request: GenerationRequest,
         search_results: list[dict[str, Any]],
-        contact: Contact | None,
         thread: list[str] | None,
-        chat_id: str | None,
-        mobilization: MobilizationResult,
-        category_result=None,
-    ) -> dict[str, Any]:
-        # Pre-generation gate: skip when no response is needed and no examples found
-        if mobilization.pressure == ResponsePressure.NONE and not search_results:
-            return {
-                "type": "skip",
-                "response": "",
-                "confidence": "none",
-                "reason": "no_response_needed",
-            }
+    ) -> GenerationResponse:
+        incoming = request.context.message_text.strip()
+        pressure = self._pressure_from_classification(request.classification)
 
-        # Ambiguity gate: clarify when signals are too weak to generate well
-        cat_conf = getattr(category_result, "confidence", 1.0) if category_result else 1.0
+        if pressure == ResponsePressure.NONE and not search_results:
+            return GenerationResponse(
+                response="",
+                confidence=0.2,
+                metadata={
+                    "type": "skip",
+                    "reason": "no_response_needed",
+                    "similarity_score": 0.0,
+                    "vec_candidates": 0,
+                },
+            )
+
+        cat_conf = self._safe_float(
+            request.classification.metadata.get("category_confidence"),
+            default=request.classification.confidence,
+        )
         has_thin_context = not thread or len(thread) < 2
         is_short_msg = len(incoming.split()) <= 3
         if (
             cat_conf < 0.4
-            and mobilization.pressure == ResponsePressure.NONE
+            and pressure == ResponsePressure.NONE
             and is_short_msg
             and has_thin_context
         ):
-            return {
-                "type": "clarify",
-                "response": "",
-                "confidence": "low",
-                "confidence_score": cat_conf,
-                "reason": "ambiguous_message",
-            }
+            return GenerationResponse(
+                response="",
+                confidence=max(0.1, cat_conf),
+                metadata={
+                    "type": "clarify",
+                    "reason": "ambiguous_message",
+                    "similarity_score": 0.0,
+                    "vec_candidates": len(search_results),
+                },
+            )
 
         try:
-            request = self.build_generation_request(
-                incoming,
-                search_results,
-                contact,
-                thread,
-                chat_id,
-                mobilization,
-                category_result=category_result,
-            )
-            response = self.generator.generate(request)
+            model_request = self._to_model_generation_request(request)
+            response = self.generator.generate(model_request)
             text = response.text.strip()
 
-            # Post-generation gate: detect model uncertainty signal
             if text.lower() in self._UNCERTAIN_SIGNALS:
-                return {
-                    "type": "uncertain",
-                    "response": text,
-                    "confidence": "low",
-                    "reason": "model_uncertain",
-                }
+                return GenerationResponse(
+                    response=text,
+                    confidence=0.25,
+                    metadata={
+                        "type": "uncertain",
+                        "reason": "model_uncertain",
+                        "similarity_score": 0.0,
+                        "vec_candidates": len(search_results),
+                    },
+                )
 
-            # Compute confidence using multiple signals
-            similarity = search_results[0]["similarity"] if search_results else 0.0
+            similarity = (
+                self._safe_float(search_results[0].get("similarity"), default=0.0)
+                if search_results
+                else 0.0
+            )
             example_diversity = self._compute_example_diversity(search_results)
             reply_length = len(text.split())
-            rerank_score = search_results[0].get("rerank_score") if search_results else None
+            rerank_score = (
+                self._safe_float(search_results[0].get("rerank_score"), default=0.0)
+                if search_results
+                else None
+            )
 
-            confidence_score, confidence = self._compute_confidence(
-                mobilization.pressure,
+            confidence_score, confidence_label = self._compute_confidence(
+                pressure,
                 similarity,
                 example_diversity,
                 reply_length,
@@ -688,22 +822,45 @@ class ReplyService:
                 rerank_score=rerank_score,
             )
 
-            return {
-                "type": "generated",
-                "response": text,
-                "confidence": confidence,
-                "confidence_score": confidence_score,
-                "similarity_score": similarity,
-                "example_diversity": example_diversity,
-            }
+            similar_triggers = [
+                str(row.get("trigger_text", ""))
+                for row in search_results[:3]
+                if row.get("trigger_text")
+            ]
+            used_docs = [doc.content for doc in request.retrieved_docs[:3] if doc.content]
+
+            return GenerationResponse(
+                response=text,
+                confidence=confidence_score,
+                used_kg_facts=used_docs,
+                metadata={
+                    "type": "generated",
+                    "reason": "generated",
+                    "category": str(
+                        request.classification.metadata.get(
+                            "category_name",
+                            request.classification.category.value,
+                        )
+                    ),
+                    "similarity_score": similarity,
+                    "example_diversity": example_diversity,
+                    "confidence_label": confidence_label,
+                    "vec_candidates": len(search_results),
+                    "similar_triggers": similar_triggers,
+                },
+            )
         except Exception as e:
             logger.exception("LLM generation failed: %s", e)
-            return {
-                "type": "clarify",
-                "response": "I'm having trouble generating a response.",
-                "confidence": "low",
-                "reason": "generation_error",
-            }
+            return GenerationResponse(
+                response="I'm having trouble generating a response.",
+                confidence=0.2,
+                metadata={
+                    "type": "clarify",
+                    "reason": "generation_error",
+                    "similarity_score": 0.0,
+                    "vec_candidates": len(search_results),
+                },
+            )
 
     @staticmethod
     def _build_mobilization_hint(mobilization: MobilizationResult) -> str:
