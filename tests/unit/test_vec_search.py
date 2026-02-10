@@ -31,7 +31,7 @@ class TestBinarizeEmbedding:
 
     def test_output_length(self):
         """384 dims -> 48 bytes (384/8)."""
-        emb = np.random.randn(384).astype(np.float32)
+        emb = np.random.RandomState(42).randn(384).astype(np.float32)
         result = VecSearcher._binarize_embedding(emb)
         assert len(result) == 48
 
