@@ -15,7 +15,6 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
@@ -91,7 +90,7 @@ def make_message_context(
     **overrides: Any,
 ) -> MessageContext:
     """Factory for MessageContext with realistic defaults.
-    
+
     Args:
         chat_id: Unique identifier for the chat
         message_text: The actual message content
@@ -101,7 +100,7 @@ def make_message_context(
         thread_id: Optional thread identifier
         metadata: Optional metadata dict
         **overrides: Additional field overrides
-        
+
     Returns:
         A MessageContext instance
     """
@@ -129,7 +128,7 @@ def make_classification_result(
     **overrides: Any,
 ) -> ClassificationResult:
     """Factory for ClassificationResult with realistic defaults.
-    
+
     Args:
         intent: The detected intent type
         category: The response category
@@ -138,7 +137,7 @@ def make_classification_result(
         requires_knowledge: Whether knowledge retrieval is needed
         metadata: Optional metadata dict
         **overrides: Additional field overrides
-        
+
     Returns:
         A ClassificationResult instance
     """
@@ -164,7 +163,7 @@ def make_entity(
     **overrides: Any,
 ) -> Entity:
     """Factory for Entity with realistic defaults.
-    
+
     Args:
         name: Canonical entity name
         label: Entity type label (e.g., PERSON, ORG, DATE)
@@ -172,7 +171,7 @@ def make_entity(
         start_char: Start character index in source text
         end_char: End character index in source text
         **overrides: Additional field overrides
-        
+
     Returns:
         An Entity instance
     """
@@ -197,7 +196,7 @@ def make_fact(
     **overrides: Any,
 ) -> Fact:
     """Factory for Fact with realistic defaults.
-    
+
     Args:
         subject: The subject of the fact
         predicate: The relationship/predicate
@@ -205,7 +204,7 @@ def make_fact(
         confidence: Extraction confidence (0.0-1.0)
         source_text: The original text this fact was extracted from
         **overrides: Additional field overrides
-        
+
     Returns:
         A Fact instance
     """
@@ -229,14 +228,14 @@ def make_relationship(
     **overrides: Any,
 ) -> Relationship:
     """Factory for Relationship with realistic defaults.
-    
+
     Args:
         source_entity: Source entity name
         target_entity: Target entity name
         relation_type: Type of relationship
         confidence: Extraction confidence (0.0-1.0)
         **overrides: Additional field overrides
-        
+
     Returns:
         A Relationship instance
     """
@@ -259,14 +258,14 @@ def make_extraction_result(
     **overrides: Any,
 ) -> ExtractionResult:
     """Factory for ExtractionResult with realistic defaults.
-    
+
     Args:
         entities: List of extracted entities
         facts: List of extracted facts
         relationships: List of extracted relationships
         topics: List of detected topics
         **overrides: Additional field overrides
-        
+
     Returns:
         An ExtractionResult instance
     """
@@ -289,14 +288,14 @@ def make_rag_document(
     **overrides: Any,
 ) -> RAGDocument:
     """Factory for RAGDocument with realistic defaults.
-    
+
     Args:
         content: The document content/chunk
         source: Source identifier (file path, URL, etc.)
         score: Retrieval similarity score
         metadata: Optional metadata dict
         **overrides: Additional field overrides
-        
+
     Returns:
         A RAGDocument instance
     """
@@ -320,7 +319,7 @@ def make_generation_request(
     **overrides: Any,
 ) -> GenerationRequest:
     """Factory for GenerationRequest with realistic defaults.
-    
+
     Args:
         context: The message context
         classification: Classification result
@@ -328,7 +327,7 @@ def make_generation_request(
         retrieved_docs: List of retrieved RAG documents
         few_shot_examples: Few-shot examples for generation
         **overrides: Additional field overrides
-        
+
     Returns:
         A GenerationRequest instance
     """
@@ -353,7 +352,7 @@ def make_generation_response(
     **overrides: Any,
 ) -> GenerationResponse:
     """Factory for GenerationResponse with realistic defaults.
-    
+
     Args:
         response: The generated response text
         confidence: Generation confidence (0.0-1.0)
@@ -361,7 +360,7 @@ def make_generation_response(
         streaming: Whether this is a streaming response chunk
         metadata: Optional metadata dict
         **overrides: Additional field overrides
-        
+
     Returns:
         A GenerationResponse instance
     """
@@ -470,7 +469,7 @@ GENERATION_RESPONSE_EMPTY = make_generation_response(
 MESSAGE_CONTEXT_MAXIMAL = make_message_context(
     chat_id="chat_max_999",
     message_text="This is a detailed message with multiple sentences. "
-                 "It contains references to various topics and entities.",
+    "It contains references to various topics and entities.",
     is_from_me=True,
     timestamp=datetime(2024, 12, 31, 23, 59, 59),
     sender_id="sender_max_12345",
@@ -518,7 +517,7 @@ FACT_MAXIMAL = make_fact(
     object="International Business Machines Corporation",
     confidence=0.9876,
     source_text="Dr. Jane Smith has been employed by "
-                "International Business Machines Corporation since 2020.",
+    "International Business Machines Corporation since 2020.",
 )
 """Fact with complex subject and object values."""
 
@@ -537,14 +536,25 @@ EXTRACTION_RESULT_MAXIMAL = make_extraction_result(
         make_entity(name="Acme Corp", label="ORG", text="Acme", start_char=20, end_char=24),
     ],
     facts=[
-        make_fact(subject="Alice", predicate="knows", object="Bob", confidence=0.95,
-                  source_text="Alice knows Bob"),
-        make_fact(subject="Bob", predicate="works_at", object="Acme Corp", confidence=0.88,
-                  source_text="Bob works at Acme"),
+        make_fact(
+            subject="Alice",
+            predicate="knows",
+            object="Bob",
+            confidence=0.95,
+            source_text="Alice knows Bob",
+        ),
+        make_fact(
+            subject="Bob",
+            predicate="works_at",
+            object="Acme Corp",
+            confidence=0.88,
+            source_text="Bob works at Acme",
+        ),
     ],
     relationships=[
-        make_relationship(source_entity="Alice", target_entity="Bob",
-                          relation_type="friend_of", confidence=0.82),
+        make_relationship(
+            source_entity="Alice", target_entity="Bob", relation_type="friend_of", confidence=0.82
+        ),
     ],
     topics=["friendship", "employment", "business", "technology"],
 )
@@ -552,9 +562,9 @@ EXTRACTION_RESULT_MAXIMAL = make_extraction_result(
 
 RAG_DOCUMENT_MAXIMAL = make_rag_document(
     content="Machine learning is a subset of artificial intelligence "
-            "that enables systems to learn from data. "
-            "Deep learning uses neural networks with many layers. "
-            "These techniques are used in computer vision, NLP, and more.",
+    "that enables systems to learn from data. "
+    "Deep learning uses neural networks with many layers. "
+    "These techniques are used in computer vision, NLP, and more.",
     source="knowledge_base/ai_ml/comprehensive_guide.md#section-3.2",
     score=0.9567,
     metadata={
@@ -592,9 +602,9 @@ GENERATION_REQUEST_MAXIMAL = make_generation_request(
 
 GENERATION_RESPONSE_MAXIMAL = make_generation_response(
     response="Based on the information provided, I can explain that "
-             "machine learning is indeed a fascinating field. "
-             "It involves training algorithms on data to make predictions. "
-             "Would you like to know more about specific techniques?",
+    "machine learning is indeed a fascinating field. "
+    "It involves training algorithms on data to make predictions. "
+    "Would you like to know more about specific techniques?",
     confidence=0.9432,
     used_kg_facts=["fact_ml_001", "fact_ml_002", "fact_ai_045", "fact_dl_012"],
     streaming=False,
@@ -683,8 +693,8 @@ GENERATION_RESPONSE_UNICODE = make_generation_response(
 # =============================================================================
 
 # Generate a long string (>1000 chars)
-_LONG_TEXT = ("This is a very long message. " * 50)  # ~1450 chars
-_LONG_CONTENT = ("Document content that goes on and on. " * 50)  # ~1850 chars
+_LONG_TEXT = "This is a very long message. " * 50  # ~1450 chars
+_LONG_CONTENT = "Document content that goes on and on. " * 50  # ~1850 chars
 
 MESSAGE_CONTEXT_LONG = make_message_context(
     chat_id="chat_" + "x" * 100,

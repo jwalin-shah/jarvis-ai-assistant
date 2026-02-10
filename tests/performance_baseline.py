@@ -23,7 +23,6 @@ class TestConversationsPerformance:
         This would fail with 5 correlated subqueries (1400ms).
         With CTE optimization: ~50ms.
         """
-        from datetime import datetime
         from integrations.imessage import ChatDBReader
 
         start = time.perf_counter()
@@ -34,8 +33,7 @@ class TestConversationsPerformance:
 
             # With 400k messages, unoptimized = 1400ms, optimized = 50ms
             assert elapsed_ms < 200, (
-                f"getConversations too slow: {elapsed_ms:.1f}ms "
-                f"(indicates N+1 query pattern)"
+                f"getConversations too slow: {elapsed_ms:.1f}ms (indicates N+1 query pattern)"
             )
             assert len(convos) <= 50, "Should return at most 50 conversations"
         except Exception as e:
@@ -59,7 +57,6 @@ class TestMessagesPerformance:
 
         With batching: 3 queries, ~25ms
         """
-        from datetime import datetime
         from integrations.imessage import ChatDBReader
 
         try:
@@ -101,23 +98,12 @@ class TestQueryPatternDetection:
 
         # Check for signs of correlated subqueries
         assert "WITH" in query_upper, "Should use CTE for aggregations"
-        assert (
-            query_upper.count("SELECT") >= 2
-        ), "Should have multiple SELECT in CTE (not single SELECT with subqueries)"
+        assert query_upper.count("SELECT") >= 2, (
+            "Should have multiple SELECT in CTE (not single SELECT with subqueries)"
+        )
 
         # Should NOT have subqueries in main SELECT clause
-        lines = query.split("\n")
-        in_select = False
-        paren_depth = 0
-
-        for line in lines:
-            if "SELECT" in line and not in_select:
-                in_select = True
-            if in_select and "FROM" in line:
-                in_select = False
-
-            # This is a simplified check - look for nested SELECT in main clause
-            # A proper check would parse SQL properly
+        # (Simplified check - robust SQL parsing would be better but overkill here)
 
 
 class TestBatchOperations:
@@ -129,8 +115,9 @@ class TestBatchOperations:
         Anti-pattern: Loop INSERT - 50 operations, 150ms
         Pro pattern: executemany() - 1 operation, 3ms
         """
-        from jarvis.contacts.fact_storage import FactStorage
         import inspect
+
+        from jarvis.contacts.fact_storage import FactStorage
 
         source = inspect.getsource(FactStorage.save_facts)
 
@@ -149,15 +136,14 @@ class TestSearchFiltering:
         Anti-pattern: Fetch 1000 messages, filter in Python loop = wasted load
         Pro pattern: Pass filters to SQL WHERE clause = fetch only needed data
         """
-        from jarvis.search.semantic_search import SemanticSearcher
         import inspect
+
+        from jarvis.search.semantic_search import SemanticSearcher
 
         source = inspect.getsource(SemanticSearcher._get_messages_to_index)
 
         # Check that filters are NOT in a separate Python loop
-        assert "for msg in" not in source or (
-            "filters." not in source
-        ), (
+        assert "for msg in" not in source or ("filters." not in source), (
             "_get_messages_to_index should not have Python loop filtering "
             "(filters should be in SQL query)"
         )
@@ -172,8 +158,9 @@ class TestGraphBatching:
         Anti-pattern: Loop add_node() - 1100 calls, 200ms
         Pro pattern: add_nodes_from() - 3 calls, 30ms
         """
-        from jarvis.graph.knowledge_graph import KnowledgeGraphBuilder
         import inspect
+
+        from jarvis.graph.knowledge_graph import KnowledgeGraphBuilder
 
         source = inspect.getsource(KnowledgeGraphBuilder.build_from_db)
 
@@ -191,8 +178,8 @@ class TestPreloadModels:
 
     def test_socket_server_supports_no_preload_flag(self) -> None:
         """Verify socket server can defer model loading with --no-preload."""
-        import sys
         import inspect
+
         from jarvis.socket_server import main
 
         source = inspect.getsource(main)

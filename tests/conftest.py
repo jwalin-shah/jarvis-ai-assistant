@@ -231,3 +231,68 @@ def auto_mock_embedder(monkeypatch, request):
         monkeypatch.setattr("jarvis.search.semantic_search.get_embedder", mock_get_embedder)
     except AttributeError:
         pass
+
+
+# =============================================================================
+# Mock SpaCy for Tests
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def mock_spacy_model(monkeypatch):
+    """Mock spacy.load to avoid needing the actual model installed."""
+    try:
+        import spacy
+    except ImportError:
+        return
+
+    mock_nlp = MagicMock()
+
+    # Mock Doc object
+    def mock_pipe(text):
+        doc = MagicMock()
+        doc.text = text
+
+        # Create mock tokens
+        tokens = []
+        for word in text.split():
+            token = MagicMock()
+            token.text = word
+            token.lemma_ = word.lower()
+            token.pos_ = "NOUN"  # Default to NOUN
+            token.tag_ = "NN"
+            token.dep_ = "nsubj"
+            token.head = token
+            token.ent_type_ = ""
+
+            # Simple heuristics for better feature extraction testing
+            if word.lower() in ["can", "could", "would", "will"]:
+                token.tag_ = "MD"
+            elif word.lower() in ["send", "do", "get"]:
+                token.pos_ = "VERB"
+                token.tag_ = "VB"
+            elif word.lower() in ["sure", "yes", "ok"]:
+                token.pos_ = "INTJ"
+
+            tokens.append(token)
+
+        doc.__iter__.return_value = tokens
+        doc.__len__.return_value = len(tokens)
+        doc.__getitem__.side_effect = lambda i: tokens[i]
+
+        # Mock sentences
+        sent = MagicMock()
+        sent.text = text
+        sent.__iter__.return_value = tokens
+        doc.sents = [sent]
+
+        return doc
+
+    mock_nlp.side_effect = mock_pipe
+    mock_nlp.pipe = MagicMock(side_effect=lambda texts, **kwargs: (mock_pipe(t) for t in texts))
+
+    # Patch spacy.load
+    def mock_load(name, **kwargs):
+        return mock_nlp
+
+    monkeypatch.setattr(spacy, "load", mock_load)

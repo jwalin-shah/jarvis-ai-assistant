@@ -101,6 +101,8 @@ def test_real_model_loading_and_generation():
         assert len(result.text) > 0
         
     except Exception as e:
+        if "Insufficient memory" in str(e):
+            pytest.skip(f"Skipping real model test due to insufficient memory: {e}")
         pytest.fail("Real model test failed: " + str(e))
     finally:
         loader.unload()
