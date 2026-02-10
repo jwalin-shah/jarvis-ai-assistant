@@ -20,6 +20,7 @@ from jarvis.contacts.contact_profile_context import ContactProfileContext
 
 if TYPE_CHECKING:
     from contracts.imessage import Message
+    from jarvis.contracts.pipeline import GenerationRequest as PipelineGenerationRequest
     from jarvis.classifiers.response_mobilization import MobilizationResult
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
@@ -1582,6 +1583,72 @@ def build_rag_reply_prompt(
     )
 
     return prompt
+
+
+def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
+    """Build a reply prompt from a typed pipeline generation request."""
+    context_messages = req.context.metadata.get("context_messages")
+    if isinstance(context_messages, list):
+        formatted_context = "\n".join(str(msg) for msg in context_messages if isinstance(msg, str))
+    else:
+        thread_messages = req.context.metadata.get("thread", [])
+        if isinstance(thread_messages, list):
+            formatted_context = "\n".join(str(msg) for msg in thread_messages if isinstance(msg, str))
+        else:
+            formatted_context = ""
+
+    if not formatted_context:
+        formatted_context = req.context.message_text
+
+    similar_exchanges: list[tuple[str, str]] = []
+    for doc in req.retrieved_docs:
+        response_text = str(doc.metadata.get("response_text", "")).strip()
+        if doc.content.strip() and response_text:
+            similar_exchanges.append((doc.content.strip(), response_text))
+
+    for example in req.few_shot_examples:
+        input_text = str(example.get("input") or example.get("context") or "").strip()
+        output_text = str(example.get("output") or example.get("response") or "").strip()
+        pair = (input_text, output_text)
+        if input_text and output_text and pair not in similar_exchanges:
+            similar_exchanges.append(pair)
+
+    relationship_profile = req.context.metadata.get("relationship_profile")
+    if not isinstance(relationship_profile, dict):
+        relationship_profile = None
+
+    contact_context_raw = req.context.metadata.get("contact_context")
+    contact_context = (
+        contact_context_raw if isinstance(contact_context_raw, ContactProfileContext) else None
+    )
+
+    user_messages_raw = req.context.metadata.get("user_messages")
+    user_messages = (
+        [msg for msg in user_messages_raw if isinstance(msg, str)]
+        if isinstance(user_messages_raw, list)
+        else None
+    )
+
+    instruction_raw = req.context.metadata.get("instruction")
+    instruction = instruction_raw if isinstance(instruction_raw, str) and instruction_raw else None
+
+    contact_name_raw = (
+        req.context.metadata.get("contact_name")
+        or req.context.sender_id
+        or "them"
+    )
+    contact_name = str(contact_name_raw)
+
+    return build_rag_reply_prompt(
+        context=formatted_context,
+        last_message=req.context.message_text,
+        contact_name=contact_name,
+        similar_exchanges=similar_exchanges[:5],
+        relationship_profile=relationship_profile,
+        contact_context=contact_context,
+        instruction=instruction,
+        user_messages=user_messages,
+    )
 
 
 def build_rag_reply_prompt_from_embeddings(

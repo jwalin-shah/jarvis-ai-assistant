@@ -21,6 +21,7 @@ Usage:
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 import threading
 import time
@@ -28,9 +29,18 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from jarvis.classifiers.cascade import classify_with_cascade
+from jarvis.classifiers.category_classifier import classify_category
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
+)
+from jarvis.contracts.pipeline import (
+    CategoryType,
+    ClassificationResult,
+    GenerationResponse,
+    IntentType,
+    MessageContext,
+    UrgencyLevel,
 )
 from jarvis.db import JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
@@ -288,6 +298,136 @@ class ReplyRouter:
         except Exception as e:
             logger.debug("Routing metrics write failed: %s", e)
 
+    @staticmethod
+    def _to_intent_type(category: str) -> IntentType:
+        mapping = {
+            "question": IntentType.QUESTION,
+            "request": IntentType.REQUEST,
+            "statement": IntentType.STATEMENT,
+            "emotion": IntentType.STATEMENT,
+            "closing": IntentType.STATEMENT,
+            "acknowledge": IntentType.STATEMENT,
+        }
+        return mapping.get(category, IntentType.UNKNOWN)
+
+    @staticmethod
+    def _to_confidence_label(confidence: float) -> str:
+        if confidence >= 0.7:
+            return "high"
+        if confidence >= 0.45:
+            return "medium"
+        return "low"
+
+    def _build_classification_result(
+        self,
+        incoming: str,
+        thread: list[str],
+        mobilization: MobilizationResult,
+    ) -> ClassificationResult:
+        category_result = classify_category(
+            incoming,
+            context=thread,
+            mobilization=mobilization,
+        )
+
+        if category_result.category == "closing":
+            category = CategoryType.CLOSING
+        elif category_result.category == "acknowledge":
+            category = CategoryType.ACKNOWLEDGE
+        else:
+            category = CategoryType.FULL_RESPONSE
+
+        if mobilization.pressure == ResponsePressure.HIGH:
+            urgency = UrgencyLevel.HIGH
+        elif mobilization.pressure == ResponsePressure.MEDIUM:
+            urgency = UrgencyLevel.MEDIUM
+        else:
+            urgency = UrgencyLevel.LOW
+
+        return ClassificationResult(
+            intent=self._to_intent_type(category_result.category),
+            category=category,
+            urgency=urgency,
+            confidence=min(1.0, (mobilization.confidence + category_result.confidence) / 2.0),
+            requires_knowledge=category_result.category in {"question", "request"},
+            metadata={
+                "category_name": category_result.category,
+                "category_confidence": category_result.confidence,
+                "category_method": category_result.method,
+                "mobilization_pressure": mobilization.pressure.value,
+                "mobilization_response_type": mobilization.response_type.value,
+                "mobilization_confidence": mobilization.confidence,
+                "mobilization_method": mobilization.method,
+            },
+        )
+
+    @staticmethod
+    def _to_legacy_response(response: GenerationResponse) -> dict[str, Any]:
+        metadata = response.metadata
+        result: dict[str, Any] = {
+            "type": str(metadata.get("type", "generated")),
+            "response": response.response,
+            "confidence": ReplyRouter._to_confidence_label(response.confidence),
+            "similarity_score": float(metadata.get("similarity_score", 0.0)),
+            "similar_triggers": metadata.get("similar_triggers"),
+            "reason": str(metadata.get("reason", "")),
+        }
+        category = metadata.get("category")
+        if category:
+            result["category"] = category
+        return result
+
+    def route_message(
+        self,
+        context: MessageContext,
+        *,
+        cached_embedder: CachedEmbedder | None = None,
+    ) -> GenerationResponse:
+        """Route a typed message context through classification and generation."""
+        incoming = context.message_text.strip()
+
+        if not incoming:
+            return GenerationResponse(
+                response="I received an empty message. Could you tell me what you need?",
+                confidence=0.2,
+                metadata={"type": "clarify", "reason": "empty_message", "similarity_score": 0.0},
+            )
+
+        thread = context.metadata.get("thread", [])
+        if not isinstance(thread, list):
+            thread = []
+        thread = [msg for msg in thread if isinstance(msg, str)]
+
+        contact_id_raw = context.metadata.get("contact_id")
+        contact_id = contact_id_raw if isinstance(contact_id_raw, int) else None
+        chat_id = context.chat_id or None
+
+        if cached_embedder is None:
+            cached_embedder = get_embedder()
+
+        contact = self.context_service.get_contact(contact_id, chat_id)
+        if contact and contact.display_name:
+            context.metadata.setdefault("contact_name", contact.display_name)
+
+        mobilization = classify_with_cascade(incoming)
+        classification = self._build_classification_result(incoming, thread, mobilization)
+
+        search_results = self.context_service.search_examples(
+            incoming,
+            chat_id=chat_id,
+            contact_id=contact.id if contact else None,
+            embedder=cached_embedder,
+        )
+
+        return self.reply_service.generate_reply(
+            context=context,
+            classification=classification,
+            search_results=search_results,
+            thread=thread,
+            contact=contact,
+            cached_embedder=cached_embedder,
+        )
+
     def route(
         self,
         incoming: str,
@@ -360,65 +500,45 @@ class ReplyRouter:
             return result
 
         # Empty message check (incoming already normalized/stripped above)
-        if not incoming:
-            # ReplyService.generate_reply handles empty/error cases
-            result = self.reply_service.generate_reply(
-                incoming="",
-            )
-            return record_and_return(result, similarity_score=0.0, decision="clarify")
-
-        # Get contact
-        contact = self.context_service.get_contact(contact_id, chat_id)
-
-        # Classify response pressure
-        mobilization_start = time.perf_counter()
-        mobilization = classify_with_cascade(incoming)
-        latency_ms["mobilization"] = (time.perf_counter() - mobilization_start) * 1000
-        logger.debug(
-            "Mobilization: pressure=%s type=%s conf=%.2f",
-            mobilization.pressure.value,
-            mobilization.response_type.value,
-            mobilization.confidence,
+        message_context = MessageContext(
+            chat_id=chat_id or "",
+            message_text=incoming,
+            is_from_me=False,
+            timestamp=datetime.utcnow(),
+            metadata={
+                "thread": thread or [],
+                "contact_id": contact_id,
+            },
         )
 
-        # Search for similar examples (pass cached_embedder to avoid re-encoding)
-        search_start = time.perf_counter()
-        search_results = self.context_service.search_examples(
-            incoming,
-            chat_id=chat_id,
-            contact_id=contact.id if contact else None,
-            embedder=cached_embedder,
-        )
-        latency_ms["vec_search"] = (time.perf_counter() - search_start) * 1000
-
-        # Generate response
         model_loaded = self.generator.is_loaded()
         generate_start = time.perf_counter()
-        result = self.reply_service.generate_reply(
-            incoming=incoming,
-            contact=contact,
-            search_results=search_results,
-            thread=thread,
-            chat_id=chat_id,
-            mobilization=mobilization,
+        response = self.route_message(
+            message_context,
             cached_embedder=cached_embedder,
         )
         latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
 
-        similarity = search_results[0]["similarity"] if search_results else 0.0
-
-        # Map mobilization pressure to confidence
-        if mobilization.pressure == ResponsePressure.HIGH:
-            result["confidence"] = "high"
-        else:
-            result["confidence"] = "medium"
+        result = self._to_legacy_response(response)
+        similarity = float(response.metadata.get("similarity_score", 0.0))
+        response_type = str(response.metadata.get("type", result.get("type", "generated")))
+        decision = (
+            "clarify"
+            if response_type in {"clarify", "uncertain", "skip", "fallback"}
+            else "generate"
+        )
+        vec_candidates_raw = response.metadata.get("vec_candidates", 0)
+        try:
+            vec_candidates = int(vec_candidates_raw)
+        except (TypeError, ValueError):
+            vec_candidates = 0
 
         return record_and_return(
             result,
             similarity_score=similarity,
-            vec_candidates=len(search_results),
+            vec_candidates=vec_candidates,
             model_loaded=model_loaded,
-            decision="generate",
+            decision=decision,
         )
 
     def get_routing_stats(self) -> StatsResponse:
@@ -472,6 +592,11 @@ def get_reply_router() -> ReplyRouter:
     return _router
 
 
+def route_message(context: MessageContext) -> GenerationResponse:
+    """Route a typed message context using the shared router instance."""
+    return get_reply_router().route_message(context)
+
+
 def reset_reply_router() -> None:
     """Reset the singleton ReplyRouter.
 
@@ -498,5 +623,6 @@ __all__ = [
     "ReplyRouter",
     # Singleton functions
     "get_reply_router",
+    "route_message",
     "reset_reply_router",
 ]
