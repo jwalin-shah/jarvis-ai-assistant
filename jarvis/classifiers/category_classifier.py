@@ -44,6 +44,7 @@ import numpy as np
 from jarvis.classifiers.factory import SingletonFactory
 from jarvis.classifiers.mixins import EmbedderMixin
 from jarvis.features import CategoryFeatureExtractor
+from jarvis.observability.logging import log_event
 from jarvis.text_normalizer import is_acknowledgment_only, is_reaction
 
 if TYPE_CHECKING:
@@ -211,6 +212,8 @@ class CategoryClassifier(EmbedderMixin):
             if time.time() - cached_time < self._cache_ttl:
                 return cached_result
 
+        classify_start = time.perf_counter()
+
         # Layer 0: Fast path for reactions and acknowledgments
         # iMessage reactions - categorize by intent
         if is_reaction(text):
@@ -235,7 +238,10 @@ class CategoryClassifier(EmbedderMixin):
                 confidence=1.0,
                 method="fast_path",
             )
-            # Cache the result
+            log_event(logger, "classifier.inference.complete",
+                      classifier="category", result=category, confidence=1.0,
+                      method="fast_path",
+                      latency_ms=round((time.perf_counter() - classify_start) * 1000, 2))
             self._cache_put(cache_key, result)
             return result
 
@@ -246,7 +252,10 @@ class CategoryClassifier(EmbedderMixin):
                 confidence=1.0,
                 method="fast_path",
             )
-            # Cache the result
+            log_event(logger, "classifier.inference.complete",
+                      classifier="category", result="acknowledge", confidence=1.0,
+                      method="fast_path",
+                      latency_ms=round((time.perf_counter() - classify_start) * 1000, 2))
             self._cache_put(cache_key, result)
             return result
 
@@ -308,13 +317,19 @@ class CategoryClassifier(EmbedderMixin):
                     confidence=confidence,
                     method=method,
                 )
-                # Cache the result
+                log_event(logger, "classifier.inference.complete",
+                          classifier="category", result=category,
+                          confidence=round(confidence, 3), method="lightgbm",
+                          latency_ms=round(
+                              (time.perf_counter() - classify_start) * 1000, 2))
                 self._cache_put(cache_key, result)
                 return result
             except Exception as e:
                 logger.error("Pipeline prediction failed: %s", e, exc_info=True)
 
         # Fallback: statement with low confidence
+        log_event(logger, "classifier.fallback", level=logging.WARNING,
+                  classifier="category", reason="no_pipeline")
         result = CategoryResult(
             category="statement",
             confidence=0.30,

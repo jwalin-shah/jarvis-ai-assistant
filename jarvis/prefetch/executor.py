@@ -26,6 +26,7 @@ from enum import Enum
 from queue import PriorityQueue
 from typing import Any
 
+from jarvis.observability.logging import log_event
 from jarvis.prefetch.cache import CacheTier, MultiTierCache, get_cache
 from jarvis.prefetch.predictor import Prediction, PredictionPriority, PredictionType
 
@@ -145,17 +146,21 @@ class ResourceManager:
 
         # Check memory
         if self._available_memory < self._memory_threshold:
-            logger.debug("Prefetch blocked: low memory")
+            log_event(logger, "prefetch.resource_blocked", level=logging.DEBUG,
+                      resource="memory",
+                      available_mb=self._available_memory // (1024 * 1024))
             return False
 
         # Check CPU
         if self._cpu_usage > self._cpu_threshold:
-            logger.debug("Prefetch blocked: high CPU")
+            log_event(logger, "prefetch.resource_blocked", level=logging.DEBUG,
+                      resource="cpu", cpu_percent=self._cpu_usage)
             return False
 
         # Check battery (only if not plugged in)
         if not self._is_plugged_in and self._battery_level < self._battery_threshold:
-            logger.debug("Prefetch blocked: low battery")
+            log_event(logger, "prefetch.resource_blocked", level=logging.DEBUG,
+                      resource="battery", battery_level=self._battery_level)
             return False
 
         return True
@@ -287,7 +292,7 @@ class PrefetchExecutor:
             self._worker_thread.start()
 
             self._state = ExecutorState.RUNNING
-            logger.info(f"Prefetch executor started with {self._max_workers} workers")
+            log_event(logger, "prefetch.executor.start", workers=self._max_workers)
 
     def stop(self, timeout: float = 5.0) -> None:
         """Stop the executor.
@@ -325,7 +330,10 @@ class PrefetchExecutor:
                 except Exception:
                     break
 
-        logger.info("Prefetch executor stopped")
+        log_event(logger, "prefetch.executor.stop",
+                  executed=self._stats.predictions_executed,
+                  failed=self._stats.predictions_failed,
+                  avg_latency_ms=round(self._stats.avg_latency_ms, 1))
 
     def pause(self) -> None:
         """Pause execution (tasks remain in queue)."""
@@ -527,6 +535,10 @@ class PrefetchExecutor:
                 )
                 cost_ms = int((time.time() - start_time) * 1000)
                 self._stats.record_execution(cost_ms, cached=True)
+                log_event(logger, "prefetch.execute.complete",
+                          prediction_type=prediction.type.value,
+                          key=prediction.key, execution_ms=cost_ms,
+                          tier=tier.value)
             else:
                 self._stats.predictions_skipped += 1
 

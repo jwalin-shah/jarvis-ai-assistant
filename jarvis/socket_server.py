@@ -32,6 +32,7 @@ from urllib.parse import parse_qs, urlparse
 import websockets
 from websockets.server import ServerConnection
 
+from jarvis.observability.logging import log_event, timed_operation
 from jarvis.utils.latency_tracker import track_latency
 
 logger = logging.getLogger(__name__)
@@ -226,8 +227,8 @@ class JarvisSocketServer:
         )
 
         self._running = True
-        logger.info(f"Unix socket listening on {SOCKET_PATH}")
-        logger.info(f"WebSocket listening on ws://{WEBSOCKET_HOST}:{WEBSOCKET_PORT}")
+        log_event(logger, "server.start", socket_path=str(SOCKET_PATH),
+                  ws_host=WEBSOCKET_HOST, ws_port=WEBSOCKET_PORT)
 
         # Start the file watcher for real-time new message detection
         if self._enable_watcher:
@@ -282,7 +283,7 @@ class JarvisSocketServer:
         Loads in parallel for faster startup.
         """
         try:
-            logger.info("Preloading models in background...")
+            log_event(logger, "model.preload.start")
 
             # Load models sequentially to avoid memory spike on 8GB systems
             for loader in [
@@ -292,13 +293,14 @@ class JarvisSocketServer:
                 self._preload_vec_index,
             ]:
                 try:
-                    await asyncio.to_thread(loader)
+                    with timed_operation(logger, f"model.preload.{loader.__name__}"):
+                        await asyncio.to_thread(loader)
                 except Exception as e:
                     logger.warning(f"Preload failed for {loader.__name__}: {e}")
 
             self._models_ready = True
             self._models_ready_event.set()
-            logger.info("Models preloaded and ready")
+            log_event(logger, "model.preload.complete")
 
         except Exception as e:
             logger.warning(f"Model preloading failed (will load on demand): {e}")
@@ -581,10 +583,8 @@ class JarvisSocketServer:
                 query_params = parse_qs(urlparse(path).query)
                 client_token = query_params.get("token", [None])[0]
                 if client_token != self._ws_auth_token:
-                    logger.warning(
-                        "Unauthorized WebSocket connection from %s",
-                        websocket.remote_address,
-                    )
+                    log_event(logger, "websocket.auth_failed", level=logging.WARNING,
+                              remote=str(websocket.remote_address))
                     await websocket.close(4001, "Unauthorized")
                     return
             except Exception:
@@ -594,11 +594,14 @@ class JarvisSocketServer:
         # Enforce connection limit (check inside lock to avoid TOCTOU race)
         async with self._clients_lock:
             if len(self._ws_clients) >= MAX_WS_CONNECTIONS:
-                logger.warning("WebSocket connection limit reached (%d)", MAX_WS_CONNECTIONS)
+                log_event(logger, "websocket.capacity.rejected", level=logging.WARNING,
+                          max_connections=MAX_WS_CONNECTIONS)
                 await websocket.close(4002, "Too many connections")
                 return
             self._ws_clients.add(websocket)
-        logger.debug(f"WebSocket client connected: {websocket.remote_address}")
+        log_event(logger, "websocket.connect",
+                  remote=str(websocket.remote_address),
+                  active_connections=len(self._ws_clients))
 
         try:
             async for message in websocket:
@@ -657,6 +660,7 @@ class JarvisSocketServer:
         # Look up handler
         handler = self._methods.get(method)
         if not handler:
+            log_event(logger, "rpc.method_not_found", level=logging.WARNING, method=method)
             return self._error_response(request_id, METHOD_NOT_FOUND, f"Method not found: {method}")
 
         # Check if streaming is requested and supported
@@ -667,6 +671,9 @@ class JarvisSocketServer:
         supports_streaming = method in self._streaming_methods
 
         # Call handler
+        import time as _time
+
+        _rpc_start = _time.perf_counter()
         try:
             if stream_requested and supports_streaming and writer:
                 # Streaming mode: pass writer and request_id to handler
@@ -674,6 +681,9 @@ class JarvisSocketServer:
                     result = await handler(_writer=writer, _request_id=request_id, **params)
                 else:
                     result = await handler(_writer=writer, _request_id=request_id)
+                _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
+                log_event(logger, "rpc.complete", method=method,
+                          streaming=True, latency_ms=round(_rpc_ms, 1))
                 # For streaming, the handler sends the final response
                 return None
             else:
@@ -688,17 +698,27 @@ class JarvisSocketServer:
                 else:
                     result = await handler()
 
+                _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
+                log_event(logger, "rpc.complete", method=method,
+                          streaming=False, latency_ms=round(_rpc_ms, 1))
                 return self._success_response(request_id, result)
 
         except asyncio.CancelledError:
             raise
         except JsonRpcError as e:
+            _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
+            log_event(logger, "rpc.error", level=logging.WARNING, method=method,
+                      error_code=e.code, error_message=e.message,
+                      latency_ms=round(_rpc_ms, 1))
             return self._error_response(request_id, e.code, e.message, e.data)
 
         except TypeError as e:
             return self._error_response(request_id, INVALID_PARAMS, f"Invalid params: {e}")
 
         except Exception:
+            _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
+            log_event(logger, "rpc.error", level=logging.ERROR, method=method,
+                      error_code=INTERNAL_ERROR, latency_ms=round(_rpc_ms, 1))
             logger.exception(f"Error handling {method}")
             return self._error_response(request_id, INTERNAL_ERROR, "Internal server error")
 
@@ -1580,11 +1600,10 @@ async def main(preload_models: bool = True) -> None:
         preload_models: Whether to preload models on startup (default True).
                        Set to False to defer loading until first use.
     """
-    # Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
+    # Set up structured logging
+    from jarvis.observability.logging import configure_structured_logging
+
+    configure_structured_logging(level=logging.INFO)
 
     logger.info(
         f"Starting socket server (preload_models={preload_models})..."

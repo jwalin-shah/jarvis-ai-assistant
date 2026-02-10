@@ -37,6 +37,7 @@ from jarvis.contracts.pipeline import (
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.errors import ErrorCode, JarvisError
+from jarvis.observability.logging import log_event, timed_operation
 from jarvis.observability.metrics_router import (
     RoutingMetrics,
     get_routing_metrics_store,
@@ -334,6 +335,10 @@ class ReplyService:
         """Generate a reply from contract types."""
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
+        log_event(logger, "reply.generate.start",
+                  level=logging.DEBUG,
+                  chat_id=context.chat_id or "",
+                  category=str(classification.category.value))
         if cached_embedder is None:
             cached_embedder = get_embedder()
 
@@ -365,6 +370,9 @@ class ReplyService:
             else:
                 template_response = random.choice(ACKNOWLEDGE_TEMPLATES)
 
+            log_event(logger, "reply.skip_slm",
+                      category=category_name,
+                      latency_ms=round((time.perf_counter() - routing_start) * 1000, 1))
             return GenerationResponse(
                 response=template_response,
                 confidence=0.95,
@@ -389,7 +397,8 @@ class ReplyService:
 
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
-            logger.warning("FALLBACK | reason=%s | returning empty response", health_reason)
+            log_event(logger, "reply.fallback", level=logging.WARNING,
+                      reason=health_reason)
             return GenerationResponse(
                 response="",
                 confidence=0.0,
@@ -413,6 +422,12 @@ class ReplyService:
         latency_ms["generation"] = (time.perf_counter() - gen_start) * 1000
 
         latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+        log_event(logger, "reply.generate.complete",
+                  category=category_name,
+                  confidence=result.confidence,
+                  total_ms=round(latency_ms["total"], 1),
+                  generation_ms=round(latency_ms["generation"], 1),
+                  vec_candidates=len(search_results))
         similarity = self._safe_float(
             result.metadata.get(
                 "similarity_score",
