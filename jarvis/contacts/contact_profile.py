@@ -50,6 +50,9 @@ class Fact:
     extracted_at: str = ""  # ISO timestamp
     source_message_id: int | None = None  # optional message ROWID
     linked_contact_id: str | None = None  # resolved contact ID (from NER person linking)
+    # Temporal validity (for facts that change over time)
+    valid_from: str | None = None  # When this fact became true (ISO timestamp)
+    valid_until: str | None = None  # When this fact stopped being true (ISO timestamp)
 
 logger = logging.getLogger(__name__)
 

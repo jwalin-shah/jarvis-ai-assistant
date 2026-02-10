@@ -1,0 +1,89 @@
+{
+  "created_at_utc": "2026-02-10T02:30:36.503612+00:00",
+  "db_path": "/Users/jwalinshah/Library/Messages/chat.db",
+  "seed": 42,
+  "total_records": 200,
+  "config": {
+    "total": 200,
+    "random_count": 120,
+    "likely_count": 50,
+    "negative_count": 30,
+    "context_window": 2,
+    "per_chat_cap": 10,
+    "min_length": 5,
+    "candidate_multiplier": 30,
+    "short_neg_length": 12
+  },
+  "bucket_counts": {
+    "random": 120,
+    "likely": 50,
+    "negative": 30
+  },
+  "is_from_me_counts": {
+    "False": 105,
+    "True": 95
+  },
+  "unique_chats": 79,
+  "top_chats": [
+    {
+      "chat_rowid": 459,
+      "count": 10
+    },
+    {
+      "chat_rowid": 294,
+      "count": 10
+    },
+    {
+      "chat_rowid": 63,
+      "count": 10
+    },
+    {
+      "chat_rowid": 4,
+      "count": 10
+    },
+    {
+      "chat_rowid": 757,
+      "count": 8
+    },
+    {
+      "chat_rowid": 222,
+      "count": 7
+    },
+    {
+      "chat_rowid": 1078,
+      "count": 7
+    },
+    {
+      "chat_rowid": 61,
+      "count": 6
+    },
+    {
+      "chat_rowid": 5,
+      "count": 6
+    },
+    {
+      "chat_rowid": 254,
+      "count": 4
+    },
+    {
+      "chat_rowid": 299,
+      "count": 4
+    },
+    {
+      "chat_rowid": 485,
+      "count": 4
+    },
+    {
+      "chat_rowid": 13,
+      "count": 4
+    },
+    {
+      "chat_rowid": 16,
+      "count": 4
+    },
+    {
+      "chat_rowid": 197,
+      "count": 3
+    }
+  ]
+}

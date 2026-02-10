@@ -1,0 +1,33 @@
+{
+  "inputs": {
+    "v1": "training_data/fact_goldset/fact_goldset_v1_frozen.csv",
+    "r2": "training_data/fact_goldset_round2/fact_goldset_400.csv"
+  },
+  "seed": 42,
+  "search_iterations": 3000,
+  "dev_fraction_target": 0.2,
+  "v1_count": 200,
+  "r2_count": 400,
+  "duplicates_removed": 7,
+  "merged_total": 593,
+  "keeps": 115,
+  "discards": 478,
+  "positive_rate": 0.1939,
+  "train_count": 474,
+  "train_positives": 92,
+  "train_positive_rate": 0.1941,
+  "dev_count": 119,
+  "dev_positives": 23,
+  "dev_positive_rate": 0.1933,
+  "unique_chats_total": 123,
+  "unique_chats_train": 98,
+  "unique_chats_dev": 25,
+  "chat_overlap_count": 0,
+  "message_overlap_count": 0,
+  "notes": {
+    "sample_id_namespaced": true,
+    "chat_held_out_split": true,
+    "message_gate_jsonl_emitted": true,
+    "candidate_filter_note": "train_fact_filter.py expects candidate-level labels; message-gate JSONL is emitted for message-level binary models."
+  }
+}

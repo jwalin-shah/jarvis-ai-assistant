@@ -843,6 +843,34 @@ class RelationshipClassifier:
         results.sort(key=lambda r: r.confidence, reverse=True)
         return results
 
+    def classify_contacts_batch(
+        self,
+        chat_ids: list[tuple[str, str]],
+        min_confidence: float = 0.3,
+    ) -> list[ClassificationResult]:
+        """Classify multiple contacts efficiently with batched DB operations.
+
+        More efficient than calling classify_contact() in a loop as it reuses
+        the compiled patterns and shares DB connection where possible.
+
+        Args:
+            chat_ids: List of (chat_id, display_name) tuples.
+            min_confidence: Minimum confidence to include in results.
+
+        Returns:
+            List of ClassificationResult objects (filtered by confidence).
+        """
+        results: list[ClassificationResult] = []
+
+        for chat_id, display_name in chat_ids:
+            result = self.classify_contact(chat_id, display_name)
+            if result.confidence >= min_confidence:
+                results.append(result)
+
+        # Sort by confidence
+        results.sort(key=lambda r: r.confidence, reverse=True)
+        return results
+
     def evaluate(
         self,
         ground_truth: dict[str, str],

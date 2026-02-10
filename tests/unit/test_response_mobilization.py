@@ -1,6 +1,8 @@
 """Tests for jarvis/classifiers/response_mobilization.py - Response pressure classification."""
 
 
+from jarvis.classifiers.cascade import MobilizationCascade, reset_mobilization_cascade
+from jarvis.classifiers.intent_classifier import IntentResult, KeywordIntentClassifier
 from jarvis.classifiers.response_mobilization import (
     COMMITMENT_RESPONSE_OPTIONS,
     EMOTIONAL_RESPONSE_OPTIONS,
@@ -76,6 +78,16 @@ class TestHighPressureRequests:
         assert result.response_type == ResponseType.COMMITMENT
 
         result = classify_response_pressure("want to hang out?")
+        assert result.pressure == ResponsePressure.HIGH
+        assert result.response_type == ResponseType.COMMITMENT
+
+    def test_short_invitation_patterns(self) -> None:
+        """Test one-word invitation prompts."""
+        result = classify_response_pressure("wanna?")
+        assert result.pressure == ResponsePressure.HIGH
+        assert result.response_type == ResponseType.COMMITMENT
+
+        result = classify_response_pressure("down?")
         assert result.pressure == ResponsePressure.HIGH
         assert result.response_type == ResponseType.COMMITMENT
 
@@ -175,6 +187,14 @@ class TestHighPressureQuestions:
         result = classify_response_pressure("when does it start")
         assert result.pressure == ResponsePressure.HIGH
         assert result.response_type == ResponseType.ANSWER
+
+    def test_slang_question_patterns(self) -> None:
+        """Slang and short forms should be treated as direct questions."""
+        for text in ("wya", "wyd?", "hbu", "u free", "what about you?", "thoughts?"):
+            result = classify_response_pressure(text)
+            assert result.pressure == ResponsePressure.HIGH
+            assert result.response_type == ResponseType.ANSWER
+            assert result.confidence >= 0.80
 
     def test_declarative_questions(self) -> None:
         """Test declarative questions (B-event statements)."""
@@ -354,6 +374,11 @@ class TestNonePressureBackchannels:
         assert result.pressure == ResponsePressure.NONE
         assert result.response_type == ResponseType.CLOSING
 
+    def test_negated_request_is_not_actionable(self) -> None:
+        result = classify_response_pressure("Don't text me")
+        assert result.pressure == ResponsePressure.NONE
+        assert result.response_type == ResponseType.CLOSING
+        assert result.confidence >= 0.95
 
 # =============================================================================
 # Test Greetings
@@ -599,3 +624,59 @@ class TestNormalization:
         _ = classify_response_pressure("Can you help")
         # May differ slightly but should be similar
         assert result1.pressure in (ResponsePressure.HIGH, ResponsePressure.LOW)
+
+
+# =============================================================================
+# Test Cascade + Intent Fallback
+# =============================================================================
+
+
+class TestIntentFallbackClassifier:
+    """Tests for keyword-based intent fallback classifier."""
+
+    def test_keyword_classifier_no_reply(self) -> None:
+        clf = KeywordIntentClassifier()
+        result = clf.classify("ok", ["no_reply_ack", "reply_casual_chat"])
+        assert result.intent == "no_reply_ack"
+        assert result.confidence >= 0.8
+
+    def test_keyword_classifier_question_slang(self) -> None:
+        clf = KeywordIntentClassifier()
+        result = clf.classify("wya", ["reply_question_info", "reply_casual_chat"])
+        assert result.intent == "reply_question_info"
+        assert result.confidence >= 0.8
+
+
+class _StubIntentClassifier:
+    def __init__(self, intent: str, confidence: float = 0.9) -> None:
+        self.intent = intent
+        self.confidence = confidence
+        self.called = False
+
+    def classify(self, text: str, intent_options: list[str]) -> IntentResult:
+        self.called = True
+        return IntentResult(intent=self.intent, confidence=self.confidence, method="stub")
+
+
+class TestMobilizationCascade:
+    """Tests for rules -> intent cascade behavior."""
+
+    def test_cascade_keeps_high_conf_rule_result(self) -> None:
+        stub = _StubIntentClassifier("reply_emotional_support", 0.95)
+        cascade = MobilizationCascade(intent_classifier=stub, confidence_threshold=0.80)
+        result = cascade.classify("Can you help me?")
+        assert result.pressure == ResponsePressure.HIGH
+        assert result.response_type == ResponseType.COMMITMENT
+        assert stub.called is False
+
+    def test_cascade_uses_fallback_for_low_conf_rule_result(self) -> None:
+        stub = _StubIntentClassifier("reply_question_info", 0.92)
+        cascade = MobilizationCascade(intent_classifier=stub, confidence_threshold=0.80)
+        result = cascade.classify("random words maybe")
+        assert stub.called is True
+        assert result.pressure == ResponsePressure.HIGH
+        assert result.response_type == ResponseType.ANSWER
+        assert result.method == "intent_fallback"
+
+    def test_cascade_singleton_reset(self) -> None:
+        reset_mobilization_cascade()

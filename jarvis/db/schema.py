@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS send_queue (
     next_retry_at TIMESTAMP             -- When to retry next
 );
 
--- Contact facts for knowledge graph (v12+, v13 adds linked_contact_id)
+-- Contact facts for knowledge graph (v12+, v13 adds linked_contact_id, v14 adds temporal)
 CREATE TABLE IF NOT EXISTS contact_facts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contact_id TEXT NOT NULL,
@@ -195,6 +195,8 @@ CREATE TABLE IF NOT EXISTS contact_facts (
     source_text TEXT DEFAULT '',
     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     linked_contact_id TEXT,                  -- resolved contact reference (v13+)
+    valid_from TIMESTAMP,                    -- when fact became true (v14+)
+    valid_until TIMESTAMP,                   -- when fact stopped being true (v14+)
     UNIQUE(contact_id, category, subject, predicate)
 );
 

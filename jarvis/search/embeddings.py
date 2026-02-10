@@ -462,12 +462,23 @@ class EmbeddingStore:
     def index_message(self, message: Message) -> bool:
         """Index a single message.
 
+        DEPRECATED: Prefer index_messages() for bulk operations.
+        This method is inefficient for batch processing as it computes
+        embeddings one at a time and performs individual DB operations.
+
         Args:
             message: Message to index
 
         Returns:
             True if indexed, False if skipped (too short or duplicate)
         """
+        import warnings
+        warnings.warn(
+            "index_message() is inefficient for batch operations. "
+            "Use index_messages([message]) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Skip very short messages
         if not message.text or len(message.text.strip()) < MIN_TEXT_LENGTH:
             return False

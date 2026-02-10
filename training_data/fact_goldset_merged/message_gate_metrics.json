@@ -1,0 +1,24 @@
+{
+  "train": {
+    "accuracy": 0.8523206751054853,
+    "precision": 0.5733333333333334,
+    "recall": 0.9347826086956522,
+    "f1": 0.7107438016528925,
+    "roc_auc": 0.943560778511268
+  },
+  "dev": {
+    "accuracy": 0.773109243697479,
+    "precision": 0.45,
+    "recall": 0.782608695652174,
+    "f1": 0.5714285714285714,
+    "roc_auc": 0.8496376811594203
+  },
+  "model_type": "logistic",
+  "train_size": 474,
+  "dev_size": 119,
+  "threshold": 0.5,
+  "max_features": 20000,
+  "min_df": 2,
+  "c_value": 1.0,
+  "train_positive_rate": 0.1940928270042194
+}
