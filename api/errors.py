@@ -158,9 +158,14 @@ async def jarvis_error_handler(request: Request, exc: JarvisError) -> JSONRespon
             status_code,
         )
 
+    headers = {}
+    if status_code == 503:
+        headers["Retry-After"] = "30"
+
     return JSONResponse(
         status_code=status_code,
         content=response_body,
+        headers=headers if headers else None,
     )
 
 
