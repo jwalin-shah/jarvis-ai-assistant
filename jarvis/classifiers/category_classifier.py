@@ -261,7 +261,13 @@ class CategoryClassifier(EmbedderMixin):
                 extractor = _get_feature_extractor()
 
                 # 1. Current message BERT embedding (384) - use normalize=True to match training
-                embedding = self.embedder.encode([text], normalize=True)[0]
+                try:
+                    embedding = self.embedder.encode([text], normalize=True)[0]
+                except Exception as embed_err:
+                    # If embedder fails (GPU contention, model not loaded), use zeros
+                    # The 147 hand-crafted features still carry signal for classification
+                    logger.warning("BERT encode failed, using zero embedding: %s", embed_err)
+                    embedding = np.zeros(384, dtype=np.float32)
 
                 # 2. Context BERT embedding (384) - ALWAYS ZERO at inference
                 # Zero-context-at-inference strategy: model trained WITH context for auxiliary
