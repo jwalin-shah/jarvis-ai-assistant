@@ -20,6 +20,7 @@ from jarvis.contacts.contact_profile_context import ContactProfileContext
 
 if TYPE_CHECKING:
     from contracts.imessage import Message
+    from jarvis.contacts.contact_profile import Fact
     from jarvis.contracts.pipeline import GenerationRequest as PipelineGenerationRequest
     from jarvis.classifiers.response_mobilization import MobilizationResult
     from jarvis.relationships import RelationshipProfile
@@ -1327,6 +1328,49 @@ def get_thread_max_tokens(config: ThreadedReplyConfig) -> int:
 
 
 # =============================================================================
+# Contact Facts Formatting
+# =============================================================================
+
+
+def format_facts_for_prompt(facts: list[Fact], max_facts: int = 10) -> str:
+    """Format contact facts compactly for prompt injection.
+
+    Takes extracted facts about a contact and produces a compact string
+    suitable for including in the reply generation prompt (~2-3 tokens per fact).
+
+    Args:
+        facts: List of Fact objects, typically from get_facts_for_contact().
+        max_facts: Maximum number of facts to include (default 10).
+
+    Returns:
+        Compact formatted string like "lives_in: Austin, works_at: Google".
+        Empty string if no qualifying facts.
+    """
+    if not facts:
+        return ""
+
+    # Filter to confident facts and cap count
+    qualified = [f for f in facts if f.confidence >= 0.5][:max_facts]
+    if not qualified:
+        return ""
+
+    # Group by category for readability
+    by_category: dict[str, list[str]] = {}
+    for fact in qualified:
+        entry = f"{fact.predicate}: {fact.subject}"
+        if fact.value:
+            entry += f" ({fact.value})"
+        by_category.setdefault(fact.category, []).append(entry)
+
+    # Flatten into compact format
+    parts: list[str] = []
+    for entries in by_category.values():
+        parts.extend(entries)
+
+    return ", ".join(parts)
+
+
+# =============================================================================
 # RAG-Enhanced Prompt Builder
 # =============================================================================
 
@@ -1365,6 +1409,10 @@ Rules:
 <style contact="{contact_name}">
 {relationship_context}
 </style>
+
+<facts>
+{contact_facts}
+</facts>
 
 <examples>
 {similar_exchanges}
@@ -1498,6 +1546,7 @@ def build_rag_reply_prompt(
     contact_context: ContactProfileContext | None = None,
     instruction: str | None = None,
     user_messages: list[str] | None = None,
+    contact_facts: str = "",
 ) -> str:
     """Build a RAG-enhanced prompt for generating personalized iMessage replies.
 
@@ -1515,6 +1564,7 @@ def build_rag_reply_prompt(
         user_messages: Optional list of user's own messages for style analysis.
             If provided, the prompt will include explicit instructions to match
             the user's texting style (length, formality, abbreviations, etc.).
+        contact_facts: Pre-formatted facts string from format_facts_for_prompt().
 
     Returns:
         Formatted prompt string ready for model input
@@ -1576,6 +1626,7 @@ def build_rag_reply_prompt(
     prompt = RAG_REPLY_PROMPT.template.format(
         contact_name=contact_name,
         relationship_context=relationship_context,
+        contact_facts=contact_facts or "(none)",
         similar_exchanges=similar_context,
         context=truncated_context,
         custom_instruction=custom_instruction,
@@ -1639,6 +1690,9 @@ def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
     )
     contact_name = str(contact_name_raw)
 
+    contact_facts_raw = req.context.metadata.get("contact_facts")
+    contact_facts = contact_facts_raw if isinstance(contact_facts_raw, str) else ""
+
     return build_rag_reply_prompt(
         context=formatted_context,
         last_message=req.context.message_text,
@@ -1648,6 +1702,7 @@ def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
         contact_context=contact_context,
         instruction=instruction,
         user_messages=user_messages,
+        contact_facts=contact_facts,
     )
 
 

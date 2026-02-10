@@ -487,6 +487,17 @@ class ReplyService:
         if contact and contact.display_name:
             context.metadata.setdefault("contact_name", contact.display_name)
 
+        # Fetch known facts about this contact for grounded replies
+        if chat_id:
+            try:
+                from jarvis.contacts.fact_storage import get_facts_for_contact
+                from jarvis.prompts import format_facts_for_prompt
+
+                facts = get_facts_for_contact(chat_id)
+                context.metadata["contact_facts"] = format_facts_for_prompt(facts)
+            except Exception:
+                pass  # Facts are optional - don't block reply generation
+
         if instruction is None:
             optimized_instruction = get_optimized_instruction(category_name)
             if optimized_instruction:
