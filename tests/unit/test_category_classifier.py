@@ -84,8 +84,17 @@ class TestFastPath:
 class TestWithLightGBMModel:
     """Tests with LightGBM model (previously TestFallbackNoModel)."""
 
+    @pytest.fixture(autouse=True)
+    def check_model_loaded(self):
+        clf = CategoryClassifier()
+        if not clf._load_pipeline():
+            pytest.skip("LightGBM model not available")
+
     def test_classifies_question(self) -> None:
         """With LightGBM model, questions are classified correctly."""
+        clf = CategoryClassifier()
+        if not clf._load_pipeline():
+            pytest.skip("LightGBM model not available")
         result = classify_category("Hey how have you been?")
         assert result.category == "question"
         assert result.method == "lightgbm"
@@ -93,6 +102,9 @@ class TestWithLightGBMModel:
 
     def test_classifies_with_context(self) -> None:
         """Model classifies with context (context embedding zeroed internally)."""
+        clf = CategoryClassifier()
+        if not clf._load_pipeline():
+            pytest.skip("LightGBM model not available")
         result = classify_category(
             "Not much, just hanging out",
             context=["Hey what's up"],
@@ -190,6 +202,19 @@ class TestCategoryClassifier:
 # =============================================================================
 
 
+def _spacy_model_available() -> bool:
+    """Check if en_core_web_sm spaCy model is installed."""
+    try:
+        import spacy
+        spacy.load("en_core_web_sm")
+        return True
+    except (ImportError, OSError):
+        return False
+
+
+_has_spacy_model = _spacy_model_available()
+
+
 class TestFeatureExtraction:
     def test_extract_hand_crafted_features(self) -> None:
         """Hand-crafted features should return 26 values."""
@@ -205,6 +230,7 @@ class TestFeatureExtraction:
         assert len(features) == 26
         assert features.dtype.name == "float32"
 
+    @pytest.mark.skipif(not _has_spacy_model, reason="spaCy en_core_web_sm not available")
     def test_extract_spacy_features(self) -> None:
         """SpaCy features should return 94 values (14 original + 80 new)."""
         from jarvis.features import CategoryFeatureExtractor
@@ -214,6 +240,7 @@ class TestFeatureExtraction:
         assert len(features) == 94
         assert features.dtype.name == "float32"
 
+    @pytest.mark.skipif(not _has_spacy_model, reason="spaCy en_core_web_sm not available")
     def test_spacy_imperative_detection(self) -> None:
         from jarvis.features import CategoryFeatureExtractor
 
@@ -222,6 +249,7 @@ class TestFeatureExtraction:
         features = extractor.extract_spacy_features("Send me the file")
         assert features[0] == 1.0  # has_imperative
 
+    @pytest.mark.skipif(not _has_spacy_model, reason="spaCy en_core_web_sm not available")
     def test_spacy_you_modal_detection(self) -> None:
         from jarvis.features import CategoryFeatureExtractor
 
@@ -229,6 +257,7 @@ class TestFeatureExtraction:
         features = extractor.extract_spacy_features("Can you help?")
         assert features[1] == 1.0  # you_modal
 
+    @pytest.mark.skipif(not _has_spacy_model, reason="spaCy en_core_web_sm not available")
     def test_spacy_agreement_detection(self) -> None:
         from jarvis.features import CategoryFeatureExtractor
 
@@ -278,6 +307,7 @@ class TestModelPath:
 
 
 class TestFeatureContract:
+    @pytest.mark.skipif(not _has_spacy_model, reason="spaCy en_core_web_sm not available")
     def test_feature_count_contract(self) -> None:
         """extract_all returns exactly 147 non-BERT features."""
         from jarvis.features import CategoryFeatureExtractor

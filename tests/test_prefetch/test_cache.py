@@ -299,7 +299,7 @@ class TestL3Cache:
 
     def test_numpy_serialization(self, cache: L3Cache) -> None:
         """Test numpy array serialization."""
-        arr = np.random.randn(100, 100).astype(np.float32)
+        arr = np.random.RandomState(42).randn(100, 100).astype(np.float32)
         entry = CacheEntry(key="large_array", value=arr, tier=CacheTier.L3)
         cache.set("large_array", entry)
         result = cache.get("large_array")
