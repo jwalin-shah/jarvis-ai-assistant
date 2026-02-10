@@ -38,6 +38,13 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
+from jarvis.contracts.pipeline import (
+    CategoryType,
+    ClassificationResult,
+    IntentType,
+    UrgencyLevel,
+)
+
 
 class ResponsePressure(str, Enum):
     """Response pressure level based on response-mobilizing features."""
@@ -81,6 +88,62 @@ class MobilizationResult:
         p = self.pressure.value
         r = self.response_type.value
         return f"MobilizationResult({p}, {r}, conf={self.confidence:.2f})"
+
+    def to_classification_result(self) -> ClassificationResult:
+        """Convert to pipeline ClassificationResult contract type."""
+        # Map pressure → urgency
+        urgency_map = {
+            ResponsePressure.HIGH: UrgencyLevel.HIGH,
+            ResponsePressure.MEDIUM: UrgencyLevel.MEDIUM,
+            ResponsePressure.LOW: UrgencyLevel.LOW,
+            ResponsePressure.NONE: UrgencyLevel.LOW,
+        }
+
+        # Map response_type → intent
+        intent_map = {
+            ResponseType.ANSWER: IntentType.QUESTION,
+            ResponseType.CONFIRMATION: IntentType.QUESTION,
+            ResponseType.COMMITMENT: IntentType.REQUEST,
+            ResponseType.EMOTIONAL: IntentType.STATEMENT,
+            ResponseType.ALIGNMENT: IntentType.STATEMENT,
+            ResponseType.OPTIONAL: IntentType.STATEMENT,
+            ResponseType.CLOSING: IntentType.GREETING,
+        }
+
+        # Map (pressure, response_type) → category
+        if self.pressure == ResponsePressure.NONE:
+            if self.response_type == ResponseType.CLOSING:
+                category = CategoryType.CLOSING
+            else:
+                category = CategoryType.ACKNOWLEDGE
+        elif self.pressure == ResponsePressure.LOW:
+            category = CategoryType.ACKNOWLEDGE
+        elif self.pressure == ResponsePressure.MEDIUM:
+            category = CategoryType.FULL_RESPONSE
+        else:  # HIGH
+            if self.response_type == ResponseType.COMMITMENT:
+                category = CategoryType.DEFER
+            else:
+                category = CategoryType.FULL_RESPONSE
+
+        requires_knowledge = (
+            self.pressure == ResponsePressure.HIGH
+            and self.response_type == ResponseType.ANSWER
+        )
+
+        return ClassificationResult(
+            intent=intent_map.get(self.response_type, IntentType.UNKNOWN),
+            category=category,
+            urgency=urgency_map.get(self.pressure, UrgencyLevel.MEDIUM),
+            confidence=self.confidence,
+            requires_knowledge=requires_knowledge,
+            metadata={
+                "pressure": self.pressure.value,
+                "response_type": self.response_type.value,
+                "method": self.method,
+                "features": self.features,
+            },
+        )
 
 
 # =============================================================================
@@ -724,6 +787,11 @@ def classify_legacy(text: str) -> str:
     return to_legacy_category(classify_response_pressure(text))
 
 
+def classify_to_contract(text: str) -> ClassificationResult:
+    """Classify message and return a pipeline ClassificationResult."""
+    return classify_response_pressure(text).to_classification_result()
+
+
 # =============================================================================
 # Response Option Types (for multi-option generation)
 # =============================================================================
@@ -795,6 +863,7 @@ __all__ = [
     "ResponseType",
     "MobilizationResult",
     "classify_response_pressure",
+    "classify_to_contract",
     "get_response_pressure",
     "requires_response",
     "response_optional",
