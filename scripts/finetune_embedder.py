@@ -20,12 +20,29 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import random
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+LOG_PATH = PROJECT_ROOT / "finetune_embedder.log"
+
+logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 
 
 def load_conversation_pairs(sft_dir: Path) -> list[tuple[str, str]]:
@@ -113,35 +130,38 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print stats only")
     args = parser.parse_args()
 
+    _setup_logging()
+    logger.info("Starting finetune_embedder.py")
+
     # Load data
     sft_dir = PROJECT_ROOT / "data" / "soc_sft"
     if not sft_dir.exists():
-        print(f"ERROR: SFT data not found at {sft_dir}")
-        print("       Run: uv run python scripts/prepare_soc_data.py")
+        print(f"ERROR: SFT data not found at {sft_dir}", flush=True)
+        print("       Run: uv run python scripts/prepare_soc_data.py", flush=True)
         return 1
 
-    print("Loading conversation pairs from SFT data...")
+    print("Loading conversation pairs from SFT data...", flush=True)
     pairs = load_conversation_pairs(sft_dir)
-    print(f"Loaded {len(pairs)} conversation pairs")
+    print(f"Loaded {len(pairs)} conversation pairs", flush=True)
 
     if len(pairs) < 100:
-        print("WARNING: Very few pairs. Consider generating more SFT data first.")
+        print("WARNING: Very few pairs. Consider generating more SFT data first.", flush=True)
 
-    print("Building triplets...")
+    print("Building triplets...", flush=True)
     triplets = build_triplets(pairs, seed=args.seed)
-    print(f"Built {len(triplets)} triplets")
+    print(f"Built {len(triplets)} triplets", flush=True)
 
     # Show samples
-    print("\nSample triplets:")
+    print("\nSample triplets:", flush=True)
     for i in range(min(3, len(triplets))):
         a, p, n = triplets[i]
-        print(f"  Anchor:   {a[:60]!r}")
-        print(f"  Positive: {p[:60]!r}")
-        print(f"  Negative: {n[:60]!r}")
-        print()
+        print(f"  Anchor:   {a[:60]!r}", flush=True)
+        print(f"  Positive: {p[:60]!r}", flush=True)
+        print(f"  Negative: {n[:60]!r}", flush=True)
+        print(flush=True)
 
     if args.dry_run:
-        print("Dry run - not training.")
+        print("Dry run - not training.", flush=True)
         return 0
 
     # Import sentence-transformers
@@ -149,12 +169,12 @@ def main() -> int:
         from sentence_transformers import InputExample, SentenceTransformer, losses
         from torch.utils.data import DataLoader
     except ImportError:
-        print("ERROR: sentence-transformers not installed.")
-        print("       Install with: uv pip install sentence-transformers")
+        print("ERROR: sentence-transformers not installed.", flush=True)
+        print("       Install with: uv pip install sentence-transformers", flush=True)
         return 1
 
     # Load model
-    print(f"Loading base model: {args.base_model}")
+    print(f"Loading base model: {args.base_model}", flush=True)
     model = SentenceTransformer(args.base_model)
 
     # Build training data
@@ -174,10 +194,10 @@ def main() -> int:
 
     # Train
     output_path = str(PROJECT_ROOT / args.output_dir)
-    print(f"\nTraining for {args.epochs} epochs...")
-    print(f"  Batch size: {args.batch_size}")
-    print(f"  Learning rate: {args.lr}")
-    print(f"  Output: {output_path}")
+    print(f"\nTraining for {args.epochs} epochs...", flush=True)
+    print(f"  Batch size: {args.batch_size}", flush=True)
+    print(f"  Learning rate: {args.lr}", flush=True)
+    print(f"  Output: {output_path}", flush=True)
 
     model.fit(
         train_objectives=[(train_dataloader, train_loss)],
@@ -188,7 +208,7 @@ def main() -> int:
         output_path=output_path,
     )
 
-    print(f"\nFine-tuned model saved to {output_path}")
+    print(f"\nFine-tuned model saved to {output_path}", flush=True)
 
     # Save metadata
     meta = {
@@ -202,7 +222,8 @@ def main() -> int:
     }
     meta_path = Path(output_path) / "training_metadata.json"
     meta_path.write_text(json.dumps(meta, indent=2))
-    print(f"Training metadata saved to {meta_path}")
+    print(f"Training metadata saved to {meta_path}", flush=True)
+    logger.info("Finished finetune_embedder.py")
 
     return 0
 

@@ -7,31 +7,59 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.preprocessing import StandardScaler
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
 logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and stream handlers."""
+    log_file = (
+        Path(__file__).resolve().parent.parent / "logs" / "train_mobilization_logistic.log"
+    )
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(log_file, mode="w"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
+    logger.info("Logging to %s", log_file)
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "mobilization_gemini"
 
 
-def load_data() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=DATA_DIR,
+        help="Directory containing mobilization train.npz and test.npz (default: %(default)s).",
+    )
+    return parser.parse_args(argv)
+
+
+def load_data(data_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Load training data."""
-    train_data = np.load(DATA_DIR / "train.npz", allow_pickle=True)
-    test_data = np.load(DATA_DIR / "test.npz", allow_pickle=True)
+    import numpy as np
+
+    try:
+        train_data = np.load(data_dir / "train.npz", allow_pickle=True)
+        test_data = np.load(data_dir / "test.npz", allow_pickle=True)
+    except OSError as exc:
+        logger.error("Failed to load mobilization data from %s: %s", data_dir, exc)
+        raise SystemExit(1) from exc
 
     X_train, y_train = train_data["X"], train_data["y"]
     X_test, y_test = test_data["X"], test_data["y"]
@@ -43,6 +71,10 @@ def load_data() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 def train_logistic_regression(X_train: np.ndarray, y_train: np.ndarray,
                                X_test: np.ndarray, y_test: np.ndarray) -> dict:
     """Train logistic regression model."""
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import classification_report, confusion_matrix
+    from sklearn.preprocessing import StandardScaler
+
     logger.info("\n" + "=" * 70)
     logger.info("TRAINING LOGISTIC REGRESSION")
     logger.info("=" * 70)
@@ -69,9 +101,9 @@ def train_logistic_regression(X_train: np.ndarray, y_train: np.ndarray,
 
     y_pred = model.predict(X_test_scaled)
 
-    print("\nClassification Report:")
+    print("\nClassification Report:", flush=True)
     report = classification_report(y_test, y_pred, output_dict=True)
-    print(classification_report(y_test, y_pred))
+    print(classification_report(y_test, y_pred), flush=True)
 
     # Confusion matrix
     labels = sorted(set(y_test))
@@ -107,8 +139,10 @@ def train_logistic_regression(X_train: np.ndarray, y_train: np.ndarray,
     }
 
 
-def main() -> None:
-    X_train, y_train, X_test, y_test = load_data()
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
+    _setup_logging()
+    X_train, y_train, X_test, y_test = load_data(args.data_dir)
     results = train_logistic_regression(X_train, y_train, X_test, y_test)
 
     logger.info("\n" + "=" * 70)

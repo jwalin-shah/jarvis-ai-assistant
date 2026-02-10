@@ -29,6 +29,7 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from tqdm import tqdm
 
 import numpy as np
 
@@ -40,7 +41,7 @@ from scripts.prepare_soc_data import extract_messages  # noqa: E402
 logger = logging.getLogger(__name__)
 
 from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key  # noqa: E402
-MAX_WORKERS = 10  # Concurrent API requests
+MAX_WORKERS = 1  # Concurrent API requests - set to 1 for 8GB RAM constraint
 
 VALID_CATEGORIES = {
     "professional", "emotional_support", "quick_exchange", "edge_case", "catching_up",
@@ -207,7 +208,7 @@ def label_conversations(
             if line.strip():
                 entry = json.loads(line)
                 cached[entry["idx"]] = (entry["category"], entry["reason"])
-        print(f"Loaded {len(cached)} cached labels from {cache_path}")
+        print(f"Loaded {len(cached)} cached labels from {cache_path}", flush=True)
 
     # Determine which conversations need labeling
     to_label = [i for i in range(len(conversations)) if i not in cached]
@@ -215,11 +216,11 @@ def label_conversations(
         to_label = to_label[:max_dry_run]
 
     if not to_label:
-        print("All conversations already labeled.")
+        print("All conversations already labeled.", flush=True)
         return cached
 
     print(f"Labeling {len(to_label)} conversations with {JUDGE_MODEL} "
-          f"({MAX_WORKERS} workers)...")
+          f"({MAX_WORKERS} workers)...", flush=True)
 
     api_key = _load_env_key()
     client = OpenAI(base_url=JUDGE_BASE_URL, api_key=api_key)
@@ -267,7 +268,7 @@ def label_conversations(
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
             futures = {pool.submit(_label_one, idx): idx for idx in to_label}
 
-            for future in as_completed(futures):
+            for future in tqdm(as_completed(futures), total=len(to_label), desc="Labeling"):
                 result = future.result()
                 if result is None:
                     with lock:
@@ -286,9 +287,9 @@ def label_conversations(
                     labeled += 1
                     if labeled % 50 == 0:
                         print(f"  Labeled {labeled}/{len(to_label)}"
-                              f" (errors: {errors})")
+                              f" (errors: {errors})", flush=True)
 
-    print(f"\nLabeled {labeled} conversations ({errors} errors)")
+    print(f"\nLabeled {labeled} conversations ({errors} errors)", flush=True)
     return cached
 
 
@@ -382,41 +383,41 @@ def label_and_extract(
     output_dir.mkdir(parents=True, exist_ok=True)
     cache_path = output_dir / "labels.jsonl"
 
-    print("Loading SOC-2508 dataset...")
+    print("Loading SOC-2508 dataset...", flush=True)
     ds = load_dataset("marcodsn/SOC-2508", split="train")
     conversations = list(ds)
-    print(f"Loaded {len(conversations)} conversations")
+    print(f"Loaded {len(conversations)} conversations", flush=True)
 
     # Step 1: LLM labeling (cached)
     conv_labels = label_conversations(conversations, cache_path, dry_run=dry_run)
 
     # Label distribution at conversation level
     label_counts_conv = Counter(cat for cat, _ in conv_labels.values())
-    print("\nConversation-level label distribution:")
+    print("\nConversation-level label distribution:", flush=True)
     for label, count in sorted(label_counts_conv.items(), key=lambda x: -x[1]):
         pct = count / len(conv_labels) * 100
-        print(f"  {label:20s} {count:5d} ({pct:.1f}%)")
+        print(f"  {label:20s} {count:5d} ({pct:.1f}%)", flush=True)
 
     if dry_run:
         # Show labeled samples for review
-        print("\n--- Labeled samples for review ---")
+        print("\n--- Labeled samples for review ---", flush=True)
         for idx in sorted(conv_labels.keys())[:20]:
             category, reason = conv_labels[idx]
             conv = conversations[idx]
             messages = extract_messages(conv.get("chat_parts", []))
-            print(f"\n[{idx}] {category}")
-            print(f"  Reason: {reason}")
+            print(f"\n[{idx}] {category}", flush=True)
+            print(f"  Reason: {reason}", flush=True)
             for m in messages[:5]:
-                print(f"  {m['sender']}: {m['text'][:80]}")
+                print(f"  {m['sender']}: {m['text'][:80]}", flush=True)
             if len(messages) > 5:
-                print(f"  ... ({len(messages) - 5} more messages)")
+                print(f"  ... ({len(messages) - 5} more messages)", flush=True)
         return {"total_conversations": len(conv_labels), "labels": dict(label_counts_conv)}
 
     # Step 2: Extract per-turn examples with features
-    print("\nExtracting per-turn examples...")
+    print("\nExtracting per-turn examples...", flush=True)
     examples: list[dict] = []
 
-    for conv_idx, conv in enumerate(conversations):
+    for conv_idx, conv in enumerate(tqdm(conversations, desc="Processing conversations", total=len(conversations))):
         if conv_idx not in conv_labels:
             continue
 
@@ -459,14 +460,14 @@ def label_and_extract(
             })
 
         if (conv_idx + 1) % 200 == 0:
-            print(f"  Processed {conv_idx + 1}/{len(conversations)}, {len(examples)} examples")
+            print(f"  Processed {conv_idx + 1}/{len(conversations)}, {len(examples)} examples", flush=True)
 
-    print(f"\nTotal examples before balancing: {len(examples)}")
+    print(f"\nTotal examples before balancing: {len(examples)}", flush=True)
 
     label_counts = Counter(ex["label"] for ex in examples)
-    print("\nPer-turn label distribution:")
+    print("\nPer-turn label distribution:", flush=True)
     for label, count in sorted(label_counts.items(), key=lambda x: -x[1]):
-        print(f"  {label:20s} {count:5d} ({count / len(examples) * 100:.1f}%)")
+        print(f"  {label:20s} {count:5d} ({count / len(examples) * 100:.1f}%)", flush=True)
 
     # Step 3: Balance classes
     minority_count = min(
@@ -488,26 +489,26 @@ def label_and_extract(
 
     rng.shuffle(balanced)
 
-    print(f"\nTotal examples after balancing: {len(balanced)}")
+    print(f"\nTotal examples after balancing: {len(balanced)}", flush=True)
     balanced_counts = Counter(ex["label"] for ex in balanced)
     for label, count in sorted(balanced_counts.items(), key=lambda x: -x[1]):
-        print(f"  {label:20s} {count:5d} ({count / len(balanced) * 100:.1f}%)")
+        print(f"  {label:20s} {count:5d} ({count / len(balanced) * 100:.1f}%)", flush=True)
 
     # Step 4: Compute embeddings (batched, one call)
-    print("\nComputing embeddings...")
+    print("\nComputing embeddings...", flush=True)
     from jarvis.embedding_adapter import get_embedder
 
     embedder = get_embedder()
     all_texts = [ex["last_message"] for ex in balanced]
     embeddings = embedder.encode(all_texts, normalize=True)
-    print(f"Embeddings shape: {embeddings.shape}")
+    print(f"Embeddings shape: {embeddings.shape}", flush=True)
 
     # Step 5: Build feature matrix and save
     hc_matrix = np.stack([ex["hc_features"] for ex in balanced])
     X = np.hstack([embeddings, hc_matrix])
     y = np.array([ex["label"] for ex in balanced])
 
-    print(f"Feature matrix: {X.shape}, Labels: {y.shape}")
+    print(f"Feature matrix: {X.shape}, Labels: {y.shape}", flush=True)
 
     from sklearn.model_selection import train_test_split
 
@@ -515,7 +516,7 @@ def label_and_extract(
         X, y, test_size=0.2, random_state=seed, stratify=y,
     )
 
-    print(f"Train: {X_train.shape}, Test: {X_test.shape}")
+    print(f"Train: {X_train.shape}, Test: {X_test.shape}", flush=True)
 
     np.savez(output_dir / "train.npz", X=X_train, y=y_train)
     np.savez(output_dir / "test.npz", X=X_test, y=y_test)
@@ -542,8 +543,8 @@ def label_and_extract(
     }
 
     (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
-    print(f"\nSaved to {output_dir}/")
-    print(json.dumps(metadata, indent=2))
+    print(f"\nSaved to {output_dir}/", flush=True)
+    print(json.dumps(metadata, indent=2), flush=True)
 
     return metadata
 
@@ -554,8 +555,19 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Label 20 and print for review")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    # Setup logging with FileHandler + StreamHandler at top of main()
+    log_file = Path("label_soc_categories.log")
+    file_handler = logging.FileHandler(log_file, mode="a")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[file_handler, stream_handler],
+    )
+    logging.info("Starting label_soc_categories.py")
+
     label_and_extract(seed=args.seed, dry_run=args.dry_run)
+    logging.info("Finished label_soc_categories.py")
     return 0
 
 

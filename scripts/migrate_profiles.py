@@ -9,7 +9,9 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -17,7 +19,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def migrate_profiles(dry_run: bool = False) -> None:
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("migrate_profiles.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
+
+def migrate_profiles(dry_run: bool = False, logger: logging.Logger | None = None) -> None:
+    if logger is None:
+        logger = logging.getLogger(__name__)
     profiles_dir = Path.home() / ".jarvis" / "profiles"
 
     if not profiles_dir.exists():
@@ -33,7 +53,11 @@ def migrate_profiles(dry_run: bool = False) -> None:
 
     if dry_run:
         for f in json_files:
-            data = json.loads(f.read_text())
+            try:
+                data = json.loads(f.read_text())
+            except OSError as exc:
+                print(f"  [DRY RUN] Failed to read {f.name}: {exc}", flush=True)
+                continue
             cid = data.get("contact_id", "unknown")
             name = data.get("contact_name", "?")
             msgs = data.get("message_count", 0)
@@ -47,7 +71,8 @@ def migrate_profiles(dry_run: bool = False) -> None:
 
     migrated = 0
     errors = 0
-    for f in json_files:
+    from tqdm import tqdm
+    for f in tqdm(json_files, desc="Migrating profiles", unit="file"):
         try:
             data = json.loads(f.read_text())
             profile = ContactProfile.from_dict(data)
@@ -70,5 +95,12 @@ def migrate_profiles(dry_run: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    dry = "--dry-run" in sys.argv
-    migrate_profiles(dry_run=dry)
+    logger = setup_logging()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be migrated without writing to the database.",
+    )
+    args = parser.parse_args()
+    migrate_profiles(dry_run=args.dry_run, logger=logger)

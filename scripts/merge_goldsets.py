@@ -14,12 +14,25 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import random
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+def _setup_logging() -> None:
+    """Configure logging with FileHandler + StreamHandler."""
+    log_file = Path("merge_goldsets.log")
+    file_handler = logging.FileHandler(log_file, mode="a")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[file_handler, stream_handler],
+    )
 
 
 @dataclass(frozen=True)
@@ -77,7 +90,7 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 def require_files(v1: Path, r2: Path) -> None:
     missing = [str(p) for p in (v1, r2) if not p.exists()]
     if missing:
-        print(f"ERROR: missing input files: {missing}", file=sys.stderr)
+        print(f"ERROR: missing input files: {missing}", file=sys.stderr, flush=True)
         raise SystemExit(1)
 
 
@@ -293,10 +306,12 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def main() -> int:
+    _setup_logging()
+    logging.info("Starting merge_goldsets.py")
     args = parse_args()
 
     if not (0 < args.dev_frac < 1):
-        print("ERROR: --dev-frac must be in (0,1)", file=sys.stderr)
+        print("ERROR: --dev-frac must be in (0,1)", file=sys.stderr, flush=True)
         return 2
 
     require_files(args.v1, args.r2)
@@ -455,26 +470,28 @@ def main() -> int:
             flush=True,
         )
 
-        print(f"\nOutputs in {args.out_dir}/:")
-        print(f"  all.csv                 ({len(merged_rows)} rows)")
-        print(f"  train.csv               ({len(train_rows)} rows)")
-        print(f"  dev.csv                 ({len(dev_rows)} rows)")
-        print(f"  train.jsonl             ({len(train_rows)} rows)")
-        print(f"  dev.jsonl               ({len(dev_rows)} rows)")
-        print(f"  train_message_gate.jsonl ({len(train_rows)} rows)")
-        print(f"  dev_message_gate.jsonl   ({len(dev_rows)} rows)")
-        print(f"  duplicates_dropped.csv   ({len(dupes)} rows)")
-        print("  manifest.json")
+        print(f"\nOutputs in {args.out_dir}/:", flush=True)
+        print(f"  all.csv                 ({len(merged_rows)} rows)", flush=True)
+        print(f"  train.csv               ({len(train_rows)} rows)", flush=True)
+        print(f"  dev.csv                 ({len(dev_rows)} rows)", flush=True)
+        print(f"  train.jsonl             ({len(train_rows)} rows)", flush=True)
+        print(f"  dev.jsonl               ({len(dev_rows)} rows)", flush=True)
+        print(f"  train_message_gate.jsonl ({len(train_rows)} rows)", flush=True)
+        print(f"  dev_message_gate.jsonl   ({len(dev_rows)} rows)", flush=True)
+        print(f"  duplicates_dropped.csv   ({len(dupes)} rows)", flush=True)
+        print("  manifest.json", flush=True)
 
         return 0
 
     except FileExistsError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        print("Use --overwrite to replace existing output files.", file=sys.stderr)
+        print(f"ERROR: {e}", file=sys.stderr, flush=True)
+        print("Use --overwrite to replace existing output files.", file=sys.stderr, flush=True)
         return 3
     except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        print(f"ERROR: {e}", file=sys.stderr, flush=True)
         return 4
+
+    logging.info("Finished merge_goldsets.py")
 
 
 if __name__ == "__main__":

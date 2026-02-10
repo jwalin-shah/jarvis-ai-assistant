@@ -30,14 +30,22 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+ROOT = Path(__file__).resolve().parent.parent
+LOG_PATH = ROOT / "eval_and_retrain_gemini.log"
+
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval_labeled.jsonl"
 RESULTS_DIR = ROOT / "evals" / "results"
 
@@ -164,18 +172,18 @@ def _compute_metrics(
     report = classification_report(y_true, y_pred, labels=labels, output_dict=True)
     cm = confusion_matrix(y_true, y_pred, labels=labels)
 
-    print(f"\n{'=' * 60}")
-    print(f"  {stage.upper()} Classification Report")
-    print(f"{'=' * 60}")
-    print(classification_report(y_true, y_pred, labels=labels))
+    print(f"\n{'=' * 60}", flush=True)
+    print(f"  {stage.upper()} Classification Report", flush=True)
+    print(f"{'=' * 60}", flush=True)
+    print(classification_report(y_true, y_pred, labels=labels), flush=True)
 
-    print("Confusion Matrix:")
+    print("Confusion Matrix:", flush=True)
     header = "          " + "  ".join(f"{l:>10}" for l in labels)
-    print(header)
+    print(header, flush=True)
     for i, label in enumerate(labels):
         row = f"{label:>10}" + "  ".join(f"{cm[i][j]:>10}" for j in range(len(labels)))
-        print(row)
-    print()
+        print(row, flush=True)
+    print(flush=True)
 
     return {
         "stage": stage,
@@ -306,6 +314,8 @@ def generate_training_data(
 
 
 def main() -> None:
+    _setup_logging()
+    logger.info("Starting eval_and_retrain_gemini.py")
     parser = argparse.ArgumentParser(description="Evaluate and retrain with Gemini labels")
     parser.add_argument(
         "--skip-retrain",

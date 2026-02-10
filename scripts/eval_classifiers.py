@@ -21,14 +21,22 @@ from pathlib import Path
 
 import numpy as np
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+ROOT = Path(__file__).resolve().parent.parent
+LOG_PATH = ROOT / "eval_classifiers.log"
+
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval.jsonl"
 DEFAULT_OUTPUT = ROOT / "evals" / "results" / "classifier_eval.json"
 
@@ -191,18 +199,18 @@ def _compute_metrics(
     cm = confusion_matrix(y_true, y_pred, labels=labels)
 
     # Print summary table
-    print(f"\n{'=' * 60}")
-    print(f"  {stage.upper()} Classification Report")
-    print(f"{'=' * 60}")
-    print(classification_report(y_true, y_pred, labels=labels))
+    print(f"\n{'=' * 60}", flush=True)
+    print(f"  {stage.upper()} Classification Report", flush=True)
+    print(f"{'=' * 60}", flush=True)
+    print(classification_report(y_true, y_pred, labels=labels), flush=True)
 
-    print("Confusion Matrix:")
+    print("Confusion Matrix:", flush=True)
     header = "          " + "  ".join(f"{l:>10}" for l in labels)
-    print(header)
+    print(header, flush=True)
     for i, label in enumerate(labels):
         row = f"{label:>10}" + "  ".join(f"{cm[i][j]:>10}" for j in range(len(labels)))
-        print(row)
-    print()
+        print(row, flush=True)
+    print(flush=True)
 
     return {
         "stage": stage,
@@ -233,6 +241,8 @@ def _compute_metrics(
 
 
 def main() -> None:
+    _setup_logging()
+    logger.info("Starting eval_classifiers.py")
     parser = argparse.ArgumentParser(description="Evaluate classifiers")
     parser.add_argument(
         "--stages", nargs="+", choices=ALL_STAGES, default=list(ALL_STAGES),

@@ -26,12 +26,22 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler("prepare_personal.log")],
-)
-log = logging.getLogger(__name__)
+
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("prepare_personal.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
 
 # --- System prompt templates ---
 
@@ -202,8 +212,9 @@ def split_by_contact(
     return train, valid, test
 
 
-def prepare_category_aware(pairs: list[dict], output_dir: Path) -> None:
+def prepare_category_aware(pairs: list[dict], output_dir: Path, log: logging.Logger) -> None:
     """Prepare category-aware training data."""
+    from tqdm import tqdm
     log.info("Preparing category-aware variant...")
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -229,7 +240,7 @@ def prepare_category_aware(pairs: list[dict], output_dir: Path) -> None:
 
     for split_name, split_pairs in [("train", train), ("valid", valid), ("test", test)]:
         examples = []
-        for i, pair in enumerate(split_pairs):
+        for i, pair in enumerate(tqdm(split_pairs, desc=f"Processing {split_name}", unit="pair")):
             if (i + 1) % 500 == 0:
                 log.info("  %s: processing %d/%d", split_name, i + 1, len(split_pairs))
 
@@ -261,7 +272,7 @@ def prepare_category_aware(pairs: list[dict], output_dir: Path) -> None:
     log.info("Category distribution: %s", dict(category_counts.most_common()))
 
 
-def prepare_raw_style(pairs: list[dict], output_dir: Path) -> None:
+def prepare_raw_style(pairs: list[dict], output_dir: Path, log: logging.Logger) -> None:
     """Prepare raw-style training data."""
     log.info("Preparing raw-style variant...")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -287,6 +298,7 @@ def prepare_raw_style(pairs: list[dict], output_dir: Path) -> None:
 
 
 def main() -> None:
+    log = setup_logging()
     parser = argparse.ArgumentParser(description="Prepare personal fine-tuning data")
     parser.add_argument(
         "--variant",
@@ -316,10 +328,10 @@ def main() -> None:
     log.info("Loaded %d pairs from %s", len(pairs), input_path)
 
     if args.both or args.variant == "category_aware":
-        prepare_category_aware(pairs, Path("data/personal/category_aware"))
+        prepare_category_aware(pairs, Path("data/personal/category_aware"), log)
 
     if args.both or args.variant == "raw_style":
-        prepare_raw_style(pairs, Path("data/personal/raw_style"))
+        prepare_raw_style(pairs, Path("data/personal/raw_style"), log)
 
     log.info("Done!")
 

@@ -22,13 +22,31 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import random
 import sqlite3
+import sys
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+
+def _setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("build_fact_goldset.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
 
 APPLE_EPOCH_UNIX = 978307200  # 2001-01-01 00:00:00 UTC
 NANOSECONDS_PER_SECOND = 1_000_000_000
@@ -558,6 +576,7 @@ def build_records(
 
 
 def main() -> int:
+    logger = _setup_logging()
     args = parse_args()
 
     validate_counts(
@@ -571,7 +590,7 @@ def main() -> int:
 
     db_path = args.db_path.expanduser()
     if not db_path.exists():
-        print(f"ERROR: chat.db not found at {db_path}")
+        print(f"ERROR: chat.db not found at {db_path}", flush=True)
         return 1
 
     conn: sqlite3.Connection | None = None
@@ -610,17 +629,20 @@ def main() -> int:
                 per_chat_cap=args.per_chat_cap,
                 rng=rng,
             )
+            logger.info("Bucket '%s': selected %d/%d", bucket, len(selected), bucket_targets[bucket])
             if len(selected) < bucket_targets[bucket]:
                 print(
                     f"WARNING: bucket '{bucket}' requested {bucket_targets[bucket]} "
-                    f"but selected {len(selected)}"
+                    f"but selected {len(selected)}",
+                    flush=True,
                 )
             sampled.extend(selected)
 
         if len(sampled) < args.total:
             print(
                 "WARNING: sampled fewer than requested total. "
-                f"requested={args.total}, got={len(sampled)}"
+                f"requested={args.total}, got={len(sampled)}",
+                flush=True,
             )
 
         # Stable shuffle before assigning sample IDs so annotators see mixed buckets.
@@ -668,36 +690,46 @@ def main() -> int:
             overwrite=args.overwrite,
         )
 
-        print("Built fact gold-set annotation pack")
-        print(f"  records:      {len(records)}")
-        print(f"  random:       {bucket_counts.get('random', 0)}")
-        print(f"  likely:       {bucket_counts.get('likely', 0)}")
-        print(f"  negative:     {bucket_counts.get('negative', 0)}")
-        print(f"  unique chats: {len(chat_counts)}")
-        print(f"  jsonl:        {jsonl_path}")
-        print(f"  csv:          {csv_path}")
-        print(f"  manifest:     {manifest_path}")
+        logger.info("Built fact gold-set annotation pack")
+        logger.info("  records:      %d", len(records))
+        logger.info("  random:       %d", bucket_counts.get("random", 0))
+        logger.info("  likely:       %d", bucket_counts.get("likely", 0))
+        logger.info("  negative:     %d", bucket_counts.get("negative", 0))
+        logger.info("  unique chats: %d", len(chat_counts))
+        logger.info("  jsonl:        %s", jsonl_path)
+        logger.info("  csv:          %s", csv_path)
+        logger.info("  manifest:     %s", manifest_path)
+        print("Built fact gold-set annotation pack", flush=True)
+        print(f"  records:      {len(records)}", flush=True)
+        print(f"  random:       {bucket_counts.get('random', 0)}", flush=True)
+        print(f"  likely:       {bucket_counts.get('likely', 0)}", flush=True)
+        print(f"  negative:     {bucket_counts.get('negative', 0)}", flush=True)
+        print(f"  unique chats: {len(chat_counts)}", flush=True)
+        print(f"  jsonl:        {jsonl_path}", flush=True)
+        print(f"  csv:          {csv_path}", flush=True)
+        print(f"  manifest:     {manifest_path}", flush=True)
         print(
             "\nNext: open the CSV and fill gold_* columns "
-            "(keep/fact_type/subject/subject_resolution)."
+            "(keep/fact_type/subject/subject_resolution).",
+            flush=True,
         )
         return 0
 
     except sqlite3.OperationalError as e:
         msg = str(e).lower()
         if "unable to open database" in msg or "operation not permitted" in msg:
-            print("ERROR: Could not read chat.db (macOS privacy restriction).")
-            print("Grant Terminal/iTerm Full Disk Access in System Settings > Privacy & Security.")
-            print(f"Then rerun: python3 scripts/build_fact_goldset.py --db-path {db_path}")
+            print("ERROR: Could not read chat.db (macOS privacy restriction).", flush=True)
+            print("Grant Terminal/iTerm Full Disk Access in System Settings > Privacy & Security.", flush=True)
+            print(f"Then rerun: python3 scripts/build_fact_goldset.py --db-path {db_path}", flush=True)
             return 2
-        print(f"ERROR: SQLite failure: {e}")
+        print(f"ERROR: SQLite failure: {e}", flush=True)
         return 2
     except FileExistsError as e:
-        print(f"ERROR: {e}")
-        print("Use --overwrite to replace existing files.")
+        print(f"ERROR: {e}", flush=True)
+        print("Use --overwrite to replace existing files.", flush=True)
         return 3
     except ValueError as e:
-        print(f"ERROR: {e}")
+        print(f"ERROR: {e}", flush=True)
         return 4
     finally:
         if conn is not None:

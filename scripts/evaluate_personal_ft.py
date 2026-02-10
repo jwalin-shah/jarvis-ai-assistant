@@ -25,14 +25,22 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler("evaluate_personal.log")],
-)
+RESULTS_PATH = Path("evals/results/personal-ft-comparison.json")
+LOG_PATH = Path("evaluate_personal.log")
+
 log = logging.getLogger(__name__)
 
-RESULTS_PATH = Path("evals/results/personal-ft-comparison.json")
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 
 # Emoji pattern for style matching
 EMOJI_PAT = re.compile(
@@ -216,7 +224,7 @@ def evaluate_config(config_path: Path, max_examples: int = 50) -> dict | None:
 def print_leaderboard(results: list[dict]) -> None:
     """Print a formatted leaderboard."""
     if not results:
-        print("No results to display.")
+        print("No results to display.", flush=True)
         return
 
     # Sort by composite score: word_overlap * clean_rate * (1/abs(1-length_ratio))
@@ -229,31 +237,35 @@ def print_leaderboard(results: list[dict]) -> None:
 
     results.sort(key=score, reverse=True)
 
-    print("\n" + "=" * 90)
-    print("PERSONAL FINE-TUNING LEADERBOARD")
-    print("=" * 90)
+    print("\n" + "=" * 90, flush=True)
+    print("PERSONAL FINE-TUNING LEADERBOARD", flush=True)
+    print("=" * 90, flush=True)
     print(
         f"{'Rank':<5} {'Config':<40} {'WordOvlp':<10} {'Clean%':<8} "
-        f"{'LenRatio':<10} {'Emoji%':<8} {'Time/ex':<8}"
+        f"{'LenRatio':<10} {'Emoji%':<8} {'Time/ex':<8}",
+        flush=True,
     )
-    print("-" * 90)
+    print("-" * 90, flush=True)
 
     for i, r in enumerate(results):
         print(
             f"{i + 1:<5} {r['config']:<40} {r.get('word_overlap', 0):<10.3f} "
             f"{r.get('clean_output_rate', 0):<8.3f} {r.get('length_ratio', 0):<10.3f} "
-            f"{r.get('emoji_match_rate', 0):<8.3f} {r.get('avg_time_per_example', 0):<8.3f}s"
+            f"{r.get('emoji_match_rate', 0):<8.3f} {r.get('avg_time_per_example', 0):<8.3f}s",
+            flush=True,
         )
 
-    print("=" * 90)
+    print("=" * 90, flush=True)
     if results:
         winner = results[0]
-        print(f"\nWinner: {winner['config']}")
-        print(f"  Model: {winner['model']}")
-        print(f"  Adapter: {winner['adapter']}")
+        print(f"\nWinner: {winner['config']}", flush=True)
+        print(f"  Model: {winner['model']}", flush=True)
+        print(f"  Adapter: {winner['adapter']}", flush=True)
 
 
 def main() -> None:
+    _setup_logging()
+    log.info("Starting evaluate_personal_ft.py")
     parser = argparse.ArgumentParser(description="Evaluate personal fine-tuned models")
     parser.add_argument("--report-only", action="store_true", help="Just print leaderboard")
     parser.add_argument("--config", help="Evaluate a single config file")
@@ -267,7 +279,7 @@ def main() -> None:
             results = json.loads(RESULTS_PATH.read_text())
             print_leaderboard(results)
         else:
-            print(f"No results file found at {RESULTS_PATH}")
+            print(f"No results file found at {RESULTS_PATH}", flush=True)
         return
 
     if args.config:

@@ -19,11 +19,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import random
 import sys
 import time
 from pathlib import Path
+
+
+def _setup_logging() -> None:
+    """Configure logging with FileHandler + StreamHandler."""
+    log_file = Path("generate_preference_pairs.log")
+    file_handler = logging.FileHandler(log_file, mode="a")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[file_handler, stream_handler],
+    )
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -86,7 +99,7 @@ def generate_gold_reply(client, context: str, last_message: str, style_guide: st
         )
         return resp.choices[0].message.content.strip().strip('"').strip("'")
     except Exception as e:
-        print(f"  Gemini error: {e}")
+        print(f"  Gemini error: {e}", flush=True)
         return None
 
 
@@ -139,6 +152,8 @@ def generate_local_reply(loader, system_msg: str, user_msg: str) -> str:
 
 
 def main() -> int:
+    _setup_logging()
+    logging.info("Starting generate_preference_pairs.py")
     parser = argparse.ArgumentParser(description="Generate ORPO preference pairs")
     parser.add_argument(
         "--sample",
@@ -168,11 +183,11 @@ def main() -> int:
     sft_dir = PROJECT_ROOT / "data" / "soc_sft"
     train_path = sft_dir / "train.jsonl"
     if not train_path.exists():
-        print(f"ERROR: SFT data not found at {train_path}")
-        print("       Run: uv run python scripts/prepare_soc_data.py")
+        print(f"ERROR: SFT data not found at {train_path}", flush=True)
+        print("       Run: uv run python scripts/prepare_soc_data.py", flush=True)
         return 1
 
-    print("Loading SFT training data...")
+    print("Loading SFT training data...", flush=True)
     examples = []
     with open(train_path) as f:
         for line in f:
@@ -181,18 +196,18 @@ def main() -> int:
     if args.sample > 0 and args.sample < len(examples):
         examples = random.sample(examples, args.sample)
 
-    print(f"Processing {len(examples)} examples")
+    print(f"Processing {len(examples)} examples", flush=True)
 
     if args.dry_run:
-        print("Dry run - would generate preference pairs for these examples.")
+        print("Dry run - would generate preference pairs for these examples.", flush=True)
         return 0
 
     # Init Gemini client
     client = get_gemini_client()
-    print(f"Gemini judge: {GEMINI_MODEL} via DeepInfra")
+    print(f"Gemini judge: {GEMINI_MODEL} via DeepInfra", flush=True)
 
     # Init local model for rejected candidates
-    print(f"Loading local model from {args.model_path}...")
+    print(f"Loading local model from {args.model_path}...", flush=True)
     model_path = PROJECT_ROOT / args.model_path
     if model_path.exists():
         # Local fused model
@@ -203,7 +218,7 @@ def main() -> int:
     loader = get_model()
     if not loader.is_loaded():
         loader.load()
-    print("Local model loaded")
+    print("Local model loaded", flush=True)
 
     # Generate preference pairs
     pairs: list[dict] = []
@@ -243,7 +258,7 @@ def main() -> int:
         try:
             rejected = generate_local_reply(loader, system_msg, user_msg)
         except Exception as e:
-            print(f"  [{i + 1}] Local model error: {e}")
+            print(f"  [{i + 1}] Local model error: {e}", flush=True)
             errors += 1
             continue
 
@@ -284,17 +299,18 @@ def main() -> int:
         if (i + 1) % 50 == 0:
             print(
                 f"  [{i + 1}/{len(examples)}] {len(pairs)} pairs, "
-                f"{skipped} skipped, {errors} errors"
+                f"{skipped} skipped, {errors} errors",
+                flush=True,
             )
 
         # Rate limiting (DeepInfra)
         time.sleep(0.2)
 
-    print(f"\nTotal preference pairs: {len(pairs)}")
-    print(f"Skipped: {skipped}, Errors: {errors}")
+    print(f"\nTotal preference pairs: {len(pairs)}", flush=True)
+    print(f"Skipped: {skipped}, Errors: {errors}", flush=True)
 
     if not pairs:
-        print("No pairs generated. Check model and API connectivity.")
+        print("No pairs generated. Check model and API connectivity.", flush=True)
         return 1
 
     # Split into train/valid (90/10)
@@ -312,7 +328,7 @@ def main() -> int:
         with open(path, "w") as f:
             for pair in split_pairs:
                 f.write(json.dumps(pair) + "\n")
-        print(f"Saved {len(split_pairs)} pairs to {path}")
+        print(f"Saved {len(split_pairs)} pairs to {path}", flush=True)
 
     # Save metadata
     meta = {
@@ -328,7 +344,8 @@ def main() -> int:
     }
     meta_path = output_dir / "metadata.json"
     meta_path.write_text(json.dumps(meta, indent=2))
-    print(f"Metadata saved to {meta_path}")
+    print(f"Metadata saved to {meta_path}", flush=True)
+    logging.info("Finished generate_preference_pairs.py")
 
     return 0
 

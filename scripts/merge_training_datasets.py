@@ -19,20 +19,12 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-
-import numpy as np
-from sklearn.model_selection import train_test_split
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 ORIGINAL_DIR = ROOT / "data" / "category_training"
@@ -40,14 +32,72 @@ GEMINI_DIR = ROOT / "data" / "gemini_features"
 OUTPUT_DIR = ROOT / "data" / "combined_training"
 
 
-def load_original_data() -> tuple[np.ndarray, np.ndarray]:
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("merge_training_datasets.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--original-dir",
+        type=Path,
+        default=ORIGINAL_DIR,
+        help="Directory containing original train.npz (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--gemini-dir",
+        type=Path,
+        default=GEMINI_DIR,
+        help="Directory containing Gemini train.npz (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=OUTPUT_DIR,
+        help="Directory to write combined datasets (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--test-size",
+        type=float,
+        default=0.2,
+        help="Test split ratio for train/test split (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for train/test split (default: %(default)s).",
+    )
+    return parser.parse_args(argv)
+
+
+def load_original_data(original_dir: Path, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
     """Load original DailyDialog/SAMSum training data."""
-    train_file = ORIGINAL_DIR / "train.npz"
+    import numpy as np
+
+    train_file = original_dir / "train.npz"
     if not train_file.exists():
         logger.error(f"Original training data not found: {train_file}")
         sys.exit(1)
 
-    data = np.load(train_file, allow_pickle=True)
+    try:
+        data = np.load(train_file, allow_pickle=True)
+    except OSError as exc:
+        logger.error("Failed to load original training data %s: %s", train_file, exc)
+        raise SystemExit(1) from exc
     X = data["X"]
     y = data["y"]
 
@@ -56,15 +106,21 @@ def load_original_data() -> tuple[np.ndarray, np.ndarray]:
     return X, y
 
 
-def load_gemini_data() -> tuple[np.ndarray, np.ndarray]:
+def load_gemini_data(gemini_dir: Path, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
     """Load Gemini-labeled iMessage data."""
-    train_file = GEMINI_DIR / "train.npz"
+    import numpy as np
+
+    train_file = gemini_dir / "train.npz"
     if not train_file.exists():
         logger.error(f"Gemini training data not found: {train_file}")
         logger.error("Run: uv run python scripts/prepare_gemini_training_data.py")
         sys.exit(1)
 
-    data = np.load(train_file, allow_pickle=True)
+    try:
+        data = np.load(train_file, allow_pickle=True)
+    except OSError as exc:
+        logger.error("Failed to load Gemini training data %s: %s", train_file, exc)
+        raise SystemExit(1) from exc
     X = data["X"]
     y = data["y"]
 
@@ -86,9 +142,13 @@ def map_old_to_new(old_label: str) -> str:
 
 
 def merge_datasets(
-    X_orig: np.ndarray, y_orig: np.ndarray, X_gemini: np.ndarray, y_gemini: np.ndarray
+    X_orig: np.ndarray, y_orig: np.ndarray, X_gemini: np.ndarray, y_gemini: np.ndarray,
+    logger: logging.Logger
 ) -> tuple[np.ndarray, np.ndarray]:
     """Merge original and Gemini datasets."""
+    import numpy as np
+    from collections import Counter
+
     logger.info("\n" + "=" * 70)
     logger.info("MERGING DATASETS")
     logger.info("=" * 70)
@@ -97,7 +157,6 @@ def merge_datasets(
     y_orig_mapped = np.array([map_old_to_new(label) for label in y_orig])
 
     logger.info(f"\nOriginal (mapped to new 6-category):")
-    from collections import Counter
 
     orig_dist = Counter(y_orig_mapped)
     for cat, count in sorted(orig_dist.items()):
@@ -124,30 +183,33 @@ def merge_datasets(
 
 
 def create_splits(
-    X: np.ndarray, y: np.ndarray, test_size: float = 0.2, seed: int = 42
+    X: np.ndarray, y: np.ndarray, test_size: float = 0.2, seed: int = 42,
+    logger: logging.Logger | None = None
 ) -> tuple:
     """Create stratified train/test split."""
+    from sklearn.model_selection import train_test_split
+    from collections import Counter
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=seed
     )
 
-    logger.info(f"\n" + "=" * 70)
-    logger.info("TRAIN/TEST SPLIT")
-    logger.info("=" * 70)
-    logger.info(f"Train: {X_train.shape}")
-    logger.info(f"Test: {X_test.shape}")
+    if logger:
+        logger.info("\n" + "=" * 70)
+        logger.info("TRAIN/TEST SPLIT")
+        logger.info("=" * 70)
+        logger.info(f"Train: {X_train.shape}")
+        logger.info(f"Test: {X_test.shape}")
 
-    logger.info(f"\nTrain distribution:")
-    from collections import Counter
+        logger.info(f"\nTrain distribution:")
+        train_dist = Counter(y_train)
+        for cat, count in sorted(train_dist.items()):
+            logger.info(f"  {cat:15s}: {count:5d}")
 
-    train_dist = Counter(y_train)
-    for cat, count in sorted(train_dist.items()):
-        logger.info(f"  {cat:15s}: {count:5d}")
-
-    logger.info(f"\nTest distribution:")
-    test_dist = Counter(y_test)
-    for cat, count in sorted(test_dist.items()):
-        logger.info(f"  {cat:15s}: {count:5d}")
+        logger.info(f"\nTest distribution:")
+        test_dist = Counter(y_test)
+        for cat, count in sorted(test_dist.items()):
+            logger.info(f"  {cat:15s}: {count:5d}")
 
     return X_train, X_test, y_train, y_test
 
@@ -157,12 +219,24 @@ def save_combined_data(
     X_test: np.ndarray,
     y_train: np.ndarray,
     y_test: np.ndarray,
+    output_dir: Path,
+    logger: logging.Logger,
 ) -> None:
     """Save combined training data."""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    import numpy as np
 
-    np.savez(OUTPUT_DIR / "train.npz", X=X_train, y=y_train)
-    np.savez(OUTPUT_DIR / "test.npz", X=X_test, y=y_test)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.error("Failed to create output directory %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
+
+    try:
+        np.savez(output_dir / "train.npz", X=X_train, y=y_train)
+        np.savez(output_dir / "test.npz", X=X_test, y=y_test)
+    except OSError as exc:
+        logger.error("Failed to write combined npz files in %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
 
     # Metadata
     labels = sorted(set(y_train) | set(y_test))
@@ -178,27 +252,39 @@ def save_combined_data(
         "test_size": len(X_test),
     }
 
-    (OUTPUT_DIR / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    try:
+        (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    except OSError as exc:
+        logger.error("Failed to write metadata file in %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
 
-    logger.info(f"\n✓ Combined training data saved to {OUTPUT_DIR}")
+    logger.info(f"\n✓ Combined training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
     logger.info(f"  - test.npz: {X_test.shape}")
     logger.info(f"  - metadata.json")
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
+    logger = setup_logging()
+    args = parse_args(argv)
     # Load both datasets
-    X_orig, y_orig = load_original_data()
-    X_gemini, y_gemini = load_gemini_data()
+    X_orig, y_orig = load_original_data(args.original_dir, logger)
+    X_gemini, y_gemini = load_gemini_data(args.gemini_dir, logger)
 
     # Merge
-    X_combined, y_combined = merge_datasets(X_orig, y_orig, X_gemini, y_gemini)
+    X_combined, y_combined = merge_datasets(X_orig, y_orig, X_gemini, y_gemini, logger)
 
     # Split
-    X_train, X_test, y_train, y_test = create_splits(X_combined, y_combined)
+    X_train, X_test, y_train, y_test = create_splits(
+        X_combined,
+        y_combined,
+        test_size=args.test_size,
+        seed=args.seed,
+        logger=logger,
+    )
 
     # Save
-    save_combined_data(X_train, X_test, y_train, y_test)
+    save_combined_data(X_train, X_test, y_train, y_test, output_dir=args.output_dir, logger=logger)
 
     logger.info("\n" + "=" * 70)
     logger.info("READY TO RETRAIN")
