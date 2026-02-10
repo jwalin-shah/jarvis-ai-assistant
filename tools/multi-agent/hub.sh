@@ -21,6 +21,26 @@ source "$SCRIPT_DIR/hub_lib.sh"
 DISPATCH_TIMEOUT=3600   # 1 hour for main work
 REVIEW_TIMEOUT=300      # 5 minutes for reviews
 
+# ── Signal Handling ───────────────────────────────────────────────────────────
+
+declare -a HUB_CHILD_PIDS=()
+
+cleanup_children() {
+    if [[ ${#HUB_CHILD_PIDS[@]} -gt 0 ]]; then
+        hub_log "Shutting down, terminating ${#HUB_CHILD_PIDS[@]} child processes..."
+        for pid in "${HUB_CHILD_PIDS[@]}"; do
+            kill -TERM "$pid" 2>/dev/null || true
+        done
+        sleep 1
+        for pid in "${HUB_CHILD_PIDS[@]}"; do
+            kill -KILL "$pid" 2>/dev/null || true
+        done
+    fi
+    _state_unlock 2>/dev/null || true
+}
+
+trap cleanup_children INT TERM
+
 # ── Usage ──────────────────────────────────────────────────────────────────────
 
 usage() {
@@ -217,6 +237,7 @@ IMPORTANT:
             on_lane_exit "$lane"
         ) &
         local pid=$!
+        HUB_CHILD_PIDS+=("$pid")
 
         set_lane_status "$lane" "working"
         set_lane_pid "$lane" "$pid"
@@ -337,6 +358,7 @@ if 'tasks' not in state:
         on_task_exit "$task_id"
     ) &
     local pid=$!
+    HUB_CHILD_PIDS+=("$pid")
 
     # Update the task with the real PID
     python3 -c "
@@ -691,8 +713,16 @@ cmd_review() {
             continue
         fi
 
-        # Save diff
+        # Save raw diff and generate structured summary
         echo "$diff_content" > "$REVIEWS_DIR/lane_${lane}_diff.patch"
+
+        local review_summary
+        if [[ -f "$PREDIFF" ]]; then
+            review_summary=$(echo "$diff_content" | python3 "$PREDIFF" --lane "$lane" --contracts-file "$CONTRACTS_FILE" 2>/dev/null)
+        fi
+        if [[ -z "${review_summary:-}" ]]; then
+            review_summary="$diff_content"
+        fi
 
         # Layer 1: Ownership auto-check
         local violations
@@ -752,7 +782,7 @@ FEEDBACKEOF
             review_prompt="${review_prompt//\{SOURCE_LABEL\}/$label}"
             review_prompt="${review_prompt//\{REVIEWER_LANE\}/${reviewer_lane^^}}"
             review_prompt="${review_prompt//\{REVIEWER_LABEL\}/$reviewer_label}"
-            review_prompt="${review_prompt//\{DIFF_CONTENT\}/$diff_content}"
+            review_prompt="${review_prompt//\{DIFF_CONTENT\}/$review_summary}"
 
             lane_log "$lane" "Requesting review from Lane ${reviewer_lane^^} ($reviewer_agent)..."
 

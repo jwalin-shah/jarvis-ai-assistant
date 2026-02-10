@@ -15,6 +15,8 @@ STATE_FILE="$HUB_DIR/state.json"
 REVIEWS_DIR="$HUB_DIR/reviews"
 LOGS_DIR="$HUB_DIR/logs"
 REVIEW_TIMEOUT="${REVIEW_TIMEOUT:-300}"
+PREDIFF="$SCRIPT_DIR/prediff.py"
+CONTRACTS_FILE="$REPO_ROOT/jarvis/contracts/pipeline.py"
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +91,35 @@ lane_log() {
     echo -e "${BLUE}[lane-${lane}/${agent}]${NC} $msg"
 }
 
+# ── State Locking ─────────────────────────────────────────────────────────────
+
+_state_lock() {
+    local timeout="${1:-30}"
+    mkdir -p "$HUB_DIR/locks"
+    local start=$SECONDS
+    while ! mkdir "$HUB_DIR/locks/state" 2>/dev/null; do
+        if (( SECONDS - start > timeout )); then
+            hub_error "Timeout waiting for state lock"
+            return 1
+        fi
+        sleep 0.1
+    done
+}
+
+_state_unlock() {
+    rmdir "$HUB_DIR/locks/state" 2>/dev/null || true
+}
+
+# Atomic state update via Python with file locking
+update_state() {
+    local python_code="$1"
+    _state_lock || return 1
+    python3 -c "$python_code"
+    local rc=$?
+    _state_unlock
+    return $rc
+}
+
 # ── State Management ──────────────────────────────────────────────────────────
 
 init_state() {
@@ -141,7 +172,7 @@ print(state['lanes']['$lane']['status'])
 set_lane_status() {
     local lane=$1
     local status=$2
-    python3 -c "
+    update_state "
 import json
 with open('$STATE_FILE') as f:
     state = json.load(f)
@@ -154,7 +185,7 @@ with open('$STATE_FILE', 'w') as f:
 set_lane_pid() {
     local lane=$1
     local pid=$2
-    python3 -c "
+    update_state "
 import json
 with open('$STATE_FILE') as f:
     state = json.load(f)
@@ -167,7 +198,7 @@ with open('$STATE_FILE', 'w') as f:
 set_lane_commit() {
     local lane=$1
     local commit=$2
-    python3 -c "
+    update_state "
 import json
 with open('$STATE_FILE') as f:
     state = json.load(f)
@@ -187,6 +218,7 @@ add_task() {
     local log_file=$4
     local model=${5:-"default"}
 
+    _state_lock || return 1
     python3 -c "
 import json, time
 with open('$STATE_FILE') as f:
@@ -207,13 +239,16 @@ with open('$STATE_FILE', 'w') as f:
     json.dump(state, f, indent=4)
 print(task_id)
 "
+    local rc=$?
+    _state_unlock
+    return $rc
 }
 
 # Update a standalone task's status
 set_task_status() {
     local task_id=$1
     local status=$2
-    python3 -c "
+    update_state "
 import json
 with open('$STATE_FILE') as f:
     state = json.load(f)
@@ -308,7 +343,7 @@ set_review_result() {
     local reviewer_lane=$2
     local result=$3  # "approve" or "reject"
     local reason=$4
-    python3 -c "
+    update_state "
 import json
 with open('$STATE_FILE') as f:
     state = json.load(f)
@@ -412,7 +447,7 @@ auto_review_lane() {
     wt_path=$(get_worktree_path "$lane")
     local label="${LANE_LABELS[$lane]}"
 
-    # Get diff
+    # Get diff and create structured summary via prediff processor
     local diff_content
     diff_content=$(git -C "$wt_path" diff main...HEAD 2>/dev/null)
     if [[ -z "$diff_content" ]]; then
@@ -420,8 +455,17 @@ auto_review_lane() {
         return
     fi
 
-    # Save diff
+    # Save raw diff
     echo "$diff_content" > "$REVIEWS_DIR/lane_${lane}_diff.patch"
+
+    # Generate structured summary (90% fewer tokens for review agents)
+    local review_summary
+    if [[ -f "$PREDIFF" ]]; then
+        review_summary=$(echo "$diff_content" | python3 "$PREDIFF" --lane "$lane" --contracts-file "$CONTRACTS_FILE" 2>/dev/null)
+    fi
+    if [[ -z "$review_summary" ]]; then
+        review_summary="$diff_content"
+    fi
 
     # Layer 1: Ownership auto-check
     local violations
@@ -459,13 +503,13 @@ FEEDBACKEOF
         local reviewer_label="${LANE_LABELS[$reviewer_lane]}"
         local review_file="$REVIEWS_DIR/${lane}_reviewed_by_${reviewer_lane}.md"
 
-        # Build review prompt
+        # Build review prompt (use structured summary, not raw diff)
         local review_prompt="$review_template"
         review_prompt="${review_prompt//\{SOURCE_LANE\}/${lane^^}}"
         review_prompt="${review_prompt//\{SOURCE_LABEL\}/$label}"
         review_prompt="${review_prompt//\{REVIEWER_LANE\}/${reviewer_lane^^}}"
         review_prompt="${review_prompt//\{REVIEWER_LABEL\}/$reviewer_label}"
-        review_prompt="${review_prompt//\{DIFF_CONTENT\}/$diff_content}"
+        review_prompt="${review_prompt//\{DIFF_CONTENT\}/$review_summary}"
 
         # Spawn review agent in background
         (
@@ -765,33 +809,44 @@ if match:
 # ── Agent Invocation ──────────────────────────────────────────────────────────
 
 # Run an agent with full write permissions (for dispatch/rework)
+# Returns exit status: 0=success, 124=timeout, other=error
 run_agent_work() {
     local agent=$1
     local prompt=$2
     local log_file=$3
     local timeout_secs=$4
+    local exit_code=0
 
     case $agent in
         claude)
-            timeout "$timeout_secs" claude -p "$prompt" --dangerously-skip-permissions > "$log_file" 2>&1 || true
+            timeout --signal=TERM "$timeout_secs" claude -p "$prompt" --dangerously-skip-permissions > "$log_file" 2>&1 || exit_code=$?
             ;;
         codex)
-            timeout "$timeout_secs" codex exec --full-auto "$prompt" > "$log_file" 2>&1 || true
+            timeout --signal=TERM "$timeout_secs" codex exec --full-auto "$prompt" > "$log_file" 2>&1 || exit_code=$?
             ;;
         gemini)
-            timeout "$timeout_secs" gemini -p "$prompt" --yolo > "$log_file" 2>&1 || true
+            timeout --signal=TERM "$timeout_secs" gemini -p "$prompt" --yolo > "$log_file" 2>&1 || exit_code=$?
             ;;
         opencode)
-            timeout "$timeout_secs" opencode run "$prompt" > "$log_file" 2>&1 || true
+            timeout --signal=TERM "$timeout_secs" opencode run "$prompt" > "$log_file" 2>&1 || exit_code=$?
             ;;
         kimi)
-            timeout "$timeout_secs" kimi --quiet -p "$prompt" --yolo > "$log_file" 2>&1 || true
+            timeout --signal=TERM "$timeout_secs" kimi --quiet -p "$prompt" --yolo > "$log_file" 2>&1 || exit_code=$?
             ;;
         *)
             hub_error "Unknown agent: $agent"
             return 1
             ;;
     esac
+
+    # Log exit status
+    case $exit_code in
+        0)   echo "[agent] Completed successfully" >> "$log_file" ;;
+        124) echo "[agent] TIMEOUT after ${timeout_secs}s" >> "$log_file" ;;
+        137) echo "[agent] KILLED (SIGKILL)" >> "$log_file" ;;
+        *)   echo "[agent] Exited with code $exit_code" >> "$log_file" ;;
+    esac
+    return $exit_code
 }
 
 # Run an agent in read-only mode (for reviews - only needs text output)
