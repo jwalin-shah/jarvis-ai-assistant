@@ -14,39 +14,82 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-
-import numpy as np
-from sklearn.model_selection import train_test_split
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval_labeled.jsonl"
 
 
-def load_gemini_examples() -> list[dict]:
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("prepare_mobilization_training.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--eval-path",
+        type=Path,
+        default=EVAL_PATH,
+        help="Path to labeled evaluation JSONL file (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ROOT / "data" / "mobilization_gemini",
+        help="Directory to write mobilization training artifacts (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--test-size",
+        type=float,
+        default=0.2,
+        help="Fraction of data in test split (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for train/test split (default: %(default)s).",
+    )
+    return parser.parse_args(argv)
+
+
+def load_gemini_examples(eval_path: Path, logger: logging.Logger) -> list[dict]:
     """Load Gemini-labeled examples with mobilization labels.
 
     Uses both Gemini and auto-labeled examples for better class balance.
     (Gemini-only was too imbalanced: only 1 HIGH example)
     """
     examples = []
-    for line in EVAL_PATH.open():
-        line = line.strip()
-        if line:
-            ex = json.loads(line)
-            # Use both Gemini and auto labels for better class distribution
-            if ex.get("mobilization") and ex.get("label_confidence") in ("gemini", "auto"):
-                examples.append(ex)
+    try:
+        with eval_path.open() as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    ex = json.loads(line)
+                    # Use both Gemini and auto labels for better class distribution
+                    if ex.get("mobilization") and ex.get("label_confidence") in ("gemini", "auto"):
+                        examples.append(ex)
+    except OSError as exc:
+        logger.error("Failed to read eval data %s: %s", eval_path, exc)
+        raise SystemExit(1) from exc
 
     logger.info(f"Loaded {len(examples)} Gemini+auto examples with mobilization")
     return examples
@@ -54,6 +97,8 @@ def load_gemini_examples() -> list[dict]:
 
 def extract_simple_features(text: str) -> np.ndarray:
     """Extract simple hand-crafted features (no embeddings)."""
+    import numpy as np
+
     features = []
 
     # Basic structure
@@ -113,15 +158,18 @@ def extract_simple_features(text: str) -> np.ndarray:
     return np.array(features, dtype=np.float32)
 
 
-def extract_all_features(examples: list[dict]) -> tuple[np.ndarray, np.ndarray, list[str]]:
+def extract_all_features(examples: list[dict], logger: logging.Logger) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """Extract features for all examples."""
+    import numpy as np
+    from tqdm import tqdm
+
     logger.info(f"Extracting features for {len(examples)} examples...")
 
     features_list = []
     labels = []
     ids = []
 
-    for i, ex in enumerate(examples):
+    for i, ex in enumerate(tqdm(examples, desc="Extracting features", unit="ex")):
         features = extract_simple_features(ex["text"])
         features_list.append(features)
         labels.append(ex["mobilization"].upper())
@@ -147,36 +195,50 @@ def extract_all_features(examples: list[dict]) -> tuple[np.ndarray, np.ndarray, 
 
 
 def create_splits(
-    X: np.ndarray, y: np.ndarray, ids: list[str], test_size: float = 0.2, seed: int = 42
+    X: np.ndarray, y: np.ndarray, ids: list[str], test_size: float = 0.2, seed: int = 42,
+    logger: logging.Logger | None = None
 ) -> tuple:
     """Create stratified train/test split."""
+    from sklearn.model_selection import train_test_split
+
     X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
         X, y, ids, test_size=test_size, stratify=y, random_state=seed
     )
 
-    logger.info(f"\nTrain/test split:")
-    logger.info(f"  Train: {X_train.shape}")
-    logger.info(f"  Test: {X_test.shape}")
+    if logger:
+        logger.info(f"\nTrain/test split:")
+        logger.info(f"  Train: {X_train.shape}")
+        logger.info(f"  Test: {X_test.shape}")
 
-    from collections import Counter
-    logger.info("\nTrain distribution:")
-    for label, count in sorted(Counter(y_train).items()):
-        logger.info(f"  {label:10s}: {count:4d}")
+        from collections import Counter
+        logger.info("\nTrain distribution:")
+        for label, count in sorted(Counter(y_train).items()):
+            logger.info(f"  {label:10s}: {count:4d}")
 
-    logger.info("\nTest distribution:")
-    for label, count in sorted(Counter(y_test).items()):
-        logger.info(f"  {label:10s}: {count:4d}")
+        logger.info("\nTest distribution:")
+        for label, count in sorted(Counter(y_test).items()):
+            logger.info(f"  {label:10s}: {count:4d}")
 
     return X_train, X_test, y_train, y_test, ids_train, ids_test
 
 
 def save_training_data(output_dir: Path, X_train: np.ndarray, X_test: np.ndarray,
-                       y_train: np.ndarray, y_test: np.ndarray) -> None:
+                       y_train: np.ndarray, y_test: np.ndarray, logger: logging.Logger) -> None:
     """Save training data."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    import numpy as np
 
-    np.savez(output_dir / "train.npz", X=X_train, y=y_train)
-    np.savez(output_dir / "test.npz", X=X_test, y=y_test)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.error("Failed to create output directory %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
+
+    try:
+        np.savez(output_dir / "train.npz", X=X_train, y=y_train)
+        np.savez(output_dir / "test.npz", X=X_test, y=y_test)
+    except OSError as exc:
+        logger.error("Failed to write NPZ training data in %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
 
     labels = sorted(set(y_train) | set(y_test))
     metadata = {
@@ -193,7 +255,11 @@ def save_training_data(output_dir: Path, X_train: np.ndarray, X_test: np.ndarray
         ]
     }
 
-    (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    try:
+        (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    except OSError as exc:
+        logger.error("Failed to write metadata in %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
 
     logger.info(f"\n✓ Training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
@@ -201,13 +267,21 @@ def save_training_data(output_dir: Path, X_train: np.ndarray, X_test: np.ndarray
     logger.info(f"  - metadata.json")
 
 
-def main() -> None:
-    examples = load_gemini_examples()
-    X, y, ids = extract_all_features(examples)
-    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(X, y, ids)
+def main(argv: Sequence[str] | None = None) -> None:
+    logger = setup_logging()
+    args = parse_args(argv)
+    examples = load_gemini_examples(args.eval_path, logger)
+    X, y, ids = extract_all_features(examples, logger)
+    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(
+        X,
+        y,
+        ids,
+        test_size=args.test_size,
+        seed=args.seed,
+        logger=logger,
+    )
 
-    output_dir = ROOT / "data" / "mobilization_gemini"
-    save_training_data(output_dir, X_train, X_test, y_train, y_test)
+    save_training_data(args.output_dir, X_train, X_test, y_train, y_test, logger)
 
     logger.info(f"\n" + "=" * 70)
     logger.info("READY TO TRAIN")

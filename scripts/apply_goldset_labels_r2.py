@@ -1,6 +1,12 @@
 """Apply gold labels to fact_goldset_round2/fact_goldset_400.csv"""
+import argparse
 import csv
+import logging
 import sys
+from collections import Counter
+from collections.abc import Sequence
+from pathlib import Path
+from tqdm import tqdm
 
 INPUT = "training_data/fact_goldset_round2/fact_goldset_400.csv"
 OUTPUT = "training_data/fact_goldset_round2/fact_goldset_400.csv"
@@ -411,38 +417,105 @@ LABELS = {
     "fact_gs_0400": (0, "", "", "", "", "joke about Apple/mom not wanting iPad"),
 }
 
-# Read CSV
-with open(INPUT, "r", newline="") as f:
-    reader = csv.DictReader(f)
-    fieldnames = reader.fieldnames
-    rows = list(reader)
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--input",
+        default=INPUT,
+        help="Path to input goldset CSV (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--output",
+        default=OUTPUT,
+        help="Path to output goldset CSV (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=25,
+        help="Print row progress every N rows when processing >10 rows (default: %(default)s).",
+    )
+    return parser.parse_args(argv)
 
-# Apply labels
-for row in rows:
-    sid = row["sample_id"]
-    if sid in LABELS:
-        keep, ftype, subj, res, anchor, notes = LABELS[sid]
-        row["gold_keep"] = str(keep)
-        row["gold_fact_type"] = ftype
-        row["gold_subject"] = subj
-        row["gold_subject_resolution"] = res
-        row["gold_anchor_message_id"] = anchor
-        row["gold_notes"] = notes
-    else:
-        print(f"WARNING: No label for {sid}", file=sys.stderr)
 
-# Write back
-with open(OUTPUT, "w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=fieldnames)
-    writer.writeheader()
-    writer.writerows(rows)
+def apply_labels(input_path: str, output_path: str, progress_every: int = 25) -> None:
+    """Apply round-2 labels to the provided CSV file."""
+    try:
+        with open(input_path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+    except OSError as exc:
+        print(f"Error reading input CSV '{input_path}': {exc}", file=sys.stderr, flush=True)
+        raise SystemExit(1) from exc
 
-labeled = sum(1 for v in LABELS.values() if v[0] == 1)
-print(f"Done. {labeled}/{len(LABELS)} labeled as keep=1 ({labeled/len(LABELS)*100:.1f}%)")
+    if not fieldnames:
+        print(f"Error: input CSV '{input_path}' is missing headers.", file=sys.stderr, flush=True)
+        raise SystemExit(1)
 
-# Print type distribution
-from collections import Counter
-types = Counter(v[1] for v in LABELS.values() if v[0] == 1)
-print(f"\nFact type distribution:")
-for t, c in types.most_common():
-    print(f"  {t}: {c}")
+    total_rows = len(rows)
+    if total_rows > 10:
+        print(f"Applying labels to {total_rows} rows...", flush=True)
+
+    for idx, row in enumerate(tqdm(rows, desc="Labeling", total=total_rows), 1):
+        sid = row["sample_id"]
+        if sid in LABELS:
+            keep, ftype, subj, res, anchor, notes = LABELS[sid]
+            row["gold_keep"] = str(keep)
+            row["gold_fact_type"] = ftype
+            row["gold_subject"] = subj
+            row["gold_subject_resolution"] = res
+            row["gold_anchor_message_id"] = anchor
+            row["gold_notes"] = notes
+        else:
+            print(f"WARNING: No label for {sid}", file=sys.stderr, flush=True)
+
+        if (
+            total_rows > 10
+            and progress_every > 0
+            and (idx % progress_every == 0 or idx == total_rows)
+        ):
+            print(f"  processed {idx}/{total_rows} rows", flush=True)
+
+    try:
+        with open(output_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+    except OSError as exc:
+        print(f"Error writing output CSV '{output_path}': {exc}", file=sys.stderr, flush=True)
+        raise SystemExit(1) from exc
+
+    labeled = sum(1 for v in LABELS.values() if v[0] == 1)
+    print(
+        f"Done. {labeled}/{len(LABELS)} labeled as keep=1 ({labeled/len(LABELS)*100:.1f}%)",
+        flush=True,
+    )
+
+    types = Counter(v[1] for v in LABELS.values() if v[0] == 1)
+    print("\nFact type distribution:", flush=True)
+    for fact_type, count in types.most_common():
+        print(f"  {fact_type}: {count}", flush=True)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """Run script entrypoint."""
+    # Setup logging with FileHandler + StreamHandler
+    log_file = Path("apply_goldset_labels_r2.log")
+    file_handler = logging.FileHandler(log_file, mode="a")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[file_handler, stream_handler],
+    )
+    logging.info("Starting apply_goldset_labels_r2.py")
+
+    args = parse_args(argv)
+    apply_labels(args.input, args.output, args.progress_every)
+    logging.info("Finished apply_goldset_labels_r2.py")
+
+
+if __name__ == "__main__":
+    main()

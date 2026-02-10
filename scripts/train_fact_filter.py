@@ -28,8 +28,23 @@ from typing import Any
 
 import numpy as np
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and stream handlers."""
+    log_file = Path(__file__).resolve().parent.parent / "logs" / "train_fact_filter.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(log_file, mode="w"),
+            logging.StreamHandler(),
+        ],
+    )
+    logger.info("Logging to %s", log_file)
 
 
 class FactFilterFeatures:
@@ -63,7 +78,57 @@ class FactFilterFeatures:
         "prescription is ready", "unsubscribe",
     ]
 
-    def extract(self, text: str, candidate: str, entity_type: str) -> dict[str, float]:
+    # Canonical stage-1 labels currently emitted by CandidateExtractor.
+    # Kept alongside legacy labels for backward compatibility.
+    ENTITY_TYPES = [
+        "person_name",
+        "family_member",
+        "place",
+        "org",
+        "date_ref",
+        "food_item",
+        "job_role",
+        "health_condition",
+        "activity",
+        # Legacy/optional aliases
+        "food_preference",
+        "disliked_food",
+        "allergy",
+        "current_location",
+        "past_location",
+        "future_location",
+        "employer",
+        "friend_name",
+        "partner_name",
+        "thing_preference",
+    ]
+
+    ENTITY_ALIASES = {
+        "food_preference": "food_item",
+        "disliked_food": "food_item",
+        "allergy": "health_condition",
+        "employer": "org",
+    }
+
+    FACT_PREFIXES = [
+        "relationship",
+        "preference",
+        "location",
+        "work",
+        "health",
+        "personal",
+        "other",
+    ]
+
+    def extract(
+        self,
+        text: str,
+        candidate: str,
+        entity_type: str,
+        *,
+        fact_type: str = "",
+        gliner_score: float | None = None,
+    ) -> dict[str, float]:
         """Extract features from a candidate fact.
 
         Returns a dictionary of feature names to values.
@@ -71,6 +136,7 @@ class FactFilterFeatures:
         text_lower = text.lower()
         candidate_lower = candidate.lower()
         words = candidate_lower.split()
+        normalized_entity = self.ENTITY_ALIASES.get(entity_type, entity_type)
 
         features: dict[str, float] = {}
 
@@ -115,20 +181,23 @@ class FactFilterFeatures:
         ) else 0.0
 
         # 6. Entity type features
-        entity_type_onehot = {
-            "food_preference": 0.0,
-            "disliked_food": 0.0,
-            "allergy": 0.0,
-            "current_location": 0.0,
-            "past_location": 0.0,
-            "future_location": 0.0,
-            "employer": 0.0,
-            "family_member": 0.0,
-            "friend_name": 0.0,
-        }
-        if entity_type in entity_type_onehot:
+        entity_type_onehot = {k: 0.0 for k in self.ENTITY_TYPES}
+        if normalized_entity in entity_type_onehot:
+            entity_type_onehot[normalized_entity] = 1.0
+        elif entity_type in entity_type_onehot:
             entity_type_onehot[entity_type] = 1.0
         features.update({f"etype_{k}": v for k, v in entity_type_onehot.items()})
+
+        # 7. Candidate score feature from GLiNER (when available).
+        score = float(gliner_score) if gliner_score is not None else 0.0
+        features["gliner_score"] = score
+        features["score_ge_05"] = 1.0 if score >= 0.5 else 0.0
+        features["score_ge_07"] = 1.0 if score >= 0.7 else 0.0
+
+        # 8. Coarse fact-type features (optional predicted fact_type).
+        prefix = fact_type.split(".", 1)[0] if fact_type else ""
+        for p in self.FACT_PREFIXES:
+            features[f"factprefix_{p}"] = 1.0 if prefix == p else 0.0
 
         return features
 
@@ -148,16 +217,40 @@ class FactFilterClassifier:
         self.scaler: Any = None
         self.is_fitted = False
 
-    def fit(self, texts: list[str], candidates: list[str], entity_types: list[str], labels: list[int]) -> None:
+    def fit(
+        self,
+        texts: list[str],
+        candidates: list[str],
+        entity_types: list[str],
+        labels: list[int],
+        fact_types: list[str] | None = None,
+        gliner_scores: list[float] | None = None,
+    ) -> None:
         """Train the classifier."""
         from sklearn.linear_model import LogisticRegression
         from sklearn.preprocessing import StandardScaler
         from sklearn.svm import LinearSVC
 
+        if fact_types is None:
+            fact_types = [""] * len(texts)
+        if gliner_scores is None:
+            gliner_scores = [0.0] * len(texts)
+
         # Extract features
         X = []
-        for text, cand, etype in zip(texts, candidates, entity_types):
-            features = self.feature_extractor.extract(text, cand, etype)
+        total = len(texts)
+        for i, (text, cand, etype, ftype, score) in enumerate(zip(
+            texts, candidates, entity_types, fact_types, gliner_scores
+        )):
+            if (i + 1) % 500 == 0 or i + 1 == total:
+                print(f"Extracting features {i + 1}/{total}...", flush=True)
+            features = self.feature_extractor.extract(
+                text,
+                cand,
+                etype,
+                fact_type=ftype,
+                gliner_score=score,
+            )
             X.append(list(features.values()))
 
         X = np.array(X)
@@ -190,7 +283,15 @@ class FactFilterClassifier:
         logger.info(f"Trained on {len(labels)} examples")
         logger.info(f"  Positive: {n_positive}, Negative: {n_negative}")
 
-    def predict(self, text: str, candidate: str, entity_type: str) -> tuple[int, float]:
+    def predict(
+        self,
+        text: str,
+        candidate: str,
+        entity_type: str,
+        *,
+        fact_type: str = "",
+        gliner_score: float | None = None,
+    ) -> tuple[int, float]:
         """Predict if candidate is valid.
 
         Returns:
@@ -199,7 +300,13 @@ class FactFilterClassifier:
         if not self.is_fitted:
             raise RuntimeError("Classifier not trained yet")
 
-        features = self.feature_extractor.extract(text, candidate, entity_type)
+        features = self.feature_extractor.extract(
+            text,
+            candidate,
+            entity_type,
+            fact_type=fact_type,
+            gliner_score=gliner_score,
+        )
         X = np.array([list(features.values())])
         X_scaled = self.scaler.transform(X)
 
@@ -232,7 +339,7 @@ class FactFilterClassifier:
         logger.info(f"Saved classifier to {path}")
 
     @classmethod
-    def load(cls, path: Path) -> "FactFilterClassifier":
+    def load(cls, path: Path) -> FactFilterClassifier:
         """Load classifier from disk."""
         with open(path, "rb") as f:
             data = pickle.load(f)
@@ -248,6 +355,7 @@ class FactFilterClassifier:
 def load_training_data(path: Path) -> dict[str, list]:
     """Load training data from JSONL file."""
     texts, candidates, entity_types, labels = [], [], [], []
+    fact_types, gliner_scores = [], []
 
     with open(path) as f:
         for line in f:
@@ -256,12 +364,19 @@ def load_training_data(path: Path) -> dict[str, list]:
             candidates.append(data["candidate"])
             entity_types.append(data.get("entity_type", ""))
             labels.append(data["label"])
+            fact_types.append(data.get("fact_type", ""))
+            try:
+                gliner_scores.append(float(data.get("gliner_score", 0.0)))
+            except (TypeError, ValueError):
+                gliner_scores.append(0.0)
 
     return {
         "texts": texts,
         "candidates": candidates,
         "entity_types": entity_types,
         "labels": labels,
+        "fact_types": fact_types,
+        "gliner_scores": gliner_scores,
     }
 
 
@@ -270,12 +385,23 @@ def evaluate_classifier(classifier: FactFilterClassifier, test_data: dict) -> di
     predictions = []
     confidences = []
 
-    for text, cand, etype in zip(
+    total = len(test_data["texts"])
+    for i, (text, cand, etype, ftype, score) in enumerate(zip(
         test_data["texts"],
         test_data["candidates"],
         test_data["entity_types"],
-    ):
-        pred, conf = classifier.predict(text, cand, etype)
+        test_data.get("fact_types", [""] * len(test_data["texts"])),
+        test_data.get("gliner_scores", [0.0] * len(test_data["texts"])),
+    )):
+        if (i + 1) % 500 == 0 or i + 1 == total:
+            print(f"Evaluating {i + 1}/{total}...", flush=True)
+        pred, conf = classifier.predict(
+            text,
+            cand,
+            etype,
+            fact_type=ftype,
+            gliner_score=score,
+        )
         predictions.append(pred)
         confidences.append(conf)
 
@@ -283,7 +409,7 @@ def evaluate_classifier(classifier: FactFilterClassifier, test_data: dict) -> di
     y_pred = np.array(predictions)
 
     # Calculate metrics
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
     accuracy = accuracy_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred, zero_division=0)
@@ -332,6 +458,7 @@ def main():
     )
 
     args = parser.parse_args()
+    _setup_logging()
 
     # Load training data
     logger.info(f"Loading training data from {args.input}")
@@ -345,6 +472,8 @@ def main():
         train_data["candidates"],
         train_data["entity_types"],
         train_data["labels"],
+        fact_types=train_data.get("fact_types"),
+        gliner_scores=train_data.get("gliner_scores"),
     )
 
     # Evaluate on training data (overfit check)
@@ -366,9 +495,9 @@ def main():
     classifier.save(args.output)
 
     # Demo predictions
-    print("\n" + "=" * 70)
-    print("Demo predictions:")
-    print("=" * 70)
+    print("\n" + "=" * 70, flush=True)
+    print("Demo predictions:", flush=True)
+    print("=" * 70, flush=True)
 
     test_cases = [
         ("I love Thai food", "Thai food", "food_preference"),
@@ -381,9 +510,9 @@ def main():
     for text, cand, etype in test_cases:
         pred, conf = classifier.predict(text, cand, etype)
         status = "VALID" if pred == 1 else "INVALID"
-        print(f"\nText: {text}")
-        print(f"Candidate: '{cand}' ({etype})")
-        print(f"Prediction: {status} (confidence: {conf:.2f})")
+        print(f"\nText: {text}", flush=True)
+        print(f"Candidate: '{cand}' ({etype})", flush=True)
+        print(f"Prediction: {status} (confidence: {conf:.2f})", flush=True)
 
 
 if __name__ == "__main__":

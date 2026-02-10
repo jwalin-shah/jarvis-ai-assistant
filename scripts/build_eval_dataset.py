@@ -22,12 +22,23 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger(__name__)
+def _setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("build_eval_dataset.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
+
+logger = _setup_logging()
 
 ROOT = Path(__file__).resolve().parent.parent
 ARCHIVE_DIR = ROOT / "archive" / "data"

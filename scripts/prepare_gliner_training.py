@@ -32,12 +32,26 @@ import argparse
 import json
 import logging
 import sqlite3
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("prepare_gliner_training.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
 
 
 @dataclass
@@ -104,10 +118,11 @@ SYNTHETIC_TEST_CASES: list[dict[str, Any]] = [
 ]
 
 
-def generate_synthetic_dataset() -> list[TrainingExample]:
+def generate_synthetic_dataset(logger: logging.Logger) -> list[TrainingExample]:
     """Generate training examples from synthetic test cases."""
+    from tqdm import tqdm
     examples = []
-    for case in SYNTHETIC_TEST_CASES:
+    for case in tqdm(SYNTHETIC_TEST_CASES, desc="Generating synthetic", unit="case"):
         # Skip empty cases
         if not case.get("candidate"):
             continue
@@ -126,7 +141,7 @@ def generate_synthetic_dataset() -> list[TrainingExample]:
     return examples
 
 
-def load_imessage_samples(db_path: Path | None = None, limit: int = 100) -> list[dict[str, Any]]:
+def load_imessage_samples(db_path: Path | None = None, limit: int = 100, logger: logging.Logger | None = None) -> list[dict[str, Any]]:
     """Load sample messages from iMessage database.
 
     Returns messages that might contain personal facts.
@@ -135,7 +150,8 @@ def load_imessage_samples(db_path: Path | None = None, limit: int = 100) -> list
         db_path = Path.home() / "Library" / "Messages" / "chat.db"
 
     if not db_path.exists():
-        logger.warning(f"iMessage DB not found at {db_path}")
+        if logger:
+            logger.warning(f"iMessage DB not found at {db_path}")
         return []
 
     messages = []
@@ -181,15 +197,17 @@ def load_imessage_samples(db_path: Path | None = None, limit: int = 100) -> list
             })
 
         conn.close()
-        logger.info(f"Loaded {len(messages)} messages from iMessage DB")
+        if logger:
+            logger.info(f"Loaded {len(messages)} messages from iMessage DB")
 
     except Exception as e:
-        logger.error(f"Error loading iMessage DB: {e}")
+        if logger:
+            logger.error(f"Error loading iMessage DB: {e}")
 
     return messages
 
 
-def extract_candidates_with_gliner(messages: list[dict[str, Any]]) -> list[TrainingExample]:
+def extract_candidates_with_gliner(messages: list[dict[str, Any]], logger: logging.Logger | None = None) -> list[TrainingExample]:
     """Run GLiNER on messages via CandidateExtractor and create training examples.
 
     Uses the canonical CandidateExtractor for consistent label sets and thresholds.
@@ -198,13 +216,15 @@ def extract_candidates_with_gliner(messages: list[dict[str, Any]]) -> list[Train
     try:
         from jarvis.contacts.candidate_extractor import CandidateExtractor
     except ImportError:
-        logger.error("CandidateExtractor not available")
+        if logger:
+            logger.error("CandidateExtractor not available")
         return []
 
     extractor = CandidateExtractor()
 
     examples = []
-    for msg in messages:
+    from tqdm import tqdm
+    for msg in tqdm(messages, desc="Extracting candidates", unit="msg"):
         text = msg.get("text", "")
         if not text:
             continue
@@ -236,11 +256,12 @@ def _fact_type_to_category(fact_type: str) -> str:
     return "unknown"
 
 
-def apply_heuristic_labels(examples: list[TrainingExample]) -> list[TrainingExample]:
+def apply_heuristic_labels(examples: list[TrainingExample], logger: logging.Logger | None = None) -> list[TrainingExample]:
     """Apply heuristic rules to suggest labels (for initial training)."""
     import re
+    from tqdm import tqdm
 
-    for ex in examples:
+    for ex in tqdm(examples, desc="Applying heuristics", unit="ex"):
         candidate_lower = ex.candidate.lower()
         text_lower = ex.text.lower()
 
@@ -277,7 +298,7 @@ def apply_heuristic_labels(examples: list[TrainingExample]) -> list[TrainingExam
     return examples
 
 
-def export_for_training(examples: list[TrainingExample], output_path: Path) -> None:
+def export_for_training(examples: list[TrainingExample], output_path: Path, logger: logging.Logger) -> None:
     """Export training examples in JSONL format."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -296,6 +317,7 @@ def export_for_training(examples: list[TrainingExample], output_path: Path) -> N
 
 
 def main():
+    logger = setup_logging()
     parser = argparse.ArgumentParser(
         description="Prepare training data for GLiNER-based fact extraction"
     )
@@ -329,36 +351,36 @@ def main():
 
     if args.source in ("synthetic", "both"):
         logger.info("Generating synthetic training examples...")
-        synthetic = generate_synthetic_dataset()
+        synthetic = generate_synthetic_dataset(logger)
         all_examples.extend(synthetic)
         logger.info(f"  Generated {len(synthetic)} synthetic examples")
 
     if args.source in ("imessage", "both"):
         logger.info("Loading messages from iMessage...")
-        messages = load_imessage_samples(limit=args.limit)
+        messages = load_imessage_samples(limit=args.limit, logger=logger)
 
         if messages:
             logger.info("Extracting candidates with GLiNER...")
-            candidates = extract_candidates_with_gliner(messages)
+            candidates = extract_candidates_with_gliner(messages, logger)
             all_examples.extend(candidates)
             logger.info(f"  Extracted {len(candidates)} candidates")
 
     if args.apply_heuristics:
         logger.info("Applying heuristic labels...")
-        all_examples = apply_heuristic_labels(all_examples)
+        all_examples = apply_heuristic_labels(all_examples, logger)
 
     if all_examples:
-        export_for_training(all_examples, args.output)
+        export_for_training(all_examples, args.output, logger)
 
         # Also print sample
-        print("\n" + "=" * 70)
-        print("Sample training examples:")
-        print("=" * 70)
+        print("\n" + "=" * 70, flush=True)
+        print("Sample training examples:", flush=True)
+        print("=" * 70, flush=True)
         for ex in all_examples[:5]:
-            print(f"\nText: {ex.text}")
-            print(f"Candidate: '{ex.candidate}' ({ex.entity_type})")
-            print(f"Label: {'VALID' if ex.label == 1 else 'INVALID'}")
-            print(f"Reasoning: {ex.reasoning}")
+            print(f"\nText: {ex.text}", flush=True)
+            print(f"Candidate: '{ex.candidate}' ({ex.entity_type})", flush=True)
+            print(f"Label: {'VALID' if ex.label == 1 else 'INVALID'}", flush=True)
+            print(f"Reasoning: {ex.reasoning}", flush=True)
     else:
         logger.warning("No examples generated!")
 

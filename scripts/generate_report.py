@@ -10,10 +10,27 @@ and produces a formatted Markdown report with tables and gate status.
 
 import argparse
 import json
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+LOG_PATH = Path("generate_report.log")
+
+logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 
 
 def load_json_safe(path: Path) -> dict[str, Any] | None:
@@ -212,6 +229,8 @@ def generate_report(results_dir: Path) -> str:
 
 def main() -> int:
     """Main entry point."""
+    _setup_logging()
+    logger.info("Starting generate_report.py")
     parser = argparse.ArgumentParser(description="Generate BENCHMARKS.md from benchmark results")
     parser.add_argument(
         "--results-dir",
@@ -228,10 +247,11 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.results_dir.exists():
-        print(f"Error: Results directory not found: {args.results_dir}")
+        print(f"Error: Results directory not found: {args.results_dir}", flush=True)
         return 1
 
     # Generate report
+    logger.info("Generating report from %s", args.results_dir)
     report = generate_report(args.results_dir)
 
     # Ensure output directory exists
@@ -239,7 +259,8 @@ def main() -> int:
 
     # Write report
     args.output.write_text(report)
-    print(f"Report generated: {args.output}")
+    print(f"Report generated: {args.output}", flush=True)
+    logger.info("Finished generate_report.py")
 
     return 0
 

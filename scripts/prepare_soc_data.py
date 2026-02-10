@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import random
 import re
 import sys
@@ -25,6 +26,23 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("prepare_soc_data.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Media tag normalization
@@ -36,7 +54,7 @@ MEDIA_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 LINK_TAG_RE = re.compile(r"<link>", re.IGNORECASE)
-DELAY_TAG_RE = re.compile(r"<delay\s+[\d.]+>", re.IGNORECASE)
+DELAY_TAG_RE = re.compile(r"<delay\s+[\d.]+", re.IGNORECASE)
 
 MEDIA_PLACEHOLDER_MAP = {
     "image": "[Photo]",
@@ -259,6 +277,7 @@ def prepare_data(
     valid_ratio: float = 0.1,
     seed: int = 42,
     dry_run: bool = False,
+    logger: logging.Logger | None = None,
 ) -> dict:
     """Download SOC-2508 and convert to SFT training format.
 
@@ -266,17 +285,21 @@ def prepare_data(
         Dict with stats about the conversion.
     """
     from datasets import load_dataset
+    from tqdm import tqdm
 
-    print("Downloading SOC-2508 dataset...")
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    logger.info("Downloading SOC-2508 dataset...")
     ds = load_dataset("marcodsn/SOC-2508", split="train")
-    print(f"Loaded {len(ds)} conversations")
+    logger.info(f"Loaded {len(ds)} conversations")
 
     all_examples: list[dict] = []
     # Track archetype per example for stratified splitting
     archetypes: list[str] = []
     skipped = 0
 
-    for i, conv in enumerate(ds):
+    for i, conv in enumerate(tqdm(ds, desc="Processing conversations", unit="conv")):
         examples = build_training_examples(
             conv,
             min_context=min_context,
@@ -297,23 +320,23 @@ def prepare_data(
             archetypes.append(archetype)
 
         if (i + 1) % 200 == 0:
-            print(f"  Processed {i + 1}/{len(ds)} convs, {len(all_examples)} examples")
+            logger.info(f"  Processed {i + 1}/{len(ds)} convs, {len(all_examples)} examples")
 
-    print(f"\nTotal examples: {len(all_examples)}")
-    print(f"Skipped conversations: {skipped}")
+    logger.info(f"\nTotal examples: {len(all_examples)}")
+    logger.info(f"Skipped conversations: {skipped}")
 
     # Archetype distribution
     arch_counts = Counter(archetypes)
-    print("\nStyle archetype distribution:")
+    logger.info("\nStyle archetype distribution:")
     for arch, count in sorted(arch_counts.items(), key=lambda x: -x[1]):
-        print(f"  {arch:15s} {count:5d} ({count / len(archetypes) * 100:.1f}%)")
+        logger.info(f"  {arch:15s} {count:5d} ({count / len(archetypes) * 100:.1f}%)")
 
     if dry_run:
-        print("\nDry run - not saving files.")
+        logger.info("\nDry run - not saving files.")
         # Show a sample
         if all_examples:
-            print("\nSample example:")
-            print(json.dumps(all_examples[0], indent=2)[:500])
+            logger.info("\nSample example:")
+            logger.info(json.dumps(all_examples[0], indent=2)[:500])
         return {
             "total": len(all_examples),
             "skipped": skipped,
@@ -361,7 +384,7 @@ def prepare_data(
         with open(path, "w") as f:
             for idx in indices:
                 f.write(json.dumps(all_examples[idx]) + "\n")
-        print(f"Saved {len(indices)} examples to {path}")
+        logger.info(f"Saved {len(indices)} examples to {path}")
 
     # Save metadata
     meta = {
@@ -381,12 +404,13 @@ def prepare_data(
     }
     meta_path = output_dir / "metadata.json"
     meta_path.write_text(json.dumps(meta, indent=2))
-    print(f"\nMetadata saved to {meta_path}")
+    logger.info(f"\nMetadata saved to {meta_path}")
 
     return meta
 
 
 def main() -> int:
+    logger = setup_logging()
     parser = argparse.ArgumentParser(description="Convert SOC-2508 to mlx-lm SFT format")
     parser.add_argument(
         "--min-context", type=int, default=2, help="Min context messages (default: 2)"
@@ -403,6 +427,7 @@ def main() -> int:
         max_context=args.max_context,
         seed=args.seed,
         dry_run=args.dry_run,
+        logger=logger,
     )
     return 0
 

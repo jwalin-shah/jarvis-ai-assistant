@@ -9,43 +9,89 @@ This allows merging with original training data.
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-
-import numpy as np
-from sklearn.model_selection import train_test_split
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 LABELED_DATA = ROOT / "data" / "gemini_training" / "labeled_examples.jsonl"
 
 
-def load_labeled_examples() -> list[dict]:
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("prepare_gemini_training_with_embeddings.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--labeled-data",
+        type=Path,
+        default=LABELED_DATA,
+        help="Path to labeled_examples.jsonl (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ROOT / "data" / "gemini_training_with_embeddings",
+        help="Directory to write extracted features (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--test-size",
+        type=float,
+        default=0.2,
+        help="Fraction of data in test split (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for train/test split (default: %(default)s).",
+    )
+    return parser.parse_args(argv)
+
+
+def load_labeled_examples(labeled_data: Path, logger: logging.Logger) -> list[dict]:
     """Load Gemini-labeled examples."""
-    if not LABELED_DATA.exists():
-        logger.error("Labeled data not found: %s", LABELED_DATA)
+    if not labeled_data.exists():
+        logger.error("Labeled data not found: %s", labeled_data)
         sys.exit(1)
 
     examples = []
-    for line in LABELED_DATA.open():
-        line = line.strip()
-        if line:
-            examples.append(json.loads(line))
+    try:
+        with labeled_data.open() as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    examples.append(json.loads(line))
+    except OSError as exc:
+        logger.error("Failed to read labeled data %s: %s", labeled_data, exc)
+        raise SystemExit(1) from exc
 
     logger.info(f"Loaded {len(examples)} labeled examples")
     return examples
 
 
-def extract_features_with_embeddings(examples: list[dict]) -> tuple[np.ndarray, list[str], list[str]]:
+def extract_features_with_embeddings(examples: list[dict], logger: logging.Logger) -> tuple[np.ndarray, list[str], list[str]]:
     """Extract BERT embeddings + hand-crafted features."""
+    import numpy as np
+    from tqdm import tqdm
+
     from jarvis.classifiers.mixins import EmbedderMixin
     from jarvis.features.category_features import CategoryFeatureExtractor
 
@@ -59,7 +105,7 @@ def extract_features_with_embeddings(examples: list[dict]) -> tuple[np.ndarray, 
 
     logger.info(f"Extracting BERT embeddings + features for {len(examples)} examples...")
 
-    for i, ex in enumerate(examples):
+    for i, ex in enumerate(tqdm(examples, desc="Extracting features", unit="ex")):
         try:
             # Get BERT embedding (384 dims)
             embedding = embedder_mixin.embedder.encode(ex["text"])
@@ -96,8 +142,11 @@ def create_splits(
     ids: list[str],
     test_size: float = 0.2,
     seed: int = 42,
+    logger: logging.Logger | None = None,
 ) -> tuple:
     """Create stratified train/test splits."""
+    from sklearn.model_selection import train_test_split
+
     X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
         X,
         y,
@@ -107,19 +156,20 @@ def create_splits(
         random_state=seed,
     )
 
-    logger.info(f"Train: {X_train.shape}, Test: {X_test.shape}")
+    if logger:
+        logger.info(f"Train: {X_train.shape}, Test: {X_test.shape}")
 
-    from collections import Counter
+        from collections import Counter
 
-    logger.info("Train distribution:")
-    train_dist = Counter(y_train)
-    for cat, count in sorted(train_dist.items()):
-        logger.info(f"  {cat:15s}: {count:4d}")
+        logger.info("Train distribution:")
+        train_dist = Counter(y_train)
+        for cat, count in sorted(train_dist.items()):
+            logger.info(f"  {cat:15s}: {count:4d}")
 
-    logger.info("Test distribution:")
-    test_dist = Counter(y_test)
-    for cat, count in sorted(test_dist.items()):
-        logger.info(f"  {cat:15s}: {count:4d}")
+        logger.info("Test distribution:")
+        test_dist = Counter(y_test)
+        for cat, count in sorted(test_dist.items()):
+            logger.info(f"  {cat:15s}: {count:4d}")
 
     return X_train, X_test, y_train, y_test, ids_train, ids_test
 
@@ -130,12 +180,23 @@ def save_training_data(
     X_test: np.ndarray,
     y_train: np.ndarray,
     y_test: np.ndarray,
+    logger: logging.Logger,
 ) -> None:
     """Save training data."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    import numpy as np
 
-    np.savez(output_dir / "train.npz", X=X_train, y=y_train)
-    np.savez(output_dir / "test.npz", X=X_test, y=y_test)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.error("Failed to create output directory %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
+
+    try:
+        np.savez(output_dir / "train.npz", X=X_train, y=y_train)
+        np.savez(output_dir / "test.npz", X=X_test, y=y_test)
+    except OSError as exc:
+        logger.error("Failed to write NPZ training data in %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
 
     labels = sorted(set(y_train) | set(y_test))
     metadata = {
@@ -149,22 +210,34 @@ def save_training_data(
         "test_size": len(X_test),
     }
 
-    (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    try:
+        (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    except OSError as exc:
+        logger.error("Failed to write metadata in %s: %s", output_dir, exc)
+        raise SystemExit(1) from exc
 
     logger.info(f"✓ Training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
     logger.info(f"  - test.npz: {X_test.shape}")
 
 
-def main() -> None:
-    examples = load_labeled_examples()
-    X, y, ids = extract_features_with_embeddings(examples)
-    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(X, y, ids)
+def main(argv: Sequence[str] | None = None) -> None:
+    logger = setup_logging()
+    args = parse_args(argv)
+    examples = load_labeled_examples(args.labeled_data, logger)
+    X, y, ids = extract_features_with_embeddings(examples, logger)
+    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(
+        X,
+        y,
+        ids,
+        test_size=args.test_size,
+        seed=args.seed,
+        logger=logger,
+    )
 
-    output_dir = ROOT / "data" / "gemini_training_with_embeddings"
-    save_training_data(output_dir, X_train, X_test, y_train, y_test)
+    save_training_data(args.output_dir, X_train, X_test, y_train, y_test, logger)
 
-    logger.info(f"\nNext: Update merge script to use {output_dir}")
+    logger.info(f"\nNext: Update merge script to use {args.output_dir}")
 
 
 if __name__ == "__main__":

@@ -20,18 +20,27 @@ from pathlib import Path
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger(__name__)
-
 ROOT = Path(__file__).resolve().parent.parent
 LABELED_DATA = ROOT / "data" / "gemini_training" / "labeled_examples.jsonl"
 
 
-def load_labeled_examples() -> list[dict]:
+def setup_logging() -> logging.Logger:
+    """Setup logging with file and stream handlers."""
+    log_file = Path("prepare_gemini_training_data.log")
+    handlers: list[logging.Handler] = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, mode="a"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
+
+
+def load_labeled_examples(logger: logging.Logger) -> list[dict]:
     """Load Gemini-labeled examples."""
     if not LABELED_DATA.exists():
         logger.error("Labeled data not found: %s", LABELED_DATA)
@@ -48,8 +57,9 @@ def load_labeled_examples() -> list[dict]:
     return examples
 
 
-def extract_features(examples: list[dict]) -> tuple[np.ndarray, list[str], list[str]]:
+def extract_features(examples: list[dict], logger: logging.Logger) -> tuple[np.ndarray, list[str], list[str]]:
     """Extract BERT + hand-crafted features for all examples."""
+    from tqdm import tqdm
     from jarvis.features.category_features import CategoryFeatureExtractor
 
     logger.info("Initializing feature extractor...")
@@ -61,7 +71,7 @@ def extract_features(examples: list[dict]) -> tuple[np.ndarray, list[str], list[
 
     logger.info(f"Extracting features for {len(examples)} examples...")
 
-    for i, ex in enumerate(examples):
+    for i, ex in enumerate(tqdm(examples, desc="Extracting features", unit="ex")):
         try:
             # Extract features
             feature_vec = extractor.extract_all(text=ex["text"], context=[])
@@ -92,6 +102,7 @@ def create_splits(
     ids: list[str],
     test_size: float = 0.2,
     seed: int = 42,
+    logger: logging.Logger | None = None,
 ) -> tuple:
     """Create stratified train/test splits."""
     X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
@@ -103,21 +114,22 @@ def create_splits(
         random_state=seed,
     )
 
-    logger.info(f"Train: {X_train.shape}, Test: {X_test.shape}")
-    logger.info(f"Train labels: {sorted(set(y_train))}")
-    logger.info(f"Test labels: {sorted(set(y_test))}")
+    if logger:
+        logger.info(f"Train: {X_train.shape}, Test: {X_test.shape}")
+        logger.info(f"Train labels: {sorted(set(y_train))}")
+        logger.info(f"Test labels: {sorted(set(y_test))}")
 
-    # Distribution
-    logger.info("Train distribution:")
-    from collections import Counter
-    train_dist = Counter(y_train)
-    for cat, count in sorted(train_dist.items()):
-        logger.info(f"  {cat:15s}: {count:4d}")
+        # Distribution
+        logger.info("Train distribution:")
+        from collections import Counter
+        train_dist = Counter(y_train)
+        for cat, count in sorted(train_dist.items()):
+            logger.info(f"  {cat:15s}: {count:4d}")
 
-    logger.info("Test distribution:")
-    test_dist = Counter(y_test)
-    for cat, count in sorted(test_dist.items()):
-        logger.info(f"  {cat:15s}: {count:4d}")
+        logger.info("Test distribution:")
+        test_dist = Counter(y_test)
+        for cat, count in sorted(test_dist.items()):
+            logger.info(f"  {cat:15s}: {count:4d}")
 
     return X_train, X_test, y_train, y_test, ids_train, ids_test
 
@@ -130,6 +142,7 @@ def save_training_data(
     y_test: np.ndarray,
     ids_train: list[str],
     ids_test: list[str],
+    logger: logging.Logger,
 ) -> None:
     """Save training data in expected format."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +176,7 @@ def save_training_data(
 
 
 def main() -> None:
+    logger = setup_logging()
     parser = argparse.ArgumentParser(description="Prepare Gemini training data")
     parser.add_argument(
         "--output-dir",
@@ -173,16 +187,16 @@ def main() -> None:
     args = parser.parse_args()
 
     # Load examples
-    examples = load_labeled_examples()
+    examples = load_labeled_examples(logger)
 
     # Extract features
-    X, y, ids = extract_features(examples)
+    X, y, ids = extract_features(examples, logger)
 
     # Create splits
-    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(X, y, ids)
+    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(X, y, ids, logger=logger)
 
     # Save
-    save_training_data(args.output_dir, X_train, X_test, y_train, y_test, ids_train, ids_test)
+    save_training_data(args.output_dir, X_train, X_test, y_train, y_test, ids_train, ids_test, logger)
 
     logger.info(f"\n✓ Training data prepared in {args.output_dir}")
     logger.info("Next: uv run python scripts/train_category_svm.py --data-dir data/gemini_features")

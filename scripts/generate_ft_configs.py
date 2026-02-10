@@ -6,9 +6,23 @@ Output: ft_configs/personal_*.yaml
 
 from __future__ import annotations
 
+import argparse
+import logging
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-import yaml
+
+def _setup_logging() -> None:
+    """Configure logging with FileHandler + StreamHandler."""
+    log_file = Path("generate_ft_configs.log")
+    file_handler = logging.FileHandler(log_file, mode="a")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[file_handler, stream_handler],
+    )
 
 # Model matrix
 MODELS = [
@@ -62,11 +76,29 @@ COMMON = {
 }
 
 
-def generate_configs() -> None:
-    out_dir = Path("ft_configs")
-    out_dir.mkdir(exist_ok=True)
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("ft_configs"),
+        help="Directory to write generated YAML configs (default: %(default)s).",
+    )
+    return parser.parse_args(argv)
+
+
+def generate_configs(out_dir: Path = Path("ft_configs")) -> None:
+    import yaml
+
+    try:
+        out_dir.mkdir(exist_ok=True)
+    except OSError as exc:
+        print(f"Error creating output directory '{out_dir}': {exc}", file=sys.stderr, flush=True)
+        raise SystemExit(1) from exc
 
     count = 0
+    total = len(MODELS) * len(ADAPTERS) * len(DATA_VARIANTS)
     for model in MODELS:
         for adapter in ADAPTERS:
             for data in DATA_VARIANTS:
@@ -87,17 +119,25 @@ def generate_configs() -> None:
                     config["fine_tune_type"] = "dora"
 
                 path = out_dir / f"{name}.yaml"
-                with open(path, "w") as f:
-                    # Add header comment
-                    f.write(f"# Personal fine-tune: {model['id']} {adapter.upper()} {data['id']}\n")
-                    f.write(f"# Run: uv run mlx_lm.lora --config {path}\n\n")
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                try:
+                    with path.open("w") as f:
+                        # Add header comment
+                        f.write(f"# Personal fine-tune: {model['id']} {adapter.upper()} {data['id']}\n")
+                        f.write(f"# Run: uv run mlx_lm.lora --config {path}\n\n")
+                        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                except OSError as exc:
+                    print(f"Error writing config '{path}': {exc}", file=sys.stderr, flush=True)
+                    raise SystemExit(1) from exc
 
                 count += 1
-                print(f"  Generated {path}", flush=True)
+                print(f"  [{count}/{total}] Generated {path}", flush=True)
 
     print(f"\nGenerated {count} config files in {out_dir}/", flush=True)
 
 
 if __name__ == "__main__":
-    generate_configs()
+    _setup_logging()
+    logging.info("Starting generate_ft_configs.py")
+    args = parse_args()
+    generate_configs(args.output_dir)
+    logging.info("Finished generate_ft_configs.py")

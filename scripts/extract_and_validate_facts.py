@@ -11,19 +11,77 @@ import json
 import logging
 import random
 import sqlite3
+import sys
 import time
+import argparse
+from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from jarvis.contacts.fact_extractor import FactExtractor
-from jarvis.contacts.contact_profile import Fact
-from jarvis.contacts.fact_storage import save_facts
-from jarvis.db import get_db
+if TYPE_CHECKING:
+    from jarvis.contacts.contact_profile import Fact
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=500,
+        help="Number of recent messages to load from iMessage DB (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=50,
+        help="Number of extracted facts to sample for review (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--report-path",
+        default="fact_extraction_review.md",
+        help="Output path for markdown review report (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--sample-json-path",
+        default="fact_extraction_sample.json",
+        help="Output path for sampled facts JSON (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=100,
+        help="Fallback progress print interval when tqdm is unavailable (default: %(default)s).",
+    )
+    return parser.parse_args(argv)
+
+
+def iter_with_progress(
+    items: list,
+    label: str,
+    progress_every: int = 100,
+) -> Iterator:
+    """Yield items with visible progress for larger loops."""
+    total = len(items)
+    if total <= 10:
+        yield from items
+        return
+
+    try:
+        from tqdm import tqdm
+
+        yield from tqdm(items, desc=label, unit="item")
+        return
+    except ImportError:
+        pass
+
+    print(f"{label}: processing {total} items...", flush=True)
+    for idx, item in enumerate(items, 1):
+        if progress_every > 0 and (idx % progress_every == 0 or idx == total):
+            print(f"{label}: {idx}/{total}", flush=True)
+        yield item
 
 
 def get_recent_messages(limit: int = 5000) -> list[dict]:
@@ -53,7 +111,7 @@ def get_recent_messages(limit: int = 5000) -> list[dict]:
         conn.close()
 
         messages = []
-        for row in rows:
+        for row in iter_with_progress(rows, "Filtering messages"):
             text = row["text"]
             if text and len(text.strip()) > 5:  # Skip very short messages
                 messages.append(
@@ -72,8 +130,10 @@ def get_recent_messages(limit: int = 5000) -> list[dict]:
         return []
 
 
-def extract_facts_with_filters(messages: list[dict]) -> list[Fact]:
+def extract_facts_with_filters(messages: list[dict], progress_every: int = 100) -> list[Fact]:
     """Extract facts using new quality filter pipeline."""
+    from jarvis.contacts.fact_extractor import FactExtractor
+
     # Keep threshold at 0.5 - professional message + coherence filters remove obvious bad facts
     extractor = FactExtractor(confidence_threshold=0.5)
     logger.info("Extracting facts with quality filters...")
@@ -88,7 +148,8 @@ def extract_facts_with_filters(messages: list[dict]) -> list[Fact]:
         chats[chat_id].append(msg)
 
     all_facts = []
-    for chat_id, chat_messages in chats.items():
+    chat_items = list(chats.items())
+    for chat_id, chat_messages in iter_with_progress(chat_items, "Extracting per-chat facts", progress_every):
         facts = extractor.extract_facts(chat_messages, contact_id=chat_id)
         all_facts.extend(facts)
 
@@ -180,8 +241,12 @@ Notes:
 def save_report(facts: list[Fact], output_path: str = "fact_extraction_review.md") -> None:
     """Save fact review report to file."""
     report = generate_review_report(facts)
-    with open(output_path, "w") as f:
-        f.write(report)
+    try:
+        with open(output_path, "w") as f:
+            f.write(report)
+    except OSError as exc:
+        logger.error("Failed to write review report %s: %s", output_path, exc)
+        raise SystemExit(1) from exc
     logger.info(f"Review report saved to {output_path}")
 
 
@@ -213,16 +278,33 @@ def get_extraction_stats(facts: list[Fact]) -> dict:
     return stats
 
 
-def main() -> None:
+def _setup_logging() -> None:
+    """Configure logging with file and stream handlers."""
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    try:
+        handlers.append(logging.FileHandler("extract_and_validate_facts.log"))
+    except OSError as exc:
+        print(f"Warning: could not open log file for writing: {exc}", flush=True)
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     """Run fact extraction and generate review report."""
+    _setup_logging()
+    args = parse_args(argv)
     logger.info("Starting fact extraction validation...")
-    print("\n" + "=" * 70)
-    print("FACT EXTRACTION QUALITY VALIDATION")
-    print("=" * 70 + "\n")
+    print("\n" + "=" * 70, flush=True)
+    print("FACT EXTRACTION QUALITY VALIDATION", flush=True)
+    print("=" * 70 + "\n", flush=True)
 
     # Extract from recent messages
     logger.info("Loading messages from database...")
-    messages = get_recent_messages(limit=500)
+    messages = get_recent_messages(limit=args.limit)
 
     if not messages:
         logger.error("No messages found - database may be empty")
@@ -231,7 +313,7 @@ def main() -> None:
     logger.info(f"Loaded {len(messages)} messages")
 
     # Extract facts with quality filters
-    facts = extract_facts_with_filters(messages)
+    facts = extract_facts_with_filters(messages, progress_every=args.progress_every)
 
     if not facts:
         logger.error("No facts extracted - review extraction logic")
@@ -246,14 +328,14 @@ def main() -> None:
     logger.info(f"  Average confidence: {stats['confidence_stats']['avg']:.2f}")
 
     # Sample for manual review
-    sample = sample_facts(facts, sample_size=50)
+    sample = sample_facts(facts, sample_size=args.sample_size)
     logger.info(f"Sampled {len(sample)} facts for manual review")
 
     # Generate review report
-    save_report(sample, output_path="fact_extraction_review.md")
+    save_report(sample, output_path=args.report_path)
 
     # Print review report
-    print(generate_review_report(sample))
+    print(generate_review_report(sample), flush=True)
 
     # Save facts to JSON for reference
     facts_json = [
@@ -266,10 +348,14 @@ def main() -> None:
         }
         for f in sample
     ]
-    with open("fact_extraction_sample.json", "w") as f:
-        json.dump(facts_json, f, indent=2)
+    try:
+        with open(args.sample_json_path, "w") as f:
+            json.dump(facts_json, f, indent=2)
+    except OSError as exc:
+        logger.error("Failed to write sample JSON %s: %s", args.sample_json_path, exc)
+        raise SystemExit(1) from exc
 
-    logger.info("Extraction complete. Review 'fact_extraction_review.md' for evaluation.")
+    logger.info("Extraction complete. Review '%s' for evaluation.", args.report_path)
 
 
 if __name__ == "__main__":

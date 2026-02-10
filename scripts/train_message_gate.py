@@ -31,8 +31,23 @@ from typing import Any
 
 import numpy as np
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and stream handlers."""
+    log_file = Path(__file__).resolve().parent.parent / "logs" / "train_message_gate.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(log_file, mode="w"),
+            logging.StreamHandler(),
+        ],
+    )
+    logger.info("Logging to %s", log_file)
 
 
 @dataclass
@@ -127,7 +142,10 @@ class MessageGateFeatures:
     def transform(self, texts: list[str], is_from_me: list[bool], buckets: list[str]) -> np.ndarray:
         """Convert rows to numeric feature matrix."""
         out: list[list[float]] = []
-        for text, from_me, bucket in zip(texts, is_from_me, buckets):
+        total = len(texts)
+        for i, (text, from_me, bucket) in enumerate(zip(texts, is_from_me, buckets)):
+            if (i + 1) % 1000 == 0 or i + 1 == total:
+                print(f"Extracting numeric features {i + 1}/{total}...", flush=True)
             t = (text or "").strip()
             lower = t.lower()
             words = lower.split()
@@ -413,6 +431,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    _setup_logging()
 
     logger.info("Loading train data from %s", args.train)
     train = load_dataset(args.train)

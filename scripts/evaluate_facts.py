@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -163,7 +165,7 @@ class FactEvaluator:
         sources = sources or {}
         all_issues = []
 
-        for fact in facts:
+        for fact in tqdm(facts, desc="Evaluating facts", total=len(facts)):
             fact_id = f"{fact.get('category', '?')}/{fact.get('subject', '?')}"
             source_text = sources.get(fact_id, fact.get("source_text", ""))
             issues = self.evaluate_fact(fact, source_text)
@@ -338,7 +340,26 @@ def generate_report(
     return "\n".join(report)
 
 
+LOG_PATH = Path("evaluate_facts.log")
+logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
+
+
 def main():
+    _setup_logging()
+    logger.info("Starting evaluate_facts.py")
+
     parser = argparse.ArgumentParser(description="Evaluate extracted facts quality")
     parser.add_argument(
         "--facts",
@@ -349,23 +370,25 @@ def main():
     args = parser.parse_args()
 
     if not args.facts.exists():
-        print(f"Error: {args.facts} not found")
+        print(f"Error: {args.facts} not found", flush=True)
         sys.exit(1)
 
     print(f"Loading facts from {args.facts}...", flush=True)
     facts, sources = parse_contact_facts_file(args.facts)
     print(f"Loaded {len(facts)} facts from {len(set(f['contact'] for f in facts))} contacts", flush=True)
-    print()
+    print(flush=True)
 
     evaluator = FactEvaluator()
     report = generate_report(facts, sources, evaluator)
-    print(report)
+    print(report, flush=True)
 
     # Save report
     report_path = args.facts.parent / "fact_evaluation_report.txt"
     with open(report_path, "w") as f:
         f.write(report)
-    print(f"\nReport saved to {report_path}")
+    print(f"\nReport saved to {report_path}", flush=True)
+    logger.info(f"Report saved to {report_path}")
+    logger.info("Finished evaluate_facts.py")
 
 
 if __name__ == "__main__":

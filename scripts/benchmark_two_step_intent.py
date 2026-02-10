@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -24,6 +26,21 @@ from jarvis.classifiers.response_mobilization import ResponsePressure
 ROOT = Path(__file__).resolve().parent.parent
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval_labeled.jsonl"
 OUT_PATH = ROOT / "evals" / "results" / "two_step_benchmark.json"
+LOG_PATH = ROOT / "benchmark_two_step_intent.log"
+
+logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 
 
 @dataclass
@@ -129,7 +146,8 @@ def _run_backend(rows: Iterable[dict], backend_spec: str, *, progress_every: int
                     y_pred_mob=y_pred_mob,
                     latencies=latencies,
                     fallbacks=fallbacks,
-                )
+                ),
+                flush=True,
             )
 
     if not y_true_reply:
@@ -154,6 +172,8 @@ def _run_backend(rows: Iterable[dict], backend_spec: str, *, progress_every: int
 
 
 def main() -> None:
+    _setup_logging()
+    logger.info("Starting benchmark_two_step_intent.py")
     parser = argparse.ArgumentParser(description="Benchmark two-step intent cascade")
     parser.add_argument(
         "--backends",
@@ -176,14 +196,15 @@ def main() -> None:
 
     limit = args.limit if args.limit > 0 else None
     results = []
-    for backend in args.backends:
+    for bi, backend in enumerate(args.backends):
+        logger.info("Backend %d/%d: %s", bi + 1, len(args.backends), backend)
         try:
             rows = _iter_gemini_rows(limit=limit)
             metrics = _run_backend(rows, backend, progress_every=max(args.progress_every, 0))
             results.append(asdict(metrics))
-            print(f"{backend}: {metrics}")
+            print(f"{backend}: {metrics}", flush=True)
         except Exception as exc:
-            print(f"{backend}: skipped ({exc})")
+            print(f"{backend}: skipped ({exc})", flush=True)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with OUT_PATH.open("w") as f:
@@ -192,7 +213,8 @@ def main() -> None:
             f,
             indent=2,
         )
-    print(f"saved: {OUT_PATH}")
+    print(f"saved: {OUT_PATH}", flush=True)
+    logger.info("Finished benchmark_two_step_intent.py")
 
 
 if __name__ == "__main__":

@@ -19,11 +19,50 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-log = logging.getLogger(__name__)
-
 GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold.json")
 METRICS_PATH = Path("training_data/gliner_goldset/gliner_metrics.json")
+LOG_PATH = Path("eval_gliner_candidates.log")
+
+log = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging with both file and console handlers."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH, mode="a"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
+
+
+def parse_context_messages(raw: object) -> list[str]:
+    """Parse context payloads from gold JSON (string blob or list) into message texts."""
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if not isinstance(raw, str):
+        return []
+
+    payload = raw.strip()
+    if not payload:
+        return []
+
+    # CSV context format: "id|speaker|text || id|speaker|text".
+    chunks = [c.strip() for c in payload.split("||") if c.strip()]
+    messages: list[str] = []
+    for chunk in chunks:
+        parts = chunk.split("|", 2)
+        if len(parts) == 3:
+            text = parts[2].strip()
+        else:
+            text = chunk
+        if text:
+            messages.append(text)
+    return messages
 
 
 def _safe_major(version: str) -> int:
@@ -34,8 +73,8 @@ def _safe_major(version: str) -> int:
         return -1
 
 
-def log_runtime_stack_warnings() -> None:
-    """Warn when runtime deps are known to degrade GLiNER extraction quality."""
+def enforce_runtime_stack(allow_unstable_stack: bool) -> None:
+    """Fail fast on unsupported runtime unless explicitly overridden."""
     try:
         import huggingface_hub
         import transformers
@@ -45,14 +84,24 @@ def log_runtime_stack_warnings() -> None:
     tver = getattr(transformers, "__version__", "unknown")
     hver = getattr(huggingface_hub, "__version__", "unknown")
     if _safe_major(str(tver)) >= 5:
-        log.warning(
+        msg = (
             "Detected transformers=%s, huggingface_hub=%s. "
-            "GLiNER quality may degrade on this stack. "
-            "For stable GLiNER evaluation use "
-            "scripts/run_gliner_eval_compat.sh.",
+            "GLiNER quality may degrade on this stack."
+        )
+        if allow_unstable_stack:
+            log.warning(
+                msg + " Continuing because --allow-unstable-stack was set.",
+                tver,
+                hver,
+            )
+            return
+        log.error(
+            msg + " Re-run via scripts/run_gliner_eval_compat.sh (recommended), "
+            "or pass --allow-unstable-stack to proceed anyway.",
             tver,
             hver,
         )
+        raise SystemExit(2)
 
 
 # ---------------------------------------------------------------------------
@@ -346,84 +395,86 @@ def print_report(
 ) -> None:
     """Print a human-readable evaluation report."""
     ov = metrics["overall"]
-    print("\n" + "=" * 60)
-    print("GLiNER Candidate Extraction Evaluation")
-    print("=" * 60)
-    print(f"Mode: {mode}")
+    print("\n" + "=" * 60, flush=True)
+    print("GLiNER Candidate Extraction Evaluation", flush=True)
+    print("=" * 60, flush=True)
+    print(f"Mode: {mode}", flush=True)
 
-    print("\nRaw GLiNER output (pre-filter):")
+    print("\nRaw GLiNER output (pre-filter):", flush=True)
     print(
         "  predictions: "
         f"{raw_stats['raw_total_predictions']} across "
-        f"{raw_stats['raw_messages_with_predictions']}/{raw_stats['raw_messages_total']} messages"
+        f"{raw_stats['raw_messages_with_predictions']}/{raw_stats['raw_messages_total']} messages",
+        flush=True,
     )
-    print(f"  avg preds/msg: {raw_stats['raw_predictions_per_message']:.3f}")
+    print(f"  avg preds/msg: {raw_stats['raw_predictions_per_message']:.3f}", flush=True)
     ss = raw_stats["raw_score_summary"]
     print(
         "  score quantiles: "
         f"min={ss['min']:.3f} p25={ss['p25']:.3f} p50={ss['p50']:.3f} "
-        f"p75={ss['p75']:.3f} p90={ss['p90']:.3f} p95={ss['p95']:.3f} max={ss['max']:.3f}"
+        f"p75={ss['p75']:.3f} p90={ss['p90']:.3f} p95={ss['p95']:.3f} max={ss['max']:.3f}",
+        flush=True,
     )
     if raw_stats["raw_top_labels"]:
-        print("  top labels:")
+        print("  top labels:", flush=True)
         for row in raw_stats["raw_top_labels"][:8]:
-            print(f"    - {row['label']}: {row['count']}")
+            print(f"    - {row['label']}: {row['count']}", flush=True)
 
     print(f"\nOverall:  P={ov['precision']:.3f}  R={ov['recall']:.3f}  "
-          f"F1={ov['f1']:.3f}  (TP={ov['tp']} FP={ov['fp']} FN={ov['fn']})")
+          f"F1={ov['f1']:.3f}  (TP={ov['tp']} FP={ov['fp']} FN={ov['fn']})", flush=True)
 
     # Per-label table
-    print(f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}")
-    print("-" * 45)
+    print(f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}", flush=True)
+    print("-" * 45, flush=True)
     for label, m in sorted(metrics["per_label"].items(), key=lambda x: -x[1]["support"]):
         print(f"{label:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
-              f"{m['f1']:>6.3f} {m['support']:>5}")
+              f"{m['f1']:>6.3f} {m['support']:>5}", flush=True)
 
     # Per-type table
-    print(f"\n{'Fact Type':<25} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}")
-    print("-" * 50)
+    print(f"\n{'Fact Type':<25} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}", flush=True)
+    print("-" * 50, flush=True)
     for ftype, m in sorted(metrics["per_type"].items(), key=lambda x: -x[1]["support"]):
         print(f"{ftype:<25} {m['precision']:>6.3f} {m['recall']:>6.3f} "
-              f"{m['f1']:>6.3f} {m['support']:>5}")
+              f"{m['f1']:>6.3f} {m['support']:>5}", flush=True)
 
     # Per-slice table
-    print(f"\n{'Slice':<20} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}")
-    print("-" * 45)
+    print(f"\n{'Slice':<20} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}", flush=True)
+    print("-" * 45, flush=True)
     for slc, m in sorted(metrics["per_slice"].items()):
         print(f"{slc:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
-              f"{m['f1']:>6.3f} {m['support']:>5}")
+              f"{m['f1']:>6.3f} {m['support']:>5}", flush=True)
 
     # Threshold sweep
-    print(f"\n{'Thresh':>7} {'P':>6} {'R':>6} {'F1':>6} {'TP':>5} {'FP':>5} {'FN':>5}")
-    print("-" * 45)
+    print(f"\n{'Thresh':>7} {'P':>6} {'R':>6} {'F1':>6} {'TP':>5} {'FP':>5} {'FN':>5}", flush=True)
+    print("-" * 45, flush=True)
     for row in sweep:
         print(f"{row['threshold']:>7.2f} {row['precision']:>6.3f} {row['recall']:>6.3f} "
-              f"{row['f1']:>6.3f} {row['tp']:>5} {row['fp']:>5} {row['fn']:>5}")
+              f"{row['f1']:>6.3f} {row['tp']:>5} {row['fp']:>5} {row['fn']:>5}", flush=True)
 
     # Error slices
-    print("\nError Slices:")
-    print(f"  Short message (<20 char) errors: {error_slices['short_message_errors']}")
-    print(f"  FP on negative messages: {error_slices['fp_on_negatives']}")
-    print(f"  Total errors: {error_slices['total_errors']}")
-    print(f"  Message length distribution: {error_slices['message_length_distribution']}")
+    print("\nError Slices:", flush=True)
+    print(f"  Short message (<20 char) errors: {error_slices['short_message_errors']}", flush=True)
+    print(f"  FP on negative messages: {error_slices['fp_on_negatives']}", flush=True)
+    print(f"  Total errors: {error_slices['total_errors']}", flush=True)
+    print(f"  Message length distribution: {error_slices['message_length_distribution']}", flush=True)
 
     # Top FP examples
     fps = [e for e in metrics["errors"] if e["type"] == "fp"][:10]
     if fps:
-        print("\nTop False Positives (first 10):")
+        print("\nTop False Positives (first 10):", flush=True)
         for e in fps:
             print(f"  [{e['slice']}] \"{e['message_text'][:60]}...\" "
-                  f"-> {e.get('pred_span', '')} ({e.get('pred_label', '')})")
+                  f"-> {e.get('pred_span', '')} ({e.get('pred_label', '')})", flush=True)
 
     # Top FN examples
     fns = [e for e in metrics["errors"] if e["type"] == "fn"][:10]
     if fns:
-        print("\nTop False Negatives (first 10):")
+        print("\nTop False Negatives (first 10):", flush=True)
         for e in fns:
             print(f"  [{e['slice']}] \"{e['message_text'][:60]}...\" "
-                  f"-> missed {e.get('gold_span', '')} ({e.get('gold_label', '')})")
+                  f"-> missed {e.get('gold_span', '')} ({e.get('gold_label', '')})", flush=True)
 
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 60, flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -437,15 +488,25 @@ def run_evaluation(
     mode: str = "pipeline",
     raw_threshold: float = 0.01,
     disable_label_min: bool = False,
+    context_window: int = 0,
+    label_profile: str = "balanced",
+    drop_labels: list[str] | None = None,
+    allow_unstable_stack: bool = False,
 ) -> dict:
     """Run the full evaluation pipeline."""
-    log_runtime_stack_warnings()
+    enforce_runtime_stack(allow_unstable_stack)
 
     # Load gold set
     log.info(f"Loading gold set from {gold_path}")
     with open(gold_path) as f:
         gold_records = json.load(f)
     log.info(f"Loaded {len(gold_records)} gold records")
+    if context_window > 0:
+        log.warning(
+            "context_window=%s can reduce extraction quality due to GLiNER truncation; "
+            "defaulting to 0 is recommended.",
+            context_window,
+        )
 
     # Sanity checks
     pos = [r for r in gold_records if r["slice"] == "positive"]
@@ -461,8 +522,20 @@ def run_evaluation(
 
     # Initialize CandidateExtractor
     log.info("Initializing CandidateExtractor...")
-    from jarvis.contacts.candidate_extractor import CandidateExtractor
-    extractor = CandidateExtractor()
+    from jarvis.contacts.candidate_extractor import CandidateExtractor, labels_for_profile
+
+    active_labels = labels_for_profile(label_profile)
+    if drop_labels:
+        drop_set = set(drop_labels)
+        active_labels = [lbl for lbl in active_labels if lbl not in drop_set]
+    if not active_labels:
+        log.error("No active labels left after applying label profile/drop-label filters.")
+        raise SystemExit(2)
+
+    log.info("  Label profile: %s", label_profile)
+    log.info("  Active labels: %s", ", ".join(active_labels))
+
+    extractor = CandidateExtractor(labels=active_labels, label_profile=label_profile)
     extractor._load_model()
 
     # Run GLiNER on all messages
@@ -477,9 +550,21 @@ def run_evaluation(
             print(f"  Processing {i + 1}/{len(gold_records)} "
                   f"({elapsed:.1f}s elapsed)", flush=True)
 
+        prev_messages: list[str] | None = None
+        next_messages: list[str] | None = None
+        if context_window > 0:
+            prev_all = parse_context_messages(rec.get("context_prev"))
+            next_all = parse_context_messages(rec.get("context_next"))
+            prev_slice = prev_all[-context_window:] if prev_all else []
+            next_slice = next_all[:context_window] if next_all else []
+            prev_messages = prev_slice or None
+            next_messages = next_slice or None
+
         raw_entities = extractor.predict_raw_entities(
             text=rec["message_text"],
             threshold=raw_threshold,
+            prev_messages=prev_messages,
+            next_messages=next_messages,
         )
         raw_preds = [
             {
@@ -505,6 +590,8 @@ def run_evaluation(
                 is_from_me=rec.get("is_from_me"),
                 threshold=override_threshold,
                 apply_label_thresholds=not disable_label_min,
+                prev_messages=prev_messages,
+                next_messages=next_messages,
             )
             predictions[rec["sample_id"]] = [
                 {
@@ -546,6 +633,10 @@ def run_evaluation(
         "mode": mode,
         "raw_threshold": raw_threshold,
         "disable_label_min": disable_label_min,
+        "context_window": context_window,
+        "label_profile": label_profile,
+        "drop_labels": drop_labels or [],
+        "active_labels": active_labels,
         "num_raw_predictions": raw_total_preds,
         "extraction_time_s": round(elapsed, 2),
         "ms_per_message": round(elapsed / len(gold_records) * 1000, 1),
@@ -568,8 +659,22 @@ def run_evaluation(
 
 
 def main():
+    _setup_logging()
+    log.info("Starting eval_gliner_candidates.py")
     parser = argparse.ArgumentParser(description="Evaluate GLiNER candidate extraction")
     parser.add_argument("--gold", type=Path, default=GOLD_PATH, help="Path to gold set JSON")
+    parser.add_argument(
+        "--label-profile",
+        choices=["high_recall", "balanced", "high_precision"],
+        default="balanced",
+        help="CandidateExtractor label profile",
+    )
+    parser.add_argument(
+        "--drop-label",
+        action="append",
+        default=[],
+        help="Drop a label after profile resolution (repeatable)",
+    )
     parser.add_argument(
         "--mode",
         choices=["pipeline", "raw"],
@@ -596,6 +701,17 @@ def main():
         action="store_true",
         help="Disable per-label minimum score filters in pipeline mode",
     )
+    parser.add_argument(
+        "--context-window",
+        type=int,
+        default=0,
+        help="Use up to N previous and N next messages from gold context fields",
+    )
+    parser.add_argument(
+        "--allow-unstable-stack",
+        action="store_true",
+        help="Allow running outside GLiNER compat runtime (not recommended)",
+    )
     args = parser.parse_args()
 
     if not args.gold.exists():
@@ -608,7 +724,12 @@ def main():
         mode=args.mode,
         raw_threshold=args.raw_threshold,
         disable_label_min=args.no_label_min,
+        context_window=args.context_window,
+        label_profile=args.label_profile,
+        drop_labels=args.drop_label,
+        allow_unstable_stack=args.allow_unstable_stack,
     )
+    log.info("Finished eval_gliner_candidates.py")
 
 
 if __name__ == "__main__":
