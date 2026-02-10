@@ -146,7 +146,9 @@ class FactExtractor:
         facts: list[Fact] = []
 
         for msg in messages:
-            text = msg.get("text", "") if isinstance(msg, dict) else (getattr(msg, "text", None) or "")
+            text = (
+                msg.get("text", "") if isinstance(msg, dict) else (getattr(msg, "text", None) or "")
+            )
             msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
             if not text or len(text) < 5:
                 continue
@@ -242,8 +244,18 @@ class FactExtractor:
 
         # Single pronouns or vague words
         vague_words = {
-            "it", "that", "this", "them", "there", "those",
-            "these", "what", "when", "where", "why", "how"
+            "it",
+            "that",
+            "this",
+            "them",
+            "there",
+            "those",
+            "these",
+            "what",
+            "when",
+            "where",
+            "why",
+            "how",
         }
         if subject_lower in vague_words:
             return False
@@ -258,13 +270,20 @@ class FactExtractor:
             return False
 
         # Bare time/location prepositions (nothing before the preposition)
-        if re.match(r"^(in|at|on)\s+(august|spring|summer|winter|night|day|morning|afternoon)$", subject_lower):
+        if re.match(
+            r"^(in|at|on)\s+(august|spring|summer|winter|night|day|morning|afternoon)$",
+            subject_lower,
+        ):
             return False
 
         # Too many abbreviations (>50% of words are 1-2 chars)
         words = subject.split()
         if len(words) > 1:
-            short_words = sum(1 for w in words if len(w) <= 2 and w.lower() not in {"i", "a", "to", "of", "in", "at", "on"})
+            short_words = sum(
+                1
+                for w in words
+                if len(w) <= 2 and w.lower() not in {"i", "a", "to", "of", "in", "at", "on"}
+            )
             if len(words) >= 2 and short_words / len(words) > 0.5:
                 return False
 
@@ -417,8 +436,20 @@ class FactExtractor:
         return filtered
 
     def _verify_facts_nli(self, facts: list[Fact]) -> list[Fact]:
-        """Filter facts by NLI entailment verification (batched)."""
+        """Filter facts by NLI entailment verification (batched).
+
+        Skips verification if the NLI model is not already loaded to avoid
+        cold-loading a heavy model mid-extraction (adds 2-7s of latency).
+        """
         try:
+            from models.nli_cross_encoder import _nli_encoder
+
+            # Skip NLI if model not already warm - cold load is too expensive
+            # for inline extraction
+            if _nli_encoder is None or not _nli_encoder.is_loaded():
+                logger.debug("NLI model not warm, skipping verification")
+                return facts
+
             from jarvis.nlp.entailment import (
                 fact_to_hypothesis,
                 verify_entailment_batch,
@@ -442,7 +473,9 @@ class FactExtractor:
                 else:
                     logger.debug(
                         "NLI rejected fact: %s/%s (score=%.2f)",
-                        fact.category, fact.subject, score,
+                        fact.category,
+                        fact.subject,
+                        score,
                     )
             return verified
         except Exception as e:
@@ -601,7 +634,9 @@ class FactExtractor:
         # Preference patterns
         for match in PREFERENCE_PATTERN.finditer(text):
             # Skip if "like" is a filler word, not preference verb
-            if "like" in match.group(0).lower() and self._is_like_filler_word(text, match.start(), match.end()):
+            if "like" in match.group(0).lower() and self._is_like_filler_word(
+                text, match.start(), match.end()
+            ):
                 logger.debug(f"Skipping filler 'like': {match.group(0)[:60]}...")
                 continue
 
@@ -726,9 +761,7 @@ class FactExtractor:
     # NER Person Extraction
     # =========================================================================
 
-    def _extract_person_facts_ner(
-        self, text: str, contact_id: str, timestamp: str
-    ) -> list[Fact]:
+    def _extract_person_facts_ner(self, text: str, contact_id: str, timestamp: str) -> list[Fact]:
         """Extract PERSON entities from text using spaCy NER.
 
         Resolves person names to contacts and creates relationship facts.
