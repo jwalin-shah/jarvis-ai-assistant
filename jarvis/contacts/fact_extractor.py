@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from jarvis.contacts.contact_profile import Fact
 from jarvis.contacts.junk_filters import is_bot_message, is_professional_message
+from jarvis.contracts.pipeline import Fact as ContractFact
 
 if TYPE_CHECKING:
     pass
@@ -822,3 +823,23 @@ class FactExtractor:
         except Exception as e:
             logger.warning("Person resolution failed: %s", e)
             return None
+
+
+def fact_to_contract(fact: Fact) -> ContractFact:
+    """Convert an internal Fact to the pipeline ContractFact type.
+
+    Maps the richer internal Fact (with category, value, contact_id, etc.)
+    to the minimal contract Fact(subject, predicate, object, confidence, source_text).
+    """
+    return ContractFact(
+        subject=fact.subject,
+        predicate=fact.predicate,
+        object=fact.value or fact.category,
+        confidence=fact.confidence,
+        source_text=fact.source_text,
+    )
+
+
+def facts_to_contract(facts: list[Fact]) -> list[ContractFact]:
+    """Convert a list of internal Facts to pipeline ContractFact types."""
+    return [fact_to_contract(f) for f in facts]
