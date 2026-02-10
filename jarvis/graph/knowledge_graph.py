@@ -71,6 +71,10 @@ class KnowledgeGraph:
     def __init__(self) -> None:
         self._nx = None
         self.graph = None
+        # Inverted index: lowercased word -> set of (src, tgt, edge_key) tuples
+        self._search_index: dict[str, set[tuple[str, str, int]]] = {}
+        # Edge data cache for search results: (src, tgt, key) -> attrs dict
+        self._edge_cache: dict[tuple[str, str, int], dict[str, Any]] = {}
 
     def _ensure_nx(self) -> Any:
         """Lazy-import networkx."""
@@ -198,6 +202,9 @@ class KnowledgeGraph:
                 if edges:
                     self.graph.add_edges_from(edges)
 
+            # Build search index for fast fact lookups
+            self._build_search_index()
+
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             logger.info(
                 "Knowledge graph built: %d nodes, %d edges in %.1fms (batch operations)",
@@ -206,11 +213,32 @@ class KnowledgeGraph:
                 elapsed_ms,
             )
 
-            logger.info(
-                "Knowledge graph built: %d nodes, %d edges",
-                self.graph.number_of_nodes(),
-                self.graph.number_of_edges(),
-            )
+    def _build_search_index(self) -> None:
+        """Build inverted index over edge labels and target labels for fast search."""
+        self._search_index.clear()
+        self._edge_cache.clear()
+        if self.graph is None:
+            return
+
+        for src, tgt, key, attrs in self.graph.edges(data=True, keys=True):
+            edge_ref = (src, tgt, key)
+            self._edge_cache[edge_ref] = attrs
+
+            # Index edge label tokens
+            label = attrs.get("label", "").lower()
+            tgt_label = self.graph.nodes.get(tgt, {}).get("label", "").lower()
+
+            tokens: set[str] = set()
+            for text in (label, tgt_label):
+                for token in text.split():
+                    token = token.strip("().,;:")
+                    if len(token) >= 2:
+                        tokens.add(token)
+
+            for token in tokens:
+                if token not in self._search_index:
+                    self._search_index[token] = set()
+                self._search_index[token].add(edge_ref)
 
     def to_graph_data(self) -> KnowledgeGraphData:
         """Convert to serializable format for API."""
@@ -304,26 +332,71 @@ class KnowledgeGraph:
                 contacts.append(src)
         return contacts
 
-    def search_facts(self, query: str) -> list[dict[str, Any]]:
-        """Search facts across all contacts."""
+    def search_facts(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Search facts across all contacts using inverted index.
+
+        Uses token-based index for fast lookups. Falls back to full scan
+        for substring queries that don't match whole tokens.
+        """
         if self.graph is None:
             return []
 
-        query_lower = query.lower()
+        query_lower = query.lower().strip()
+        if not query_lower:
+            return []
+
+        # Try indexed lookup first: find edges matching any query token
+        query_tokens = [t.strip("().,;:") for t in query_lower.split() if len(t) >= 2]
+        candidate_refs: set[tuple[str, str, int]] | None = None
+
+        if query_tokens:
+            for token in query_tokens:
+                matching = self._search_index.get(token, set())
+                if candidate_refs is None:
+                    candidate_refs = set(matching)
+                else:
+                    # Intersect: all tokens must match
+                    candidate_refs &= matching
+
+        # Verify candidates with substring match (index is token-based, query may be substring)
         results = []
-        for src, tgt, attrs in self.graph.edges(data=True):
-            label = attrs.get("label", "").lower()
-            tgt_label = self.graph.nodes.get(tgt, {}).get("label", "").lower()
-            if query_lower in label or query_lower in tgt_label:
-                results.append(
-                    {
-                        "source": src,
-                        "source_label": self.graph.nodes[src].get("label", src),
-                        "target": tgt,
-                        "target_label": self.graph.nodes[tgt].get("label", tgt),
-                        "edge_type": attrs.get("edge_type", ""),
-                        "label": attrs.get("label", ""),
-                        "weight": attrs.get("weight", 1.0),
-                    }
-                )
-        return results[:50]
+        if candidate_refs:
+            for edge_ref in candidate_refs:
+                src, tgt, _ = edge_ref
+                attrs = self._edge_cache.get(edge_ref, {})
+                label = attrs.get("label", "").lower()
+                tgt_label = self.graph.nodes.get(tgt, {}).get("label", "").lower()
+                if query_lower in label or query_lower in tgt_label:
+                    results.append(
+                        {
+                            "source": src,
+                            "source_label": self.graph.nodes[src].get("label", src),
+                            "target": tgt,
+                            "target_label": self.graph.nodes[tgt].get("label", tgt),
+                            "edge_type": attrs.get("edge_type", ""),
+                            "label": attrs.get("label", ""),
+                            "weight": attrs.get("weight", 1.0),
+                        }
+                    )
+                    if len(results) >= limit:
+                        break
+        else:
+            # Fallback: full scan for queries with no token matches (e.g., single char)
+            for src, tgt, attrs in self.graph.edges(data=True):
+                label = attrs.get("label", "").lower()
+                tgt_label = self.graph.nodes.get(tgt, {}).get("label", "").lower()
+                if query_lower in label or query_lower in tgt_label:
+                    results.append(
+                        {
+                            "source": src,
+                            "source_label": self.graph.nodes[src].get("label", src),
+                            "target": tgt,
+                            "target_label": self.graph.nodes[tgt].get("label", tgt),
+                            "edge_type": attrs.get("edge_type", ""),
+                            "label": attrs.get("label", ""),
+                            "weight": attrs.get("weight", 1.0),
+                        }
+                    )
+                    if len(results) >= limit:
+                        break
+        return results
