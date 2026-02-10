@@ -1,0 +1,541 @@
+{
+  "gold_path": "training_data/gliner_goldset/candidate_gold.json",
+  "num_records": 250,
+  "num_predictions": 309,
+  "mode": "pipeline",
+  "raw_threshold": 0.01,
+  "disable_label_min": true,
+  "num_raw_predictions": 1741,
+  "extraction_time_s": 38.18,
+  "ms_per_message": 152.7,
+  "overall": {
+    "precision": 0.2524,
+    "recall": 0.4756,
+    "f1": 0.3298,
+    "tp": 78,
+    "fp": 231,
+    "fn": 86,
+    "support": 164
+  },
+  "per_label": {
+    "activity": {
+      "precision": 0.2162,
+      "recall": 0.1951,
+      "f1": 0.2051,
+      "tp": 8,
+      "fp": 29,
+      "fn": 33,
+      "support": 41
+    },
+    "allergy": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 3,
+      "fn": 0,
+      "support": 0
+    },
+    "current_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 11,
+      "fn": 4,
+      "support": 4
+    },
+    "date_ref": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 24,
+      "fn": 0,
+      "support": 0
+    },
+    "employer": {
+      "precision": 0.4286,
+      "recall": 0.75,
+      "f1": 0.5455,
+      "tp": 3,
+      "fp": 4,
+      "fn": 1,
+      "support": 4
+    },
+    "family_member": {
+      "precision": 0.6341,
+      "recall": 0.8966,
+      "f1": 0.7429,
+      "tp": 52,
+      "fp": 30,
+      "fn": 6,
+      "support": 58
+    },
+    "food_item": {
+      "precision": 0.2,
+      "recall": 0.5,
+      "f1": 0.2857,
+      "tp": 5,
+      "fp": 20,
+      "fn": 5,
+      "support": 10
+    },
+    "friend_name": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 2,
+      "fn": 3,
+      "support": 3
+    },
+    "future_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "support": 3
+    },
+    "health_condition": {
+      "precision": 0.5,
+      "recall": 0.125,
+      "f1": 0.2,
+      "tp": 2,
+      "fp": 2,
+      "fn": 14,
+      "support": 16
+    },
+    "job_role": {
+      "precision": 0.1111,
+      "recall": 0.25,
+      "f1": 0.1538,
+      "tp": 1,
+      "fp": 8,
+      "fn": 3,
+      "support": 4
+    },
+    "org": {
+      "precision": 0.1176,
+      "recall": 0.2,
+      "f1": 0.1481,
+      "tp": 2,
+      "fp": 15,
+      "fn": 8,
+      "support": 10
+    },
+    "past_location": {
+      "precision": 0.4286,
+      "recall": 0.5,
+      "f1": 0.4615,
+      "tp": 3,
+      "fp": 4,
+      "fn": 3,
+      "support": 6
+    },
+    "person_name": {
+      "precision": 0.0161,
+      "recall": 0.5,
+      "f1": 0.0312,
+      "tp": 1,
+      "fp": 61,
+      "fn": 1,
+      "support": 2
+    },
+    "place": {
+      "precision": 0.0526,
+      "recall": 0.3333,
+      "f1": 0.0909,
+      "tp": 1,
+      "fp": 18,
+      "fn": 2,
+      "support": 3
+    }
+  },
+  "per_type": {
+    "health.allergy": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 3,
+      "fn": 0,
+      "support": 0
+    },
+    "health.condition": {
+      "precision": 1.0,
+      "recall": 0.125,
+      "f1": 0.2222,
+      "tp": 2,
+      "fp": 0,
+      "fn": 14,
+      "support": 16
+    },
+    "location.current": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 14,
+      "fn": 4,
+      "support": 4
+    },
+    "location.future": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "support": 4
+    },
+    "location.past": {
+      "precision": 0.375,
+      "recall": 0.4286,
+      "f1": 0.4,
+      "tp": 3,
+      "fp": 5,
+      "fn": 4,
+      "support": 7
+    },
+    "other_personal_fact": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 142,
+      "fn": 7,
+      "support": 7
+    },
+    "personal.school": {
+      "precision": 0.3333,
+      "recall": 0.1667,
+      "f1": 0.2222,
+      "tp": 1,
+      "fp": 2,
+      "fn": 5,
+      "support": 6
+    },
+    "preference": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "support": 1
+    },
+    "preference.activity": {
+      "precision": 1.0,
+      "recall": 0.2895,
+      "f1": 0.449,
+      "tp": 11,
+      "fp": 0,
+      "fn": 27,
+      "support": 38
+    },
+    "preference.food_dislike": {
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6667,
+      "tp": 1,
+      "fp": 1,
+      "fn": 0,
+      "support": 1
+    },
+    "preference.food_like": {
+      "precision": 0.5714,
+      "recall": 0.5,
+      "f1": 0.5333,
+      "tp": 4,
+      "fp": 3,
+      "fn": 4,
+      "support": 8
+    },
+    "relationship.family": {
+      "precision": 0.486,
+      "recall": 0.8966,
+      "f1": 0.6303,
+      "tp": 52,
+      "fp": 55,
+      "fn": 6,
+      "support": 58
+    },
+    "relationship.friend": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 2,
+      "fn": 3,
+      "support": 3
+    },
+    "relationship.partner": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "support": 1
+    },
+    "work.employer": {
+      "precision": 0.4286,
+      "recall": 0.6,
+      "f1": 0.5,
+      "tp": 3,
+      "fp": 4,
+      "fn": 2,
+      "support": 5
+    },
+    "work.job_title": {
+      "precision": 1.0,
+      "recall": 0.2,
+      "f1": 0.3333,
+      "tp": 1,
+      "fp": 0,
+      "fn": 4,
+      "support": 5
+    }
+  },
+  "per_slice": {
+    "hard_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 10,
+      "fn": 0,
+      "support": 0
+    },
+    "near_miss": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 53,
+      "fn": 0,
+      "support": 0
+    },
+    "positive": {
+      "precision": 0.3406,
+      "recall": 0.4756,
+      "f1": 0.3969,
+      "tp": 78,
+      "fp": 151,
+      "fn": 86,
+      "support": 164
+    },
+    "random_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 17,
+      "fn": 0,
+      "support": 0
+    }
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.3,
+      "precision": 0.1615,
+      "recall": 0.4756,
+      "f1": 0.2411,
+      "tp": 78,
+      "fp": 405,
+      "fn": 86,
+      "support": 164
+    },
+    {
+      "threshold": 0.35,
+      "precision": 0.173,
+      "recall": 0.4695,
+      "f1": 0.2529,
+      "tp": 77,
+      "fp": 368,
+      "fn": 87,
+      "support": 164
+    },
+    {
+      "threshold": 0.4,
+      "precision": 0.1969,
+      "recall": 0.4634,
+      "f1": 0.2764,
+      "tp": 76,
+      "fp": 310,
+      "fn": 88,
+      "support": 164
+    },
+    {
+      "threshold": 0.45,
+      "precision": 0.2133,
+      "recall": 0.4512,
+      "f1": 0.2896,
+      "tp": 74,
+      "fp": 273,
+      "fn": 90,
+      "support": 164
+    },
+    {
+      "threshold": 0.5,
+      "precision": 0.224,
+      "recall": 0.4207,
+      "f1": 0.2924,
+      "tp": 69,
+      "fp": 239,
+      "fn": 95,
+      "support": 164
+    },
+    {
+      "threshold": 0.55,
+      "precision": 0.2268,
+      "recall": 0.372,
+      "f1": 0.2818,
+      "tp": 61,
+      "fp": 208,
+      "fn": 103,
+      "support": 164
+    },
+    {
+      "threshold": 0.6,
+      "precision": 0.2424,
+      "recall": 0.3415,
+      "f1": 0.2835,
+      "tp": 56,
+      "fp": 175,
+      "fn": 108,
+      "support": 164
+    },
+    {
+      "threshold": 0.65,
+      "precision": 0.2539,
+      "recall": 0.2988,
+      "f1": 0.2745,
+      "tp": 49,
+      "fp": 144,
+      "fn": 115,
+      "support": 164
+    },
+    {
+      "threshold": 0.7,
+      "precision": 0.2547,
+      "recall": 0.25,
+      "f1": 0.2523,
+      "tp": 41,
+      "fp": 120,
+      "fn": 123,
+      "support": 164
+    },
+    {
+      "threshold": 0.75,
+      "precision": 0.2698,
+      "recall": 0.2073,
+      "f1": 0.2345,
+      "tp": 34,
+      "fp": 92,
+      "fn": 130,
+      "support": 164
+    },
+    {
+      "threshold": 0.8,
+      "precision": 0.2391,
+      "recall": 0.1341,
+      "f1": 0.1719,
+      "tp": 22,
+      "fp": 70,
+      "fn": 142,
+      "support": 164
+    }
+  ],
+  "error_slices": {
+    "short_message_errors": 35,
+    "fp_on_negatives": 27,
+    "message_length_distribution": {
+      "<20": 93,
+      "20-50": 78,
+      "50-100": 46,
+      ">100": 33
+    },
+    "total_errors": 317
+  },
+  "raw_stats": {
+    "raw_total_predictions": 1741,
+    "raw_messages_with_predictions": 250,
+    "raw_messages_total": 250,
+    "raw_predictions_per_message": 6.964,
+    "raw_score_summary": {
+      "min": 0.0101,
+      "p25": 0.0316,
+      "p50": 0.0949,
+      "p75": 0.3564,
+      "p90": 0.6776,
+      "p95": 0.8177,
+      "max": 0.9839
+    },
+    "raw_top_labels": [
+      {
+        "label": "date_ref",
+        "count": 631
+      },
+      {
+        "label": "person_name",
+        "count": 448
+      },
+      {
+        "label": "activity",
+        "count": 261
+      },
+      {
+        "label": "family_member",
+        "count": 92
+      },
+      {
+        "label": "place",
+        "count": 80
+      },
+      {
+        "label": "food_item",
+        "count": 54
+      },
+      {
+        "label": "past_location",
+        "count": 48
+      },
+      {
+        "label": "org",
+        "count": 30
+      },
+      {
+        "label": "job_role",
+        "count": 25
+      },
+      {
+        "label": "current_location",
+        "count": 22
+      },
+      {
+        "label": "allergy",
+        "count": 16
+      },
+      {
+        "label": "health_condition",
+        "count": 10
+      },
+      {
+        "label": "employer",
+        "count": 10
+      },
+      {
+        "label": "friend_name",
+        "count": 7
+      },
+      {
+        "label": "partner_name",
+        "count": 4
+      }
+    ]
+  }
+}

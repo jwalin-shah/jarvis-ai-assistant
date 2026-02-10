@@ -27,14 +27,14 @@ logger = logging.getLogger(__name__)
 MODEL = "urchade/gliner_medium-v2.1"
 GLOBAL_THRESHOLD = 0.35  # high recall
 
-# Hybrid label set: generic NER labels + fact-like labels for better recall
+# Canonical labels used internally by our pipeline and evaluation.
 SPAN_LABELS = [
-    # Generic (GLiNER strong at these)
+    # Generic
     "person_name",
     "place",
     "org",
     "date_ref",
-    # Fact-like (improves recall for personal facts)
+    # Fact-like
     "food_item",
     "job_role",
     "health_condition",
@@ -48,6 +48,27 @@ SPAN_LABELS = [
     "friend_name",
     "partner_name",
 ]
+
+# Natural-language prompts sent to GLiNER.
+# Keep these semantically explicit and close to everyday wording.
+NATURAL_LANGUAGE_LABELS: dict[str, str] = {
+    "person_name": "person name",
+    "place": "place",
+    "org": "organization",
+    "date_ref": "date reference",
+    "food_item": "food item",
+    "job_role": "job role",
+    "health_condition": "medical condition",
+    "activity": "activity",
+    "allergy": "allergy",
+    "employer": "employer",
+    "current_location": "current location",
+    "future_location": "future location",
+    "past_location": "past location",
+    "family_member": "family member",
+    "friend_name": "friend name",
+    "partner_name": "romantic partner",
+}
 
 # Per-label minimum thresholds (after global threshold)
 PER_LABEL_MIN: dict[str, float] = {
@@ -190,20 +211,72 @@ class CandidateExtractor:
     Uses hybrid label set (generic + fact-like) for high recall.
     """
 
-    def __init__(self, model_name: str = MODEL, labels: list[str] | None = None):
+    def __init__(
+        self,
+        model_name: str = MODEL,
+        labels: list[str] | None = None,
+        global_threshold: float = GLOBAL_THRESHOLD,
+        per_label_min: dict[str, float] | None = None,
+        default_min: float = DEFAULT_MIN,
+    ):
         self._model: Any = None
         self._model_name = model_name
-        self._labels = labels or SPAN_LABELS
+        # `labels` are canonical label ids. GLiNER sees natural-language prompts.
+        self._labels_canonical = labels or SPAN_LABELS
+        self._model_labels = [self._to_model_label(lbl) for lbl in self._labels_canonical]
+        self._label_to_canonical = {
+            self._to_model_label(lbl): lbl for lbl in self._labels_canonical
+        }
+        # Also accept canonical labels directly if the model returns them.
+        self._label_to_canonical.update({lbl: lbl for lbl in self._labels_canonical})
+        self._global_threshold = global_threshold
+        self._per_label_min = (
+            dict(per_label_min) if per_label_min is not None else dict(PER_LABEL_MIN)
+        )
+        self._default_min = default_min
 
-    def _load_model(self) -> None:
+    @staticmethod
+    def _to_model_label(canonical_label: str) -> str:
+        """Convert canonical label id to a natural-language GLiNER prompt label."""
+        return NATURAL_LANGUAGE_LABELS.get(canonical_label, canonical_label.replace("_", " "))
+
+    def _canonicalize_label(self, predicted_label: str) -> str:
+        """Map GLiNER label output back to canonical label ids."""
+        return self._label_to_canonical.get(predicted_label, predicted_label)
+
+    def _load_model(self) -> Any:
         """Lazy-load GLiNER model (500MB, load once)."""
         if self._model is not None:
-            return
+            return self._model
         from gliner import GLiNER
 
         logger.info("Loading GLiNER model: %s", self._model_name)
         self._model = GLiNER.from_pretrained(self._model_name)
         logger.info("GLiNER model loaded")
+        return self._model
+
+    def predict_raw_entities(self, text: str, threshold: float = 0.01) -> list[dict[str, Any]]:
+        """Run raw GLiNER prediction without local filtering.
+
+        Args:
+            text: Input message text.
+            threshold: GLiNER score threshold used at model call time.
+        """
+        model = self._load_model()
+        entities = model.predict_entities(
+            text,
+            self._model_labels,
+            threshold=threshold,
+            flat_ner=True,
+        )
+        normalized: list[dict[str, Any]] = []
+        for entity in entities:
+            item = dict(entity)
+            raw_label = str(item.get("label", ""))
+            item["raw_label"] = raw_label
+            item["label"] = self._canonicalize_label(raw_label)
+            normalized.append(item)
+        return normalized
 
     def extract_candidates(
         self,
@@ -214,6 +287,9 @@ class CandidateExtractor:
         is_from_me: bool | None = None,
         sender_handle_id: int | None = None,
         message_date: int | None = None,
+        threshold: float | None = None,
+        apply_label_thresholds: bool = True,
+        apply_vague_filter: bool = True,
     ) -> list[FactCandidate]:
         """Single message -> list of FactCandidates.
 
@@ -224,22 +300,28 @@ class CandidateExtractor:
             return []
 
         self._load_model()
-        ents = self._model.predict_entities(text, self._labels, threshold=GLOBAL_THRESHOLD)
+        call_threshold = self._global_threshold if threshold is None else threshold
+        ents = self._model.predict_entities(
+            text,
+            self._model_labels,
+            threshold=call_threshold,
+            flat_ner=True,
+        )
 
         out: list[FactCandidate] = []
         seen: set[tuple[str, str]] = set()  # (span_casefolded, label) for dedup
 
         for e in ents:
             span = e["text"].strip()
-            label = e["label"]
+            label = self._canonicalize_label(e["label"])
             score = float(e.get("score", 0.0))
 
             # Per-label threshold
-            if score < PER_LABEL_MIN.get(label, DEFAULT_MIN):
+            if apply_label_thresholds and score < self._per_label_min.get(label, self._default_min):
                 continue
 
             # Vague word rejection
-            if span.casefold() in VAGUE or len(span) < 2:
+            if apply_vague_filter and (span.casefold() in VAGUE or len(span) < 2):
                 continue
 
             # Strict dedup: same span + label + message_id emitted once
@@ -300,7 +382,7 @@ class CandidateExtractor:
 
             # GLiNER batch prediction
             batch_entities = self._model.batch_predict_entities(
-                texts, self._labels, threshold=GLOBAL_THRESHOLD
+                texts, self._model_labels, threshold=self._global_threshold, flat_ner=True
             )
 
             for msg, ents in zip(batch, batch_entities):
@@ -309,10 +391,10 @@ class CandidateExtractor:
 
                 for e in ents:
                     span = e["text"].strip()
-                    label = e["label"]
+                    label = self._canonicalize_label(e["label"])
                     score = float(e.get("score", 0.0))
 
-                    if score < PER_LABEL_MIN.get(label, DEFAULT_MIN):
+                    if score < self._per_label_min.get(label, self._default_min):
                         continue
                     if span.casefold() in VAGUE or len(span) < 2:
                         continue
