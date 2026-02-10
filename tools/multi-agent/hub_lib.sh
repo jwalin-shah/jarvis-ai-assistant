@@ -9,10 +9,12 @@ _HUB_LIB_LOADED=1
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 HUB_DIR="$REPO_ROOT/.hub"
 STATE_FILE="$HUB_DIR/state.json"
 REVIEWS_DIR="$HUB_DIR/reviews"
 LOGS_DIR="$HUB_DIR/logs"
+REVIEW_TIMEOUT="${REVIEW_TIMEOUT:-300}"
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 
@@ -91,21 +93,39 @@ lane_log() {
 
 init_state() {
     mkdir -p "$HUB_DIR" "$REVIEWS_DIR" "$LOGS_DIR"
-    cat > "$STATE_FILE" << 'STATEEOF'
-{
-    "lanes": {
-        "a": {"status": "idle", "agent": "codex", "pid": null, "last_commit": null},
-        "b": {"status": "idle", "agent": "claude", "pid": null, "last_commit": null},
-        "c": {"status": "idle", "agent": "gemini", "pid": null, "last_commit": null}
-    },
-    "reviews": {},
-    "created_at": "TIMESTAMP"
-}
-STATEEOF
-    # Fill in timestamp
+
+    # If state already exists, preserve it (don't overwrite running tasks)
+    if [[ -f "$STATE_FILE" ]]; then
+        # Just ensure lanes exist
+        python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+for lane in ['a', 'b', 'c']:
+    if lane not in state.get('lanes', {}):
+        state.setdefault('lanes', {})[lane] = {'status': 'idle', 'agent': '', 'pid': None, 'last_commit': None}
+if 'tasks' not in state:
+    state['tasks'] = []
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+"
+        return
+    fi
+
     local ts
     ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sed -i '' "s/TIMESTAMP/$ts/" "$STATE_FILE"
+    cat > "$STATE_FILE" << STATEEOF
+{
+    "lanes": {
+        "a": {"status": "idle", "agent": "${LANE_A_AGENT:-codex}", "pid": null, "last_commit": null},
+        "b": {"status": "idle", "agent": "${LANE_B_AGENT:-claude}", "pid": null, "last_commit": null},
+        "c": {"status": "idle", "agent": "${LANE_C_AGENT:-gemini}", "pid": null, "last_commit": null}
+    },
+    "tasks": [],
+    "reviews": {},
+    "created_at": "$ts"
+}
+STATEEOF
 }
 
 get_lane_status() {
@@ -152,6 +172,55 @@ import json
 with open('$STATE_FILE') as f:
     state = json.load(f)
 state['lanes']['$lane']['last_commit'] = '$commit'
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+"
+}
+
+# ── Standalone Task Tracking ──────────────────────────────────────────────────
+
+# Add a standalone task to the state file. Returns the task ID.
+add_task() {
+    local agent=$1
+    local description=$2
+    local pid=$3
+    local log_file=$4
+    local model=${5:-"default"}
+
+    python3 -c "
+import json, time
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+tasks = state.setdefault('tasks', [])
+task_id = len(tasks) + 1
+tasks.append({
+    'id': task_id,
+    'agent': '$agent',
+    'model': '$model',
+    'description': '''$description''',
+    'pid': $pid,
+    'log': '$log_file',
+    'status': 'working',
+    'started_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+})
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+print(task_id)
+"
+}
+
+# Update a standalone task's status
+set_task_status() {
+    local task_id=$1
+    local status=$2
+    python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+for t in state.get('tasks', []):
+    if t['id'] == $task_id:
+        t['status'] = '$status'
+        break
 with open('$STATE_FILE', 'w') as f:
     json.dump(state, f, indent=4)
 "
@@ -210,6 +279,295 @@ agent_done_exists() {
     local wt_path
     wt_path=$(get_worktree_path "$lane")
     [[ -f "$wt_path/.agent-done" ]]
+}
+
+# ── Auto-Update on Exit ──────────────────────────────────────────────────────
+
+# Called after a lane agent exits to auto-update state and trigger review
+on_lane_exit() {
+    local lane=$1
+    local wt_path
+    wt_path=$(get_worktree_path "$lane")
+
+    # Check if agent created .agent-done
+    if [[ -f "$wt_path/.agent-done" ]]; then
+        local commits
+        commits=$(git -C "$wt_path" log main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+        if [[ "$commits" -gt 0 ]]; then
+            set_lane_status "$lane" "done"
+            local last
+            last=$(git -C "$wt_path" log -1 --format="%h" 2>/dev/null)
+            set_lane_commit "$lane" "$last"
+            echo "[$(date '+%H:%M:%S')] Lane ${lane^^} completed (commit: $last)" >> "$LOGS_DIR/hub_events.log" 2>&1
+        else
+            set_lane_status "$lane" "done"
+            echo "[$(date '+%H:%M:%S')] Lane ${lane^^} finished (no commits)" >> "$LOGS_DIR/hub_events.log" 2>&1
+        fi
+    else
+        set_lane_status "$lane" "done"
+        echo "[$(date '+%H:%M:%S')] Lane ${lane^^} exited (no .agent-done sentinel)" >> "$LOGS_DIR/hub_events.log" 2>&1
+    fi
+
+    # Auto-trigger review if HUB_AUTO_REVIEW=1
+    if [[ "${HUB_AUTO_REVIEW:-1}" == "1" ]]; then
+        echo "[$(date '+%H:%M:%S')] Auto-reviewing Lane ${lane^^}..." >> "$LOGS_DIR/hub_events.log" 2>&1
+        auto_review_lane "$lane"
+    fi
+}
+
+# Auto-review a single lane (called on exit, runs in background)
+auto_review_lane() {
+    local lane=$1
+    local wt_path
+    wt_path=$(get_worktree_path "$lane")
+    local label="${LANE_LABELS[$lane]}"
+
+    # Get diff
+    local diff_content
+    diff_content=$(git -C "$wt_path" diff main...HEAD 2>/dev/null)
+    if [[ -z "$diff_content" ]]; then
+        echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: no changes to review" >> "$LOGS_DIR/hub_events.log" 2>&1
+        return
+    fi
+
+    # Save diff
+    echo "$diff_content" > "$REVIEWS_DIR/lane_${lane}_diff.patch"
+
+    # Layer 1: Ownership auto-check
+    local violations
+    violations=$(check_ownership_violations "$lane")
+    if [[ -n "$violations" ]]; then
+        echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: OWNERSHIP VIOLATION - $violations" >> "$LOGS_DIR/hub_events.log" 2>&1
+        set_lane_status "$lane" "needs_revision"
+        set_review_result "$lane" "hub" "reject" "Ownership violation: $violations"
+        cat > "$REVIEWS_DIR/${lane}_feedback.md" << FEEDBACKEOF
+# Auto-Rejection: Ownership Violation
+
+Lane ${lane^^} modified files outside its ownership boundaries.
+
+## Violating Files
+$(for f in $violations; do echo "- \`$f\`"; done)
+
+## Required Action
+Remove or revert changes to the above files.
+FEEDBACKEOF
+        return
+    fi
+
+    echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: ownership check passed, spawning cross-reviews..." >> "$LOGS_DIR/hub_events.log" 2>&1
+    set_lane_status "$lane" "reviewing"
+
+    # Load review template
+    local review_template
+    review_template=$(cat "$SCRIPT_DIR/templates/review_prompt.md" 2>/dev/null || echo "Review the following diff and respond with APPROVE: or REJECT: on the first line.")
+
+    # Spawn cross-reviews in parallel (background)
+    for reviewer_lane in $ALL_LANES; do
+        [[ "$reviewer_lane" == "$lane" ]] && continue
+
+        local reviewer_agent="${LANE_AGENTS[$reviewer_lane]}"
+        local reviewer_label="${LANE_LABELS[$reviewer_lane]}"
+        local review_file="$REVIEWS_DIR/${lane}_reviewed_by_${reviewer_lane}.md"
+
+        # Build review prompt
+        local review_prompt="$review_template"
+        review_prompt="${review_prompt//\{SOURCE_LANE\}/${lane^^}}"
+        review_prompt="${review_prompt//\{SOURCE_LABEL\}/$label}"
+        review_prompt="${review_prompt//\{REVIEWER_LANE\}/${reviewer_lane^^}}"
+        review_prompt="${review_prompt//\{REVIEWER_LABEL\}/$reviewer_label}"
+        review_prompt="${review_prompt//\{DIFF_CONTENT\}/$diff_content}"
+
+        # Spawn review agent in background
+        (
+            local reviewer_wt
+            reviewer_wt=$(get_worktree_path "$reviewer_lane")
+            cd "$reviewer_wt" 2>/dev/null || cd "$REPO_ROOT"
+            run_agent_review "$reviewer_agent" "$review_prompt" "$review_file" "${REVIEW_TIMEOUT:-300}"
+
+            # Parse and record verdict
+            local verdict
+            verdict=$(parse_review_verdict "$review_file")
+            local reason
+            reason=$(parse_review_reason "$review_file")
+
+            if [[ "$verdict" == "APPROVE" ]]; then
+                set_review_result "$lane" "$reviewer_lane" "approve" "$reason"
+                echo "[$(date '+%H:%M:%S')] Lane ${lane^^} reviewed by ${reviewer_lane^^}: APPROVED - $reason" >> "$LOGS_DIR/hub_events.log" 2>&1
+            else
+                set_review_result "$lane" "$reviewer_lane" "reject" "$reason"
+                echo "[$(date '+%H:%M:%S')] Lane ${lane^^} reviewed by ${reviewer_lane^^}: REJECTED - $reason" >> "$LOGS_DIR/hub_events.log" 2>&1
+            fi
+
+            # Check if all reviews are in for this lane
+            local all_in
+            all_in=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+reviews = state.get('reviews', {})
+needed = [l for l in '$ALL_LANES'.split() if l != '$lane']
+results = []
+for n in needed:
+    key = '${lane}_by_' + n
+    if key in reviews:
+        results.append(reviews[key]['result'])
+if len(results) == len(needed):
+    if all(r == 'approve' for r in results):
+        print('all_approved')
+    else:
+        print('has_rejections')
+" 2>/dev/null)
+
+            if [[ "$all_in" == "all_approved" ]]; then
+                set_lane_status "$lane" "approved"
+                echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: ALL REVIEWS APPROVED" >> "$LOGS_DIR/hub_events.log" 2>&1
+            elif [[ "$all_in" == "has_rejections" ]]; then
+                set_lane_status "$lane" "needs_revision"
+                echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: NEEDS REVISION - triggering auto-rework" >> "$LOGS_DIR/hub_events.log" 2>&1
+
+                # Auto-rework if enabled and under retry limit
+                if [[ "${HUB_AUTO_REWORK:-1}" == "1" ]]; then
+                    auto_rework_lane "$lane"
+                fi
+            fi
+        ) &
+    done
+}
+
+# Auto-rework a lane that was rejected, with retry limit
+auto_rework_lane() {
+    local lane=$1
+    local max_retries="${HUB_MAX_RETRIES:-3}"
+
+    # Track retry count
+    local retries
+    retries=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+count = state['lanes']['$lane'].get('retries', 0)
+print(count)
+" 2>/dev/null)
+
+    if [[ "$retries" -ge "$max_retries" ]]; then
+        echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: MAX RETRIES ($max_retries) reached - needs manual intervention" >> "$LOGS_DIR/hub_events.log" 2>&1
+        set_lane_status "$lane" "needs_revision"
+        return
+    fi
+
+    # Increment retry count
+    python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+state['lanes']['$lane']['retries'] = state['lanes']['$lane'].get('retries', 0) + 1
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null
+
+    local new_retry=$((retries + 1))
+    echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: Auto-rework attempt $new_retry/$max_retries" >> "$LOGS_DIR/hub_events.log" 2>&1
+
+    local wt_path
+    wt_path=$(get_worktree_path "$lane")
+    local agent="${LANE_AGENTS[$lane]}"
+    local label="${LANE_LABELS[$lane]}"
+
+    # Collect all rejection feedback
+    local feedback=""
+    for reviewer_lane in $ALL_LANES; do
+        [[ "$reviewer_lane" == "$lane" ]] && continue
+        local review_file="$REVIEWS_DIR/${lane}_reviewed_by_${reviewer_lane}.md"
+        if [[ -f "$review_file" ]]; then
+            local verdict
+            verdict=$(parse_review_verdict "$review_file")
+            if [[ "$verdict" == "REJECT" ]]; then
+                feedback="${feedback}
+
+## Feedback from Lane ${reviewer_lane^^} (${LANE_AGENTS[$reviewer_lane]})
+$(cat "$review_file")
+"
+            fi
+        fi
+    done
+
+    # Write combined feedback
+    cat > "$REVIEWS_DIR/${lane}_feedback.md" << RFEOF
+# Review Feedback for Lane ${lane^^} (Attempt $new_retry/$max_retries)
+$feedback
+RFEOF
+
+    # Read original task
+    local original_task=""
+    if [[ -f "$wt_path/.hub-task.md" ]]; then
+        original_task=$(cat "$wt_path/.hub-task.md")
+    fi
+
+    # Remove done sentinel
+    rm -f "$wt_path/.agent-done"
+
+    # Build rework prompt
+    local prompt="You are working on Lane ${lane^^} ($label) of a multi-agent project.
+
+Your previous work was REJECTED during cross-review (attempt $new_retry/$max_retries). Fix the issues.
+
+## Original Task
+$original_task
+
+## Review Feedback
+$feedback
+
+## Instructions
+1. Read the feedback carefully
+2. Fix ONLY the issues identified - don't rewrite everything
+3. Commit your changes
+4. Run: touch .agent-done
+
+Only modify files you own (see CLAUDE.md for ownership rules)."
+
+    local log_file="$LOGS_DIR/lane_${lane}_rework${new_retry}_$(date +%Y%m%d_%H%M%S).log"
+
+    # Clear old reviews
+    python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+state['reviews'] = {k: v for k, v in state.get('reviews', {}).items()
+                    if not k.startswith('${lane}_')}
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null
+
+    set_lane_status "$lane" "working"
+
+    # Spawn agent with auto-update on exit (which triggers another review)
+    (
+        cd "$wt_path"
+        run_agent_work "$agent" "$prompt" "$log_file" "${DISPATCH_TIMEOUT:-3600}"
+        on_lane_exit "$lane"
+    ) &
+    local pid=$!
+
+    set_lane_pid "$lane" "$pid"
+    echo "[$(date '+%H:%M:%S')] Lane ${lane^^}: Rework dispatched to $agent (PID: $pid)" >> "$LOGS_DIR/hub_events.log" 2>&1
+}
+
+# Called after a standalone task agent exits to auto-update state
+on_task_exit() {
+    local task_id=$1
+    python3 -c "
+import json, time
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+for t in state.get('tasks', []):
+    if t['id'] == $task_id:
+        t['status'] = 'finished'
+        t['finished_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        break
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null
+    hub_log "Task #$task_id finished" >> "$LOGS_DIR/hub_events.log" 2>&1
 }
 
 # ── Ownership Enforcement ─────────────────────────────────────────────────────
@@ -291,25 +649,58 @@ if match:
 
 # ── Agent Invocation ──────────────────────────────────────────────────────────
 
-build_agent_cmd() {
+# Run an agent with full write permissions (for dispatch/rework)
+run_agent_work() {
     local agent=$1
     local prompt=$2
+    local log_file=$3
+    local timeout_secs=$4
 
     case $agent in
         claude)
-            echo "claude -p $(printf '%q' "$prompt") --print"
+            timeout "$timeout_secs" claude -p "$prompt" --dangerously-skip-permissions > "$log_file" 2>&1 || true
             ;;
         codex)
-            echo "codex e $(printf '%q' "$prompt")"
+            timeout "$timeout_secs" codex exec --full-auto "$prompt" > "$log_file" 2>&1 || true
             ;;
         gemini)
-            echo "gemini -p $(printf '%q' "$prompt")"
+            timeout "$timeout_secs" gemini -p "$prompt" --yolo > "$log_file" 2>&1 || true
             ;;
         opencode)
-            echo "opencode run $(printf '%q' "$prompt")"
+            timeout "$timeout_secs" opencode run "$prompt" > "$log_file" 2>&1 || true
             ;;
         kimi)
-            echo "kimi --quiet -p $(printf '%q' "$prompt")"
+            timeout "$timeout_secs" kimi --quiet -p "$prompt" --yolo > "$log_file" 2>&1 || true
+            ;;
+        *)
+            hub_error "Unknown agent: $agent"
+            return 1
+            ;;
+    esac
+}
+
+# Run an agent in read-only mode (for reviews - only needs text output)
+run_agent_review() {
+    local agent=$1
+    local prompt=$2
+    local review_file=$3
+    local timeout_secs=$4
+
+    case $agent in
+        claude)
+            timeout "$timeout_secs" claude -p "$prompt" --print > "$review_file" 2>&1 || true
+            ;;
+        codex)
+            timeout "$timeout_secs" codex exec "$prompt" > "$review_file" 2>&1 || true
+            ;;
+        gemini)
+            timeout "$timeout_secs" gemini -p "$prompt" > "$review_file" 2>&1 || true
+            ;;
+        opencode)
+            timeout "$timeout_secs" opencode run "$prompt" > "$review_file" 2>&1 || true
+            ;;
+        kimi)
+            timeout "$timeout_secs" kimi --quiet -p "$prompt" > "$review_file" 2>&1 || true
             ;;
         *)
             hub_error "Unknown agent: $agent"
