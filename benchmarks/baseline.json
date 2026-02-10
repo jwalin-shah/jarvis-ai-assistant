@@ -1,0 +1,94 @@
+{
+  "baseline": {
+    "timestamp": "2026-02-10T08:22:56-08:00",
+    "test_run": {
+      "total_tests": 2177,
+      "passed": 2162,
+      "failed": 8,
+      "skipped": 7,
+      "warnings": 1418,
+      "duration_seconds": 42.44
+    },
+    "python_version": "3.13.11",
+    "platform": "darwin"
+  },
+  "notes": [
+    "8 pre-existing failures in category_classifier and fact_extractor modules",
+    "These failures are unrelated to contract conformance tests",
+    "All contract serialization tests pass (100 tests)"
+  ],
+  "contract_tests": {
+    "unit_tests": {
+      "file": "tests/unit/test_contracts.py",
+      "test_count": 76,
+      "coverage": [
+        "GenerationRequest serialization",
+        "GenerationResponse serialization", 
+        "DetectedEvent serialization",
+        "CreateEventResult serialization",
+        "CalendarEvent serialization",
+        "Calendar serialization",
+        "AttachmentSummary serialization",
+        "HHEMResult serialization",
+        "HHEMBenchmarkResult serialization",
+        "LatencyResult serialization",
+        "LatencyBenchmarkResult serialization",
+        "MemoryProfile serialization",
+        "MemoryState serialization",
+        "PermissionStatus serialization",
+        "SchemaInfo serialization",
+        "Attachment serialization",
+        "Reaction serialization",
+        "Message serialization",
+        "Conversation serialization",
+        "IntentType enum values",
+        "CategoryType enum values",
+        "UrgencyLevel enum values",
+        "MessageContext serialization",
+        "ClassificationResult serialization",
+        "Entity serialization",
+        "Fact serialization",
+        "Relationship serialization",
+        "ExtractionResult serialization",
+        "RAGDocument serialization",
+        "GenerationRequest pipeline serialization",
+        "GenerationResponse pipeline serialization",
+        "FeatureState enum values",
+        "Permission enum values",
+        "MemoryMode enum values",
+        "Scenario literal values",
+        "Field coverage validation"
+      ]
+    },
+    "integration_boundary_tests": {
+      "file": "tests/integration/test_boundary_contracts.py",
+      "test_count": 24,
+      "coverage": [
+        "ClassificationResult required fields",
+        "IntentType enum string values",
+        "CategoryType enum string values",
+        "UrgencyLevel enum string values",
+        "Classification serialization for API",
+        "ExtractionResult required fields",
+        "Entity structure validation",
+        "Fact structure validation",
+        "Relationship structure validation",
+        "Extraction with sample data",
+        "Empty extraction validation",
+        "MessageContext required fields",
+        "MessageContext optional fields",
+        "RAGDocument structure",
+        "RAGDocument score range",
+        "GenerationRequest structure",
+        "GenerationRequest optional extraction",
+        "GenerationResponse structure",
+        "GenerationResponse defaults",
+        "Mock classification flow",
+        "Mock extraction flow",
+        "Confidence type validation",
+        "Timestamp type validation",
+        "Metadata type validation"
+      ]
+    }
+  }
+}
