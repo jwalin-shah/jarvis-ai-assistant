@@ -28,13 +28,18 @@ usage() {
 Usage: hub.sh <command> [args]
 
 Commands:
-  setup                  Create worktrees, state directory, per-lane CLAUDE.md
-  dispatch <task-file>   Parse task file and spawn agents into worktrees
-  status                 Show lane status, PIDs, last commits, reviews
-  review                 Cross-review completed lanes (ownership + agent review)
-  rework <lane>          Re-dispatch a lane with rejection feedback
-  merge                  Merge all approved lanes to main (runs make verify)
-  teardown               Remove worktrees and clean up state
+  setup                           Create worktrees, state directory, per-lane CLAUDE.md
+  dispatch <task-file>            Parse task file and spawn agents into worktrees
+  run <agent> [-m model] <prompt> Run a standalone agent task (tracked in status)
+  status                          Show all lanes + standalone tasks
+  watch [interval]                Auto-refresh status (default: 5s), stops when all done
+  logs <lane|task-id> [-f]        Show log for a lane (a/b/c) or task (#1, #2, ...)
+  review                          Cross-review completed lanes (ownership + agent review)
+  rework <lane>                   Re-dispatch a lane with rejection feedback
+  merge                           Merge all approved lanes to main (runs make verify)
+  teardown                        Remove worktrees and clean up state
+
+Agents: claude, codex, gemini, kimi, opencode
 
 Options:
   -h, --help             Show this help
@@ -42,6 +47,9 @@ Options:
 Examples:
   hub.sh setup
   hub.sh dispatch tasks/my-task.md
+  hub.sh run codex "Audit all SQL queries and write a report"
+  hub.sh run codex -m o3 "Deep code review of jarvis/"
+  hub.sh run kimi "Generate test fixtures for contracts"
   hub.sh status
   hub.sh review
   hub.sh rework b
@@ -201,26 +209,11 @@ IMPORTANT:
 
         lane_log "$lane" "Dispatching to $agent..."
 
-        # Spawn agent in background
+        # Spawn agent in background with full write permissions + auto-update on exit
         (
             cd "$wt_path"
-            case $agent in
-                claude)
-                    timeout "$DISPATCH_TIMEOUT" claude -p "$prompt" --print > "$log_file" 2>&1 || true
-                    ;;
-                codex)
-                    timeout "$DISPATCH_TIMEOUT" codex e "$prompt" > "$log_file" 2>&1 || true
-                    ;;
-                gemini)
-                    timeout "$DISPATCH_TIMEOUT" gemini -p "$prompt" > "$log_file" 2>&1 || true
-                    ;;
-                opencode)
-                    timeout "$DISPATCH_TIMEOUT" opencode run "$prompt" > "$log_file" 2>&1 || true
-                    ;;
-                kimi)
-                    timeout "$DISPATCH_TIMEOUT" kimi --quiet -p "$prompt" > "$log_file" 2>&1 || true
-                    ;;
-            esac
+            run_agent_work "$agent" "$prompt" "$log_file" "$DISPATCH_TIMEOUT"
+            on_lane_exit "$lane"
         ) &
         local pid=$!
 
@@ -238,6 +231,114 @@ IMPORTANT:
         hub_success "$dispatched lane(s) dispatched"
         hub_log "Monitor with: hub.sh status"
     fi
+}
+
+# ── Command: run ───────────────────────────────────────────────────────────────
+
+cmd_run() {
+    local agent="${1:-}"
+    shift || true
+
+    if [[ -z "$agent" ]]; then
+        hub_error "Usage: hub.sh run <agent> [-m model] <prompt>"
+        hub_error "Agents: claude, codex, gemini, kimi, opencode"
+        exit 1
+    fi
+
+    # Parse optional -m model flag
+    local model="default"
+    if [[ "${1:-}" == "-m" ]]; then
+        shift
+        model="${1:-default}"
+        shift || true
+    fi
+
+    local prompt="${*}"
+    if [[ -z "$prompt" ]]; then
+        hub_error "Usage: hub.sh run <agent> [-m model] <prompt>"
+        exit 1
+    fi
+
+    # Ensure state exists
+    if [[ ! -f "$STATE_FILE" ]]; then
+        mkdir -p "$HUB_DIR" "$REVIEWS_DIR" "$LOGS_DIR"
+        init_state
+    fi
+
+    # Ensure tasks array exists
+    python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+if 'tasks' not in state:
+    state['tasks'] = []
+    with open('$STATE_FILE', 'w') as f:
+        json.dump(state, f, indent=4)
+" 2>/dev/null
+
+    local log_file="$LOGS_DIR/${agent}_task_$(date +%Y%m%d_%H%M%S).log"
+    local short_desc="${prompt:0:60}"
+
+    hub_log "Running $agent${model:+ ($model)}: $short_desc..."
+
+    # Build model flag
+    local model_flag=""
+    if [[ "$model" != "default" ]]; then
+        case $agent in
+            codex)   model_flag="-m $model" ;;
+            claude)  model_flag="--model $model" ;;
+            gemini)  model_flag="-m $model" ;;
+            kimi)    model_flag="-m $model" ;;
+            opencode) model_flag="" ;; # opencode doesn't support model flag in run
+        esac
+    fi
+
+    # Pre-register task to get ID, then spawn with auto-update on exit
+    local task_id
+    task_id=$(add_task "$agent" "$short_desc" "0" "$log_file" "$model")
+
+    (
+        cd "$REPO_ROOT"
+        case $agent in
+            claude)
+                timeout "$DISPATCH_TIMEOUT" claude -p "$prompt" --dangerously-skip-permissions $model_flag > "$log_file" 2>&1 || true
+                ;;
+            codex)
+                timeout "$DISPATCH_TIMEOUT" codex exec --full-auto $model_flag "$prompt" > "$log_file" 2>&1 || true
+                ;;
+            gemini)
+                timeout "$DISPATCH_TIMEOUT" gemini -p "$prompt" --yolo $model_flag > "$log_file" 2>&1 || true
+                ;;
+            opencode)
+                timeout "$DISPATCH_TIMEOUT" opencode run $model_flag "$prompt" > "$log_file" 2>&1 || true
+                ;;
+            kimi)
+                timeout "$DISPATCH_TIMEOUT" kimi --quiet -p "$prompt" --yolo $model_flag > "$log_file" 2>&1 || true
+                ;;
+            *)
+                echo "Unknown agent: $agent" >> "$log_file"
+                ;;
+        esac
+        on_task_exit "$task_id"
+    ) &
+    local pid=$!
+
+    # Update the task with the real PID
+    python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+for t in state.get('tasks', []):
+    if t['id'] == $task_id:
+        t['pid'] = $pid
+        break
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null
+
+    hub_success "Task #$task_id started: $agent${model:+ ($model)} PID $pid"
+    hub_log "Log: $log_file"
+    hub_log "Monitor with: hub.sh status"
 }
 
 # ── Command: status ────────────────────────────────────────────────────────────
@@ -343,6 +444,164 @@ if reviews:
         echo "────────────────────────────────────────────────────────────────"
         echo "$has_reviews" | tail -n +2
         echo ""
+    fi
+
+    # Show standalone tasks
+    local task_output
+    task_output=$(python3 -c "
+import json, os, signal
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+tasks = state.get('tasks', [])
+if not tasks:
+    exit(0)
+print('TASKS')
+for t in tasks:
+    pid = t.get('pid')
+    status = t.get('status', 'unknown')
+    # Check if process is still running
+    if status == 'working' and pid:
+        try:
+            os.kill(pid, 0)
+            pid_info = str(pid)
+        except (OSError, ProcessLookupError):
+            pid_info = 'done'
+            status = 'finished'
+            t['status'] = 'finished'
+    else:
+        pid_info = str(pid) if pid else '-'
+    agent = t.get('agent', '?')
+    model = t.get('model', 'default')
+    desc = t.get('description', '')[:50]
+    task_id = t.get('id', '?')
+    model_str = f' ({model})' if model != 'default' else ''
+    print(f'  #{task_id:<4} {status:<12} {agent}{model_str:<16} {pid_info:<8} {desc}')
+# Save updated statuses
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null)
+
+    if [[ -n "$task_output" ]]; then
+        echo -e "${BOLD}Standalone Tasks${NC}"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        printf "  %-6s %-12s %-18s %-8s %s\n" "ID" "STATUS" "AGENT" "PID" "DESCRIPTION"
+        echo "  ──────────────────────────────────────────────────────────────"
+        echo "$task_output" | tail -n +2
+        echo ""
+    fi
+}
+
+# ── Command: watch ─────────────────────────────────────────────────────────────
+
+cmd_watch() {
+    local interval="${1:-5}"
+    hub_log "Watching hub status (refresh every ${interval}s, Ctrl+C to stop)"
+    echo ""
+
+    while true; do
+        clear
+        cmd_status
+
+        # Count active work
+        local active=0
+        for lane in $ALL_LANES; do
+            local status
+            status=$(get_lane_status "$lane")
+            if [[ "$status" == "working" ]]; then
+                active=$((active + 1))
+            fi
+        done
+
+        local active_tasks
+        active_tasks=$(python3 -c "
+import json, os
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+count = 0
+for t in state.get('tasks', []):
+    if t.get('status') == 'working' and t.get('pid'):
+        try:
+            os.kill(t['pid'], 0)
+            count += 1
+        except (OSError, ProcessLookupError):
+            pass
+print(count)
+" 2>/dev/null)
+        active=$((active + active_tasks))
+
+        # Show recent events
+        if [[ -f "$LOGS_DIR/hub_events.log" ]]; then
+            local recent
+            recent=$(tail -5 "$LOGS_DIR/hub_events.log" 2>/dev/null)
+            if [[ -n "$recent" ]]; then
+                echo -e "${BOLD}Recent Events${NC}"
+                echo "────────────────────────────────────────────────────────────────"
+                echo "$recent"
+                echo ""
+            fi
+        fi
+
+        echo -e "${CYAN}Active: $active | Refreshing every ${interval}s | Ctrl+C to stop${NC}"
+
+        if [[ "$active" -eq 0 ]]; then
+            echo ""
+            hub_success "All work complete!"
+            break
+        fi
+
+        sleep "$interval"
+    done
+}
+
+# ── Command: logs ─────────────────────────────────────────────────────────────
+
+cmd_logs() {
+    local target="${1:-}"
+
+    if [[ -z "$target" ]]; then
+        hub_error "Usage: hub.sh logs <lane|task-id>"
+        hub_error "  hub.sh logs a          Show Lane A log"
+        hub_error "  hub.sh logs 3          Show standalone task #3 log"
+        hub_error "  hub.sh logs a --tail   Follow Lane A log"
+        exit 1
+    fi
+
+    local follow=false
+    if [[ "${2:-}" == "--tail" ]] || [[ "${2:-}" == "-f" ]]; then
+        follow=true
+    fi
+
+    local log_file=""
+
+    # Check if it's a lane (a, b, c)
+    if [[ "$target" =~ ^[abc]$ ]]; then
+        # Find most recent lane log
+        log_file=$(ls -t "$LOGS_DIR"/lane_${target}_*.log 2>/dev/null | head -1)
+    elif [[ "$target" =~ ^[0-9]+$ ]]; then
+        # It's a task ID
+        log_file=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+for t in state.get('tasks', []):
+    if t['id'] == $target:
+        print(t.get('log', ''))
+        break
+" 2>/dev/null)
+    fi
+
+    if [[ -z "$log_file" ]] || [[ ! -f "$log_file" ]]; then
+        hub_error "No log found for: $target"
+        exit 1
+    fi
+
+    if $follow; then
+        hub_log "Following: $log_file (Ctrl+C to stop)"
+        tail -f "$log_file"
+    else
+        hub_log "Log: $log_file"
+        echo "────────────────────────────────────────────────────────────────"
+        cat "$log_file"
     fi
 }
 
@@ -450,23 +709,7 @@ FEEDBACKEOF
 
             (
                 cd "$reviewer_wt"
-                case $reviewer_agent in
-                    claude)
-                        timeout "$REVIEW_TIMEOUT" claude -p "$review_prompt" --print > "$review_file" 2>&1 || true
-                        ;;
-                    codex)
-                        timeout "$REVIEW_TIMEOUT" codex e "$review_prompt" > "$review_file" 2>&1 || true
-                        ;;
-                    gemini)
-                        timeout "$REVIEW_TIMEOUT" gemini -p "$review_prompt" > "$review_file" 2>&1 || true
-                        ;;
-                    opencode)
-                        timeout "$REVIEW_TIMEOUT" opencode run "$review_prompt" > "$review_file" 2>&1 || true
-                        ;;
-                    kimi)
-                        timeout "$REVIEW_TIMEOUT" kimi --quiet -p "$review_prompt" > "$review_file" 2>&1 || true
-                        ;;
-                esac
+                run_agent_review "$reviewer_agent" "$review_prompt" "$review_file" "$REVIEW_TIMEOUT"
             )
 
             # Parse verdict
@@ -585,26 +828,11 @@ Only modify files you own (see CLAUDE.md for ownership rules)."
 
     lane_log "$lane" "Re-dispatching $agent with feedback..."
 
-    # Spawn agent
+    # Spawn agent with full write permissions + auto-update on exit
     (
         cd "$wt_path"
-        case $agent in
-            claude)
-                timeout "$DISPATCH_TIMEOUT" claude -p "$prompt" --print > "$log_file" 2>&1 || true
-                ;;
-            codex)
-                timeout "$DISPATCH_TIMEOUT" codex e "$prompt" > "$log_file" 2>&1 || true
-                ;;
-            gemini)
-                timeout "$DISPATCH_TIMEOUT" gemini -p "$prompt" > "$log_file" 2>&1 || true
-                ;;
-            opencode)
-                timeout "$DISPATCH_TIMEOUT" opencode run "$prompt" > "$log_file" 2>&1 || true
-                ;;
-            kimi)
-                timeout "$DISPATCH_TIMEOUT" kimi --quiet -p "$prompt" > "$log_file" 2>&1 || true
-                ;;
-        esac
+        run_agent_work "$agent" "$prompt" "$log_file" "$DISPATCH_TIMEOUT"
+        on_lane_exit "$lane"
     ) &
     local pid=$!
 
@@ -813,8 +1041,17 @@ case "$COMMAND" in
     dispatch)
         cmd_dispatch "$@"
         ;;
+    run)
+        cmd_run "$@"
+        ;;
     status)
         cmd_status
+        ;;
+    watch)
+        cmd_watch "$@"
+        ;;
+    logs)
+        cmd_logs "$@"
         ;;
     review)
         cmd_review
