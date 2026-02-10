@@ -74,16 +74,20 @@ class FactExtractor:
 
     Uses rule-based patterns as the primary extraction method.
     Optionally uses spaCy NER for entity detection and NLI for verification.
+    Includes quality filters to reject bot messages, vague subjects, and short phrases.
     """
 
     def __init__(
         self,
         entailment_threshold: float = 0.7,
         use_nli: bool = False,
+        confidence_threshold: float = 0.5,
     ) -> None:
         self.threshold = entailment_threshold
         self.use_nli = use_nli
+        self.confidence_threshold = confidence_threshold
         self._nlp = None
+        self._contacts_cache: dict[str, Any] | None = None
 
     def _get_nlp(self) -> Any:
         """Lazy-load spaCy model."""
@@ -105,7 +109,7 @@ class FactExtractor:
             contact_id: ID of the contact these messages belong to.
 
         Returns:
-            Deduplicated list of extracted facts.
+            Deduplicated list of extracted facts (filtered by quality).
         """
         now = datetime.now().isoformat()
         facts: list[Fact] = []
@@ -116,11 +120,19 @@ class FactExtractor:
             if not text or len(text) < 5:
                 continue
 
+            # Skip bot messages before extraction
+            if self._is_bot_message(text, contact_id):
+                logger.debug("Skipping bot message: %s", text[:50])
+                continue
+
             extracted = self._extract_rule_based(text, contact_id, now)
             # Attach source message ID
             for fact in extracted:
                 fact.source_message_id = msg_id
             facts.extend(extracted)
+
+        # Apply quality filters and recalibrate confidence
+        facts = self._apply_quality_filters(facts)
 
         # Deduplicate
         facts = self._deduplicate(facts)
@@ -130,12 +142,174 @@ class FactExtractor:
             facts = self._verify_facts_nli(facts)
 
         logger.info(
-            "Extracted %d facts from %d messages for %s",
+            "Extracted %d facts from %d messages for %s (after quality filtering)",
             len(facts),
             len(messages),
             contact_id[:16],
         )
         return facts
+
+    # =========================================================================
+    # Quality Filtering Methods
+    # =========================================================================
+
+    def _is_bot_message(self, text: str, chat_id: str = "") -> bool:
+        """Detect high-confidence bot messages (spam, automated replies).
+
+        High-confidence indicators (any 1 match = reject):
+        - CVS Pharmacy, Rx Ready (pharmacy bots)
+        - "Check out this job at" (LinkedIn spam)
+        - Sender is 5-6 digit short code (SMS;-;898287)
+
+        Medium-confidence (any 3 matches = reject):
+        - URL + "job" + capitalized company
+        - "apply" + "now"
+        - >50% all-caps text
+        """
+        # High-confidence single indicators
+        high_confidence_patterns = [
+            r"CVS Pharmacy",
+            r"Rx Ready",
+            r"Check out this job at",
+        ]
+        for pattern in high_confidence_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                return True
+
+        # Check for SMS short codes (5-6 digit only in chat_id)
+        if chat_id and re.match(r"SMS;-;\d{5,6}$", chat_id):
+            return True
+
+        # Medium-confidence multi-factor detection
+        medium_factors = 0
+
+        # Factor 1: URL + job keyword + capitalized word
+        if re.search(r"https?://", text) and re.search(r"\bjob\b", text, re.IGNORECASE):
+            if re.search(r"\b[A-Z][a-z]+\s+[A-Z]", text):
+                medium_factors += 1
+
+        # Factor 2: "apply" + "now"
+        if re.search(r"\bapply\b", text, re.IGNORECASE) and re.search(
+            r"\bnow\b", text, re.IGNORECASE
+        ):
+            medium_factors += 1
+
+        # Factor 3: >50% all caps
+        letters = [c for c in text if c.isalpha()]
+        if letters:
+            caps_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
+            if caps_ratio > 0.5:
+                medium_factors += 1
+
+        return medium_factors >= 3
+
+    def _is_vague_subject(self, subject: str) -> bool:
+        """Reject vague subjects that are pronouns losing context.
+
+        Pronouns to reject: me, you, that, this, it, them, he, she
+        """
+        vague_pronouns = {"me", "you", "that", "this", "it", "them", "he", "she"}
+        return subject.lower().strip() in vague_pronouns
+
+    def _is_too_short(self, category: str, subject: str) -> bool:
+        """Reject facts with subjects too short for category.
+
+        Category-specific thresholds:
+        - preference: require min 3 words (context crucial)
+        - relationship/work/location: min 2 words
+        """
+        word_count = len(subject.split())
+
+        if category == "preference":
+            return word_count < 3
+
+        # relationship, work, location, event
+        if category in ("relationship", "work", "location", "event"):
+            return word_count < 2
+
+        return False
+
+    def _calculate_confidence(
+        self,
+        base_confidence: float,
+        category: str,
+        subject: str,
+        is_vague: bool,
+        is_short: bool,
+    ) -> float:
+        """Recalibrate confidence based on quality factors.
+
+        Adjustments:
+        - Vague subject: multiply by 0.5
+        - Short phrase: multiply by 0.7
+        - Rich context (4+ words): multiply by 1.1
+        """
+        adjusted = base_confidence
+
+        if is_vague:
+            adjusted *= 0.5
+        elif is_short:
+            adjusted *= 0.7
+
+        # Bonus for rich context (4+ words)
+        word_count = len(subject.split())
+        if word_count >= 4:
+            adjusted = min(adjusted * 1.1, 1.0)
+
+        return adjusted
+
+    def _apply_quality_filters(self, facts: list[Fact]) -> list[Fact]:
+        """Filter facts by quality and recalibrate confidence.
+
+        Returns only facts with confidence >= threshold after filtering.
+        """
+        filtered: list[Fact] = []
+
+        for fact in facts:
+            # Check vague subject
+            is_vague = self._is_vague_subject(fact.subject)
+            if is_vague:
+                logger.debug(
+                    "Rejecting vague subject: %s (category=%s)",
+                    fact.subject,
+                    fact.category,
+                )
+                continue
+
+            # Check short phrase
+            is_short = self._is_too_short(fact.category, fact.subject)
+
+            # Recalibrate confidence
+            adjusted_confidence = self._calculate_confidence(
+                fact.confidence,
+                fact.category,
+                fact.subject,
+                is_vague,
+                is_short,
+            )
+
+            # Only keep if confidence >= threshold
+            if adjusted_confidence < self.confidence_threshold:
+                logger.debug(
+                    "Rejecting low-confidence fact: %s/%s (conf=%.2f, adjusted=%.2f)",
+                    fact.category,
+                    fact.subject,
+                    fact.confidence,
+                    adjusted_confidence,
+                )
+                continue
+
+            # Update confidence and keep
+            fact.confidence = adjusted_confidence
+            filtered.append(fact)
+
+        logger.debug(
+            "Quality filtering: %d → %d facts (%.1f%% kept)",
+            len(facts),
+            len(filtered),
+            (len(filtered) / len(facts) * 100) if facts else 0,
+        )
+        return filtered
 
     def _verify_facts_nli(self, facts: list[Fact]) -> list[Fact]:
         """Filter facts by NLI entailment verification (batched)."""
@@ -359,3 +533,105 @@ class FactExtractor:
                             )
 
         return self._deduplicate(facts)
+
+    # =========================================================================
+    # NER Person Extraction
+    # =========================================================================
+
+    def _extract_person_facts_ner(
+        self, text: str, contact_id: str, timestamp: str
+    ) -> list[Fact]:
+        """Extract PERSON entities from text using spaCy NER.
+
+        Resolves person names to contacts and creates relationship facts.
+        Returns empty list if spaCy unavailable.
+        """
+        nlp = self._get_nlp()
+        if nlp is None:
+            return []
+
+        facts: list[Fact] = []
+        try:
+            doc = nlp(text)
+            for ent in doc.ents:
+                if ent.label_ == "PERSON" and len(ent.text) > 1:
+                    person_name = ent.text.strip()
+
+                    # Try to resolve to contact
+                    linked_contact_id = self._resolve_person_to_contact(person_name)
+
+                    facts.append(
+                        Fact(
+                            category="relationship",
+                            subject=person_name,
+                            predicate="mentioned_person",
+                            source_text=text[:200],
+                            confidence=0.5,
+                            contact_id=contact_id,
+                            extracted_at=timestamp,
+                        )
+                    )
+        except Exception as e:
+            logger.warning("NER person extraction failed: %s", e)
+
+        return facts
+
+    def _resolve_person_to_contact(self, person_name: str) -> str | None:
+        """Fuzzy match person name to contact in database.
+
+        Uses token-based matching: require unique match with confidence >= 0.7
+        or clear winner with 0.2+ gap over runner-up.
+
+        Returns:
+            Contact ID if match found, None otherwise.
+        """
+        try:
+            from jarvis.db import get_db
+
+            db = get_db()
+
+            # Get all contacts
+            with db.connection() as conn:
+                cursor = conn.execute("SELECT id, display_name FROM contacts")
+                contacts = cursor.fetchall()
+
+            if not contacts:
+                return None
+
+            # Simple token-based fuzzy match
+            name_tokens = set(person_name.lower().split())
+            scores: dict[int, float] = {}
+
+            for contact_id, display_name in contacts:
+                contact_tokens = set(display_name.lower().split())
+                if not contact_tokens:
+                    continue
+
+                # Jaccard similarity: intersection / union
+                intersection = len(name_tokens & contact_tokens)
+                union = len(name_tokens | contact_tokens)
+                similarity = intersection / union if union > 0 else 0
+                scores[contact_id] = similarity
+
+            if not scores:
+                return None
+
+            # Sort by score descending
+            sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            top_score = sorted_scores[0][1]
+
+            # Require high confidence or clear winner
+            if top_score < 0.7:
+                return None
+
+            # Check for clear winner (gap >= 0.2)
+            if len(sorted_scores) > 1:
+                runner_up_score = sorted_scores[1][1]
+                if top_score - runner_up_score < 0.2:
+                    return None  # ambiguous match
+
+            return str(sorted_scores[0][0])
+
+        except Exception as e:
+            logger.warning("Person resolution failed: %s", e)
+            return None

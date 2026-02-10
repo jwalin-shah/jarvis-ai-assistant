@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS send_queue (
     next_retry_at TIMESTAMP             -- When to retry next
 );
 
--- Contact facts for knowledge graph (v12+)
+-- Contact facts for knowledge graph (v12+, v13 adds linked_contact_id)
 CREATE TABLE IF NOT EXISTS contact_facts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contact_id TEXT NOT NULL,
@@ -194,11 +194,13 @@ CREATE TABLE IF NOT EXISTS contact_facts (
     source_message_id INTEGER,
     source_text TEXT DEFAULT '',
     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    linked_contact_id TEXT,                  -- resolved contact reference (v13+)
     UNIQUE(contact_id, category, subject, predicate)
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_contact ON contact_facts(contact_id);
 CREATE INDEX IF NOT EXISTS idx_facts_category ON contact_facts(category);
+CREATE INDEX IF NOT EXISTS idx_facts_linked_contact ON contact_facts(linked_contact_id);
 
 -- Indexes for scheduling tables
 CREATE INDEX IF NOT EXISTS idx_scheduled_contact ON scheduled_drafts(contact_id);
@@ -237,7 +239,7 @@ EXPECTED_INDICES = {
     "idx_facts_category",
 }
 
-CURRENT_SCHEMA_VERSION = 12  # contact_facts table for knowledge graph
+CURRENT_SCHEMA_VERSION = 13  # contact_facts + linked_contact_id for NER linking
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {
@@ -260,6 +262,8 @@ VALID_MIGRATION_COLUMNS = {
     "cluster_id",
     # v9: content hash
     "content_hash",
+    # v13: NER person linking
+    "linked_contact_id",
 }
 
 # Allowlist of valid column types for ALTER TABLE migrations
