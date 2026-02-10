@@ -24,6 +24,7 @@ from api.schemas.graph import (
     GraphEvolutionSnapshot,
     GraphNodeSchema,
 )
+from jarvis.errors import GraphError
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,7 @@ def get_network_graph(
 
     except Exception as e:
         logger.exception("Error building network graph")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GraphError("Failed to build network graph", cause=e)
 
 
 @router.get(
@@ -250,8 +251,12 @@ def get_ego_graph(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error building ego graph for {contact_id}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error building ego graph for %s", contact_id)
+        raise GraphError(
+            f"Failed to build ego graph for contact: {contact_id}",
+            contact_id=contact_id,
+            cause=e,
+        )
 
 
 @router.get(
@@ -272,6 +277,8 @@ def get_contact_profile(contact_id: str) -> ContactProfileDetailSchema:
     try:
         from jarvis.contacts.contact_profile import (
             ContactProfile,
+        )
+        from jarvis.contacts.contact_profile import (
             load_profile as load_contact_profile,
         )
         from jarvis.relationships import generate_style_guide, load_profile
@@ -307,20 +314,26 @@ def get_contact_profile(contact_id: str) -> ContactProfileDetailSchema:
                     (contact_id,),
                 ).fetchall()
                 for row in rows:
-                    r = dict(row) if hasattr(row, "keys") else {
-                        "category": row[0],
-                        "subject": row[1],
-                        "predicate": row[2],
-                        "value": row[3],
-                        "confidence": row[4],
-                    }
-                    facts.append(ContactFactSchema(
-                        category=r["category"],
-                        subject=r["subject"],
-                        predicate=r["predicate"],
-                        value=r["value"],
-                        confidence=r["confidence"],
-                    ))
+                    r = (
+                        dict(row)
+                        if hasattr(row, "keys")
+                        else {
+                            "category": row[0],
+                            "subject": row[1],
+                            "predicate": row[2],
+                            "value": row[3],
+                            "confidence": row[4],
+                        }
+                    )
+                    facts.append(
+                        ContactFactSchema(
+                            category=r["category"],
+                            subject=r["subject"],
+                            predicate=r["predicate"],
+                            value=r["value"],
+                            confidence=r["confidence"],
+                        )
+                    )
         except Exception as e:
             logger.debug("Could not load contact facts: %s", e)
 
@@ -345,7 +358,11 @@ def get_contact_profile(contact_id: str) -> ContactProfileDetailSchema:
         raise
     except Exception as e:
         logger.exception("Error loading contact profile for %s", contact_id)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GraphError(
+            f"Failed to load contact profile: {contact_id}",
+            contact_id=contact_id,
+            cause=e,
+        )
 
 
 @router.get(
@@ -408,7 +425,7 @@ def get_clusters(
 
     except Exception as e:
         logger.exception("Error computing clusters")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GraphError("Failed to compute graph clusters", cause=e)
 
 
 @router.get(
@@ -509,7 +526,7 @@ def get_graph_evolution(
         raise
     except Exception as e:
         logger.exception("Error computing graph evolution")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GraphError("Failed to compute graph evolution", cause=e)
 
 
 @router.post(
@@ -583,7 +600,7 @@ def export_graph(
 
     except Exception as e:
         logger.exception("Error exporting graph")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GraphError("Failed to export graph", cause=e)
 
 
 @router.get(
@@ -653,4 +670,4 @@ def get_graph_stats(
 
     except Exception as e:
         logger.exception("Error computing graph stats")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise GraphError("Failed to compute graph statistics", cause=e)

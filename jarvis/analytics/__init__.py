@@ -21,6 +21,8 @@ from jarvis.analytics.engine import (
     AnalyticsEngine,
     AnalyticsResult,
     ContactAnalytics,
+    EmojiStats,
+    MessageLengthStats,
     OverviewMetrics,
     get_analytics_engine,
 )
@@ -42,6 +44,8 @@ __all__ = [
     "AnalyticsEngine",
     "AnalyticsResult",
     "ContactAnalytics",
+    "EmojiStats",
+    "MessageLengthStats",
     "OverviewMetrics",
     "get_analytics_engine",
     # Aggregator

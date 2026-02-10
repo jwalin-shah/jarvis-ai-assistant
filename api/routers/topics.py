@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.dependencies import get_imessage_reader
 from integrations.imessage import ChatDBReader
-from jarvis.metrics import TTLCache
+from jarvis.cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

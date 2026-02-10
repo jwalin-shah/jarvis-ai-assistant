@@ -19,6 +19,7 @@ from api.schemas import (
 )
 from contracts.imessage import Conversation, Message
 from integrations.imessage import ChatDBReader
+from jarvis.errors import ExportError
 from jarvis.export import (
     ExportFormat,
     export_backup,
@@ -130,10 +131,11 @@ async def export_conversation(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to export conversation: {e}",
-        ) from e
+        raise ExportError(
+            "Failed to export conversation",
+            export_format=export_request.format.value,
+            cause=e,
+        )
 
 
 @router.post("/search", response_model=ExportResponse)
@@ -212,10 +214,11 @@ async def export_search(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to export search results: {e}",
-        ) from e
+        raise ExportError(
+            "Failed to export search results",
+            export_format=search_request.format.value,
+            cause=e,
+        )
 
 
 TIMEOUT_BACKUP = 60.0  # Backups can take longer
@@ -312,7 +315,7 @@ async def export_full_backup(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create backup: {e}",
+        raise ExportError(
+            "Failed to create backup",
+            cause=e,
         ) from e

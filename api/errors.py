@@ -53,6 +53,7 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     ErrorCode.VAL_TYPE_ERROR: 400,
     ErrorCode.MDL_INVALID_REQUEST: 400,
     ErrorCode.CAL_PARSE_FAILED: 400,
+    ErrorCode.EXPORT_INVALID_FORMAT: 400,
     # 403 Forbidden
     ErrorCode.MSG_ACCESS_DENIED: 403,
     ErrorCode.CAL_ACCESS_DENIED: 403,
@@ -60,6 +61,7 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     ErrorCode.MDL_NOT_FOUND: 404,
     ErrorCode.MSG_DB_NOT_FOUND: 404,
     ErrorCode.CFG_MISSING: 404,
+    ErrorCode.GRF_CONTACT_NOT_FOUND: 404,
     # 408 Request Timeout
     ErrorCode.MDL_TIMEOUT: 408,
     # 500 Internal Server Error
@@ -69,6 +71,11 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     ErrorCode.MSG_QUERY_FAILED: 500,
     ErrorCode.MSG_SCHEMA_UNSUPPORTED: 500,
     ErrorCode.MSG_SEND_FAILED: 500,
+    ErrorCode.GRF_BUILD_FAILED: 500,
+    ErrorCode.DB_QUERY_FAILED: 500,
+    ErrorCode.DB_INTEGRITY_ERROR: 500,
+    ErrorCode.EXPORT_GENERATION_FAILED: 500,
+    ErrorCode.EMB_ENCODING_FAILED: 500,
     # 500 Internal Server Error (Calendar)
     ErrorCode.CAL_CREATE_FAILED: 500,
     ErrorCode.CAL_NOT_AVAILABLE: 500,
@@ -78,6 +85,8 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     ErrorCode.RES_MEMORY_EXHAUSTED: 503,
     ErrorCode.RES_DISK_FULL: 503,
     ErrorCode.RES_DISK_ACCESS: 503,
+    ErrorCode.DB_CONNECTION_FAILED: 503,
+    ErrorCode.EMB_INDEX_NOT_READY: 503,
 }
 
 

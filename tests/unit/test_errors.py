@@ -60,6 +60,10 @@ class TestErrorCode:
                     "CAL_",
                     "EXP_",
                     "FBK_",
+                    "GRF_",
+                    "DB_",
+                    "EMB_",
+                    "EXPORT_",
                 ]
             )
 

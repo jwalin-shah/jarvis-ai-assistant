@@ -8,7 +8,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from jarvis.db.models import JARVIS_DB_PATH, TTLCache
+from jarvis.cache import TTLCache
+from jarvis.db.models import JARVIS_DB_PATH
 from jarvis.db.schema import (
     CURRENT_SCHEMA_VERSION,
     EXPECTED_INDICES,
@@ -436,7 +437,9 @@ class JarvisDBBase:
                     if "already exists" in str(e).lower():
                         logger.debug("vec tables already exist")
                     else:
-                        logger.warning("sqlite-vec migration skipped (extension unavailable): %s", e)
+                        logger.warning(
+                            "sqlite-vec migration skipped (extension unavailable): %s", e
+                        )
 
             # Migration v10 -> v11: Recreate vec_binary with aux columns
             if current_version == 10:
@@ -457,7 +460,9 @@ class JarvisDBBase:
                     if "already exists" in str(e).lower():
                         logger.debug("vec_binary already has new schema")
                     else:
-                        logger.warning("vec_binary migration skipped (extension unavailable): %s", e)
+                        logger.warning(
+                            "vec_binary migration skipped (extension unavailable): %s", e
+                        )
 
             # Migration v11 -> v12: contact_facts table for knowledge graph
             # Table is created by SCHEMA_SQL with CREATE TABLE IF NOT EXISTS

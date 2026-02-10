@@ -9,6 +9,11 @@ from collections.abc import Iterator
 from fastapi import HTTPException
 
 from integrations.imessage import ChatDBReader, reset_connection_pool
+from jarvis.cache import TTLCache
+
+# Cache access check result to avoid per-request DB queries.
+# TTL of 60s balances freshness with performance.
+_access_cache = TTLCache(ttl_seconds=60.0, maxsize=1)
 
 
 def get_imessage_reader() -> Iterator[ChatDBReader]:
@@ -26,7 +31,15 @@ def get_imessage_reader() -> Iterator[ChatDBReader]:
     """
     reader = ChatDBReader()
 
-    if not reader.check_access():
+    found, has_access = _access_cache.get("imessage_access")
+    if not found:
+        has_access = reader.check_access()
+        if has_access:
+            _access_cache.set("imessage_access", True)
+        else:
+            _access_cache.invalidate("imessage_access")
+
+    if not has_access:
         reader.close()
         raise HTTPException(
             status_code=403,
@@ -50,5 +63,5 @@ def get_imessage_reader() -> Iterator[ChatDBReader]:
 
 def reset_imessage_reader() -> None:
     """Reset the connection pool (for testing or reconnection)."""
-    # Reset the underlying connection pool
     reset_connection_pool()
+    _access_cache.invalidate()

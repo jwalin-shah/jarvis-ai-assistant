@@ -41,6 +41,7 @@ from api.schemas import (
 from contracts.imessage import Message
 from contracts.models import GenerationRequest
 from integrations.imessage import ChatDBReader
+from jarvis.errors import ModelError, iMessageQueryError
 from jarvis.model_warmer import get_warm_generator
 from jarvis.prompts import API_REPLY_EXAMPLES, API_SUMMARY_EXAMPLES
 
@@ -404,10 +405,10 @@ async def generate_draft_reply(
         )
     except Exception as e:
         logger.error("Failed to fetch messages for chat %s: %s", draft_request.chat_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch conversation context: {e}",
-        ) from e
+        raise iMessageQueryError(
+            f"Failed to fetch conversation context for chat: {draft_request.chat_id}",
+            cause=e,
+        )
 
     if not messages:
         raise HTTPException(
@@ -425,10 +426,10 @@ async def generate_draft_reply(
         generator = await run_in_threadpool(get_warm_generator)
     except Exception as e:
         logger.error("Failed to get generator: %s", e)
-        raise HTTPException(
-            status_code=503,
-            detail="Model service unavailable",
-        ) from e
+        raise ModelError(
+            "Model service unavailable",
+            cause=e,
+        )
 
     # Generate suggestions sequentially (MLX/Metal GPU is NOT thread-safe)
     suggestions: list[DraftSuggestion] = []
@@ -630,10 +631,10 @@ async def summarize_conversation(
         )
     except Exception as e:
         logger.error("Failed to fetch messages for chat %s: %s", summary_request.chat_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch conversation: {e}",
-        ) from e
+        raise iMessageQueryError(
+            f"Failed to fetch conversation for chat: {summary_request.chat_id}",
+            cause=e,
+        )
 
     if not messages:
         raise HTTPException(
@@ -653,10 +654,10 @@ async def summarize_conversation(
         generator = await run_in_threadpool(get_warm_generator)
     except Exception as e:
         logger.error("Failed to get generator: %s", e)
-        raise HTTPException(
-            status_code=503,
-            detail="Model service unavailable",
-        ) from e
+        raise ModelError(
+            "Model service unavailable",
+            cause=e,
+        )
 
     # Generate summary with timeout
     prompt = _build_summary_prompt(context_text, len(messages))
@@ -677,10 +678,10 @@ async def summarize_conversation(
         ) from None
     except Exception as e:
         logger.error("Failed to generate summary: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate conversation summary",
-        ) from e
+        raise ModelError(
+            "Failed to generate conversation summary",
+            cause=e,
+        )
 
     return DraftSummaryResponse(
         summary=summary,
@@ -858,10 +859,10 @@ async def generate_smart_reply(
         )
     except Exception as e:
         logger.error("Failed to fetch messages for chat %s: %s", routed_request.chat_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch conversation context: {e}",
-        ) from e
+        raise iMessageQueryError(
+            f"Failed to fetch conversation context for chat: {routed_request.chat_id}",
+            cause=e,
+        )
 
     if not messages:
         raise HTTPException(
@@ -912,10 +913,10 @@ async def generate_smart_reply(
         ) from None
     except Exception as e:
         logger.error("Failed to route reply: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate smart reply",
-        ) from e
+        raise ModelError(
+            "Failed to generate smart reply",
+            cause=e,
+        )
 
     return RoutedReplyResponse(
         response=result["response"],
