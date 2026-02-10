@@ -41,6 +41,12 @@ from models.registry import (
     get_recommended_model,
     is_model_available,
 )
+from models.resilience import (
+    FallbackTier,
+    check_memory_pressure,
+    get_fallback_response,
+    should_skip_model_load,
+)
 from models.templates import (
     ResponseTemplate,
     SentenceModelError,
@@ -66,6 +72,11 @@ __all__ = [
     "get_model_spec_by_path",
     "get_recommended_model",
     "is_model_available",
+    # Resilience
+    "FallbackTier",
+    "check_memory_pressure",
+    "get_fallback_response",
+    "should_skip_model_load",
     # MLX Embeddings
     "DEFAULT_MLX_EMBEDDING_MODEL",
     "MLX_EMBEDDING_DIM",
