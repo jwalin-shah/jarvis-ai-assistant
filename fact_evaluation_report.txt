@@ -1,0 +1,81 @@
+================================================================================
+FACT EXTRACTION EVALUATION REPORT
+================================================================================
+
+SUMMARY
+----------------------------------------
+Total facts extracted:        19
+Facts with issues:            10
+Total issues found:           21
+
+ISSUE BREAKDOWN
+----------------------------------------
+  bot_message         :   4 ( 21.1%)
+  low_confidence      :   2 ( 10.5%)
+  short_phrase        :  11 ( 57.9%)
+  vague               :   4 ( 21.1%)
+
+FACTS BY CATEGORY
+----------------------------------------
+  preference     :  17 facts (avg conf: 0.91)
+  work           :   2 facts (avg conf: 0.97)
+
+HIGH-SEVERITY ISSUES (RECOMMEND FIX)
+----------------------------------------
+
+BOT_MESSAGE (4 facts):
+  - preference/seeing you: Fact extracted from automated message (pharmacy, job posting, etc.)
+    → Filter bot messages before extraction (e.g., check for known bot keywords)
+  - work/Chaffin Luhana: Fact extracted from automated message (pharmacy, job posting, etc.)
+    → Filter bot messages before extraction (e.g., check for known bot keywords)
+  - work/Retool: Fact extracted from automated message (pharmacy, job posting, etc.)
+    → Filter bot messages before extraction (e.g., check for known bot keywords)
+  - preference/the energy: Fact extracted from automated message (pharmacy, job posting, etc.)
+    → Filter bot messages before extraction (e.g., check for known bot keywords)
+
+VAGUE (4 facts):
+  - preference/THAT: Subject 'that' is too vague/generic
+    → Extract full phrase from context, not just 'that'
+  - preference/me: Subject 'me' is too vague/generic
+    → Extract full phrase from context, not just 'me'
+  - preference/you: Subject 'you' is too vague/generic
+    → Extract full phrase from context, not just 'you'
+  - preference/me: Subject 'me' is too vague/generic
+    → Extract full phrase from context, not just 'me'
+
+CONFIDENCE DISTRIBUTION
+----------------------------------------
+  0.6: █████                      2 ( 10.5%)
+  0.7: ██                         1 (  5.3%)
+  0.9: ██████████████████████████████████████████ 16 ( 84.2%)
+
+RECOMMENDATIONS
+----------------------------------------
+
+1. BOT MESSAGE FILTERING
+   - Filter CVS pharmacy, job posting bots before extraction
+   - Check for patterns: "CVS Pharmacy", "job at", "Check out this job"
+   - Skip messages with >5 bot keywords
+
+2. SUBJECT QUALITY IMPROVEMENT
+   - Reject facts with vague subjects (me, you, that, etc)
+   - Require minimum 3-word phrase length
+   - Extract full context, not just noun: "driving in sf" not "sf"
+
+3. CONFIDENCE CALIBRATION
+   - Current hard-coded scores (0.6-0.8) don't reflect quality
+   - Use fact length + bot-filter + vagueness as confidence inputs
+   - Consider NLI verification for <0.7 confidence facts
+
+4. PRECISION VS RECALL TRADEOFF
+   - Current: High recall (catch everything) + low precision (lots of noise)
+   - Recommendation: Reduce recall by 30%, improve precision by 50%
+   - Filter facts that fail: bot check + vagueness check + short phrase check
+
+5. GROUND TRUTH EVALUATION
+   To measure recall, you need:
+   - Manually annotate 50-100 messages with expected facts
+   - Extract with current system
+   - Calculate: recall = (facts_found / facts_expected)
+   - Currently: precision ≈ 0.6-0.7 (my estimate)
+   

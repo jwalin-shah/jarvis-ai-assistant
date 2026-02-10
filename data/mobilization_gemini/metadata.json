@@ -1,0 +1,34 @@
+{
+  "source": "gemini_mobilization",
+  "labels": [
+    "HIGH",
+    "LOW",
+    "MEDIUM",
+    "NONE"
+  ],
+  "label_map": {
+    "HIGH": 0,
+    "LOW": 1,
+    "MEDIUM": 2,
+    "NONE": 3
+  },
+  "feature_dims": 14,
+  "train_size": 4629,
+  "test_size": 1158,
+  "features": [
+    "message_length",
+    "word_count",
+    "question_marks",
+    "exclamation_marks",
+    "punct_density",
+    "has_wh",
+    "has_aux",
+    "has_request",
+    "has_closing",
+    "emotional_count",
+    "caps_density",
+    "emoji_count",
+    "is_short",
+    "has_negation"
+  ]
+}

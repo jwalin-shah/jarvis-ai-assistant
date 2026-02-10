@@ -26,7 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_recent_messages(limit: int = 500) -> list[dict]:
+def get_recent_messages(limit: int = 5000) -> list[dict]:
     """Get recent messages from iMessage chat.db for fact extraction."""
     db_path = Path.home() / "Library" / "Messages" / "chat.db"
     if not db_path.exists():
@@ -74,6 +74,7 @@ def get_recent_messages(limit: int = 500) -> list[dict]:
 
 def extract_facts_with_filters(messages: list[dict]) -> list[Fact]:
     """Extract facts using new quality filter pipeline."""
+    # Keep threshold at 0.5 - professional message + coherence filters remove obvious bad facts
     extractor = FactExtractor(confidence_threshold=0.5)
     logger.info("Extracting facts with quality filters...")
     start = time.perf_counter()
