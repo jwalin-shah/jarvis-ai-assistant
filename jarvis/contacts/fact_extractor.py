@@ -326,10 +326,6 @@ class FactExtractor:
             # Multi-word is always OK
             return False
 
-        # Event requires context
-        if category == "event":
-            return word_count < 2
-
         return False
 
     def _calculate_confidence(

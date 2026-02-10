@@ -179,11 +179,6 @@ class TestShortPhraseFiltering:
         # Lowercase single word should still fail
         assert extractor._is_too_short("location", "city")  # lowercase, no context
 
-    def test_event_requires_2_words(self) -> None:
-        """Event facts need 2+ words."""
-        extractor = FactExtractor()
-        assert extractor._is_too_short("event", "party")  # 1 word
-        assert not extractor._is_too_short("event", "birthday party")  # 2 words
 
 
 class TestConfidenceRecalibration:
