@@ -83,7 +83,7 @@ class FactExtractor:
     def __init__(
         self,
         entailment_threshold: float = 0.7,
-        use_nli: bool = False,
+        use_nli: bool = True,  # Enable by default
         confidence_threshold: float = 0.5,
     ) -> None:
         self.threshold = entailment_threshold
@@ -160,6 +160,40 @@ class FactExtractor:
     # =========================================================================
     # Quality Filtering Methods
     # =========================================================================
+
+    def _is_like_filler_word(self, text: str, match_start: int, match_end: int) -> bool:
+        """Detect if 'like' in this context is a filler word, not a preference verb.
+
+        Filler patterns:
+        - "it's like X" (that's like, it's like)
+        - "that's like X"
+        - "<verb> like X" where verb != like (looks like, feels like, sounds like)
+        - "like okay", "like yeah", "like what"
+        - Mid-sentence: "so like I was..." (conversational filler)
+        """
+        # Look at context around the match (50 chars before/after)
+        context_start = max(0, match_start - 50)
+        context_end = min(len(text), match_end + 50)
+        context = text[context_start:context_end].lower()
+
+        # Pattern: X is/was/feels like (not preference)
+        if re.search(r"(it's|that's|feels?|looks?|sounds?)\s+like\b", context):
+            return True
+
+        # Pattern: like + discourse marker (okay, yeah, what, so, you know)
+        if re.search(r"\blike\s+(okay|yeah|yeah?|what|so|you know|omg|lol)", context):
+            return True
+
+        # Pattern: mid-sentence filler "so like" or "and like"
+        if re.search(r"(?:^|[,;])\s+like\s+", context):
+            return True
+
+        # Pattern: "I like" at sentence start is usually preference, allow it
+        # Pattern: "I was like" at sentence start is likely filler, reject it
+        if re.search(r"^i\s+was\s+like\b", context):
+            return True
+
+        return False
 
     def _is_professional_message(self, text: str) -> bool:
         """Detect professional/business emails that should not be processed.
@@ -546,6 +580,11 @@ class FactExtractor:
 
         # Preference patterns
         for match in PREFERENCE_PATTERN.finditer(text):
+            # Skip if "like" is a filler word, not preference verb
+            if "like" in match.group(0).lower() and self._is_like_filler_word(text, match.start(), match.end()):
+                logger.debug(f"Skipping filler 'like': {match.group(0)[:60]}...")
+                continue
+
             thing = self._clean_subject(match.group(1))
             if not thing:  # Skip if empty after cleaning
                 continue
