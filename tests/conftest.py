@@ -4,12 +4,43 @@ Handles mocking of platform-specific dependencies (MLX) to allow tests
 to run on non-macOS platforms.
 """
 
+import functools
+import platform
 import sys
 import types
 from unittest.mock import MagicMock
 
 import numpy as np
+import psutil
 import pytest
+
+
+def hardware_required(min_ram_gb: int = 8, requires_apple_silicon: bool = False,
+                      requires_model: str | None = None):
+    """Skip decorator for tests requiring specific hardware."""
+    reasons = []
+    skip = False
+
+    if requires_apple_silicon and platform.machine() != "arm64":
+        reasons.append("requires Apple Silicon")
+        skip = True
+
+    total_ram_gb = psutil.virtual_memory().total / (1024**3)
+    if total_ram_gb < min_ram_gb:
+        reasons.append(f"requires {min_ram_gb}GB RAM (have {total_ram_gb:.1f}GB)")
+        skip = True
+
+    if not MLX_AVAILABLE:
+        reasons.append("requires MLX")
+        skip = True
+
+    reason = "; ".join(reasons) if reasons else ""
+    return pytest.mark.skipif(skip, reason=reason)
+
+
+def slow_test(timeout: int = 30):
+    """Mark a test as slow with a timeout hint."""
+    return pytest.mark.timeout(timeout)
 
 
 def _mock_mlx_modules():
