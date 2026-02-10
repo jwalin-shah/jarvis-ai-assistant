@@ -24,6 +24,7 @@ from slowapi.errors import RateLimitExceeded
 from api.errors import register_exception_handlers
 from api.ratelimit import limiter, rate_limit_exceeded_handler
 from api.routers import (
+    admin_router,
     analytics_router,
     attachments_router,
     batch_router,
@@ -355,6 +356,7 @@ async def metrics_middleware(request: Request, call_next):  # type: ignore[no-un
 
 
 # Include routers
+app.include_router(admin_router)
 app.include_router(health_router)
 app.include_router(debug_router)
 app.include_router(attachments_router)
@@ -388,3 +390,22 @@ app.include_router(graph_router)
 
 # Register JARVIS exception handlers for standardized error responses
 register_exception_handlers(app)
+
+
+@app.on_event("startup")
+async def _startup_reliability_check() -> None:
+    """Run database reliability check on server startup."""
+    import logging
+
+    _logger = logging.getLogger(__name__)
+    try:
+        from jarvis.db.reliability import get_reliability_monitor
+
+        monitor = get_reliability_monitor()
+        status = monitor.check_health()
+        if status.healthy:
+            _logger.info("Database health check passed (size=%.1fMB)", status.db_size_mb)
+        else:
+            _logger.warning("Database health issues: %s", status.issues)
+    except Exception as e:
+        _logger.warning("Startup health check skipped: %s", e)
