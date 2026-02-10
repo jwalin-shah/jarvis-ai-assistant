@@ -14,7 +14,7 @@ import pytest
 from contracts.imessage import Message
 from jarvis.router import ReplyRouter, reset_reply_router
 
-from .conftest import create_mock_message
+from tests.integration.conftest import create_mock_message
 
 
 @pytest.fixture(autouse=True)

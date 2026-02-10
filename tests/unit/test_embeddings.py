@@ -40,7 +40,8 @@ def temp_db_path(tmp_path):
 @pytest.fixture
 def mock_embedding():
     """Create a mock normalized embedding vector."""
-    embedding = np.random.randn(384).astype(np.float32)
+    rng = np.random.RandomState(42)
+    embedding = rng.randn(384).astype(np.float32)
     return embedding / np.linalg.norm(embedding)
 
 
@@ -380,7 +381,8 @@ class TestEmbeddingStoreSimilarSearch:
     ):
         """Test that find_similar returns matching messages."""
         # Create embeddings that are similar
-        base_embedding = np.random.randn(384).astype(np.float32)
+        rng = np.random.RandomState(42)
+        base_embedding = rng.randn(384).astype(np.float32)
         base_embedding = base_embedding / np.linalg.norm(base_embedding)
 
         # Batch embeddings for indexing
@@ -407,7 +409,7 @@ class TestEmbeddingStoreSimilarSearch:
         """Test that min_similarity filters results."""
         # Create very different embeddings
         mock_embed_batch.return_value = np.array(
-            [np.random.randn(384).astype(np.float32) for _ in sample_messages]
+            [np.random.RandomState(i).randn(384).astype(np.float32) for i, _ in enumerate(sample_messages)]
         )
         # Query with orthogonal embedding
         query_embedding = np.zeros(384, dtype=np.float32)
