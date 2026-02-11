@@ -164,9 +164,7 @@
    tail -50 test_results.txt
    ```
 
-2. **Known collection errors**: `CentroidMixin` import errors in `jarvis/classifiers/mixins.py` are pre-existing and don't affect production code.
-
-3. **Run a specific test:**
+2. **Run a specific test:**
    ```bash
    uv run pytest tests/test_specific.py -v
    ```
