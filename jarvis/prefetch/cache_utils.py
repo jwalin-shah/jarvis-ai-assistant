@@ -60,6 +60,8 @@ def _check_json_nesting_depth(raw: str, max_depth: int = _MAX_JSON_NESTING_DEPTH
                 return False
         elif ch in ("}", "]"):
             depth -= 1
+            if depth < 0:
+                return False
     return True
 
 
@@ -71,52 +73,65 @@ def deserialize_value(data: bytes, value_type: str) -> Any:
         value_type: Type string from serialization.
 
     Returns:
-        Deserialized value.
+        Deserialized value for valid types (numpy, json, str, bytes).
 
     Raises:
-        ValueError: If data exceeds size limits or contains invalid types.
+        ValueError: If data exceeds the 10MB size limit, numpy dtype is not
+            in the allowlist, numpy header is malformed/truncated, JSON nesting
+            depth exceeds the limit, or value_type is pickle/unknown.
     """
     if len(data) > _MAX_DESERIALIZE_BYTES:
-        logger.warning(
-            "Refusing to deserialize %d bytes (limit %d). Returning None.",
-            len(data),
-            _MAX_DESERIALIZE_BYTES,
+        msg = (
+            f"Refusing to deserialize {len(data)} bytes (limit {_MAX_DESERIALIZE_BYTES})."
         )
-        return None
+        logger.warning(msg)
+        raise ValueError(msg)
 
     if value_type == "numpy":
         if len(data) < 8:
-            logger.warning("NumPy data too short (%d bytes). Returning None.", len(data))
-            return None
+            msg = f"NumPy data too short ({len(data)} bytes), need at least 8."
+            logger.warning(msg)
+            raise ValueError(msg)
         shape_len, dtype_len = struct.unpack("II", data[:8])
-        shape = struct.unpack(f"{shape_len // 4}I", data[8 : 8 + shape_len])
+        # Validate dtype before unpacking the full buffer
+        min_header = 8 + shape_len + dtype_len
+        if min_header > len(data):
+            msg = (
+                f"NumPy header extends beyond data "
+                f"(header {min_header} bytes, data {len(data)} bytes)."
+            )
+            logger.warning(msg)
+            raise ValueError(msg)
         dtype_str = data[8 + shape_len : 8 + shape_len + dtype_len].decode()
         if dtype_str not in _ALLOWED_NUMPY_DTYPES:
-            logger.warning(
-                "Refusing to deserialize numpy array with dtype '%s' "
-                "(allowed: %s). Returning None.",
-                dtype_str,
-                ", ".join(sorted(_ALLOWED_NUMPY_DTYPES)),
+            msg = (
+                f"Refusing to deserialize numpy array with dtype '{dtype_str}' "
+                f"(allowed: {', '.join(sorted(_ALLOWED_NUMPY_DTYPES))})."
             )
-            return None
+            logger.warning(msg)
+            raise ValueError(msg)
+        shape = struct.unpack(f"{shape_len // 4}I", data[8 : 8 + shape_len])
         buffer = data[8 + shape_len + dtype_len :]
         return np.frombuffer(buffer, dtype=np.dtype(dtype_str)).reshape(shape)
     elif value_type == "json":
         raw = data.decode()
         if not _check_json_nesting_depth(raw):
-            logger.warning(
-                "Refusing to deserialize JSON with nesting depth > %d. Returning None.",
-                _MAX_JSON_NESTING_DEPTH,
+            msg = (
+                f"Refusing to deserialize JSON with nesting depth > "
+                f"{_MAX_JSON_NESTING_DEPTH}."
             )
-            return None
+            logger.warning(msg)
+            raise ValueError(msg)
         return json.loads(raw)
     elif value_type == "str":
         return data.decode()
     elif value_type == "bytes":
         return data
     elif value_type == "pickle":
-        logger.warning("Refusing to deserialize pickle data (security risk). Returning None.")
-        return None
+        msg = "Refusing to deserialize pickle data (security risk)."
+        logger.warning(msg)
+        raise ValueError(msg)
     else:
-        logger.warning("Unknown value_type '%s', returning None.", value_type)
-        return None
+        msg = f"Unknown value_type '{value_type}'."
+        logger.warning(msg)
+        raise ValueError(msg)
