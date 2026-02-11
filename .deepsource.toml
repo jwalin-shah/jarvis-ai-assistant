@@ -1,0 +1,37 @@
+version = 1
+
+[[analyzers]]
+name = "python"
+enabled = true
+
+  [analyzers.meta]
+  runtime_version = "3.x"
+  max_line_length = 100
+
+[[analyzers]]
+name = "rust"
+enabled = true
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  environment = ["browser", "node"]
+
+test_patterns = [
+  "tests/**",
+  "test/**",
+  "**/*_test.py",
+  "**/test_*.py",
+]
+
+exclude_patterns = [
+  "desktop/src-tauri/target/**",
+  "desktop/node_modules/**",
+  "**/node_modules/**",
+  "**/__pycache__/**",
+  "dist/**",
+  "*.min.js",
+  "migrations/**",
+]
