@@ -1122,6 +1122,74 @@ class ChatDBReader:
 
             return conversations
 
+    def get_conversation(self, chat_id: str) -> Conversation | None:
+        """Get a single conversation by chat_id.
+
+        Direct lookup instead of fetching all conversations and filtering.
+
+        Args:
+            chat_id: The conversation ID (chat.guid)
+
+        Returns:
+            Conversation object if found, None otherwise
+        """
+        if not chat_id or not isinstance(chat_id, str):
+            return None
+
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
+
+            query = get_query(
+                "conversation_by_chat_id",
+                self._schema_version or "v14",
+            )
+
+            try:
+                cursor.execute(query, (chat_id,))
+                row = cursor.fetchone()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.warning(f"Query error in get_conversation: {e}")
+                return None
+
+        if row is None:
+            return None
+
+        # Parse participants
+        participants_str = row["participants"] or ""
+        participants = [
+            normalized
+            for p in participants_str.split(",")
+            if p.strip() and (normalized := normalize_phone_number(p.strip())) is not None
+        ]
+
+        is_group = len(participants) > 1
+        last_message_date = parse_apple_timestamp(row["last_message_date"])
+
+        display_name = row["display_name"] or None
+        if not display_name and not is_group and len(participants) == 1:
+            display_name = self._resolve_contact_name(participants[0])
+
+        row_keys = row.keys()
+        last_message_text = (
+            row["last_message_text"] if "last_message_text" in row_keys else None
+        )
+        if not last_message_text and "last_message_attributed_body" in row_keys:
+            attributed_body = row["last_message_attributed_body"]
+            if attributed_body:
+                from .parser import parse_attributed_body
+
+                last_message_text = parse_attributed_body(attributed_body)
+
+        return Conversation(
+            chat_id=row["chat_id"],
+            participants=participants,
+            display_name=display_name,
+            last_message_date=last_message_date,
+            message_count=row["message_count"],
+            is_group=is_group,
+            last_message_text=last_message_text,
+        )
+
     def get_messages(
         self,
         chat_id: str,
