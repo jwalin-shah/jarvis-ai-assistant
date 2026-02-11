@@ -13,8 +13,8 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -260,13 +260,35 @@ class DeterministicClassifier:
         (lambda t: t.lower() in {"sounds good", "sounds great"}, "acknowledge", 0.90, "exact"),
         # Questions
         (lambda t: "?" in t, "question", 0.85, "pattern"),
-        (lambda t: t.lower().startswith(("what", "how", "why", "when", "where")), "question", 0.88, "pattern"),
+        (
+            lambda t: t.lower().startswith(("what", "how", "why", "when", "where")),
+            "question",
+            0.88,
+            "pattern",
+        ),
         # Emotions
-        (lambda t: any(w in t.lower() for w in ["love", "loved", "hate", "happy", "sad", "angry"]), "emotion", 0.80, "keyword"),
+        (
+            lambda t: any(
+                w in t.lower() for w in ["love", "loved", "hate", "happy", "sad", "angry"]
+            ),
+            "emotion",
+            0.80,
+            "keyword",
+        ),
         # Requests
-        (lambda t: any(w in t.lower() for w in ["can you", "please", "send", "help me"]), "request", 0.75, "keyword"),
+        (
+            lambda t: any(w in t.lower() for w in ["can you", "please", "send", "help me"]),
+            "request",
+            0.75,
+            "keyword",
+        ),
         # Closings
-        (lambda t: any(w in t.lower() for w in ["bye", "goodbye", "talk later", "see you"]), "closing", 0.90, "keyword"),
+        (
+            lambda t: any(w in t.lower() for w in ["bye", "goodbye", "talk later", "see you"]),
+            "closing",
+            0.90,
+            "keyword",
+        ),
     ]
 
     def classify(self, text: str, **kwargs: Any) -> ClassificationResult:
@@ -286,9 +308,7 @@ class DeterministicClassifier:
         # Default fallback
         return ClassificationResult("statement", 0.60, "fallback")
 
-    def classify_with_scores(
-        self, text: str, **kwargs: Any
-    ) -> list[tuple[str, float]]:
+    def classify_with_scores(self, text: str, **kwargs: Any) -> list[tuple[str, float]]:
         """Return sorted list of (category, confidence) for all categories.
 
         Args:

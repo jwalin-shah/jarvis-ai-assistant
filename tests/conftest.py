@@ -4,7 +4,6 @@ Handles mocking of platform-specific dependencies (MLX) to allow tests
 to run on non-macOS platforms.
 """
 
-import functools
 import platform
 import sys
 import types
@@ -15,8 +14,9 @@ import psutil
 import pytest
 
 
-def hardware_required(min_ram_gb: int = 8, requires_apple_silicon: bool = False,
-                      requires_model: str | None = None):
+def hardware_required(
+    min_ram_gb: int = 8, requires_apple_silicon: bool = False, requires_model: str | None = None
+):
     """Skip decorator for tests requiring specific hardware."""
     reasons = []
     skip = False
