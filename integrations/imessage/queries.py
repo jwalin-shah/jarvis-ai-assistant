@@ -301,6 +301,38 @@ _BASE_QUERIES = {
         WHERE message.guid = ?
         LIMIT 1
     """,
+    "conversation_by_chat_id": """
+        SELECT
+            chat.ROWID as chat_rowid,
+            chat.guid as chat_id,
+            chat.display_name,
+            chat.chat_identifier,
+            (
+                SELECT GROUP_CONCAT(h.id, ', ')
+                FROM chat_handle_join chj
+                JOIN handle h ON chj.handle_id = h.ROWID
+                WHERE chj.chat_id = chat.ROWID
+            ) as participants,
+            (
+                SELECT COUNT(*)
+                FROM chat_message_join cmj
+                WHERE cmj.chat_id = chat.ROWID
+            ) as message_count,
+            lm.date as last_message_date,
+            lm.text as last_message_text,
+            lm.attributedBody as last_message_attributed_body
+        FROM chat
+        LEFT JOIN (
+            SELECT cmj2.chat_id, m2.date, m2.text, m2.attributedBody
+            FROM chat_message_join cmj2
+            JOIN message m2 ON cmj2.message_id = m2.ROWID
+            WHERE cmj2.chat_id = (SELECT c.ROWID FROM chat c WHERE c.guid = ?)
+            ORDER BY m2.date DESC
+            LIMIT 1
+        ) lm ON lm.chat_id = chat.ROWID
+        WHERE chat.guid = ?
+        LIMIT 1
+    """,
     "messages_after": """
         SELECT
             message.ROWID as id,
