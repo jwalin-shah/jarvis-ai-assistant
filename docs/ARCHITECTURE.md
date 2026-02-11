@@ -582,6 +582,39 @@ export async function semanticSearch(query: string, chatId?: string) {
 
 ---
 
+## Repository Modernization (Phases 1-3)
+
+The codebase underwent a 3-phase modernization effort to reduce complexity:
+
+### Phase 1: Foundation Cleanup
+- Removed 100+ experimental scripts and result files from root
+- Pruned obsolete model artifacts (category_svm_v2, old LightGBM variants)
+- Consolidated scripts directory from 116 to ~25 production scripts
+- Removed unused dependencies from pyproject.toml
+- Stabilized test suite (0 failures baseline)
+
+### Phase 2: Structural Reorganization
+- Established `contracts/` for Protocol-based interfaces (Classifier, Embedder, Generator)
+- Decomposed large modules:
+  - `socket_server.py` remains single file but with clear handler sections
+  - Lifecycle management extracted where applicable
+- Enforced clean architecture layers (core -> interfaces -> infrastructure)
+- Standardized error responses across API routers
+
+### Phase 3: Pipeline Simplification
+- Unified model access through registry pattern
+- Simplified feature extraction pipeline
+- Consolidated cache implementations into `jarvis/cache.py` (TTLCache)
+- Removed dead prefetch paths and redundant warming logic
+
+### Phase 4: Stabilization & Hardoff
+- Performance baseline tests (`tests/test_performance_baselines.py`)
+- Coverage threshold enforcement (`--cov-fail-under=60`)
+- Security hardening: rate limiting, path validation, timing-safe token comparison
+- Documentation updates (SECURITY.md, TROUBLESHOOTING.md)
+
+---
+
 ## Performance Comparison
 
 | Operation | V1 (HTTP) | V2 (Direct + Socket) |

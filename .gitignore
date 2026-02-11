@@ -164,6 +164,8 @@ research_*.py
 review_*.py
 sample_*.py
 test_*.py
+!tests/test_*.py
+!tests/**/test_*.py
 validate_*.py
 verify_*.py
 detailed_*.py
