@@ -1,0 +1,70 @@
+#!/bin/bash
+# Pre-commit hook to detect flake-prone patterns
+# Install: cp .githooks/pre-commit-flake-check .git/hooks/
+
+echo "🔍 Checking for flake-prone patterns..."
+
+# Get list of staged Python files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$' || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# Patterns that commonly cause test flakiness
+# Format: "pattern|category|message"
+FLAKE_PATTERNS=(
+    "time\.sleep\([0-9]|timing|time.sleep() - use event-driven synchronization"
+    "datetime\.now\(\)|timing|datetime.now() - use frozen_time fixture"
+    "datetime\.utcnow\(\)|timing|datetime.utcnow() - use frozen_time fixture"
+    "np\.random\.rand[^n]|randomness|np.random.rand - use seeded_random fixture"
+    "np\.random\.randn|randomness|np.random.randn - use seeded_random fixture"
+    "random\.randint|randomness|random.randint - use seeded_random fixture"
+    "random\.random\(\)|randomness|random.random - use seeded_random fixture"
+    "asyncio\.sleep|timing|asyncio.sleep - use controlled_timeout"
+    "threading\.Timer|timing|threading.Timer - use deterministic patterns"
+)
+
+FOUND_ISSUES=0
+
+for file in $STAGED_FILES; do
+    # Skip certain files
+    if [[ "$file" == tests/utils/* ]] || [[ "$file" == tests/ci/* ]]; then
+        continue
+    fi
+    
+    if [ -f "$file" ]; then
+        for pattern_info in "${FLAKE_PATTERNS[@]}"; do
+            IFS='|' read -r pattern category message <<< "$pattern_info"
+            
+            if grep -nE "$pattern" "$file" > /dev/null 2>&1; then
+                echo ""
+                echo "⚠️  Potential flake-prone pattern detected:"
+                echo "   File: $file"
+                echo "   Category: $category"
+                echo "   Message: $message"
+                echo "   Matching lines:"
+                grep -nE "$pattern" "$file" | head -3
+                echo ""
+                FOUND_ISSUES=1
+            fi
+        done
+    fi
+done
+
+if [ $FOUND_ISSUES -eq 1 ]; then
+    echo ""
+    echo "❌ Commit blocked due to potential test flakiness."
+    echo ""
+    echo "To fix these issues:"
+    echo "  1. See docs/TEST_FLAKE_ERADICATION_PROGRAM.md"
+    echo "  2. Use the hardened fixtures in tests/utils/"
+    echo ""
+    echo "To bypass this check (not recommended):"
+    echo "  git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+echo "✅ No flake-prone patterns detected"
+exit 0

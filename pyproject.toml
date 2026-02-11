@@ -99,6 +99,7 @@ coref = [
 
 [project.scripts]
 jarvis = "jarvis._cli_main:run"
+jarvis-tools = "jarvis.tools.cli:run"
 
 [project.urls]
 Homepage = "https://github.com/jwalinshah/jarvis-ai-assistant"
@@ -127,6 +128,7 @@ ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
 "scripts/train_*.py" = ["N803", "N806"]
 "scripts/label_*.py" = ["N803", "N806"]
 "scripts/eval_*.py" = ["N806"]
+"jarvis/tools/**/*.py" = ["N803", "N806"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -135,7 +137,7 @@ warn_return_any = true
 warn_unused_ignores = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "tests/tools/unit", "tests/tools/integration", "tests/tools/e2e"]
 python_files = "test_*.py"
 python_functions = "test_*"
 addopts = "-v --doctest-modules --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing"
@@ -143,10 +145,14 @@ timeout = 30
 timeout_method = "thread"
 markers = [
     "real_model: mark test as requiring a real MLX model to be available",
+    "hardware: mark test as requiring specific hardware (Apple Silicon, sufficient RAM)",
+    "slow: mark test as slow (> 30s)",
+    "statistical: mark test as using statistical assertions (may have variance)",
+    "requires_deps(name1,name2): mark test as requiring specific dependencies",
 ]
 
 [tool.coverage.run]
-source = ["jarvis", "api", "models", "core", "integrations", "contracts", "benchmarks"]
+source = ["jarvis", "api", "models", "core", "integrations", "contracts", "benchmarks", "jarvis/tools"]
 omit = ["tests/*", "*/test_*.py"]
 
 [tool.coverage.report]

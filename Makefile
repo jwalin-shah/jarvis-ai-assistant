@@ -15,7 +15,14 @@
         prepare-data finetune-sft finetune-draft fuse-models \
         generate-prefs finetune-orpo fuse-orpo finetune-embedder \
         prepare-dailydialog dailydialog-sweep dailydialog-sweep-quick dailydialog-analyze train-category-svm \
-        personalize extract-personal prepare-personal generate-ft-configs finetune-personal evaluate-personal personalize-report fuse-personal
+        personalize extract-personal prepare-personal generate-ft-configs finetune-personal evaluate-personal personalize-report fuse-personal \
+        db-backup db-backup-export db-backup-migration \
+        db-restore db-restore-force db-restore-backup \
+        db-health db-health-json db-list \
+        db-maintain db-maintain-full db-vacuum db-analyze db-cleanup db-cleanup-dry \
+        db-test-migrations db-test-migration db-rollback-test \
+        db-drill db-recover db-recover-force \
+        db-pre-release db-verify-full
 
 # ============================================================================
 # HELP
@@ -93,6 +100,20 @@ help:
 	@echo "  make dailydialog-sweep-quick Quick sweep: 3-class combined only (32 experiments)"
 	@echo "  make dailydialog-analyze     Analyze sweep results and print recommendations"
 	@echo "  make train-category-svm      Train production SVM (requires --label-map flag)"
+	@echo ""
+	@echo "Database Reliability & Maintenance:"
+	@echo "  make db-backup               Create hot backup of database"
+	@echo "  make db-restore              Restore from latest backup"
+	@echo "  make db-health               Run database health check"
+	@echo "  make db-maintain             Run daily maintenance (ANALYZE, checkpoint)"
+	@echo "  make db-maintain-full        Run full maintenance (includes VACUUM, backup)"
+	@echo "  make db-test-migrations      Test all database migrations"
+	@echo "  make db-drill                Run backup/restore drill"
+	@echo "  make db-recover              Attempt database recovery"
+	@echo "  make db-list                 List available backups"
+	@echo "  make db-cleanup              Clean up old backups"
+	@echo "  make db-pre-release          Run pre-release database checks"
+	@echo "  make db-verify-full          Complete database verification"
 
 # ============================================================================
 # SETUP
@@ -150,6 +171,37 @@ endif
 	uv run pytest $(FILE) --tb=long -v --junit-xml=test_results.xml --timeout=30 --timeout-method=thread 2>&1 | tee test_results.txt
 	@echo ""
 	@echo "Results saved to test_results.txt and test_results.xml"
+
+# ============================================================================
+# TIERED TEST TARGETS (New Architecture)
+# ============================================================================
+
+test-deps:
+	@uv run python -c "from tests.dependencies import print_dependency_report; print_dependency_report()"
+
+test-unit:
+	@echo "Running unit tests (no external deps)..."
+	uv run pytest tests/unit/ -v --tb=short -m "not slow" 2>&1 | tee test_results.txt
+
+test-integration:
+	@echo "Running integration tests (mocked deps)..."
+	uv run pytest tests/integration/ -v --tb=short -m "not slow" 2>&1 | tee test_results.txt
+
+test-hardware:
+	@echo "Running hardware tests (requires Apple Silicon, 16GB RAM)..."
+	uv run pytest tests/hardware/ -v --tb=short 2>&1 | tee test_results.txt
+
+test-slow:
+	@echo "Running slow tests..."
+	RUN_SLOW_TESTS=1 uv run pytest tests/ -v --tb=short -m "slow" 2>&1 | tee test_results.txt
+
+test-ci:
+	@echo "Running CI test suite (unit + integration, no hardware)..."
+	uv run pytest tests/unit/ tests/integration/ -v --tb=short -m "not hardware and not slow" 2>&1 | tee test_results.txt
+
+test-full:
+	@echo "Running full test suite (all tiers)..."
+	uv run pytest tests/ -v --tb=short 2>&1 | tee test_results.txt
 
 # ============================================================================
 # CODE QUALITY
@@ -496,31 +548,6 @@ fuse-personal:
 	done
 
 # ============================================================================
-# DailyDialog Dialog Acts Experiments
-# ============================================================================
-
-# Prepare DailyDialog data with native dialog act labels
-prepare-dailydialog:
-	uv run python scripts/prepare_dailydialog_data.py
-
-# Run full 144-experiment sweep (5-7 hours)
-dailydialog-sweep:
-	uv run python experiments/scripts/dailydialog_sweep.py
-
-# Quick sweep: 3-class combined features only (32 experiments, ~1 hour)
-dailydialog-sweep-quick:
-	uv run python experiments/scripts/dailydialog_sweep.py --quick
-
-# Analyze sweep results and print recommendations
-dailydialog-analyze:
-	uv run python experiments/scripts/analyze_dailydialog_results.py
-
-# Train production category SVM
-# Usage: make train-category-svm ARGS="--label-map 3class"
-train-category-svm:
-	uv run python scripts/train_category_svm.py $(ARGS)
-
-# ============================================================================
 # CLEANUP
 # ============================================================================
 
@@ -564,3 +591,352 @@ desktop-build:
 
 frontend-dev:
 	cd desktop && npm run dev
+
+
+# ============================================================================
+# DEVELOPER PRODUCTIVITY ENHANCEMENTS
+# See docs/DEV_PRODUCTIVITY_PLAN.md for full documentation
+# ============================================================================
+
+# --- Cache Configuration ---
+
+PYTHON_FILES_HASH := $(shell find jarvis models core api -name '*.py' -type f -exec md5 -q {} \; 2>/dev/null | md5 -q)
+DEPS_HASH := $(shell md5 -q pyproject.toml uv.lock 2>/dev/null)
+JARVIS_CACHE_DIR := $(HOME)/.cache/jarvis
+
+# --- Bootstrap Speedups ---
+
+install-fast:
+	@echo "Installing dependencies (using uv cache)..."
+	uv sync --extra dev --frozen
+
+restore-venv:
+	@if [ -d "$(JARVIS_CACHE_DIR)/venvs/$(shell git rev-parse --short HEAD)" ]; then \
+		echo "Restoring venv from cache..."; \
+		cp -r "$(JARVIS_CACHE_DIR)/venvs/$(shell git rev-parse --short HEAD)" .venv; \
+		echo "Venv restored!"; \
+	else \
+		echo "No cached venv found, running fresh install..."; \
+		make install && make cache-venv; \
+	fi
+
+cache-venv:
+	@mkdir -p "$(JARVIS_CACHE_DIR)/venvs"
+	@if [ -d ".venv" ]; then \
+		cp -r .venv "$(JARVIS_CACHE_DIR)/venvs/$(shell git rev-parse --short HEAD)"; \
+		echo "Venv cached for commit $(shell git rev-parse --short HEAD)"; \
+	fi
+
+setup-parallel:
+	@echo "Running parallel setup..."
+	@(make install-fast > /tmp/install.log 2>&1 && echo "✓ Dependencies installed") &
+	@(make hooks > /tmp/hooks.log 2>&1 && echo "✓ Git hooks configured") &
+	@wait
+	@echo "Parallel setup complete!"
+
+# --- Test Acceleration ---
+
+test-changed:
+	@changed_files=$$(git diff --name-only HEAD~1 | grep '\.py$$'); \
+	if [ -z "$$changed_files" ]; then \
+		echo "No Python files changed since last commit"; \
+		exit 0; \
+	fi; \
+	echo "Testing changed files: $$changed_files"; \
+	uv run pytest $$changed_files --tb=short -v --timeout=30 2>&1 | tee test_results.txt
+
+test-ff:
+	@echo "Running tests (fail-fast mode)..."
+	uv run pytest tests/ --tb=line --maxfail=1 --timeout=30 -q 2>&1 | tee test_results.txt
+
+test-parallel:
+	@echo "Running tests in parallel (2 workers for 8GB RAM constraint)..."
+	uv run pytest tests/ -n 2 --tb=short --timeout=30 2>&1 | tee test_results.txt
+
+test-failed:
+	@echo "Re-running previously failed tests..."
+	uv run pytest tests/ --lf --tb=short -v --timeout=30 2>&1 | tee test_results.txt
+
+test-smart:
+	@echo "Running failed tests first, then others..."
+	uv run pytest tests/ --ff --tb=short -v --timeout=30 2>&1 | tee test_results.txt
+
+test-module:
+	@if [ -z "$(MODULE)" ]; then \
+		echo "Usage: make test-module MODULE=jarvis/contacts"; \
+		exit 1; \
+	fi
+	@echo "Testing module: $(MODULE)"
+	@base=$$(basename $(MODULE)); \
+	uv run pytest tests/unit/test_$${base}*.py tests/integration/test_$${base}*.py --tb=short -v --timeout=30 2>&1 | tee test_results.txt
+
+test-watch:
+	@echo "Starting test watch mode (requires pytest-watch)..."
+	@uv run ptw tests/ --onpass "echo '✓ All tests passed'" --onfail "echo '✗ Tests failed'" -q 2>/dev/null || \
+		(echo "Installing pytest-watch..."; uv add --dev pytest-watch; uv run ptw tests/ -q)
+
+test-profile:
+	@echo "Profiling test execution times..."
+	@uv run pytest tests/ --durations=20 --tb=no -q 2>&1 | tee test_profile.txt
+	@echo ""
+	@echo "Top 10 slowest tests:"
+	@head -15 test_profile.txt | tail -10
+
+# --- Incremental Caching ---
+
+lint-incremental:
+	@mkdir -p .cache/lint
+	@if [ -f .cache/lint/last_run_hash ] && [ "$$(cat .cache/lint/last_run_hash)" = "$(PYTHON_FILES_HASH)" ]; then \
+		echo "✓ Lint cache valid (no Python changes since last run)"; \
+	else \
+		echo "Running linter..."; \
+		uv run ruff check . && echo "$(PYTHON_FILES_HASH)" > .cache/lint/last_run_hash; \
+	fi
+
+typecheck-incremental:
+	@mkdir -p .cache/typecheck
+	@if [ -f .cache/typecheck/last_run_hash ] && [ "$$(cat .cache/typecheck/last_run_hash)" = "$(PYTHON_FILES_HASH)" ]; then \
+		echo "✓ Type check cache valid (no Python changes since last run)"; \
+	else \
+		echo "Running type checker..."; \
+		uv run mypy jarvis/ core/ models/ api/ --ignore-missing-imports && echo "$(PYTHON_FILES_HASH)" > .cache/typecheck/last_run_hash; \
+	fi
+
+format-incremental:
+	@mkdir -p .cache/format
+	@if [ -f .cache/format/last_run_hash ] && [ "$$(cat .cache/format/last_run_hash)" = "$(PYTHON_FILES_HASH)" ]; then \
+		echo "✓ Format check cache valid"; \
+	else \
+		echo "Checking format..."; \
+		uv run ruff format --check . && echo "$(PYTHON_FILES_HASH)" > .cache/format/last_run_hash; \
+	fi
+
+verify-fast: format-incremental lint-incremental typecheck-incremental test-ff
+	@echo ""
+	@echo "✅ Fast verification complete!"
+
+# --- Code Ownership ---
+
+owner:
+	@if [ -z "$(FILE)" ]; then \
+		echo "Usage: make owner FILE=jarvis/contacts/fact_extractor.py"; \
+		exit 1; \
+	fi
+	@uv run python scripts/code_owner.py $(FILE)
+
+reviewers:
+	@echo "Suggested reviewers for current changes:"
+	@uv run python scripts/code_owner.py
+
+code-review-checklist:
+	@echo "========================================"
+	@echo "Code Review Checklist"
+	@echo "========================================"
+	@echo ""
+	@echo "Before requesting review:"
+	@echo "  [ ] make verify-fast passes"
+	@echo "  [ ] Self-review: git diff --cached"
+	@echo "  [ ] Test coverage maintained/improved"
+	@echo "  [ ] Documentation updated (if needed)"
+	@echo "  [ ] CHANGELOG.md updated (if user-facing)"
+	@echo ""
+	@echo "For ML changes:"
+	@echo "  [ ] Benchmarks run and documented"
+	@echo "  [ ] Memory usage checked (8GB constraint)"
+	@echo ""
+	@echo "For API changes:"
+	@echo "  [ ] Contracts updated"
+	@echo "  [ ] Integration tests pass"
+	@echo ""
+
+# --- Cache Management ---
+
+clear-caches:
+	@echo "Clearing all development caches..."
+	@rm -rf .cache/
+	@rm -rf .pytest_cache/
+	@rm -rf .mypy_cache/
+	@rm -rf .ruff_cache/
+	@echo "Caches cleared. Next verify will run full checks."
+
+clear-venv-cache:
+	@echo "Clearing venv cache..."
+	@rm -rf $(JARVIS_CACHE_DIR)/venvs/
+	@echo "Venv cache cleared."
+
+# --- Performance Profiling ---
+
+profile-imports:
+	@echo "Profiling import times..."
+	@python -X importtime -c "import jarvis" 2>&1 | tail -20
+
+profile-tests:
+	@echo "Running tests with profiling..."
+	@uv run pytest tests/ --profile-svg --tb=no -q 2>/dev/null || \
+		(echo "Installing pytest-profiling..."; uv add --dev pytest-profiling; uv run pytest tests/ --profile-svg --tb=no -q)
+	@echo "Profile saved to prof/"
+
+# --- Development Health Check ---
+
+dev-health:
+	@echo "========================================"
+	@echo "Developer Environment Health"
+	@echo "========================================"
+	@echo ""
+	@echo "Git Status:"
+	@echo "  Branch: $$(git branch --show-current)"
+	@echo "  Uncommitted: $$(git status --porcelain | wc -l | tr -d ' ') files"
+	@echo ""
+	@echo "Virtual Environment:"
+	@echo "  Status: $$(if [ -d .venv ]; then echo '✓ present'; else echo '✗ missing'; fi)"
+	@echo "  Size: $$(du -sh .venv 2>/dev/null | cut -f1 || echo 'N/A')"
+	@echo ""
+	@echo "Cache Status:"
+	@echo "  Lint cache: $$(if [ -f .cache/lint/last_run_hash ]; then echo '✓ valid'; else echo '✗ none'; fi)"
+	@echo "  Type cache: $$(if [ -f .cache/typecheck/last_run_hash ]; then echo '✓ valid'; else echo '✗ none'; fi)"
+	@echo ""
+	@echo "Recent Test Results:"
+	@if [ -f test_results.txt ]; then \
+		if grep -q "passed" test_results.txt; then \
+			passed=$$(grep -o "[0-9]* passed" test_results.txt | tail -1 | grep -o "[0-9]*" || echo "0"); \
+			failed=$$(grep -o "[0-9]* failed" test_results.txt | tail -1 | grep -o "[0-9]*" || echo "0"); \
+			echo "  ✓ $$passed tests passed"; \
+			if [ "$$failed" != "0" ] && [ "$$failed" != "" ]; then \
+				echo "  ✗ $$failed tests failed"; \
+			fi; \
+		else \
+			echo "  ⚠ No test results found. Run: make test"; \
+		fi; \
+	else \
+		echo "  ⚠ No test results found. Run: make test"; \
+	fi
+	@echo ""
+	@echo "Last Commit:"
+	@git log -1 --oneline
+	@echo ""
+
+# ============================================================================
+# DATABASE RELIABILITY & MAINTENANCE
+# See docs/DATABASE_RELIABILITY_PLAN.md for full documentation
+# ============================================================================
+
+db-backup:
+	@uv run python scripts/db_maintenance.py backup --type hot
+
+db-backup-export:
+	@uv run python scripts/db_maintenance.py backup --type export
+
+db-backup-migration:
+	@uv run python scripts/db_maintenance.py backup --type migration
+
+db-restore:
+	@uv run python scripts/db_maintenance.py restore
+
+db-restore-force:
+	@uv run python scripts/db_maintenance.py restore --force
+
+db-restore-backup:
+ifndef BACKUP
+	$(error BACKUP is required. Usage: make db-restore-backup BACKUP=path/to/backup.db)
+endif
+	@uv run python scripts/db_maintenance.py restore --backup $(BACKUP) --force
+
+# ============================================================================
+# DATABASE HEALTH & MONITORING
+# ============================================================================
+
+db-health:
+	@uv run python scripts/db_maintenance.py health
+
+db-health-json:
+	@uv run python scripts/db_maintenance.py health --json
+
+db-list:
+	@uv run python scripts/db_maintenance.py list
+
+# ============================================================================
+# DATABASE MAINTENANCE
+# ============================================================================
+
+db-maintain:
+	@uv run python scripts/db_maintenance.py maintain --daily
+
+db-maintain-full:
+	@uv run python scripts/db_maintenance.py maintain --full
+
+db-vacuum:
+	@sqlite3 ~/.jarvis/jarvis.db "VACUUM"
+	@echo "Database vacuumed successfully"
+
+db-analyze:
+	@sqlite3 ~/.jarvis/jarvis.db "ANALYZE"
+	@echo "Database analyzed successfully"
+
+db-cleanup:
+	@uv run python scripts/db_maintenance.py cleanup --max-age 7
+
+db-cleanup-dry:
+	@uv run python scripts/db_maintenance.py cleanup --max-age 7 --dry-run
+
+# ============================================================================
+# DATABASE MIGRATION TESTING
+# ============================================================================
+
+db-test-migrations:
+	@uv run python scripts/db_maintenance.py test-migrations
+
+db-test-migration:
+ifndef VERSION
+	$(error VERSION is required. Usage: make db-test-migration VERSION=5)
+endif
+	@uv run python scripts/db_maintenance.py test-migrations --from-version $(VERSION)
+
+db-rollback-test:
+ifndef FROM_VERSION
+	$(error FROM_VERSION is required. Usage: make db-rollback-test FROM_VERSION=7 TO_VERSION=6)
+endif
+ifndef TO_VERSION
+	$(error TO_VERSION is required. Usage: make db-rollback-test FROM_VERSION=7 TO_VERSION=6)
+endif
+	@uv run python scripts/db_maintenance.py rollback-test --from-version $(FROM_VERSION) --to-version $(TO_VERSION)
+
+# ============================================================================
+# DATABASE RELIABILITY DRILLS & RECOVERY
+# ============================================================================
+
+db-drill:
+	@uv run python scripts/db_maintenance.py drill
+
+db-recover:
+	@uv run python scripts/db_maintenance.py recover
+
+db-recover-force:
+	@uv run python scripts/db_maintenance.py recover --force
+
+# ============================================================================
+# PRE-RELEASE DATABASE CHECKLIST
+# ============================================================================
+
+db-pre-release: db-backup db-test-migrations db-drill
+	@echo ""
+	@echo "========================================"
+	@echo "PRE-RELEASE DATABASE CHECKLIST"
+	@echo "========================================"
+	@echo ""
+	@echo "✓ Backup created"
+	@echo "✓ Migrations tested"
+	@echo "✓ Backup/restore drill completed"
+	@echo ""
+	@echo "Database is ready for release."
+
+# ============================================================================
+# COMPLETE DATABASE RELIABILITY VERIFICATION
+# ============================================================================
+
+db-verify-full: db-health db-backup db-test-migrations db-drill db-maintain
+	@echo ""
+	@echo "========================================"
+	@echo "COMPLETE DATABASE VERIFICATION"
+	@echo "========================================"
+	@echo ""
+	@echo "All database reliability checks passed!"
