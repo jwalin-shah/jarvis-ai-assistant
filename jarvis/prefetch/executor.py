@@ -220,9 +220,16 @@ class PrefetchExecutor:
 
     Features:
     - Priority queue for task scheduling
-    - Resource-aware execution
+    - Resource-aware execution (default: 2 workers, adjusted 1-4 by ResourceManager)
     - Extensible handler system
     - Metrics and monitoring
+
+    Concurrency Model:
+    - Default 2 workers handle IO-bound (DB, cache) and GPU-bound (LLM, embeddings) tasks.
+    - MLXModelLoader._mlx_load_lock serializes all GPU operations across workers.
+    - Multiple workers benefit IO-bound tasks (contact profiles, search, vec index).
+    - GPU-bound tasks (draft replies, embeddings) block on the lock regardless.
+    - ResourceManager dynamically adjusts 1-4 workers based on CPU/memory/battery.
     """
 
     def __init__(
@@ -236,7 +243,8 @@ class PrefetchExecutor:
 
         Args:
             cache: Multi-tier cache for storing prefetched data.
-            max_workers: Maximum worker threads (auto-detected if None).
+            max_workers: Maximum worker threads. Defaults to 2. ResourceManager
+                can recommend 1-4 based on system resources.
             max_queue_size: Maximum pending tasks.
             tick_interval: How often to check for tasks (seconds).
         """
@@ -412,7 +420,7 @@ class PrefetchExecutor:
             return False
 
     def schedule_batch(self, predictions: list[Prediction]) -> int:
-        """Schedule multiple predictions.
+        """Schedule multiple predictions with single lock acquisition.
 
         Args:
             predictions: List of predictions to schedule.
@@ -420,10 +428,48 @@ class PrefetchExecutor:
         Returns:
             Number of predictions scheduled.
         """
+        tasks_to_enqueue = []
+
+        with self._lock:
+            if self._state not in (ExecutorState.RUNNING, ExecutorState.PAUSED):
+                return 0
+
+            for prediction in predictions:
+                # Check if already in cache
+                if self._cache.get(prediction.key) is not None:
+                    self._stats.cache_hits += 1
+                    continue
+
+                # Check if already being processed
+                with self._active_lock:
+                    if prediction.key in self._active_tasks:
+                        continue
+                    if prediction.type == PredictionType.DRAFT_REPLY:
+                        draft_cid = prediction.params.get("chat_id", "")
+                        if draft_cid and draft_cid in self._active_drafts:
+                            continue
+
+                tasks_to_enqueue.append(
+                    PrefetchTask(
+                        priority=-prediction.priority.value,
+                        created_at=time.time(),
+                        prediction=prediction,
+                    )
+                )
+
         count = 0
-        for pred in predictions:
-            if self.schedule(pred):
+        for task in tasks_to_enqueue:
+            try:
+                self._queue.put_nowait(task)
                 count += 1
+            except Exception:
+                pass
+
+        with self._lock:
+            self._stats.predictions_scheduled += count
+            self._stats.predictions_skipped += len(predictions) - count
+            self._stats.queue_size = self._queue.qsize()
+
         return count
 
     def stats(self) -> dict[str, Any]:
@@ -636,21 +682,15 @@ class PrefetchExecutor:
             if not last_incoming:
                 return None
 
-            # Build thread context
-            thread = []
-            for msg in reversed(messages):
-                prefix = "Me" if msg.is_from_me else msg.sender_name or msg.sender
-                if msg.text:
-                    thread.append(f"{prefix}: {msg.text}")
-
             # Route and generate (acquire MLX lock to serialize GPU ops)
+            # Pass conversation_messages so router skips re-fetching from DB
             from models.loader import MLXModelLoader
 
             with MLXModelLoader._mlx_load_lock:
                 result = router.route(
                     incoming=last_incoming,
-                    thread=thread[-10:] if thread else None,
                     chat_id=chat_id,
+                    conversation_messages=messages,
                 )
 
             return {
@@ -841,24 +881,18 @@ class PrefetchExecutor:
             return None
 
 
-# Singleton instance
-_executor: PrefetchExecutor | None = None
-_executor_lock = threading.Lock()
+from jarvis.utils.singleton import thread_safe_singleton
 
 
+@thread_safe_singleton
 def get_executor() -> PrefetchExecutor:
     """Get or create singleton executor instance."""
-    global _executor
-    with _executor_lock:
-        if _executor is None:
-            _executor = PrefetchExecutor()
-        return _executor
+    return PrefetchExecutor()
 
 
 def reset_executor() -> None:
     """Reset singleton executor (stops if running)."""
-    global _executor
-    with _executor_lock:
-        if _executor is not None:
-            _executor.stop()
-        _executor = None
+    instance = get_executor.peek()  # type: ignore[attr-defined]
+    if instance is not None:
+        instance.stop()
+    get_executor.reset()  # type: ignore[attr-defined]

@@ -54,6 +54,7 @@ htmlcov/
 .nox/
 test_results.txt
 test_results.xml
+test_results_summary.txt
 
 # Type checking
 .mypy_cache/

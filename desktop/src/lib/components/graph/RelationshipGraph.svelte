@@ -32,6 +32,31 @@
   let g: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
   let zoom: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null;
 
+  // Pre-computed adjacency map for O(1) neighbor lookups
+  let adjacencyMap: Map<string, Set<string>> = new Map();
+
+  // Pre-computed node map for O(1) node lookups
+  let nodeMap: Map<string, GraphNode> = new Map();
+
+  function buildAdjacencyMap(edges: { source: string; target: string }[]) {
+    const map = new Map<string, Set<string>>();
+    for (const e of edges) {
+      if (!map.has(e.source)) map.set(e.source, new Set());
+      if (!map.has(e.target)) map.set(e.target, new Set());
+      map.get(e.source)!.add(e.target);
+      map.get(e.target)!.add(e.source);
+    }
+    return map;
+  }
+
+  function buildNodeMap(nodes: GraphNode[]) {
+    const map = new Map<string, GraphNode>();
+    for (const node of nodes) {
+      map.set(node.id, node);
+    }
+    return map;
+  }
+
   // Relationship colors for legend
   const relationshipColors: Record<string, string> = {
     family: "#FF6B6B",
@@ -56,6 +81,8 @@
         width,
         height,
       });
+      adjacencyMap = buildAdjacencyMap(graphData.edges);
+      nodeMap = buildNodeMap(graphData.nodes);
       renderGraph();
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load graph";
@@ -64,10 +91,41 @@
     }
   }
 
+  // Track if this is first render for incremental updates
+  let isFirstRender = true;
+  // Store references to D3 selections for updates
+  let linkSelection: d3.Selection<any, any, any, unknown> | null = null;
+  let nodeSelection: d3.Selection<any, any, any, unknown> | null = null;
+  let labelSelection: d3.Selection<any, any, any, unknown> | null = null;
+
   function renderGraph() {
     if (!graphData || !svgElement) return;
 
-    // Clear existing
+    // Prepare data for D3
+    const nodes = graphData.nodes.map(n => ({
+      ...n,
+      x: n.x ?? width / 2,
+      y: n.y ?? height / 2,
+    }));
+
+    const links = graphData.edges.map(e => ({
+      ...e,
+      source: e.source,
+      target: e.target,
+    }));
+
+    if (isFirstRender) {
+      // First render: build everything from scratch
+      renderInitial(nodes, links);
+      isFirstRender = false;
+    } else {
+      // Subsequent updates: use D3's data join for efficient updates
+      updateGraph(nodes, links);
+    }
+  }
+
+  function renderInitial(nodes: any[], links: any[]) {
+    // Clear existing (only on first render)
     d3.select(svgElement).selectAll("*").remove();
 
     svg = d3.select(svgElement)
@@ -86,19 +144,6 @@
 
     svg.call(zoom);
 
-    // Prepare data for D3
-    const nodes = graphData.nodes.map(n => ({
-      ...n,
-      x: n.x ?? width / 2,
-      y: n.y ?? height / 2,
-    }));
-
-    const links = graphData.edges.map(e => ({
-      ...e,
-      source: e.source,
-      target: e.target,
-    }));
-
     // Create simulation
     simulation = d3.forceSimulation(nodes as d3.SimulationNodeDatum[])
       .force("link", d3.forceLink(links)
@@ -112,7 +157,7 @@
         .radius((d: any) => d.size + 5));
 
     // Draw links
-    const link = g!.append("g")
+    linkSelection = g!.append("g")
       .attr("class", "links")
       .selectAll("line")
       .data(links)
@@ -122,7 +167,7 @@
       .attr("stroke-width", (d: any) => Math.max(1, d.weight * 3));
 
     // Draw nodes
-    const node = g!.append("g")
+    nodeSelection = g!.append("g")
       .attr("class", "nodes")
       .selectAll("circle")
       .data(nodes)
@@ -135,7 +180,7 @@
       .call(drag(simulation) as any);
 
     // Draw labels
-    const label = g!.append("g")
+    labelSelection = g!.append("g")
       .attr("class", "labels")
       .selectAll("text")
       .data(nodes)
@@ -150,6 +195,94 @@
       .text((d: any) => d.label);
 
     // Event handlers
+    bindEventHandlers(nodeSelection!);
+
+    // Update positions on tick
+    simulation.on("tick", () => {
+      linkSelection!
+        .attr("x1", (d: any) => d.source.x)
+        .attr("y1", (d: any) => d.source.y)
+        .attr("x2", (d: any) => d.target.x)
+        .attr("y2", (d: any) => d.target.y);
+
+      nodeSelection!
+        .attr("cx", (d: any) => d.x)
+        .attr("cy", (d: any) => d.y);
+
+      labelSelection!
+        .attr("x", (d: any) => d.x)
+        .attr("y", (d: any) => d.y);
+    });
+  }
+
+  function updateGraph(nodes: any[], links: any[]) {
+    if (!simulation || !g) return;
+
+    // Update simulation data
+    simulation.nodes(nodes as d3.SimulationNodeDatum[]);
+    (simulation.force("link") as d3.ForceLink<any, any>).links(links);
+
+    // Update links using data join
+    linkSelection = g.select(".links")
+      .selectAll("line")
+      .data(links, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
+      .join(
+        enter => enter.append("line")
+          .attr("stroke", "#666")
+          .attr("stroke-opacity", 0.6)
+          .attr("stroke-width", (d: any) => Math.max(1, d.weight * 3)),
+        update => update
+          .attr("stroke-width", (d: any) => Math.max(1, d.weight * 3)),
+        exit => exit.remove()
+      );
+
+    // Update nodes using data join
+    nodeSelection = g.select(".nodes")
+      .selectAll("circle")
+      .data(nodes, (d: any) => d.id)
+      .join(
+        enter => enter.append("circle")
+          .attr("r", (d: any) => d.size)
+          .attr("fill", (d: any) => d.color)
+          .attr("stroke", "#fff")
+          .attr("stroke-width", 2)
+          .attr("cursor", "pointer")
+          .call(drag(simulation!) as any),
+        update => update
+          .attr("r", (d: any) => d.size)
+          .attr("fill", (d: any) => d.color),
+        exit => exit.remove()
+      );
+
+    // Update labels using data join
+    labelSelection = g.select(".labels")
+      .selectAll("text")
+      .data(nodes, (d: any) => d.id)
+      .join(
+        enter => enter.append("text")
+          .attr("text-anchor", "middle")
+          .attr("dy", (d: any) => d.size + 14)
+          .attr("font-size", "11px")
+          .attr("fill", "#fff")
+          .attr("pointer-events", "none")
+          .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
+          .style("display", showLabels ? "block" : "none")
+          .text((d: any) => d.label),
+        update => update
+          .attr("dy", (d: any) => d.size + 14)
+          .style("display", showLabels ? "block" : "none")
+          .text((d: any) => d.label),
+        exit => exit.remove()
+      );
+
+    // Re-bind event handlers for new nodes
+    bindEventHandlers(nodeSelection!);
+
+    // Reheat simulation for layout adjustment
+    simulation.alpha(0.3).restart();
+  }
+
+  function bindEventHandlers(node: d3.Selection<any, any, any, unknown>) {
     node.on("mouseover", (event: MouseEvent, d: any) => {
       tooltipNode = d as GraphNode;
       tooltipX = event.pageX;
@@ -169,23 +302,6 @@
     .on("dblclick", (_event: MouseEvent, d: any) => {
       if (onNodeDoubleClick) onNodeDoubleClick(d as GraphNode);
       zoomToNode(d);
-    });
-
-    // Update positions on tick
-    simulation.on("tick", () => {
-      link
-        .attr("x1", (d: any) => d.source.x)
-        .attr("y1", (d: any) => d.source.y)
-        .attr("x2", (d: any) => d.target.x)
-        .attr("y2", (d: any) => d.target.y);
-
-      node
-        .attr("cx", (d: any) => d.x)
-        .attr("cy", (d: any) => d.y);
-
-      label
-        .attr("x", (d: any) => d.x)
-        .attr("y", (d: any) => d.y);
     });
   }
 
@@ -232,12 +348,9 @@
         d.source.id === nodeId || d.target.id === nodeId ? 1 : 0.2
       );
 
-    // Dim unconnected nodes
-    const connectedIds = new Set<string>();
-    graphData?.edges.forEach(e => {
-      if (e.source === nodeId) connectedIds.add(e.target);
-      if (e.target === nodeId) connectedIds.add(e.source);
-    });
+    // Dim unconnected nodes (O(1) lookup via adjacency map)
+    const neighbors = adjacencyMap.get(nodeId) ?? new Set();
+    const connectedIds = new Set<string>(neighbors);
     connectedIds.add(nodeId);
 
     g.selectAll("circle")
@@ -278,8 +391,64 @@
     }
   }
 
+  async function exportGraph(format: "png" | "svg" | "json" | "html") {
+    if (!svgElement || !graphData) return;
+
+    if (format === "json") {
+      const blob = new Blob([JSON.stringify(graphData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `jarvis-graph-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (format === "svg") {
+      const serializer = new XMLSerializer();
+      const svgStr = serializer.serializeToString(svgElement);
+      const blob = new Blob([svgStr], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `jarvis-graph-${new Date().toISOString().split("T")[0]}.svg`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (format === "png") {
+      const serializer = new XMLSerializer();
+      const svgStr = serializer.serializeToString(svgElement);
+      const canvas = document.createElement("canvas");
+      canvas.width = width * 2;
+      canvas.height = height * 2;
+      const ctx = canvas.getContext("2d")!;
+      ctx.scale(2, 2);
+      const img = new Image();
+      const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const pngUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = pngUrl;
+          a.download = `jarvis-graph-${new Date().toISOString().split("T")[0]}.png`;
+          a.click();
+          URL.revokeObjectURL(pngUrl);
+        }, "image/png");
+      };
+      img.src = url;
+    }
+  }
+
   async function changeLayout(layout: LayoutType) {
     currentLayout = layout;
+    isFirstRender = true; // Force full re-render on layout change
     await loadGraph();
   }
 
@@ -295,8 +464,10 @@
 
     g.selectAll("line")
       .attr("opacity", (d: any) => {
-        const sourceNode = graphData!.nodes.find(n => n.id === d.source.id || n.id === d.source);
-        const targetNode = graphData!.nodes.find(n => n.id === d.target.id || n.id === d.target);
+        const sourceId = d.source.id || d.source;
+        const targetId = d.target.id || d.target;
+        const sourceNode = nodeMap.get(sourceId);
+        const targetNode = nodeMap.get(targetId);
         if (types.length === 0) return 0.6;
         const sourceMatch = sourceNode && typeSet.has(sourceNode.relationship_type);
         const targetMatch = targetNode && typeSet.has(targetNode.relationship_type);
@@ -345,6 +516,7 @@
     on:changeLayout={(e) => changeLayout(e.detail)}
     on:search={(e) => searchNodes(e.detail)}
     on:filterRelationships={(e) => filterByRelationship(e.detail)}
+    on:export={(e) => exportGraph(e.detail)}
   />
 
   <div class="graph-wrapper">

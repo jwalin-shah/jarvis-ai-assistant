@@ -356,22 +356,23 @@ describe("getConversationsQuery", () => {
     const sql = getConversationsQuery({});
     expect(sql).toContain("SELECT");
     expect(sql).toContain("FROM chat");
-    expect(sql).toContain("ORDER BY last_message_date DESC");
+    expect(sql).toContain("ORDER BY");
+    expect(sql).toContain("DESC");
     expect(sql).toContain("LIMIT ?");
-    expect(sql).not.toContain("AND last_message_date >");
-    expect(sql).not.toContain("AND last_message_date <");
+    expect(sql).not.toContain("mr.date > ?");
+    expect(sql).not.toContain("mr.date < ?");
   });
 
   it("includes since filter when withSinceFilter is true", () => {
     const sql = getConversationsQuery({ withSinceFilter: true });
-    expect(sql).toContain("AND last_message_date > ?");
-    expect(sql).not.toContain("AND last_message_date < ?");
+    expect(sql).toContain("mr.date > ?");
+    expect(sql).not.toContain("mr.date < ?");
   });
 
   it("includes before filter when withBeforeFilter is true", () => {
     const sql = getConversationsQuery({ withBeforeFilter: true });
-    expect(sql).not.toContain("AND last_message_date > ?");
-    expect(sql).toContain("AND last_message_date < ?");
+    expect(sql).not.toContain("mr.date > ?");
+    expect(sql).toContain("mr.date < ?");
   });
 
   it("includes both filters when both options are true", () => {
@@ -379,8 +380,8 @@ describe("getConversationsQuery", () => {
       withSinceFilter: true,
       withBeforeFilter: true,
     });
-    expect(sql).toContain("AND last_message_date > ?");
-    expect(sql).toContain("AND last_message_date < ?");
+    expect(sql).toContain("mr.date > ?");
+    expect(sql).toContain("mr.date < ?");
   });
 
   it("omits filters when options are explicitly false", () => {
@@ -388,8 +389,8 @@ describe("getConversationsQuery", () => {
       withSinceFilter: false,
       withBeforeFilter: false,
     });
-    expect(sql).not.toContain("AND last_message_date > ?");
-    expect(sql).not.toContain("AND last_message_date < ?");
+    expect(sql).not.toContain("mr.date > ?");
+    expect(sql).not.toContain("mr.date < ?");
   });
 
   it("selects expected columns", () => {

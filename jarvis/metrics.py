@@ -23,6 +23,8 @@ from typing import Any
 
 import psutil
 
+from jarvis.cache import TTLCache
+
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -292,12 +294,26 @@ class RequestCounter:
     Tracks request counts by endpoint and method.
     """
 
+    MAX_ENDPOINTS = 1000
+
     def __init__(self) -> None:
         """Initialize the request counter."""
         self._counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._total = 0
         self._lock = threading.Lock()
         self._start_time = datetime.now(UTC)
+
+    def _evict_if_needed(self) -> None:
+        """Evict lowest-count endpoints if over MAX_ENDPOINTS."""
+        if len(self._counts) <= self.MAX_ENDPOINTS:
+            return
+        # Sort by total count, evict bottom 10%
+        sorted_keys = sorted(
+            self._counts.keys(), key=lambda k: sum(self._counts[k].values())
+        )
+        evict_count = len(sorted_keys) - self.MAX_ENDPOINTS + 100
+        for key in sorted_keys[:evict_count]:
+            del self._counts[key]
 
     def increment(self, endpoint: str, method: str = "GET") -> None:
         """Increment the counter for an endpoint.
@@ -309,6 +325,7 @@ class RequestCounter:
         with self._lock:
             self._counts[endpoint][method] += 1
             self._total += 1
+            self._evict_if_needed()
 
     def get_count(self, endpoint: str | None = None, method: str | None = None) -> int:
         """Get request count.
@@ -372,6 +389,8 @@ class LatencyHistogram:
     Uses configurable buckets for Prometheus-compatible histogram output.
     """
 
+    MAX_OPERATIONS = 1000
+
     def __init__(self, buckets: tuple[float, ...] = DEFAULT_LATENCY_BUCKETS) -> None:
         """Initialize the latency histogram.
 
@@ -381,6 +400,17 @@ class LatencyHistogram:
         self._buckets = buckets
         self._histograms: dict[str, HistogramData] = {}
         self._lock = threading.Lock()
+
+    def _evict_if_needed(self) -> None:
+        """Evict least-used operations if over MAX_OPERATIONS."""
+        if len(self._histograms) <= self.MAX_OPERATIONS:
+            return
+        sorted_keys = sorted(
+            self._histograms.keys(), key=lambda k: self._histograms[k].total_count
+        )
+        evict_count = len(sorted_keys) - self.MAX_OPERATIONS + 100
+        for key in sorted_keys[:evict_count]:
+            del self._histograms[key]
 
     def observe(self, operation: str, duration: float) -> None:
         """Record a latency observation.
@@ -392,6 +422,7 @@ class LatencyHistogram:
         with self._lock:
             if operation not in self._histograms:
                 self._histograms[operation] = HistogramData(buckets=self._buckets)
+                self._evict_if_needed()
             self._histograms[operation].observe(duration)
 
     def time(self, operation: str) -> _TimerContext:
@@ -878,91 +909,6 @@ def get_template_analytics() -> TemplateAnalytics:
             if _template_analytics is None:
                 _template_analytics = TemplateAnalytics()
     return _template_analytics
-
-
-class TTLCache:
-    """Thread-safe cache with time-to-live expiration.
-
-    Useful for caching expensive computations that should refresh periodically.
-    """
-
-    def __init__(self, ttl_seconds: float = 30.0, maxsize: int = 100) -> None:
-        """Initialize the TTL cache.
-
-        Args:
-            ttl_seconds: Time-to-live for cached items in seconds
-            maxsize: Maximum number of items to cache
-        """
-        self._cache: dict[str, tuple[float, Any]] = {}
-        self._ttl = ttl_seconds
-        self._maxsize = maxsize
-        self._lock = threading.Lock()
-        self._hits = 0
-        self._misses = 0
-
-    def get(self, key: str) -> tuple[bool, Any]:
-        """Get a value from the cache.
-
-        Args:
-            key: Cache key
-
-        Returns:
-            Tuple of (found, value). found is False if key doesn't exist or is expired.
-        """
-        with self._lock:
-            if key in self._cache:
-                timestamp, value = self._cache[key]
-                if time.time() - timestamp < self._ttl:
-                    self._hits += 1
-                    return True, value
-                # Expired - remove it
-                del self._cache[key]
-            self._misses += 1
-            return False, None
-
-    def set(self, key: str, value: Any) -> None:
-        """Store a value in the cache.
-
-        Args:
-            key: Cache key
-            value: Value to store
-        """
-        with self._lock:
-            # Evict oldest entries if at capacity
-            while len(self._cache) >= self._maxsize:
-                oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][0])
-                del self._cache[oldest_key]
-
-            self._cache[key] = (time.time(), value)
-
-    def invalidate(self, key: str | None = None) -> None:
-        """Invalidate cache entries.
-
-        Args:
-            key: Specific key to invalidate (None for all)
-        """
-        with self._lock:
-            if key is None:
-                self._cache.clear()
-            elif key in self._cache:
-                del self._cache[key]
-
-    def stats(self) -> dict[str, Any]:
-        """Get cache statistics.
-
-        Returns:
-            Dictionary with cache stats
-        """
-        with self._lock:
-            total = self._hits + self._misses
-            return {
-                "size": len(self._cache),
-                "maxsize": self._maxsize,
-                "ttl_seconds": self._ttl,
-                "hits": self._hits,
-                "misses": self._misses,
-                "hit_rate": self._hits / total if total > 0 else 0.0,
-            }
 
 
 # Pre-configured caches for common use cases

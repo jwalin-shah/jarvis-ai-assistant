@@ -222,7 +222,7 @@ FACT_TYPES = {
 
 # Mapping: (text_pattern_regex, span_label_set, fact_type)
 # span_label_set supports both generic and fact-like labels
-FACT_TYPE_RULES: list[tuple[str, set[str], str]] = [
+_FACT_TYPE_RULES_RAW: list[tuple[str, set[str], str]] = [
     # health / allergy
     (r"allergic to", {"food_item", "health_condition", "allergy"}, "health.allergy"),
     # location
@@ -279,7 +279,13 @@ FACT_TYPE_RULES: list[tuple[str, set[str], str]] = [
     (r"my (dog|cat|pet|puppy|kitten)", {"person_name"}, "personal.pet"),
 ]
 
-# Direct label → fact_type for fact-like labels (no pattern needed)
+# Pre-compile regex patterns at module load for O(1) reuse (not per-call re.search)
+FACT_TYPE_RULES: list[tuple[re.Pattern, set[str], str]] = [
+    (re.compile(pattern, re.IGNORECASE), label_set, fact_type)
+    for pattern, label_set, fact_type in _FACT_TYPE_RULES_RAW
+]
+
+# Direct label -> fact_type for fact-like labels (no pattern needed)
 DIRECT_LABEL_MAP: dict[str, str] = {
     "allergy": "health.allergy",
     "health_condition": "health.condition",
@@ -462,6 +468,21 @@ class CandidateExtractor:
 
         return merged, current_start, current_end
 
+    @staticmethod
+    def _find_entity_in_text(
+        raw_span: str, current_text: str
+    ) -> tuple[str, int, int] | None:
+        """Case-insensitive search for *raw_span* inside *current_text*.
+
+        Returns (raw_span, start, end) on match, or None.
+        """
+        if not raw_span:
+            return None
+        idx = current_text.casefold().find(raw_span.casefold())
+        if idx < 0:
+            return None
+        return raw_span, idx, idx + len(raw_span)
+
     def _project_entity_to_current(
         self,
         entity: dict[str, Any],
@@ -479,35 +500,20 @@ class CandidateExtractor:
 
         # Only keep entities fully contained in the current message segment.
         if raw_start < current_start or raw_end > current_end:
-            if raw_span:
-                idx = current_text.casefold().find(raw_span.casefold())
-                if idx >= 0:
-                    return raw_span, idx, idx + len(raw_span)
-            return None
+            return self._find_entity_in_text(raw_span, current_text)
 
         start_char = raw_start - current_start
         end_char = raw_end - current_start
         if start_char < 0 or end_char > len(current_text) or end_char <= start_char:
-            if raw_span:
-                idx = current_text.casefold().find(raw_span.casefold())
-                if idx >= 0:
-                    return raw_span, idx, idx + len(raw_span)
-            return None
+            return self._find_entity_in_text(raw_span, current_text)
 
         span_text = current_text[start_char:end_char].strip()
         if raw_span and span_text.casefold() != raw_span.casefold():
-            idx = current_text.casefold().find(raw_span.casefold())
-            if idx >= 0:
-                return raw_span, idx, idx + len(raw_span)
+            found = self._find_entity_in_text(raw_span, current_text)
+            if found is not None:
+                return found
         if not span_text:
-            if not raw_span:
-                return None
-            idx = current_text.casefold().find(raw_span.casefold())
-            if idx < 0:
-                return None
-            start_char = idx
-            end_char = idx + len(raw_span)
-            span_text = raw_span
+            return self._find_entity_in_text(raw_span, current_text)
 
         return span_text, start_char, end_char
 
@@ -704,12 +710,81 @@ class CandidateExtractor:
 
         return out
 
+    def _process_batch_entity(
+        self,
+        entity: dict[str, Any],
+        *,
+        current_start: int,
+        current_end: int,
+        current_text: str,
+        msg: dict[str, Any],
+        seen: set[tuple[str, str]],
+    ) -> FactCandidate | None:
+        """Process a single GLiNER entity from a batch prediction into a FactCandidate.
+
+        Applies projection, threshold filtering, vague rejection, canonicalization,
+        dedup, and fact-type resolution. Returns None if the entity is filtered out.
+        Updates *seen* in-place for dedup tracking.
+        """
+        projected = self._project_entity_to_current(
+            entity,
+            current_start=current_start,
+            current_end=current_end,
+            current_text=current_text,
+        )
+        if projected is None:
+            return None
+        span, start_char, end_char = projected
+
+        label = self._canonicalize_label(str(entity.get("label", "")))
+        score = float(entity.get("score", 0.0))
+
+        if score < self._per_label_min.get(label, self._default_min):
+            return None
+        if span.casefold() in VAGUE or len(span) < 2:
+            return None
+
+        # Entity canonicalization (e.g. "sf" -> "San Francisco")
+        canonical = ENTITY_ALIASES.get(label, {}).get(span.casefold())
+        if canonical:
+            span = canonical
+
+        dedup_key = (span.casefold(), label)
+        if dedup_key in seen:
+            return None
+        seen.add(dedup_key)
+
+        fact_type = self._resolve_fact_type(current_text, span, label)
+
+        # Drop unresolvable fallback spans (highest FP source)
+        if fact_type == "other_personal_fact":
+            return None
+
+        return FactCandidate(
+            message_id=msg["message_id"],
+            span_text=span,
+            span_label=label,
+            gliner_score=score,
+            fact_type=fact_type,
+            start_char=start_char,
+            end_char=end_char,
+            source_text=current_text,
+            chat_id=msg.get("chat_id"),
+            is_from_me=msg.get("is_from_me"),
+            sender_handle_id=msg.get("sender_handle_id"),
+            message_date=msg.get("message_date"),
+        )
+
     def extract_batch(
         self,
         messages: list[dict[str, Any]],
-        batch_size: int = 32,
+        batch_size: int = 16,
     ) -> list[FactCandidate]:
-        """Batch extraction with progress reporting.
+        """Batch extraction with length-sorted batching for minimal padding waste.
+
+        Sorts messages by text length so each batch has similar-length sequences,
+        reducing padding overhead on the GPU. Results are collected regardless of
+        processing order.
 
         Each message dict should have at minimum:
             - text: str
@@ -725,6 +800,11 @@ class CandidateExtractor:
 
         # Pre-filter junk messages
         valid_msgs = [m for m in messages if not is_junk_message(m.get("text", ""))]
+
+        # Sort by text length to minimize padding waste within each batch.
+        # Messages of similar length get batched together, so the GPU doesn't
+        # waste compute on padding short messages to the longest one's length.
+        valid_msgs.sort(key=lambda m: len(m.get("text", "")))
 
         all_candidates: list[FactCandidate] = []
         total = len(valid_msgs)
@@ -762,61 +842,18 @@ class CandidateExtractor:
 
             for msg, bounds, ents in zip(batch, current_bounds, batch_entities):
                 seen: set[tuple[str, str]] = set()
-                msg_id = msg["message_id"]
-                current_text = msg["text"]
                 current_start, current_end = bounds
-
                 for e in ents:
-                    projected = self._project_entity_to_current(
+                    candidate = self._process_batch_entity(
                         e,
                         current_start=current_start,
                         current_end=current_end,
-                        current_text=current_text,
+                        current_text=msg["text"],
+                        msg=msg,
+                        seen=seen,
                     )
-                    if projected is None:
-                        continue
-                    span, start_char, end_char = projected
-
-                    label = self._canonicalize_label(str(e.get("label", "")))
-                    score = float(e.get("score", 0.0))
-
-                    if score < self._per_label_min.get(label, self._default_min):
-                        continue
-                    if span.casefold() in VAGUE or len(span) < 2:
-                        continue
-
-                    # Entity canonicalization (e.g. "sf" -> "San Francisco")
-                    canonical = ENTITY_ALIASES.get(label, {}).get(span.casefold())
-                    if canonical:
-                        span = canonical
-
-                    dedup_key = (span.casefold(), label)
-                    if dedup_key in seen:
-                        continue
-                    seen.add(dedup_key)
-
-                    fact_type = self._resolve_fact_type(current_text, span, label)
-
-                    # Drop unresolvable fallback spans (highest FP source)
-                    if fact_type == "other_personal_fact":
-                        continue
-
-                    all_candidates.append(
-                        FactCandidate(
-                            message_id=msg_id,
-                            span_text=span,
-                            span_label=label,
-                            gliner_score=score,
-                            fact_type=fact_type,
-                            start_char=start_char,
-                            end_char=end_char,
-                            source_text=current_text,
-                            chat_id=msg.get("chat_id"),
-                            is_from_me=msg.get("is_from_me"),
-                            sender_handle_id=msg.get("sender_handle_id"),
-                            message_date=msg.get("message_date"),
-                        )
-                    )
+                    if candidate is not None:
+                        all_candidates.append(candidate)
 
             processed = min(i + batch_size, total)
             logger.info(
@@ -941,9 +978,9 @@ class CandidateExtractor:
         2. Direct label map for fact-like labels (allergy, employer, etc.)
         3. Fallback: other_personal_fact
         """
-        # Pattern-based rules
-        for pattern, label_set, fact_type in FACT_TYPE_RULES:
-            if span_label in label_set and re.search(pattern, text, re.IGNORECASE):
+        # Pattern-based rules (pre-compiled regexes)
+        for compiled_pat, label_set, fact_type in FACT_TYPE_RULES:
+            if span_label in label_set and compiled_pat.search(text):
                 return fact_type
 
         # Direct label map for fact-like labels

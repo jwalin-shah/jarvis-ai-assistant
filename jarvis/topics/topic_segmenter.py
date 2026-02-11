@@ -60,6 +60,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Stopwords for keyword extraction (module-level to avoid per-call rebuilding)
+_STOPWORDS: frozenset[str] = frozenset({
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "must", "shall", "i", "you", "he", "she",
+    "it", "we", "they", "me", "him", "her", "us", "them", "my", "your",
+    "his", "its", "our", "their", "this", "that", "these", "those", "and",
+    "or", "but", "if", "then", "so", "than", "too", "very", "just", "to",
+    "of", "in", "for", "on", "with", "at", "by", "from", "about", "into",
+    "through", "during", "before", "after", "above", "below", "between",
+    "under", "again", "further", "once", "here", "there", "when", "where",
+    "why", "how", "all", "each", "few", "more", "most", "other", "some",
+    "such", "no", "nor", "not", "only", "own", "same", "than", "what",
+    "which", "who", "whom", "lol", "lmao", "haha", "yeah", "yea", "ya",
+    "ok", "okay", "like", "gonna", "wanna", "gotta", "kinda", "sorta",
+    "im", "dont", "cant", "wont",
+})
+
 
 # =============================================================================
 # Data Classes
@@ -91,6 +109,7 @@ class SegmentMessage:
     text: str
     timestamp: datetime
     is_from_me: bool
+    message_id: int | None = None  # iMessage ROWID for fact attribution
     embedding: NDArray[np.float32] | None = None
     entities: list[Entity] = field(default_factory=list)
     coreference_resolved_text: str | None = None
@@ -268,6 +287,7 @@ class TopicSegmenter:
         boundary_threshold: float = 0.5,
         forward_context_window: int = 2,
         forward_continuity_threshold: float = 0.7,
+        normalization_task: str = "classification",
     ) -> None:
         """Initialize topic segmenter.
 
@@ -303,6 +323,7 @@ class TopicSegmenter:
         self.boundary_threshold = boundary_threshold
         self.forward_context_window = forward_context_window
         self.forward_continuity_threshold = forward_continuity_threshold
+        self.normalization_task = normalization_task
 
         # Lazy-load coref resolver
         self._coref_resolver: CorefResolver | None = None
@@ -414,7 +435,7 @@ class TopicSegmenter:
             text_to_normalize = resolved_texts[msg_idx] or msg.text
 
             # Normalize and extract entities
-            result = normalize_for_task_with_entities(text_to_normalize, "classification")
+            result = normalize_for_task_with_entities(text_to_normalize, self.normalization_task)
 
             if result.text:
                 segment_messages.append(
@@ -422,6 +443,7 @@ class TopicSegmenter:
                         text=result.text,
                         timestamp=msg.date,
                         is_from_me=msg.is_from_me,
+                        message_id=getattr(msg, "id", None),
                         entities=result.entities,
                         coreference_resolved_text=(
                             resolved_texts[msg_idx] if resolved_texts[msg_idx] else None
@@ -437,19 +459,47 @@ class TopicSegmenter:
     def _compute_embeddings(self, messages: list[SegmentMessage]) -> None:
         """Compute embeddings for all messages.
 
+        Checks vec_messages cache first to avoid redundant BERT encoding.
+
         Args:
             messages: List of SegmentMessage (modified in place).
         """
         if not messages:
             return
 
+        # Try to reuse cached embeddings from vec_messages
+        cached: dict[int, Any] = {}
+        try:
+            from jarvis.search.vec_search import get_vec_searcher
+
+            vec = get_vec_searcher()
+            if vec is not None:
+                msg_ids = [m.message_id for m in messages if m.message_id is not None]
+                if msg_ids:
+                    cached = vec.get_embeddings_by_ids(msg_ids)
+        except Exception:
+            pass  # Fall through to full encoding
+
+        # Split into cached vs uncached
+        uncached_indices = []
+        for i, msg in enumerate(messages):
+            emb = cached.get(msg.message_id) if msg.message_id is not None else None
+            if emb is not None:
+                msg.embedding = emb
+            else:
+                uncached_indices.append(i)
+
+        if not uncached_indices:
+            return  # All from cache
+
+        # Encode only uncached messages
         embedder = self._get_embedder()
-        texts = [m.text for m in messages]
+        texts = [messages[i].text for i in uncached_indices]
 
         try:
             embeddings = embedder.encode(texts, normalize=True)
-            for i, msg in enumerate(messages):
-                msg.embedding = embeddings[i]
+            for j, idx in enumerate(uncached_indices):
+                messages[idx].embedding = embeddings[j]
         except Exception as e:
             logger.warning("Failed to compute embeddings: %s", e)
 
@@ -927,137 +977,13 @@ class TopicSegmenter:
         import re
         from collections import Counter
 
-        stopwords = {
-            "the",
-            "a",
-            "an",
-            "is",
-            "are",
-            "was",
-            "were",
-            "be",
-            "been",
-            "being",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "will",
-            "would",
-            "could",
-            "should",
-            "may",
-            "might",
-            "must",
-            "shall",
-            "i",
-            "you",
-            "he",
-            "she",
-            "it",
-            "we",
-            "they",
-            "me",
-            "him",
-            "her",
-            "us",
-            "them",
-            "my",
-            "your",
-            "his",
-            "its",
-            "our",
-            "their",
-            "this",
-            "that",
-            "these",
-            "those",
-            "and",
-            "or",
-            "but",
-            "if",
-            "then",
-            "so",
-            "than",
-            "too",
-            "very",
-            "just",
-            "to",
-            "of",
-            "in",
-            "for",
-            "on",
-            "with",
-            "at",
-            "by",
-            "from",
-            "about",
-            "into",
-            "through",
-            "during",
-            "before",
-            "after",
-            "above",
-            "below",
-            "between",
-            "under",
-            "again",
-            "further",
-            "once",
-            "here",
-            "there",
-            "when",
-            "where",
-            "why",
-            "how",
-            "all",
-            "each",
-            "few",
-            "more",
-            "most",
-            "other",
-            "some",
-            "such",
-            "no",
-            "nor",
-            "not",
-            "only",
-            "own",
-            "same",
-            "than",
-            "what",
-            "which",
-            "who",
-            "whom",
-            "lol",
-            "lmao",
-            "haha",
-            "yeah",
-            "yea",
-            "ya",
-            "ok",
-            "okay",
-            "like",
-            "gonna",
-            "wanna",
-            "gotta",
-            "kinda",
-            "sorta",
-            "im",
-            "dont",
-            "cant",
-            "wont",
-        }
-
         word_counts: Counter[str] = Counter()
 
         for msg in segment.messages:
             if msg.text:
                 words = re.findall(r"\b[a-z]{3,}\b", msg.text.lower())
                 for word in words:
-                    if word not in stopwords:
+                    if word not in _STOPWORDS:
                         word_counts[word] += 1
 
         return [word for word, _ in word_counts.most_common(top_k)]

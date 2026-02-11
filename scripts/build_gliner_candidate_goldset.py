@@ -198,37 +198,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _safe_major(version: str) -> int:
-    try:
-        return int(version.split(".", 1)[0])
-    except (TypeError, ValueError):
-        return -1
-
-
-def enforce_runtime_stack(allow_unstable_stack: bool) -> None:
-    try:
-        import huggingface_hub
-        import transformers
-    except Exception:
-        return
-
-    tver = getattr(transformers, "__version__", "unknown")
-    hver = getattr(huggingface_hub, "__version__", "unknown")
-    if _safe_major(str(tver)) >= 5:
-        msg = (
-            f"Detected transformers={tver}, huggingface_hub={hver}. "
-            "GLiNER quality may degrade on this stack."
-        )
-        if allow_unstable_stack:
-            print("WARNING: " + msg + " Continuing due --allow-unstable-stack.", flush=True)
-            return
-        raise SystemExit(
-            "ERROR: "
-            + msg
-            + " Re-run via scripts/run_gliner_compat.sh "
-            + "scripts/build_gliner_candidate_goldset.py ..."
-            + " or pass --allow-unstable-stack."
-        )
+from gliner_shared import enforce_runtime_stack
 
 
 def parse_apple_timestamp(timestamp: int | float | None) -> datetime:

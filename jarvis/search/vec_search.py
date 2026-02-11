@@ -776,10 +776,9 @@ class VecSearcher:
             for row in cursor:
                 chunk_rowid = row["rowid"]
                 int8_blob = row["embedding"]
-                # Convert int8 blob to float for binarization
+                # Binarize directly from int8 (positive → 1, else → 0)
                 int8_arr = np.frombuffer(int8_blob, dtype=np.int8)
-                float_arr = int8_arr.astype(np.float32) / self._INT8_SCALE
-                binary_blob = self._binarize_embedding(float_arr)
+                binary_blob = np.packbits((int8_arr > 0).astype(np.uint8)).tobytes()
                 batch.append((binary_blob, chunk_rowid, int8_blob))
 
                 if len(batch) >= batch_size:
@@ -800,6 +799,36 @@ class VecSearcher:
                 count += len(batch)
             logger.info("Backfilled %d rows into vec_binary", count)
             return count
+
+    def get_embeddings_by_ids(self, message_ids: list[int]) -> dict[int, np.ndarray]:
+        """Retrieve cached embeddings from vec_messages by message ID.
+
+        Returns dequantized float32 embeddings (int8 / 127.0).
+
+        Args:
+            message_ids: List of message ROWIDs to look up.
+
+        Returns:
+            Dict mapping message_id → (384,) float32 embedding array.
+        """
+        if not message_ids:
+            return {}
+
+        result: dict[int, np.ndarray] = {}
+        with self.db.connection() as conn:
+            # Chunk to stay within SQLite parameter limits
+            for chunk_start in range(0, len(message_ids), 900):
+                chunk = message_ids[chunk_start : chunk_start + 900]
+                placeholders = ",".join("?" * len(chunk))
+                rows = conn.execute(
+                    f"SELECT rowid, embedding FROM vec_messages "
+                    f"WHERE rowid IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+                for row in rows:
+                    int8_arr = np.frombuffer(row["embedding"], dtype=np.int8)
+                    result[row["rowid"]] = int8_arr.astype(np.float32) / self._INT8_SCALE
+        return result
 
     def get_stats(self) -> dict[str, Any]:
         """Get index statistics.
@@ -832,18 +861,12 @@ class VecSearcher:
             }
 
 
-# Singleton
-_vec_searcher: VecSearcher | None = None
-_lock = threading.Lock()
+from jarvis.utils.singleton import thread_safe_singleton
 
 
+@thread_safe_singleton
 def get_vec_searcher(db: JarvisDB | None = None) -> VecSearcher:
     """Get singleton VecSearcher."""
-    global _vec_searcher
-    if _vec_searcher is None:
-        with _lock:
-            if _vec_searcher is None:
-                if db is None:
-                    db = get_db()
-                _vec_searcher = VecSearcher(db)
-    return _vec_searcher
+    if db is None:
+        db = get_db()
+    return VecSearcher(db)

@@ -110,6 +110,7 @@ _BASE_QUERIES = {
         LEFT JOIN handle ON message.handle_id = handle.ROWID
         LEFT JOIN handle AS affected_handle ON message.other_handle = affected_handle.ROWID
         WHERE chat.guid = ?
+        {after_filter}
         {before_filter}
         ORDER BY message.date DESC
         LIMIT ?

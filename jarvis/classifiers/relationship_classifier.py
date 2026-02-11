@@ -333,36 +333,34 @@ class RelationshipClassifier:
         self.chat_db_path = chat_db_path or Path.home() / "Library/Messages/chat.db"
         self.min_messages = min_messages
 
-        # Pre-compile keyword/anti-keyword patterns per category (Fix 5)
+        # Pre-compile keyword/anti-keyword patterns per category
+        # Emoji keywords are escaped and compiled into the same regex pattern
+        # as text keywords, avoiding a separate per-emoji string search loop.
         self._keyword_patterns: dict[str, re.Pattern[str] | None] = {}
         self._anti_keyword_patterns: dict[str, re.Pattern[str] | None] = {}
-        self._emoji_keywords: dict[str, list[str]] = {}
-        self._emoji_anti_keywords: dict[str, list[str]] = {}
 
         for cat, info in RELATIONSHIP_CATEGORIES.items():
-            text_kws = []
-            emoji_kws = []
+            all_kw_parts = []
             for kw in info["keywords"]:
                 kw_lower = kw.lower()
                 if _is_emoji(kw_lower):
-                    emoji_kws.append(kw_lower)
+                    all_kw_parts.append(re.escape(kw_lower))
                 else:
-                    text_kws.append(rf"\b{re.escape(kw_lower)}\b")
-            self._keyword_patterns[cat] = re.compile("|".join(text_kws)) if text_kws else None
-            self._emoji_keywords[cat] = emoji_kws
+                    all_kw_parts.append(rf"\b{re.escape(kw_lower)}\b")
+            self._keyword_patterns[cat] = (
+                re.compile("|".join(all_kw_parts)) if all_kw_parts else None
+            )
 
-            text_akws = []
-            emoji_akws = []
+            all_akw_parts = []
             for kw in info.get("anti_keywords", []):
                 kw_lower = kw.lower()
                 if _is_emoji(kw_lower):
-                    emoji_akws.append(kw_lower)
+                    all_akw_parts.append(re.escape(kw_lower))
                 else:
-                    text_akws.append(rf"\b{re.escape(kw_lower)}\b")
+                    all_akw_parts.append(rf"\b{re.escape(kw_lower)}\b")
             self._anti_keyword_patterns[cat] = (
-                re.compile("|".join(text_akws)) if text_akws else None
+                re.compile("|".join(all_akw_parts)) if all_akw_parts else None
             )
-            self._emoji_anti_keywords[cat] = emoji_akws
 
     def _get_messages_for_chat(
         self,
@@ -435,6 +433,84 @@ class RelationshipClassifier:
             logger.error("Failed to get messages for chat %s: %s", chat_id, e)
 
         return messages
+
+    def _get_messages_for_chats_batch(
+        self,
+        chat_ids: list[str],
+        limit_per_chat: int = 500,
+    ) -> dict[str, list[ChatMessage]]:
+        """Get messages for multiple chats in ONE query.
+
+        Args:
+            chat_ids: List of chat identifiers.
+            limit_per_chat: Maximum messages per chat.
+
+        Returns:
+            Dict of chat_id -> list of ChatMessage objects.
+        """
+        if not chat_ids or not self.chat_db_path.exists():
+            return {cid: [] for cid in chat_ids}
+
+        messages_by_chat: dict[str, list[ChatMessage]] = {cid: [] for cid in chat_ids}
+        try:
+            with contextlib.closing(
+                sqlite3.connect(
+                    f"file:{self.chat_db_path}?mode=ro",
+                    uri=True,
+                    timeout=5.0,
+                )
+            ) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # Use ROW_NUMBER to limit per chat within a single query
+                placeholders = ",".join("?" for _ in chat_ids)
+                query = f"""
+                    WITH ranked AS (
+                        SELECT
+                            m.text,
+                            m.is_from_me,
+                            m.date as date_int,
+                            c.chat_identifier,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY c.chat_identifier
+                                ORDER BY m.date DESC
+                            ) as rn
+                        FROM message m
+                        JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+                        JOIN chat c ON cmj.chat_id = c.ROWID
+                        WHERE c.chat_identifier IN ({placeholders})
+                            AND m.text IS NOT NULL
+                            AND m.text != ''
+                    )
+                    SELECT text, is_from_me, date_int, chat_identifier
+                    FROM ranked
+                    WHERE rn <= ?
+                """
+
+                cursor = conn.execute(query, (*chat_ids, limit_per_chat))
+
+                for row in cursor:
+                    date_int = row["date_int"]
+                    if date_int:
+                        timestamp = date_int / 1_000_000_000 + 978307200
+                        date = datetime.fromtimestamp(timestamp, tz=UTC)
+                    else:
+                        date = None
+
+                    chat_id = row["chat_identifier"]
+                    messages_by_chat[chat_id].append(
+                        ChatMessage(
+                            text=row["text"] or "",
+                            is_from_me=bool(row["is_from_me"]),
+                            date=date,
+                            chat_id=chat_id,
+                        )
+                    )
+
+        except Exception as e:
+            logger.error("Failed to batch-get messages for %d chats: %s", len(chat_ids), e)
+
+        return messages_by_chat
 
     def _get_non_group_chats(self) -> list[tuple[str, str]]:
         """Get all non-group chats (1:1 conversations).
@@ -537,21 +613,15 @@ class RelationshipClassifier:
             if any(w in text_lower for w in informal_words):
                 informal_indicators += 1
 
-            # Keyword matching using pre-compiled patterns
+            # Keyword matching using pre-compiled patterns (includes emojis)
             for cat in RELATIONSHIP_CATEGORIES:
                 pat = self._keyword_patterns[cat]
                 if pat:
                     keyword_matches[cat] += len(pat.findall(text_lower))
-                for ekw in self._emoji_keywords[cat]:
-                    if ekw in text_lower:
-                        keyword_matches[cat] += 1
 
                 anti_pat = self._anti_keyword_patterns[cat]
                 if anti_pat:
                     anti_keyword_matches[cat] += len(anti_pat.findall(text_lower))
-                for ekw in self._emoji_anti_keywords[cat]:
-                    if ekw in text_lower:
-                        anti_keyword_matches[cat] += 1
 
         # Calculate date range
         dates = [m.date for m in messages if m.date]
@@ -857,10 +927,10 @@ class RelationshipClassifier:
         chat_ids: list[tuple[str, str]],
         min_confidence: float = 0.3,
     ) -> list[ClassificationResult]:
-        """Classify multiple contacts efficiently with batched DB operations.
+        """Classify multiple contacts with a single batched DB query.
 
-        More efficient than calling classify_contact() in a loop as it reuses
-        the compiled patterns and shares DB connection where possible.
+        Fetches all messages for all chat_ids in ONE query, then classifies
+        each contact from memory. Much faster than N individual DB queries.
 
         Args:
             chat_ids: List of (chat_id, display_name) tuples.
@@ -869,12 +939,44 @@ class RelationshipClassifier:
         Returns:
             List of ClassificationResult objects (filtered by confidence).
         """
-        results: list[ClassificationResult] = []
+        if not chat_ids:
+            return []
 
-        for chat_id, display_name in chat_ids:
-            result = self.classify_contact(chat_id, display_name)
-            if result.confidence >= min_confidence:
-                results.append(result)
+        # Check cache for already-classified contacts, collect uncached ones
+        now = time.time()
+        results: list[ClassificationResult] = []
+        uncached: list[tuple[str, str]] = []
+
+        with _cache_lock:
+            for chat_id, display_name in chat_ids:
+                if chat_id in _classification_cache:
+                    cached_time, cached_result = _classification_cache[chat_id]
+                    if now - cached_time < _CLASSIFICATION_CACHE_TTL_SECONDS:
+                        if cached_result.confidence >= min_confidence:
+                            results.append(cached_result)
+                        continue
+                uncached.append((chat_id, display_name))
+
+        # Batch-fetch messages for all uncached chats in ONE query
+        if uncached:
+            uncached_ids = [cid for cid, _ in uncached]
+            messages_by_chat = self._get_messages_for_chats_batch(uncached_ids)
+
+            for chat_id, display_name in uncached:
+                messages = messages_by_chat.get(chat_id, [])
+                result = self.classify_messages(messages, chat_id, display_name)
+
+                # Update cache
+                with _cache_lock:
+                    if len(_classification_cache) >= _CLASSIFICATION_CACHE_MAX_SIZE:
+                        oldest_key = min(
+                            _classification_cache, key=lambda k: _classification_cache[k][0]
+                        )
+                        del _classification_cache[oldest_key]
+                    _classification_cache[chat_id] = (now, result)
+
+                if result.confidence >= min_confidence:
+                    results.append(result)
 
         # Sort by confidence
         results.sort(key=lambda r: r.confidence, reverse=True)

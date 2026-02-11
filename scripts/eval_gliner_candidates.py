@@ -24,6 +24,9 @@ GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold.json")
 METRICS_PATH = Path("training_data/gliner_goldset/gliner_metrics.json")
 LOG_PATH = Path("eval_gliner_candidates.log")
 
+from eval_shared import jaccard_tokens, spans_match
+from gliner_shared import enforce_runtime_stack, parse_context_messages
+
 log = logging.getLogger(__name__)
 
 
@@ -37,104 +40,6 @@ def _setup_logging() -> None:
             logging.StreamHandler(sys.stdout),
         ],
     )
-
-
-def parse_context_messages(raw: object) -> list[str]:
-    """Parse context payloads from gold JSON (string blob or list) into message texts."""
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return [str(x).strip() for x in raw if str(x).strip()]
-    if not isinstance(raw, str):
-        return []
-
-    payload = raw.strip()
-    if not payload:
-        return []
-
-    # CSV context format: "id|speaker|text || id|speaker|text".
-    chunks = [c.strip() for c in payload.split("||") if c.strip()]
-    messages: list[str] = []
-    for chunk in chunks:
-        parts = chunk.split("|", 2)
-        if len(parts) == 3:
-            text = parts[2].strip()
-        else:
-            text = chunk
-        if text:
-            messages.append(text)
-    return messages
-
-
-def _safe_major(version: str) -> int:
-    """Best-effort major version parser."""
-    try:
-        return int(version.split(".", 1)[0])
-    except (TypeError, ValueError):
-        return -1
-
-
-def enforce_runtime_stack(allow_unstable_stack: bool) -> None:
-    """Fail fast on unsupported runtime unless explicitly overridden."""
-    try:
-        import huggingface_hub
-        import transformers
-    except Exception:
-        return
-
-    tver = getattr(transformers, "__version__", "unknown")
-    hver = getattr(huggingface_hub, "__version__", "unknown")
-    if _safe_major(str(tver)) >= 5:
-        msg = (
-            "Detected transformers=%s, huggingface_hub=%s. "
-            "GLiNER quality may degrade on this stack."
-        )
-        if allow_unstable_stack:
-            log.warning(
-                msg + " Continuing because --allow-unstable-stack was set.",
-                tver,
-                hver,
-            )
-            return
-        log.error(
-            msg + " Re-run via scripts/run_gliner_eval_compat.sh (recommended), "
-            "or pass --allow-unstable-stack to proceed anyway.",
-            tver,
-            hver,
-        )
-        raise SystemExit(2)
-
-
-# ---------------------------------------------------------------------------
-# Span matching
-# ---------------------------------------------------------------------------
-
-
-def jaccard_tokens(a: str, b: str) -> float:
-    """Token-level Jaccard similarity (case-insensitive)."""
-    ta = set(a.lower().split())
-    tb = set(b.lower().split())
-    if not ta or not tb:
-        return 0.0
-    return len(ta & tb) / len(ta | tb)
-
-
-def spans_match(pred_text: str, pred_label: str, gold_text: str, gold_label: str) -> bool:
-    """Check if a predicted span matches a gold span.
-
-    Match criteria:
-      - span_label matches exactly
-      - AND text overlap: Jaccard token >= 0.5 OR substring containment (case-insensitive)
-    """
-    if pred_label != gold_label:
-        return False
-    pl = pred_text.lower().strip()
-    gl = gold_text.lower().strip()
-    if pl in gl or gl in pl:
-        return True
-    if jaccard_tokens(pred_text, gold_text) >= 0.5:
-        return True
-    return False
 
 
 # ---------------------------------------------------------------------------

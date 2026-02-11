@@ -3,6 +3,7 @@
 //! Provides Tauri commands for connecting to ~/.jarvis/jarvis.sock and sending JSON-RPC messages.
 //! Supports both request/response and streaming patterns.
 
+use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -110,6 +111,52 @@ pub struct NewMessageEvent {
     pub sender: Option<String>,
     pub text_preview: Option<String>,
     pub is_from_me: bool,
+}
+
+/// Check that the socket is connected and the writer isn't dead.
+async fn check_connection(
+    connected: &Arc<RwLock<bool>>,
+    writer_dead: &Arc<RwLock<bool>>,
+) -> Result<(), String> {
+    {
+        let c = connected.read().await;
+        if !*c {
+            return Err("Not connected to socket server".to_string());
+        }
+    }
+    {
+        let wd = writer_dead.read().await;
+        if *wd {
+            return Err("Writer is dead after previous failure".to_string());
+        }
+    }
+    Ok(())
+}
+
+/// Write a JSON string to the socket writer, marking it dead on failure.
+async fn write_to_socket(
+    writer_arc: &Arc<Mutex<Option<BufWriter<tokio::net::unix::OwnedWriteHalf>>>>,
+    writer_dead_arc: &Arc<RwLock<bool>>,
+    json: &str,
+) -> Result<(), String> {
+    let mut writer_guard = writer_arc.lock().await;
+    if let Some(writer) = writer_guard.as_mut() {
+        let result = async {
+            writer.write_all(json.as_bytes()).await?;
+            writer.write_all(b"\n").await?;
+            writer.flush().await?;
+            Ok::<(), std::io::Error>(())
+        }.await;
+
+        if let Err(e) = result {
+            let mut wd = writer_dead_arc.write().await;
+            *wd = true;
+            return Err(format!("Failed to write to socket: {} (writer marked dead)", e));
+        }
+        Ok(())
+    } else {
+        Err("Writer not available".to_string())
+    }
 }
 
 /// Connect to the JARVIS socket server with persistent connection
@@ -247,40 +294,21 @@ pub async fn send_message(
     params: serde_json::Value,
     state: State<'_, SocketState>,
 ) -> Result<serde_json::Value, String> {
-    // Clone Arc references
     let connected_arc = state.connected.clone();
     let pending_arc = state.pending.clone();
     let writer_arc = state.writer.clone();
     let writer_dead_arc = state.writer_dead.clone();
 
-    // Check if connected
-    {
-        let connected = connected_arc.read().await;
-        if !*connected {
-            return Err("Not connected to socket server".to_string());
-        }
-    }
-
-    // Check if writer is dead
-    {
-        let writer_dead = writer_dead_arc.read().await;
-        if *writer_dead {
-            return Err("Writer is dead after previous failure".to_string());
-        }
-    }
+    check_connection(&connected_arc, &writer_dead_arc).await?;
 
     let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
-
-    // Create channel for response
     let (tx, mut rx) = mpsc::channel(1);
 
-    // Register pending request
     {
         let mut pending = pending_arc.write().await;
         pending.insert(id, PendingRequest { response_tx: tx });
     }
 
-    // Build and send request
     let request = JsonRpcRequest {
         jsonrpc: "2.0",
         method,
@@ -290,7 +318,6 @@ pub async fn send_message(
 
     let request_json = serde_json::to_string(&request)
         .map_err(|e| {
-            // Clean up pending request on error
             let pending_arc = pending_arc.clone();
             tokio::spawn(async move {
                 let mut pending = pending_arc.write().await;
@@ -299,35 +326,11 @@ pub async fn send_message(
             format!("Failed to serialize request: {}", e)
         })?;
 
-    {
-        let mut writer_guard = writer_arc.lock().await;
-        if let Some(writer) = writer_guard.as_mut() {
-            let result = async {
-                writer.write_all(request_json.as_bytes()).await?;
-                writer.write_all(b"\n").await?;
-                writer.flush().await?;
-                Ok::<(), std::io::Error>(())
-            }.await;
-
-            if let Err(e) = result {
-                // Mark writer as dead on write failure
-                let mut writer_dead = writer_dead_arc.write().await;
-                *writer_dead = true;
-
-                // Clean up pending request
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
-
-                return Err(format!("Failed to write to socket: {} (writer marked dead)", e));
-            }
-        } else {
-            // Clean up pending request
-            let mut pending = pending_arc.write().await;
-            pending.remove(&id);
-
-            return Err("Writer not available".to_string());
-        }
-    };
+    if let Err(e) = write_to_socket(&writer_arc, &writer_dead_arc, &request_json).await {
+        let mut pending = pending_arc.write().await;
+        pending.remove(&id);
+        return Err(e);
+    }
 
     // Wait for response with timeout
     match tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv()).await {
@@ -347,6 +350,162 @@ pub async fn send_message(
     }
 }
 
+/// Batch request item
+#[derive(Deserialize, Debug)]
+pub struct BatchRequestItem {
+    method: String,
+    params: serde_json::Value,
+}
+
+/// Batch response item
+#[derive(Serialize, Debug)]
+pub struct BatchResponseItem {
+    result: Option<serde_json::Value>,
+    error: Option<String>,
+}
+
+/// Send multiple JSON-RPC messages as a batch.
+/// Writes all requests to the socket, then waits for all responses concurrently.
+/// This overlaps response wait times for better throughput.
+#[tauri::command]
+pub async fn send_batch(
+    requests: Vec<BatchRequestItem>,
+    state: State<'_, SocketState>,
+) -> Result<Vec<BatchResponseItem>, String> {
+    let connected_arc = state.connected.clone();
+    let pending_arc = state.pending.clone();
+    let writer_arc = state.writer.clone();
+    let writer_dead_arc = state.writer_dead.clone();
+
+    check_connection(&connected_arc, &writer_dead_arc).await?;
+
+    // Phase 1: Write all requests and collect response receivers
+    let mut receivers = Vec::with_capacity(requests.len());
+
+    for req in &requests {
+        let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = mpsc::channel(1);
+
+        // Register pending request
+        {
+            let mut pending = pending_arc.write().await;
+            pending.insert(id, PendingRequest { response_tx: tx });
+        }
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0",
+            method: req.method.clone(),
+            params: req.params.clone(),
+            id,
+        };
+
+        let request_json = match serde_json::to_string(&request) {
+            Ok(json) => json,
+            Err(_e) => {
+                let mut pending = pending_arc.write().await;
+                pending.remove(&id);
+                receivers.push(None);
+                continue;
+            }
+        };
+
+        {
+            let mut writer_guard = writer_arc.lock().await;
+            if let Some(writer) = writer_guard.as_mut() {
+                let result = async {
+                    writer.write_all(request_json.as_bytes()).await?;
+                    writer.write_all(b"\n").await?;
+                    Ok::<(), std::io::Error>(())
+                }.await;
+
+                if let Err(_e) = result {
+                    let mut writer_dead = writer_dead_arc.write().await;
+                    *writer_dead = true;
+                    let mut pending = pending_arc.write().await;
+                    pending.remove(&id);
+                    receivers.push(None);
+                    for _ in (receivers.len())..requests.len() {
+                        receivers.push(None);
+                    }
+                    break;
+                }
+            } else {
+                let mut pending = pending_arc.write().await;
+                pending.remove(&id);
+                receivers.push(None);
+                continue;
+            }
+        }
+
+        receivers.push(Some((id, rx)));
+    }
+
+    // Flush all written requests in a single syscall
+    {
+        let is_dead = *writer_dead_arc.read().await;
+        if !is_dead {
+            let mut writer_guard = writer_arc.lock().await;
+            if let Some(writer) = writer_guard.as_mut() {
+                if let Err(_e) = writer.flush().await {
+                    let mut writer_dead = writer_dead_arc.write().await;
+                    *writer_dead = true;
+                }
+            }
+        }
+    }
+
+    // Phase 2: Wait for all responses concurrently
+    let futures: Vec<_> = receivers
+        .into_iter()
+        .map(|receiver| {
+            let pending_arc = pending_arc.clone();
+            async move {
+                match receiver {
+                    Some((id, mut rx)) => {
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(30),
+                            rx.recv(),
+                        )
+                        .await
+                        {
+                            Ok(Some(Ok(value))) => {
+                                BatchResponseItem { result: Some(value), error: None }
+                            }
+                            Ok(Some(Err(e))) => {
+                                BatchResponseItem { result: None, error: Some(e) }
+                            }
+                            Ok(None) => {
+                                let mut pending = pending_arc.write().await;
+                                pending.remove(&id);
+                                BatchResponseItem {
+                                    result: None,
+                                    error: Some("Response channel closed".to_string()),
+                                }
+                            }
+                            Err(_) => {
+                                let mut pending = pending_arc.write().await;
+                                pending.remove(&id);
+                                BatchResponseItem {
+                                    result: None,
+                                    error: Some("Request timed out".to_string()),
+                                }
+                            }
+                        }
+                    }
+                    None => BatchResponseItem {
+                        result: None,
+                        error: Some("Failed to send request".to_string()),
+                    },
+                }
+            }
+        })
+        .collect();
+
+    let results = join_all(futures).await;
+
+    Ok(results)
+}
+
 /// Send a streaming request (response comes via events)
 #[tauri::command]
 pub async fn send_streaming_message(
@@ -354,46 +513,22 @@ pub async fn send_streaming_message(
     params: serde_json::Value,
     state: State<'_, SocketState>,
 ) -> Result<u64, String> {
-    // Clone Arc references
     let connected_arc = state.connected.clone();
-    let pending_arc = state.pending.clone();
     let writer_arc = state.writer.clone();
     let writer_dead_arc = state.writer_dead.clone();
 
-    // Check if connected
-    {
-        let connected = connected_arc.read().await;
-        if !*connected {
-            return Err("Not connected to socket server".to_string());
-        }
-    }
-
-    // Check if writer is dead
-    {
-        let writer_dead = writer_dead_arc.read().await;
-        if *writer_dead {
-            return Err("Writer is dead after previous failure".to_string());
-        }
-    }
+    check_connection(&connected_arc, &writer_dead_arc).await?;
 
     let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
 
-    // Create channel for final response
-    let (tx, _rx) = mpsc::channel(1);
+    // Streaming requests don't register in pending - tokens arrive as notifications
+    // and the frontend correlates them by request_id.
 
-    // Register pending request
-    {
-        let mut pending = pending_arc.write().await;
-        pending.insert(id, PendingRequest { response_tx: tx });
-    }
-
-    // Add stream flag to params
     let mut params_with_stream = params;
     if let Some(obj) = params_with_stream.as_object_mut() {
         obj.insert("stream".to_string(), serde_json::Value::Bool(true));
     }
 
-    // Build and send request
     let request = JsonRpcRequest {
         jsonrpc: "2.0",
         method,
@@ -402,45 +537,9 @@ pub async fn send_streaming_message(
     };
 
     let request_json = serde_json::to_string(&request)
-        .map_err(|e| {
-            // Clean up pending request on error
-            let pending_arc = pending_arc.clone();
-            tokio::spawn(async move {
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
-            });
-            format!("Failed to serialize request: {}", e)
-        })?;
+        .map_err(|e| format!("Failed to serialize request: {}", e))?;
 
-    {
-        let mut writer_guard = writer_arc.lock().await;
-        if let Some(writer) = writer_guard.as_mut() {
-            let result = async {
-                writer.write_all(request_json.as_bytes()).await?;
-                writer.write_all(b"\n").await?;
-                writer.flush().await?;
-                Ok::<(), std::io::Error>(())
-            }.await;
-
-            if let Err(e) = result {
-                // Mark writer as dead on write failure
-                let mut writer_dead = writer_dead_arc.write().await;
-                *writer_dead = true;
-
-                // Clean up pending request
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
-
-                return Err(format!("Failed to write to socket: {} (writer marked dead)", e));
-            }
-        } else {
-            // Clean up pending request
-            let mut pending = pending_arc.write().await;
-            pending.remove(&id);
-
-            return Err("Writer not available".to_string());
-        }
-    }
+    write_to_socket(&writer_arc, &writer_dead_arc, &request_json).await?;
 
     // Return request ID so frontend can correlate stream tokens
     Ok(id)
@@ -456,7 +555,6 @@ pub async fn is_socket_connected(state: State<'_, SocketState>) -> Result<bool, 
 
 /// Attempt to reconnect with exponential backoff
 /// Returns true if connected, false if all retries exhausted
-#[allow(dead_code)]
 pub async fn reconnect_with_backoff(
     app: &AppHandle,
     state: &SocketState,
@@ -602,7 +700,8 @@ async fn connect_socket_internal(
             }
         }
 
-        // Emit disconnected event
+        // Emit disconnected event - frontend handles reconnection
+        println!("[Socket] Connection lost, notifying frontend for reconnection");
         if let Err(e) = app_handle.emit("jarvis:disconnected", ()) {
             eprintln!("[Socket] Failed to emit disconnected event: {}", e);
         }

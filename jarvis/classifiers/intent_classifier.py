@@ -220,7 +220,8 @@ class MLXPromptIntentClassifier:
 
     @staticmethod
     def _extract_label(raw: str, intent_options: list[str]) -> tuple[str, float]:
-        normalized = raw.strip().splitlines()[0].strip().strip('"').strip("'")
+        lines = raw.strip().splitlines()
+        normalized = lines[0].strip().strip('"').strip("'") if lines else ""
         normalized_l = normalized.lower()
 
         exact = {opt.lower(): opt for opt in intent_options}

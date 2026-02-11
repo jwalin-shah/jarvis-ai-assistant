@@ -23,7 +23,7 @@ class TestIngestContactsSuccessCases:
     @pytest.fixture
     def mock_db(self) -> MagicMock:
         db = MagicMock()
-        db.get_contact_by_handle = Mock(return_value=None)
+        db.get_contact_by_handles = Mock(return_value=None)
         db.add_contact = Mock()
         return db
 
@@ -50,8 +50,8 @@ class TestIngestContactsSuccessCases:
             handles_json=json.dumps(["+15551234567"]),
         )
 
-        mock_db.get_contact_by_handle.side_effect = lambda h: (
-            existing if h == "+15551234567" else None
+        mock_db.get_contact_by_handles.side_effect = lambda handles: (
+            existing if "+15551234567" in handles else None
         )
 
         rows = [_row("+1 (555) 123-4567", "John", "Doe")]
@@ -73,7 +73,7 @@ class TestIngestContactsEdgeCases:
     @pytest.fixture
     def mock_db(self) -> MagicMock:
         db = MagicMock()
-        db.get_contact_by_handle = Mock(return_value=None)
+        db.get_contact_by_handles = Mock(return_value=None)
         db.add_contact = Mock()
         return db
 
@@ -111,8 +111,8 @@ class TestIngestContactsEdgeCases:
     def test_skips_unchanged_real_name(self, mock_db) -> None:
         existing = MagicMock()
         existing.display_name = "John Doe"
-        mock_db.get_contact_by_handle.side_effect = lambda h: (
-            existing if h == "+15551234567" else None
+        mock_db.get_contact_by_handles.side_effect = lambda handles: (
+            existing if "+15551234567" in handles else None
         )
         rows = [_row("+15551234567", "John", "Doe")]
         with patch("jarvis.search.ingest._read_all_source_dbs", return_value=rows):
@@ -135,7 +135,7 @@ class TestIngestContactsIntegration:
     @pytest.fixture
     def mock_db(self) -> MagicMock:
         db = MagicMock()
-        db.get_contact_by_handle = Mock(return_value=None)
+        db.get_contact_by_handles = Mock(return_value=None)
         db.add_contact = Mock()
         return db
 
@@ -168,8 +168,8 @@ class TestIngestContactsIntegration:
             handles_json=json.dumps(["+15559876543"]),
         )
 
-        mock_db.get_contact_by_handle.side_effect = lambda h: (
-            existing if h == "+15559876543" else None
+        mock_db.get_contact_by_handles.side_effect = lambda handles: (
+            existing if "+15559876543" in handles else None
         )
 
         rows = [

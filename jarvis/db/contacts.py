@@ -13,6 +13,12 @@ if TYPE_CHECKING:
     from jarvis.db.core import JarvisDBBase
 
 
+_CONTACT_COLUMNS = (
+    "id, chat_id, display_name, phone_or_email, relationship,"
+    " style_notes, handles_json, created_at, updated_at"
+)
+
+
 class ContactMixin:
     """Mixin providing contact CRUD operations."""
 
@@ -124,9 +130,7 @@ class ContactMixin:
 
         with self.connection() as conn:
             cursor = conn.execute(
-                """SELECT id, chat_id, display_name, phone_or_email, relationship,
-                          style_notes, handles_json, created_at, updated_at
-                   FROM contacts WHERE id = ?""",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE id = ?",
                 (contact_id,),
             )
             row = cursor.fetchone()
@@ -150,9 +154,7 @@ class ContactMixin:
         with self.connection() as conn:
             # Try exact match first
             cursor = conn.execute(
-                """SELECT id, chat_id, display_name, phone_or_email, relationship,
-                          style_notes, handles_json, created_at, updated_at
-                   FROM contacts WHERE chat_id = ?""",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id = ?",
                 (chat_id,),
             )
             row = cursor.fetchone()
@@ -180,10 +182,30 @@ class ContactMixin:
         """
         with self.connection() as conn:
             cursor = conn.execute(
-                """SELECT id, chat_id, display_name, phone_or_email, relationship,
-                          style_notes, handles_json, created_at, updated_at
-                   FROM contacts WHERE chat_id = ? OR phone_or_email = ?""",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id = ? OR phone_or_email = ?",
                 (handle, handle),
+            )
+            row = cursor.fetchone()
+            return self._row_to_contact(row) if row else None
+
+    def get_contact_by_handles(
+        self: JarvisDBBase, handles: list[str]
+    ) -> Contact | None:
+        """Get first matching contact for any of the given handles.
+
+        Batch version of get_contact_by_handle - checks all handles in a single
+        query instead of one query per handle.
+        """
+        if not handles:
+            return None
+        with self.connection() as conn:
+            placeholders = ",".join("?" for _ in handles)
+            cursor = conn.execute(
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts"
+                f" WHERE chat_id IN ({placeholders})"
+                f" OR phone_or_email IN ({placeholders})"
+                f" LIMIT 1",
+                handles + handles,
             )
             row = cursor.fetchone()
             return self._row_to_contact(row) if row else None
@@ -193,9 +215,7 @@ class ContactMixin:
         with self.connection() as conn:
             # Try exact match first
             cursor = conn.execute(
-                """SELECT id, chat_id, display_name, phone_or_email, relationship,
-                          style_notes, handles_json, created_at, updated_at
-                   FROM contacts WHERE LOWER(display_name) = LOWER(?)""",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE LOWER(display_name) = LOWER(?)",
                 (name,),
             )
             row = cursor.fetchone()
@@ -204,9 +224,7 @@ class ContactMixin:
                 # Try partial match - escape wildcards for LIKE
                 escaped_name = name.replace("%", "\\%").replace("_", "\\_")
                 cursor = conn.execute(
-                    """SELECT id, chat_id, display_name, phone_or_email, relationship,
-                              style_notes, handles_json, created_at, updated_at
-                       FROM contacts WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'""",
+                    f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'",
                     (f"%{escaped_name}%",),
                 )
                 row = cursor.fetchone()
@@ -219,9 +237,7 @@ class ContactMixin:
         """List all contacts."""
         with self.connection() as conn:
             cursor = conn.execute(
-                """SELECT id, chat_id, display_name, phone_or_email, relationship,
-                          style_notes, handles_json, created_at, updated_at
-                   FROM contacts ORDER BY display_name LIMIT ?""",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts ORDER BY display_name LIMIT ?",
                 (limit,),
             )
             return [self._row_to_contact(row) for row in cursor]

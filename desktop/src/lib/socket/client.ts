@@ -179,6 +179,17 @@ class JarvisSocket {
   }> = [];
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Request batching state for Tauri mode
+  private tauriBatchQueue: Array<{
+    method: string;
+    params: object;
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  private tauriBatchTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly TAURI_BATCH_WINDOW_MS = 10; // 10ms batching window
+  private readonly TAURI_MAX_BATCH_SIZE = 5;
+
   /**
    * Get current connection state
    */
@@ -485,13 +496,21 @@ class JarvisSocket {
     await this.cleanupEventListeners();
     this.stopStaleRequestCleanup();
 
-    // Clear batch timer and reject pending batched requests
+    // Clear batch timer and reject pending batched requests (WebSocket)
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;
     }
     this.batchQueue.forEach((req) => req.reject(new Error("Disconnected")));
     this.batchQueue = [];
+
+    // Clear Tauri batch timer and reject pending requests
+    if (this.tauriBatchTimer) {
+      clearTimeout(this.tauriBatchTimer);
+      this.tauriBatchTimer = null;
+    }
+    this.tauriBatchQueue.forEach((req) => req.reject(new Error("Disconnected")));
+    this.tauriBatchQueue = [];
 
     // Close WebSocket if open
     if (this.ws) {
@@ -607,12 +626,12 @@ class JarvisSocket {
   }
 
   /**
-   * Call a method with automatic batching (WebSocket mode only)
+   * Call a method with automatic batching
    * Collects rapid sequential calls and sends them as a single batch request.
    * This reduces round-trip overhead when making multiple calls in quick succession.
    *
    * @example
-   * // These 3 calls made within 15ms will be batched into 1 request
+   * // These 3 calls made within 10ms will be batched into 1 request
    * const [result1, result2, result3] = await Promise.all([
    *   client.callBatched("ping", {}),
    *   client.callBatched("classify_intent", { text: "hello" }),
@@ -620,9 +639,9 @@ class JarvisSocket {
    * ]);
    */
   async callBatched<T>(method: string, params: object = {}): Promise<T> {
-    // In Tauri mode, just use regular call (batching handled differently)
+    // In Tauri mode, use Tauri-specific batching
     if (isTauri) {
-      return this.call<T>(method, params);
+      return this.callTauriBatched<T>(method, params);
     }
 
     // Ensure connected
@@ -655,6 +674,87 @@ class JarvisSocket {
         }, BATCH_WINDOW_MS);
       }
     });
+  }
+
+  /**
+   * Call a method with Tauri-specific batching
+   * Uses IPC batching to reduce round trips
+   */
+  private callTauriBatched<T>(method: string, params: object = {}): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      // Add to Tauri batch queue
+      this.tauriBatchQueue.push({
+        method,
+        params,
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      });
+
+      // If batch is full, send immediately
+      if (this.tauriBatchQueue.length >= this.TAURI_MAX_BATCH_SIZE) {
+        this.flushTauriBatch();
+        return;
+      }
+
+      // Start batch timer if not already running
+      if (!this.tauriBatchTimer) {
+        this.tauriBatchTimer = setTimeout(() => {
+          this.flushTauriBatch();
+        }, this.TAURI_BATCH_WINDOW_MS);
+      }
+    });
+  }
+
+  /**
+   * Flush the Tauri batch queue
+   */
+  private async flushTauriBatch(): Promise<void> {
+    // Clear timer
+    if (this.tauriBatchTimer) {
+      clearTimeout(this.tauriBatchTimer);
+      this.tauriBatchTimer = null;
+    }
+
+    // Nothing to flush
+    if (this.tauriBatchQueue.length === 0) {
+      return;
+    }
+
+    // Take all queued requests
+    const batch = this.tauriBatchQueue.splice(0);
+
+    // If only one request, send it directly
+    if (batch.length === 1) {
+      const req = batch[0];
+      if (req) {
+        this.call(req.method, req.params).then(req.resolve).catch(req.reject);
+      }
+      return;
+    }
+
+    // Send as batch
+    console.log(`[JarvisSocket] Sending Tauri batch of ${batch.length} requests`);
+
+    try {
+      const results = await withTimeout(
+        invoke!("send_batch", { requests: batch.map(r => ({ method: r.method, params: r.params })) }),
+        REQUEST_TIMEOUT,
+        "send_batch"
+      ) as Array<{ result?: unknown; error?: string }>;
+
+      // Map results back to individual promises
+      batch.forEach((req, index) => {
+        const result = results[index];
+        if (result?.error) {
+          req.reject(new Error(result.error));
+        } else {
+          req.resolve(result?.result);
+        }
+      });
+    } catch (error) {
+      // Reject all requests on batch failure
+      batch.forEach((req) => req.reject(error as Error));
+    }
   }
 
   /**

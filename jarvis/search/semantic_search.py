@@ -1,5 +1,10 @@
 """Semantic search for iMessage conversations.
 
+.. deprecated::
+    This module is superseded by ``jarvis.search.vec_search.VecSearcher`` which
+    uses sqlite-vec for faster, quantized vector search. This module is kept for
+    the ``/search/semantic`` API endpoints but should not be used in new code.
+
 Uses sentence embeddings (bge-small-en-v1.5 via unified adapter) to find
 messages by meaning rather than exact text matching. Embeddings are cached
 in SQLite for efficient repeated searches.
@@ -626,32 +631,25 @@ class SemanticSearcher:
         self.cache.close()
 
 
-# Singleton instance management
-_searcher_instance: SemanticSearcher | None = None
-_searcher_lock = threading.Lock()
+from jarvis.utils.singleton import thread_safe_singleton
 
 
+@thread_safe_singleton
 def get_semantic_searcher(reader: ChatDBReader) -> SemanticSearcher:
     """Get or create a singleton SemanticSearcher instance.
 
     Args:
-        reader: iMessage database reader
+        reader: iMessage database reader (only used on first call)
 
     Returns:
         SemanticSearcher instance
     """
-    global _searcher_instance
-    if _searcher_instance is None:
-        with _searcher_lock:
-            if _searcher_instance is None:
-                _searcher_instance = SemanticSearcher(reader)
-    return _searcher_instance
+    return SemanticSearcher(reader)
 
 
 def reset_semantic_searcher() -> None:
     """Reset the singleton SemanticSearcher instance."""
-    global _searcher_instance
-    with _searcher_lock:
-        if _searcher_instance is not None:
-            _searcher_instance.close()
-            _searcher_instance = None
+    instance = get_semantic_searcher.peek()  # type: ignore[attr-defined]
+    if instance is not None:
+        instance.close()
+    get_semantic_searcher.reset()  # type: ignore[attr-defined]

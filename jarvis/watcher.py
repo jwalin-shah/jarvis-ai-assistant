@@ -9,8 +9,9 @@ notifications via the socket server.
 import asyncio
 import logging
 import sqlite3
+import time
 from collections import OrderedDict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -90,6 +91,8 @@ class ChatDBWatcher:
         self._resegment_locks_mutex = asyncio.Lock()  # Protect OrderedDict mutations
         # Persistent read-only connection for rowid polling (avoids 10-50ms connect overhead)
         self._poll_conn: sqlite3.Connection | None = None
+        self._poll_conn_last_health_check: float = 0.0  # Timestamp of last health check
+        self._poll_conn_health_check_interval: float = 30.0  # Check every 30 seconds
 
     async def start(self) -> None:
         """Start watching chat.db for changes."""
@@ -338,11 +341,13 @@ class ChatDBWatcher:
             # Periodic cleanup: cap dict size to prevent unbounded growth from
             # chats that never reach the segment threshold
             if len(self._chat_msg_counts) > 1000:
-                # Keep only the 500 most recent (highest count) entries
-                sorted_chats = sorted(
-                    self._chat_msg_counts.items(), key=lambda x: x[1], reverse=True
+                # Keep top 500 by count using heapq (O(n log k) vs O(n log n) sort)
+                import heapq
+
+                top_500 = heapq.nlargest(
+                    500, self._chat_msg_counts.items(), key=lambda x: x[1]
                 )
-                self._chat_msg_counts = dict(sorted_chats[:500])
+                self._chat_msg_counts = dict(top_500)
 
             if chats_to_resegment:
                 task = asyncio.create_task(self._resegment_chats(chats_to_resegment))
@@ -407,12 +412,62 @@ class ChatDBWatcher:
 
         Identifies when a user sends a message that was previously suggested
         by the AI, or when they send a message that implies feedback.
+
+        This is a simple implementation that logs matches for monitoring.
+        A full implementation would:
+        1. Store recent suggestions with timestamps and chat_id
+        2. Compute semantic similarity between sent message and suggestions
+        3. Record to FeedbackStore with action=SENT (>0.92 similarity) or EDITED (>0.55)
+        4. Track which suggestions were ignored (wrote_from_scratch)
         """
-        # TODO: Implement passive feedback detection logic
-        # 1. Check for messages where is_from_me is True
-        # 2. Compare against recent suggestions in FeedbackStore
-        # 3. If match found (and not already recorded), record as SuggestionAction.SENT
-        pass
+        try:
+            # Filter to outgoing messages with text (is_from_me=True)
+            outgoing = [m for m in messages if m.get("is_from_me") and m.get("text")]
+            if not outgoing:
+                return
+
+            # Get recent feedback entries to check for matches
+            from jarvis.eval.evaluation import get_feedback_store
+
+            store = get_feedback_store()
+            recent_entries = await asyncio.to_thread(store.get_recent_entries, limit=50)
+
+            # Simple time window: only compare against suggestions from last 5 minutes
+            cutoff_time = datetime.now(UTC) - timedelta(minutes=5)
+
+            for msg in outgoing:
+                msg_text = msg.get("text", "").strip().lower()
+                chat_id = msg.get("chat_id", "")
+
+                # Look for recent suggestions for this chat
+                for entry in recent_entries:
+                    # Skip if wrong chat or too old
+                    if entry.chat_id != chat_id:
+                        continue
+                    if entry.timestamp < cutoff_time:
+                        continue
+
+                    suggestion_text = entry.suggestion_text.strip().lower()
+
+                    # Simple exact match check (a full implementation would use embeddings)
+                    # This logs when user sends exactly what was suggested
+                    if msg_text == suggestion_text:
+                        logger.info(
+                            "Passive feedback detected: user sent suggested message "
+                            "(chat=%s, suggestion_id=%s)",
+                            chat_id[:20],
+                            entry.suggestion_id,
+                        )
+                        # A full implementation would call:
+                        # store.record_feedback(
+                        #     action=SuggestionAction.SENT,
+                        #     suggestion_id=entry.suggestion_id,
+                        #     ...
+                        # )
+                        break
+
+        except Exception as e:
+            logger.debug("Passive feedback detection error: %s", e)
 
     async def _extract_facts(self, messages: list[dict[str, Any]]) -> None:
         """Extract and persist facts from new messages (background task)."""
@@ -434,6 +489,9 @@ class ChatDBWatcher:
                 if cid:
                     by_chat.setdefault(cid, []).append(msg)
 
+            # Track chats with significant fact updates for profile cache invalidation
+            chats_to_invalidate: list[str] = []
+
             for chat_id, chat_msgs in by_chat.items():
                 try:
                     facts = await asyncio.to_thread(extractor.extract_facts, chat_msgs, chat_id)
@@ -446,8 +504,24 @@ class ChatDBWatcher:
                                 inserted,
                                 chat_id[:20],
                             )
+                            # Invalidate profile cache if significant new facts (threshold: 5+)
+                            if inserted >= 5:
+                                chats_to_invalidate.append(chat_id)
                 except Exception as e:
                     logger.debug("Fact extraction failed for %s: %s", chat_id[:20], e)
+
+            # Invalidate contact profile cache for chats with significant updates
+            if chats_to_invalidate:
+                try:
+                    from jarvis.contacts.contact_profile import invalidate_profile_cache
+
+                    await asyncio.to_thread(invalidate_profile_cache)
+                    logger.info(
+                        "Invalidated contact profile cache after extracting facts for %d chats",
+                        len(chats_to_invalidate),
+                    )
+                except Exception as e:
+                    logger.debug("Profile cache invalidation error: %s", e)
 
         except Exception as e:
             logger.debug("Fact extraction pipeline error: %s", e)
@@ -577,9 +651,34 @@ class ChatDBWatcher:
         return await asyncio.to_thread(self._query_last_rowid)
 
     def _get_poll_conn(self) -> sqlite3.Connection | None:
-        """Get or create persistent read-only connection for polling."""
+        """Get or create persistent read-only connection for polling.
+
+        Includes periodic health check (every 30s) to detect stale connections.
+        """
+        current_time = time.time()
+
+        # Health check existing connection
+        if self._poll_conn is not None:
+            # Periodic health check
+            if current_time - self._poll_conn_last_health_check > self._poll_conn_health_check_interval:
+                try:
+                    cursor = self._poll_conn.cursor()
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                    self._poll_conn_last_health_check = current_time
+                except Exception as e:
+                    logger.debug("Health check failed, reopening connection: %s", e)
+                    try:
+                        self._poll_conn.close()
+                    except Exception:
+                        pass
+                    self._poll_conn = None
+
+        # Return if still healthy
         if self._poll_conn is not None:
             return self._poll_conn
+
+        # Create new connection
         if not CHAT_DB_PATH.exists():
             return None
         try:
@@ -588,6 +687,7 @@ class ChatDBWatcher:
                 uri=True,
                 timeout=5.0,
             )
+            self._poll_conn_last_health_check = current_time
             return self._poll_conn
         except Exception as e:
             logger.debug("Error creating poll connection: %s", e)
@@ -605,8 +705,13 @@ class ChatDBWatcher:
             return row[0] if row and row[0] else None
         except Exception as e:
             logger.debug("Error getting last ROWID: %s", e)
-            # Connection may be stale, reset it
+            # Connection may be stale, reset it and force health check on next call
+            try:
+                self._poll_conn.close()
+            except Exception:
+                pass
             self._poll_conn = None
+            self._poll_conn_last_health_check = 0.0
             return None
 
     async def _get_new_messages(self) -> list[dict[str, Any]]:

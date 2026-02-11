@@ -6,7 +6,7 @@
 //! - Right-click context menu
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     App, Emitter, Manager,
 };
@@ -15,12 +15,13 @@ use tauri::{
 pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     // Create menu items
     let show_item = MenuItem::with_id(app, "show", "Show JARVIS", true, None::<&str>)?;
+    let status_item = MenuItem::with_id(app, "status", "Status: Disconnected", false, None::<&str>)?;
     let health_item = MenuItem::with_id(app, "health", "System Health", true, None::<&str>)?;
-    let separator = MenuItem::with_id(app, "sep", "---", false, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
     // Build the tray menu
-    let menu = Menu::with_items(app, &[&show_item, &health_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &status_item, &health_item, &separator, &quit_item])?;
 
     // Create the tray icon
     let _tray = TrayIconBuilder::new()

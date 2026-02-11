@@ -544,6 +544,49 @@ def _detect_features(text: str, text_lower: str) -> dict[str, bool]:
     return features
 
 
+def _matches_info_question(text_lower: str) -> bool:
+    """Check if text matches any compiled info-seeking question pattern."""
+    return any(pattern.match(text_lower) for pattern in _COMPILED_INFO_QUESTION)
+
+
+def _make_result(
+    pressure: ResponsePressure,
+    response_type: ResponseType,
+    confidence: float,
+    features: dict[str, bool | int],
+    method: str = "rule",
+) -> MobilizationResult:
+    return MobilizationResult(
+        pressure=pressure,
+        response_type=response_type,
+        confidence=confidence,
+        features=features,
+        method=method,
+    )
+
+
+def _classify_question_mark(
+    text_lower: str, features: dict[str, bool | int],
+) -> MobilizationResult:
+    """Handle messages with explicit question mark."""
+    if features["has_wh_word"] or features["has_aux_inversion"]:
+        if features["is_rhetorical"]:
+            return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.80, features)
+        return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.90, features)
+    return _make_result(ResponsePressure.HIGH, ResponseType.CONFIRMATION, 0.75, features)
+
+
+def _classify_recipient_oriented(
+    text_lower: str, features: dict[str, bool | int],
+) -> MobilizationResult:
+    """Handle recipient-oriented questions."""
+    if re.match(
+        r"^(are|is) (you|u|ya) (coming|going|in|down|free|busy|available)\b", text_lower
+    ):
+        return _make_result(ResponsePressure.HIGH, ResponseType.COMMITMENT, 0.90, features)
+    return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.90, features)
+
+
 def classify_response_pressure(text: str) -> MobilizationResult:
     """Classify message by response pressure using linguistic features.
 
@@ -556,188 +599,58 @@ def classify_response_pressure(text: str) -> MobilizationResult:
         MobilizationResult with pressure level and appropriate response type
     """
     if not text or not text.strip():
-        return MobilizationResult(
-            pressure=ResponsePressure.NONE,
-            response_type=ResponseType.CLOSING,
-            confidence=0.0,
-            features={},
-            method="empty",
+        return _make_result(
+            ResponsePressure.NONE, ResponseType.CLOSING, 0.0, {}, method="empty",
         )
 
     text_lower = _normalize_for_classification(text)
     features = _detect_features(text, text_lower)
 
-    # === NONE: Backchannels and greetings ===
-    if features["is_negated_request"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.NONE,
-            response_type=ResponseType.CLOSING,
-            confidence=0.98,
-            features=features,
-        )
-
-    if features["is_backchannel"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.NONE,
-            response_type=ResponseType.CLOSING,
-            confidence=0.98,
-            features=features,
-        )
+    if features["is_negated_request"] or features["is_backchannel"]:
+        return _make_result(ResponsePressure.NONE, ResponseType.CLOSING, 0.98, features)
 
     if features["is_greeting"]:
-        # Greetings get greetings back, but low pressure
-        return MobilizationResult(
-            pressure=ResponsePressure.LOW,
-            response_type=ResponseType.OPTIONAL,
-            confidence=0.90,
-            features=features,
-        )
+        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.90, features)
 
-    # === HIGH: Requests and invitations (COMMITMENT) ===
     if features["is_request"] or features["is_imperative"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.HIGH,
-            response_type=ResponseType.COMMITMENT,
-            confidence=0.95,
-            features=features,
-        )
+        return _make_result(ResponsePressure.HIGH, ResponseType.COMMITMENT, 0.95, features)
 
     if features["is_slang_question"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.HIGH,
-            response_type=ResponseType.ANSWER,
-            confidence=0.90,
-            features=features,
-        )
+        return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.90, features)
 
-    # === HIGH: Recipient-oriented questions (ANSWER or COMMITMENT) ===
     if features["is_recipient_oriented"]:
-        # "Are you coming?" = commitment, "Do you know X?" = answer
-        if re.match(
-            r"^(are|is) (you|u|ya) (coming|going|in|down|free|busy|available)\b", text_lower
-        ):
-            return MobilizationResult(
-                pressure=ResponsePressure.HIGH,
-                response_type=ResponseType.COMMITMENT,
-                confidence=0.90,
-                features=features,
-            )
-        return MobilizationResult(
-            pressure=ResponsePressure.HIGH,
-            response_type=ResponseType.ANSWER,
-            confidence=0.90,
-            features=features,
-        )
+        return _classify_recipient_oriented(text_lower, features)
 
-    # === HIGH: Direct questions with ? and WH-word or aux inversion ===
     if features["has_question_mark"]:
-        if features["has_wh_word"] or features["has_aux_inversion"]:
-            # Check for rhetorical patterns first
-            if features["is_rhetorical"]:
-                return MobilizationResult(
-                    pressure=ResponsePressure.LOW,
-                    response_type=ResponseType.OPTIONAL,
-                    confidence=0.80,
-                    features=features,
-                )
-            return MobilizationResult(
-                pressure=ResponsePressure.HIGH,
-                response_type=ResponseType.ANSWER,
-                confidence=0.90,
-                features=features,
-            )
-        # Has ? but no clear question syntax - could be declarative question
-        # "You're coming?" - B-event statement seeking confirmation
-        return MobilizationResult(
-            pressure=ResponsePressure.HIGH,
-            response_type=ResponseType.CONFIRMATION,
-            confidence=0.75,
-            features=features,
-        )
+        return _classify_question_mark(text_lower, features)
 
-    # === LOW: Speaker-oriented (musings, wonderings) ===
     if features["is_speaker_oriented"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.LOW,
-            response_type=ResponseType.OPTIONAL,
-            confidence=0.90,
-            features=features,
-        )
+        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.90, features)
 
-    # === LOW: Rhetorical questions (no ?) ===
     if features["is_rhetorical"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.LOW,
-            response_type=ResponseType.OPTIONAL,
-            confidence=0.85,
-            features=features,
-        )
+        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.85, features)
 
-    # === MEDIUM: Reactive content (emotional news) ===
     if features["is_reactive"] or features["has_multiple_exclamation"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.MEDIUM,
-            response_type=ResponseType.EMOTIONAL,
-            confidence=0.85,
-            features=features,
-        )
+        return _make_result(ResponsePressure.MEDIUM, ResponseType.EMOTIONAL, 0.85, features)
 
-    # === LOW: Opinions without strong alignment-seeking ===
     if features["is_opinion"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.LOW,
-            response_type=ResponseType.OPTIONAL,
-            confidence=0.80,
-            features=features,
-        )
+        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.80, features)
 
-    # === LOW: Tellings (informing) ===
     if features["is_telling"]:
-        return MobilizationResult(
-            pressure=ResponsePressure.LOW,
-            response_type=ResponseType.OPTIONAL,
-            confidence=0.80,
-            features=features,
-        )
+        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.80, features)
 
-    # === WH-word without ? - depends on pattern ===
+    # WH-word without ? - depends on pattern
     if features["has_wh_word"] and not features["has_question_mark"]:
-        # Direct info-seeking WH-questions (even without ?)
-        # "What time is the game" "Where are you" "When does it start"
-        for pattern in _COMPILED_INFO_QUESTION:
-            if pattern.match(text_lower):
-                return MobilizationResult(
-                    pressure=ResponsePressure.HIGH,
-                    response_type=ResponseType.ANSWER,
-                    confidence=0.80,
-                    features=features,
-                )
-        # Otherwise, WH-word without ? is likely rhetorical
-        return MobilizationResult(
-            pressure=ResponsePressure.LOW,
-            response_type=ResponseType.OPTIONAL,
-            confidence=0.70,
-            features=features,
-        )
+        if _matches_info_question(text_lower):
+            return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.80, features)
+        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.70, features)
 
-    # === Short-form direct questions without WH-word ===
-    # Covers common slang that still expects an answer.
-    for pattern in _COMPILED_INFO_QUESTION:
-        if pattern.match(text_lower):
-            return MobilizationResult(
-                pressure=ResponsePressure.HIGH,
-                response_type=ResponseType.ANSWER,
-                confidence=0.80,
-                features=features,
-            )
+    # Short-form direct questions without WH-word
+    if _matches_info_question(text_lower):
+        return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.80, features)
 
-    # === DEFAULT: LOW (most casual chat is low-pressure) ===
-    return MobilizationResult(
-        pressure=ResponsePressure.LOW,
-        response_type=ResponseType.OPTIONAL,
-        confidence=0.50,
-        features=features,
-        method="default",
+    return _make_result(
+        ResponsePressure.LOW, ResponseType.OPTIONAL, 0.50, features, method="default",
     )
 
 

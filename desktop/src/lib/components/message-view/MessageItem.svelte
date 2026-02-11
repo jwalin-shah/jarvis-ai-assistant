@@ -10,6 +10,7 @@
     isNew: boolean;
     onRetry?: (optimisticId: string) => void;
     onDismiss?: (optimisticId: string) => void;
+    onHeightChange?: (messageId: number, height: number) => void;
   }
 
   let {
@@ -20,7 +21,39 @@
     isNew,
     onRetry,
     onDismiss,
+    onHeightChange,
   }: Props = $props();
+
+  // ResizeObserver for efficient height tracking
+  let messageElement: HTMLElement | null = $state(null);
+  let resizeObserver: ResizeObserver | null = null;
+
+  $effect(() => {
+    if (!messageElement || !onHeightChange) return;
+
+    // Initial measurement
+    const measure = () => {
+      const style = window.getComputedStyle(messageElement!);
+      const marginTop = parseFloat(style.marginTop) || 0;
+      const marginBottom = parseFloat(style.marginBottom) || 0;
+      const height = messageElement!.offsetHeight + marginTop + marginBottom;
+      onHeightChange!(message.id, height);
+    };
+
+    // Use ResizeObserver for efficient height tracking
+    resizeObserver = new ResizeObserver(() => {
+      measure();
+    });
+    resizeObserver.observe(messageElement);
+
+    // Initial measurement
+    measure();
+
+    return () => {
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+    };
+  });
 
   // Derived values using strict type guards
   const optimistic = $derived(isOptimisticMessage(message));
@@ -49,12 +82,13 @@
 </script>
 
 {#if message.is_system_message}
-  <div class="system-message" data-message-id={message.id}>
+  <div class="system-message" data-message-id={message.id} bind:this={messageElement}>
     {message.text}
   </div>
 {:else}
   <div
     class="message"
+    bind:this={messageElement}
     class:from-me={message.is_from_me}
     class:new-message={isNew}
     class:highlighted={isHighlighted}

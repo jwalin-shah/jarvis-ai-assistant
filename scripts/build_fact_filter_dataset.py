@@ -23,6 +23,10 @@ import sys
 from pathlib import Path
 
 
+from eval_shared import jaccard_tokens, spans_match
+from gliner_shared import _safe_major, enforce_runtime_stack, parse_context_messages
+
+
 def _setup_logging() -> logging.Logger:
     """Setup logging with file and stream handlers."""
     log_file = Path("build_fact_filter_dataset.log")
@@ -37,14 +41,6 @@ def _setup_logging() -> logging.Logger:
         force=True,
     )
     return logging.getLogger(__name__)
-
-
-def _safe_major(version: str) -> int:
-    """Best-effort major version parser."""
-    try:
-        return int(version.split(".", 1)[0])
-    except (TypeError, ValueError):
-        return -1
 
 
 def warn_runtime_stack() -> None:
@@ -64,85 +60,6 @@ def warn_runtime_stack() -> None:
             "Use scripts/run_gliner_compat.sh scripts/build_fact_filter_dataset.py ...",
             flush=True,
         )
-
-
-def enforce_runtime_stack(allow_unstable_stack: bool) -> None:
-    """Fail fast on unsupported runtime unless explicitly overridden."""
-    try:
-        import huggingface_hub
-        import transformers
-    except Exception:
-        return
-
-    tver = getattr(transformers, "__version__", "unknown")
-    hver = getattr(huggingface_hub, "__version__", "unknown")
-    if _safe_major(str(tver)) >= 5:
-        msg = (
-            f"Detected transformers={tver}, huggingface_hub={hver}. "
-            "GLiNER quality may degrade on this stack."
-        )
-        if allow_unstable_stack:
-            print(
-                "WARNING: " + msg + " Continuing due --allow-unstable-stack.",
-                flush=True,
-            )
-            return
-        raise SystemExit(
-            "ERROR: "
-            + msg
-            + " Re-run via scripts/run_gliner_compat.sh scripts/build_fact_filter_dataset.py ..."
-            + " or pass --allow-unstable-stack."
-        )
-
-
-def parse_context_messages(raw: object) -> list[str]:
-    """Parse context payloads from gold JSON (string blob or list) into message texts."""
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return [str(x).strip() for x in raw if str(x).strip()]
-    if not isinstance(raw, str):
-        return []
-
-    payload = raw.strip()
-    if not payload:
-        return []
-
-    # CSV context format: "id|speaker|text || id|speaker|text".
-    chunks = [c.strip() for c in payload.split("||") if c.strip()]
-    messages: list[str] = []
-    for chunk in chunks:
-        parts = chunk.split("|", 2)
-        if len(parts) == 3:
-            text = parts[2].strip()
-        else:
-            text = chunk
-        if text:
-            messages.append(text)
-    return messages
-
-
-def jaccard_tokens(a: str, b: str) -> float:
-    """Token-level Jaccard similarity (case-insensitive)."""
-    ta = set(a.lower().split())
-    tb = set(b.lower().split())
-    if not ta or not tb:
-        return 0.0
-    return len(ta & tb) / len(ta | tb)
-
-
-def spans_match(pred_text: str, pred_label: str, gold_text: str, gold_label: str) -> bool:
-    """Check if a predicted span matches a gold span."""
-    if pred_label != gold_label:
-        return False
-
-    pl = pred_text.lower().strip()
-    gl = gold_text.lower().strip()
-    if pl in gl or gl in pl:
-        return True
-    if jaccard_tokens(pred_text, gold_text) >= 0.5:
-        return True
-    return False
 
 
 def first_matching_gold(pred: dict, gold_candidates: list[dict]) -> dict | None:

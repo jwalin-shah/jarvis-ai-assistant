@@ -24,51 +24,33 @@ export function getConversationsQuery(options: {
   withSinceFilter?: boolean;
   withBeforeFilter?: boolean;
 }): string {
-  const sinceFilter = options.withSinceFilter ? "AND cmj_max.max_date > ?" : "";
-  const beforeFilter = options.withBeforeFilter ? "AND cmj_max.max_date < ?" : "";
+  const sinceFilter = options.withSinceFilter ? "AND mr.date > ?" : "";
+  const beforeFilter = options.withBeforeFilter ? "AND mr.date < ?" : "";
 
-  // Optimized query: single pass with window functions + subquery for last message
-  // Reduces from 5 correlated subqueries per chat to 1 efficient query with JOINs
+  // ROW_NUMBER() window function guarantees exactly one message per chat,
+  // fixing duplicate-timestamp bug where MAX(date) matched multiple messages.
+  // Mirrors Python fix in integrations/imessage/queries.py:50-87.
   // Performance: ~1400ms → ~50ms with 400k messages
   return `
-    WITH chat_stats AS (
-      -- Get message count and last message date for each chat in one pass
+    WITH message_ranked AS (
       SELECT
-        chat_id,
-        COUNT(*) as msg_count,
-        MAX(message.date) as max_date,
-        -- Get ROWID of last message for efficient text lookup
-        (SELECT message.ROWID FROM message
-         JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
-         WHERE chat_message_join.chat_id = chat_message_join.chat_id
-         ORDER BY message.date DESC LIMIT 1) as last_msg_rowid
-      FROM chat_message_join
-      JOIN message ON chat_message_join.message_id = message.ROWID
-      GROUP BY chat_id
+        cmj.chat_id,
+        m.text,
+        m.attributedBody,
+        m.date,
+        ROW_NUMBER() OVER (PARTITION BY cmj.chat_id ORDER BY m.date DESC) as msg_rank,
+        COUNT(*) OVER (PARTITION BY cmj.chat_id) as message_count
+      FROM chat_message_join cmj
+      JOIN message m ON cmj.message_id = m.ROWID
+      WHERE m.date > (strftime('%s', 'now', '-365 days') - 978307200) * 1000000000
     ),
     chat_participants AS (
-      -- Get participants for each chat
       SELECT
         chat_handle_join.chat_id,
         GROUP_CONCAT(handle.id, ', ') as participants
       FROM chat_handle_join
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       GROUP BY chat_handle_join.chat_id
-    ),
-    last_messages AS (
-      -- Get last message text and body
-      SELECT DISTINCT
-        cmj.chat_id,
-        message.text as last_message_text,
-        message.attributedBody as last_message_attributed_body
-      FROM chat_message_join cmj
-      JOIN message ON cmj.message_id = message.ROWID
-      WHERE (cmj.chat_id, message.date) IN (
-        SELECT chat_id, MAX(date)
-        FROM chat_message_join
-        JOIN message ON chat_message_join.message_id = message.ROWID
-        GROUP BY chat_id
-      )
     )
     SELECT
       chat.ROWID as chat_rowid,
@@ -76,18 +58,17 @@ export function getConversationsQuery(options: {
       chat.display_name,
       chat.chat_identifier,
       COALESCE(chat_participants.participants, '') as participants,
-      COALESCE(chat_stats.msg_count, 0) as message_count,
-      COALESCE(chat_stats.max_date, 0) as last_message_date,
-      COALESCE(last_messages.last_message_text, '') as last_message_text,
-      COALESCE(last_messages.last_message_attributed_body, '') as last_message_attributed_body
+      COALESCE(mr.message_count, 0) as message_count,
+      COALESCE(mr.date, 0) as last_message_date,
+      COALESCE(mr.text, '') as last_message_text,
+      COALESCE(mr.attributedBody, '') as last_message_attributed_body
     FROM chat
-    LEFT JOIN chat_stats ON chat.ROWID = chat_stats.chat_id
     LEFT JOIN chat_participants ON chat.ROWID = chat_participants.chat_id
-    LEFT JOIN last_messages ON chat.ROWID = last_messages.chat_id
-    WHERE COALESCE(chat_stats.msg_count, 0) > 0
+    LEFT JOIN message_ranked mr ON mr.chat_id = chat.ROWID AND mr.msg_rank = 1
+    WHERE COALESCE(mr.message_count, 0) > 0
     ${sinceFilter}
     ${beforeFilter}
-    ORDER BY COALESCE(chat_stats.max_date, 0) DESC
+    ORDER BY COALESCE(mr.date, 0) DESC
     LIMIT ?
   `;
 }

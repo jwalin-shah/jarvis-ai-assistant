@@ -97,14 +97,12 @@ class TestReplyRouterInit:
         """Test initialization with all dependencies provided."""
         router = ReplyRouter(db=mock_db, generator=mock_generator)
         assert router._db is mock_db
-        assert router._semantic_searcher is None  # Always lazy
         assert router._generator is mock_generator
 
     def test_init_with_no_dependencies(self) -> None:
         """Test initialization with no dependencies (lazy loading)."""
         router = ReplyRouter()
         assert router._db is None
-        assert router._semantic_searcher is None
         assert router._generator is None
 
     def test_db_property_creates_default(self) -> None:
@@ -118,15 +116,6 @@ class TestReplyRouterInit:
 
             mock_get_db.assert_called_once()
             mock_db.init_schema.assert_called_once()
-
-    def test_semantic_searcher_returns_none_without_reader(self) -> None:
-        """Test semantic_searcher returns None when no imessage_reader."""
-        with patch(
-            "integrations.imessage.reader.ChatDBReader",
-            side_effect=Exception("No access"),
-        ):
-            router = ReplyRouter()
-            assert router.semantic_searcher is None
 
     def test_generator_property_creates_default(self) -> None:
         """Test generator property creates default instance when None."""
@@ -198,7 +187,7 @@ class TestAlwaysGenerates:
         """Test that emotion messages without context skip (NONE pressure, no examples)."""
         result = router.route("lol")
 
-        # Emotion with no context → NONE pressure → skip
+        # Emotion with no context -> NONE pressure -> skip
         assert result["type"] == "skip"
         assert result["reason"] == "no_response_needed"
         mock_generator.generate.assert_not_called()
@@ -221,36 +210,41 @@ class TestAlwaysGenerates:
 
 
 class TestMobilizationIntegration:
-    """Tests that mobilization pressure maps to confidence correctly."""
+    """Tests that mobilization pressure maps to confidence correctly.
 
-    def test_high_pressure_high_confidence(
+    Without RAG context (no search results), _compute_confidence applies:
+    - base_confidence[pressure] * 0.8 (sim < 0.5) * 0.9 (diversity < 0.3)
+    Then maps: >= 0.7 -> "high", >= 0.45 -> "medium", else -> "low".
+    """
+
+    def test_high_pressure_yields_medium_confidence_without_rag(
         self,
         router: ReplyRouter,
         mock_generator: MagicMock,
     ) -> None:
-        """Test HIGH pressure messages produce high confidence."""
+        """HIGH pressure with no RAG: base 0.85 * 0.8 * 0.9 = 0.612 -> medium."""
         result = router.route("Can you pick me up at 5?")
 
         assert result["type"] == "generated"
-        assert result["confidence"] in ("high", "medium")
+        assert result["confidence"] == "medium"
 
-    def test_low_pressure_medium_confidence(
+    def test_low_pressure_yields_low_confidence_without_rag(
         self,
         router: ReplyRouter,
         mock_generator: MagicMock,
     ) -> None:
-        """Test LOW pressure messages produce a valid confidence label."""
+        """LOW pressure with no RAG: base 0.45 * 0.8 * 0.9 = 0.324 -> low."""
         result = router.route("I think the weather is nice")
 
         assert result["type"] == "generated"
-        assert result["confidence"] in ("low", "medium")
+        assert result["confidence"] == "low"
 
-    def test_medium_pressure_medium_confidence(
+    def test_medium_pressure_yields_medium_confidence_without_rag(
         self,
         router: ReplyRouter,
         mock_generator: MagicMock,
     ) -> None:
-        """Test MEDIUM pressure messages produce medium confidence."""
+        """MEDIUM pressure with no RAG: base 0.65 * 0.8 * 0.9 = 0.468 -> medium."""
         result = router.route("I got the job!!")
 
         assert result["type"] == "generated"
@@ -388,32 +382,45 @@ class TestSingleton:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_route_with_contact_id(
+    def test_route_with_contact_id_uses_contact_data(
         self,
         router: ReplyRouter,
         mock_db: MagicMock,
+        mock_generator: MagicMock,
         sample_contact: Contact,
     ) -> None:
-        """Test routing with contact_id for personalization."""
+        """Test routing with contact_id fetches contact and uses it for generation."""
         mock_db.get_contact.return_value = sample_contact
 
-        router.route("hello there!", contact_id=1)
+        result = router.route("hello there!", contact_id=1)
 
+        # Verify contact was fetched
         mock_db.get_contact.assert_called_with(1)
+        # Verify generation was called (contact influences prompt building)
+        mock_generator.generate.assert_called_once()
+        # Verify the result includes a generated response (contact data influenced the pipeline)
+        assert result["type"] == "generated"
+        assert result["response"] == "Generated response"
 
-    def test_route_with_chat_id(
+    def test_route_with_chat_id_uses_contact_data(
         self,
         router: ReplyRouter,
         mock_db: MagicMock,
+        mock_generator: MagicMock,
         sample_contact: Contact,
     ) -> None:
-        """Test routing with chat_id for contact lookup."""
+        """Test routing with chat_id falls back to chat_id lookup and uses contact for generation."""
         mock_db.get_contact.return_value = None
         mock_db.get_contact_by_chat_id.return_value = sample_contact
 
-        router.route("hello there!", chat_id="chat123")
+        result = router.route("hello there!", chat_id="chat123")
 
+        # Verify chat_id-based contact lookup was used
         mock_db.get_contact_by_chat_id.assert_called_with("chat123")
+        # Verify generation was called with the resolved contact
+        mock_generator.generate.assert_called_once()
+        assert result["type"] == "generated"
+        assert result["response"] == "Generated response"
 
     def test_generation_error_returns_clarify(
         self,
@@ -430,28 +437,15 @@ class TestEdgeCases:
 
 
 # =============================================================================
-# Route Result Tests
+# Route Result and Exception Tests
 # =============================================================================
 
 
-class TestRouteResult:
-    """Tests for RouteResult dataclass."""
+class TestRouteResultDefaults:
+    """Tests for RouteResult dataclass default values."""
 
-    def test_route_result_creation(self) -> None:
-        """Test basic RouteResult creation."""
-        result = RouteResult(
-            response="Hello!",
-            type="generated",
-            confidence="high",
-            similarity_score=0.95,
-        )
-        assert result.response == "Hello!"
-        assert result.type == "generated"
-        assert result.confidence == "high"
-        assert result.similarity_score == 0.95
-
-    def test_route_result_defaults(self) -> None:
-        """Test RouteResult default values."""
+    def test_optional_fields_default_correctly(self) -> None:
+        """Test that optional fields have meaningful defaults."""
         result = RouteResult(
             response="Test",
             type="clarify",
@@ -463,46 +457,24 @@ class TestRouteResult:
         assert result.similar_triggers is None
 
 
-# =============================================================================
-# RouterError Tests
-# =============================================================================
-
-
-class TestRouterError:
-    """Tests for RouterError exception."""
-
-    def test_router_error_creation(self) -> None:
-        """Test RouterError can be created."""
-        error = RouterError("Test error")
-        assert str(error) == "Test error"
+class TestExceptionHierarchy:
+    """Tests for exception hierarchy (RouterError -> JarvisError)."""
 
     def test_router_error_inherits_from_jarvis_error(self) -> None:
-        """Test RouterError inherits from JarvisError."""
+        """RouterError should be catchable as JarvisError."""
         from jarvis.errors import JarvisError
 
-        assert issubclass(RouterError, JarvisError)
+        error = RouterError("Test error")
+        assert isinstance(error, JarvisError)
+        assert str(error) == "Test error"
 
-
-# =============================================================================
-# IndexNotAvailableError Tests
-# =============================================================================
-
-
-class TestIndexNotAvailableError:
-    """Tests for IndexNotAvailableError exception."""
-
-    def test_index_not_available_error_creation(self) -> None:
-        """Test IndexNotAvailableError can be created."""
+    def test_index_not_available_inherits_from_router_error(self) -> None:
+        """IndexNotAvailableError should be catchable as RouterError."""
         from jarvis.router import IndexNotAvailableError
 
         error = IndexNotAvailableError()
+        assert isinstance(error, RouterError)
         assert "index not available" in str(error).lower()
-
-    def test_index_not_available_inherits_from_router_error(self) -> None:
-        """Test IndexNotAvailableError inherits from RouterError."""
-        from jarvis.router import IndexNotAvailableError
-
-        assert issubclass(IndexNotAvailableError, RouterError)
 
 
 # =============================================================================
@@ -680,3 +652,226 @@ class TestFetchConversationContext:
 
         assert len(result) == 1
         assert "[John]: Hello" in result[0]
+
+
+# =============================================================================
+# _analyze_complexity Tests
+# =============================================================================
+
+
+class TestAnalyzeComplexity:
+    """Tests for ReplyRouter._analyze_complexity static method."""
+
+    def test_empty_string(self) -> None:
+        assert ReplyRouter._analyze_complexity("") == 0.0
+
+    def test_short_message(self) -> None:
+        score = ReplyRouter._analyze_complexity("ok")
+        assert 0.0 < score <= 0.3
+
+    def test_long_complex_message(self) -> None:
+        text = (
+            "I was wondering if you could help me with something? "
+            "I need to schedule a meeting with the team, "
+            "coordinate with marketing, and prepare the presentation slides."
+        )
+        score = ReplyRouter._analyze_complexity(text)
+        assert score > 0.5
+
+    def test_punctuation_variety_increases_score(self) -> None:
+        plain = "Hello there how are you"
+        punctuated = "Hello! How are you? Great, thanks."
+        assert ReplyRouter._analyze_complexity(punctuated) > ReplyRouter._analyze_complexity(plain)
+
+    def test_word_variety_matters(self) -> None:
+        repetitive = "the the the the the the the the"
+        varied = "quick brown fox jumps over lazy dog today"
+        # Same-ish length, but variety_score differs
+        rep_score = ReplyRouter._analyze_complexity(repetitive)
+        var_score = ReplyRouter._analyze_complexity(varied)
+        assert var_score > rep_score
+
+    def test_result_between_0_and_1(self) -> None:
+        """All results should be in [0, 1]."""
+        for text in ["", "hi", "a" * 500, "Hello? Yes! No, wait: maybe; perhaps."]:
+            score = ReplyRouter._analyze_complexity(text)
+            assert 0.0 <= score <= 1.0
+
+    def test_single_word(self) -> None:
+        score = ReplyRouter._analyze_complexity("hello")
+        assert 0.0 < score < 0.4
+
+
+# =============================================================================
+# _to_intent_type Tests
+# =============================================================================
+
+
+class TestToIntentType:
+    """Tests for to_intent_type (extracted to classification_result module)."""
+
+    def test_question(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("question") == IntentType.QUESTION
+
+    def test_request(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("request") == IntentType.REQUEST
+
+    def test_statement(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("statement") == IntentType.STATEMENT
+
+    def test_emotion(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("emotion") == IntentType.STATEMENT
+
+    def test_closing(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("closing") == IntentType.STATEMENT
+
+    def test_acknowledge(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("acknowledge") == IntentType.STATEMENT
+
+    def test_unknown_category(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("gibberish") == IntentType.UNKNOWN
+
+    def test_empty_string(self) -> None:
+        from jarvis.classifiers.classification_result import to_intent_type
+        from jarvis.contracts.pipeline import IntentType
+
+        assert to_intent_type("") == IntentType.UNKNOWN
+
+
+# =============================================================================
+# _to_confidence_label Tests
+# =============================================================================
+
+
+class TestToConfidenceLabel:
+    """Tests for ReplyRouter._to_confidence_label static method."""
+
+    def test_high_confidence(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.9) == "high"
+
+    def test_boundary_0_7(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.7) == "high"
+
+    def test_medium_confidence(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.55) == "medium"
+
+    def test_boundary_0_45(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.45) == "medium"
+
+    def test_low_confidence(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.3) == "low"
+
+    def test_zero(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.0) == "low"
+
+    def test_just_below_0_7(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.699) == "medium"
+
+    def test_just_below_0_45(self) -> None:
+        assert ReplyRouter._to_confidence_label(0.449) == "low"
+
+
+# =============================================================================
+# _to_legacy_response Tests
+# =============================================================================
+
+
+class TestToLegacyResponse:
+    """Tests for ReplyRouter._to_legacy_response static method."""
+
+    def test_generated_response_format(self) -> None:
+        from jarvis.contracts.pipeline import GenerationResponse
+
+        resp = GenerationResponse(
+            response="Hello there!",
+            confidence=0.85,
+            metadata={
+                "type": "generated",
+                "reason": "generated",
+                "similarity_score": 0.72,
+                "similar_triggers": ["hi", "hey"],
+                "category": "question",
+            },
+        )
+        result = ReplyRouter._to_legacy_response(resp)
+
+        assert result["type"] == "generated"
+        assert result["response"] == "Hello there!"
+        assert result["confidence"] == "high"
+        assert result["similarity_score"] == 0.72
+        assert result["similar_triggers"] == ["hi", "hey"]
+        assert result["category"] == "question"
+
+    def test_clarify_response_format(self) -> None:
+        from jarvis.contracts.pipeline import GenerationResponse
+
+        resp = GenerationResponse(
+            response="I'm having trouble generating a response.",
+            confidence=0.2,
+            metadata={
+                "type": "clarify",
+                "reason": "generation_error",
+                "similarity_score": 0.0,
+            },
+        )
+        result = ReplyRouter._to_legacy_response(resp)
+
+        assert result["type"] == "clarify"
+        assert result["confidence"] == "low"
+        assert result["reason"] == "generation_error"
+
+    def test_category_included_when_present(self) -> None:
+        from jarvis.contracts.pipeline import GenerationResponse
+
+        resp = GenerationResponse(
+            response="Sure",
+            confidence=0.5,
+            metadata={"type": "generated", "category": "acknowledge"},
+        )
+        result = ReplyRouter._to_legacy_response(resp)
+        assert result["category"] == "acknowledge"
+
+    def test_category_omitted_when_absent(self) -> None:
+        from jarvis.contracts.pipeline import GenerationResponse
+
+        resp = GenerationResponse(
+            response="Sure",
+            confidence=0.5,
+            metadata={"type": "generated"},
+        )
+        result = ReplyRouter._to_legacy_response(resp)
+        assert "category" not in result
+
+    def test_missing_metadata_fields_use_defaults(self) -> None:
+        from jarvis.contracts.pipeline import GenerationResponse
+
+        resp = GenerationResponse(
+            response="text",
+            confidence=0.5,
+            metadata={},
+        )
+        result = ReplyRouter._to_legacy_response(resp)
+        assert result["type"] == "generated"
+        assert result["similarity_score"] == 0.0
+        assert result["reason"] == ""

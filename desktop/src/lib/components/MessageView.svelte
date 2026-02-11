@@ -13,7 +13,7 @@
     removeOptimisticMessage,
     clearOptimisticMessages,
     clearPrefetchedDraft,
-  } from '../stores/conversations';
+  } from '../stores/conversations.svelte';
   import type { DraftSuggestion, Message } from '../types';
   import {
     activeZone,
@@ -29,6 +29,7 @@
   import { EmptyState } from './ui';
   import { MessageIcon } from './icons';
   import { formatDate, getMessageDateString } from '../utils/date';
+  import { getNavAction, isTypingInInput } from '../utils/keyboard-nav';
 
   // Panel visibility state
   let showDraftPanel = $state(false);
@@ -71,54 +72,51 @@
   let needsScrollToBottom = $state(false);
   let prevSelectedChatId = $state<string | null>(null);
 
-  // Debounce utility
-  function debounce<T extends (...args: unknown[]) => void>(
-    fn: T,
-    delay: number
-  ): (...args: Parameters<T>) => void {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    return (...args: Parameters<T>) => {
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => fn(...args), delay);
-    };
-  }
+  // Batched height updates via ResizeObserver - collects changes in a rAF to avoid
+  // cloning the Map on every individual resize callback
+  let pendingHeightUpdates = new Map<number, number>();
+  let heightUpdateRafId: number | null = null;
 
-  const debouncedMeasureHeights = debounce(() => {
-    measureVisibleMessages();
-  }, 150);
+  function handleMessageHeightChange(messageId: number, height: number) {
+    if (!messageId || height <= 0 || messageHeights.get(messageId) === height) return;
+
+    pendingHeightUpdates.set(messageId, height);
+
+    if (heightUpdateRafId === null) {
+      heightUpdateRafId = requestAnimationFrame(() => {
+        heightUpdateRafId = null;
+        if (pendingHeightUpdates.size === 0) return;
+
+        const newHeights = new Map(messageHeights);
+        for (const [id, h] of pendingHeightUpdates) {
+          newHeights.set(id, h);
+        }
+        pendingHeightUpdates.clear();
+        messageHeights = newHeights;
+      });
+    }
+  }
 
   function getMessageHeight(messageId: number): number {
     return messageHeights.get(messageId) ?? ESTIMATED_MESSAGE_HEIGHT;
   }
 
-  function measureVisibleMessages() {
-    if (!messagesContainer) return;
-
-    const messageElements = messagesContainer.querySelectorAll('[data-message-id]');
-    let needsUpdate = false;
-    const newHeights = new Map(messageHeights);
-
-    messageElements.forEach((el) => {
-      const messageId = parseInt(el.getAttribute('data-message-id') || '0', 10);
-      const rect = el.getBoundingClientRect();
-      const style = window.getComputedStyle(el);
-      const marginTop = parseFloat(style.marginTop) || 0;
-      const marginBottom = parseFloat(style.marginBottom) || 0;
-      const height = rect.height + marginTop + marginBottom;
-
-      if (messageId && height > 0 && newHeights.get(messageId) !== height) {
-        newHeights.set(messageId, height);
-        needsUpdate = true;
-      }
-    });
-
-    if (needsUpdate) {
-      messageHeights = newHeights;
+  // Cached cumulative heights array - recomputed only when messages or heights change
+  // cumulativeHeights[i] = sum of heights for messages[0..i-1], cumulativeHeights[0] = 0
+  let cumulativeHeights = $derived.by(() => {
+    const messages = conversationsStore.messages;
+    // Access messageHeights to track it as a dependency
+    const _heights = messageHeights;
+    const cumulative = new Float64Array(messages.length + 1);
+    for (let i = 0; i < messages.length; i++) {
+      cumulative[i + 1] = cumulative[i]! + (_heights.get(messages[i]!.id) ?? ESTIMATED_MESSAGE_HEIGHT);
     }
-  }
+    return cumulative;
+  });
 
   function calculateVisibleRange(scrollTop: number, containerHeight: number) {
     const messages = conversationsStore.messages;
+    const cumHeights = cumulativeHeights;
     if (messages.length === 0) {
       visibleStartIndex = 0;
       visibleEndIndex = 0;
@@ -130,42 +128,37 @@
     const loadSectionHeight = 48;
     const adjustedScrollTop = Math.max(0, scrollTop - loadSectionHeight);
 
-    let accumulatedHeight = 0;
-    let startIdx = 0;
-
-    for (let i = 0; i < messages.length; i++) {
-      const height = getMessageHeight(messages[i]!.id);
-      if (accumulatedHeight + height >= adjustedScrollTop) {
-        startIdx = i;
-        break;
-      }
-      accumulatedHeight += height;
-    }
-
-    startIdx = Math.max(0, startIdx - BUFFER_SIZE);
-
-    let topPadding = 0;
-    for (let i = 0; i < startIdx; i++) {
-      topPadding += getMessageHeight(messages[i]!.id);
-    }
-
-    let visibleHeight = 0;
-    let endIdx = startIdx;
-
-    for (let i = startIdx; i < messages.length; i++) {
-      endIdx = i + 1;
-      visibleHeight += getMessageHeight(messages[i]!.id);
-      if (visibleHeight >= containerHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT) {
-        break;
+    // Binary search to find first message whose bottom edge >= adjustedScrollTop
+    let lo = 0;
+    let hi = messages.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (cumHeights[mid + 1]! < adjustedScrollTop) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
       }
     }
+    let startIdx = Math.max(0, lo - BUFFER_SIZE);
 
-    endIdx = Math.min(messages.length, Math.max(endIdx, startIdx + MIN_VISIBLE_MESSAGES));
+    const topPadding = cumHeights[startIdx]!;
 
-    let bottomPadding = 0;
-    for (let i = endIdx; i < messages.length; i++) {
-      bottomPadding += getMessageHeight(messages[i]!.id);
+    // Binary search to find first message whose top edge > adjustedScrollTop + containerHeight
+    const scrollBottom = adjustedScrollTop + containerHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT;
+    lo = startIdx;
+    hi = messages.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (cumHeights[mid]! < scrollBottom) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
     }
+    let endIdx = Math.min(messages.length, Math.max(lo, startIdx + MIN_VISIBLE_MESSAGES));
+
+    const totalHeight = cumHeights[messages.length]!;
+    const bottomPadding = totalHeight - cumHeights[endIdx]!;
 
     visibleStartIndex = startIdx;
     visibleEndIndex = endIdx;
@@ -321,8 +314,6 @@
       updateVirtualScroll();
     }
 
-    debouncedMeasureHeights();
-
     // Load more when near top
     if (
       container.scrollTop < SCROLL_THRESHOLD &&
@@ -419,7 +410,6 @@
         suppressScrollRecalc = true;
         tick().then(async () => {
           await scrollToBottom(true);
-          measureVisibleMessages();
           await tick();
           await scrollToBottom(true);
           requestAnimationFrame(() => {
@@ -494,11 +484,9 @@
 
   function handleKeydown(event: KeyboardEvent) {
     const isMod = event.metaKey || event.ctrlKey;
-    const isTyping =
-      event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
 
     if ($activeZone !== 'messages' && $activeZone !== null) return;
-    if (isTyping) {
+    if (isTypingInInput(event)) {
       if (event.key === 'Escape') {
         event.preventDefault();
         (event.target as HTMLElement).blur();
@@ -508,6 +496,7 @@
     }
     if (!conversationsStore.selectedConversation) return;
 
+    // Component-specific shortcuts
     if (isMod && event.key === 'd') {
       event.preventDefault();
       prefetchedSuggestions = undefined;
@@ -515,88 +504,45 @@
       return;
     }
 
+    if (event.key === 'r') {
+      event.preventDefault();
+      setActiveZone('compose');
+      document.querySelector<HTMLTextAreaElement>('.compose-input')?.focus();
+      announce('Composing reply');
+      return;
+    }
+
+    if (event.key === 'ArrowLeft' || event.key === 'h') {
+      event.preventDefault();
+      setActiveZone('conversations');
+      setMessageIndex(-1);
+      focusedMessageIndex = -1;
+      announce('Returned to conversations list');
+      return;
+    }
+
     const messages = conversationsStore.messages;
     if (messages.length === 0) return;
 
     const maxIndex = messages.length - 1;
+    const action = getNavAction(event.key, event.shiftKey, focusedMessageIndex, maxIndex);
+    if (!action) return;
 
-    switch (event.key) {
-      case 'j':
-      case 'ArrowDown':
-        event.preventDefault();
-        setActiveZone('messages');
-        if (focusedMessageIndex < maxIndex) {
-          const newIndex = focusedMessageIndex + 1;
-          setMessageIndex(newIndex);
-          focusedMessageIndex = newIndex;
-          scrollToMessageByIndex(newIndex);
-          announceMessage(messages[newIndex]!);
-        }
-        break;
+    event.preventDefault();
 
-      case 'k':
-      case 'ArrowUp':
-        event.preventDefault();
-        setActiveZone('messages');
-        if (focusedMessageIndex > 0) {
-          const newIndex = focusedMessageIndex - 1;
-          setMessageIndex(newIndex);
-          focusedMessageIndex = newIndex;
-          scrollToMessageByIndex(newIndex);
-          announceMessage(messages[newIndex]!);
-        } else if (focusedMessageIndex === -1 && messages.length > 0) {
-          const lastIndex = maxIndex;
-          setMessageIndex(lastIndex);
-          focusedMessageIndex = lastIndex;
-          scrollToMessageByIndex(lastIndex);
-          announceMessage(messages[lastIndex]!);
-        }
-        break;
-
-      case 'r':
-        event.preventDefault();
-        setActiveZone('compose');
-        document.querySelector<HTMLTextAreaElement>('.compose-input')?.focus();
-        announce('Composing reply');
-        break;
-
-      case 'g':
-        if (!event.shiftKey && messages.length > 0) {
-          event.preventDefault();
-          setActiveZone('messages');
-          setMessageIndex(0);
-          focusedMessageIndex = 0;
-          scrollToMessageByIndex(0);
-          announceMessage(messages[0]!);
-        }
-        break;
-
-      case 'G':
-        if (event.shiftKey && messages.length > 0) {
-          event.preventDefault();
-          setActiveZone('messages');
-          setMessageIndex(maxIndex);
-          focusedMessageIndex = maxIndex;
-          scrollToMessageByIndex(maxIndex);
-          announceMessage(messages[maxIndex]!);
-        }
-        break;
-
-      case 'ArrowLeft':
-      case 'h':
-        event.preventDefault();
-        setActiveZone('conversations');
-        setMessageIndex(-1);
-        focusedMessageIndex = -1;
-        announce('Returned to conversations list');
-        break;
-
-      case 'Escape':
-        setMessageIndex(-1);
-        focusedMessageIndex = -1;
-        setActiveZone(null);
-        break;
+    if (action.type === 'escape') {
+      setMessageIndex(-1);
+      focusedMessageIndex = -1;
+      setActiveZone(null);
+      return;
     }
+
+    setActiveZone('messages');
+    const newIndex = action.type === 'first' ? 0 : action.index;
+    setMessageIndex(newIndex);
+    focusedMessageIndex = newIndex;
+    scrollToMessageByIndex(newIndex);
+    announceMessage(messages[newIndex]!);
   }
 
   function scrollToMessageByIndex(index: number) {
@@ -769,6 +715,7 @@
               isNew={isNewMessage(message.id)}
               onRetry={handleRetry}
               onDismiss={handleDismissFailedMessage}
+              onHeightChange={handleMessageHeightChange}
             />
           {/each}
         </div>

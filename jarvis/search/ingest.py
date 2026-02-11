@@ -136,13 +136,8 @@ def ingest_contacts(db: JarvisDB) -> dict[str, int]:
 
         handle_list = list(handles)
 
-        # Check if this contact already exists by any handle
-        existing_contact = None
-        for handle in handle_list:
-            existing = db.get_contact_by_handle(handle)
-            if existing:
-                existing_contact = existing
-                break
+        # Check if this contact already exists by any handle (single batch query)
+        existing_contact = db.get_contact_by_handles(handle_list)
 
         if existing_contact:
             # Update if name is just a phone number (not a real name yet)

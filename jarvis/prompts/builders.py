@@ -1,22 +1,44 @@
-"""Prompt templates and builders for iMessage reply generation.
+"""Functions that build and format prompts for various use cases.
 
-Provides well-engineered prompts optimized for small local LLMs (Qwen2.5-0.5B/1.5B)
-with clear structure, few-shot examples, and tone-aware generation.
-
-This module is the SINGLE SOURCE OF TRUTH for all prompts in the JARVIS system.
-Import prompts from here, not from other modules.
+This module contains all prompt building functions:
+- Tone detection and style analysis
+- Example formatting (consolidated into a generic formatter)
+- Reply, summary, search, and threaded reply prompt builders
+- RAG-enhanced prompt builders
+- Contact facts formatting
+- Utility functions (token estimation, etc.)
 """
 
 from __future__ import annotations
 
 import re
-import threading
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.contacts.contact_profile_context import ContactProfileContext
+from jarvis.prompts.constants import (
+    CASUAL_INDICATORS,
+    EMOJI_PATTERN,
+    MAX_CONTEXT_CHARS,
+    MAX_PROMPT_TOKENS,
+    PROFESSIONAL_INDICATORS,
+    RAG_REPLY_PROMPT,
+    REPLY_PROMPT,
+    SEARCH_PROMPT,
+    SUMMARY_PROMPT,
+    TEXT_ABBREVIATIONS,
+    THREADED_REPLY_PROMPT,
+    UserStyleAnalysis,
+)
+from jarvis.prompts.examples import (
+    CASUAL_REPLY_EXAMPLES,
+    CATCHING_UP_THREAD_EXAMPLES,
+    PROFESSIONAL_REPLY_EXAMPLES,
+    SEARCH_ANSWER_EXAMPLES,
+    SUMMARIZATION_EXAMPLES,
+    THREAD_EXAMPLES,
+    FewShotExample,
+)
 
 if TYPE_CHECKING:
     from contracts.imessage import Message
@@ -26,580 +48,10 @@ if TYPE_CHECKING:
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
 
-# =============================================================================
-# Prompt Metadata & Versioning
-# =============================================================================
-
-PROMPT_VERSION = "1.0.0"
-PROMPT_LAST_UPDATED = "2026-01-26"
-
-# =============================================================================
-# Few-Shot Examples
-# =============================================================================
-
-
-@dataclass
-class PromptMetadata:
-    """Metadata for a prompt or example set.
-
-    Attributes:
-        name: Human-readable name for the prompt/example set
-        version: Semantic version string (e.g., "1.0.0")
-        last_updated: ISO date string of last update
-        description: Brief description of the prompt's purpose
-    """
-
-    name: str
-    version: str = PROMPT_VERSION
-    last_updated: str = PROMPT_LAST_UPDATED
-    description: str = ""
-
-
-@dataclass
-class FewShotExample:
-    """A few-shot example for prompt engineering.
-
-    Attributes:
-        context: The conversation context
-        output: The expected output/reply
-        tone: The tone of the example (casual/professional)
-    """
-
-    context: str
-    output: str
-    tone: Literal["casual", "professional"] = "casual"
-
-
-# Reply generation examples - casual tone
-CASUAL_REPLY_EXAMPLES: list[FewShotExample] = [
-    FewShotExample(
-        context="[10:30] John: Want to grab lunch?",
-        output="Sure! What time works for you?",
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[14:00] Mom: Don't forget dinner Sunday",
-        output="I'll be there! Should I bring anything?",
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[09:15] Alex: Running 10 min late",
-        output="No worries, see you soon!",
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[18:30] Sam: Did you see the game last night?",
-        output="Yes! That ending was incredible",
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[11:00] Lisa: Can you pick up milk on your way home?",
-        output="Sure thing, anything else?",
-        tone="casual",
-    ),
-]
-
-# Reply generation examples - professional tone
-PROFESSIONAL_REPLY_EXAMPLES: list[FewShotExample] = [
-    FewShotExample(
-        context="[09:00] Manager: Can you send the Q4 report by EOD?",
-        output="Absolutely, I'll have it ready by 5 PM.",
-        tone="professional",
-    ),
-    FewShotExample(
-        context="[14:30] Client: When can we schedule a follow-up meeting?",
-        output="I'm available Thursday or Friday afternoon. Would either work for you?",
-        tone="professional",
-    ),
-    FewShotExample(
-        context="[10:15] HR: Please complete your annual review form",
-        output="Thank you for the reminder. I'll complete it today.",
-        tone="professional",
-    ),
-    FewShotExample(
-        context="[16:00] Colleague: Could you review my proposal draft?",
-        output="Happy to help. I'll review it and send feedback by tomorrow morning.",
-        tone="professional",
-    ),
-    FewShotExample(
-        context="[11:30] Vendor: The shipment will be delayed by 2 days",
-        output="Thanks for letting me know. Please send the updated tracking info when available.",
-        tone="professional",
-    ),
-]
-
-# Summarization examples
-SUMMARIZATION_EXAMPLES: list[tuple[str, str]] = [
-    (
-        """[Mon 9:00] John: Hey, want to meet for coffee Tuesday?
-[Mon 9:05] You: Sure, what time?
-[Mon 9:10] John: How about 3pm at Blue Bottle?
-[Mon 9:12] You: Perfect, see you then""",
-        """Summary:
-- Coffee meeting planned for Tuesday at 3pm
-- Location: Blue Bottle
-- Confirmed with John""",
-    ),
-    (
-        """[Tue 14:00] Boss: Can you handle the client presentation Friday?
-[Tue 14:05] You: Yes, I can do that
-[Tue 14:10] Boss: Great, they want to see the Q3 numbers
-[Tue 14:15] Boss: Also include the growth projections
-[Tue 14:20] You: Got it, I'll prepare both""",
-        """Summary:
-- Action item: Prepare client presentation for Friday
-- Include: Q3 numbers and growth projections
-- Commitment made to prepare materials""",
-    ),
-    (
-        """[Wed 10:00] Mom: Are you coming for Thanksgiving?
-[Wed 10:15] You: Yes, I'll be there
-[Wed 10:20] Mom: Can you bring your famous pie?
-[Wed 10:25] You: Of course!
-[Wed 10:30] Mom: Dinner is at 4pm""",
-        """Summary:
-- Thanksgiving plans confirmed
-- Bringing pie (action item)
-- Dinner time: 4pm""",
-    ),
-]
-
-# Search/question answering examples
-SEARCH_ANSWER_EXAMPLES: list[tuple[str, str, str]] = [
-    (
-        """[Mon] John: Let's meet at 123 Main St
-[Tue] John: Actually, let's do 456 Oak Ave instead""",
-        "Where are we meeting?",
-        "You're meeting at 456 Oak Ave (John changed it from the original 123 Main St).",
-    ),
-    (
-        """[10:00] Sarah: The project deadline is March 15th
-[10:30] Sarah: We need the draft by March 10th for review""",
-        "When is the deadline?",
-        "The project deadline is March 15th, with a draft due March 10th for review.",
-    ),
-    (
-        """[Mon] Alex: I recommend trying Sushi Palace
-[Mon] Alex: They have great lunch specials
-[Tue] Mom: That new Italian place is good too""",
-        "What restaurants were recommended?",
-        "Two restaurants were recommended: Sushi Palace (by Alex, noted for lunch specials) "
-        "and a new Italian place (by Mom).",
-    ),
-]
-
-
-# =============================================================================
-# Thread-Specific Few-Shot Examples
-# =============================================================================
-
-# Examples for logistics/coordination threads - concise responses
-LOGISTICS_THREAD_EXAMPLES: list[FewShotExample] = [
-    FewShotExample(
-        context="[14:00] Sarah: What time works for pickup?\n[14:05] Me: How about 5pm?",
-        output="5pm works! See you then.",
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[10:00] John: Running late, stuck in traffic\n[10:05] John: Be there in 15",
-        output="No worries, take your time!",
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[18:30] Mom: Which entrance should I use?",
-        output="Use the main entrance on Oak Street. I'll meet you there.",
-        tone="casual",
-    ),
-]
-
-# Examples for emotional support threads - empathetic responses
-EMOTIONAL_SUPPORT_THREAD_EXAMPLES: list[FewShotExample] = [
-    FewShotExample(
-        context=(
-            "[20:00] Sarah: Had the worst day at work today\n"
-            "[20:05] Sarah: My project got cancelled"
-        ),
-        output=(
-            "I'm so sorry to hear that. That's really frustrating, "
-            "especially after all your hard work. Want to talk about it?"
-        ),
-        tone="casual",
-    ),
-    FewShotExample(
-        context=(
-            "[15:00] John: Just found out I didn't get the job\n[15:02] John: Feeling pretty down"
-        ),
-        output=(
-            "That's really disappointing, I know you were excited about it. "
-            "Their loss though - something better will come along. I'm here if you need to vent."
-        ),
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[09:00] Mom: Missing dad a lot today",
-        output=(
-            "I know, I miss him too. It's okay to have those days. "
-            "Want to look through some old photos together later?"
-        ),
-        tone="casual",
-    ),
-]
-
-# Examples for planning threads - includes action items
-PLANNING_THREAD_EXAMPLES: list[FewShotExample] = [
-    FewShotExample(
-        context=(
-            "[14:00] Alex: Want to do dinner Saturday?\n"
-            "[14:05] Me: Sure!\n"
-            "[14:10] Alex: Any restaurant preferences?"
-        ),
-        output=(
-            "How about Italian? There's a new place downtown I've been wanting to try. "
-            "I can make a reservation for 7pm if that works?"
-        ),
-        tone="casual",
-    ),
-    FewShotExample(
-        context=(
-            "[10:00] Sarah: We should plan a birthday surprise for Mike\n[10:05] Sarah: Any ideas?"
-        ),
-        output=(
-            "Definitely! We could do a small surprise at his favorite bar. "
-            "I can coordinate with Lisa on decorations. Should we aim for next Friday?"
-        ),
-        tone="casual",
-    ),
-    FewShotExample(
-        context=(
-            "[16:00] John: Thinking about a camping trip next month\n[16:05] John: You interested?"
-        ),
-        output=(
-            "Count me in! I can bring the tent and cooler. "
-            "What dates are you thinking? Should I check with the others too?"
-        ),
-        tone="casual",
-    ),
-]
-
-# Examples for catching up threads - warm, conversational
-CATCHING_UP_THREAD_EXAMPLES: list[FewShotExample] = [
-    FewShotExample(
-        context="[19:00] Lisa: Haven't heard from you in ages! How are things?",
-        output=(
-            "I know, it's been too long! Things are good - busy with work but can't complain. "
-            "How about you? Still enjoying the new job?"
-        ),
-        tone="casual",
-    ),
-    FewShotExample(
-        context=(
-            "[11:00] College Friend: Just saw your post about the promotion!\n"
-            "[11:02] College Friend: So proud of you!"
-        ),
-        output=(
-            "Thanks so much! It's been a wild ride. "
-            "We should catch up properly soon - coffee this weekend?"
-        ),
-        tone="casual",
-    ),
-]
-
-# Examples for quick exchange threads - brief responses
-QUICK_EXCHANGE_THREAD_EXAMPLES: list[FewShotExample] = [
-    FewShotExample(
-        context="[12:00] Tom: Got the tickets!",
-        output="Awesome, thanks!",
-        tone="casual",
-    ),
-    FewShotExample(
-        context="[09:00] Boss: Can you join the 2pm call?",
-        output="Yes, I'll be there.",
-        tone="professional",
-    ),
-]
-
-# Thread examples organized by topic for the registry
-THREAD_EXAMPLES: dict[str, list[FewShotExample]] = {
-    "logistics": LOGISTICS_THREAD_EXAMPLES,
-    "warm": EMOTIONAL_SUPPORT_THREAD_EXAMPLES,
-    "planning": PLANNING_THREAD_EXAMPLES,
-    "social": CATCHING_UP_THREAD_EXAMPLES,
-    "brief": QUICK_EXCHANGE_THREAD_EXAMPLES,
-    # Legacy aliases for thread topic enum values
-    "emotional_support": EMOTIONAL_SUPPORT_THREAD_EXAMPLES,
-    "catching_up": CATCHING_UP_THREAD_EXAMPLES,
-    "quick_exchange": QUICK_EXCHANGE_THREAD_EXAMPLES,
-}
-
-
-# =============================================================================
-# Prompt Templates
-# =============================================================================
-
-# Token limit guidance for small models
-MAX_PROMPT_TOKENS = 1500  # Reserve space for generation
-MAX_CONTEXT_CHARS = 4000  # Approximate, ~4 chars per token
-
-
-@dataclass
-class PromptTemplate:
-    """A prompt template with placeholders.
-
-    Attributes:
-        name: Template identifier
-        system_message: Role/context for the model
-        template: Format string with {placeholders}
-        max_output_tokens: Suggested max tokens for response
-    """
-
-    name: str
-    system_message: str
-    template: str
-    max_output_tokens: int = 100
-
-
-REPLY_PROMPT = PromptTemplate(
-    name="reply_generation",
-    system_message=(
-        "You are helping draft a text message reply. Match the user's texting style "
-        "exactly - same length, formality, and patterns."
-    ),
-    template="""### Conversation Context:
-{context}
-
-### Instructions:
-Generate a reply that matches the user's texting style exactly:
-- Match the tone of the conversation ({tone})
-- Keep response length similar to user's typical messages
-- Use the same level of formality as the examples
-- Sound like the user wrote it, not an AI
-{style_instructions}
-{custom_instruction}
-
-### Examples:
-{examples}
-
-### Last message to reply to:
-{last_message}
-
-### Your reply:""",
-    max_output_tokens=50,
-)
-
-
-SUMMARY_PROMPT = PromptTemplate(
-    name="conversation_summary",
-    system_message="You are summarizing a text message conversation. Extract key information "
-    "concisely and highlight any action items or commitments.",
-    template="""### Conversation:
-{context}
-
-### Instructions:
-Summarize this conversation. Include:
-- Key points discussed
-- Any action items or commitments made
-- Important dates, times, or locations mentioned
-{focus_instruction}
-
-### Examples:
-{examples}
-
-### Summary:""",
-    max_output_tokens=150,
-)
-
-
-SEARCH_PROMPT = PromptTemplate(
-    name="search_answer",
-    system_message="You are answering a question about a text message conversation. "
-    "Base your answer only on the provided messages.",
-    template="""### Messages:
-{context}
-
-### Question:
-{question}
-
-### Instructions:
-Answer the question based only on the messages above. Be specific and cite relevant details.
-If the answer isn't in the messages, say so.
-
-### Examples:
-{examples}
-
-### Answer:""",
-    max_output_tokens=100,
-)
-
-
-THREADED_REPLY_PROMPT = PromptTemplate(
-    name="threaded_reply",
-    system_message=(
-        "You are helping draft a text message reply based on the conversation thread context. "
-        "Match the tone and respond appropriately to the thread type."
-    ),
-    template="""### Thread Context:
-Topic: {thread_topic}
-State: {thread_state}
-Your role: {user_role}
-{participants_info}
-
-### Relevant Messages:
-{context}
-
-### Instructions:
-Generate a natural reply that:
-- Matches the thread's {response_style} tone
-- Is {length_guidance}
-{additional_instructions}
-{custom_instruction}
-
-### Examples:
-{examples}
-
-### Last message to reply to:
-{last_message}
-
-### Your reply:""",
-    max_output_tokens=100,
-)
-
 
 # =============================================================================
 # Tone Detection
 # =============================================================================
-
-# Casual indicators
-CASUAL_INDICATORS: set[str] = {
-    # Emoji patterns are detected separately
-    "lol",
-    "haha",
-    "hehe",
-    "lmao",
-    "omg",
-    "btw",
-    "brb",
-    "ttyl",
-    "idk",
-    "ikr",
-    "nvm",
-    "tbh",
-    "imo",
-    "fyi",
-    "np",
-    "k",
-    "kk",
-    "ok",
-    "yeah",
-    "yep",
-    "nope",
-    "yup",
-    "gonna",
-    "wanna",
-    "gotta",
-    "cuz",
-    "bc",
-    "u",
-    "ur",
-    "r",
-    "y",
-    "thx",
-    "ty",
-    "pls",
-    "plz",
-    "omw",
-    "wya",
-    "wassup",
-    "sup",
-    "hey",
-    "yo",
-    "dude",
-    "bro",
-    "sis",
-    "fam",
-    "lit",
-    "chill",
-    "cool",
-    "nice",
-    "sick",
-    "dope",
-    "yay",
-    "ooh",
-    "ahh",
-    "hmm",
-    "meh",
-    "ugh",
-    "whoa",
-    "wow",
-    "aww",
-    "oops",
-    "whoops",
-}
-
-# Professional indicators
-PROFESSIONAL_INDICATORS: set[str] = {
-    "regarding",
-    "pursuant",
-    "attached",
-    "please",
-    "kindly",
-    "sincerely",
-    "regards",
-    "cordially",
-    "respectfully",
-    "appreciate",
-    "opportunity",
-    "discussed",
-    "confirmed",
-    "scheduled",
-    "deadline",
-    "deliverable",
-    "milestone",
-    "stakeholder",
-    "proposal",
-    "presentation",
-    "quarterly",
-    "annual",
-    "fiscal",
-    "eod",
-    "eow",
-    "asap",
-    "cc",
-    "per",
-    "via",
-    "ensure",
-    "verify",
-    "confirm",
-    "acknowledge",
-    "proceed",
-    "follow-up",
-    "followup",
-    "meeting",
-    "conference",
-    "agenda",
-    "minutes",
-    "action item",
-    "mr.",
-    "mrs.",
-    "ms.",
-    "dr.",
-    "dear",
-    "hello",
-    "good morning",
-    "good afternoon",
-    "good evening",
-}
-
-# Emoji regex pattern
-EMOJI_PATTERN = re.compile(
-    "["
-    "\U0001f600-\U0001f64f"  # emoticons
-    "\U0001f300-\U0001f5ff"  # symbols & pictographs
-    "\U0001f680-\U0001f6ff"  # transport & map symbols
-    "\U0001f1e0-\U0001f1ff"  # flags
-    "\U00002702-\U000027b0"  # dingbats
-    "\U000024c2-\U0001f251"  # enclosed characters
-    "]+"
-)
 
 
 def detect_tone(messages: list[str]) -> Literal["casual", "professional", "mixed"]:
@@ -659,72 +111,6 @@ def detect_tone(messages: list[str]) -> Literal["casual", "professional", "mixed
 # =============================================================================
 # User Style Analysis
 # =============================================================================
-
-
-@dataclass
-class UserStyleAnalysis:
-    """Analysis of user's texting style from message examples.
-
-    Attributes:
-        avg_length: Average message length in characters
-        min_length: Minimum message length seen
-        max_length: Maximum message length seen
-        formality: Detected formality level
-        uses_lowercase: Whether user typically uses lowercase
-        uses_abbreviations: Whether user uses text abbreviations (u, ur, gonna)
-        uses_minimal_punctuation: Whether user avoids excessive punctuation
-        common_abbreviations: List of abbreviations user commonly uses
-        emoji_frequency: Emojis per message
-        exclamation_frequency: Exclamation marks per message
-    """
-
-    avg_length: float = 50.0
-    min_length: int = 0
-    max_length: int = 200
-    formality: Literal["formal", "casual", "very_casual"] = "casual"
-    uses_lowercase: bool = False
-    uses_abbreviations: bool = False
-    uses_minimal_punctuation: bool = False
-    common_abbreviations: list[str] = field(default_factory=list)
-    emoji_frequency: float = 0.0
-    exclamation_frequency: float = 0.0
-
-
-# Common text abbreviations to detect
-TEXT_ABBREVIATIONS: set[str] = {
-    "u",
-    "ur",
-    "r",
-    "y",
-    "n",
-    "k",
-    "kk",
-    "ok",
-    "bc",
-    "cuz",
-    "gonna",
-    "wanna",
-    "gotta",
-    "thx",
-    "ty",
-    "pls",
-    "plz",
-    "idk",
-    "nvm",
-    "brb",
-    "ttyl",
-    "omw",
-    "lol",
-    "lmao",
-    "omg",
-    "tbh",
-    "imo",
-    "ikr",
-    "rn",
-    "atm",
-    "btw",
-    "fyi",
-}
 
 
 def analyze_user_style(messages: list[str]) -> UserStyleAnalysis:
@@ -869,7 +255,7 @@ def build_style_instructions(style: UserStyleAnalysis) -> str:
 
 
 # =============================================================================
-# Prompt Builder Functions
+# Example Formatting (Consolidated)
 # =============================================================================
 
 
@@ -942,6 +328,11 @@ def _truncate_context(context: str, max_chars: int = MAX_CONTEXT_CHARS) -> str:
         truncated = truncated[first_newline + 1 :]
 
     return f"[Earlier messages truncated]\n{truncated}"
+
+
+# =============================================================================
+# Prompt Builder Functions
+# =============================================================================
 
 
 def build_reply_prompt(
@@ -1371,64 +762,8 @@ def format_facts_for_prompt(facts: list[Fact], max_facts: int = 10) -> str:
 
 
 # =============================================================================
-# RAG-Enhanced Prompt Builder
+# RAG-Enhanced Prompt Builders
 # =============================================================================
-
-# Static system prefix for KV cache reuse. This block is identical across all
-# contacts/messages so the KV cache computed for it can be shared.
-SYSTEM_PREFIX = """<system>
-You are NOT an AI assistant. You are replying to a text message from your phone.
-Just text back. No helpfulness, no formality, no assistant behavior.
-Rules:
-- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
-- Sound natural, never like an AI
-- No phrases like "I hope this helps" or "Let me know"
-- No formal greetings unless they use them
-- If the message is unclear or you lack context to reply properly, respond with just "?"
-</system>
-
-"""
-
-RAG_REPLY_PROMPT = PromptTemplate(
-    name="rag_reply_generation",
-    system_message=(
-        "You are NOT an AI assistant. You are replying to a text message from your phone. "
-        "Just text back. No helpfulness, no formality, no assistant behavior."
-    ),
-    template="""<system>
-You are NOT an AI assistant. You are replying to a text message from your phone.
-Just text back. No helpfulness, no formality, no assistant behavior.
-Rules:
-- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
-- Sound natural, never like an AI
-- No phrases like "I hope this helps" or "Let me know"
-- No formal greetings unless they use them
-- If the message is unclear or you lack context to reply properly, respond with just "?"
-</system>
-
-<style contact="{contact_name}">
-{relationship_context}
-</style>
-
-<facts>
-{contact_facts}
-</facts>
-
-<examples>
-{similar_exchanges}
-</examples>
-
-<conversation>
-{context}
-</conversation>
-
-<instruction>{custom_instruction}</instruction>
-
-<last_message>{last_message}</last_message>
-
-<reply>""",
-    max_output_tokens=40,
-)
 
 
 def _format_similar_exchanges(exchanges: list[tuple[str, str]]) -> str:
@@ -1547,6 +882,7 @@ def build_rag_reply_prompt(
     instruction: str | None = None,
     user_messages: list[str] | None = None,
     contact_facts: str = "",
+    relationship_graph: str = "",
 ) -> str:
     """Build a RAG-enhanced prompt for generating personalized iMessage replies.
 
@@ -1565,6 +901,7 @@ def build_rag_reply_prompt(
             If provided, the prompt will include explicit instructions to match
             the user's texting style (length, formality, abbreviations, etc.).
         contact_facts: Pre-formatted facts string from format_facts_for_prompt().
+        relationship_graph: Pre-formatted graph context from get_graph_context().
 
     Returns:
         Formatted prompt string ready for model input
@@ -1626,6 +963,7 @@ def build_rag_reply_prompt(
     prompt = RAG_REPLY_PROMPT.template.format(
         contact_name=contact_name,
         relationship_context=relationship_context,
+        relationship_graph=relationship_graph or "(none)",
         contact_facts=contact_facts or "(none)",
         similar_exchanges=similar_context,
         context=truncated_context,
@@ -1691,6 +1029,11 @@ def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
     contact_facts_raw = req.context.metadata.get("contact_facts")
     contact_facts = contact_facts_raw if isinstance(contact_facts_raw, str) else ""
 
+    relationship_graph_raw = req.context.metadata.get("relationship_graph")
+    relationship_graph = (
+        relationship_graph_raw if isinstance(relationship_graph_raw, str) else ""
+    )
+
     return build_rag_reply_prompt(
         context=formatted_context,
         last_message=req.context.message_text,
@@ -1701,6 +1044,7 @@ def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
         instruction=instruction,
         user_messages=user_messages,
         contact_facts=contact_facts,
+        relationship_graph=relationship_graph,
     )
 
 
@@ -1774,179 +1118,8 @@ def build_rag_reply_prompt_from_embeddings(
 
 
 # =============================================================================
-# DSPy-Optimized Per-Category Prompt Loader
+# Category Resolution
 # =============================================================================
-
-
-@dataclass
-class OptimizedCategoryProgram:
-    """Loaded optimized program for a specific category.
-
-    Attributes:
-        category: The response category name
-        instruction: Optimized instruction text from MIPRO v2
-        demos: Few-shot demo examples [(context, reply), ...]
-    """
-
-    category: str
-    instruction: str
-    demos: list[tuple[str, str]]
-
-
-# Cache of loaded programs
-_optimized_programs: dict[str, OptimizedCategoryProgram] | None = None
-_optimized_programs_lock = threading.Lock()
-
-# Path to per-category compiled programs
-_CATEGORY_DIR = Path(__file__).parent.parent / "evals" / "optimized_categories"
-
-
-def _load_optimized_programs() -> dict[str, OptimizedCategoryProgram]:
-    """Load all per-category optimized programs from disk.
-
-    Reads DSPy compiled JSON files and extracts the instruction text
-    and few-shot demonstrations for each category.
-
-    Returns:
-        Dict mapping category name -> OptimizedCategoryProgram
-    """
-    programs: dict[str, OptimizedCategoryProgram] = {}
-
-    if not _CATEGORY_DIR.exists():
-        return programs
-
-    import json as _json
-
-    for path in _CATEGORY_DIR.glob("optimized_*.json"):
-        category = path.stem.replace("optimized_", "")
-        try:
-            data = _json.loads(path.read_text())
-
-            # Extract instruction from DSPy compiled program format
-            # DSPy saves programs as {"generate": {"lm": null, "traces": [...], ...}}
-            instruction = ""
-            demos: list[tuple[str, str]] = []
-
-            # Navigate DSPy's saved format to find instruction and demos
-            generate_data = data.get("generate", data)
-
-            # Try to extract instruction from extended_signature or signature
-            if "extended_signature_instructions" in generate_data:
-                instruction = generate_data["extended_signature_instructions"]
-            elif "signature_instructions" in generate_data:
-                instruction = generate_data["signature_instructions"]
-
-            # Extract demos from the compiled program
-            for demo in generate_data.get("demos", []):
-                ctx = demo.get("context", "")
-                reply = demo.get("reply", demo.get("output", ""))
-                if ctx and reply:
-                    demos.append((ctx, reply))
-
-            programs[category] = OptimizedCategoryProgram(
-                category=category,
-                instruction=instruction,
-                demos=demos,
-            )
-        except Exception:
-            # Skip malformed files silently
-            continue
-
-    return programs
-
-
-def get_optimized_program(category: str) -> OptimizedCategoryProgram | None:
-    """Get the optimized program for a category, loading from disk on first call.
-
-    Args:
-        category: Category name (quick_exchange, emotional_support, etc.)
-
-    Returns:
-        OptimizedCategoryProgram if found, None otherwise
-    """
-    global _optimized_programs
-    if _optimized_programs is None:
-        with _optimized_programs_lock:
-            if _optimized_programs is None:
-                _optimized_programs = _load_optimized_programs()
-    return _optimized_programs.get(category)
-
-
-def get_optimized_examples(category: str) -> list[FewShotExample]:
-    """Get DSPy-optimized examples for a category, falling back to static ones.
-
-    If a compiled program exists for the category, returns its optimized demos.
-    Otherwise returns the static THREAD_EXAMPLES for that category.
-
-    Args:
-        category: Category name matching THREAD_EXAMPLES keys
-
-    Returns:
-        List of FewShotExample objects
-    """
-    program = get_optimized_program(category)
-    if program and program.demos:
-        return [FewShotExample(context=ctx, output=reply) for ctx, reply in program.demos]
-    # Fallback to static examples
-    return THREAD_EXAMPLES.get(category, CATCHING_UP_THREAD_EXAMPLES)
-
-
-# Legacy aliases for backward compatibility
-EMOTIONAL_SUPPORT_EXAMPLES = EMOTIONAL_SUPPORT_THREAD_EXAMPLES
-CATCHING_UP_EXAMPLES = CATCHING_UP_THREAD_EXAMPLES
-QUICK_EXCHANGE_EXAMPLES = QUICK_EXCHANGE_THREAD_EXAMPLES
-
-
-def get_optimized_instruction(category: str) -> str | None:
-    """Get the MIPRO v2-optimized instruction prefix for a category.
-
-    Args:
-        category: Category name
-
-    Returns:
-        Optimized instruction string, or None if no compiled program exists
-    """
-    program = get_optimized_program(category)
-    if program and program.instruction:
-        return program.instruction
-    return None
-
-
-# System prompt for chat-based reply generation
-CHAT_SYSTEM_PROMPT = (
-    "Generate a casual text message reply. One short sentence max. "
-    'No AI phrases like "I understand" or "Let me know". '
-    "No emojis unless they used them first."
-)
-
-
-# Category mapping: map old/runtime signals to new 6-category schema
-CATEGORY_MAP: dict[str, str] = {
-    # Old 5-category schema -> new 6-category
-    "ack": "acknowledge",
-    "info": "request",
-    "emotional": "emotion",
-    "social": "statement",
-    # Old 4-category schema -> new 6-category
-    "brief": "request",
-    "warm": "emotion",
-    # Runtime signals -> new categories
-    "quick_exchange": "acknowledge",
-    "logistics": "request",
-    "emotional_support": "emotion",
-    "catching_up": "statement",
-    "planning": "request",
-    # Tone -> category defaults
-    "casual": "statement",
-    "professional": "request",
-    "mixed": "statement",
-    "celebration": "social",
-    # Ambiguous / low context
-    "clarify": "clarify",
-    "edge_case": "clarify",
-    "unknown": "clarify",
-    "information": "clarify",
-}
 
 
 def resolve_category(
@@ -1969,6 +1142,8 @@ def resolve_category(
     Returns:
         Optimization category name.
     """
+    from jarvis.prompts.constants import CATEGORY_MAP
+
     try:
         from jarvis.classifiers.category_classifier import classify_category
 
@@ -1979,10 +1154,18 @@ def resolve_category(
         return CATEGORY_MAP.get(tone, "statement")
 
 
-def reset_optimized_programs() -> None:
-    """Reset the cached optimized programs (for testing)."""
-    global _optimized_programs
-    _optimized_programs = None
+def get_category_config(category: str) -> CategoryConfig:
+    """Get routing configuration for a category.
+
+    Args:
+        category: Category name (closing, acknowledge, question, request, emotion, statement).
+
+    Returns:
+        CategoryConfig for the category, or default (statement) if unknown.
+    """
+    from jarvis.prompts.constants import CATEGORY_CONFIGS
+
+    return CATEGORY_CONFIGS.get(category, CATEGORY_CONFIGS["statement"])
 
 
 # =============================================================================
@@ -2016,411 +1199,3 @@ def is_within_token_limit(prompt: str, limit: int = MAX_PROMPT_TOKENS) -> bool:
         True if prompt is within limit, False otherwise
     """
     return estimate_tokens(prompt) <= limit
-
-
-# =============================================================================
-# Compatibility Exports
-# =============================================================================
-
-# Convert FewShotExample lists to tuple format for GenerationRequest compatibility
-REPLY_EXAMPLES: list[tuple[str, str]] = [(ex.context, ex.output) for ex in CASUAL_REPLY_EXAMPLES]
-
-SUMMARY_EXAMPLES: list[tuple[str, str]] = SUMMARIZATION_EXAMPLES
-
-
-# =============================================================================
-# API-Style Prompt Examples
-# =============================================================================
-
-# These examples use the instruction-based format for API endpoints
-# (e.g., the drafts router). They include explicit instructions.
-
-API_REPLY_EXAMPLES_METADATA = PromptMetadata(
-    name="api_reply_examples",
-    version=PROMPT_VERSION,
-    last_updated=PROMPT_LAST_UPDATED,
-    description="Few-shot examples for API reply generation with explicit instructions",
-)
-
-API_REPLY_EXAMPLES: list[tuple[str, str]] = [
-    (
-        "Last message: 'Hey, are you free for dinner tomorrow?'\n"
-        "Instruction: accept enthusiastically",
-        "Yes, absolutely! I'd love to! What time works for you?",
-    ),
-    (
-        "Last message: 'Can you review this document by EOD?'\n"
-        "Instruction: confirm and ask for details",
-        "Sure, I can take a look. Which sections should I focus on?",
-    ),
-    (
-        "Last message: 'Thanks for your help yesterday!'\nInstruction: None",
-        "You're welcome! Happy I could help.",
-    ),
-]
-
-API_SUMMARY_EXAMPLES_METADATA = PromptMetadata(
-    name="api_summary_examples",
-    version=PROMPT_VERSION,
-    last_updated=PROMPT_LAST_UPDATED,
-    description="Few-shot examples for API conversation summarization",
-)
-
-API_SUMMARY_EXAMPLES: list[tuple[str, str]] = [
-    (
-        "Conversation about planning a birthday party with 5 messages "
-        "discussing date, venue, and guest list.",
-        "Summary: Planning discussion for a birthday party.\n"
-        "Key points:\n- Deciding on date and venue\n- Creating guest list",
-    ),
-]
-
-
-# =============================================================================
-# Prompt Registry
-# =============================================================================
-
-
-class PromptRegistry:
-    """Registry for dynamic prompt management.
-
-    Provides centralized access to all prompts, examples, and templates
-    with metadata tracking and versioning support.
-
-    Example:
-        >>> registry = PromptRegistry()
-        >>> examples = registry.get_examples("casual_reply")
-        >>> template = registry.get_template("reply_generation")
-        >>> metadata = registry.get_metadata("casual_reply")
-    """
-
-    def __init__(self) -> None:
-        """Initialize the prompt registry with all registered prompts."""
-        self._examples: dict[str, list[tuple[str, str]]] = {
-            "casual_reply": REPLY_EXAMPLES,
-            "professional_reply": [(ex.context, ex.output) for ex in PROFESSIONAL_REPLY_EXAMPLES],
-            "summarization": SUMMARIZATION_EXAMPLES,
-            "search_answer": [
-                (f"Messages:\n{msgs}\nQuestion: {q}", a) for msgs, q, a in SEARCH_ANSWER_EXAMPLES
-            ],
-            "api_reply": API_REPLY_EXAMPLES,
-            "api_summary": API_SUMMARY_EXAMPLES,
-            "thread_logistics": [(ex.context, ex.output) for ex in LOGISTICS_THREAD_EXAMPLES],
-            "thread_emotional_support": [
-                (ex.context, ex.output) for ex in EMOTIONAL_SUPPORT_THREAD_EXAMPLES
-            ],
-            "thread_planning": [(ex.context, ex.output) for ex in PLANNING_THREAD_EXAMPLES],
-            "thread_catching_up": [(ex.context, ex.output) for ex in CATCHING_UP_THREAD_EXAMPLES],
-            "thread_quick_exchange": [
-                (ex.context, ex.output) for ex in QUICK_EXCHANGE_THREAD_EXAMPLES
-            ],
-        }
-
-        self._templates: dict[str, PromptTemplate] = {
-            "reply_generation": REPLY_PROMPT,
-            "conversation_summary": SUMMARY_PROMPT,
-            "search_answer": SEARCH_PROMPT,
-            "threaded_reply": THREADED_REPLY_PROMPT,
-        }
-
-        self._metadata: dict[str, PromptMetadata] = {
-            "casual_reply": PromptMetadata(
-                name="casual_reply",
-                description="Few-shot examples for casual iMessage replies",
-            ),
-            "professional_reply": PromptMetadata(
-                name="professional_reply",
-                description="Few-shot examples for professional iMessage replies",
-            ),
-            "summarization": PromptMetadata(
-                name="summarization",
-                description="Few-shot examples for conversation summarization",
-            ),
-            "search_answer": PromptMetadata(
-                name="search_answer",
-                description="Few-shot examples for question answering over messages",
-            ),
-            "api_reply": API_REPLY_EXAMPLES_METADATA,
-            "api_summary": API_SUMMARY_EXAMPLES_METADATA,
-            "reply_generation": PromptMetadata(
-                name="reply_generation",
-                description="Template for generating iMessage replies",
-            ),
-            "conversation_summary": PromptMetadata(
-                name="conversation_summary",
-                description="Template for summarizing conversations",
-            ),
-            "search_answer_template": PromptMetadata(
-                name="search_answer_template",
-                description="Template for answering questions about conversations",
-            ),
-            "threaded_reply": PromptMetadata(
-                name="threaded_reply",
-                description="Template for thread-aware reply generation",
-            ),
-            "thread_logistics": PromptMetadata(
-                name="thread_logistics",
-                description="Examples for logistics/coordination thread replies",
-            ),
-            "thread_emotional_support": PromptMetadata(
-                name="thread_emotional_support",
-                description="Examples for emotional support thread replies",
-            ),
-            "thread_planning": PromptMetadata(
-                name="thread_planning",
-                description="Examples for planning thread replies with action items",
-            ),
-            "thread_catching_up": PromptMetadata(
-                name="thread_catching_up",
-                description="Examples for catching up/casual thread replies",
-            ),
-            "thread_quick_exchange": PromptMetadata(
-                name="thread_quick_exchange",
-                description="Examples for quick exchange thread replies",
-            ),
-        }
-
-    def get_examples(self, name: str) -> list[tuple[str, str]]:
-        """Get few-shot examples by name.
-
-        Args:
-            name: The example set name (e.g., "casual_reply", "api_reply")
-
-        Returns:
-            List of (input, output) tuples for few-shot prompting
-
-        Raises:
-            KeyError: If the example set doesn't exist
-        """
-        if name not in self._examples:
-            available = ", ".join(sorted(self._examples.keys()))
-            raise KeyError(f"Unknown example set '{name}'. Available: {available}")
-        return self._examples[name]
-
-    def get_template(self, name: str) -> PromptTemplate:
-        """Get a prompt template by name.
-
-        Args:
-            name: The template name (e.g., "reply_generation")
-
-        Returns:
-            The PromptTemplate instance
-
-        Raises:
-            KeyError: If the template doesn't exist
-        """
-        if name not in self._templates:
-            available = ", ".join(sorted(self._templates.keys()))
-            raise KeyError(f"Unknown template '{name}'. Available: {available}")
-        return self._templates[name]
-
-    def get_metadata(self, name: str) -> PromptMetadata:
-        """Get metadata for a prompt or example set.
-
-        Args:
-            name: The prompt/example set name
-
-        Returns:
-            The PromptMetadata instance
-
-        Raises:
-            KeyError: If the metadata doesn't exist
-        """
-        if name not in self._metadata:
-            available = ", ".join(sorted(self._metadata.keys()))
-            raise KeyError(f"Unknown prompt '{name}'. Available: {available}")
-        return self._metadata[name]
-
-    def list_examples(self) -> list[str]:
-        """List all available example set names.
-
-        Returns:
-            Sorted list of example set names
-        """
-        return sorted(self._examples.keys())
-
-    def list_templates(self) -> list[str]:
-        """List all available template names.
-
-        Returns:
-            Sorted list of template names
-        """
-        return sorted(self._templates.keys())
-
-    def register_examples(
-        self,
-        name: str,
-        examples: list[tuple[str, str]],
-        metadata: PromptMetadata | None = None,
-    ) -> None:
-        """Register a new example set.
-
-        Args:
-            name: Unique name for the example set
-            examples: List of (input, output) tuples
-            metadata: Optional metadata for the example set
-        """
-        self._examples[name] = examples
-        if metadata:
-            self._metadata[name] = metadata
-        else:
-            self._metadata[name] = PromptMetadata(
-                name=name,
-                description=f"Custom example set: {name}",
-            )
-
-    def register_template(
-        self,
-        template: PromptTemplate,
-        metadata: PromptMetadata | None = None,
-    ) -> None:
-        """Register a new prompt template.
-
-        Args:
-            template: The PromptTemplate to register
-            metadata: Optional metadata for the template
-        """
-        self._templates[template.name] = template
-        if metadata:
-            self._metadata[template.name] = metadata
-        else:
-            self._metadata[template.name] = PromptMetadata(
-                name=template.name,
-                description=f"Custom template: {template.name}",
-            )
-
-    @property
-    def version(self) -> str:
-        """Get the prompt system version."""
-        return PROMPT_VERSION
-
-    @property
-    def last_updated(self) -> str:
-        """Get the last update date."""
-        return PROMPT_LAST_UPDATED
-
-
-# Global registry instance
-_registry: PromptRegistry | None = None
-
-
-def get_prompt_registry() -> PromptRegistry:
-    """Get the global PromptRegistry instance.
-
-    Returns:
-        The shared PromptRegistry instance
-    """
-    global _registry
-    if _registry is None:
-        _registry = PromptRegistry()
-    return _registry
-
-
-def reset_prompt_registry() -> None:
-    """Reset the global PromptRegistry instance.
-
-    Useful for testing or when prompts need to be reloaded.
-    """
-    global _registry
-    _registry = None
-
-
-# =============================================================================
-# Category Configuration (for reply routing)
-# =============================================================================
-
-
-@dataclass
-class CategoryConfig:
-    """Configuration for a message category.
-
-    Attributes:
-        skip_slm: If True, skip SLM generation (use template response).
-        prompt: Prompt template key to use (if not skipping SLM).
-        context_depth: Number of messages to include in context.
-        system_prompt: Optional category-specific system prompt.
-    """
-
-    skip_slm: bool
-    prompt: str | None
-    context_depth: int
-    system_prompt: str | None = None
-
-
-# Category configurations (maps category → routing behavior)
-CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
-    "closing": CategoryConfig(
-        skip_slm=True,
-        prompt=None,
-        context_depth=0,
-        system_prompt=None,
-    ),
-    "acknowledge": CategoryConfig(
-        skip_slm=True,
-        prompt=None,
-        context_depth=0,
-        system_prompt=None,
-    ),
-    "question": CategoryConfig(
-        skip_slm=False,
-        prompt="reply_generation",
-        context_depth=5,
-        system_prompt="They asked a question. Just answer it, keep it short.",
-    ),
-    "request": CategoryConfig(
-        skip_slm=False,
-        prompt="reply_generation",
-        context_depth=5,
-        system_prompt="They're asking you to do something. Say yes, no, or ask a follow-up.",
-    ),
-    "emotion": CategoryConfig(
-        skip_slm=False,
-        prompt="reply_generation",
-        context_depth=3,
-        system_prompt="They're sharing something emotional. Be a good friend, not a therapist.",
-    ),
-    "statement": CategoryConfig(
-        skip_slm=False,
-        prompt="reply_generation",
-        context_depth=3,
-        system_prompt="They're sharing or chatting. React naturally like a friend would.",
-    ),
-}
-
-
-def get_category_config(category: str) -> CategoryConfig:
-    """Get routing configuration for a category.
-
-    Args:
-        category: Category name (closing, acknowledge, question, request, emotion, statement).
-
-    Returns:
-        CategoryConfig for the category, or default (statement) if unknown.
-    """
-    return CATEGORY_CONFIGS.get(category, CATEGORY_CONFIGS["statement"])
-
-
-# Template responses for acknowledge/closing categories (when skip_slm=True)
-ACKNOWLEDGE_TEMPLATES: list[str] = [
-    "ok",
-    "sounds good",
-    "got it",
-    "thanks",
-    "np",
-    "👍",
-    "for sure",
-    "alright",
-    "bet",
-    "cool",
-]
-
-CLOSING_TEMPLATES: list[str] = [
-    "bye!",
-    "see ya",
-    "later!",
-    "talk soon",
-    "ttyl",
-    "peace",
-    "catch you later",
-    "gn",
-]

@@ -11,6 +11,7 @@ export {
   getConversations,
   getMessages,
   getMessage,
+  getMessagesBatch,
   getLastMessageRowid,
   getNewMessagesSince,
   populateContactsCache,

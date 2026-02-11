@@ -186,7 +186,7 @@ class JarvisDBBase:
                 row["name"]
                 for row in conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' "
-                    "AND name IN ('vec_chunks', 'vec_messages', 'vec_binary')"
+                    "AND name IN ('vec_chunks', 'vec_messages', 'vec_binary', 'vec_facts')"
                 ).fetchall()
             }
 
@@ -240,6 +240,19 @@ class JarvisDBBase:
                 """
                 )
                 logger.info("Created vec_binary table")
+
+            if "vec_facts" not in existing:
+                conn.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_facts USING vec0(
+                        embedding int8[384] distance_metric=L2,
+                        contact_id text,
+                        +fact_id INTEGER,
+                        +fact_text TEXT
+                    )
+                """
+                )
+                logger.info("Created vec_facts table")
 
         except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
             logger.warning("Could not create vec tables (sqlite-vec unavailable): %s", e)
@@ -511,6 +524,10 @@ class JarvisDBBase:
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)
+
+            # Ensure vec tables exist (sqlite-vec virtual tables can't be
+            # created via executescript, need separate CREATE statements)
+            self._ensure_vec_tables(conn)
 
             # Update version
             conn.execute(

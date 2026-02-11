@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import Any
 
 from jarvis.prefetch.cache import (
@@ -192,6 +193,8 @@ class PrefetchManager:
         self._cleanup_thread: threading.Thread | None = None
         self._shutdown_event = threading.Event()
         self._lock = threading.RLock()
+        self._last_activity_time: float = time.time()
+        self._idle_timeout: float = 300.0  # Skip predictions after 5 min idle
 
     def start(self) -> None:
         """Start the prefetch system."""
@@ -262,6 +265,8 @@ class PrefetchManager:
             text: Message text.
             is_from_me: Whether message was from user.
         """
+        self._last_activity_time = time.time()
+
         # Update predictor
         self._predictor.record_message(chat_id, text, is_from_me)
 
@@ -280,6 +285,7 @@ class PrefetchManager:
         Args:
             chat_id: Chat identifier.
         """
+        self._last_activity_time = time.time()
         self._predictor.record_focus(chat_id)
 
         # Immediately schedule high-priority prefetch
@@ -293,6 +299,7 @@ class PrefetchManager:
         Args:
             chat_id: Chat identifier.
         """
+        self._last_activity_time = time.time()
         self._predictor.record_hover(chat_id)
 
     def on_search(self, query: str) -> None:
@@ -301,6 +308,7 @@ class PrefetchManager:
         Args:
             query: Search query.
         """
+        self._last_activity_time = time.time()
         self._predictor.record_search(query)
 
     def get(self, key: str) -> Any | None:
@@ -409,6 +417,12 @@ class PrefetchManager:
 
         while not self._shutdown_event.is_set():
             try:
+                # Skip predictions when idle for too long
+                if time.time() - self._last_activity_time > self._idle_timeout:
+                    logger.debug("Skipping prediction cycle: idle for >5 min")
+                    self._shutdown_event.wait(self._prediction_interval)
+                    continue
+
                 # Skip predictions when memory is under pressure
                 try:
                     from core.memory import get_memory_controller
@@ -483,24 +497,18 @@ class PrefetchManager:
         self._executor.schedule_batch(warmup_predictions)
 
 
-# Singleton instance
-_manager: PrefetchManager | None = None
-_manager_lock = threading.Lock()
+from jarvis.utils.singleton import thread_safe_singleton
 
 
+@thread_safe_singleton
 def get_prefetch_manager() -> PrefetchManager:
     """Get or create singleton prefetch manager."""
-    global _manager
-    with _manager_lock:
-        if _manager is None:
-            _manager = PrefetchManager()
-        return _manager
+    return PrefetchManager()
 
 
 def reset_prefetch_manager() -> None:
     """Reset singleton prefetch manager (stops if running)."""
-    global _manager
-    with _manager_lock:
-        if _manager is not None:
-            _manager.stop()
-        _manager = None
+    instance = get_prefetch_manager.peek()  # type: ignore[attr-defined]
+    if instance is not None:
+        instance.stop()
+    get_prefetch_manager.reset()  # type: ignore[attr-defined]

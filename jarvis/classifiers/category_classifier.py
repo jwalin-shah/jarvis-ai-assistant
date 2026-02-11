@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,16 +79,19 @@ CATEGORIES = [
 
 # Feature extractor singleton
 _feature_extractor = None
+_feature_extractor_lock = threading.Lock()
 
 # Cached zero context embedding (avoids 1.5KB allocation per classification)
 _ZERO_CONTEXT = np.zeros(384, dtype=np.float32)
 
 
 def _get_feature_extractor() -> CategoryFeatureExtractor:
-    """Get or initialize feature extractor."""
+    """Get or initialize feature extractor (thread-safe)."""
     global _feature_extractor
     if _feature_extractor is None:
-        _feature_extractor = CategoryFeatureExtractor()
+        with _feature_extractor_lock:
+            if _feature_extractor is None:
+                _feature_extractor = CategoryFeatureExtractor()
     return _feature_extractor
 
 
@@ -190,6 +194,96 @@ class CategoryClassifier(EmbedderMixin):
             logger.error("Failed to load pipeline: %s", e)
             return False
 
+    def _log_classification(
+        self, result: CategoryResult, classify_start: float
+    ) -> None:
+        """Log a classification result with timing."""
+        log_event(
+            logger,
+            "classifier.inference.complete",
+            classifier="category",
+            result=result.category,
+            confidence=(
+                round(result.confidence, 3)
+                if result.method != "fast_path"
+                else result.confidence
+            ),
+            method=result.method,
+            latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
+        )
+
+    def _classify_fast_path(self, text: str) -> CategoryResult | None:
+        """Layer 0: Fast path for reactions and acknowledgments.
+
+        Returns CategoryResult on match, None otherwise.
+        """
+        if is_reaction(text):
+            if text.startswith(("Loved", "Laughed at")):
+                category = "emotion"
+            elif text.startswith("Questioned"):
+                category = "question"
+            elif text.startswith(("Liked", "Disliked", "Emphasized")):
+                category = "acknowledge"
+            elif "Removed" in text:
+                category = "acknowledge"
+            else:
+                category = "emotion"
+            return CategoryResult(category=category, confidence=1.0, method="fast_path")
+
+        if is_acknowledgment_only(text):
+            return CategoryResult(category="acknowledge", confidence=1.0, method="fast_path")
+
+        return None
+
+    def _classify_pipeline(
+        self,
+        text: str,
+        context: list[str],
+        mobilization: MobilizationResult | None,
+    ) -> CategoryResult | None:
+        """Layer 1: LightGBM pipeline prediction.
+
+        Returns CategoryResult on success, None if pipeline unavailable or fails.
+        """
+        if not self._load_pipeline():
+            return None
+
+        try:
+            mob_pressure = mobilization.pressure if mobilization else "none"
+            mob_type = mobilization.response_type if mobilization else "answer"
+            extractor = _get_feature_extractor()
+
+            try:
+                embedding = self.embedder.encode([text], normalize=True)[0]
+            except Exception as embed_err:
+                logger.warning("BERT encode failed, using zero embedding: %s", embed_err)
+                embedding = np.zeros(384, dtype=np.float32)
+
+            # Context BERT ALWAYS ZERO at inference (auxiliary supervision strategy)
+            non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
+            features = np.concatenate([embedding, _ZERO_CONTEXT, non_bert_features])
+            features = features.reshape(1, -1)
+
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", "X does not have valid feature names")
+                proba = self._pipeline.predict_proba(features)[0]
+
+            category_idx = int(np.argmax(proba))
+            if self._mlb is not None:
+                classes = self._mlb.classes_
+            else:
+                logger.warning("Using hardcoded CATEGORIES fallback (mlb not loaded)")
+                classes = CATEGORIES
+            category = classes[category_idx]
+            confidence = float(proba[category_idx])
+
+            return CategoryResult(category=category, confidence=confidence, method="lightgbm")
+        except Exception as e:
+            logger.error("Pipeline prediction failed: %s", e, exc_info=True)
+            return None
+
     def classify(
         self,
         text: str,
@@ -208,8 +302,8 @@ class CategoryClassifier(EmbedderMixin):
         """
         context = context or []
 
-        # Check cache first (hash of text only, not context, for prefetch coherence)
-        cache_key = hashlib.md5(text.encode()).hexdigest()
+        cache_input = text + "|" + "|".join(context)
+        cache_key = hashlib.md5(cache_input.encode()).hexdigest()
         if cache_key in self._classification_cache:
             cached_result, cached_time = self._classification_cache[cache_key]
             if time.time() - cached_time < self._cache_ttl:
@@ -217,149 +311,144 @@ class CategoryClassifier(EmbedderMixin):
 
         classify_start = time.perf_counter()
 
-        # Layer 0: Fast path for reactions and acknowledgments
-        # iMessage reactions - categorize by intent
-        if is_reaction(text):
-            # Emotional reactions
-            if text.startswith(("Loved", "Laughed at")):
-                category = "emotion"
-            # Question reactions
-            elif text.startswith("Questioned"):
-                category = "question"
-            # Acknowledgment reactions (approval/disapproval)
-            elif text.startswith(("Liked", "Disliked", "Emphasized")):
-                category = "acknowledge"
-            # Removed reactions - acknowledge that the reaction was removed
-            elif "Removed" in text:
-                category = "acknowledge"
-            else:
-                # Default for unknown reactions
-                category = "emotion"
-
-            result = CategoryResult(
-                category=category,
-                confidence=1.0,
-                method="fast_path",
-            )
+        result = self._classify_fast_path(text)
+        if result is None:
+            result = self._classify_pipeline(text, context, mobilization)
+        if result is None:
             log_event(
-                logger,
-                "classifier.inference.complete",
-                classifier="category",
-                result=category,
-                confidence=1.0,
-                method="fast_path",
-                latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
+                logger, "classifier.fallback",
+                level=logging.WARNING, classifier="category", reason="no_pipeline",
             )
-            self._cache_put(cache_key, result)
-            return result
+            result = CategoryResult(category="statement", confidence=0.30, method="default")
 
-        # Simple acknowledgments → acknowledge
-        if is_acknowledgment_only(text):
-            result = CategoryResult(
-                category="acknowledge",
-                confidence=1.0,
-                method="fast_path",
-            )
-            log_event(
-                logger,
-                "classifier.inference.complete",
-                classifier="category",
-                result="acknowledge",
-                confidence=1.0,
-                method="fast_path",
-                latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
-            )
-            self._cache_put(cache_key, result)
-            return result
-
-        # Layer 1: Pipeline prediction (scaler + LightGBM)
-        if self._load_pipeline():
-            try:
-                # Extract mobilization features
-                mob_pressure = mobilization.pressure if mobilization else "none"
-                mob_type = mobilization.response_type if mobilization else "answer"
-
-                # Get feature extractor
-                extractor = _get_feature_extractor()
-
-                # 1. Current message BERT embedding (384) - use normalize=True to match training
-                try:
-                    embedding = self.embedder.encode([text], normalize=True)[0]
-                except Exception as embed_err:
-                    # If embedder fails (GPU contention, model not loaded), use zeros
-                    # The 147 hand-crafted features still carry signal for classification
-                    logger.warning("BERT encode failed, using zero embedding: %s", embed_err)
-                    embedding = np.zeros(384, dtype=np.float32)
-
-                # 2. Context BERT embedding (384) - ALWAYS ZERO at inference
-                # Zero-context-at-inference strategy: model trained WITH context for auxiliary
-                # supervision, but we zero it out at inference for better generalization.
-                # The 3 hand-crafted context stats in non-BERT features still use context.
-                context_embedding = _ZERO_CONTEXT
-
-                # 3. All non-BERT features (147) - still pass context for hand-crafted features
-                # These include 3 context stats + context_lexical_overlap (minimal contribution)
-                non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
-
-                # 4. Concatenate: [current_bert(384) + context_bert(384) + non_bert(147)] = 915
-                features = np.concatenate([embedding, context_embedding, non_bert_features])
-                features = features.reshape(1, -1)
-
-                # Predict (pipeline handles scaling automatically)
-                # Model is OneVsRestClassifier(LGBMClassifier) - returns probabilities directly
-                import warnings
-
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", "X does not have valid feature names")
-                    proba = self._pipeline.predict_proba(features)[0]
-
-                # Get category and confidence
-                category_idx = int(np.argmax(proba))
-                if self._mlb is not None:
-                    classes = self._mlb.classes_
-                else:
-                    logger.warning("Using hardcoded CATEGORIES fallback (mlb not loaded)")
-                    classes = CATEGORIES
-                category = classes[category_idx]
-                confidence = float(proba[category_idx])
-
-                method = "lightgbm"
-
-                result = CategoryResult(
-                    category=category,
-                    confidence=confidence,
-                    method=method,
-                )
-                log_event(
-                    logger,
-                    "classifier.inference.complete",
-                    classifier="category",
-                    result=category,
-                    confidence=round(confidence, 3),
-                    method="lightgbm",
-                    latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
-                )
-                self._cache_put(cache_key, result)
-                return result
-            except Exception as e:
-                logger.error("Pipeline prediction failed: %s", e, exc_info=True)
-
-        # Fallback: statement with low confidence
-        log_event(
-            logger,
-            "classifier.fallback",
-            level=logging.WARNING,
-            classifier="category",
-            reason="no_pipeline",
-        )
-        result = CategoryResult(
-            category="statement",
-            confidence=0.30,
-            method="default",
-        )
-        # Cache the result
+        self._log_classification(result, classify_start)
         self._cache_put(cache_key, result)
         return result
+
+    def classify_batch(
+        self,
+        texts: list[str],
+        contexts: list[list[str] | None] | None = None,
+        mobilizations: list[MobilizationResult | None] | None = None,
+    ) -> list[CategoryResult]:
+        """Classify a batch of messages efficiently.
+
+        Batch-encodes all texts in one call and runs prediction in a single pass.
+        Falls back to per-message classify() for fast-path hits (reactions,
+        acknowledgments) since those skip the pipeline entirely.
+
+        Args:
+            texts: List of message texts.
+            contexts: Optional list of context lists (one per text).
+            mobilizations: Optional list of MobilizationResults (one per text).
+
+        Returns:
+            List of CategoryResult, one per input text.
+        """
+        if not texts:
+            return []
+
+        n = len(texts)
+        if contexts is None:
+            contexts = [None] * n
+        if mobilizations is None:
+            mobilizations = [None] * n
+
+        results: list[CategoryResult | None] = [None] * n
+
+        # --- Pass 1: Check cache and fast path ---
+        pipeline_indices: list[int] = []
+        for i, text in enumerate(texts):
+            ctx = contexts[i] or []
+            cache_input = text + "|" + "|".join(ctx)
+            cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+
+            # Check cache
+            if cache_key in self._classification_cache:
+                cached_result, cached_time = self._classification_cache[cache_key]
+                if time.time() - cached_time < self._cache_ttl:
+                    results[i] = cached_result
+                    continue
+
+            # Check fast path
+            fast = self._classify_fast_path(text)
+            if fast is not None:
+                results[i] = fast
+                self._cache_put(cache_key, fast)
+                continue
+
+            pipeline_indices.append(i)
+
+        # --- Pass 2: Batch pipeline classification ---
+        if pipeline_indices and self._load_pipeline():
+            import warnings
+
+            pipeline_texts = [texts[i] for i in pipeline_indices]
+            pipeline_contexts = [contexts[i] or [] for i in pipeline_indices]
+            pipeline_mobs = [mobilizations[i] for i in pipeline_indices]
+
+            # Batch BERT encode
+            try:
+                embeddings = self.embedder.encode(pipeline_texts, normalize=True)
+            except Exception as embed_err:
+                logger.warning("Batch BERT encode failed, using zero embeddings: %s", embed_err)
+                embeddings = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
+
+            # Batch non-BERT feature extraction
+            mob_pressures = [
+                m.pressure if m else "none" for m in pipeline_mobs
+            ]
+            mob_types = [
+                m.response_type if m else "answer" for m in pipeline_mobs
+            ]
+            extractor = _get_feature_extractor()
+            non_bert_batch = extractor.extract_all_batch(
+                pipeline_texts, pipeline_contexts, mob_pressures, mob_types,
+            )
+
+            # Build full feature matrix: BERT (384) + zero context (384) + non-BERT (147)
+            zero_ctx = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
+            non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
+            feature_matrix = np.concatenate(
+                [embeddings, zero_ctx, non_bert_matrix], axis=1,
+            )
+
+            # Single prediction call
+            try:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", "X does not have valid feature names")
+                    proba_matrix = self._pipeline.predict_proba(feature_matrix)
+
+                classes = self._mlb.classes_ if self._mlb is not None else CATEGORIES
+
+                for j, idx in enumerate(pipeline_indices):
+                    proba = proba_matrix[j]
+                    category_idx = int(np.argmax(proba))
+                    category = classes[category_idx]
+                    confidence = float(proba[category_idx])
+                    result = CategoryResult(
+                        category=category, confidence=confidence, method="lightgbm",
+                    )
+                    results[idx] = result
+                    ctx = contexts[idx] or []
+                    cache_input = texts[idx] + "|" + "|".join(ctx)
+                    cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+                    self._cache_put(cache_key, result)
+            except Exception as e:
+                logger.error("Batch pipeline prediction failed: %s", e, exc_info=True)
+
+        # --- Pass 3: Fill any remaining with fallback ---
+        for i in range(n):
+            if results[i] is None:
+                results[i] = CategoryResult(
+                    category="statement", confidence=0.30, method="default",
+                )
+                ctx = contexts[i] or []
+                cache_input = texts[i] + "|" + "|".join(ctx)
+                cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+                self._cache_put(cache_key, results[i])
+
+        return results  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +479,24 @@ def classify_category(
         CategoryResult with category, confidence, method
     """
     return get_classifier().classify(text, context, mobilization)
+
+
+def classify_category_batch(
+    texts: list[str],
+    contexts: list[list[str] | None] | None = None,
+    mobilizations: list[MobilizationResult | None] | None = None,
+) -> list[CategoryResult]:
+    """Classify a batch of messages (convenience function).
+
+    Args:
+        texts: List of message texts.
+        contexts: Optional list of context lists (one per text).
+        mobilizations: Optional list of MobilizationResults (one per text).
+
+    Returns:
+        List of CategoryResult, one per input text.
+    """
+    return get_classifier().classify_batch(texts, contexts, mobilizations)
 
 
 def reset_category_classifier() -> None:

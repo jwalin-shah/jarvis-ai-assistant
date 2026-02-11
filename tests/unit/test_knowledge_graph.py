@@ -78,7 +78,7 @@ def mock_db():
     # Set up execute to return different results based on query
     def execute_side_effect(query):
         result = MagicMock()
-        if "contact_profiles" in query:
+        if "FROM contacts" in query:
             result.fetchall.return_value = profiles
         elif "contact_facts" in query:
             result.fetchall.return_value = facts
@@ -292,7 +292,7 @@ class TestSearchPerformance:
 
         def execute_side_effect(query):
             result = MagicMock()
-            if "contact_profiles" in query:
+            if "FROM contacts" in query:
                 result.fetchall.return_value = profiles
             elif "contact_facts" in query:
                 result.fetchall.return_value = facts
