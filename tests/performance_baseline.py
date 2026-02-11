@@ -160,9 +160,9 @@ class TestGraphBatching:
         """
         import inspect
 
-        from jarvis.graph.knowledge_graph import KnowledgeGraphBuilder
+        from jarvis.graph.knowledge_graph import KnowledgeGraph
 
-        source = inspect.getsource(KnowledgeGraphBuilder.build_from_db)
+        source = inspect.getsource(KnowledgeGraph.build_from_db)
 
         # Should use batch operations
         assert "add_nodes_from" in source, (
