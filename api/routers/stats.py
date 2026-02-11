@@ -533,13 +533,9 @@ def get_conversation_stats(
     first_date = messages_sorted[0].date if messages_sorted else None
     last_date = messages_sorted[-1].date if messages_sorted else None
 
-    # Get participants from conversation
-    conversations = reader.get_conversations(limit=100)
-    participants = []
-    for conv in conversations:
-        if conv.chat_id == chat_id:
-            participants = conv.participants
-            break
+    # Get participants from conversation (direct lookup, not O(n) scan)
+    conv = reader.get_conversation(chat_id)
+    participants = conv.participants if conv else []
 
     result = ConversationStatsResponse(
         chat_id=chat_id,

@@ -301,6 +301,42 @@ _BASE_QUERIES = {
         WHERE message.guid = ?
         LIMIT 1
     """,
+    "conversation_by_chat_id": """
+        WITH message_ranked AS (
+            SELECT
+                cmj.chat_id,
+                m.text,
+                m.attributedBody,
+                m.date,
+                ROW_NUMBER() OVER (PARTITION BY cmj.chat_id ORDER BY m.date DESC) as msg_rank,
+                COUNT(*) OVER (PARTITION BY cmj.chat_id) as message_count
+            FROM chat_message_join cmj
+            JOIN message m ON cmj.message_id = m.ROWID
+        ),
+        chat_participants AS (
+            SELECT
+                chat_handle_join.chat_id,
+                GROUP_CONCAT(handle.id, ', ') as participants
+            FROM chat_handle_join
+            JOIN handle ON chat_handle_join.handle_id = handle.ROWID
+            GROUP BY chat_handle_join.chat_id
+        )
+        SELECT
+            chat.ROWID as chat_rowid,
+            chat.guid as chat_id,
+            chat.display_name,
+            chat.chat_identifier,
+            cp.participants,
+            COALESCE(mr.message_count, 0) as message_count,
+            mr.date as last_message_date,
+            mr.text as last_message_text,
+            mr.attributedBody as last_message_attributed_body
+        FROM chat
+        LEFT JOIN chat_participants cp ON cp.chat_id = chat.ROWID
+        LEFT JOIN message_ranked mr ON mr.chat_id = chat.ROWID AND mr.msg_rank = 1
+        WHERE chat.guid = ?
+        LIMIT 1
+    """,
     "messages_after": """
         SELECT
             message.ROWID as id,
