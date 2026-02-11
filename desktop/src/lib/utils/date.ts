@@ -83,6 +83,42 @@ export function getMessageDateString(messageId: number, dateStr: string): string
 }
 
 /**
+ * Format a date string to a compact relative time (e.g., "2m", "1h", "3d")
+ */
+export function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+  const diffWeek = Math.floor(diffDay / 7);
+
+  if (diffSec < 60) return 'now';
+  if (diffMin < 60) return `${diffMin}m`;
+  if (diffHr < 24) return `${diffHr}h`;
+  if (diffDay < 7) return `${diffDay}d`;
+  if (diffWeek < 52) return `${diffWeek}w`;
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+/**
+ * Format a date string to a full readable timestamp for tooltips
+ */
+export function formatFullTimestamp(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
  * Clear all date format caches
  */
 export function clearDateCaches(): void {

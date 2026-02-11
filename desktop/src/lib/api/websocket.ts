@@ -449,10 +449,11 @@ class JarvisWebSocket {
 
   private startPingInterval(): void {
     this.stopPingInterval();
-    // Send ping every 30 seconds to keep connection alive
+    // Send ping every 60 seconds to keep connection alive
+    // (local Unix socket connections don't need aggressive keepalive)
     this.pingTimer = setInterval(() => {
       this.ping();
-    }, 30000);
+    }, 60000);
   }
 
   private stopPingInterval(): void {

@@ -288,7 +288,7 @@
       .replace(/'/g, "&#039;");
   }
 
-  // Cache for compiled regex patterns
+  // Cache for compiled regex patterns (bounded to prevent memory leak)
   let regexCache = new Map<string, RegExp>();
 
   function highlightMatch(text: string, searchQuery: string): string {
@@ -300,6 +300,24 @@
     // Escape HTML in user text first to prevent XSS, then highlight
     const safeText = escapeHtml(text);
     const safeQuery = escapeHtml(searchQuery);
+
+    // Clear cache if unbounded to prevent memory leak
+    if (regexCache.size > 100) regexCache.clear();
+
+    // For semantic search, highlight individual words from the query
+    if (searchMode === "semantic") {
+      const words = safeQuery.split(/\s+/).filter(w => w.length >= 2);
+      if (words.length === 0) return safeText;
+
+      const cacheKey = `semantic:${words.join('|')}`;
+      let regex = regexCache.get(cacheKey);
+      if (!regex) {
+        const pattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+        regex = new RegExp(`(${pattern})`, "gi");
+        regexCache.set(cacheKey, regex);
+      }
+      return safeText.replace(regex, '<mark class="highlight">$1</mark>');
+    }
 
     // Check cache before creating new RegExp
     let regex = regexCache.get(safeQuery);
@@ -927,13 +945,13 @@
   }
 
   .error-state svg {
-    color: var(--error-color);
+    color: var(--color-error);
     opacity: 1;
   }
 
   .retry-btn {
     padding: 8px 16px;
-    background: var(--error-color);
+    background: var(--color-error);
     border: none;
     border-radius: 6px;
     color: white;
@@ -1097,8 +1115,8 @@
   }
 
   :global(.highlight) {
-    background-color: #fbbf24;
-    color: #1c1c1e;
+    background-color: rgba(251, 191, 36, 0.35);
+    color: inherit;
     padding: 1px 2px;
     border-radius: 2px;
   }

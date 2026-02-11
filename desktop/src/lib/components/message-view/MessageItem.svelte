@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Message } from '../../types';
   import { isOptimisticMessage, getOptimisticStatus, getOptimisticId } from '../../types';
+  import { formatRelativeTime, formatFullTimestamp } from '../../utils/date';
+  import LinkPreview from './LinkPreview.svelte';
 
   interface Props {
     message: Message;
@@ -68,6 +70,41 @@
     });
   }
 
+  // Detect URLs in message text
+  function extractUrls(text: string): string[] {
+    if (!text) return [];
+    const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
+    return text.match(urlRegex) || [];
+  }
+
+  // Group reactions by type with counts
+  interface GroupedReaction {
+    type: string;
+    count: number;
+    senders: string[];
+  }
+
+  function groupReactions(reactions: typeof message.reactions): GroupedReaction[] {
+    const groups = new Map<string, GroupedReaction>();
+    for (const r of reactions) {
+      const existing = groups.get(r.type);
+      if (existing) {
+        existing.count++;
+        existing.senders.push(r.sender_name || r.sender);
+      } else {
+        groups.set(r.type, {
+          type: r.type,
+          count: 1,
+          senders: [r.sender_name || r.sender],
+        });
+      }
+    }
+    return Array.from(groups.values());
+  }
+
+  let urls = $derived(extractUrls(message.text));
+  let groupedReactions = $derived(groupReactions(message.reactions));
+
   function handleRetry() {
     if (optimisticId && onRetry) {
       onRetry(optimisticId);
@@ -120,6 +157,13 @@
           {/each}
         </div>
       {/if}
+      {#if urls.length > 0}
+        <div class="link-previews">
+          {#each urls.slice(0, 3) as url}
+            <LinkPreview {url} />
+          {/each}
+        </div>
+      {/if}
       {#if optimisticStatus === 'sending'}
         <span class="optimistic-status sending">
           <span class="sending-dot"></span>
@@ -128,7 +172,7 @@
       {:else if optimisticStatus === 'failed'}
         <span class="optimistic-status failed">Failed to send</span>
       {:else}
-        <span class="time">{formatTime(message.date)}</span>
+        <span class="time" title={formatFullTimestamp(message.date)}>{formatRelativeTime(message.date)}</span>
       {/if}
     </div>
     {#if optimisticStatus === 'failed' && optimisticId}
@@ -150,9 +194,9 @@
     {/if}
     {#if message.reactions.length > 0}
       <div class="reactions">
-        {#each message.reactions as reaction}
-          <span class="reaction" title={reaction.sender_name || reaction.sender}>
-            {reaction.type}
+        {#each groupedReactions as reaction}
+          <span class="reaction" title={reaction.senders.join(', ')}>
+            {reaction.type}{#if reaction.count > 1} <span class="reaction-count">{reaction.count}</span>{/if}
           </span>
         {/each}
       </div>
@@ -253,10 +297,16 @@
   .bubble .time {
     font-size: var(--text-xs);
     color: var(--text-secondary);
-    opacity: 0.7;
+    opacity: 0.5;
     display: block;
     text-align: right;
     margin-top: var(--space-1);
+    cursor: default;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .bubble:hover .time {
+    opacity: 1;
   }
 
   .from-me .bubble .time {
@@ -286,17 +336,39 @@
 
   .reactions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-1);
-    margin-top: var(--space-1);
+    margin-top: calc(var(--space-1) * -1);
+    position: relative;
+    top: -4px;
   }
 
   .reaction {
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 13px;
     font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
     background: var(--surface-elevated);
-    padding: 2px 6px;
-    border-radius: 10px;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
     cursor: default;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .reaction-count {
+    font-family: var(--font-family-sans);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+  }
+
+  .link-previews {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
   }
 
   .system-message {

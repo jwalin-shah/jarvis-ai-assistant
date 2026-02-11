@@ -9,7 +9,7 @@
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import Toast from './lib/components/Toast.svelte';
   import { checkApiConnection } from './lib/stores/health';
-  import { clearSelection } from './lib/stores/conversations.svelte';
+  import { clearSelection, conversationsStore, selectConversation } from './lib/stores/conversations.svelte';
   import { initializeTheme } from './lib/stores/theme';
   import { initAnnouncer } from './lib/stores/keyboard';
 
@@ -25,6 +25,14 @@
   let showShortcuts = $state(false);
   let showCommandPalette = $state(false);
   let sidebarCollapsed = $state(false);
+  let showConversationList = $state(true);
+  let isNarrow = $state(false);
+
+  $effect(() => {
+    if (isNarrow && conversationsStore.selectedChatId) {
+      showConversationList = false;
+    }
+  });
 
   // Lazy loaded components
   const Dashboard = $derived(
@@ -57,6 +65,21 @@
       : null
   );
 
+  function goToNextUnread() {
+    const unread = conversationsStore.unreadCounts;
+    if (unread.size === 0) return;
+    // Get first unread chat that's not currently selected
+    for (const [chatId] of unread) {
+      if (chatId !== conversationsStore.selectedChatId) {
+        selectConversation(chatId);
+        return;
+      }
+    }
+    // If all unread are the current chat, select the first one
+    const firstUnread = unread.keys().next().value;
+    if (firstUnread) selectConversation(firstUnread);
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     const isMod = event.metaKey || event.ctrlKey;
 
@@ -64,6 +87,13 @@
     if (isMod && event.shiftKey && event.key.toLowerCase() === 'p' && !showCommandPalette) {
       event.preventDefault();
       showCommandPalette = true;
+      return;
+    }
+
+    // Cmd+Shift+] to go to next unread
+    if (isMod && event.shiftKey && event.key === ']') {
+      event.preventDefault();
+      goToNextUnread();
       return;
     }
 
@@ -118,6 +148,17 @@
     // Initialize ARIA announcer
     initAnnouncer();
 
+    // Responsive layout detection
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const handleResize = (e: MediaQueryListEvent | MediaQueryList) => {
+      isNarrow = e.matches;
+      if (isNarrow) {
+        sidebarCollapsed = true;
+      }
+    };
+    handleResize(mediaQuery);
+    mediaQuery.addEventListener('change', handleResize);
+
     // Show window after first paint to avoid white flash
     if (isTauri) {
       requestAnimationFrame(() => {
@@ -167,6 +208,7 @@
       clearTimeout(apiCheckTimer);
       if (unlisten) unlisten();
       window.removeEventListener('keydown', handleKeydown);
+      mediaQuery.removeEventListener('change', handleResize as (e: MediaQueryListEvent) => void);
       cleanupTheme();
     };
   });
@@ -279,8 +321,22 @@
           </button>
         </div>
         <div class="messages-content">
-          <ConversationList />
-          <MessageView />
+          {#if !isNarrow || showConversationList}
+            <div class="conversation-list-wrapper" class:overlay={isNarrow}>
+              <ConversationList />
+            </div>
+          {/if}
+          <div class="message-view-wrapper">
+            {#if isNarrow && !showConversationList}
+              <button class="back-button" onclick={() => showConversationList = true}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                Back
+              </button>
+            {/if}
+            <MessageView />
+          </div>
         </div>
       </div>
     {/if}
@@ -430,5 +486,63 @@
     justify-content: center;
     color: var(--color-error);
     font-size: var(--text-lg);
+  }
+
+  .conversation-list-wrapper {
+    display: contents;
+  }
+
+  .conversation-list-wrapper.overlay {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: var(--z-dropdown);
+    width: 300px;
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-lg);
+    animation: slideInLeft var(--duration-fast) var(--ease-out);
+  }
+
+  .message-view-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .back-button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-elevated);
+    border: none;
+    border-bottom: 1px solid var(--border-default);
+    color: var(--color-primary);
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+  }
+
+  .back-button:hover {
+    background: var(--surface-hover);
+  }
+
+  @keyframes slideInLeft {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .messages-content {
+      position: relative;
+    }
   }
 </style>

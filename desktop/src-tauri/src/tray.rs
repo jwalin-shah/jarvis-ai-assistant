@@ -20,11 +20,26 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
+    let dashboard_item = MenuItem::with_id(app, "dashboard", "Dashboard", true, None::<&str>)?;
+    let messages_item = MenuItem::with_id(app, "messages", "Messages", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let nav_separator = PredefinedMenuItem::separator(app)?;
+
     // Build the tray menu
-    let menu = Menu::with_items(app, &[&show_item, &status_item, &health_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[
+        &show_item,
+        &nav_separator,
+        &dashboard_item,
+        &messages_item,
+        &health_item,
+        &settings_item,
+        &separator,
+        &status_item,
+        &quit_item,
+    ])?;
 
     // Create the tray icon
-    let _tray = TrayIconBuilder::new()
+    let _tray = TrayIconBuilder::with_id("main")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -50,6 +65,13 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                     if let Err(e) = window.emit("navigate", "health") {
                         eprintln!("[Tray] Failed to emit navigate event: {}", e);
                     }
+                }
+            }
+            "dashboard" | "messages" | "settings" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = window.emit("navigate", event.id.as_ref());
                 }
             }
             "quit" => {

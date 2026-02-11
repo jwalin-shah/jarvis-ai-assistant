@@ -53,10 +53,10 @@
 <style>
   .toast-container {
     position: fixed;
-    bottom: 24px;
+    top: 24px;
     right: 24px;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     gap: 12px;
     z-index: 9999;
     pointer-events: none;
@@ -81,11 +81,11 @@
   @keyframes toastEnter {
     from {
       opacity: 0;
-      transform: translateX(100%) scale(0.9);
+      transform: translateY(-100%) scale(0.9);
     }
     to {
       opacity: 1;
-      transform: translateX(0) scale(1);
+      transform: translateY(0) scale(1);
     }
   }
 
