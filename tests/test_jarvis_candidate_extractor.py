@@ -214,6 +214,12 @@ def test_vague_filter_expanded():
     # Original words still present
     for word in ["it", "this", "that", "me", "you"]:
         assert word in VAGUE
+    # Curly apostrophe variants (iMessage uses U+2019)
+    for word in ["i\u2019m", "i\u2019ll", "i\u2019ve", "i\u2019d", "we\u2019re"]:
+        assert word in VAGUE, f"curly apostrophe '{word}' should be in VAGUE set"
+    # Chat abbreviations
+    for word in ["ik", "ai", "boi"]:
+        assert word in VAGUE
 
 
 def test_entity_canonicalization():
@@ -223,6 +229,22 @@ def test_entity_canonicalization():
     assert ENTITY_ALIASES["place"]["la"] == "Los Angeles"
     # Labels without aliases return nothing
     assert ENTITY_ALIASES.get("org", {}).get("goog") is None
+
+
+def test_tapback_reactions_filtered():
+    """iMessage tapback reactions are junk-filtered."""
+    from jarvis.contacts.junk_filters import is_tapback_reaction
+
+    assert is_tapback_reaction("Loved \u201csome message text\u201d")
+    assert is_tapback_reaction("Liked \u201cOk sounds good\u201d")
+    assert is_tapback_reaction("Emphasized \u201clong term here is a nightmare\u201d")
+    assert is_tapback_reaction("Laughed at \u201cDw I disssapoint me too\u201d")
+    assert is_tapback_reaction("Disliked \u201csomething\u201d")
+    assert is_tapback_reaction("Questioned \u201cwhat?\u201d")
+    # Normal messages should not match
+    assert not is_tapback_reaction("I loved that movie")
+    assert not is_tapback_reaction("Loved it!")
+    assert not is_tapback_reaction("She liked the food")
 
 
 def test_extract_candidates_junk_filter(extractor):
