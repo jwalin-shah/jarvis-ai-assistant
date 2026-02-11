@@ -289,9 +289,71 @@ def cmd_db(args: argparse.Namespace) -> int:
         return _cmd_db_stats(args)
     elif subcommand == "build-profiles":
         return _cmd_db_build_profiles(args)
+    elif subcommand == "feedback":
+        return _cmd_feedback(args)
     else:
         console.print(f"[red]Unknown db subcommand: {subcommand}[/red]")
         return 1
+
+
+def _cmd_feedback(args: argparse.Namespace) -> int:
+    """Display user feedback statistics."""
+    from jarvis.eval.evaluation import get_feedback_store
+
+    store = get_feedback_store()
+    stats = store.get_stats()
+
+    console.print(Panel("[bold]JARVIS User Feedback Statistics[/bold]", title="Feedback"))
+
+    if not stats or stats.get("total_entries", 0) == 0:
+        console.print("[yellow]No feedback recorded yet.[/yellow]")
+        return 0
+
+    table = Table(title="Summary")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Total Entries", str(stats["total_entries"]))
+    table.add_row("Acceptance Rate", f"{stats.get('acceptance_rate', 0) * 100:.1f}%")
+    table.add_row("Edit Rate", f"{stats.get('edit_rate', 0) * 100:.1f}%")
+
+    console.print(table)
+
+    # Actions breakdown
+    actions_table = Table(title="Actions Breakdown")
+    actions_table.add_column("Action", style="bold")
+    actions_table.add_column("Count")
+
+    actions = stats.get("actions", {})
+    for action, count in actions.items():
+        actions_table.add_row(action, str(count))
+
+    console.print("\n", actions_table)
+
+    if args.limit > 0:
+        entries = store.list_feedback(limit=args.limit)
+        if entries:
+            console.print("\n[bold]Recent Feedback Entries:[/bold]")
+            entries_table = Table()
+            entries_table.add_column("Time", style="dim")
+            entries_table.add_column("Action")
+            entries_table.add_column("Suggestion")
+            entries_table.add_column("Edited Text")
+
+            for entry in entries:
+                entries_table.add_row(
+                    entry.timestamp.strftime("%Y-%m-%d %H:%M"),
+                    entry.action.value,
+                    entry.suggestion_text[:50] + "..."
+                    if len(entry.suggestion_text) > 50
+                    else entry.suggestion_text,
+                    (entry.edited_text[:50] + "...")
+                    if entry.edited_text and len(entry.edited_text) > 50
+                    else (entry.edited_text or ""),
+                )
+            console.print(entries_table)
+
+    return 0
 
 
 def cmd_ner(args: argparse.Namespace) -> int:
@@ -817,6 +879,12 @@ def create_parser() -> argparse.ArgumentParser:
     )
     db_build_profiles_parser.add_argument(
         "--force", action="store_true", help="rebuild existing profiles"
+    )
+
+    # db feedback
+    db_feedback_parser = db_subparsers.add_parser("feedback", help="show user feedback statistics")
+    db_feedback_parser.add_argument(
+        "-l", "--limit", type=int, default=5, help="number of recent entries to show"
     )
 
     db_parser.set_defaults(func=cmd_db)

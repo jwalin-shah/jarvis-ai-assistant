@@ -55,9 +55,9 @@
 | Task | Status | Files |
 |------|--------|-------|
 | Hook up desktop feedback | TODO | SmartReplyChipsV2.svelte |
-| Passive feedback detection | TODO | jarvis/watcher.py |
-| Trigger complexity analysis | TODO | jarvis/router.py |
-| Feedback CLI | TODO | jarvis/_cli_main.py |
+| Passive feedback detection | 🚧 In Progress | jarvis/watcher.py |
+| Trigger complexity analysis | ✅ Complete | jarvis/router.py |
+| Feedback CLI | ✅ Complete | jarvis/_cli_main.py |
 
 ## Medium Term
 
