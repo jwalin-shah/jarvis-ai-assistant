@@ -127,8 +127,7 @@ class MobilizationResult:
                 category = CategoryType.FULL_RESPONSE
 
         requires_knowledge = (
-            self.pressure == ResponsePressure.HIGH
-            and self.response_type == ResponseType.ANSWER
+            self.pressure == ResponsePressure.HIGH and self.response_type == ResponseType.ANSWER
         )
 
         return ClassificationResult(

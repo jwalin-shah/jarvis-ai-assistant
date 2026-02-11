@@ -297,10 +297,12 @@ class InProcessEmbedder:
             )
 
         with self._get_gpu_lock():
-            # CRITICAL: Set MLX memory limit BEFORE any MLX operations to prevent 5GB VMS spike on 8GB systems
-            # Without this, MLX allocates 4-5GB virtual memory during batch encoding,
-            # triggering swap even though RSS stays low
-            # Must be set immediately after acquiring GPU lock, before model creation or weight loading
+            # CRITICAL: Set MLX memory limit BEFORE any MLX operations
+            # to prevent 5GB VMS spike on 8GB systems.
+            # Without this, MLX allocates 4-5GB virtual memory during
+            # batch encoding, triggering swap even though RSS stays low.
+            # Must be set immediately after acquiring GPU lock, before
+            # model creation or weight loading.
             mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
             mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB cache
 

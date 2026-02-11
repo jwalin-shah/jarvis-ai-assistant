@@ -67,9 +67,7 @@ def _is_emoji(text: str) -> bool:
         # Emoji ranges: 0x1F300-0x1F9FF covers most emoji
         # 0x2600-0x27BF covers miscellaneous symbols including emoji
         # 0x1F000-0x1F02F covers mahjong and dominoes
-        if (0x1F300 <= code <= 0x1F9FF or
-            0x2600 <= code <= 0x27BF or
-            0x1F000 <= code <= 0x1F02F):
+        if 0x1F300 <= code <= 0x1F9FF or 0x2600 <= code <= 0x27BF or 0x1F000 <= code <= 0x1F02F:
             return True
     return False
 

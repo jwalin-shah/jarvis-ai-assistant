@@ -106,7 +106,8 @@ class KnowledgeGraph:
             with db.connection() as conn:
                 # Load contact profiles as contact nodes
                 profiles = conn.execute(
-                    "SELECT contact_id, contact_name, relationship, message_count FROM contact_profiles"
+                    "SELECT contact_id, contact_name, relationship,"
+                    " message_count FROM contact_profiles"
                 ).fetchall()
 
                 # PERF FIX: Use batch operations add_nodes_from() and add_edges_from()

@@ -340,7 +340,7 @@ def main() -> None:
         if args.context_window > 0:
             prev_all = parse_context_messages(rec.get("context_prev"))
             next_all = parse_context_messages(rec.get("context_next"))
-            prev_slice = prev_all[-args.context_window:] if prev_all else []
+            prev_slice = prev_all[-args.context_window :] if prev_all else []
             next_slice = next_all[: args.context_window] if next_all else []
             prev_messages = prev_slice or None
             next_messages = next_slice or None
@@ -429,7 +429,9 @@ def main() -> None:
     logger.info("  manifest:   %s", args.manifest)
     logger.info(
         "  labels:     pos=%d neg=%d (pos_rate=%.1f%%)",
-        total_pos, negatives, total_pos / len(all_rows) * 100,
+        total_pos,
+        negatives,
+        total_pos / len(all_rows) * 100,
     )
     print("Built fact-filter candidate dataset", flush=True)
     print(f"  all:        {args.output_all} ({len(all_rows)} rows)", flush=True)
@@ -437,8 +439,7 @@ def main() -> None:
     print(f"  dev:        {args.output_dev} ({len(dev_rows)} rows)", flush=True)
     print(f"  manifest:   {args.manifest}", flush=True)
     print(
-        "  labels:     "
-        f"pos={total_pos} neg={negatives} (pos_rate={total_pos / len(all_rows):.1%})",
+        f"  labels:     pos={total_pos} neg={negatives} (pos_rate={total_pos / len(all_rows):.1%})",
         flush=True,
     )
 

@@ -57,9 +57,12 @@ def load_labeled_examples(logger: logging.Logger) -> list[dict]:
     return examples
 
 
-def extract_features(examples: list[dict], logger: logging.Logger) -> tuple[np.ndarray, list[str], list[str]]:
+def extract_features(
+    examples: list[dict], logger: logging.Logger
+) -> tuple[np.ndarray, list[str], list[str]]:
     """Extract BERT + hand-crafted features for all examples."""
     from tqdm import tqdm
+
     from jarvis.features.category_features import CategoryFeatureExtractor
 
     logger.info("Initializing feature extractor...")
@@ -122,6 +125,7 @@ def create_splits(
         # Distribution
         logger.info("Train distribution:")
         from collections import Counter
+
         train_dist = Counter(y_train)
         for cat, count in sorted(train_dist.items()):
             logger.info(f"  {cat:15s}: {count:4d}")
@@ -172,7 +176,7 @@ def save_training_data(
     logger.info(f"✓ Training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
     logger.info(f"  - test.npz: {X_test.shape}")
-    logger.info(f"  - metadata.json")
+    logger.info("  - metadata.json")
 
 
 def main() -> None:
@@ -196,7 +200,9 @@ def main() -> None:
     X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(X, y, ids, logger=logger)
 
     # Save
-    save_training_data(args.output_dir, X_train, X_test, y_train, y_test, ids_train, ids_test, logger)
+    save_training_data(
+        args.output_dir, X_train, X_test, y_train, y_test, ids_train, ids_test, logger
+    )
 
     logger.info(f"\n✓ Training data prepared in {args.output_dir}")
     logger.info("Next: uv run python scripts/train_category_svm.py --data-dir data/gemini_features")

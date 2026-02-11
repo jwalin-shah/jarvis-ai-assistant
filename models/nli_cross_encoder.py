@@ -211,8 +211,7 @@ class NLICrossEncoder:
             with self._encode_lock:
                 self.tokenizer.no_padding()
                 encodings = [
-                    self.tokenizer.encode(premise, hypothesis)
-                    for premise, hypothesis in batch
+                    self.tokenizer.encode(premise, hypothesis) for premise, hypothesis in batch
                 ]
 
             # Pad to uniform length
@@ -222,10 +221,7 @@ class NLICrossEncoder:
                 dtype=np.int32,
             )
             attention_mask = np.array(
-                [
-                    e.attention_mask + [0] * (max_len - len(e.attention_mask))
-                    for e in encodings
-                ],
+                [e.attention_mask + [0] * (max_len - len(e.attention_mask)) for e in encodings],
                 dtype=np.int32,
             )
 
@@ -240,9 +236,7 @@ class NLICrossEncoder:
 
             probs_np = np.array(probs)
             for row in probs_np:
-                all_results.append(
-                    {label: float(row[i]) for i, label in enumerate(NLI_LABELS)}
-                )
+                all_results.append({label: float(row[i]) for i, label in enumerate(NLI_LABELS)})
 
         return all_results
 

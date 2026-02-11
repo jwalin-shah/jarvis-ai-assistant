@@ -40,9 +40,7 @@ def is_bot_message(text: str, chat_id: str = "") -> bool:
         if re.search(r"\b[A-Z][a-z]+\s+[A-Z]", text):
             medium_factors += 1
 
-    if re.search(r"\bapply\b", text, re.IGNORECASE) and re.search(
-        r"\bnow\b", text, re.IGNORECASE
-    ):
+    if re.search(r"\bapply\b", text, re.IGNORECASE) and re.search(r"\bnow\b", text, re.IGNORECASE):
         medium_factors += 1
 
     letters = [c for c in text if c.isalpha()]

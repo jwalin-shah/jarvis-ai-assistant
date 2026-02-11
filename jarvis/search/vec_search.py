@@ -490,7 +490,8 @@ class VecSearcher:
                     # Delete from vec_binary by chunk_rowid
                     try:
                         placeholders = ",".join("?" * len(rowids))
-                        # SECURITY: Validate placeholders only contain "?" and "," before SQL interpolation
+                        # SECURITY: Validate placeholders only contain
+                        # "?" and "," before SQL interpolation
                         _validate_placeholders(placeholders)
                         conn.execute(
                             f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",
