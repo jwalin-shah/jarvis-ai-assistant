@@ -91,9 +91,7 @@ def load_labeled_examples(labeled_data: Path, logger: logging.Logger) -> list[di
     return examples
 
 
-def extract_full_features(
-    examples: list[dict], logger: logging.Logger
-) -> tuple[np.ndarray, list[str], list[str]]:
+def extract_full_features(examples: list[dict], logger: logging.Logger) -> tuple[np.ndarray, list[str], list[str]]:
     """Extract full 915 features: BERT (384) + context BERT (384) + hand-crafted (147)."""
     import numpy as np
     from tqdm import tqdm
@@ -154,9 +152,9 @@ def extract_full_features(
     y = np.array(categories)
 
     logger.info(f"\nExtracted {X.shape[0]} examples with {X.shape[1]} features")
-    logger.info("Feature breakdown:")
-    logger.info("  - 384 BERT embeddings")
-    logger.info("  - 384 context BERT embeddings")
+    logger.info(f"Feature breakdown:")
+    logger.info(f"  - 384 BERT embeddings")
+    logger.info(f"  - 384 context BERT embeddings")
     logger.info(f"  - {X.shape[1] - 768} hand-crafted + spaCy features")
     logger.info(f"  = {X.shape[1]} total")
 
@@ -184,12 +182,11 @@ def create_splits(
     )
 
     if logger:
-        logger.info("\nTrain/test split:")
+        logger.info(f"\nTrain/test split:")
         logger.info(f"  Train: {X_train.shape}")
         logger.info(f"  Test: {X_test.shape}")
 
         from collections import Counter
-
         logger.info("\nTrain distribution:")
         train_dist = Counter(y_train)
         for cat, count in sorted(train_dist.items()):
@@ -249,7 +246,7 @@ def save_training_data(
     logger.info(f"\n✓ Training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
     logger.info(f"  - test.npz: {X_test.shape}")
-    logger.info("  - metadata.json")
+    logger.info(f"  - metadata.json")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -268,11 +265,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     save_training_data(args.output_dir, X_train, X_test, y_train, y_test, logger)
 
-    logger.info("\n" + "=" * 70)
+    logger.info(f"\n" + "=" * 70)
     logger.info("READY TO MERGE AND RETRAIN")
     logger.info("=" * 70)
     logger.info(f"Gemini training data (915 features): {args.output_dir}")
-    logger.info("Next: Merge with original training data and retrain LightGBM")
+    logger.info(f"Next: Merge with original training data and retrain LightGBM")
 
 
 if __name__ == "__main__":

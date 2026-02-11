@@ -221,9 +221,7 @@ def filter_pairs(
 
     capped = []
     contact_items = list(by_contact.items())
-    for _contact, contact_pairs in iter_with_progress(
-        contact_items, "Per-contact capping", progress_every
-    ):
+    for _contact, contact_pairs in iter_with_progress(contact_items, "Per-contact capping", progress_every):
         if len(contact_pairs) > max_per_contact:
             indices = rng.choice(len(contact_pairs), max_per_contact, replace=False)
             contact_pairs = [contact_pairs[i] for i in indices]

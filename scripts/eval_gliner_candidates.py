@@ -8,7 +8,6 @@ Outputs:
     - Printed report with per-label and per-type metrics
     - JSON metrics file at training_data/gliner_goldset/gliner_metrics.json
 """
-
 from __future__ import annotations
 
 import argparse
@@ -109,7 +108,6 @@ def enforce_runtime_stack(allow_unstable_stack: bool) -> None:
 # Span matching
 # ---------------------------------------------------------------------------
 
-
 def jaccard_tokens(a: str, b: str) -> float:
     """Token-level Jaccard similarity (case-insensitive)."""
     ta = set(a.lower().split())
@@ -140,7 +138,6 @@ def spans_match(pred_text: str, pred_label: str, gold_text: str, gold_label: str
 # ---------------------------------------------------------------------------
 # Metrics computation
 # ---------------------------------------------------------------------------
-
 
 @dataclass
 class Metrics:
@@ -234,16 +231,14 @@ def compute_metrics(
                 per_label[gc["span_label"]].fn += 1
                 per_type[gc.get("fact_type", "unknown")].fn += 1
                 per_slice[slc].fn += 1
-                errors.append(
-                    {
-                        "type": "fn",
-                        "sample_id": sid,
-                        "slice": slc,
-                        "message_text": rec["message_text"][:100],
-                        "gold_span": gc["span_text"],
-                        "gold_label": gc["span_label"],
-                    }
-                )
+                errors.append({
+                    "type": "fn",
+                    "sample_id": sid,
+                    "slice": slc,
+                    "message_text": rec["message_text"][:100],
+                    "gold_span": gc["span_text"],
+                    "gold_label": gc["span_label"],
+                })
 
         # Unmatched preds = FP
         for pi, pc in enumerate(pred_cands):
@@ -254,16 +249,14 @@ def compute_metrics(
                 ftype = pc.get("fact_type", "unknown")
                 per_type[ftype].fp += 1
                 per_slice[slc].fp += 1
-                errors.append(
-                    {
-                        "type": "fp",
-                        "sample_id": sid,
-                        "slice": slc,
-                        "message_text": rec["message_text"][:100],
-                        "pred_span": pc.get("span_text", ""),
-                        "pred_label": label,
-                    }
-                )
+                errors.append({
+                    "type": "fp",
+                    "sample_id": sid,
+                    "slice": slc,
+                    "message_text": rec["message_text"][:100],
+                    "pred_span": pc.get("span_text", ""),
+                    "pred_label": label,
+                })
 
     return {
         "overall": overall.to_dict(),
@@ -277,7 +270,6 @@ def compute_metrics(
 # ---------------------------------------------------------------------------
 # Threshold sweep
 # ---------------------------------------------------------------------------
-
 
 def threshold_sweep(
     gold_records: list[dict],
@@ -293,14 +285,14 @@ def threshold_sweep(
         # Filter predictions by threshold
         filtered = {}
         for sid, preds in all_raw_preds.items():
-            filtered[sid] = [p for p in preds if p.get("gliner_score", 1.0) >= thresh]
+            filtered[sid] = [
+                p for p in preds if p.get("gliner_score", 1.0) >= thresh
+            ]
         metrics = compute_metrics(gold_records, filtered)
-        results.append(
-            {
-                "threshold": thresh,
-                **metrics["overall"],
-            }
-        )
+        results.append({
+            "threshold": thresh,
+            **metrics["overall"],
+        })
     return results
 
 
@@ -308,13 +300,11 @@ def threshold_sweep(
 # Error slices
 # ---------------------------------------------------------------------------
 
-
 def compute_error_slices(gold_records: list[dict], errors: list[dict]) -> dict:
     """Compute error statistics by message characteristics."""
     short_msgs = [e for e in errors if len(e["message_text"]) < 20]
     fp_on_negatives = [
-        e
-        for e in errors
+        e for e in errors
         if e["type"] == "fp" and e["slice"] in ("hard_negative", "random_negative")
     ]
 
@@ -396,7 +386,6 @@ def compute_raw_prediction_stats(all_raw_preds: dict[str, list[dict]]) -> dict:
 # Report printing
 # ---------------------------------------------------------------------------
 
-
 def print_report(
     metrics: dict,
     sweep: list[dict],
@@ -431,82 +420,59 @@ def print_report(
         for row in raw_stats["raw_top_labels"][:8]:
             print(f"    - {row['label']}: {row['count']}", flush=True)
 
-    print(
-        f"\nOverall:  P={ov['precision']:.3f}  R={ov['recall']:.3f}  "
-        f"F1={ov['f1']:.3f}  (TP={ov['tp']} FP={ov['fp']} FN={ov['fn']})",
-        flush=True,
-    )
+    print(f"\nOverall:  P={ov['precision']:.3f}  R={ov['recall']:.3f}  "
+          f"F1={ov['f1']:.3f}  (TP={ov['tp']} FP={ov['fp']} FN={ov['fn']})", flush=True)
 
     # Per-label table
     print(f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}", flush=True)
     print("-" * 45, flush=True)
     for label, m in sorted(metrics["per_label"].items(), key=lambda x: -x[1]["support"]):
-        print(
-            f"{label:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
-            f"{m['f1']:>6.3f} {m['support']:>5}",
-            flush=True,
-        )
+        print(f"{label:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
+              f"{m['f1']:>6.3f} {m['support']:>5}", flush=True)
 
     # Per-type table
     print(f"\n{'Fact Type':<25} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}", flush=True)
     print("-" * 50, flush=True)
     for ftype, m in sorted(metrics["per_type"].items(), key=lambda x: -x[1]["support"]):
-        print(
-            f"{ftype:<25} {m['precision']:>6.3f} {m['recall']:>6.3f} "
-            f"{m['f1']:>6.3f} {m['support']:>5}",
-            flush=True,
-        )
+        print(f"{ftype:<25} {m['precision']:>6.3f} {m['recall']:>6.3f} "
+              f"{m['f1']:>6.3f} {m['support']:>5}", flush=True)
 
     # Per-slice table
     print(f"\n{'Slice':<20} {'P':>6} {'R':>6} {'F1':>6} {'Sup':>5}", flush=True)
     print("-" * 45, flush=True)
     for slc, m in sorted(metrics["per_slice"].items()):
-        print(
-            f"{slc:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
-            f"{m['f1']:>6.3f} {m['support']:>5}",
-            flush=True,
-        )
+        print(f"{slc:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
+              f"{m['f1']:>6.3f} {m['support']:>5}", flush=True)
 
     # Threshold sweep
     print(f"\n{'Thresh':>7} {'P':>6} {'R':>6} {'F1':>6} {'TP':>5} {'FP':>5} {'FN':>5}", flush=True)
     print("-" * 45, flush=True)
     for row in sweep:
-        print(
-            f"{row['threshold']:>7.2f} {row['precision']:>6.3f} {row['recall']:>6.3f} "
-            f"{row['f1']:>6.3f} {row['tp']:>5} {row['fp']:>5} {row['fn']:>5}",
-            flush=True,
-        )
+        print(f"{row['threshold']:>7.2f} {row['precision']:>6.3f} {row['recall']:>6.3f} "
+              f"{row['f1']:>6.3f} {row['tp']:>5} {row['fp']:>5} {row['fn']:>5}", flush=True)
 
     # Error slices
     print("\nError Slices:", flush=True)
     print(f"  Short message (<20 char) errors: {error_slices['short_message_errors']}", flush=True)
     print(f"  FP on negative messages: {error_slices['fp_on_negatives']}", flush=True)
     print(f"  Total errors: {error_slices['total_errors']}", flush=True)
-    print(
-        f"  Message length distribution: {error_slices['message_length_distribution']}", flush=True
-    )
+    print(f"  Message length distribution: {error_slices['message_length_distribution']}", flush=True)
 
     # Top FP examples
     fps = [e for e in metrics["errors"] if e["type"] == "fp"][:10]
     if fps:
         print("\nTop False Positives (first 10):", flush=True)
         for e in fps:
-            print(
-                f'  [{e["slice"]}] "{e["message_text"][:60]}..." '
-                f"-> {e.get('pred_span', '')} ({e.get('pred_label', '')})",
-                flush=True,
-            )
+            print(f"  [{e['slice']}] \"{e['message_text'][:60]}...\" "
+                  f"-> {e.get('pred_span', '')} ({e.get('pred_label', '')})", flush=True)
 
     # Top FN examples
     fns = [e for e in metrics["errors"] if e["type"] == "fn"][:10]
     if fns:
         print("\nTop False Negatives (first 10):", flush=True)
         for e in fns:
-            print(
-                f'  [{e["slice"]}] "{e["message_text"][:60]}..." '
-                f"-> missed {e.get('gold_span', '')} ({e.get('gold_label', '')})",
-                flush=True,
-            )
+            print(f"  [{e['slice']}] \"{e['message_text'][:60]}...\" "
+                  f"-> missed {e.get('gold_span', '')} ({e.get('gold_label', '')})", flush=True)
 
     print("\n" + "=" * 60, flush=True)
 
@@ -514,7 +480,6 @@ def print_report(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-
 
 def run_evaluation(
     gold_path: Path,
@@ -552,10 +517,8 @@ def run_evaluation(
     log.info(f"  Negative: {len(neg)} ({neg_with_cands} with candidates)")
 
     if pos_with_cands < len(pos) * 0.5:
-        log.warning(
-            f"WARNING: Only {pos_with_cands}/{len(pos)} positive messages "
-            "have expected_candidates. Gold set may be incomplete."
-        )
+        log.warning(f"WARNING: Only {pos_with_cands}/{len(pos)} positive messages "
+                     "have expected_candidates. Gold set may be incomplete.")
 
     # Initialize CandidateExtractor
     log.info("Initializing CandidateExtractor...")
@@ -584,7 +547,8 @@ def run_evaluation(
     for i, rec in enumerate(gold_records):
         if (i + 1) % 50 == 0:
             elapsed = time.time() - t0
-            print(f"  Processing {i + 1}/{len(gold_records)} ({elapsed:.1f}s elapsed)", flush=True)
+            print(f"  Processing {i + 1}/{len(gold_records)} "
+                  f"({elapsed:.1f}s elapsed)", flush=True)
 
         prev_messages: list[str] | None = None
         next_messages: list[str] | None = None
@@ -642,10 +606,8 @@ def run_evaluation(
     elapsed = time.time() - t0
     total_preds = sum(len(v) for v in predictions.values())
     raw_total_preds = sum(len(v) for v in all_raw_preds.values())
-    log.info(
-        f"Extraction complete: {total_preds} candidates "
-        f"in {elapsed:.1f}s ({elapsed / len(gold_records) * 1000:.1f}ms/msg)"
-    )
+    log.info(f"Extraction complete: {total_preds} candidates "
+             f"in {elapsed:.1f}s ({elapsed / len(gold_records) * 1000:.1f}ms/msg)")
     log.info(f"Raw predictions (pre-filter): {raw_total_preds}")
 
     # Compute metrics
@@ -718,7 +680,8 @@ def main():
         choices=["pipeline", "raw"],
         default="pipeline",
         help=(
-            "pipeline = evaluate CandidateExtractor filters; raw = evaluate direct GLiNER output"
+            "pipeline = evaluate CandidateExtractor filters; "
+            "raw = evaluate direct GLiNER output"
         ),
     )
     parser.add_argument(

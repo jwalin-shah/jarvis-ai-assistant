@@ -45,11 +45,8 @@ def backfill(
     db = get_db()
     db.init_schema()
 
-    print(
-        f"Starting backfill: max_contacts={max_contacts}, "
-        f"messages_per_contact={messages_per_contact}, nli={use_nli}",
-        flush=True,
-    )
+    print(f"Starting backfill: max_contacts={max_contacts}, "
+          f"messages_per_contact={messages_per_contact}, nli={use_nli}", flush=True)
 
     # Get conversations sorted by message count
     reader = ChatDBReader()
@@ -84,11 +81,8 @@ def backfill(
 
             processed += 1
             elapsed = time.time() - start_time
-            eta = (
-                elapsed / processed * (min(max_contacts, len(conversations)) - processed)
-                if processed > 0
-                else 0
-            )
+            eta = (elapsed / processed * (min(max_contacts, len(conversations)) - processed)
+                   if processed > 0 else 0)
 
             print(
                 f"[{processed}/{max_contacts}] {chat_id[:30]:30s} "
@@ -152,7 +146,7 @@ def _export_facts(output_file: str) -> None:
                 )
                 if f.source_text:
                     src = f.source_text[:120].replace("\n", " ")
-                    fp.write(f'    src: "{src}"\n')
+                    fp.write(f"    src: \"{src}\"\n")
             fp.write("\n")
 
     print(f"Exported {len(facts)} facts to {output_file}", flush=True)
@@ -166,10 +160,7 @@ def main() -> None:
     )
     parser.add_argument("--no-nli", action="store_true", help="Skip NLI verification")
     parser.add_argument(
-        "--output",
-        "-o",
-        type=str,
-        default=None,
+        "--output", "-o", type=str, default=None,
         help="Export extracted facts to this file for review",
     )
     args = parser.parse_args()

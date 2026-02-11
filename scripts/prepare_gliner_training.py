@@ -71,207 +71,56 @@ class TrainingExample:
 # Synthetic test cases with labels for validation
 SYNTHETIC_TEST_CASES: list[dict[str, Any]] = [
     # === VALID FACTS (label=1) ===
+
     # Preferences - food
-    {
-        "text": "I love Thai food, especially pad thai",
-        "candidate": "Thai food",
-        "entity_type": "food_preference",
-        "label": 1,
-        "category": "preference",
-        "reasoning": "Clear preference with specific food",
-    },
-    {
-        "text": "I can't stand cilantro, it tastes like soap",
-        "candidate": "cilantro",
-        "entity_type": "disliked_food",
-        "label": 1,
-        "category": "preference",
-        "reasoning": "Clear dislike with specific reason",
-    },
-    {
-        "text": "obsessed with this new ramen place",
-        "candidate": "ramen place",
-        "entity_type": "food_preference",
-        "label": 1,
-        "category": "preference",
-        "reasoning": "Slang 'obsessed with' indicates strong preference",
-    },
-    {
-        "text": "I'm allergic to peanuts so be careful",
-        "candidate": "peanuts",
-        "entity_type": "allergy",
-        "label": 1,
-        "category": "health",
-        "reasoning": "Medical fact - allergy",
-    },
+    {"text": "I love Thai food, especially pad thai", "candidate": "Thai food", "entity_type": "food_preference", "label": 1, "category": "preference", "reasoning": "Clear preference with specific food"},
+    {"text": "I can't stand cilantro, it tastes like soap", "candidate": "cilantro", "entity_type": "disliked_food", "label": 1, "category": "preference", "reasoning": "Clear dislike with specific reason"},
+    {"text": "obsessed with this new ramen place", "candidate": "ramen place", "entity_type": "food_preference", "label": 1, "category": "preference", "reasoning": "Slang 'obsessed with' indicates strong preference"},
+    {"text": "I'm allergic to peanuts so be careful", "candidate": "peanuts", "entity_type": "allergy", "label": 1, "category": "health", "reasoning": "Medical fact - allergy"},
+
     # Locations
-    {
-        "text": "I live in San Francisco now",
-        "candidate": "San Francisco",
-        "entity_type": "current_location",
-        "label": 1,
-        "category": "location",
-        "reasoning": "Clear current location statement",
-    },
-    {
-        "text": "moving to Austin next month",
-        "candidate": "Austin",
-        "entity_type": "future_location",
-        "label": 1,
-        "category": "location",
-        "reasoning": "Future location with temporal marker",
-    },
-    {
-        "text": "grew up in Ohio but left for college",
-        "candidate": "Ohio",
-        "entity_type": "past_location",
-        "label": 1,
-        "category": "location",
-        "reasoning": "Past location with context",
-    },
+    {"text": "I live in San Francisco now", "candidate": "San Francisco", "entity_type": "current_location", "label": 1, "category": "location", "reasoning": "Clear current location statement"},
+    {"text": "moving to Austin next month", "candidate": "Austin", "entity_type": "future_location", "label": 1, "category": "location", "reasoning": "Future location with temporal marker"},
+    {"text": "grew up in Ohio but left for college", "candidate": "Ohio", "entity_type": "past_location", "label": 1, "category": "location", "reasoning": "Past location with context"},
+
     # Work
-    {
-        "text": "I work at Google as a software engineer",
-        "candidate": "Google",
-        "entity_type": "employer",
-        "label": 1,
-        "category": "work",
-        "reasoning": "Clear employer statement",
-    },
-    {
-        "text": "just got a job at a startup downtown",
-        "candidate": "startup",
-        "entity_type": "employer",
-        "label": 1,
-        "category": "work",
-        "reasoning": "Employment context clear",
-    },
+    {"text": "I work at Google as a software engineer", "candidate": "Google", "entity_type": "employer", "label": 1, "category": "work", "reasoning": "Clear employer statement"},
+    {"text": "just got a job at a startup downtown", "candidate": "startup", "entity_type": "employer", "label": 1, "category": "work", "reasoning": "Employment context clear"},
+
     # Relationships
-    {
-        "text": "My sister Sarah is visiting this weekend",
-        "candidate": "Sarah",
-        "entity_type": "family_member",
-        "label": 1,
-        "category": "relationship",
-        "reasoning": "Family relationship with name",
-    },
-    {
-        "text": "my mom's birthday is tomorrow",
-        "candidate": "mom",
-        "entity_type": "family_member",
-        "label": 1,
-        "category": "relationship",
-        "reasoning": "Family relationship mentioned",
-    },
+    {"text": "My sister Sarah is visiting this weekend", "candidate": "Sarah", "entity_type": "family_member", "label": 1, "category": "relationship", "reasoning": "Family relationship with name"},
+    {"text": "my mom's birthday is tomorrow", "candidate": "mom", "entity_type": "family_member", "label": 1, "category": "relationship", "reasoning": "Family relationship mentioned"},
+
     # === FALSE POSITIVES (label=0) ===
+
     # Vague/subjectless
-    {
-        "text": "yeah same, I love it",
-        "candidate": "it",
-        "entity_type": "thing_preference",
-        "label": 0,
-        "category": "preference",
-        "reasoning": "Vague pronoun 'it' - unknown referent",
-    },
-    {
-        "text": "me too! love that",
-        "candidate": "that",
-        "entity_type": "thing_preference",
-        "label": 0,
-        "category": "preference",
-        "reasoning": "Vague pronoun 'that' - context dependent",
-    },
-    {
-        "text": "it's great",
-        "candidate": "it",
-        "entity_type": "thing_preference",
-        "label": 0,
-        "category": "preference",
-        "reasoning": "Vague pronoun, no specific referent",
-    },
-    {
-        "text": "that thing is amazing",
-        "candidate": "that thing",
-        "entity_type": "thing_preference",
-        "label": 0,
-        "category": "preference",
-        "reasoning": "Vague noun phrase",
-    },
+    {"text": "yeah same, I love it", "candidate": "it", "entity_type": "thing_preference", "label": 0, "category": "preference", "reasoning": "Vague pronoun 'it' - unknown referent"},
+    {"text": "me too! love that", "candidate": "that", "entity_type": "thing_preference", "label": 0, "category": "preference", "reasoning": "Vague pronoun 'that' - context dependent"},
+    {"text": "it's great", "candidate": "it", "entity_type": "thing_preference", "label": 0, "category": "preference", "reasoning": "Vague pronoun, no specific referent"},
+    {"text": "that thing is amazing", "candidate": "that thing", "entity_type": "thing_preference", "label": 0, "category": "preference", "reasoning": "Vague noun phrase"},
+
     # Too short/insufficient context
-    {
-        "text": "I like sf",
-        "candidate": "sf",
-        "entity_type": "current_location",
-        "label": 0,
-        "category": "location",
-        "reasoning": "Abbreviation without clear context",
-    },
-    {
-        "text": "love this",
-        "candidate": "this",
-        "entity_type": "thing_preference",
-        "label": 0,
-        "category": "preference",
-        "reasoning": "Vague demonstrative",
-    },
+    {"text": "I like sf", "candidate": "sf", "entity_type": "current_location", "label": 0, "category": "location", "reasoning": "Abbreviation without clear context"},
+    {"text": "love this", "candidate": "this", "entity_type": "thing_preference", "label": 0, "category": "preference", "reasoning": "Vague demonstrative"},
+
     # Bot/spam patterns
-    {
-        "text": "Your CVS Pharmacy prescription is ready",
-        "candidate": "CVS Pharmacy",
-        "entity_type": "employer",
-        "label": 0,
-        "category": "work",
-        "reasoning": "Bot message - automated",
-    },
-    {
-        "text": "Check out this job at Amazon",
-        "candidate": "Amazon",
-        "entity_type": "employer",
-        "label": 0,
-        "category": "work",
-        "reasoning": "Spam/LinkedIn message",
-    },
+    {"text": "Your CVS Pharmacy prescription is ready", "candidate": "CVS Pharmacy", "entity_type": "employer", "label": 0, "category": "work", "reasoning": "Bot message - automated"},
+    {"text": "Check out this job at Amazon", "candidate": "Amazon", "entity_type": "employer", "label": 0, "category": "work", "reasoning": "Spam/LinkedIn message"},
+
     # Misclassified
-    {
-        "text": "Dear John, I hope this finds you well",
-        "candidate": "John",
-        "entity_type": "friend_name",
-        "label": 0,
-        "category": "relationship",
-        "reasoning": "Professional email, not personal fact",
-    },
+    {"text": "Dear John, I hope this finds you well", "candidate": "John", "entity_type": "friend_name", "label": 0, "category": "relationship", "reasoning": "Professional email, not personal fact"},
+
     # === EDGE CASES (ambiguous) ===
-    {
-        "text": "moving next week",
-        "candidate": "next week",
-        "entity_type": "date_reference",
-        "label": 0,
-        "category": "temporal",
-        "reasoning": "Temporal marker but missing location (dropped subject)",
-    },
-    {
-        "text": "same lol",
-        "candidate": "",
-        "entity_type": "",
-        "label": 0,
-        "category": "",
-        "reasoning": "No extractable content",
-    },
-    {
-        "text": "my friend is great",
-        "candidate": "friend",
-        "entity_type": "friend_name",
-        "label": 0,
-        "category": "relationship",
-        "reasoning": "Generic, no specific name mentioned",
-    },
+
+    {"text": "moving next week", "candidate": "next week", "entity_type": "date_reference", "label": 0, "category": "temporal", "reasoning": "Temporal marker but missing location (dropped subject)"},
+    {"text": "same lol", "candidate": "", "entity_type": "", "label": 0, "category": "", "reasoning": "No extractable content"},
+    {"text": "my friend is great", "candidate": "friend", "entity_type": "friend_name", "label": 0, "category": "relationship", "reasoning": "Generic, no specific name mentioned"},
 ]
 
 
 def generate_synthetic_dataset(logger: logging.Logger) -> list[TrainingExample]:
     """Generate training examples from synthetic test cases."""
     from tqdm import tqdm
-
     examples = []
     for case in tqdm(SYNTHETIC_TEST_CASES, desc="Generating synthetic", unit="case"):
         # Skip empty cases
@@ -292,9 +141,7 @@ def generate_synthetic_dataset(logger: logging.Logger) -> list[TrainingExample]:
     return examples
 
 
-def load_imessage_samples(
-    db_path: Path | None = None, limit: int = 100, logger: logging.Logger | None = None
-) -> list[dict[str, Any]]:
+def load_imessage_samples(db_path: Path | None = None, limit: int = 100, logger: logging.Logger | None = None) -> list[dict[str, Any]]:
     """Load sample messages from iMessage database.
 
     Returns messages that might contain personal facts.
@@ -342,14 +189,12 @@ def load_imessage_samples(
 
         for row in cursor.fetchall():
             text, date, chat_name = row
-            messages.append(
-                {
-                    "text": text,
-                    "date": date,
-                    "chat": chat_name,
-                    "source": "imessage",
-                }
-            )
+            messages.append({
+                "text": text,
+                "date": date,
+                "chat": chat_name,
+                "source": "imessage",
+            })
 
         conn.close()
         if logger:
@@ -362,9 +207,7 @@ def load_imessage_samples(
     return messages
 
 
-def extract_candidates_with_gliner(
-    messages: list[dict[str, Any]], logger: logging.Logger | None = None
-) -> list[TrainingExample]:
+def extract_candidates_with_gliner(messages: list[dict[str, Any]], logger: logging.Logger | None = None) -> list[TrainingExample]:
     """Run GLiNER on messages via CandidateExtractor and create training examples.
 
     Uses the canonical CandidateExtractor for consistent label sets and thresholds.
@@ -381,15 +224,13 @@ def extract_candidates_with_gliner(
 
     examples = []
     from tqdm import tqdm
-
     for msg in tqdm(messages, desc="Extracting candidates", unit="msg"):
         text = msg.get("text", "")
         if not text:
             continue
 
         candidates = extractor.extract_candidates(
-            text,
-            message_id=0,  # no real ROWID for training prep
+            text, message_id=0,  # no real ROWID for training prep
         )
 
         for c in candidates:
@@ -415,12 +256,9 @@ def _fact_type_to_category(fact_type: str) -> str:
     return "unknown"
 
 
-def apply_heuristic_labels(
-    examples: list[TrainingExample], logger: logging.Logger | None = None
-) -> list[TrainingExample]:
+def apply_heuristic_labels(examples: list[TrainingExample], logger: logging.Logger | None = None) -> list[TrainingExample]:
     """Apply heuristic rules to suggest labels (for initial training)."""
     import re
-
     from tqdm import tqdm
 
     for ex in tqdm(examples, desc="Applying heuristics", unit="ex"):
@@ -460,9 +298,7 @@ def apply_heuristic_labels(
     return examples
 
 
-def export_for_training(
-    examples: list[TrainingExample], output_path: Path, logger: logging.Logger
-) -> None:
+def export_for_training(examples: list[TrainingExample], output_path: Path, logger: logging.Logger) -> None:
     """Export training examples in JSONL format."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
