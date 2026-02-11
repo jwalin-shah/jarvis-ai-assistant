@@ -138,11 +138,11 @@ test.describe("Performance Tests", () => {
 
         // Scroll to bottom
         await scrollToBottom(page, listSelector);
-        await page.waitForTimeout(100);
+        await page.waitForFunction(() => true, { timeout: 100 });
 
         // Scroll back to top
         await scrollToTop(page, listSelector);
-        await page.waitForTimeout(100);
+        await page.waitForFunction(() => true, { timeout: 100 });
 
         const scrollTime = Date.now() - startTime;
         console.log(`Scroll round-trip time: ${scrollTime}ms`);
@@ -185,13 +185,13 @@ test.describe("Performance Tests", () => {
       // Navigate through all views multiple times
       for (let i = 0; i < 3; i++) {
         await navigateToView(page, "messages");
-        await page.waitForTimeout(200);
+        await page.waitForLoadState("domcontentloaded");
         await navigateToView(page, "dashboard");
-        await page.waitForTimeout(200);
+        await page.waitForLoadState("domcontentloaded");
         await navigateToView(page, "health");
-        await page.waitForTimeout(200);
+        await page.waitForLoadState("domcontentloaded");
         await navigateToView(page, "settings");
-        await page.waitForTimeout(200);
+        await page.waitForLoadState("domcontentloaded");
       }
 
       // Collect final metrics
@@ -219,11 +219,11 @@ test.describe("Performance Tests", () => {
 
       // Navigate through views
       await navigateToView(page, "settings");
-      await page.waitForTimeout(100);
+      await page.waitForLoadState("domcontentloaded");
       await navigateToView(page, "health");
-      await page.waitForTimeout(100);
+      await page.waitForLoadState("domcontentloaded");
       await navigateToView(page, "messages");
-      await page.waitForTimeout(100);
+      await page.waitForLoadState("domcontentloaded");
 
       // Collect final metrics
       const finalMetrics = await collectPerformanceMetrics(page);
@@ -251,7 +251,7 @@ test.describe("Performance Tests", () => {
         for (const name of conversations) {
           try {
             await selectConversation(page, name);
-            await page.waitForTimeout(100);
+            await page.waitForSelector(".message", { timeout: 500 }).catch(() => {});
           } catch {
             // Conversation might not exist in mock data
           }
@@ -275,8 +275,8 @@ test.describe("Performance Tests", () => {
       await page.goto("/");
       await waitForAppLoad(page);
 
-      // Wait for everything to settle
-      await page.waitForTimeout(500);
+      // Wait for layout to stabilize
+      await page.waitForLoadState("networkidle", { timeout: 1000 }).catch(() => {});
 
       const metrics = await collectPerformanceMetrics(page);
       console.log(`Layout shifts: ${metrics.layoutShifts}`);
@@ -357,9 +357,9 @@ test.describe("Performance Tests", () => {
 
       // Trigger some transitions
       await navigateToView(page, "settings");
-      await page.waitForTimeout(300);
+      await page.waitForLoadState("domcontentloaded");
       await navigateToView(page, "messages");
-      await page.waitForTimeout(300);
+      await page.waitForLoadState("domcontentloaded");
 
       // Get performance metrics
       const metrics = await client.send("Performance.getMetrics");

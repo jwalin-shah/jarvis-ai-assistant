@@ -119,16 +119,6 @@
     });
   }
 
-  // Get attachment type icon
-  function getTypeIcon(mimeType: string | null): string {
-    if (!mimeType) return "file";
-    if (mimeType.startsWith("image/")) return "image";
-    if (mimeType.startsWith("video/")) return "video";
-    if (mimeType.startsWith("audio/")) return "music";
-    if (mimeType.includes("pdf")) return "file-text";
-    return "file";
-  }
-
   // Get thumbnail URL
   function getThumbnailUrl(filePath: string | null): string | null {
     if (!filePath) return null;
@@ -178,7 +168,7 @@
       "#5856d6",
       "#007aff",
     ];
-    return colors[index % colors.length];
+    return colors[index % colors.length]!;
   }
 
   onMount(() => {

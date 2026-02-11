@@ -20,7 +20,6 @@ import type {
   Calendar,
   CalendarEvent,
   ClusterResult,
-  ContactFact,
   ContactProfileDetail,
   ContactsLeaderboard,
   ContactStats,
@@ -43,7 +42,6 @@ import type {
   DigestExportRequest,
   DigestExportResponse,
   DigestGenerateRequest,
-  DigestPeriod,
   DigestPreferences,
   DigestPreferencesUpdateRequest,
   DigestResponse,
@@ -104,7 +102,6 @@ import type {
   TimingSuggestionsResponse,
   TrendingPatterns,
   TopicsResponse,
-  UserAction,
   VariantConfig,
 } from "./types";
 
@@ -334,7 +331,7 @@ class ApiClient {
     const url = `/conversations/search?${params.toString()}`;
     const response = await fetch(`${this.baseUrl}${url}`, {
       headers: { "Content-Type": "application/json" },
-      signal,
+      signal: signal ?? null,
     });
 
     if (!response.ok) {
@@ -368,12 +365,15 @@ class ApiClient {
     const socketReady = await ensureSocketConnected();
     if (socketReady) {
       try {
-        const result = await jarvis.semanticSearch({
+        const params: { query: string; limit: number; threshold: number; filters?: SemanticSearchFilters } = {
           query,
           limit: options.limit ?? 20,
           threshold: options.threshold ?? 0.3,
-          filters: options.filters,
-        });
+        };
+        if (options.filters) {
+          params.filters = options.filters;
+        }
+        const result = await jarvis.semanticSearch(params);
         return {
           query,
           results: result.results.map((r) => ({
@@ -401,7 +401,7 @@ class ApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal,
+      signal: signal ?? null,
     });
 
     if (!response.ok) {
@@ -480,11 +480,14 @@ class ApiClient {
     const socketReady = await ensureSocketConnected();
     if (socketReady) {
       try {
-        const result = await jarvis.generateDraft({
+        const params: { chat_id: string; context_messages: number; instruction?: string } = {
           chat_id: chatId,
-          instruction,
           context_messages: 20,
-        });
+        };
+        if (instruction) {
+          params.instruction = instruction;
+        }
+        const result = await jarvis.generateDraft(params);
         return {
           suggestions: result.suggestions.map((s) => ({
             text: s.text,
@@ -508,7 +511,7 @@ class ApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal,
+      signal: signal ?? null,
     });
 
     if (!response.ok) {
@@ -592,7 +595,7 @@ class ApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal,
+      signal: signal ?? null,
     });
 
     if (!response.ok) {
@@ -677,7 +680,7 @@ class ApiClient {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal,
+        signal: signal ?? null,
       }
     );
 
@@ -717,7 +720,7 @@ class ApiClient {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal,
+        signal: signal ?? null,
       }
     );
 
@@ -737,7 +740,7 @@ class ApiClient {
     let filename = "conversation.pdf";
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="?([^"]+)"?/);
-      if (match) {
+      if (match && match[1]) {
         filename = match[1];
       }
     }
@@ -843,7 +846,7 @@ class ApiClient {
       `${this.baseUrl}/priority?${params.toString()}`,
       {
         headers: { "Content-Type": "application/json" },
-        signal,
+        signal: signal ?? null,
       }
     );
 
@@ -1158,7 +1161,7 @@ class ApiClient {
       `/conversations/${encodeURIComponent(chatId)}/threads/analyze?${params.toString()}`,
       {
         method: "POST",
-        body: config ? JSON.stringify(config) : undefined,
+        body: config ? JSON.stringify(config) : null,
       }
     );
   }
@@ -1243,7 +1246,7 @@ class ApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal,
+      signal: signal ?? null,
     });
 
     if (!response.ok) {
@@ -1262,11 +1265,11 @@ class ApiClient {
   }
 
   async getDailyDigest(signal?: AbortSignal): Promise<DigestResponse> {
-    return this.request<DigestResponse>("/digest/daily", { signal });
+    return this.request<DigestResponse>("/digest/daily", signal ? { signal } : {});
   }
 
   async getWeeklyDigest(signal?: AbortSignal): Promise<DigestResponse> {
-    return this.request<DigestResponse>("/digest/weekly", { signal });
+    return this.request<DigestResponse>("/digest/weekly", signal ? { signal } : {});
   }
 
   async exportDigest(
@@ -1283,7 +1286,7 @@ class ApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal,
+      signal: signal ?? null,
     });
 
     if (!response.ok) {

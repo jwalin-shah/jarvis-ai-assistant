@@ -2,14 +2,12 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import {
     conversationsStore,
-    selectedConversation,
     loadMoreMessages,
     pollMessages,
     stopMessagePolling,
     highlightedMessageId,
     scrollToMessageId,
     clearScrollTarget,
-    messagesWithOptimistic,
     addOptimisticMessage,
     updateOptimisticMessage,
     removeOptimisticMessage,
@@ -31,7 +29,6 @@
   import { EmptyState } from './ui';
   import { MessageIcon } from './icons';
   import { formatDate, getMessageDateString } from '../utils/date';
-  import { isOptimisticMessage } from '../types';
 
   // Panel visibility state
   let showDraftPanel = $state(false);
@@ -121,7 +118,7 @@
   }
 
   function calculateVisibleRange(scrollTop: number, containerHeight: number) {
-    const messages = $conversationsStore.messages;
+    const messages = conversationsStore.messages;
     if (messages.length === 0) {
       visibleStartIndex = 0;
       visibleEndIndex = 0;
@@ -137,7 +134,7 @@
     let startIdx = 0;
 
     for (let i = 0; i < messages.length; i++) {
-      const height = getMessageHeight(messages[i].id);
+      const height = getMessageHeight(messages[i]!.id);
       if (accumulatedHeight + height >= adjustedScrollTop) {
         startIdx = i;
         break;
@@ -149,7 +146,7 @@
 
     let topPadding = 0;
     for (let i = 0; i < startIdx; i++) {
-      topPadding += getMessageHeight(messages[i].id);
+      topPadding += getMessageHeight(messages[i]!.id);
     }
 
     let visibleHeight = 0;
@@ -157,7 +154,7 @@
 
     for (let i = startIdx; i < messages.length; i++) {
       endIdx = i + 1;
-      visibleHeight += getMessageHeight(messages[i].id);
+      visibleHeight += getMessageHeight(messages[i]!.id);
       if (visibleHeight >= containerHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT) {
         break;
       }
@@ -167,7 +164,7 @@
 
     let bottomPadding = 0;
     for (let i = endIdx; i < messages.length; i++) {
-      bottomPadding += getMessageHeight(messages[i].id);
+      bottomPadding += getMessageHeight(messages[i]!.id);
     }
 
     visibleStartIndex = startIdx;
@@ -177,7 +174,7 @@
   }
 
   function getVisibleMessages(): Message[] {
-    return $messagesWithOptimistic.slice(visibleStartIndex, visibleEndIndex);
+    return conversationsStore.messagesWithOptimistic.slice(visibleStartIndex, visibleEndIndex);
   }
 
   let rafPending = false;
@@ -193,13 +190,13 @@
   }
 
   async function scrollToMessage(messageId: number) {
-    const messages = $conversationsStore.messages;
+    const messages = conversationsStore.messages;
     const msgIndex = messages.findIndex((m) => m.id === messageId);
     if (msgIndex === -1) return;
 
     let scrollPosition = 48;
     for (let i = 0; i < msgIndex; i++) {
-      scrollPosition += getMessageHeight(messages[i].id);
+      scrollPosition += getMessageHeight(messages[i]!.id);
     }
 
     visibleStartIndex = Math.max(0, msgIndex - BUFFER_SIZE);
@@ -207,13 +204,13 @@
 
     let topPadding = 0;
     for (let i = 0; i < visibleStartIndex; i++) {
-      topPadding += getMessageHeight(messages[i].id);
+      topPadding += getMessageHeight(messages[i]!.id);
     }
     virtualTopPadding = topPadding;
 
     let bottomPadding = 0;
     for (let i = visibleEndIndex; i < messages.length; i++) {
-      bottomPadding += getMessageHeight(messages[i].id);
+      bottomPadding += getMessageHeight(messages[i]!.id);
     }
     virtualBottomPadding = bottomPadding;
 
@@ -234,22 +231,22 @@
 
   // Send message
   async function handleSendMessage(text: string, retryId?: string) {
-    if (!$selectedConversation) return;
+    if (!conversationsStore.selectedConversation) return;
 
     let optimisticId: string;
     if (retryId) {
       optimisticId = retryId;
-      updateOptimisticMessage(optimisticId, { status: 'sending', error: undefined });
+      updateOptimisticMessage(optimisticId, { status: 'sending' });
     } else {
       optimisticId = addOptimisticMessage(text);
     }
 
     try {
-      const chatId = $selectedConversation.chat_id;
-      const isGroup = $selectedConversation.is_group;
+      const chatId = conversationsStore.selectedConversation.chat_id;
+      const isGroup = conversationsStore.selectedConversation.is_group;
       const recipient =
-        !isGroup && $selectedConversation.participants?.length > 0
-          ? $selectedConversation.participants[0]
+        !isGroup && conversationsStore.selectedConversation.participants?.length > 0
+          ? conversationsStore.selectedConversation.participants[0]
           : undefined;
 
       const response = await fetch(
@@ -266,7 +263,7 @@
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
+        await response.text();
         updateOptimisticMessage(optimisticId, {
           status: 'failed',
           error: `Send failed: ${response.status}`,
@@ -302,7 +299,7 @@
   }
 
   function handleRetry(optimisticId: string) {
-    const msg = $conversationsStore.optimisticMessages.find((m) => m.id === optimisticId);
+    const msg = conversationsStore.optimisticMessages.find((m) => m.id === optimisticId);
     if (msg) {
       handleSendMessage(msg.text, optimisticId);
     }
@@ -312,18 +309,7 @@
     removeOptimisticMessage(optimisticId);
   }
 
-  function getLastReceivedMessage(): string {
-    const messages = $conversationsStore.messages;
-    if (messages.length === 0) return '';
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage.is_from_me && lastMessage.text) {
-      return lastMessage.text;
-    }
-    return '';
-  }
-
   let previousFirstMessageId = $state<number | null>(null);
-  let previousScrollHeight = $state(0);
 
   const SCROLL_THRESHOLD = 200;
 
@@ -340,24 +326,23 @@
     // Load more when near top
     if (
       container.scrollTop < SCROLL_THRESHOLD &&
-      $conversationsStore.hasMore &&
-      !$conversationsStore.loadingMore &&
-      $conversationsStore.messages.length > 0
+      conversationsStore.hasMore &&
+      !conversationsStore.loadingMore &&
+      conversationsStore.messages.length > 0
     ) {
-      const firstVisibleMessage = $conversationsStore.messages[visibleStartIndex];
+      const firstVisibleMessage = conversationsStore.messages[visibleStartIndex];
       previousFirstMessageId = firstVisibleMessage?.id ?? null;
-      previousScrollHeight = container.scrollHeight;
 
       await loadMoreMessages();
 
       await tick();
       if (messagesContainer && previousFirstMessageId !== null) {
-        const messages = $conversationsStore.messages;
+        const messages = conversationsStore.messages;
         const prevIndex = messages.findIndex((m) => m.id === previousFirstMessageId);
         if (prevIndex > 0) {
           let newScrollTop = 48;
           for (let i = 0; i < prevIndex; i++) {
-            newScrollTop += getMessageHeight(messages[i].id);
+            newScrollTop += getMessageHeight(messages[i]!.id);
           }
           messagesContainer.scrollTop = newScrollTop;
         }
@@ -377,24 +362,23 @@
 
   async function handleLoadEarlier() {
     if (messagesContainer) {
-      const firstVisibleMessage = $conversationsStore.messages[visibleStartIndex];
+      const firstVisibleMessage = conversationsStore.messages[visibleStartIndex];
       previousFirstMessageId = firstVisibleMessage?.id ?? null;
-      previousScrollHeight = messagesContainer.scrollHeight;
     }
     await loadMoreMessages();
   }
 
   // Effects
   $effect(() => {
-    const currentCount = $conversationsStore.messages.length;
+    const currentCount = conversationsStore.messages.length;
     if (currentCount > previousMessageCount && previousMessageCount > 0) {
-      const newMessages = $conversationsStore.messages.slice(previousMessageCount);
+      const newMessages = conversationsStore.messages.slice(previousMessageCount);
       const newIds = new Set(newMessageIds);
       newMessages.forEach((m) => newIds.add(m.id));
       newMessageIds = newIds;
 
       if (isAtBottom) {
-        visibleEndIndex = $conversationsStore.messages.length;
+        visibleEndIndex = conversationsStore.messages.length;
         scrollToBottom();
       } else {
         hasNewMessagesBelow = true;
@@ -408,8 +392,8 @@
   });
 
   $effect(() => {
-    const msgCount = $conversationsStore.messages.length;
-    const isLoading = $conversationsStore.loadingMessages;
+    const msgCount = conversationsStore.messages.length;
+    const isLoading = conversationsStore.loadingMessages;
 
     const countChanged = msgCount !== lastMessageCount;
     const loadingChanged = isLoading !== lastLoadingState;
@@ -418,7 +402,7 @@
     if (!countChanged) return;
     lastMessageCount = msgCount;
 
-    if (!isLoading && msgCount === 0 && $conversationsStore.error && needsScrollToBottom) {
+    if (!isLoading && msgCount === 0 && conversationsStore.error && needsScrollToBottom) {
       needsScrollToBottom = false;
       return;
     }
@@ -449,7 +433,7 @@
   });
 
   $effect(() => {
-    const chatId = $conversationsStore.selectedChatId;
+    const chatId = conversationsStore.selectedChatId;
     if (chatId && chatId !== prevSelectedChatId) {
       const oldChatId = prevSelectedChatId;
       prevSelectedChatId = chatId;
@@ -473,8 +457,8 @@
   });
 
   $effect(() => {
-    const draft = $conversationsStore.prefetchedDraft;
-    const chatId = $conversationsStore.selectedChatId;
+    const draft = conversationsStore.prefetchedDraft;
+    const chatId = conversationsStore.selectedChatId;
     if (draft && chatId && draft.chatId === chatId && !showDraftPanel) {
       prefetchedSuggestions = draft.suggestions;
       showDraftPanel = true;
@@ -494,13 +478,13 @@
   }
 
   function handleNewMessagesClick() {
-    const messages = $conversationsStore.messages;
+    const messages = conversationsStore.messages;
     visibleEndIndex = messages.length;
     visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
 
     let topPadding = 0;
     for (let i = 0; i < visibleStartIndex; i++) {
-      topPadding += getMessageHeight(messages[i].id);
+      topPadding += getMessageHeight(messages[i]!.id);
     }
     virtualTopPadding = topPadding;
     virtualBottomPadding = 0;
@@ -513,15 +497,6 @@
     const isTyping =
       event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
 
-    if (isMod && event.key === 'd') {
-      event.preventDefault();
-      if ($selectedConversation) {
-        prefetchedSuggestions = undefined;
-        showDraftPanel = true;
-      }
-      return;
-    }
-
     if ($activeZone !== 'messages' && $activeZone !== null) return;
     if (isTyping) {
       if (event.key === 'Escape') {
@@ -531,9 +506,16 @@
       }
       return;
     }
-    if (!$selectedConversation) return;
+    if (!conversationsStore.selectedConversation) return;
 
-    const messages = $conversationsStore.messages;
+    if (isMod && event.key === 'd') {
+      event.preventDefault();
+      prefetchedSuggestions = undefined;
+      showDraftPanel = true;
+      return;
+    }
+
+    const messages = conversationsStore.messages;
     if (messages.length === 0) return;
 
     const maxIndex = messages.length - 1;
@@ -548,7 +530,7 @@
           setMessageIndex(newIndex);
           focusedMessageIndex = newIndex;
           scrollToMessageByIndex(newIndex);
-          announceMessage(messages[newIndex]);
+          announceMessage(messages[newIndex]!);
         }
         break;
 
@@ -561,13 +543,13 @@
           setMessageIndex(newIndex);
           focusedMessageIndex = newIndex;
           scrollToMessageByIndex(newIndex);
-          announceMessage(messages[newIndex]);
+          announceMessage(messages[newIndex]!);
         } else if (focusedMessageIndex === -1 && messages.length > 0) {
           const lastIndex = maxIndex;
           setMessageIndex(lastIndex);
           focusedMessageIndex = lastIndex;
           scrollToMessageByIndex(lastIndex);
-          announceMessage(messages[lastIndex]);
+          announceMessage(messages[lastIndex]!);
         }
         break;
 
@@ -585,7 +567,7 @@
           setMessageIndex(0);
           focusedMessageIndex = 0;
           scrollToMessageByIndex(0);
-          announceMessage(messages[0]);
+          announceMessage(messages[0]!);
         }
         break;
 
@@ -596,7 +578,7 @@
           setMessageIndex(maxIndex);
           focusedMessageIndex = maxIndex;
           scrollToMessageByIndex(maxIndex);
-          announceMessage(messages[maxIndex]);
+          announceMessage(messages[maxIndex]!);
         }
         break;
 
@@ -618,10 +600,10 @@
   }
 
   function scrollToMessageByIndex(index: number) {
-    const messages = $conversationsStore.messages;
+    const messages = conversationsStore.messages;
     if (index < 0 || index >= messages.length) return;
 
-    const messageId = messages[index].id;
+    const messageId = messages[index]!.id;
     tick().then(() => {
       const element = document.querySelector(`[data-message-id="${messageId}"]`);
       if (element) {
@@ -654,13 +636,13 @@
   // Date header logic
   function shouldShowDateHeader(visibleIndex: number): boolean {
     const actualIndex = visibleStartIndex + visibleIndex;
-    const messages = $conversationsStore.messages;
+    const messages = conversationsStore.messages;
 
     if (actualIndex === 0) return true;
     if (actualIndex >= messages.length) return false;
 
-    const curr = getMessageDateString(messages[actualIndex].id, messages[actualIndex].date);
-    const prev = getMessageDateString(messages[actualIndex - 1].id, messages[actualIndex - 1].date);
+    const curr = getMessageDateString(messages[actualIndex]!.id, messages[actualIndex]!.date);
+    const prev = getMessageDateString(messages[actualIndex - 1]!.id, messages[actualIndex - 1]!.date);
     return curr !== prev;
   }
 
@@ -690,30 +672,33 @@
 </script>
 
 <div class="message-view" tabindex="-1">
-  {#if !$selectedConversation}
+  {#if !conversationsStore.selectedConversation}
     <EmptyState
       title="Select a conversation"
       description="Choose a conversation from the list to view messages"
-      icon={MessageIcon}
-    />
+    >
+      {#snippet icon()}
+        <MessageIcon />
+      {/snippet}
+    </EmptyState>
   {:else}
     <div class="header">
-      <div class="avatar" class:group={$selectedConversation.is_group}>
-        {#if $selectedConversation.is_group}
+      <div class="avatar" class:group={conversationsStore.selectedConversation.is_group}>
+        {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path
               d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6z"
             />
           </svg>
         {:else}
-          {($selectedConversation.display_name || $selectedConversation.participants[0] || '?').charAt(0).toUpperCase()}
+          {(conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants[0] || '?').charAt(0).toUpperCase()}
         {/if}
       </div>
       <div class="info">
         <h2>
-          {$selectedConversation.display_name || $selectedConversation.participants.join(', ')}
+          {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.join(', ')}
         </h2>
-        <p>{$selectedConversation.message_count} messages</p>
+        <p>{conversationsStore.selectedConversation.message_count} messages</p>
       </div>
       <div class="header-actions">
         <button
@@ -735,19 +720,19 @@
     </div>
 
     <div class="messages" bind:this={messagesContainer} onscroll={handleScroll}>
-      {#if $conversationsStore.loadingMessages}
+      {#if conversationsStore.loadingMessages}
         <MessageSkeleton />
-      {:else if $conversationsStore.messages.length === 0}
+      {:else if conversationsStore.messages.length === 0}
         <div class="empty">No messages in this conversation</div>
       {:else}
         <!-- Load earlier messages section -->
         <div class="load-earlier-section">
-          {#if $conversationsStore.loadingMore}
+          {#if conversationsStore.loadingMore}
             <div class="loading-more">
               <div class="spinner"></div>
               <span>Loading earlier messages...</span>
             </div>
-          {:else if $conversationsStore.hasMore}
+          {:else if conversationsStore.hasMore}
             <button
               class="load-earlier-btn"
               onclick={handleLoadEarlier}
@@ -778,7 +763,7 @@
 
             <MessageItem
               {message}
-              isGroup={$selectedConversation.is_group}
+              isGroup={conversationsStore.selectedConversation.is_group}
               isHighlighted={$highlightedMessageId === message.id}
               isKeyboardFocused={focusedMessageIndex === visibleStartIndex + visibleIndex}
               isNew={isNewMessage(message.id)}
@@ -802,21 +787,21 @@
       </button>
     {/if}
 
-    {#if showDraftPanel && $selectedConversation}
+    {#if showDraftPanel && conversationsStore.selectedConversation}
       <SuggestionBar
-        chatId={$selectedConversation.chat_id}
+        chatId={conversationsStore.selectedConversation.chat_id}
         onSelect={handleDraftSelect}
         onClose={() => {
           showDraftPanel = false;
           prefetchedSuggestions = undefined;
         }}
-        {prefetchedSuggestions}
+        {...(prefetchedSuggestions && { initialSuggestions: prefetchedSuggestions })}
       />
     {/if}
 
     <ComposeArea
       onSend={(text) => handleSendMessage(text)}
-      disabled={!$selectedConversation}
+      disabled={!conversationsStore.selectedConversation}
       sending={sendingMessage}
     />
   {/if}

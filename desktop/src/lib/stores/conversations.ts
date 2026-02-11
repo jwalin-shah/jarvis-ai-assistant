@@ -2,7 +2,7 @@
  * Conversations store for managing chat state using Svelte 5 Runes
  */
 
-import {
+import type {
   Conversation,
   Message,
   PaginationState,
@@ -16,13 +16,9 @@ import {
   isDirectAccessAvailable,
   getConversations as getConversationsDirect,
   getMessages as getMessagesDirect,
-  getMessage,
   getLastMessageRowid,
-  populateContactsCache,
-  isContactsCacheLoaded,
 } from "../db";
 import { jarvis } from "../socket";
-import { tick } from "svelte";
 
 /** Check if running in Tauri context */
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -68,7 +64,7 @@ class ConversationsState {
     if (this.optimisticMessages.length === 0) return this.messages;
 
     const optimisticAsMessages: Message[] = this.optimisticMessages.map((opt) => ({
-      id: -Date.now() - Math.random(),
+      id: opt.stableId,
       chat_id: this.selectedChatId || "",
       text: opt.text,
       date: new Date(opt.timestamp).toISOString(),
@@ -84,7 +80,7 @@ class ConversationsState {
       _optimistic: true,
       _optimisticId: opt.id,
       _optimisticStatus: opt.status,
-      _optimisticError: opt.error,
+      ...(opt.error !== undefined && { _optimisticError: opt.error }),
     }));
     return [...this.messages, ...optimisticAsMessages];
   });
@@ -96,8 +92,8 @@ class ConversationsState {
 
 export const conversationsStore = new ConversationsState();
 
-// Helper stores for UI components (keeping them as writables for backward compatibility if needed, 
-// or migrate them to the class if preferred. Let's keep them separate for now as they are small.)
+// Helper stores for UI components (these use traditional Svelte stores, not runes)
+// These can be accessed with $ prefix in components
 import { writable } from "svelte/store";
 export const highlightedMessageId = writable<number | null>(null);
 export const scrollToMessageId = writable<number | null>(null);
@@ -113,11 +109,13 @@ export function clearNewMessageIndicator(chatId: string) {
 
 export function addOptimisticMessage(text: string): string {
   const id = `optimistic-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const stableId = -Date.now() - Math.random(); // Negative ID assigned once
   conversationsStore.optimisticMessages.push({
     id,
     text,
     status: "sending",
     timestamp: Date.now(),
+    stableId,
   });
   return id;
 }
@@ -298,7 +296,10 @@ export async function loadMoreMessages(): Promise<boolean> {
   const { selectedChatId, messages, loadingMore, hasMore } = conversationsStore;
   if (!selectedChatId || loadingMore || !hasMore || messages.length === 0) return false;
 
-  const beforeDate = messages[0].date;
+  const firstMessage = messages[0];
+  if (!firstMessage) return false;
+
+  const beforeDate = firstMessage.date;
   conversationsStore.loadingMore = true;
 
   try {
@@ -388,4 +389,10 @@ export async function navigateToMessage(chatId: string, messageId: number) {
 
 export function clearScrollTarget() {
   scrollToMessageId.set(null);
+}
+
+export function clearSelection() {
+  conversationsStore.selectedChatId = null;
+  conversationsStore.messages = [];
+  stopMessagePolling();
 }

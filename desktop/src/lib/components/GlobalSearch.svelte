@@ -199,14 +199,15 @@
       filters.before = new Date(filterEndDate).toISOString();
     }
 
+    const options = {
+      limit: 50,
+      threshold: semanticThreshold,
+      indexLimit: 1000,
+      ...(Object.keys(filters).length > 0 && { filters }),
+    };
     const response = await api.semanticSearch(
       searchQuery,
-      {
-        limit: 50,
-        threshold: semanticThreshold,
-        indexLimit: 1000,
-        filters: Object.keys(filters).length > 0 ? filters : undefined,
-      },
+      options,
       abortController!.signal
     );
 
@@ -255,7 +256,7 @@
       case "Enter":
         event.preventDefault();
         if (selectedIndex >= 0 && flatResults[selectedIndex]) {
-          handleResultClick(flatResults[selectedIndex].msg);
+          handleResultClick(flatResults[selectedIndex]!.msg);
         } else if (query.trim()) {
           performSearch();
         }
@@ -558,13 +559,13 @@
           {/if}
         </div>
         <div class="results-list">
-          {#each groupedResults as group, groupIndex}
+          {#each groupedResults as group}
             <div class="result-group">
               <div class="group-header">
                 <span class="conversation-name">{group.conversation_name}</span>
                 <span class="message-count">{group.messages.length}</span>
               </div>
-              {#each group.messages as message, msgIndex}
+              {#each group.messages as message}
                 {@const flatIndex = flatIndexMap.get(message.id) ?? -1}
                 <button
                   class="result-item"

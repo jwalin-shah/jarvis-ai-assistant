@@ -68,7 +68,6 @@
       handleCreate();
     } else if (e.key === "Backspace" && !searchQuery && selectedTagIds.length > 0) {
       // Remove last selected tag
-      const lastTagId = selectedTagIds[selectedTagIds.length - 1];
       selectedTagIds = selectedTagIds.slice(0, -1);
       dispatch("change", selectedTagIds);
     }

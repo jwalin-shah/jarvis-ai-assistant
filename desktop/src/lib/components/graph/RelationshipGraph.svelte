@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import * as d3 from "d3";
   import { api } from "../../api/client";
-  import type { GraphData, GraphNode, GraphEdge, LayoutType } from "../../api/types";
+  import type { GraphData, GraphNode, LayoutType } from "../../api/types";
   import GraphControls from "./GraphControls.svelte";
   import NodeTooltip from "./NodeTooltip.svelte";
   import ClusterLegend from "./ClusterLegend.svelte";
@@ -18,10 +18,10 @@
   let error: string | null = null;
   let graphData: GraphData | null = null;
   let svgElement: SVGSVGElement;
-  let containerElement: HTMLDivElement;
+  // @ts-expect-error - used in bind:this
+  let _containerElement: HTMLDivElement;
   let showLabels = true;
   let currentLayout: LayoutType = "force";
-  let selectedNode: GraphNode | null = null;
   let tooltipNode: GraphNode | null = null;
   let tooltipX = 0;
   let tooltipY = 0;
@@ -162,12 +162,11 @@
     .on("mouseout", () => {
       tooltipNode = null;
     })
-    .on("click", (event: MouseEvent, d: any) => {
-      selectedNode = d as GraphNode;
+    .on("click", (_event: MouseEvent, d: any) => {
       highlightNode(d.id);
       if (onNodeClick) onNodeClick(d as GraphNode);
     })
-    .on("dblclick", (event: MouseEvent, d: any) => {
+    .on("dblclick", (_event: MouseEvent, d: any) => {
       if (onNodeDoubleClick) onNodeDoubleClick(d as GraphNode);
       zoomToNode(d);
     });
@@ -243,19 +242,6 @@
 
     g.selectAll("circle")
       .attr("opacity", (d: any) => connectedIds.has(d.id) ? 1 : 0.3);
-  }
-
-  function clearHighlight() {
-    selectedNode = null;
-    if (!g) return;
-
-    g.selectAll("circle")
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 2)
-      .attr("opacity", 1);
-
-    g.selectAll("line")
-      .attr("opacity", 0.6);
   }
 
   function zoomToNode(node: any) {
@@ -349,7 +335,7 @@
   });
 </script>
 
-<div class="graph-container" bind:this={containerElement}>
+<div class="graph-container" bind:this={_containerElement}>
   <GraphControls
     {showLabels}
     {currentLayout}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     conversationsStore,
     selectConversation,
@@ -20,7 +20,8 @@
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
-  let listRef = $state<HTMLElement | null>(null);
+  // @ts-expect-error - used in bind:this
+  let _listRef = $state<HTMLElement | null>(null);
   let itemRefs = $state<HTMLButtonElement[]>([]);
 
   // Sync focusedIndex with store
@@ -38,22 +39,25 @@
   let avatarStates = $state<Map<string, 'loading' | 'loaded' | 'error'>>(new Map());
   let avatarUrls = $state<Map<string, string>>(new Map());
 
-  // Intersection Observer for lazy loading avatars
+  // Intersection Observer for lazy loading avatars and topics
   let observer = $state<IntersectionObserver | null>(null);
+  let topicObserver = $state<IntersectionObserver | null>(null);
   let observedElements = $state<Map<string, HTMLElement>>(new Map());
+  let observedTopicElements = $state<Map<string, HTMLElement>>(new Map());
 
   const API_BASE = getApiBaseUrl();
   let cleanup: (() => void) | null = null;
 
   // Use $derived for conversation fingerprint to avoid manual tracking
   let conversationFingerprint = $derived(
-    $conversationsStore.conversations
+    conversationsStore.conversations
       .slice(0, 20)
       .map((c) => c.chat_id)
       .join(',')
   );
 
   // Fetch topics when fingerprint changes
+  // Only fetch for first 5 conversations to avoid N+1 burst
   $effect(() => {
     const fingerprint = conversationFingerprint;
     if (fingerprint) {
@@ -62,7 +66,7 @@
   });
 
   onMount(() => {
-    cleanup = initializePolling();
+    initializePolling().then((fn) => { cleanup = fn; });
     window.addEventListener('keydown', handleKeydown);
 
     observer = new IntersectionObserver(
@@ -83,10 +87,29 @@
       }
     );
 
+    topicObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const chatId = entry.target.getAttribute('data-chat-id');
+            if (chatId && !topicsMap.has(chatId) && !loadingTopics.has(chatId)) {
+              void fetchTopicsForChat(chatId);
+            }
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: '100px',
+        threshold: 0.1,
+      }
+    );
+
     return () => {
       cleanup?.();
       window.removeEventListener('keydown', handleKeydown);
       observer?.disconnect();
+      topicObserver?.disconnect();
       // Revoke blob URLs
       avatarUrls.forEach((url) => {
         if (url.startsWith('blob:')) {
@@ -98,11 +121,19 @@
   });
 
   async function fetchTopicsForConversations() {
-    const visibleConvs = $conversationsStore.conversations.slice(0, 20);
+    // Only fetch topics for first 5 conversations to avoid N+1 burst
+    // Topics for other conversations will be fetched on-demand when scrolled into view
+    const visibleConvs = conversationsStore.conversations.slice(0, 5);
     const toFetch = visibleConvs.filter(
       (conv) => !topicsMap.has(conv.chat_id) && !loadingTopics.has(conv.chat_id)
     );
-    await Promise.all(toFetch.map((conv) => fetchTopicsForChat(conv.chat_id)));
+
+    // Limit concurrent topic requests to avoid server overload
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < toFetch.length; i += BATCH_SIZE) {
+      const batch = toFetch.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map((conv) => fetchTopicsForChat(conv.chat_id)));
+    }
   }
 
   async function fetchTopicsForChat(chatId: string) {
@@ -208,13 +239,30 @@
     };
   }
 
+  function observeTopics(node: HTMLElement, chatId: string) {
+    if (topicObserver && chatId) {
+      node.setAttribute('data-chat-id', chatId);
+      topicObserver.observe(node);
+      observedTopicElements.set(chatId, node);
+    }
+
+    return {
+      destroy() {
+        if (topicObserver && node) {
+          topicObserver.unobserve(node);
+        }
+        observedTopicElements.delete(chatId);
+      },
+    };
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if ($activeZone !== 'conversations' && $activeZone !== null) return;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;
     }
 
-    const conversations = $conversationsStore.conversations;
+    const conversations = conversationsStore.conversations;
     if (conversations.length === 0) return;
 
     const maxIndex = conversations.length - 1;
@@ -229,7 +277,7 @@
           setConversationIndex(newIndex);
           focusedIndex = newIndex;
           scrollToItem(newIndex);
-          announce(`${getDisplayName(conversations[newIndex])}, ${newIndex + 1} of ${conversations.length}`);
+          announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
         }
         break;
 
@@ -242,12 +290,12 @@
           setConversationIndex(newIndex);
           focusedIndex = newIndex;
           scrollToItem(newIndex);
-          announce(`${getDisplayName(conversations[newIndex])}, ${newIndex + 1} of ${conversations.length}`);
+          announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
         } else if (focusedIndex === -1) {
           setConversationIndex(0);
           focusedIndex = 0;
           scrollToItem(0);
-          announce(`${getDisplayName(conversations[0])}, 1 of ${conversations.length}`);
+          announce(`${getDisplayName(conversations[0]!)}, 1 of ${conversations.length}`);
         }
         break;
 
@@ -255,7 +303,7 @@
       case ' ':
         if (focusedIndex >= 0 && focusedIndex <= maxIndex) {
           event.preventDefault();
-          const conv = conversations[focusedIndex];
+          const conv = conversations[focusedIndex]!;
           selectConversation(conv.chat_id);
           setActiveZone('messages');
           announce(`Opened conversation with ${getDisplayName(conv)}`);
@@ -269,7 +317,7 @@
           setConversationIndex(0);
           focusedIndex = 0;
           scrollToItem(0);
-          announce(`${getDisplayName(conversations[0])}, 1 of ${conversations.length}`);
+          announce(`${getDisplayName(conversations[0]!)}, 1 of ${conversations.length}`);
         }
         break;
 
@@ -280,7 +328,7 @@
           setConversationIndex(maxIndex);
           focusedIndex = maxIndex;
           scrollToItem(maxIndex);
-          announce(`${getDisplayName(conversations[maxIndex])}, ${maxIndex + 1} of ${conversations.length}`);
+          announce(`${getDisplayName(conversations[maxIndex]!)}, ${maxIndex + 1} of ${conversations.length}`);
         }
         break;
 
@@ -301,12 +349,9 @@
     });
   }
 
-  function setItemRef(el: HTMLButtonElement | null, index: number) {
-    if (el) itemRefs[index] = el;
-  }
-
   function formatParticipant(p: string): string {
-    if (p.includes('@')) return p.split('@')[0];
+    const atParts = p.split('@');
+    if (p.includes('@') && atParts[0]) return atParts[0];
     if (/^\+?\d{10,}$/.test(p.replace(/[\s\-()]/g, ''))) {
       return '...' + p.replace(/\D/g, '').slice(-4);
     }
@@ -316,7 +361,7 @@
   function getDisplayName(conv: Conversation): string {
     if (conv.display_name) return conv.display_name;
     if (conv.participants.length === 1) {
-      return formatParticipant(conv.participants[0]);
+      return formatParticipant(conv.participants[0]!);
     }
     const formatted = conv.participants.slice(0, 2).map(formatParticipant);
     return (
@@ -348,7 +393,7 @@
   }
 
   function hasNewMessages(chatId: string): boolean {
-    return $conversationsStore.conversationsWithNewMessages.has(chatId);
+    return conversationsStore.conversationsWithNewMessages.has(chatId);
   }
 
   function getPrimaryIdentifier(conv: Conversation): string | null {
@@ -358,8 +403,10 @@
 
   function getInitials(name: string): string {
     const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    if (parts.length >= 2 && first && first[0] && last && last[0]) {
+      return `${first[0]}${last[0]}`.toUpperCase();
     }
     return parts[0]?.[0]?.toUpperCase() || '?';
   }
@@ -374,15 +421,15 @@
     <input type="text" placeholder="Search conversations..." />
   </div>
 
-  {#if $conversationsStore.loading}
+  {#if conversationsStore.loading}
     <ConversationSkeleton />
-  {:else if $conversationsStore.error}
-    <div class="error">{$conversationsStore.error}</div>
-  {:else if $conversationsStore.conversations.length === 0}
+  {:else if conversationsStore.error}
+    <div class="error">{conversationsStore.error}</div>
+  {:else if conversationsStore.conversations.length === 0}
     <div class="empty">No conversations found</div>
   {:else}
-    <div class="list" bind:this={listRef} role="listbox" aria-label="Conversations">
-      {#each $conversationsStore.conversations as conv, index (conv.chat_id)}
+    <div class="list" bind:this={_listRef} role="listbox" aria-label="Conversations">
+      {#each conversationsStore.conversations as conv, index (conv.chat_id)}
         {@const identifier = getPrimaryIdentifier(conv)}
         {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
         {@const avatarState = identifier ? avatarStates.get(identifier) : null}
@@ -390,7 +437,7 @@
         <button
           bind:this={itemRefs[index]}
           class="conversation"
-          class:active={$conversationsStore.selectedChatId === conv.chat_id}
+          class:active={conversationsStore.selectedChatId === conv.chat_id}
           class:focused={isFocused}
           class:group={conv.is_group}
           class:has-new={hasNewMessages(conv.chat_id)}
@@ -399,7 +446,7 @@
             setConversationIndex(index);
           }}
           role="option"
-          aria-selected={$conversationsStore.selectedChatId === conv.chat_id}
+          aria-selected={conversationsStore.selectedChatId === conv.chat_id}
           tabindex={isFocused ? 0 : -1}
         >
           <div class="avatar-container">
@@ -436,7 +483,7 @@
                 {formatConversationDate(conv.last_message_date)}
               </span>
             </div>
-            <div class="topics-row">
+            <div class="topics-row" use:observeTopics={conv.chat_id}>
               {#if topicsMap.has(conv.chat_id)}
                 {#each topicsMap.get(conv.chat_id) || [] as topic}
                   <span

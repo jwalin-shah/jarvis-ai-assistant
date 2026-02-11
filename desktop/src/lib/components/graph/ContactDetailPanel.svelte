@@ -26,7 +26,7 @@
       if (!groups[fact.category]) {
         groups[fact.category] = [];
       }
-      groups[fact.category].push(fact);
+      groups[fact.category]!.push(fact);
     }
     return groups;
   }

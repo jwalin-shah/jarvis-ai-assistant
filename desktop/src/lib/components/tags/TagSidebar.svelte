@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Tag, SmartFolder } from "../../api/types";
-  import TagBadge from "./TagBadge.svelte";
   import { createEventDispatcher } from "svelte";
 
   export let tags: Tag[] = [];
@@ -52,7 +51,7 @@
     dispatch("selectFolder", folderId);
   }
 
-  function getFolderIcon(icon: string): string {
+  function getFolderIcon(icon: string | undefined): string {
     const icons: Record<string, string> = {
       inbox: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
       mail: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
@@ -60,7 +59,7 @@
       clock: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
       folder: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
     };
-    return icons[icon] || icons.folder;
+    return (icon && icons[icon]) || icons.folder!;
   }
 </script>
 

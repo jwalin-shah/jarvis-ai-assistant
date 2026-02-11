@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Message } from '../../types';
-  import { isOptimisticMessage, getOptimisticStatus, getOptimisticError, getOptimisticId } from '../../types';
+  import { isOptimisticMessage, getOptimisticStatus, getOptimisticId } from '../../types';
 
   interface Props {
     message: Message;
@@ -25,7 +25,6 @@
   // Derived values using strict type guards
   const optimistic = $derived(isOptimisticMessage(message));
   const optimisticStatus = $derived(getOptimisticStatus(message));
-  const optimisticError = $derived(getOptimisticError(message));
   const optimisticId = $derived(getOptimisticId(message));
 
   // Format time consistently

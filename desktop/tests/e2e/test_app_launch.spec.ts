@@ -22,8 +22,8 @@ test.describe("App Launch", () => {
     // App should display
     await expect(page.locator(".app")).toBeVisible();
 
-    // Give time for any async errors
-    await page.waitForTimeout(1000);
+    // Wait for initial load to complete
+    await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
 
     // Filter out expected errors (like network errors when mocking)
     const unexpectedErrors = consoleErrors.filter(
@@ -81,8 +81,8 @@ test.describe("App Launch", () => {
     // Wait for the sidebar at least
     await page.waitForSelector(".sidebar", { state: "visible" });
 
-    // Give time for connection check to complete
-    await page.waitForTimeout(2000);
+    // Wait for connection check to complete and status to update
+    await page.waitForSelector(".sidebar .status-dot.disconnected", { timeout: 3000 }).catch(() => {});
 
     // Status should show disconnected (in sidebar)
     await expect(page.locator(".sidebar .status-dot.disconnected")).toBeVisible();

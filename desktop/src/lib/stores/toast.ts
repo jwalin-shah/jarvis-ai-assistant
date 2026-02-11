@@ -50,8 +50,8 @@ export function showToast(
     type: options.type ?? "info",
     duration: options.duration ?? 4000,
     dismissible: options.dismissible ?? true,
-    description: options.description,
-    action: options.action,
+    ...(options.description !== undefined && { description: options.description }),
+    ...(options.action !== undefined && { action: options.action }),
   };
 
   toastStore.update((state) => ({

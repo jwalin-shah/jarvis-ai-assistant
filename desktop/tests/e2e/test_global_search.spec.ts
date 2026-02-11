@@ -48,11 +48,11 @@ test.describe("Global Search", () => {
 
       // Click on the overlay (outside modal)
       await page.locator(".search-overlay").click({ position: { x: 10, y: 10 } });
-      await page.waitForTimeout(300);
 
+      // Wait for modal to actually close
       await expect(
         page.locator(".search-modal, .global-search")
-      ).not.toBeVisible();
+      ).not.toBeVisible({ timeout: 5000 });
     });
 
     test("close button works", async ({ socketMockedPage: page }) => {
@@ -95,13 +95,12 @@ test.describe("Global Search", () => {
 
       if ((await modeToggle.count()) > 0) {
         await modeToggle.click();
-        await page.waitForTimeout(200);
 
-        // Placeholder should change
+        // Wait for placeholder to change
         const input = page.locator(".search-input");
-        const placeholder = await input.getAttribute("placeholder");
-
-        expect(placeholder).toMatch(/meaning|semantic/i);
+        await expect(input).toHaveAttribute("placeholder", /meaning|semantic/i, {
+          timeout: 5000,
+        });
       }
     });
 
@@ -114,13 +113,12 @@ test.describe("Global Search", () => {
 
       if ((await modeToggle.count()) > 0) {
         await modeToggle.click();
-        await page.waitForTimeout(200);
 
-        // Should show semantic indicator
+        // Wait for semantic indicator to appear
         const semanticIndicator = page.locator(
           ".mode-toggle.semantic, .search-icon.semantic"
         );
-        await expect(semanticIndicator.first()).toBeVisible();
+        await expect(semanticIndicator.first()).toBeVisible({ timeout: 5000 });
       }
     });
 
@@ -134,11 +132,22 @@ test.describe("Global Search", () => {
       if ((await modeToggle.count()) > 0) {
         // Switch to semantic
         await modeToggle.click();
-        await page.waitForTimeout(100);
+
+        // Wait for mode to switch
+        await expect(modeToggle).toHaveClass(/semantic/, { timeout: 5000 });
 
         // Type search query
         await page.locator(".search-input").fill("dinner plans");
-        await page.waitForTimeout(500);
+
+        // Wait for results or no-results state to appear after debounce
+        await Promise.race([
+          page
+            .locator(".result-item, .no-results-state")
+            .first()
+            .waitFor({ state: "visible", timeout: 5000 })
+            .catch(() => {}),
+          page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+        ]);
 
         // Mode should still be semantic
         await expect(modeToggle).toHaveClass(/semantic/);
@@ -179,7 +188,15 @@ test.describe("Global Search", () => {
 
       // Type search query
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(600); // Wait for debounce
+
+      // Wait for results or no-results state to appear after debounce
+      await Promise.race([
+        page
+          .locator(".result-item, .results-list, .no-results-state")
+          .first()
+          .waitFor({ state: "visible", timeout: 5000 }),
+        page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+      ]);
 
       // Results should appear
       const results = page.locator(".result-item, .results-list");
@@ -199,10 +216,10 @@ test.describe("Global Search", () => {
 
       // Type unlikely search query
       await page.locator(".search-input").fill("xyznonexistent123");
-      await page.waitForTimeout(600);
 
-      // No results state should show
+      // Wait for no results state to appear after debounce
       const noResultsState = page.locator(".no-results-state");
+      await noResultsState.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       if ((await noResultsState.count()) > 0) {
         await expect(noResultsState).toBeVisible();
@@ -212,10 +229,12 @@ test.describe("Global Search", () => {
 
     test("debounces search input", async ({ socketMockedPage: page }) => {
       let searchCount = 0;
+      let lastRequestTime = Date.now();
 
       // Count search requests
       await page.route("http://localhost:8742/conversations/search", async (route) => {
         searchCount++;
+        lastRequestTime = Date.now();
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -225,9 +244,14 @@ test.describe("Global Search", () => {
 
       await openGlobalSearch(page);
 
+      const startTime = Date.now();
       // Type quickly
       await page.locator(".search-input").type("testing search", { delay: 20 });
-      await page.waitForTimeout(700);
+
+      // Wait for debounce to complete (wait until 1s after last request or 2s max)
+      while (Date.now() - lastRequestTime < 1000 && Date.now() - startTime < 2000) {
+        await page.waitForFunction(() => true, { timeout: 100 });
+      }
 
       // Should have made only 1-2 requests (debounced)
       expect(searchCount).toBeLessThanOrEqual(3);
@@ -240,7 +264,16 @@ test.describe("Global Search", () => {
 
       // Search and get results
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(600);
+
+      // Wait for results to appear after debounce
+      await Promise.race([
+        page
+          .locator(".result-item, .no-results-state")
+          .first()
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => {}),
+        page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+      ]);
 
       // Clear input
       const clearBtn = page.locator(".clear-btn");
@@ -250,10 +283,8 @@ test.describe("Global Search", () => {
         await page.locator(".search-input").fill("");
       }
 
-      await page.waitForTimeout(200);
-
-      // Should show empty state again
-      await expect(page.locator(".empty-state")).toBeVisible();
+      // Wait for empty state to appear
+      await expect(page.locator(".empty-state")).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -269,15 +300,13 @@ test.describe("Global Search", () => {
 
         // Open filters
         await filterToggle.click();
-        await page.waitForTimeout(200);
-
-        await expect(page.locator(".filters-panel")).toBeVisible();
+        await expect(page.locator(".filters-panel")).toBeVisible({ timeout: 5000 });
 
         // Close filters
         await filterToggle.click();
-        await page.waitForTimeout(200);
-
-        await expect(page.locator(".filters-panel")).not.toBeVisible();
+        await expect(page.locator(".filters-panel")).not.toBeVisible({
+          timeout: 5000,
+        });
       }
     });
 
@@ -288,7 +317,9 @@ test.describe("Global Search", () => {
 
       if ((await filterToggle.count()) > 0) {
         await filterToggle.click();
-        await page.waitForTimeout(200);
+
+        // Wait for filter panel to be visible
+        await expect(page.locator(".filters-panel")).toBeVisible({ timeout: 5000 });
 
         const senderFilter = page.locator("#filter-sender, [name='sender']");
 
@@ -308,7 +339,9 @@ test.describe("Global Search", () => {
 
       if ((await filterToggle.count()) > 0) {
         await filterToggle.click();
-        await page.waitForTimeout(200);
+
+        // Wait for filter panel to be visible
+        await expect(page.locator(".filters-panel")).toBeVisible({ timeout: 5000 });
 
         const startDate = page.locator("#filter-start, [name='start']");
 
@@ -328,7 +361,9 @@ test.describe("Global Search", () => {
 
       if ((await filterToggle.count()) > 0) {
         await filterToggle.click();
-        await page.waitForTimeout(200);
+
+        // Wait for filter panel to be visible
+        await expect(page.locator(".filters-panel")).toBeVisible({ timeout: 5000 });
 
         // Set some filters
         const senderFilter = page.locator("#filter-sender, [name='sender']");
@@ -340,11 +375,10 @@ test.describe("Global Search", () => {
         const clearBtn = page.locator(".clear-filters-btn");
         if ((await clearBtn.count()) > 0) {
           await clearBtn.click();
-          await page.waitForTimeout(200);
 
-          // Filters should be cleared
+          // Wait for filters to be cleared
           if ((await senderFilter.count()) > 0) {
-            await expect(senderFilter).toHaveValue("");
+            await expect(senderFilter).toHaveValue("", { timeout: 5000 });
           }
         }
       }
@@ -359,18 +393,22 @@ test.describe("Global Search", () => {
       const modeToggle = page.locator(".mode-toggle");
       if ((await modeToggle.count()) > 0) {
         await modeToggle.click();
-        await page.waitForTimeout(200);
+
+        // Wait for mode to switch
+        await expect(modeToggle).toHaveClass(/semantic/, { timeout: 5000 });
       }
 
       // Open filters
       const filterToggle = page.locator(".filter-toggle");
       if ((await filterToggle.count()) > 0) {
         await filterToggle.click();
-        await page.waitForTimeout(200);
+
+        // Wait for filter panel to be visible
+        await expect(page.locator(".filters-panel")).toBeVisible({ timeout: 5000 });
 
         // Threshold slider should be visible
         const thresholdSlider = page.locator("#threshold, .threshold-control");
-        await expect(thresholdSlider.first()).toBeVisible();
+        await expect(thresholdSlider.first()).toBeVisible({ timeout: 5000 });
       }
     });
   });
@@ -383,17 +421,21 @@ test.describe("Global Search", () => {
 
       // Search to get results
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(600);
 
+      // Wait for results to appear
       const results = page.locator(".result-item");
+      await results.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       if ((await results.count()) > 0) {
         // Navigate down
         await page.keyboard.press("ArrowDown");
-        await page.waitForTimeout(100);
 
-        // First result should be selected
+        // Wait for selection to be applied
         const selectedResult = page.locator(".result-item.selected");
+        await selectedResult
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => {});
+
         const hasSelection = (await selectedResult.count()) > 0;
 
         if (hasSelection) {
@@ -408,21 +450,28 @@ test.describe("Global Search", () => {
       await openGlobalSearch(page);
 
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(600);
 
+      // Wait for results to appear
       const results = page.locator(".result-item");
+      await results.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       if ((await results.count()) > 0) {
         // Select first result
         await page.keyboard.press("ArrowDown");
-        await page.waitForTimeout(100);
+
+        // Wait for selection to be applied
+        await page
+          .locator(".result-item.selected")
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => {});
 
         // Press Enter
         await page.keyboard.press("Enter");
-        await page.waitForTimeout(300);
 
-        // Modal should close and navigate to result
-        // (Search closes after selection)
+        // Wait for modal to close after selection
+        await expect(page.locator(".search-modal")).not.toBeVisible({
+          timeout: 5000,
+        });
       }
     });
 
@@ -432,17 +481,18 @@ test.describe("Global Search", () => {
       await openGlobalSearch(page);
 
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(600);
 
+      // Wait for results to appear
       const results = page.locator(".result-item");
+      await results.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       if ((await results.count()) > 0) {
         await results.first().click();
-        await page.waitForTimeout(300);
 
-        // Should navigate to the message
-        // Search modal should close
-        await expect(page.locator(".search-modal")).not.toBeVisible();
+        // Wait for modal to close after navigation
+        await expect(page.locator(".search-modal")).not.toBeVisible({
+          timeout: 5000,
+        });
       }
     });
 
@@ -452,7 +502,16 @@ test.describe("Global Search", () => {
       await openGlobalSearch(page);
 
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(600);
+
+      // Wait for results to appear after search
+      await Promise.race([
+        page
+          .locator(".result-item, .result-group")
+          .first()
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => {}),
+        page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+      ]);
 
       // Results should be grouped by conversation
       const resultGroups = page.locator(".result-group");
@@ -470,7 +529,16 @@ test.describe("Global Search", () => {
       await openGlobalSearch(page);
 
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(600);
+
+      // Wait for results to appear after search
+      await Promise.race([
+        page
+          .locator(".result-item, .message-count")
+          .first()
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => {}),
+        page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+      ]);
 
       const messageCount = page.locator(".message-count");
 
@@ -490,12 +558,23 @@ test.describe("Global Search", () => {
       const modeToggle = page.locator(".mode-toggle");
       if ((await modeToggle.count()) > 0) {
         await modeToggle.click();
-        await page.waitForTimeout(200);
+
+        // Wait for mode to switch
+        await expect(modeToggle).toHaveClass(/semantic/, { timeout: 5000 });
       }
 
       // Search
       await page.locator(".search-input").fill("dinner plans");
-      await page.waitForTimeout(600);
+
+      // Wait for results to appear after semantic search
+      await Promise.race([
+        page
+          .locator(".result-item, .similarity-badge")
+          .first()
+          .waitFor({ state: "visible", timeout: 5000 })
+          .catch(() => {}),
+        page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+      ]);
 
       // Check for similarity badges
       const similarityBadge = page.locator(".similarity-badge");
@@ -548,7 +627,10 @@ test.describe("Global Search", () => {
 
       for (const width of widths) {
         await page.setViewportSize({ width, height: 720 });
-        await page.waitForTimeout(100);
+
+        // Wait for layout to stabilize after viewport change
+        await page.waitForLoadState("domcontentloaded");
+        await expect(page.locator(".search-modal")).toBeVisible({ timeout: 5000 });
 
         // Modal should still be visible and usable
         await expect(page.locator(".search-modal")).toBeVisible();
@@ -562,9 +644,13 @@ test.describe("Global Search", () => {
       await openGlobalSearch(page);
 
       await page.locator(".search-input").fill("message");
-      await page.waitForTimeout(600);
 
+      // Wait for results to appear
       const resultsContainer = page.locator(".search-results, .results-list");
+      await resultsContainer
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 })
+        .catch(() => {});
 
       if ((await resultsContainer.count()) > 0) {
         // Check if scrollable

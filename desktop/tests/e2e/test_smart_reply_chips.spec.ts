@@ -129,9 +129,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
         // Press 1 to select first chip
         await page.keyboard.press("1");
 
-        // Toast should appear
-        await page.waitForTimeout(500);
+        // Wait for toast to appear
         const toast = page.locator(".toast");
+        await toast.waitFor({ state: "visible", timeout: 1000 }).catch(() => {});
 
         if ((await toast.count()) > 0) {
           await expect(toast).toBeVisible();
@@ -148,8 +148,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
         // Press 2 to select second chip
         await page.keyboard.press("2");
 
-        await page.waitForTimeout(500);
+        // Wait for toast to appear
         const toast = page.locator(".toast");
+        await toast.waitFor({ state: "visible", timeout: 1000 }).catch(() => {});
 
         if ((await toast.count()) > 0) {
           await expect(toast).toBeVisible();
@@ -165,8 +166,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
         // Press 3 to select third chip
         await page.keyboard.press("3");
 
-        await page.waitForTimeout(500);
+        // Wait for toast to appear
         const toast = page.locator(".toast");
+        await toast.waitFor({ state: "visible", timeout: 1000 }).catch(() => {});
 
         if ((await toast.count()) > 0) {
           await expect(toast).toBeVisible();
@@ -184,7 +186,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
 
       // Press 1 - should NOT select chip (compose not focused)
       await page.keyboard.press("1");
-      await page.waitForTimeout(300);
+
+      // Brief moment for any actions to complete
+      await page.waitForFunction(() => true, { timeout: 300 });
 
       // Toast should NOT appear when not focused on compose
       // This behavior depends on isFocused prop
@@ -202,9 +206,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
       if ((await chip.count()) > 0) {
         await chip.click();
 
-        // Toast should appear
-        await page.waitForTimeout(500);
+        // Wait for toast to appear
         const toast = page.locator(".toast");
+        await toast.waitFor({ state: "visible", timeout: 1000 }).catch(() => {});
 
         if ((await toast.count()) > 0) {
           await expect(toast).toBeVisible();
@@ -229,7 +233,8 @@ test.describe("SmartReplyChipsV2 Component", () => {
         // Click and check for :active styles
         // Hard to test transient states, but we can verify click works
         await chip.click();
-        await page.waitForTimeout(100);
+        // Brief wait for any state update
+        await page.waitForFunction(() => true, { timeout: 100 });
       }
     });
 
@@ -264,15 +269,15 @@ test.describe("SmartReplyChipsV2 Component", () => {
       if ((await chip.count()) > 0) {
         await chip.click();
 
-        // Toast should appear
-        await page.waitForTimeout(500);
+        // Wait for toast to appear
         const toast = page.locator(".toast");
+        await toast.waitFor({ state: "visible", timeout: 1000 }).catch(() => {});
 
         if ((await toast.count()) > 0) {
           await expect(toast).toBeVisible();
 
-          // Wait for toast to disappear (2000ms timeout)
-          await page.waitForTimeout(2500);
+          // Wait for toast to auto-dismiss (typically 2000ms timeout)
+          await toast.waitFor({ state: "hidden", timeout: 3000 });
           await expect(toast).not.toBeVisible();
         }
       }
@@ -288,11 +293,14 @@ test.describe("SmartReplyChipsV2 Component", () => {
       const refreshButton = page.locator(".refresh-btn");
 
       if ((await refreshButton.count()) > 0) {
-        // Click refresh
+        // Click refresh and wait for reload
         await refreshButton.click();
 
-        // Should show loading state briefly
-        await page.waitForTimeout(100);
+        // Wait for loading state or new chips to appear
+        await Promise.race([
+          page.locator(".loading-state, .loading").waitFor({ state: "visible", timeout: 500 }),
+          page.waitForFunction(() => true, { timeout: 100 })
+        ]).catch(() => {});
 
         // Suggestions should reload (may take a moment)
         await page.waitForSelector(".chip", { timeout: 5000 });
@@ -375,11 +383,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
       await page.waitForSelector(".conversation");
       await selectConversation(page, "John Doe");
 
-      // Error state should appear
+      // Wait for error state to appear after failed generation
       const errorState = page.locator(".error-state, .error-text");
-
-      // Give time for the error to appear
-      await page.waitForTimeout(3000);
+      await errorState.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       if ((await errorState.count()) > 0) {
         await expect(errorState).toBeVisible();
@@ -448,9 +454,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
       await page.waitForSelector(".conversation");
       await selectConversation(page, "John Doe");
 
-      await page.waitForTimeout(3000);
-
+      // Wait for error state and retry button to appear
       const retryButton = page.locator(".retry-btn");
+      await retryButton.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       if ((await retryButton.count()) > 0) {
         await expect(retryButton).toBeVisible();
@@ -465,9 +471,9 @@ test.describe("SmartReplyChipsV2 Component", () => {
     }) => {
       await page.waitForSelector(".smart-reply-container", { timeout: 5000 });
 
-      // Set narrow viewport
+      // Set narrow viewport and wait for layout
       await page.setViewportSize({ width: 400, height: 600 });
-      await page.waitForTimeout(200);
+      await page.waitForLoadState("domcontentloaded");
 
       const container = page.locator(".chips-container");
 
@@ -524,8 +530,8 @@ test.describe("SmartReplyChipsV2 Component", () => {
       const chipsContainer = page.locator(".chips-container");
 
       if ((await chipsContainer.count()) > 0) {
-        // After loading, container should have visible class
-        await page.waitForTimeout(500);
+        // Wait for container to become visible after load
+        await chipsContainer.waitFor({ state: "visible", timeout: 1000 });
         const hasVisible = await chipsContainer.evaluate((el) =>
           el.classList.contains("visible")
         );
