@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Prepare Gemini training data with FULL 915 features to match current model.
+"""Prepare Gemini training data with 531 features to match current model.
 
 Features:
 - 384 BERT embeddings (text encoding)
-- 384 context BERT embeddings (previous messages - mostly zeros for iMessage)
 - 147 hand-crafted + spaCy features (structure, NER, deps, mobilization, etc)
-= 915 total (matches current LightGBM model architecture)
+= 531 total (matches current LightGBM model architecture)
+
+Note: Context BERT embeddings (384d) were removed to eliminate train-serve skew.
+Previously they were zeroed at inference, making them dead weight.
 
 Usage:
     uv run python scripts/prepare_gemini_with_full_features.py
@@ -94,7 +96,7 @@ def load_labeled_examples(labeled_data: Path, logger: logging.Logger) -> list[di
 def extract_full_features(
     examples: list[dict], logger: logging.Logger
 ) -> tuple[np.ndarray, list[str], list[str]]:
-    """Extract full 915 features: BERT (384) + context BERT (384) + hand-crafted (147)."""
+    """Extract 531 features: BERT (384) + hand-crafted (147)."""
     import numpy as np
     from tqdm import tqdm
 
@@ -109,9 +111,8 @@ def extract_full_features(
     categories = []
     ids = []
 
-    logger.info(f"Extracting 915 features for {len(examples)} examples...")
+    logger.info(f"Extracting 531 features for {len(examples)} examples...")
     logger.info("  - 384 BERT embeddings (text)")
-    logger.info("  - 384 context BERT embeddings (previous messages, mostly zero)")
     logger.info("  - 147 hand-crafted + spaCy features")
 
     # Batch encode all texts at once (10-40x faster than one-at-a-time)
@@ -119,25 +120,6 @@ def extract_full_features(
     logger.info(f"Batch encoding {len(all_texts)} texts...")
     all_text_embeddings = embedder_mixin.embedder.encode(all_texts)
     logger.info("Text batch encoding complete")
-
-    # Collect and batch encode non-empty context strings
-    context_indices = []
-    context_texts = []
-    for idx, ex in enumerate(examples):
-        context = ex.get("thread", [])
-        if context and len(context) > 0:
-            context_texts.append(" ".join(context[-1:]))
-            context_indices.append(idx)
-
-    context_embedding_map: dict[int, np.ndarray] = {}
-    if context_texts:
-        logger.info(f"Batch encoding {len(context_texts)} context strings...")
-        all_context_embeddings = embedder_mixin.embedder.encode(context_texts)
-        for ci, idx in enumerate(context_indices):
-            context_embedding_map[idx] = all_context_embeddings[ci]
-        logger.info("Context batch encoding complete")
-
-    zero_context = np.zeros(384, dtype=np.float32)
 
     for i, (ex, text_embedding) in enumerate(
         tqdm(
@@ -151,14 +133,11 @@ def extract_full_features(
             text = ex["text"]
             context = ex.get("thread", [])
 
-            # Context BERT embedding (384 dims) - from pre-computed batch
-            context_embedding = context_embedding_map.get(i, zero_context)
-
             # Hand-crafted + spaCy features (147 dims)
             hand_crafted = feature_extractor.extract_all(text=text, context=context)
 
-            # Combine all: text BERT (384) + context BERT (384) + hand-crafted (147) = 915
-            combined = np.concatenate([text_embedding, context_embedding, hand_crafted])
+            # Combine: text BERT (384) + hand-crafted (147) = 531
+            combined = np.concatenate([text_embedding, hand_crafted])
             features_list.append(combined)
 
             categories.append(ex["category"])
@@ -177,8 +156,7 @@ def extract_full_features(
     logger.info(f"\nExtracted {X.shape[0]} examples with {X.shape[1]} features")
     logger.info("Feature breakdown:")
     logger.info("  - 384 BERT embeddings")
-    logger.info("  - 384 context BERT embeddings")
-    logger.info(f"  - {X.shape[1] - 768} hand-crafted + spaCy features")
+    logger.info(f"  - {X.shape[1] - 384} hand-crafted + spaCy features")
     logger.info(f"  = {X.shape[1]} total")
 
     return X, y, ids
@@ -255,8 +233,7 @@ def save_training_data(
         "label_map": {label: i for i, label in enumerate(labels)},
         "feature_dims": int(X_train.shape[1]),
         "embedding_dims": 384,
-        "context_embedding_dims": 384,
-        "hand_crafted_dims": X_train.shape[1] - 768,
+        "hand_crafted_dims": X_train.shape[1] - 384,
         "train_size": len(X_train),
         "test_size": len(X_test),
     }
@@ -267,7 +244,7 @@ def save_training_data(
         logger.error("Failed to write metadata in %s: %s", output_dir, exc)
         raise SystemExit(1) from exc
 
-    logger.info(f"\n✓ Training data saved to {output_dir}")
+    logger.info(f"\n Training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
     logger.info(f"  - test.npz: {X_test.shape}")
     logger.info("  - metadata.json")
@@ -292,7 +269,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger.info("\n" + "=" * 70)
     logger.info("READY TO MERGE AND RETRAIN")
     logger.info("=" * 70)
-    logger.info(f"Gemini training data (915 features): {args.output_dir}")
+    logger.info(f"Gemini training data (531 features): {args.output_dir}")
     logger.info("Next: Merge with original training data and retrain LightGBM")
 
 
