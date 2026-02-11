@@ -94,13 +94,23 @@ class SendAttachmentRequest(BaseModel):
     @field_validator("file_path")
     @classmethod
     def validate_file_path(cls, v: str) -> str:
-        """Validate file path is within user home directory."""
+        """Validate file path is within user home directory and is a regular file."""
         from pathlib import Path
 
-        resolved = Path(v).resolve()
+        try:
+            resolved = Path(v).resolve(strict=True)
+        except OSError:
+            raise ValueError("file_path does not exist or is not accessible")
+
         home = Path.home()
-        if not str(resolved).startswith(str(home)):
+        try:
+            resolved.relative_to(home)
+        except ValueError:
             raise ValueError(f"file_path must be within user home directory ({home})")
+
+        if not resolved.is_file():
+            raise ValueError("file_path must be a regular file")
+
         return str(resolved)
 
 
