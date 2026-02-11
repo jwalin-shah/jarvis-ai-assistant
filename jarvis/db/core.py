@@ -281,6 +281,7 @@ class JarvisDBBase:
                 "linked_contact_id": "TEXT",
                 "valid_from": "TIMESTAMP",
                 "valid_until": "TIMESTAMP",
+                "attribution": "TEXT DEFAULT 'contact'",
             }
 
             for col_name, col_type in required_columns.items():

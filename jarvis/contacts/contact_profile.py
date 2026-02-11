@@ -53,6 +53,7 @@ class Fact:
     # Temporal validity (for facts that change over time)
     valid_from: str | None = None  # When this fact became true (ISO timestamp)
     valid_until: str | None = None  # When this fact stopped being true (ISO timestamp)
+    attribution: str = "contact"  # "contact", "user", or "third_party"
 
 
 logger = logging.getLogger(__name__)
