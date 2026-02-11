@@ -17,7 +17,7 @@ declare -A AGENT_MODELS=(
     [claude]=""                              # uses default (your subscription)
     [codex]=""                               # uses default (gpt-5.3-codex from config)
     [gemini]=""                              # uses default (gemini-2.5-pro)
-    [opencode]="opencode/glm-4.7-free"       # free tier
+    [opencode]=""                               # uses default (configured in opencode settings)
     [kimi]=""                                # uses default (kimi-k2.5)
 )
 
@@ -71,7 +71,7 @@ DEFAULT MODELS:
   claude    = (subscription default)
   codex     = (subscription default)
   gemini    = (subscription default)
-  opencode  = opencode/glm-4.7-free
+  opencode  = (subscription default)
   kimi      = (subscription default)
 EOF
     exit 0

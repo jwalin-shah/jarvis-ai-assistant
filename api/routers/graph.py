@@ -489,6 +489,7 @@ def get_graph_evolution(
             # Build graph for messages up to this point
             graph = build_network_graph(
                 since=start,
+                until=current,
                 max_nodes=max_nodes,
             )
 

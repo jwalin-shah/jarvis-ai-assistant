@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +32,108 @@ RELATIONSHIP_COLORS: dict[str, str] = {
 MIN_NODE_SIZE = 8
 MAX_NODE_SIZE = 40
 DEFAULT_NODE_SIZE = 16
+
+# Sentiment lexicon for casual texting/iMessage
+POSITIVE_WORDS: set[str] = {
+    # Common positive words
+    "love", "thanks", "thank", "great", "awesome", "happy", "good", "best", "perfect",
+    "amazing", "wonderful", "excellent", "fantastic", "nice", "beautiful", "brilliant",
+    "excited", "fun", "cool", "glad", "appreciate", "yes", "yay", "yeah", "yep",
+    "sweet", "congrats", "congratulations", "celebrate", "lovely", "enjoy", "enjoyed",
+    "delighted", "pleased", "proud", "success", "successful", "win", "won", "victory",
+    "blessed", "grateful", "ideal", "outstanding", "superb", "fabulous", "marvelous",
+    "delightful", "incredible", "adore", "treasure", "cherish", "joy", "joyful",
+    # Texting slang
+    "lol", "lmao", "rofl", "haha", "hehe", "omg", "wow", "yesss", "yayyy", "woohoo",
+    "yasss", "lit", "fire", "dope", "sick", "rad", "stellar", "legit", "boss", "btw",
+    "tbh", "imo", "imho", "ngl", "fr", "bet", "vibes", "vibe", "mood",
+    # Positive emojis
+    "\U0001f600", "\U0001f603", "\U0001f604", "\U0001f601", "\U0001f60a", "\U0001f60d",
+    "\U0001f970", "\U0001f618", "\U0001f917", "\U0001f929", "\U0001f60e", "\U0001f64c",
+    "\U0001f44d", "\U0001f44f", "\U0001f4aa", "\U0001f389", "\U0001f38a", "\u2764\ufe0f",
+    "\U0001f495", "\U0001f496", "\U0001f497", "\U0001f499", "\U0001f49a", "\U0001f49b",
+    "\U0001f9e1", "\U0001f49c", "\U0001f90d", "\u2728", "\u2b50", "\U0001f31f",
+    "\U0001f4af", "\U0001f525", "\U0001f44c", "\U0001f64f", "\U0001f602", "\U0001f923",
+    "\u263a\ufe0f", "\U0001f60c", "\U0001f973", "\U0001f607",
+}
+
+NEGATIVE_WORDS: set[str] = {
+    # Common negative words
+    "sorry", "sad", "angry", "hate", "bad", "terrible", "awful", "horrible", "worst",
+    "upset", "annoyed", "frustrated", "disappointed", "disappointing", "sucks", "sucked",
+    "wrong", "problem", "issue", "unfortunately", "miss", "missed", "cancel", "cancelled",
+    "worry", "worried", "stress", "stressed", "difficult", "hard", "tough", "struggle",
+    "struggling", "fail", "failed", "failure", "lost", "lose", "losing", "sick", "ill",
+    "hurt", "pain", "painful", "crying", "depressed", "anxious", "nervous", "scared",
+    "afraid", "fear", "disaster", "crisis", "emergency", "broke", "broken", "damage",
+    "damaged", "hopeless", "helpless", "miserable", "pathetic", "nightmare", "regret",
+    "unfortunate", "dreadful", "disgusting", "worthless", "boring", "bored", "tired",
+    "exhausted", "overwhelmed", "confused", "stupid", "ridiculous", "annoying", "irritated",
+    # Texting slang
+    "ugh", "smh", "wtf", "omfg", "nah", "nope", "meh", "blah", "yikes", "oof", "rip",
+    "bruh", "fml", "smfh", "smdh",
+    # Negative emojis
+    "\U0001f622", "\U0001f62d", "\U0001f614", "\U0001f61e", "\U0001f61f", "\U0001f615",
+    "\U0001f641", "\u2639\ufe0f", "\U0001f623", "\U0001f616", "\U0001f62b", "\U0001f629",
+    "\U0001f624", "\U0001f620", "\U0001f621", "\U0001f92c", "\U0001f494", "\U0001f630",
+    "\U0001f628", "\U0001f631", "\U0001f633", "\U0001f62c", "\U0001f926", "\U0001f937",
+    "\U0001f612", "\U0001f644", "\U0001f611", "\U0001f62a",
+}
+
+INTENSIFIERS: set[str] = {
+    "very", "really", "so", "super", "extremely", "totally", "absolutely", "completely",
+    "incredibly", "particularly", "especially", "exceptionally", "remarkably", "quite",
+    "utterly", "truly", "genuinely", "seriously", "definitely", "literally",
+}
+
+# Intensifier boost factor
+INTENSIFIER_BOOST = 1.5
+
+
+def _compute_sentiment_score(text: str) -> float:
+    """Compute sentiment score using lexicon-based approach.
+
+    Args:
+        text: Message text to analyze
+
+    Returns:
+        Sentiment score from -1.0 (negative) to 1.0 (positive)
+    """
+    if not text:
+        return 0.0
+
+    # Tokenize and lowercase
+    tokens = text.lower().split()
+    if not tokens:
+        return 0.0
+
+    positive_score = 0.0
+    negative_score = 0.0
+
+    # Find intensifier positions for context-aware boosting
+    intensifier_positions: set[int] = set()
+    for i, token in enumerate(tokens):
+        if token in INTENSIFIERS:
+            intensifier_positions.add(i)
+
+    # Score each token using set membership (O(1) per lookup)
+    for i, token in enumerate(tokens):
+        boost = INTENSIFIER_BOOST if (i - 1) in intensifier_positions else 1.0
+
+        if token in POSITIVE_WORDS:
+            positive_score += boost
+
+        if token in NEGATIVE_WORDS:
+            negative_score += boost
+
+    # Normalize to -1 to 1 range
+    total_score = positive_score + negative_score
+    if total_score == 0:
+        return 0.0
+
+    # Calculate polarity
+    polarity = (positive_score - negative_score) / total_score
+    return max(-1.0, min(1.0, polarity))
 
 
 @dataclass
@@ -263,6 +366,7 @@ class GraphBuilder:
         self,
         chat_id: str | None = None,
         since: datetime | None = None,
+        until: datetime | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Get message statistics per contact."""
         from integrations.imessage import ChatDBReader
@@ -273,34 +377,31 @@ class GraphBuilder:
             reader = ChatDBReader()
             conversations = reader.get_conversations(limit=500)
 
+            # Filter conversations if specific chat_id requested
+            if chat_id:
+                conversations = [c for c in conversations if c.chat_id == chat_id]
+
+            # Collect all chat_ids and fetch messages in a single batch query
+            chat_ids = [conv.chat_id for conv in conversations]
+            messages_by_chat: dict[str, list] = self._batch_get_messages(
+                reader, chat_ids, limit_per_chat=500, after=since, before=until
+            )
+
             for conv in conversations:
                 cid = conv.chat_id
-                if chat_id and cid != chat_id:
-                    continue
-
-                # Get message counts
-                messages = reader.get_messages(cid, limit=500)
-                if since:
-                    messages = [m for m in messages if m.date >= since]
+                messages = messages_by_chat.get(cid, [])
 
                 sent_count = sum(1 for m in messages if m.is_from_me)
                 received_count = len(messages) - sent_count
 
-                # Calculate sentiment from messages
+                # Calculate sentiment from messages using lexicon
                 sentiment_sum = 0.0
                 sentiment_count = 0
                 for msg in messages:
                     if msg.text:
-                        # Simple sentiment heuristic
-                        text = msg.text.lower()
-                        positive = sum(
-                            1 for w in ["thanks", "love", "great", "awesome", "happy"] if w in text
-                        )
-                        negative = sum(
-                            1 for w in ["sorry", "sad", "angry", "hate", "bad"] if w in text
-                        )
-                        if positive + negative > 0:
-                            sentiment_sum += (positive - negative) / (positive + negative)
+                        score = _compute_sentiment_score(msg.text)
+                        if score != 0.0:
+                            sentiment_sum += score
                             sentiment_count += 1
 
                 avg_sentiment = sentiment_sum / sentiment_count if sentiment_count > 0 else 0.0
@@ -352,11 +453,104 @@ class GraphBuilder:
 
         return stats
 
+    @staticmethod
+    def _batch_get_messages(
+        reader: Any,
+        chat_ids: list[str],
+        limit_per_chat: int = 500,
+        after: datetime | None = None,
+        before: datetime | None = None,
+    ) -> dict[str, list]:
+        """Fetch messages for multiple chat_ids in a single SQL query.
+
+        Returns a dict mapping chat_id -> list of Message objects.
+        Falls back to per-chat queries if the batch query fails.
+        """
+        if not chat_ids:
+            return {}
+
+        from contracts.imessage import Message
+        from integrations.imessage.parser import (
+            datetime_to_apple_timestamp,
+            parse_apple_timestamp,
+        )
+
+        messages_by_chat: dict[str, list] = defaultdict(list)
+
+        try:
+            with reader._connection_context() as conn:
+                placeholders = ",".join("?" * len(chat_ids))
+                params: list[Any] = list(chat_ids)
+
+                date_clauses = ""
+                if after is not None:
+                    params.append(datetime_to_apple_timestamp(after))
+                    date_clauses += "AND message.date > ?"
+                if before is not None:
+                    params.append(datetime_to_apple_timestamp(before))
+                    date_clauses += " AND message.date < ?"
+
+                query = f"""
+                    SELECT
+                        chat.guid as chat_id,
+                        message.ROWID as msg_id,
+                        message.text,
+                        message.is_from_me,
+                        message.date,
+                        handle.id as sender,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY chat.guid ORDER BY message.date DESC
+                        ) as rn
+                    FROM chat
+                    JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                    JOIN message ON chat_message_join.message_id = message.ROWID
+                    LEFT JOIN handle ON message.handle_id = handle.ROWID
+                    WHERE chat.guid IN ({placeholders})
+                    {date_clauses}
+                    ORDER BY chat.guid, message.date DESC
+                """
+
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+
+                for row in rows:
+                    row_chat_id = row[0]
+                    rn = row[6]
+                    if rn > limit_per_chat:
+                        continue
+
+                    msg_date = parse_apple_timestamp(row[4]) if row[4] else None
+
+                    msg = Message(
+                        id=row[1],
+                        chat_id=row_chat_id,
+                        sender=row[5] or "",
+                        sender_name=None,
+                        text=row[2] or "",
+                        date=msg_date or datetime.now(),
+                        is_from_me=bool(row[3]),
+                    )
+                    messages_by_chat[row_chat_id].append(msg)
+
+        except Exception as e:
+            logger.warning("Batch message fetch failed, falling back to per-chat: %s", e)
+            for cid in chat_ids:
+                try:
+                    messages_by_chat[cid] = reader.get_messages(
+                        cid, limit=limit_per_chat, after=after
+                    )
+                except Exception:
+                    messages_by_chat[cid] = []
+
+        return dict(messages_by_chat)
+
     def build_network(
         self,
         include_relationships: list[str] | None = None,
         min_messages: int = 1,
         since: datetime | None = None,
+        until: datetime | None = None,
         max_nodes: int = 100,
     ) -> GraphData:
         """Build a full network graph of all contacts.
@@ -365,13 +559,14 @@ class GraphBuilder:
             include_relationships: Filter by relationship types (None = all)
             min_messages: Minimum message count to include
             since: Only include messages after this date
+            until: Only include messages before this date
             max_nodes: Maximum number of nodes to include
 
         Returns:
             GraphData with nodes and edges
         """
         contacts = self._get_contacts()
-        stats = self._get_message_stats(since=since)
+        stats = self._get_message_stats(since=since, until=until)
 
         # Build contact lookup by various identifiers
         contact_lookup: dict[str, dict[str, Any]] = {}
@@ -512,13 +707,15 @@ class GraphBuilder:
         # Build full network first
         full_graph = self.build_network(max_nodes=200)
 
-        # Find the target node
+        # Index nodes by ID and identifier for O(1) lookup
         target_hash = _hash_id(contact_id)
-        target_node = None
-        for node in full_graph.nodes:
-            if node.id == target_hash or node.metadata.get("identifier") == contact_id:
-                target_node = node
-                break
+        nodes_by_id = {n.id: n for n in full_graph.nodes}
+        nodes_by_ident = {
+            n.metadata.get("identifier"): n
+            for n in full_graph.nodes
+            if n.metadata.get("identifier")
+        }
+        target_node = nodes_by_id.get(target_hash) or nodes_by_ident.get(contact_id)
 
         if target_node is None:
             # Create a minimal graph with just the contact
@@ -538,26 +735,21 @@ class GraphBuilder:
         included_nodes: dict[str, GraphNode] = {target_node.id: target_node}
         included_edges: list[GraphEdge] = []
 
-        # BFS from target
+        # BFS from target (uses nodes_by_id dict for O(1) lookups)
         current_level = {target_node.id}
         for _ in range(depth):
             next_level: set[str] = set()
             for edge in full_graph.edges:
                 if edge.source in current_level and edge.target not in included_nodes:
                     next_level.add(edge.target)
-                    # Find the node
-                    for node in full_graph.nodes:
-                        if node.id == edge.target:
-                            included_nodes[node.id] = node
-                            break
+                    if edge.target in nodes_by_id:
+                        included_nodes[edge.target] = nodes_by_id[edge.target]
                     included_edges.append(edge)
 
                 elif edge.target in current_level and edge.source not in included_nodes:
                     next_level.add(edge.source)
-                    for node in full_graph.nodes:
-                        if node.id == edge.source:
-                            included_nodes[node.id] = node
-                            break
+                    if edge.source in nodes_by_id:
+                        included_nodes[edge.source] = nodes_by_id[edge.source]
                     included_edges.append(edge)
 
             current_level = next_level
@@ -592,6 +784,7 @@ def build_network_graph(
     include_relationships: list[str] | None = None,
     min_messages: int = 1,
     since: datetime | None = None,
+    until: datetime | None = None,
     max_nodes: int = 100,
 ) -> GraphData:
     """Convenience function to build a network graph.
@@ -600,6 +793,7 @@ def build_network_graph(
         include_relationships: Filter by relationship types
         min_messages: Minimum message count
         since: Only include messages after this date
+        until: Only include messages before this date
         max_nodes: Maximum nodes to include
 
     Returns:
@@ -610,6 +804,7 @@ def build_network_graph(
         include_relationships=include_relationships,
         min_messages=min_messages,
         since=since,
+        until=until,
         max_nodes=max_nodes,
     )
 

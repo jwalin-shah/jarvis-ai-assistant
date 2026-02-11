@@ -241,7 +241,7 @@ EXPECTED_INDICES = {
     "idx_facts_category",
 }
 
-CURRENT_SCHEMA_VERSION = 13  # contact_facts + linked_contact_id for NER linking
+CURRENT_SCHEMA_VERSION = 15  # vec_facts semantic index for contact facts
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {

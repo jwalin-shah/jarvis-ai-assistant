@@ -243,6 +243,13 @@ models/*_imessage_thresholds.json
 
 # Optuna databases
 optuna_bayesian.db
+optuna_studies.db
+
+# Data artifacts (personal, regeneratable)
+all_extracted_facts.json
+fact_extraction_sample.json
+facts_extracted_batched.json
+labeling.pid
 
 # Gemini review batches
 gemini_reviews_batches/
