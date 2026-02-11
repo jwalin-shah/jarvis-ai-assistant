@@ -1145,7 +1145,7 @@ class ChatDBReader:
             )
 
             try:
-                cursor.execute(query, (chat_id,))
+                cursor.execute(query, (chat_id, chat_id))
                 row = cursor.fetchone()
             except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
                 logger.warning(f"Query error in get_conversation: {e}")

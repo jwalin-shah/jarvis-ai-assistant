@@ -302,38 +302,34 @@ _BASE_QUERIES = {
         LIMIT 1
     """,
     "conversation_by_chat_id": """
-        WITH message_ranked AS (
-            SELECT
-                cmj.chat_id,
-                m.text,
-                m.attributedBody,
-                m.date,
-                ROW_NUMBER() OVER (PARTITION BY cmj.chat_id ORDER BY m.date DESC) as msg_rank,
-                COUNT(*) OVER (PARTITION BY cmj.chat_id) as message_count
-            FROM chat_message_join cmj
-            JOIN message m ON cmj.message_id = m.ROWID
-        ),
-        chat_participants AS (
-            SELECT
-                chat_handle_join.chat_id,
-                GROUP_CONCAT(handle.id, ', ') as participants
-            FROM chat_handle_join
-            JOIN handle ON chat_handle_join.handle_id = handle.ROWID
-            GROUP BY chat_handle_join.chat_id
-        )
         SELECT
             chat.ROWID as chat_rowid,
             chat.guid as chat_id,
             chat.display_name,
             chat.chat_identifier,
-            cp.participants,
-            COALESCE(mr.message_count, 0) as message_count,
-            mr.date as last_message_date,
-            mr.text as last_message_text,
-            mr.attributedBody as last_message_attributed_body
+            (
+                SELECT GROUP_CONCAT(h.id, ', ')
+                FROM chat_handle_join chj
+                JOIN handle h ON chj.handle_id = h.ROWID
+                WHERE chj.chat_id = chat.ROWID
+            ) as participants,
+            (
+                SELECT COUNT(*)
+                FROM chat_message_join cmj
+                WHERE cmj.chat_id = chat.ROWID
+            ) as message_count,
+            lm.date as last_message_date,
+            lm.text as last_message_text,
+            lm.attributedBody as last_message_attributed_body
         FROM chat
-        LEFT JOIN chat_participants cp ON cp.chat_id = chat.ROWID
-        LEFT JOIN message_ranked mr ON mr.chat_id = chat.ROWID AND mr.msg_rank = 1
+        LEFT JOIN (
+            SELECT cmj2.chat_id, m2.date, m2.text, m2.attributedBody
+            FROM chat_message_join cmj2
+            JOIN message m2 ON cmj2.message_id = m2.ROWID
+            WHERE cmj2.chat_id = (SELECT c.ROWID FROM chat c WHERE c.guid = ?)
+            ORDER BY m2.date DESC
+            LIMIT 1
+        ) lm ON lm.chat_id = chat.ROWID
         WHERE chat.guid = ?
         LIMIT 1
     """,
