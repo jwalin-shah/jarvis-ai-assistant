@@ -3,13 +3,13 @@
 Single source of truth for all category classification features.
 Eliminates train/serve skew by using identical feature extraction.
 
-Features:
+Feature layout (531 total):
 - 384 BERT embeddings (via embedder.encode, normalized)
 - 26 hand-crafted features (structure, mobilization, context, reactions)
 - 94 spaCy features (14 original + 80 new: NER, deps, tokens, morphology)
 - 19 new hand-crafted features (8 error-analysis + 11 high-value additions)
 - 8 hard-class features (closing/request specific)
-Total: 531 non-BERT features (147 without BERT, 531 with BERT)
+Total: 147 non-BERT features, 531 total with BERT
 
 Usage:
     from jarvis.features.category_features import CategoryFeatureExtractor
@@ -1078,25 +1078,34 @@ class CategoryFeatureExtractor:
 
 
 class FeatureConfig:
-    """Feature dimensions and metadata."""
+    """Feature dimensions and metadata.
+
+    Feature layout (531 total):
+    - [0:384]   = BERT embedding (L2-normalized)
+    - [384:410] = 26 hand-crafted (structure, mobilization, context, reactions)
+    - [410:504] = 94 spaCy (POS, tags, deps, NER, tokens, morphology)
+    - [504:523] = 19 new hand-crafted (error-analysis + high-value additions)
+    - [523:531] = 8 hard-class (closing/request specific)
+
+    Context BERT embeddings were removed to eliminate train-serve skew.
+    Previously, context BERT (384 dims at indices 384:768) was zeroed at
+    inference but present during training, causing a distribution mismatch.
+    """
 
     # Feature group sizes
     BERT_DIM = 384
-    CONTEXT_BERT_DIM = 384  # NEW: Context embeddings
     HAND_CRAFTED_DIM = 26
     SPACY_DIM = 94  # 14 original + 80 new (15 NER + 5 deps + 5 tokens + 55 from before)
     NEW_HAND_CRAFTED_DIM = 19  # 8 error-analysis + 11 high-value additions
     HARD_CLASS_DIM = 8
     MULTILABEL_INDICATOR_DIM = 10  # Closing + request specific features (unused in hardclass)
     TOTAL_NON_BERT = HAND_CRAFTED_DIM + SPACY_DIM + NEW_HAND_CRAFTED_DIM + HARD_CLASS_DIM  # 147
-    TOTAL_DIM = BERT_DIM + CONTEXT_BERT_DIM + TOTAL_NON_BERT  # 915
+    TOTAL_DIM = BERT_DIM + TOTAL_NON_BERT  # 531
 
     # Feature index ranges (for ColumnTransformer)
     BERT_START = 0
     BERT_END = BERT_DIM
-    CONTEXT_BERT_START = BERT_END
-    CONTEXT_BERT_END = CONTEXT_BERT_START + CONTEXT_BERT_DIM
-    HAND_CRAFTED_START = CONTEXT_BERT_END
+    HAND_CRAFTED_START = BERT_END
     HAND_CRAFTED_END = HAND_CRAFTED_START + HAND_CRAFTED_DIM
     SPACY_START = HAND_CRAFTED_END
     SPACY_END = SPACY_START + SPACY_DIM
@@ -1106,9 +1115,8 @@ class FeatureConfig:
     HARD_CLASS_END = HARD_CLASS_START + HARD_CLASS_DIM
 
     # Binary feature indices (no scaling needed)
-    # [0:384] = current BERT (passthrough, already normalized)
-    # [384:768] = context BERT (passthrough, already normalized)
-    # [768:775] = mobilization one-hots within hand-crafted (passthrough, binary)
+    # [0:384] = BERT (passthrough, already normalized)
+    # [389:396] = mobilization one-hots within hand-crafted (passthrough, binary)
     # Everything else gets scaled
     BINARY_INDICES = list(
         range(HAND_CRAFTED_START + 5, HAND_CRAFTED_START + 12)
@@ -1119,16 +1127,14 @@ class FeatureConfig:
         """Get feature indices for ColumnTransformer scaling.
 
         Feature layout:
-        - [0:384] = current BERT → passthrough (already L2-normalized)
-        - [384:768] = context BERT → passthrough (already L2-normalized)
-        - [768:775] = mobilization one-hots → passthrough (binary)
-        - [775:915] = everything else → StandardScaler
+        - [0:384]   = BERT → passthrough (already L2-normalized)
+        - [389:396] = mobilization one-hots → passthrough (binary)
+        - everything else → StandardScaler
 
         Returns:
             (bert_indices, binary_indices, scale_indices)
         """
-        # Both BERT embeddings (current + context) are already normalized
-        bert_indices = list(range(cls.BERT_START, cls.CONTEXT_BERT_END))
+        bert_indices = list(range(cls.BERT_START, cls.BERT_END))
         binary_indices = cls.BINARY_INDICES
         scale_indices = [
             i for i in range(cls.TOTAL_DIM) if i not in bert_indices and i not in binary_indices

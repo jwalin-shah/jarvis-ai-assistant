@@ -2,17 +2,19 @@
 
 Three-layer classification (fast path + ML model + heuristics):
 1. Fast path: reactions/acknowledgments → `acknowledge` (100% precision)
-2. Trained LightGBM: BERT (384) + context BERT (384) + hand-crafted (147) = 915 features → category
+2. Trained LightGBM: BERT (384) + hand-crafted (147) = 531 features → category
 3. Heuristic post-processing: Rule-based corrections for common errors
 4. Fallback: `statement` (default)
 
 Categories: acknowledge, closing, emotion, question, request, statement
 
-**Zero-Context-at-Inference Strategy**:
-Model trained WITH context features (915 dims), but context BERT embedding (indices 384:768)
-is ZEROED at inference. Context features during training act as "auxiliary supervision" -
-they help the model learn better representations in the other 531 features.
-Result: F1 0.7111 (samples) vs 0.7021 without context in training.
+Feature layout (531 total):
+- [0:384]   = BERT embedding (L2-normalized)
+- [384:531] = hand-crafted features (26 structural + 94 spaCy + 19 error-analysis + 8 hard-class)
+
+Note: Context BERT embeddings were removed from both training and inference to
+eliminate train-serve skew. Previously, context BERT (384 dims) was zeroed at
+inference but present during training, causing a distribution mismatch.
 
 Heuristic corrections:
 - Reaction messages ("Laughed at", "Loved") → emotion
@@ -81,9 +83,6 @@ CATEGORIES = [
 _feature_extractor = None
 _feature_extractor_lock = threading.Lock()
 
-# Cached zero context embedding (avoids 1.5KB allocation per classification)
-_ZERO_CONTEXT = np.zeros(384, dtype=np.float32)
-
 
 def _get_feature_extractor() -> CategoryFeatureExtractor:
     """Get or initialize feature extractor (thread-safe)."""
@@ -122,8 +121,7 @@ class CategoryClassifier(EmbedderMixin):
 
     Layers:
     1. Fast path: reactions/acknowledgments → `acknowledge`
-    2. LightGBM prediction (BERT + context BERT + hand-crafted + spaCy features)
-       - Context BERT is ZEROED at inference (auxiliary supervision strategy)
+    2. LightGBM prediction: BERT (384) + hand-crafted (147) = 531 features
     3. Fallback: `statement` (conf=0.30)
     """
 
@@ -150,8 +148,8 @@ class CategoryClassifier(EmbedderMixin):
     def _load_pipeline(self) -> bool:
         """Load trained Pipeline (with scaler + LightGBM) from disk.
 
-        Model: OneVsRestClassifier(LGBMClassifier) trained with 915 features.
-        Strategy: Trained WITH context embeddings, zeroed at inference.
+        Model: OneVsRestClassifier(LGBMClassifier) trained with 531 features.
+        Feature layout: BERT (384) + hand-crafted (147).
         """
         if self._pipeline_loaded:
             return self._pipeline is not None
@@ -255,9 +253,8 @@ class CategoryClassifier(EmbedderMixin):
                 logger.warning("BERT encode failed, using zero embedding: %s", embed_err)
                 embedding = np.zeros(384, dtype=np.float32)
 
-            # Context BERT ALWAYS ZERO at inference (auxiliary supervision strategy)
             non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
-            features = np.concatenate([embedding, _ZERO_CONTEXT, non_bert_features])
+            features = np.concatenate([embedding, non_bert_features])
             features = features.reshape(1, -1)
 
             import warnings
@@ -404,11 +401,10 @@ class CategoryClassifier(EmbedderMixin):
                 mob_types,
             )
 
-            # Build full feature matrix: BERT (384) + zero context (384) + non-BERT (147)
-            zero_ctx = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
+            # Build full feature matrix: BERT (384) + hand-crafted (147) = 531
             non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
             feature_matrix = np.concatenate(
-                [embeddings, zero_ctx, non_bert_matrix],
+                [embeddings, non_bert_matrix],
                 axis=1,
             )
 
