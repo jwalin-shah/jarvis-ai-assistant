@@ -72,7 +72,9 @@ def test_extract_candidates(mock_junk, extractor):
         {"text": "Google", "label": "org", "score": 0.8, "start": 25, "end": 31},
     ]
 
-    candidates = extractor.extract_candidates("I live in Austin and work at Google", message_id=1)
+    candidates = extractor.extract_candidates(
+        "I live in Austin and work at Google", message_id=1, use_gate=False,
+    )
 
     assert len(candidates) == 2
     assert candidates[0].span_text == "Austin"
@@ -89,7 +91,8 @@ def test_extract_candidates_filtering(extractor):
         {"text": "Austin", "label": "place", "score": 0.95},  # Duplicate
     ]
 
-    candidates = extractor.extract_candidates("it is Small in Austin", message_id=1)
+    # Need "live in" pattern so place resolves to location.current (not other_personal_fact)
+    candidates = extractor.extract_candidates("I live in Austin", message_id=1, use_gate=False)
     assert len(candidates) == 1
     assert candidates[0].span_text == "Austin"
 

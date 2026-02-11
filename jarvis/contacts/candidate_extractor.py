@@ -16,6 +16,7 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from jarvis.contacts.fact_filter import is_fact_likely
 from jarvis.contacts.junk_filters import is_junk_message
 
 logger = logging.getLogger(__name__)
@@ -27,45 +28,65 @@ logger = logging.getLogger(__name__)
 MODEL = "urchade/gliner_medium-v2.1"
 GLOBAL_THRESHOLD = 0.35  # high recall
 
-# Canonical labels used internally by our pipeline and evaluation.
+# Canonical extraction labels used by default for stage-1 candidate generation.
+# These are intentionally coarse; downstream filtering and attribution resolve
+# finer distinctions (e.g., current vs future location, employer vs school).
 SPAN_LABELS = [
-    # Generic
     "person_name",
+    "family_member",
     "place",
     "org",
     "date_ref",
-    # Fact-like
     "food_item",
     "job_role",
     "health_condition",
     "activity",
-    "allergy",
-    "employer",
-    "current_location",
-    "future_location",
-    "past_location",
-    "family_member",
-    "friend_name",
-    "partner_name",
 ]
+
+# Label profiles:
+# - high_recall: broad mining (default behavior / research mode)
+# - balanced: drops labels with highest nuisance rate in chat data
+# - high_precision: stricter shortlist for production candidate quality
+LABEL_PROFILES: dict[str, list[str]] = {
+    "high_recall": list(SPAN_LABELS),
+    "balanced": [
+        "family_member",
+        "place",
+        "org",
+        "food_item",
+        "job_role",
+        "health_condition",
+        "activity",
+    ],
+    "high_precision": [
+        "family_member",
+        "place",
+        "org",
+        "food_item",
+        "job_role",
+        "health_condition",
+        "activity",
+    ],
+}
 
 # Natural-language prompts sent to GLiNER.
 # Keep these semantically explicit and close to everyday wording.
 NATURAL_LANGUAGE_LABELS: dict[str, str] = {
     "person_name": "person name",
-    "place": "place",
-    "org": "organization",
-    "date_ref": "date reference",
-    "food_item": "food item",
-    "job_role": "job role",
-    "health_condition": "medical condition",
-    "activity": "activity",
+    "family_member": "family member (mom, sister, etc)",
+    "place": "place or location",
+    "org": "organization or company",
+    "date_ref": "date or time reference",
+    "food_item": "food or drink",
+    "job_role": "job title or profession",
+    "health_condition": "medical condition or symptom",
+    "activity": "hobby, sport, or activity",
+    # Optional aliases retained for custom label sets.
     "allergy": "allergy",
     "employer": "employer",
     "current_location": "current location",
     "future_location": "future location",
     "past_location": "past location",
-    "family_member": "family member",
     "friend_name": "friend name",
     "partner_name": "romantic partner",
 }
@@ -73,23 +94,49 @@ NATURAL_LANGUAGE_LABELS: dict[str, str] = {
 # Per-label minimum thresholds (after global threshold)
 PER_LABEL_MIN: dict[str, float] = {
     "person_name": 0.55,
+    "family_member": 0.50,
     "place": 0.50,
     "org": 0.60,
-    "food_item": 0.50,
-    "job_role": 0.55,
-    "health_condition": 0.50,
-    "activity": 0.55,
     "date_ref": 0.60,
+    "food_item": 0.50,
+    "job_role": 0.65,  # Tightened from 0.55
+    "health_condition": 0.50,
+    "activity": 0.65,  # Tightened from 0.55
+    # Optional aliases retained for custom label sets.
     "allergy": 0.45,
     "employer": 0.50,
     "current_location": 0.45,
     "future_location": 0.45,
     "past_location": 0.45,
-    "family_member": 0.50,
     "friend_name": 0.50,
     "partner_name": 0.50,
 }
 DEFAULT_MIN = 0.55
+CONTEXT_SEPARATOR = "\n[CTX]\n"
+
+# Profile-specific per-label minimum score overrides.
+# These are merged on top of PER_LABEL_MIN.
+PER_LABEL_MIN_PROFILE_OVERRIDES: dict[str, dict[str, float]] = {
+    # Keep broad recall in research mode.
+    "high_recall": {},
+    # Slightly tighter on historically noisy labels.
+    "balanced": {
+        "place": 0.60,
+        "org": 0.62,
+        "activity": 0.70,
+        "job_role": 0.68,
+    },
+    # Stronger precision-oriented thresholds.
+    "high_precision": {
+        "family_member": 0.65,
+        "place": 0.65,
+        "org": 0.68,
+        "food_item": 0.60,
+        "job_role": 0.70,
+        "health_condition": 0.55,
+        "activity": 0.65,
+    },
+}
 
 # Vague words to reject as span_text
 VAGUE = {"it", "this", "that", "thing", "stuff", "them", "there", "here", "me", "you"}
@@ -100,17 +147,30 @@ VAGUE = {"it", "this", "that", "thing", "stuff", "them", "there", "here", "me", 
 
 FACT_TYPES = {
     # location
-    "location.current", "location.past", "location.future", "location.hometown",
+    "location.current",
+    "location.past",
+    "location.future",
+    "location.hometown",
     # work
-    "work.employer", "work.job_title", "work.former_employer",
+    "work.employer",
+    "work.job_title",
+    "work.former_employer",
     # relationship
-    "relationship.family", "relationship.friend", "relationship.partner",
+    "relationship.family",
+    "relationship.friend",
+    "relationship.partner",
     # preference
-    "preference.food_like", "preference.food_dislike", "preference.activity",
+    "preference.food_like",
+    "preference.food_dislike",
+    "preference.activity",
     # health
-    "health.allergy", "health.dietary", "health.condition",
+    "health.allergy",
+    "health.dietary",
+    "health.condition",
     # personal
-    "personal.birthday", "personal.school", "personal.pet",
+    "personal.birthday",
+    "personal.school",
+    "personal.pet",
     # fallback
     "other_personal_fact",
 }
@@ -122,13 +182,16 @@ FACT_TYPE_RULES: list[tuple[str, set[str], str]] = [
     (r"allergic to", {"food_item", "health_condition", "allergy"}, "health.allergy"),
     # location
     (r"(live|living|based) in", {"place", "current_location"}, "location.current"),
+    (r"(stay|staying|reside) +(in|at|near)", {"place", "current_location"}, "location.current"),
     (r"(moving|headed|relocating) to", {"place", "future_location"}, "location.future"),
     (r"(grew up|from|raised) in", {"place", "past_location"}, "location.hometown"),
+    (r"(born|hometown|originally) +(in|from)", {"place", "past_location"}, "location.hometown"),
     (r"(moved from|used to live|lived in)", {"place", "past_location"}, "location.past"),
     # work
     (r"(work|working|started|joined) at", {"org", "employer"}, "work.employer"),
+    (r"(hired|promoted|intern) at", {"org", "employer"}, "work.employer"),
     (r"(left|quit|fired from|used to work)", {"org", "employer"}, "work.former_employer"),
-    (r"(i'm a|work as|job as|position as)", {"job_role"}, "work.job_title"),
+    (r"(i'm a|i am a|i am an|work as|job as|position as)", {"job_role"}, "work.job_title"),
     # relationship
     (
         r"my (sister|brother|mom|dad|mother|father|aunt|uncle|cousin|grandma|grandpa)",
@@ -143,13 +206,13 @@ FACT_TYPE_RULES: list[tuple[str, set[str], str]] = [
     ),
     # preference
     (
-        r"(love|obsessed with|addicted to|favorite)",
+        r"(love|obsessed with|addicted to|favorite|crave)",
         {"food_item"},
         "preference.food_like",
     ),
     (r"(hate|can't stand|despise|gross)", {"food_item"}, "preference.food_dislike"),
     (
-        r"(love|enjoy|into) +(running|hiking|swimming|yoga|cooking|gaming|reading)",
+        r"(love|enjoy|into|started|play|playing) +\w+",
         {"activity"},
         "preference.activity",
     ),
@@ -162,6 +225,7 @@ FACT_TYPE_RULES: list[tuple[str, set[str], str]] = [
 # Direct label → fact_type for fact-like labels (no pattern needed)
 DIRECT_LABEL_MAP: dict[str, str] = {
     "allergy": "health.allergy",
+    "health_condition": "health.condition",
     "current_location": "location.current",
     "future_location": "location.future",
     "past_location": "location.past",
@@ -169,7 +233,31 @@ DIRECT_LABEL_MAP: dict[str, str] = {
     "family_member": "relationship.family",
     "friend_name": "relationship.friend",
     "partner_name": "relationship.partner",
+    "food_item": "preference.food_like",
+    "activity": "preference.activity",
+    "job_role": "work.job_title",
 }
+
+
+def list_label_profiles() -> list[str]:
+    """Return valid label profile names."""
+    return sorted(LABEL_PROFILES.keys())
+
+
+def labels_for_profile(profile: str) -> list[str]:
+    """Return canonical labels for a known profile."""
+    if profile not in LABEL_PROFILES:
+        valid = ", ".join(list_label_profiles())
+        raise ValueError(f"Unknown label profile '{profile}'. Valid profiles: {valid}")
+    return list(LABEL_PROFILES[profile])
+
+
+def per_label_min_for_profile(profile: str) -> dict[str, float]:
+    """Return per-label min thresholds for a profile."""
+    merged = dict(PER_LABEL_MIN)
+    merged.update(PER_LABEL_MIN_PROFILE_OVERRIDES.get(profile, {}))
+    return merged
+
 
 # ---------------------------------------------------------------------------
 # FactCandidate dataclass
@@ -208,21 +296,35 @@ class CandidateExtractor:
     """Extract fact candidates from messages using GLiNER.
 
     Lazy-loads the model (~500MB) on first call.
-    Uses hybrid label set (generic + fact-like) for high recall.
+    Uses a coarse, natural-language label set for high-recall candidate mining.
     """
 
     def __init__(
         self,
         model_name: str = MODEL,
         labels: list[str] | None = None,
+        label_profile: str | None = None,
         global_threshold: float = GLOBAL_THRESHOLD,
         per_label_min: dict[str, float] | None = None,
         default_min: float = DEFAULT_MIN,
+        backend: str = "auto",
     ):
         self._model: Any = None
+        self._mlx_model: Any = None
         self._model_name = model_name
+        self._backend = backend  # "auto", "mlx", or "pytorch"
+        self._label_profile = label_profile or "high_recall"
+
+        if labels is not None:
+            # Explicit labels override profile selection.
+            resolved_labels = list(labels)
+        elif label_profile is not None:
+            resolved_labels = labels_for_profile(label_profile)
+        else:
+            resolved_labels = list(SPAN_LABELS)
+
         # `labels` are canonical label ids. GLiNER sees natural-language prompts.
-        self._labels_canonical = labels or SPAN_LABELS
+        self._labels_canonical = resolved_labels
         self._model_labels = [self._to_model_label(lbl) for lbl in self._labels_canonical]
         self._label_to_canonical = {
             self._to_model_label(lbl): lbl for lbl in self._labels_canonical
@@ -230,9 +332,14 @@ class CandidateExtractor:
         # Also accept canonical labels directly if the model returns them.
         self._label_to_canonical.update({lbl: lbl for lbl in self._labels_canonical})
         self._global_threshold = global_threshold
-        self._per_label_min = (
-            dict(per_label_min) if per_label_min is not None else dict(PER_LABEL_MIN)
-        )
+        if per_label_min is not None:
+            self._per_label_min = dict(per_label_min)
+        else:
+            self._per_label_min = (
+                per_label_min_for_profile(label_profile)
+                if label_profile is not None
+                else dict(PER_LABEL_MIN)
+            )
         self._default_min = default_min
 
     @staticmethod
@@ -244,8 +351,126 @@ class CandidateExtractor:
         """Map GLiNER label output back to canonical label ids."""
         return self._label_to_canonical.get(predicted_label, predicted_label)
 
+    @staticmethod
+    def _normalize_context_messages(messages: Any) -> list[str]:
+        """Normalize optional context payload into a clean list of message strings."""
+        if messages is None:
+            return []
+        if isinstance(messages, str):
+            msg = messages.strip()
+            return [msg] if msg else []
+        normalized: list[str] = []
+        for item in messages:
+            if not isinstance(item, str):
+                continue
+            text = item.strip()
+            if text:
+                normalized.append(text)
+        return normalized
+
+    def _build_context_text(
+        self,
+        current_text: str,
+        prev_messages: Any = None,
+        next_messages: Any = None,
+    ) -> tuple[str, int, int]:
+        """Build model input text and return current-message character bounds."""
+        prev = self._normalize_context_messages(prev_messages)
+        nxt = self._normalize_context_messages(next_messages)
+        if not prev and not nxt:
+            return current_text, 0, len(current_text)
+
+        prev_block = "\n".join(prev)
+        next_block = "\n".join(nxt)
+
+        if prev_block:
+            merged = f"{prev_block}{CONTEXT_SEPARATOR}{current_text}"
+            current_start = len(prev_block) + len(CONTEXT_SEPARATOR)
+        else:
+            merged = current_text
+            current_start = 0
+
+        current_end = current_start + len(current_text)
+        if next_block:
+            merged = f"{merged}{CONTEXT_SEPARATOR}{next_block}"
+
+        return merged, current_start, current_end
+
+    def _project_entity_to_current(
+        self,
+        entity: dict[str, Any],
+        *,
+        current_start: int,
+        current_end: int,
+        current_text: str,
+    ) -> tuple[str, int, int] | None:
+        """Project a model entity span from merged context text to current message offsets."""
+        raw_start = int(entity.get("start", 0))
+        raw_end = int(entity.get("end", raw_start + len(str(entity.get("text", "")))))
+        raw_span = str(entity.get("text", "")).strip()
+        if raw_end <= raw_start:
+            return None
+
+        # Only keep entities fully contained in the current message segment.
+        if raw_start < current_start or raw_end > current_end:
+            if raw_span:
+                idx = current_text.casefold().find(raw_span.casefold())
+                if idx >= 0:
+                    return raw_span, idx, idx + len(raw_span)
+            return None
+
+        start_char = raw_start - current_start
+        end_char = raw_end - current_start
+        if start_char < 0 or end_char > len(current_text) or end_char <= start_char:
+            if raw_span:
+                idx = current_text.casefold().find(raw_span.casefold())
+                if idx >= 0:
+                    return raw_span, idx, idx + len(raw_span)
+            return None
+
+        span_text = current_text[start_char:end_char].strip()
+        if raw_span and span_text.casefold() != raw_span.casefold():
+            idx = current_text.casefold().find(raw_span.casefold())
+            if idx >= 0:
+                return raw_span, idx, idx + len(raw_span)
+        if not span_text:
+            if not raw_span:
+                return None
+            idx = current_text.casefold().find(raw_span.casefold())
+            if idx < 0:
+                return None
+            start_char = idx
+            end_char = idx + len(raw_span)
+            span_text = raw_span
+
+        return span_text, start_char, end_char
+
+    def _use_mlx(self) -> bool:
+        """Check whether to use the MLX backend."""
+        if self._backend == "pytorch":
+            return False
+        if self._backend == "mlx":
+            return True
+        # auto: try MLX, fall back to PyTorch
+        try:
+            import mlx.core  # noqa: F401
+
+            return True
+        except ImportError:
+            return False
+
+    def _load_mlx_model(self) -> Any:
+        """Lazy-load MLX GLiNER model."""
+        if self._mlx_model is not None:
+            return self._mlx_model
+        from models.gliner_mlx import get_mlx_gliner
+
+        self._mlx_model = get_mlx_gliner()
+        self._mlx_model.load_model()
+        return self._mlx_model
+
     def _load_model(self) -> Any:
-        """Lazy-load GLiNER model (500MB, load once)."""
+        """Lazy-load PyTorch GLiNER model (500MB, load once)."""
         if self._model is not None:
             return self._model
         from gliner import GLiNER
@@ -255,26 +480,63 @@ class CandidateExtractor:
         logger.info("GLiNER model loaded")
         return self._model
 
-    def predict_raw_entities(self, text: str, threshold: float = 0.01) -> list[dict[str, Any]]:
+    def predict_raw_entities(
+        self,
+        text: str,
+        threshold: float = 0.01,
+        *,
+        prev_messages: Any = None,
+        next_messages: Any = None,
+    ) -> list[dict[str, Any]]:
         """Run raw GLiNER prediction without local filtering.
 
         Args:
-            text: Input message text.
+            text: Current input message text.
             threshold: GLiNER score threshold used at model call time.
+            prev_messages: Optional previous messages for context.
+            next_messages: Optional next messages for context.
         """
-        model = self._load_model()
-        entities = model.predict_entities(
+        merged_text, current_start, current_end = self._build_context_text(
             text,
-            self._model_labels,
-            threshold=threshold,
-            flat_ner=True,
+            prev_messages=prev_messages,
+            next_messages=next_messages,
         )
+
+        if self._use_mlx():
+            mlx_model = self._load_mlx_model()
+            entities = mlx_model.predict_entities(
+                merged_text,
+                self._model_labels,
+                threshold=threshold,
+                flat_ner=True,
+            )
+        else:
+            model = self._load_model()
+            entities = model.predict_entities(
+                merged_text,
+                self._model_labels,
+                threshold=threshold,
+                flat_ner=True,
+            )
+
         normalized: list[dict[str, Any]] = []
         for entity in entities:
+            projected = self._project_entity_to_current(
+                entity,
+                current_start=current_start,
+                current_end=current_end,
+                current_text=text,
+            )
+            if projected is None:
+                continue
+            span_text, start_char, end_char = projected
             item = dict(entity)
             raw_label = str(item.get("label", ""))
             item["raw_label"] = raw_label
             item["label"] = self._canonicalize_label(raw_label)
+            item["text"] = span_text
+            item["start"] = start_char
+            item["end"] = end_char
             normalized.append(item)
         return normalized
 
@@ -290,30 +552,39 @@ class CandidateExtractor:
         threshold: float | None = None,
         apply_label_thresholds: bool = True,
         apply_vague_filter: bool = True,
+        prev_messages: Any = None,
+        next_messages: Any = None,
+        use_gate: bool = True,
     ) -> list[FactCandidate]:
         """Single message -> list of FactCandidates.
 
-        Applies junk filter, per-label thresholds, vague word rejection,
+        If prev/next context is provided, GLiNER runs on merged context while
+        candidates are strictly anchored to the current message span.
+
+        Applies junk filter, message gate, per-label thresholds, vague word rejection,
         and strict dedup before returning.
         """
         if is_junk_message(text):
             return []
+        
+        if use_gate and not is_fact_likely(text, is_from_me=is_from_me or False):
+            logger.debug("Gate closed for message: %s", text[:50])
+            return []
 
-        self._load_model()
         call_threshold = self._global_threshold if threshold is None else threshold
-        ents = self._model.predict_entities(
+        ents = self.predict_raw_entities(
             text,
-            self._model_labels,
             threshold=call_threshold,
-            flat_ner=True,
+            prev_messages=prev_messages,
+            next_messages=next_messages,
         )
 
         out: list[FactCandidate] = []
         seen: set[tuple[str, str]] = set()  # (span_casefolded, label) for dedup
 
         for e in ents:
-            span = e["text"].strip()
-            label = self._canonicalize_label(e["label"])
+            span = str(e.get("text", "")).strip()
+            label = str(e.get("label", ""))
             score = float(e.get("score", 0.0))
 
             # Per-label threshold
@@ -331,25 +602,31 @@ class CandidateExtractor:
             seen.add(dedup_key)
 
             # Resolve character offsets
-            start_char = e.get("start", 0)
-            end_char = e.get("end", start_char + len(span))
+            start_char = int(e.get("start", 0))
+            end_char = int(e.get("end", start_char + len(span)))
 
             fact_type = self._resolve_fact_type(text, span, label)
 
-            out.append(FactCandidate(
-                message_id=message_id,
-                span_text=span,
-                span_label=label,
-                gliner_score=score,
-                fact_type=fact_type,
-                start_char=start_char,
-                end_char=end_char,
-                source_text=text,
-                chat_id=chat_id,
-                is_from_me=is_from_me,
-                sender_handle_id=sender_handle_id,
-                message_date=message_date,
-            ))
+            # Drop unresolvable fallback spans (highest FP source)
+            if fact_type == "other_personal_fact":
+                continue
+
+            out.append(
+                FactCandidate(
+                    message_id=message_id,
+                    span_text=span,
+                    span_label=label,
+                    gliner_score=score,
+                    fact_type=fact_type,
+                    start_char=start_char,
+                    end_char=end_char,
+                    source_text=text,
+                    chat_id=chat_id,
+                    is_from_me=is_from_me,
+                    sender_handle_id=sender_handle_id,
+                    message_date=message_date,
+                )
+            )
 
         return out
 
@@ -363,35 +640,70 @@ class CandidateExtractor:
         Each message dict should have at minimum:
             - text: str
             - message_id: int
-        Optional keys: chat_id, is_from_me, sender_handle_id, message_date
+        Optional keys: chat_id, is_from_me, sender_handle_id, message_date,
+        context_prev (list[str]), context_next (list[str]).
         """
-        self._load_model()
+        use_mlx = self._use_mlx()
+        if use_mlx:
+            self._load_mlx_model()
+        else:
+            self._load_model()
 
         # Pre-filter junk messages
-        valid_msgs = [
-            m for m in messages
-            if not is_junk_message(m.get("text", ""))
-        ]
+        valid_msgs = [m for m in messages if not is_junk_message(m.get("text", ""))]
 
         all_candidates: list[FactCandidate] = []
         total = len(valid_msgs)
 
         for i in range(0, total, batch_size):
             batch = valid_msgs[i : i + batch_size]
-            texts = [m["text"] for m in batch]
+            merged_texts: list[str] = []
+            current_bounds: list[tuple[int, int]] = []
+
+            for msg in batch:
+                merged_text, current_start, current_end = self._build_context_text(
+                    msg["text"],
+                    prev_messages=msg.get("context_prev"),
+                    next_messages=msg.get("context_next"),
+                )
+                merged_texts.append(merged_text)
+                current_bounds.append((current_start, current_end))
 
             # GLiNER batch prediction
-            batch_entities = self._model.batch_predict_entities(
-                texts, self._model_labels, threshold=self._global_threshold, flat_ner=True
-            )
+            if use_mlx:
+                batch_entities = self._mlx_model.predict_batch(
+                    merged_texts,
+                    self._model_labels,
+                    batch_size=len(merged_texts),
+                    threshold=self._global_threshold,
+                    flat_ner=True,
+                )
+            else:
+                batch_entities = self._model.batch_predict_entities(
+                    merged_texts,
+                    self._model_labels,
+                    threshold=self._global_threshold,
+                    flat_ner=True,
+                )
 
-            for msg, ents in zip(batch, batch_entities):
+            for msg, bounds, ents in zip(batch, current_bounds, batch_entities):
                 seen: set[tuple[str, str]] = set()
                 msg_id = msg["message_id"]
+                current_text = msg["text"]
+                current_start, current_end = bounds
 
                 for e in ents:
-                    span = e["text"].strip()
-                    label = self._canonicalize_label(e["label"])
+                    projected = self._project_entity_to_current(
+                        e,
+                        current_start=current_start,
+                        current_end=current_end,
+                        current_text=current_text,
+                    )
+                    if projected is None:
+                        continue
+                    span, start_char, end_char = projected
+
+                    label = self._canonicalize_label(str(e.get("label", "")))
                     score = float(e.get("score", 0.0))
 
                     if score < self._per_label_min.get(label, self._default_min):
@@ -404,29 +716,35 @@ class CandidateExtractor:
                         continue
                     seen.add(dedup_key)
 
-                    start_char = e.get("start", 0)
-                    end_char = e.get("end", start_char + len(span))
-                    fact_type = self._resolve_fact_type(msg["text"], span, label)
+                    fact_type = self._resolve_fact_type(current_text, span, label)
 
-                    all_candidates.append(FactCandidate(
-                        message_id=msg_id,
-                        span_text=span,
-                        span_label=label,
-                        gliner_score=score,
-                        fact_type=fact_type,
-                        start_char=start_char,
-                        end_char=end_char,
-                        source_text=msg["text"],
-                        chat_id=msg.get("chat_id"),
-                        is_from_me=msg.get("is_from_me"),
-                        sender_handle_id=msg.get("sender_handle_id"),
-                        message_date=msg.get("message_date"),
-                    ))
+                    # Drop unresolvable fallback spans (highest FP source)
+                    if fact_type == "other_personal_fact":
+                        continue
+
+                    all_candidates.append(
+                        FactCandidate(
+                            message_id=msg_id,
+                            span_text=span,
+                            span_label=label,
+                            gliner_score=score,
+                            fact_type=fact_type,
+                            start_char=start_char,
+                            end_char=end_char,
+                            source_text=current_text,
+                            chat_id=msg.get("chat_id"),
+                            is_from_me=msg.get("is_from_me"),
+                            sender_handle_id=msg.get("sender_handle_id"),
+                            message_date=msg.get("message_date"),
+                        )
+                    )
 
             processed = min(i + batch_size, total)
             logger.info(
                 "Batch progress: %d/%d messages (%d candidates so far)",
-                processed, total, len(all_candidates),
+                processed,
+                total,
+                len(all_candidates),
             )
 
         return all_candidates
