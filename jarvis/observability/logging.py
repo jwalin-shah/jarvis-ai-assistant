@@ -100,7 +100,10 @@ def timed_operation(
             elapsed_ms,
             extra={
                 "event_type": f"{operation}.complete",
-                "metrics": {"latency_ms": round(elapsed_ms, 1), **{k: v for k, v in merged.items() if isinstance(v, (int, float))}},
+                "metrics": {
+                    "latency_ms": round(elapsed_ms, 1),
+                    **{k: v for k, v in merged.items() if isinstance(v, (int, float))},
+                },
                 "metadata": {k: v for k, v in merged.items() if not isinstance(v, (int, float))},
             },
         )

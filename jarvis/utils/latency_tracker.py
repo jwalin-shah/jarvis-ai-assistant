@@ -7,19 +7,18 @@ Integrates with metrics system for dashboard reporting.
 import logging
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, asdict
-from typing import Dict, List, Optional
+from dataclasses import asdict, dataclass
 
 logger = logging.getLogger(__name__)
 
 LATENCY_THRESHOLDS = {
-    "conversations_fetch": 100,      # Should be <100ms (was 1400ms)
-    "message_load": 100,             # Should be <100ms (was 500ms with N+1)
-    "fact_save": 50,                 # Should be <50ms (was 150ms with N+1)
-    "search_filter": 100,            # Should be <100ms (was wasted 1000 msg load)
-    "graph_build": 100,              # Should be <100ms (was 200ms with loops)
-    "socket_startup": 500,           # Socket should be ready in <500ms
-    "db_query": 200,                 # Single query should be <200ms
+    "conversations_fetch": 100,  # Should be <100ms (was 1400ms)
+    "message_load": 100,  # Should be <100ms (was 500ms with N+1)
+    "fact_save": 50,  # Should be <50ms (was 150ms with N+1)
+    "search_filter": 100,  # Should be <100ms (was wasted 1000 msg load)
+    "graph_build": 100,  # Should be <100ms (was 200ms with loops)
+    "socket_startup": 500,  # Socket should be ready in <500ms
+    "db_query": 200,  # Single query should be <200ms
 }
 
 
@@ -30,9 +29,9 @@ class LatencyRecord:
     operation: str
     elapsed_ms: float
     timestamp: float
-    threshold_ms: Optional[float] = None
+    threshold_ms: float | None = None
     exceeded: bool = False
-    metadata: Dict = None
+    metadata: dict = None
 
     def to_dict(self) -> dict:
         """Convert to dict for JSON serialization."""
@@ -46,13 +45,11 @@ class LatencyTracker:
     """Track operation latencies and detect performance regressions."""
 
     def __init__(self):
-        self._records: List[LatencyRecord] = []
+        self._records: list[LatencyRecord] = []
         self._thresholds = LATENCY_THRESHOLDS.copy()
 
     @contextmanager
-    def track(
-        self, operation: str, threshold_ms: Optional[float] = None, **metadata
-    ):
+    def track(self, operation: str, threshold_ms: float | None = None, **metadata):
         """Context manager for tracking operation latency.
 
         Usage:
@@ -86,19 +83,17 @@ class LatencyTracker:
                     f"Metadata: {metadata}"
                 )
             else:
-                logger.debug(
-                    f"[LATENCY] {operation} took {elapsed_ms:.1f}ms (ok)"
-                )
+                logger.debug(f"[LATENCY] {operation} took {elapsed_ms:.1f}ms (ok)")
 
-    def get_records(self) -> List[LatencyRecord]:
+    def get_records(self) -> list[LatencyRecord]:
         """Get all recorded latencies."""
         return self._records
 
-    def get_slow_operations(self) -> List[LatencyRecord]:
+    def get_slow_operations(self) -> list[LatencyRecord]:
         """Get operations that exceeded thresholds."""
         return [r for r in self._records if r.exceeded]
 
-    def summary(self) -> Dict:
+    def summary(self) -> dict:
         """Get summary statistics."""
         if not self._records:
             return {}
