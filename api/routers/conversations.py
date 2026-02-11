@@ -10,6 +10,7 @@ All endpoints require Full Disk Access permission to read the iMessage database.
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
@@ -679,6 +680,21 @@ async def send_attachment(
         HTTPException 408: Request timed out
         HTTPException 429: Rate limit exceeded
     """
+    # Defense-in-depth: re-validate resolved path at point of use (TOCTOU mitigation)
+    try:
+        resolved = Path(attachment_request.file_path).resolve(strict=True)
+        resolved.relative_to(Path.home())
+    except (ValueError, OSError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file path: must exist and be within home directory",
+        )
+    if not resolved.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file path: must be a regular file",
+        )
+
     sender = IMessageSender()
 
     try:
@@ -687,7 +703,7 @@ async def send_attachment(
                 if attachment_request.is_group:
                     result = await run_in_threadpool(
                         sender.send_attachment,
-                        file_path=attachment_request.file_path,
+                        file_path=str(resolved),
                         chat_id=chat_id,
                         is_group=True,
                     )
@@ -699,7 +715,7 @@ async def send_attachment(
                         )
                     result = await run_in_threadpool(
                         sender.send_attachment,
-                        file_path=attachment_request.file_path,
+                        file_path=str(resolved),
                         recipient=attachment_request.recipient,
                     )
         except TimeoutError:
