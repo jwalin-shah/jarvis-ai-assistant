@@ -3,13 +3,15 @@
 Extracts facts (relationships, locations, work, preferences) from existing
 messages and populates the knowledge graph database.
 
-Two modes:
-  --use-segments: Topic segmenter → GLiNER + spaCy NER (higher recall)
-  default:        Rule-based FactExtractor (fast, no model load)
+Three modes:
+  default (--use-segments): GLiNER batch extraction with context windows (fast, MLX GPU)
+  --use-segments:           Same as default (kept for backwards compat)
+  --rule-based:             Rule-based FactExtractor (no model load, lower recall)
 
 Usage:
-    uv run python scripts/backfill_contact_facts.py [--max-contacts 50] [--messages-per-contact 500]
-    uv run python scripts/backfill_contact_facts.py --use-segments
+    uv run python scripts/backfill_contact_facts.py --max-contacts 5 --messages-per-contact 200
+    uv run python scripts/backfill_contact_facts.py --max-contacts 50 -o results/facts.txt
+    uv run python scripts/backfill_contact_facts.py --rule-based
 """
 
 from __future__ import annotations
@@ -38,18 +40,19 @@ def backfill(
     max_contacts: int = 50,
     messages_per_contact: int = 500,
     output_file: str | None = None,
-    use_segments: bool = False,
+    rule_based: bool = False,
+    batch_size: int = 32,
 ) -> None:
     """Extract facts from historical messages for top contacts."""
     from integrations.imessage import ChatDBReader
-    from jarvis.contacts.fact_storage import get_fact_count, save_facts
+    from jarvis.contacts.fact_storage import get_fact_count, save_candidate_facts, save_facts
     from jarvis.db import get_db
 
     # Ensure schema is up to date
     db = get_db()
     db.init_schema()
 
-    mode = "segments (GLiNER + spaCy)" if use_segments else "rule-based"
+    mode = "rule-based" if rule_based else f"GLiNER batch (batch_size={batch_size})"
     print(
         f"Starting backfill: max_contacts={max_contacts}, "
         f"messages_per_contact={messages_per_contact}, mode={mode}",
@@ -62,13 +65,18 @@ def backfill(
     print(f"Found {len(conversations)} conversations", flush=True)
 
     # Initialize extractors based on mode
-    if use_segments:
+    if not rule_based:
         from jarvis.contacts.candidate_extractor import CandidateExtractor
-        from jarvis.contacts.segment_extractor import extract_facts_from_segments
-        from jarvis.topics.topic_segmenter import TopicSegmenter
 
-        segmenter = TopicSegmenter(normalization_task="extraction")
-        candidate_extractor = CandidateExtractor()
+        extractor = CandidateExtractor()
+        # Eagerly load the model so first batch isn't slow
+        print("Loading GLiNER model...", flush=True)
+        if extractor._use_mlx():
+            extractor._load_mlx_model()
+            print("  MLX backend (Metal GPU)", flush=True)
+        else:
+            extractor._load_model()
+            print("  PyTorch backend (CPU)", flush=True)
     else:
         from jarvis.contacts.fact_extractor import FactExtractor
 
@@ -76,6 +84,7 @@ def backfill(
 
     total_facts = 0
     total_inserted = 0
+    total_messages = 0
     start_time = time.time()
 
     # Sort by participant count (prefer 1:1 chats)
@@ -93,58 +102,13 @@ def backfill(
         try:
             messages = reader.get_messages(chat_id, limit=messages_per_contact)
 
-            if use_segments:
-                # Use all messages for segmentation (context matters)
-                msgs_with_text = [m for m in messages if m.text]
-                if len(msgs_with_text) < 3:
-                    continue
-
-                processed += 1
-                elapsed = time.time() - start_time
-                remaining = min(max_contacts, len(conversations)) - processed
-                eta = elapsed / processed * remaining if processed > 0 else 0
-
-                print(
-                    f"[{processed}/{max_contacts}] {chat_id[:30]:30s} "
-                    f"({len(msgs_with_text)} msgs) "
-                    f"ETA: {eta:.0f}s",
-                    flush=True,
-                )
-
-                # Segment → extract
-                segments = segmenter.segment(msgs_with_text)
-                candidates = extract_facts_from_segments(segments, candidate_extractor)
-                n_facts = len(candidates)
-                total_facts += n_facts
-
-                if candidates:
-                    # Convert FactCandidates to storage format
-                    from jarvis.contacts.fact_storage import save_candidate_facts
-
-                    inserted = save_candidate_facts(candidates, chat_id)
-                    total_inserted += inserted
-                    if inserted:
-                        print(
-                            f"  -> {n_facts} candidates, {inserted} new ({len(segments)} segments)",
-                            flush=True,
-                        )
-            else:
-                # Original rule-based path
+            if rule_based:
                 incoming = [m for m in messages if not m.is_from_me and m.text]
                 if len(incoming) < 3:
                     continue
 
                 processed += 1
-                elapsed = time.time() - start_time
-                remaining = min(max_contacts, len(conversations)) - processed
-                eta = elapsed / processed * remaining if processed > 0 else 0
-
-                print(
-                    f"[{processed}/{max_contacts}] {chat_id[:30]:30s} "
-                    f"({len(incoming)} msgs) "
-                    f"ETA: {eta:.0f}s",
-                    flush=True,
-                )
+                _print_progress(processed, max_contacts, chat_id, len(incoming), start_time)
 
                 facts = fact_extractor.extract_facts(incoming, chat_id)
                 total_facts += len(facts)
@@ -153,10 +117,40 @@ def backfill(
                     inserted = save_facts(facts, chat_id)
                     total_inserted += inserted
                     if inserted:
-                        print(
-                            f"  -> {len(facts)} facts extracted, {inserted} new",
-                            flush=True,
-                        )
+                        print(f"  -> {len(facts)} facts, {inserted} new", flush=True)
+            else:
+                # GLiNER batch extraction
+                msgs_with_text = [m for m in messages if m.text]
+                if len(msgs_with_text) < 3:
+                    continue
+
+                processed += 1
+                total_messages += len(msgs_with_text)
+                _print_progress(processed, max_contacts, chat_id, len(msgs_with_text), start_time)
+
+                # Sort by date for context windowing
+                msgs_with_text.sort(key=lambda m: m.date)
+
+                # Build batch dicts with context windows
+                batch_dicts = _build_batch_dicts(msgs_with_text, chat_id)
+
+                # Run batched extraction
+                t0 = time.time()
+                candidates = extractor.extract_batch(batch_dicts, batch_size=batch_size)
+                dt = time.time() - t0
+
+                n_facts = len(candidates)
+                total_facts += n_facts
+                rate = len(batch_dicts) / dt if dt > 0 else 0
+
+                if candidates:
+                    inserted = save_candidate_facts(candidates, chat_id)
+                    total_inserted += inserted
+                    print(
+                        f"  -> {n_facts} candidates, {inserted} new "
+                        f"({len(batch_dicts)} msgs in {dt:.1f}s, {rate:.0f} msgs/sec)",
+                        flush=True,
+                    )
 
         except Exception as e:
             logger.warning("Error processing %s: %s", chat_id[:20], e)
@@ -167,13 +161,52 @@ def backfill(
     print(f"\nBackfill complete in {elapsed:.1f}s:", flush=True)
     print(f"  Mode:               {mode}", flush=True)
     print(f"  Contacts processed: {processed}", flush=True)
+    print(f"  Messages processed: {total_messages}", flush=True)
     print(f"  Facts extracted:    {total_facts}", flush=True)
     print(f"  New facts saved:    {total_inserted}", flush=True)
     print(f"  Total facts in DB:  {total_in_db}", flush=True)
+    if total_messages > 0 and elapsed > 0:
+        print(f"  Throughput:         {total_messages / elapsed:.0f} msgs/sec", flush=True)
 
     # Export to file if requested
     if output_file:
         _export_facts(output_file)
+
+
+def _build_batch_dicts(msgs_with_text: list, chat_id: str) -> list[dict]:
+    """Convert iMessage objects to batch dicts with 2-message context windows."""
+    batch: list[dict] = []
+    texts = [m.text for m in msgs_with_text]
+
+    for i, msg in enumerate(msgs_with_text):
+        prev = texts[max(0, i - 2) : i]
+        nxt = texts[i + 1 : min(len(texts), i + 2)]
+
+        batch.append({
+            "text": msg.text,
+            "message_id": msg.id,
+            "chat_id": chat_id,
+            "is_from_me": msg.is_from_me,
+            "message_date": msg.date,
+            "context_prev": prev if prev else None,
+            "context_next": nxt if nxt else None,
+        })
+
+    return batch
+
+
+def _print_progress(
+    processed: int, max_contacts: int, chat_id: str, n_msgs: int, start_time: float
+) -> None:
+    """Print progress line with ETA."""
+    elapsed = time.time() - start_time
+    remaining = max_contacts - processed
+    eta = elapsed / processed * remaining if processed > 0 else 0
+    print(
+        f"[{processed}/{max_contacts}] {chat_id[:35]:35s} "
+        f"({n_msgs} msgs) elapsed={elapsed:.0f}s ETA={eta:.0f}s",
+        flush=True,
+    )
 
 
 def _export_facts(output_file: str) -> None:
@@ -225,9 +258,20 @@ def main() -> None:
         help="Export extracted facts to this file for review",
     )
     parser.add_argument(
+        "--rule-based",
+        action="store_true",
+        help="Use rule-based extractor (no model load, lower recall)",
+    )
+    parser.add_argument(
         "--use-segments",
         action="store_true",
-        help="Use topic segmenter + GLiNER pipeline (higher recall, slower)",
+        help="(Deprecated) Same as default GLiNER batch mode",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="GLiNER batch size (default: 32)",
     )
     args = parser.parse_args()
 
@@ -235,7 +279,8 @@ def main() -> None:
         max_contacts=args.max_contacts,
         messages_per_contact=args.messages_per_contact,
         output_file=args.output,
-        use_segments=args.use_segments,
+        rule_based=args.rule_based,
+        batch_size=args.batch_size,
     )
 
 
