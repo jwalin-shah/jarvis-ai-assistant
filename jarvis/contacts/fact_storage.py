@@ -96,6 +96,15 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 contact_id[:16],
                 elapsed_ms,
             )
+
+            # Index newly inserted facts into vec_facts for semantic retrieval
+            try:
+                from jarvis.contacts.fact_index import index_facts
+
+                index_facts(facts, contact_id)
+            except Exception as e:
+                logger.debug("Fact indexing skipped: %s", e)
+
         return inserted
 
 
@@ -134,6 +143,20 @@ def get_facts_for_contact(contact_id: str) -> list[Fact]:
         )
         for row in rows
     ]
+
+
+def count_facts_for_contact(contact_id: str) -> int:
+    """Quick check for whether a contact has any facts. Returns count."""
+    from jarvis.db import get_db
+
+    db = get_db()
+
+    with db.connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
+            (contact_id,),
+        ).fetchone()
+        return row[0] if row else 0
 
 
 def get_all_facts() -> list[Fact]:
@@ -187,6 +210,75 @@ def delete_facts_for_contact(contact_id: str) -> int:
     if deleted:
         logger.info("Deleted %d facts for %s", deleted, contact_id[:16])
     return deleted
+
+
+def save_candidate_facts(
+    candidates: list[FactCandidate],
+    contact_id: str,
+) -> int:
+    """Convert FactCandidates to Facts and save them.
+
+    Maps fact_type (e.g. 'location.current') to category+predicate used by
+    the Fact storage schema.
+
+    Args:
+        candidates: List of FactCandidate objects from CandidateExtractor.
+        contact_id: Contact ID to associate facts with.
+
+    Returns:
+        Number of new facts inserted.
+    """
+    from jarvis.contacts.candidate_extractor import FactCandidate
+
+    # fact_type → (category, predicate)
+    type_to_schema: dict[str, tuple[str, str]] = {
+        "location.current": ("location", "lives_in"),
+        "location.past": ("location", "lived_in"),
+        "location.future": ("location", "moving_to"),
+        "location.hometown": ("location", "from"),
+        "work.employer": ("work", "works_at"),
+        "work.former_employer": ("work", "worked_at"),
+        "work.job_title": ("work", "job_title"),
+        "relationship.family": ("relationship", "is_family_of"),
+        "relationship.friend": ("relationship", "is_friend_of"),
+        "relationship.partner": ("relationship", "is_partner_of"),
+        "preference.food_like": ("preference", "likes_food"),
+        "preference.food_dislike": ("preference", "dislikes_food"),
+        "preference.activity": ("preference", "enjoys"),
+        "health.allergy": ("health", "allergic_to"),
+        "health.dietary": ("health", "dietary"),
+        "health.condition": ("health", "has_condition"),
+        "personal.birthday": ("personal", "birthday_is"),
+        "personal.school": ("personal", "attends"),
+        "personal.pet": ("personal", "has_pet"),
+    }
+
+    facts: list[Fact] = []
+    for c in candidates:
+        if not isinstance(c, FactCandidate):
+            continue
+        mapping = type_to_schema.get(c.fact_type)
+        if mapping is None:
+            continue
+        category, predicate = mapping
+
+        facts.append(
+            Fact(
+                category=category,
+                subject=c.span_text,
+                predicate=predicate,
+                value=c.span_label,
+                source_text=c.source_text[:500] if c.source_text else "",
+                confidence=c.gliner_score if c.gliner_score > 0 else 0.5,
+                contact_id=contact_id,
+                source_message_id=c.message_id,
+            )
+        )
+
+    if not facts:
+        return 0
+
+    return save_facts(facts, contact_id)
 
 
 def get_fact_count() -> int:

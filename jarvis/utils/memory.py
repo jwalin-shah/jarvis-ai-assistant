@@ -87,13 +87,24 @@ class MemoryInfo:
         return base
 
 
+_pressure_cache: tuple[float, MacOSMemoryPressure | None] = (0.0, None)
+_PRESSURE_CACHE_TTL = 5.0  # seconds
+
+
 def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
     """Get macOS memory pressure metrics from vm_stat and sysctl.
 
+    Caches result for 5 seconds to avoid subprocess overhead on hot paths.
     Returns None on non-macOS systems.
     """
+    global _pressure_cache
     if not IS_MACOS:
         return None
+
+    now = time.monotonic()
+    cached_at, cached_result = _pressure_cache
+    if now - cached_at < _PRESSURE_CACHE_TTL:
+        return cached_result
 
     try:
         # Parse vm_stat
@@ -129,7 +140,7 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
         free_mb = (pages_free * page_size) / 1024**2
         compression_ratio = pages_compressed / pages_occupied if pages_occupied > 0 else 1.0
 
-        return MacOSMemoryPressure(
+        result = MacOSMemoryPressure(
             pressure_level=pressure_level,
             compressed_mb=compressed_mb,
             pageouts=stats.get("Pageouts", 0),
@@ -139,8 +150,11 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
             free_mb=free_mb,
             compressed_ratio=compression_ratio,
         )
+        _pressure_cache = (now, result)
+        return result
     except (subprocess.CalledProcessError, KeyError, ValueError) as e:
         logger.debug(f"Failed to get macOS memory pressure: {e}")
+        _pressure_cache = (now, None)
         return None
 
 

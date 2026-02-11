@@ -139,6 +139,8 @@ class L1Cache:
         self._max_bytes = max_bytes
         self._current_bytes = 0
         self._lock = threading.RLock()
+        # Tag -> keys index for O(1) tag invalidation
+        self._tag_index: dict[str, set[str]] = {}
 
     def get(self, key: str) -> CacheEntry | None:
         """Get entry from cache.
@@ -189,6 +191,12 @@ class L1Cache:
             self._cache[key] = entry
             self._current_bytes += entry.size_bytes
 
+            # Update tag index
+            for tag in entry.tags:
+                if tag not in self._tag_index:
+                    self._tag_index[tag] = set()
+                self._tag_index[tag].add(key)
+
     def remove(self, key: str) -> bool:
         """Remove entry from cache.
 
@@ -207,13 +215,28 @@ class L1Cache:
             return False
         entry = self._cache.pop(key)
         self._current_bytes -= entry.size_bytes
+        # Clean up tag index
+        for tag in entry.tags:
+            if tag in self._tag_index:
+                self._tag_index[tag].discard(key)
+                if not self._tag_index[tag]:
+                    del self._tag_index[tag]
         return True
+
+    def remove_by_tag(self, tag: str) -> int:
+        """Remove all entries with a specific tag using tag index (O(k) not O(n))."""
+        with self._lock:
+            keys = list(self._tag_index.get(tag, set()))
+            for key in keys:
+                self._remove(key)
+            return len(keys)
 
     def clear(self) -> None:
         """Clear all entries."""
         with self._lock:
             self._cache.clear()
             self._current_bytes = 0
+            self._tag_index.clear()
 
     def keys(self) -> list[str]:
         """Get all cache keys."""
@@ -246,22 +269,28 @@ class L2Cache:
         self._db_path = db_path or CACHE_DB_PATH
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
+        self._connections: list[sqlite3.Connection] = []
+        self._conn_lock = threading.Lock()
         self._init_schema()
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get or create thread-local connection."""
         if not hasattr(self._local, "connection") or self._local.connection is None:
-            self._local.connection = sqlite3.connect(
+            conn = sqlite3.connect(
                 str(self._db_path),
                 timeout=10.0,
                 check_same_thread=False,
             )
-            self._local.connection.row_factory = sqlite3.Row
+            conn.row_factory = sqlite3.Row
             # Optimize for read-heavy workloads
-            self._local.connection.execute("PRAGMA journal_mode = WAL")
-            self._local.connection.execute("PRAGMA synchronous = NORMAL")
-            self._local.connection.execute("PRAGMA cache_size = -4000")  # 4MB
-            self._local.connection.execute("PRAGMA temp_store = MEMORY")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            conn.execute("PRAGMA cache_size = -4000")  # 4MB
+            conn.execute("PRAGMA temp_store = MEMORY")
+            self._local.connection = conn
+            # Track for cleanup
+            with self._conn_lock:
+                self._connections.append(conn)
         return self._local.connection
 
     def _init_schema(self) -> None:
@@ -403,6 +432,10 @@ class L2Cache:
     def remove_by_tag(self, tag: str) -> int:
         """Remove all entries with a specific tag.
 
+        Note: Uses LIKE scan on tags_json (O(n)). Acceptable for prefetch cache
+        sizes (<10k rows). A separate cache_tags index table would be needed if
+        the table grows beyond that.
+
         Args:
             tag: Tag to match.
 
@@ -410,7 +443,7 @@ class L2Cache:
             Number of entries removed.
         """
         conn = self._get_connection()
-        # Use JSON contains pattern
+        # LIKE on JSON array - matches `"tag"` to avoid partial matches
         cursor = conn.execute(
             """
             DELETE FROM cache_entries
@@ -468,6 +501,24 @@ class L2Cache:
             "total_bytes": row["total_bytes"] or 0,
             "avg_access_count": row["avg_access_count"] or 0,
         }
+
+    def close(self) -> None:
+        """Close all thread-local connections."""
+        with self._conn_lock:
+            for conn in self._connections:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._connections.clear()
+        self._local = threading.local()
+
+    def __del__(self) -> None:
+        """Cleanup connections on garbage collection."""
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def _serialize(self, value: Any) -> tuple[bytes, str]:
         """Serialize value to bytes.
@@ -554,6 +605,11 @@ class L3Cache:
         self._lock = threading.RLock()
         self._metadata_path = self._cache_dir / "_metadata.json"
         self._metadata: dict[str, dict] = self._load_metadata()
+        # Running total avoids O(n) sum on every set/eviction
+        self._total_bytes = sum(m.get("size_bytes", 0) for m in self._metadata.values())
+        # Dirty flag for batched metadata writes
+        self._metadata_dirty = False
+        self._last_flush: float = time.time()
 
     def _load_metadata(self) -> dict[str, dict]:
         """Load metadata from disk."""
@@ -564,12 +620,29 @@ class L3Cache:
                 return {}
         return {}
 
+    def _mark_dirty(self) -> None:
+        """Mark metadata as needing a flush."""
+        self._metadata_dirty = True
+
     def _save_metadata(self) -> None:
-        """Save metadata to disk."""
+        """Save metadata to disk (unconditionally)."""
         try:
             self._metadata_path.write_text(json.dumps(self._metadata))
+            self._metadata_dirty = False
+            self._last_flush = time.time()
         except OSError as e:
             logger.warning(f"Failed to save L3 cache metadata: {e}")
+
+    def _maybe_flush(self, interval: float = 5.0) -> None:
+        """Flush metadata if dirty and enough time has passed since last flush."""
+        if self._metadata_dirty and (time.time() - self._last_flush) >= interval:
+            self._save_metadata()
+
+    def flush_metadata(self) -> None:
+        """Flush metadata to disk if dirty."""
+        with self._lock:
+            if self._metadata_dirty:
+                self._save_metadata()
 
     def _key_to_path(self, key: str) -> Path:
         """Convert cache key to file path."""
@@ -600,8 +673,9 @@ class L3Cache:
 
             file_path = self._key_to_path(key)
             if not file_path.exists():
+                self._total_bytes -= meta.get("size_bytes", 0)
                 del self._metadata[key]
-                self._save_metadata()
+                self._mark_dirty()
                 return None
 
             try:
@@ -628,10 +702,10 @@ class L3Cache:
                 tags=tags,
             )
 
-            # Update metadata
+            # Update metadata (deferred write)
             meta["accessed_at"] = time.time()
             meta["access_count"] = meta.get("access_count", 0) + 1
-            self._save_metadata()
+            self._mark_dirty()
 
             entry.touch()
             return entry
@@ -644,16 +718,17 @@ class L3Cache:
             entry: Cache entry.
         """
         with self._lock:
-            # Check space and evict if needed
-            total_bytes = sum(m.get("size_bytes", 0) for m in self._metadata.values())
-            while total_bytes + entry.size_bytes > self._max_bytes and self._metadata:
+            # Evict if needed using running total (O(1) check instead of O(n) sum)
+            while (
+                self._total_bytes + entry.size_bytes > self._max_bytes
+                and self._metadata
+            ):
                 # Evict least recently accessed
                 oldest_key = min(
                     self._metadata.keys(),
                     key=lambda k: self._metadata[k].get("accessed_at", 0),
                 )
                 self.remove(oldest_key)
-                total_bytes = sum(m.get("size_bytes", 0) for m in self._metadata.values())
 
             # Serialize and write
             file_path = self._key_to_path(key)
@@ -666,17 +741,24 @@ class L3Cache:
                 logger.warning(f"Failed to write L3 cache entry {key}: {e}")
                 return
 
+            # Update running total
+            data_size = len(data)
+            if key in self._metadata:
+                self._total_bytes -= self._metadata[key].get("size_bytes", 0)
+            self._total_bytes += data_size
+
             # Update metadata
             self._metadata[key] = {
                 "created_at": entry.created_at,
                 "accessed_at": entry.accessed_at,
                 "ttl_seconds": entry.ttl_seconds,
                 "access_count": entry.access_count,
-                "size_bytes": len(data),
+                "size_bytes": data_size,
                 "value_type": value_type,
                 "tags": entry.tags,
             }
-            self._save_metadata()
+            self._mark_dirty()
+            self._maybe_flush()
 
     def remove(self, key: str) -> bool:
         """Remove entry from cache.
@@ -691,6 +773,9 @@ class L3Cache:
             if key not in self._metadata:
                 return False
 
+            # Update running total before deleting
+            self._total_bytes -= self._metadata[key].get("size_bytes", 0)
+
             file_path = self._key_to_path(key)
             try:
                 file_path.unlink(missing_ok=True)
@@ -698,7 +783,7 @@ class L3Cache:
                 pass
 
             del self._metadata[key]
-            self._save_metadata()
+            self._mark_dirty()
             return True
 
     def remove_by_tag(self, tag: str) -> int:
@@ -732,10 +817,9 @@ class L3Cache:
     def stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         with self._lock:
-            total_bytes = sum(m.get("size_bytes", 0) for m in self._metadata.values())
             return {
                 "entries": len(self._metadata),
-                "total_bytes": total_bytes,
+                "total_bytes": self._total_bytes,
                 "max_bytes": self._max_bytes,
             }
 
@@ -934,13 +1018,8 @@ class MultiTierCache:
             Number of entries invalidated.
         """
         with self._lock:
-            # L1 doesn't support tag filtering directly, so check all keys
-            count = 0
-            for key in self._l1.keys():
-                entry = self._l1.get(key)
-                if entry and tag in entry.tags:
-                    self._l1.remove(key)
-                    count += 1
+            # L1 uses tag index for O(k) invalidation
+            count = self._l1.remove_by_tag(tag)
 
             count += self._l2.remove_by_tag(tag)
             count += self._l3.remove_by_tag(tag)
@@ -1090,24 +1169,18 @@ class MultiTierCache:
                 return 1024  # Default estimate
 
 
-# Singleton instance
-_cache: MultiTierCache | None = None
-_cache_lock = threading.Lock()
+from jarvis.utils.singleton import thread_safe_singleton
 
 
+@thread_safe_singleton
 def get_cache() -> MultiTierCache:
     """Get or create singleton cache instance."""
-    global _cache
-    with _cache_lock:
-        if _cache is None:
-            _cache = MultiTierCache()
-        return _cache
+    return MultiTierCache()
 
 
 def reset_cache() -> None:
     """Reset singleton cache (clears all entries)."""
-    global _cache
-    with _cache_lock:
-        if _cache is not None:
-            _cache.clear()
-        _cache = None
+    instance = get_cache.peek()  # type: ignore[attr-defined]
+    if instance is not None:
+        instance.clear()
+    get_cache.reset()  # type: ignore[attr-defined]

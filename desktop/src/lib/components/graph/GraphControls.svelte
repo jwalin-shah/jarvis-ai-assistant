@@ -17,6 +17,7 @@
 
   let searchQuery = "";
   let selectedRelationships: string[] = [];
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   const layouts: { value: LayoutType; label: string }[] = [
     { value: "force", label: "Force" },
@@ -35,7 +36,10 @@
   ];
 
   function handleSearch() {
-    dispatch("search", searchQuery);
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      dispatch("search", searchQuery);
+    }, 200);
   }
 
   function handleLayoutChange(event: Event) {
@@ -55,6 +59,7 @@
   function clearFilters() {
     selectedRelationships = [];
     searchQuery = "";
+    if (searchTimer) clearTimeout(searchTimer);
     dispatch("filterRelationships", []);
     dispatch("search", "");
   }

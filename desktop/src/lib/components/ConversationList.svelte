@@ -4,7 +4,7 @@
     conversationsStore,
     selectConversation,
     initializePolling,
-  } from '../stores/conversations';
+  } from '../stores/conversations.svelte';
   import { api } from '../api/client';
   import type { Topic, Conversation } from '../types';
   import ConversationSkeleton from './ConversationSkeleton.svelte';
@@ -17,6 +17,8 @@
   } from '../stores/keyboard';
   import { getApiBaseUrl } from '../config/runtime';
   import { formatConversationDate } from '../utils/date';
+  import { getNavAction, isTypingInInput } from '../utils/keyboard-nav';
+  import { LRUCache } from '../utils/lru-cache';
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
@@ -35,9 +37,15 @@
   let loadingTopics = $state<Set<string>>(new Set());
   let topicFetchControllers = $state<Map<string, AbortController>>(new Map());
 
-  // Avatar state
+  // Avatar state with LRU cache to prevent unbounded memory growth
+  // Max 50 avatars (~5-10MB) - enough for visible + scroll buffer
+  const MAX_CACHED_AVATARS = 50;
   let avatarStates = $state<Map<string, 'loading' | 'loaded' | 'error'>>(new Map());
-  let avatarUrls = $state<Map<string, string>>(new Map());
+  let avatarUrls = $state<LRUCache<string, string>>(new LRUCache(MAX_CACHED_AVATARS, (_key, url) => {
+    if (url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
+  }));
 
   // Intersection Observer for lazy loading avatars and topics
   let observer = $state<IntersectionObserver | null>(null);
@@ -56,13 +64,13 @@
       .join(',')
   );
 
-  // Fetch topics when fingerprint changes
+  // Defer topic fetching - topics are cosmetic tags, not critical for initial render
   // Only fetch for first 5 conversations to avoid N+1 burst
   $effect(() => {
     const fingerprint = conversationFingerprint;
-    if (fingerprint) {
-      void fetchTopicsForConversations();
-    }
+    if (!fingerprint) return;
+    const timer = setTimeout(() => void fetchTopicsForConversations(), 2000);
+    return () => clearTimeout(timer);
   });
 
   onMount(() => {
@@ -110,12 +118,8 @@
       window.removeEventListener('keydown', handleKeydown);
       observer?.disconnect();
       topicObserver?.disconnect();
-      // Revoke blob URLs
-      avatarUrls.forEach((url) => {
-        if (url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
+      // LRU cache clear() now handles blob URL revocation via onEvict callback
+      avatarUrls.clear();
       topicFetchControllers.forEach((controller) => controller.abort());
     };
   });
@@ -170,13 +174,25 @@
   const MAX_CONCURRENT_AVATARS = 3;
   let activeAvatarLoads = 0;
   let avatarQueue: string[] = [];
+  let avatarQueueSet = new Set<string>();
 
   async function loadAvatar(identifier: string) {
     if (avatarStates.get(identifier) === 'loading') return;
 
+    // If already cached, just mark as loaded (LRU will update recency)
+    if (avatarUrls.has(identifier)) {
+      avatarStates.set(identifier, 'loaded');
+      avatarStates = avatarStates;
+      // Touch the cache to update LRU order
+      const url = avatarUrls.get(identifier);
+      if (url) avatarUrls.set(identifier, url);
+      return;
+    }
+
     if (activeAvatarLoads >= MAX_CONCURRENT_AVATARS) {
-      if (!avatarQueue.includes(identifier)) {
+      if (!avatarQueueSet.has(identifier)) {
         avatarQueue.push(identifier);
+        avatarQueueSet.add(identifier);
       }
       return;
     }
@@ -195,29 +211,27 @@
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
 
-      const existingUrl = avatarUrls.get(identifier);
-      if (existingUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(existingUrl);
-      }
-
+      // LRU cache handles eviction + blob URL revocation via onEvict callback
       avatarUrls.set(identifier, url);
+
       avatarStates.set(identifier, 'loaded');
-      avatarUrls = avatarUrls;
       avatarStates = avatarStates;
+      // Trigger reactivity for avatarUrls
+      avatarUrls = avatarUrls;
     } catch (error) {
-      const existingUrl = avatarUrls.get(identifier);
-      if (existingUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(existingUrl);
-      }
       avatarUrls.delete(identifier);
       avatarStates.set(identifier, 'error');
-      avatarUrls = avatarUrls;
       avatarStates = avatarStates;
+      // Trigger reactivity
+      avatarUrls = avatarUrls;
     } finally {
       activeAvatarLoads--;
       if (avatarQueue.length > 0) {
         const next = avatarQueue.shift();
-        if (next) void loadAvatar(next);
+        if (next) {
+          avatarQueueSet.delete(next);
+          void loadAvatar(next);
+        }
       }
     }
   }
@@ -258,86 +272,41 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if ($activeZone !== 'conversations' && $activeZone !== null) return;
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-      return;
-    }
+    if (isTypingInInput(event)) return;
 
     const conversations = conversationsStore.conversations;
     if (conversations.length === 0) return;
 
     const maxIndex = conversations.length - 1;
 
-    switch (event.key) {
-      case 'j':
-      case 'ArrowDown':
-        event.preventDefault();
-        setActiveZone('conversations');
-        if (focusedIndex < maxIndex) {
-          const newIndex = focusedIndex + 1;
-          setConversationIndex(newIndex);
-          focusedIndex = newIndex;
-          scrollToItem(newIndex);
-          announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
-        }
-        break;
-
-      case 'k':
-      case 'ArrowUp':
-        event.preventDefault();
-        setActiveZone('conversations');
-        if (focusedIndex > 0) {
-          const newIndex = focusedIndex - 1;
-          setConversationIndex(newIndex);
-          focusedIndex = newIndex;
-          scrollToItem(newIndex);
-          announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
-        } else if (focusedIndex === -1) {
-          setConversationIndex(0);
-          focusedIndex = 0;
-          scrollToItem(0);
-          announce(`${getDisplayName(conversations[0]!)}, 1 of ${conversations.length}`);
-        }
-        break;
-
-      case 'Enter':
-      case ' ':
-        if (focusedIndex >= 0 && focusedIndex <= maxIndex) {
-          event.preventDefault();
-          const conv = conversations[focusedIndex]!;
-          selectConversation(conv.chat_id);
-          setActiveZone('messages');
-          announce(`Opened conversation with ${getDisplayName(conv)}`);
-        }
-        break;
-
-      case 'g':
-        if (!event.shiftKey && conversations.length > 0) {
-          event.preventDefault();
-          setActiveZone('conversations');
-          setConversationIndex(0);
-          focusedIndex = 0;
-          scrollToItem(0);
-          announce(`${getDisplayName(conversations[0]!)}, 1 of ${conversations.length}`);
-        }
-        break;
-
-      case 'G':
-        if (event.shiftKey && conversations.length > 0) {
-          event.preventDefault();
-          setActiveZone('conversations');
-          setConversationIndex(maxIndex);
-          focusedIndex = maxIndex;
-          scrollToItem(maxIndex);
-          announce(`${getDisplayName(conversations[maxIndex]!)}, ${maxIndex + 1} of ${conversations.length}`);
-        }
-        break;
-
-      case 'Escape':
-        setConversationIndex(-1);
-        focusedIndex = -1;
-        setActiveZone(null);
-        break;
+    // Enter/Space: select conversation (component-specific)
+    if ((event.key === 'Enter' || event.key === ' ') && focusedIndex >= 0 && focusedIndex <= maxIndex) {
+      event.preventDefault();
+      const conv = conversations[focusedIndex]!;
+      selectConversation(conv.chat_id);
+      setActiveZone('messages');
+      announce(`Opened conversation with ${getDisplayName(conv)}`);
+      return;
     }
+
+    const action = getNavAction(event.key, event.shiftKey, focusedIndex, maxIndex);
+    if (!action) return;
+
+    event.preventDefault();
+
+    if (action.type === 'escape') {
+      setConversationIndex(-1);
+      focusedIndex = -1;
+      setActiveZone(null);
+      return;
+    }
+
+    setActiveZone('conversations');
+    const newIndex = action.type === 'first' ? 0 : action.index;
+    setConversationIndex(newIndex);
+    focusedIndex = newIndex;
+    scrollToItem(newIndex);
+    announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
   }
 
   function scrollToItem(index: number) {

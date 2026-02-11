@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { healthStore, fetchHealth } from "../stores/health";
-  import { conversationsStore, fetchConversations } from "../stores/conversations";
+  import { conversationsStore, fetchConversations } from "../stores/conversations.svelte";
   import {
     metricsStore,
     startMetricsPolling,

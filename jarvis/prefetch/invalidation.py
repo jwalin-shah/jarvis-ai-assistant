@@ -601,22 +601,15 @@ class CacheInvalidator:
             }
 
 
-# Singleton instance
-_invalidator: CacheInvalidator | None = None
-_invalidator_lock = threading.Lock()
+from jarvis.utils.singleton import thread_safe_singleton
 
 
+@thread_safe_singleton
 def get_invalidator() -> CacheInvalidator:
     """Get or create singleton invalidator instance."""
-    global _invalidator
-    with _invalidator_lock:
-        if _invalidator is None:
-            _invalidator = CacheInvalidator()
-        return _invalidator
+    return CacheInvalidator()
 
 
 def reset_invalidator() -> None:
     """Reset singleton invalidator."""
-    global _invalidator
-    with _invalidator_lock:
-        _invalidator = None
+    get_invalidator.reset()  # type: ignore[attr-defined]

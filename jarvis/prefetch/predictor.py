@@ -917,22 +917,15 @@ class PrefetchPredictor:
         return None
 
 
-# Singleton instance
-_predictor: PrefetchPredictor | None = None
-_predictor_lock = threading.Lock()
+from jarvis.utils.singleton import thread_safe_singleton
 
 
+@thread_safe_singleton
 def get_predictor() -> PrefetchPredictor:
     """Get or create singleton predictor instance."""
-    global _predictor
-    with _predictor_lock:
-        if _predictor is None:
-            _predictor = PrefetchPredictor()
-        return _predictor
+    return PrefetchPredictor()
 
 
 def reset_predictor() -> None:
     """Reset singleton predictor."""
-    global _predictor
-    with _predictor_lock:
-        _predictor = None
+    get_predictor.reset()  # type: ignore[attr-defined]

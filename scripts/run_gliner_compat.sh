@@ -27,7 +27,10 @@ echo "Syncing GLiNER compatibility dependencies..."
   "gliner==0.2.24" \
   "transformers==4.57.3" \
   "huggingface-hub<1.0" \
-  "torch>=2.5.0"
+  "torch>=2.5.0" \
+  "scikit-learn>=1.5.0" \
+  "scipy>=1.14.0" \
+  "numpy>=1.26.0"
 
 PYTHONPATH="${ROOT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
   HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-1}" \

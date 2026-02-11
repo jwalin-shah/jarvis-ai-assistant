@@ -51,7 +51,7 @@
     "webdriverio": "^9.23.3"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-sql": "^2.3.1",
     "@testdriver.ai/playwright": "^1.0.5",
     "@types/d3": "^7.4.3",

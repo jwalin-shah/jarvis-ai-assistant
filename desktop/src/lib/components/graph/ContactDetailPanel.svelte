@@ -2,13 +2,17 @@
   import { api } from "../../api/client";
   import type { ContactProfileDetail, ContactFact, GraphNode } from "../../api/types";
 
-  export let node: GraphNode | null = null;
-  export let visible: boolean = false;
-  export let onClose: (() => void) | null = null;
+  interface Props {
+    node: GraphNode | null;
+    visible: boolean;
+    onClose?: (() => void) | null;
+  }
 
-  let profile: ContactProfileDetail | null = null;
-  let loading = false;
-  let error: string | null = null;
+  let { node = null, visible = false, onClose = null }: Props = $props();
+
+  let profile = $state<ContactProfileDetail | null>(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
 
   // Fact category icons
   const categoryIcons: Record<string, string> = {
@@ -44,11 +48,13 @@
     }
   }
 
-  $: if (node && visible) {
-    loadProfile(node.id);
-  }
+  $effect(() => {
+    if (node && visible) {
+      loadProfile(node.id);
+    }
+  });
 
-  $: groupedFacts = profile?.facts ? groupFacts(profile.facts) : {};
+  let groupedFacts = $derived(profile?.facts ? groupFacts(profile.facts) : {});
 
   function handleClose() {
     visible = false;
@@ -57,12 +63,12 @@
 </script>
 
 {#if visible && node}
-  <div class="panel-overlay" on:click={handleClose} on:keydown={(e) => e.key === "Escape" && handleClose()} role="button" tabindex="-1">
-    <div class="detail-panel" on:click|stopPropagation role="presentation">
+  <div class="panel-overlay" onclick={handleClose} onkeydown={(e) => e.key === "Escape" && handleClose()} role="button" tabindex="-1">
+    <div class="detail-panel" onclick={(e) => e.stopPropagation()} role="presentation">
       <div class="panel-header">
         <div class="contact-info">
           <div class="contact-avatar" style="background-color: {node.color}">
-            {node.label.charAt(0).toUpperCase()}
+            {[...node.label][0]?.toUpperCase() ?? "?"}
           </div>
           <div>
             <h2>{node.label || "Unknown"}</h2>
@@ -72,7 +78,7 @@
             {/if}
           </div>
         </div>
-        <button class="close-btn" on:click={handleClose}>&times;</button>
+        <button class="close-btn" onclick={handleClose}>&times;</button>
       </div>
 
       {#if loading}

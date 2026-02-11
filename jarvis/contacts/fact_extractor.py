@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -89,6 +90,83 @@ PREFERENCE_PATTERN = re.compile(
 POSITIVE_PREF = {"love", "loves", "loved", "obsessed", "addicted", "favorite"}
 NEGATIVE_PREF = {"hate", "hates", "hated", "can't stand", "allergic"}
 
+# Family relationship types for predicate resolution
+_FAMILY_RELATIONS = frozenset({
+    "sister", "brother", "mom", "mother", "dad", "father",
+    "wife", "husband", "daughter", "son", "cousin", "aunt", "uncle",
+    "grandma", "grandmother", "grandpa", "grandfather",
+})
+
+
+@dataclass
+class _RulePattern:
+    """Descriptor for a simple rule-based extraction pattern.
+
+    Each instance drives one ``finditer`` loop inside ``_extract_rule_based``.
+    Patterns that need custom logic (relationship, preference) use dedicated handlers.
+    """
+
+    name: str
+    pattern: re.Pattern[str]
+    category: str
+    predicate: str
+    confidence: float
+    subject_group: int  # regex group index for the extracted subject
+    dedup: bool = False  # skip if (category, subject) already seen
+    valid_from_ts: bool = False  # set valid_from=timestamp on the Fact
+    valid_until_ts: bool = False  # set valid_until=timestamp on the Fact
+
+
+# Registry of simple rule patterns (no custom handler needed).
+# Order matters: temporal locations before legacy fallback.
+_RULE_PATTERNS: list[_RulePattern] = [
+    _RulePattern(
+        name="location_present",
+        pattern=LOCATION_PRESENT_PATTERN,
+        category="location",
+        predicate="lives_in",
+        confidence=0.85,
+        subject_group=1,
+        valid_from_ts=True,
+    ),
+    _RulePattern(
+        name="location_future",
+        pattern=LOCATION_FUTURE_PATTERN,
+        category="location",
+        predicate="moving_to",
+        confidence=0.6,
+        subject_group=1,
+        valid_from_ts=True,
+    ),
+    _RulePattern(
+        name="location_past",
+        pattern=LOCATION_PAST_PATTERN,
+        category="location",
+        predicate="lived_in",
+        confidence=0.5,
+        subject_group=1,
+        valid_until_ts=True,
+    ),
+    _RulePattern(
+        name="location_legacy",
+        pattern=LOCATION_PATTERN,
+        category="location",
+        predicate="lives_in",
+        confidence=0.7,
+        subject_group=1,
+        dedup=True,
+    ),
+    _RulePattern(
+        name="work",
+        pattern=WORK_PATTERN,
+        category="work",
+        predicate="works_at",
+        confidence=0.7,
+        subject_group=1,
+        dedup=True,
+    ),
+]
+
 
 @dataclass
 class EntitySpan:
@@ -98,6 +176,27 @@ class EntitySpan:
     label: str  # PERSON, GPE, ORG, DATE, etc.
     start: int
     end: int
+
+
+# Module-level spaCy singleton (shared across all FactExtractor instances)
+_spacy_nlp: Any = None
+_spacy_nlp_lock = threading.Lock()
+
+
+def _get_shared_nlp() -> Any:
+    """Return shared spaCy model, loading once on first call (thread-safe)."""
+    global _spacy_nlp
+    if _spacy_nlp is None:
+        with _spacy_nlp_lock:
+            if _spacy_nlp is None:
+                try:
+                    import spacy
+
+                    _spacy_nlp = spacy.load("en_core_web_sm")
+                except Exception as e:
+                    logger.warning("spaCy not available, using regex-only extraction: %s", e)
+                    _spacy_nlp = False  # sentinel: don't retry
+    return _spacy_nlp if _spacy_nlp is not False else None
 
 
 class FactExtractor:
@@ -113,20 +212,11 @@ class FactExtractor:
         confidence_threshold: float = 0.5,
     ) -> None:
         self.confidence_threshold = confidence_threshold
-        self._nlp = None
         self._contacts_cache: dict[str, Any] | None = None
 
     def _get_nlp(self) -> Any:
-        """Lazy-load spaCy model."""
-        if self._nlp is None:
-            try:
-                import spacy
-
-                self._nlp = spacy.load("en_core_web_sm")
-            except Exception as e:
-                logger.warning("spaCy not available, using regex-only extraction: %s", e)
-                self._nlp = False  # sentinel: don't retry
-        return self._nlp if self._nlp is not False else None
+        """Return shared spaCy model singleton."""
+        return _get_shared_nlp()
 
     def extract_facts(self, messages: list[Any], contact_id: str = "") -> list[Fact]:
         """Extract facts from a list of messages.
@@ -183,37 +273,24 @@ class FactExtractor:
     # Quality Filtering Methods
     # =========================================================================
 
-    def _is_like_filler_word(self, text: str, match_start: int, match_end: int) -> bool:
-        """Detect if 'like' in this context is a filler word, not a preference verb.
+    # Pre-compiled filler word patterns (avoid recompiling per match)
+    _FILLER_PATTERNS = [
+        re.compile(r"(it\u2019s|it's|that\u2019s|that's|feels?|looks?|sounds?)\s+like\b"),
+        re.compile(r"\blike\s+(okay|yeah|yeah?|what|so|you know|omg|lol)"),
+        re.compile(r"(?:^|[,;])\s+like\s+"),
+        re.compile(r"^i\s+was\s+like\b"),
+    ]
 
-        Filler patterns:
-        - "it's like X" (that's like, it's like)
-        - "that's like X"
-        - "<verb> like X" where verb != like (looks like, feels like, sounds like)
-        - "like okay", "like yeah", "like what"
-        - Mid-sentence: "so like I was..." (conversational filler)
-        """
+    def _is_like_filler_word(self, text: str, match_start: int, match_end: int) -> bool:
+        """Detect if 'like' in this context is a filler word, not a preference verb."""
         # Look at context around the match (50 chars before/after)
         context_start = max(0, match_start - 50)
         context_end = min(len(text), match_end + 50)
         context = text[context_start:context_end].lower()
 
-        # Pattern: X is/was/feels like (not preference)
-        if re.search(r"(it's|that's|feels?|looks?|sounds?)\s+like\b", context):
-            return True
-
-        # Pattern: like + discourse marker (okay, yeah, what, so, you know)
-        if re.search(r"\blike\s+(okay|yeah|yeah?|what|so|you know|omg|lol)", context):
-            return True
-
-        # Pattern: mid-sentence filler "so like" or "and like"
-        if re.search(r"(?:^|[,;])\s+like\s+", context):
-            return True
-
-        # Pattern: "I like" at sentence start is usually preference, allow it
-        # Pattern: "I was like" at sentence start is likely filler, reject it
-        if re.search(r"^i\s+was\s+like\b", context):
-            return True
+        for pat in self._FILLER_PATTERNS:
+            if pat.search(context):
+                return True
 
         return False
 
@@ -420,7 +497,7 @@ class FactExtractor:
             filtered.append(fact)
 
         logger.debug(
-            "Quality filtering: %d → %d facts (%.1f%% kept)",
+            "Quality filtering: %d \u2192 %d facts (%.1f%% kept)",
             len(facts),
             len(filtered),
             (len(filtered) / len(facts) * 100) if facts else 0,
@@ -443,41 +520,30 @@ class FactExtractor:
         return subject.strip()
 
     def _extract_rule_based(self, text: str, contact_id: str, timestamp: str) -> list[Fact]:
-        """Extract facts using regex patterns."""
+        """Extract facts using regex patterns.
+
+        Uses three extraction phases:
+        1. Relationship patterns (custom predicate logic based on rel_type)
+        2. Registry-driven patterns (location temporal, location legacy, work)
+        3. Preference patterns (custom filler-word filter + sentiment detection)
+        """
         facts: list[Fact] = []
 
-        # Relationship patterns
+        # --- Phase 1: Relationship patterns (custom predicate logic) ---
         for match in RELATIONSHIP_PATTERN.finditer(text):
             rel_type = match.group(1).lower()
             person = match.group(2).strip()
+            if rel_type in _FAMILY_RELATIONS:
+                predicate = "is_family_of"
+            elif "friend" in rel_type:
+                predicate = "is_friend_of"
+            else:
+                predicate = "is_associated_with"
             facts.append(
                 Fact(
                     category="relationship",
                     subject=person,
-                    predicate="is_family_of"
-                    if rel_type
-                    in (
-                        "sister",
-                        "brother",
-                        "mom",
-                        "mother",
-                        "dad",
-                        "father",
-                        "wife",
-                        "husband",
-                        "daughter",
-                        "son",
-                        "cousin",
-                        "aunt",
-                        "uncle",
-                        "grandma",
-                        "grandmother",
-                        "grandpa",
-                        "grandfather",
-                    )
-                    else "is_friend_of"
-                    if "friend" in rel_type
-                    else "is_associated_with",
+                    predicate=predicate,
                     value=rel_type,
                     source_text=text[:200],
                     confidence=0.8,
@@ -486,97 +552,50 @@ class FactExtractor:
                 )
             )
 
-        # Location patterns - temporal aware
-        # Present locations (highest confidence - current residence)
-        for match in LOCATION_PRESENT_PATTERN.finditer(text):
-            location = self._clean_subject(match.group(1))
-            if location:
-                facts.append(
-                    Fact(
-                        category="location",
-                        subject=location,
-                        predicate="lives_in",
-                        source_text=text[:200],
-                        confidence=0.85,  # Higher confidence for present tense
-                        contact_id=contact_id,
-                        extracted_at=timestamp,
-                        valid_from=timestamp,  # Current location
-                    )
-                )
+        # --- Phase 2: Registry-driven patterns (locations + work) ---
+        # Build dedup set lazily: patterns with dedup=False run first, then the
+        # dedup set is built once before dedup=True patterns execute.
+        _extracted: set[tuple[str, str]] | None = None
 
-        # Future locations (moving to)
-        for match in LOCATION_FUTURE_PATTERN.finditer(text):
-            location = self._clean_subject(match.group(1))
-            if location:
-                facts.append(
-                    Fact(
-                        category="location",
-                        subject=location,
-                        predicate="moving_to",
-                        source_text=text[:200],
-                        confidence=0.6,
-                        contact_id=contact_id,
-                        extracted_at=timestamp,
-                        valid_from=timestamp,  # Will be valid from now
-                    )
-                )
+        for rule in _RULE_PATTERNS:
+            # Build dedup set on first dedup-aware pattern
+            if rule.dedup and _extracted is None:
+                _extracted = {(f.category, f.subject.lower()) for f in facts}
 
-        # Past locations (grew up in, moved from)
-        for match in LOCATION_PAST_PATTERN.finditer(text):
-            location = self._clean_subject(match.group(1))
-            if location:
-                facts.append(
-                    Fact(
-                        category="location",
-                        subject=location,
-                        predicate="lived_in",
-                        source_text=text[:200],
-                        confidence=0.5,  # Lower confidence for past
-                        contact_id=contact_id,
-                        extracted_at=timestamp,
-                        valid_until=timestamp,  # No longer valid
-                    )
-                )
+            for match in rule.pattern.finditer(text):
+                subject = self._clean_subject(match.group(rule.subject_group))
+                if not subject:
+                    continue
 
-        # Legacy pattern (fallback)
-        for match in LOCATION_PATTERN.finditer(text):
-            location = self._clean_subject(match.group(1))
-            if location:
-                # Check if already extracted by temporal patterns
-                already_extracted = any(
-                    f.category == "location" and f.subject.lower() == location.lower()
-                    for f in facts
-                )
-                if not already_extracted:
-                    facts.append(
-                        Fact(
-                            category="location",
-                            subject=location,
-                            predicate="lives_in",
-                            source_text=text[:200],
-                            confidence=0.7,
-                            contact_id=contact_id,
-                            extracted_at=timestamp,
-                        )
-                    )
+                # Dedup check
+                if rule.dedup:
+                    key = (rule.category, subject.lower())
+                    if key in _extracted:
+                        continue
 
-        # Work patterns
-        for match in WORK_PATTERN.finditer(text):
-            org = self._clean_subject(match.group(1))
-            if org:  # Only add if non-empty after cleaning
-                facts.append(
-                    Fact(
-                        category="work",
-                        subject=org,
-                        predicate="works_at",
-                        source_text=text[:200],
-                        confidence=0.7,
-                        contact_id=contact_id,
-                        extracted_at=timestamp,
-                    )
-                )
+                fact_kwargs: dict[str, Any] = {
+                    "category": rule.category,
+                    "subject": subject,
+                    "predicate": rule.predicate,
+                    "source_text": text[:200],
+                    "confidence": rule.confidence,
+                    "contact_id": contact_id,
+                    "extracted_at": timestamp,
+                }
+                if rule.valid_from_ts:
+                    fact_kwargs["valid_from"] = timestamp
+                if rule.valid_until_ts:
+                    fact_kwargs["valid_until"] = timestamp
 
-        # Preference patterns
+                facts.append(Fact(**fact_kwargs))
+
+                if rule.dedup:
+                    _extracted.add(key)
+
+        # --- Phase 3: Preference patterns (filler-word filter + sentiment) ---
+        if _extracted is None:
+            _extracted = {(f.category, f.subject.lower()) for f in facts}
+
         for match in PREFERENCE_PATTERN.finditer(text):
             # Skip if "like" is a filler word, not preference verb
             if "like" in match.group(0).lower() and self._is_like_filler_word(
@@ -589,23 +608,26 @@ class FactExtractor:
             if not thing:  # Skip if empty after cleaning
                 continue
 
-            # Determine sentiment
-            match_text = match.group(0).lower()
-            if any(w in match_text for w in NEGATIVE_PREF):
-                predicate = "dislikes"
-            else:
-                predicate = "likes"
-            facts.append(
-                Fact(
-                    category="preference",
-                    subject=thing,
-                    predicate=predicate,
-                    source_text=text[:200],
-                    confidence=0.6,
-                    contact_id=contact_id,
-                    extracted_at=timestamp,
+            key = ("preference", thing.lower())
+            if key not in _extracted:
+                # Determine sentiment
+                match_text = match.group(0).lower()
+                if any(w in match_text for w in NEGATIVE_PREF):
+                    predicate = "dislikes"
+                else:
+                    predicate = "likes"
+                facts.append(
+                    Fact(
+                        category="preference",
+                        subject=thing,
+                        predicate=predicate,
+                        source_text=text[:200],
+                        confidence=0.6,
+                        contact_id=contact_id,
+                        extracted_at=timestamp,
+                    )
                 )
-            )
+                _extracted.add(key)
 
         return facts
 
@@ -645,15 +667,14 @@ class FactExtractor:
                 # Rule-based first
                 facts.extend(self._extract_rule_based(text, contact_id, now))
 
+                # Build dedup set for O(1) lookups instead of O(n) scans
+                _ner_seen = {(f.category, f.subject.lower()) for f in facts}
+
                 # NER-enhanced: extract entities spaCy found
                 for ent in doc.ents:
+                    ent_lower = ent.text.lower()
                     if ent.label_ == "PERSON" and len(ent.text) > 1:
-                        # Check if already captured by relationship pattern
-                        if not any(
-                            f.subject.lower() == ent.text.lower()
-                            for f in facts
-                            if f.category == "relationship"
-                        ):
+                        if ("relationship", ent_lower) not in _ner_seen:
                             facts.append(
                                 Fact(
                                     category="relationship",
@@ -665,12 +686,9 @@ class FactExtractor:
                                     extracted_at=now,
                                 )
                             )
+                            _ner_seen.add(("relationship", ent_lower))
                     elif ent.label_ in ("GPE", "LOC") and len(ent.text) > 1:
-                        if not any(
-                            f.subject.lower() == ent.text.lower()
-                            for f in facts
-                            if f.category == "location"
-                        ):
+                        if ("location", ent_lower) not in _ner_seen:
                             facts.append(
                                 Fact(
                                     category="location",
@@ -682,12 +700,9 @@ class FactExtractor:
                                     extracted_at=now,
                                 )
                             )
+                            _ner_seen.add(("location", ent_lower))
                     elif ent.label_ == "ORG" and len(ent.text) > 1:
-                        if not any(
-                            f.subject.lower() == ent.text.lower()
-                            for f in facts
-                            if f.category == "work"
-                        ):
+                        if ("work", ent_lower) not in _ner_seen:
                             facts.append(
                                 Fact(
                                     category="work",
@@ -699,6 +714,7 @@ class FactExtractor:
                                     extracted_at=now,
                                 )
                             )
+                            _ner_seen.add(("work", ent_lower))
 
         return self._deduplicate(facts)
 
@@ -742,34 +758,50 @@ class FactExtractor:
 
         return facts
 
+    def _get_contacts_for_resolution(self) -> list[tuple[str, str, set[str]]]:
+        """Load and cache contacts with pre-tokenized names for fuzzy matching."""
+        if self._contacts_cache is not None:
+            return self._contacts_cache
+
+        try:
+            from jarvis.db import get_db
+
+            db = get_db()
+            with db.connection() as conn:
+                cursor = conn.execute("SELECT id, display_name FROM contacts")
+                rows = cursor.fetchall()
+
+            # Pre-tokenize contact names for O(1) reuse across calls
+            self._contacts_cache = [
+                (str(cid), name, set(name.lower().split()))
+                for cid, name in rows
+                if name
+            ]
+        except Exception:
+            self._contacts_cache = []
+
+        return self._contacts_cache
+
     def _resolve_person_to_contact(self, person_name: str) -> str | None:
         """Fuzzy match person name to contact in database.
 
-        Uses token-based matching: require unique match with confidence >= 0.7
-        or clear winner with 0.2+ gap over runner-up.
+        Uses cached contacts with pre-tokenized names (single DB query per session).
+        Requires unique match with confidence >= 0.7 or clear winner with 0.2+ gap.
 
         Returns:
             Contact ID if match found, None otherwise.
         """
         try:
-            from jarvis.db import get_db
-
-            db = get_db()
-
-            # Get all contacts
-            with db.connection() as conn:
-                cursor = conn.execute("SELECT id, display_name FROM contacts")
-                contacts = cursor.fetchall()
+            contacts = self._get_contacts_for_resolution()
 
             if not contacts:
                 return None
 
             # Simple token-based fuzzy match
             name_tokens = set(person_name.lower().split())
-            scores: dict[int, float] = {}
+            scores: dict[str, float] = {}
 
-            for contact_id, display_name in contacts:
-                contact_tokens = set(display_name.lower().split())
+            for contact_id, display_name, contact_tokens in contacts:
                 if not contact_tokens:
                     continue
 

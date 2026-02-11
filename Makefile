@@ -214,9 +214,13 @@ format-check:
 typecheck:
 	uv run mypy jarvis/ core/ models/ integrations/ benchmarks/ api/ --ignore-missing-imports
 
-check: lint format-check typecheck
+check: lint format-check typecheck svelte-check
 	@echo ""
 	@echo "All static checks passed!"
+
+svelte-check:
+	@echo "Running svelte-check..."
+	@cd desktop && pnpm check
 
 # ============================================================================
 # VERIFICATION & REVIEW

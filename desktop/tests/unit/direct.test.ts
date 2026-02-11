@@ -405,7 +405,8 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]);
-      mockSelect.mockResolvedValueOnce([]); // attachments (empty)
+      mockSelect.mockResolvedValueOnce([]); // batch attachments (empty)
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -420,9 +421,10 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]);
-      // Attachments - returns one attachment
+      // Batch attachments - includes message_id to link to the message
       mockSelect.mockResolvedValueOnce([
         {
+          message_id: 100,
           attachment_id: 1,
           filename: "~/Library/Messages/Attachments/photo.jpg",
           mime_type: "image/jpeg",
@@ -430,7 +432,7 @@ describe("direct.ts", () => {
           transfer_name: "photo.jpg",
         },
       ]);
-      // Reactions
+      // Batch reactions
       mockSelect.mockResolvedValueOnce([]);
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
@@ -453,7 +455,8 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]);
-      // System messages don't query attachments/reactions
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -470,6 +473,8 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]);
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -487,6 +492,8 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]);
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -505,6 +512,8 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]);
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -520,6 +529,8 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]);
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -588,10 +599,10 @@ describe("direct.ts", () => {
       });
 
       mockSelect.mockResolvedValueOnce([row]); // main query
-      mockSelect.mockResolvedValueOnce([]); // attachments
-      // getMessageRowidByGuid returns the ROWID
-      mockSelect.mockResolvedValueOnce([{ id: 42 }]);
-      mockSelect.mockResolvedValueOnce([]); // reactions
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
+      // batch GUID→ROWID resolution
+      mockSelect.mockResolvedValueOnce([{ guid: "original-msg-guid", id: 42 }]);
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -601,19 +612,14 @@ describe("direct.ts", () => {
 
     it("handles multiple messages correctly", async () => {
       const rows = [
-        makeMessageRow({ id: 100, text: "First" }),
-        makeMessageRow({ id: 101, text: "Second" }),
-        makeMessageRow({ id: 102, text: "Third" }),
+        makeMessageRow({ id: 100, text: "First", guid: "guid-100" }),
+        makeMessageRow({ id: 101, text: "Second", guid: "guid-101" }),
+        makeMessageRow({ id: 102, text: "Third", guid: "guid-102" }),
       ];
 
       mockSelect.mockResolvedValueOnce(rows);
-      // Each message needs attachments + reactions queries
-      mockSelect.mockResolvedValueOnce([]); // attachments for msg 100
-      mockSelect.mockResolvedValueOnce([]); // reactions for msg 100
-      mockSelect.mockResolvedValueOnce([]); // attachments for msg 101
-      mockSelect.mockResolvedValueOnce([]); // reactions for msg 101
-      mockSelect.mockResolvedValueOnce([]); // attachments for msg 102
-      mockSelect.mockResolvedValueOnce([]); // reactions for msg 102
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
+      mockSelect.mockResolvedValueOnce([]); // batch reactions
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
 
@@ -704,9 +710,10 @@ describe("direct.ts", () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]);
 
-      // Attachments
+      // Batch attachments
       mockSelect.mockResolvedValueOnce([
         {
+          message_id: 100,
           attachment_id: 1,
           filename: "~/Library/Messages/Attachments/00/ABCDEF/photo.heic",
           mime_type: "image/heic",
@@ -714,7 +721,7 @@ describe("direct.ts", () => {
           transfer_name: "vacation.heic",
         },
       ]);
-      // Reactions
+      // Batch reactions
       mockSelect.mockResolvedValueOnce([]);
 
       const result = await directModule.getMessages("iMessage;-;+15551234567");
@@ -736,6 +743,7 @@ describe("direct.ts", () => {
 
       mockSelect.mockResolvedValueOnce([
         {
+          message_id: 100,
           attachment_id: 1,
           filename: "document.pdf",
           mime_type: "application/pdf",
@@ -756,6 +764,7 @@ describe("direct.ts", () => {
 
       mockSelect.mockResolvedValueOnce([
         {
+          message_id: 100,
           attachment_id: 1,
           filename: null,
           mime_type: null,
@@ -783,11 +792,12 @@ describe("direct.ts", () => {
     it("maps reaction rows to Reaction objects", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]); // main query
-      mockSelect.mockResolvedValueOnce([]); // attachments
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
 
-      // Reactions
+      // Batch reactions
       mockSelect.mockResolvedValueOnce([
         {
+          message_guid: "msg-guid-001",
           id: 200,
           associated_message_type: 2000, // love
           date: 700001000000000000,
@@ -806,10 +816,11 @@ describe("direct.ts", () => {
     it("filters out remove_* reaction types", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]);
-      mockSelect.mockResolvedValueOnce([]); // attachments
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
 
       mockSelect.mockResolvedValueOnce([
         {
+          message_guid: "msg-guid-001",
           id: 200,
           associated_message_type: 2001, // like
           date: 700001000000000000,
@@ -817,6 +828,7 @@ describe("direct.ts", () => {
           sender: "+15559876543",
         },
         {
+          message_guid: "msg-guid-001",
           id: 201,
           associated_message_type: 3001, // remove_like (should be filtered out)
           date: 700002000000000000,
@@ -834,10 +846,11 @@ describe("direct.ts", () => {
     it("filters out unknown reaction types", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]);
-      mockSelect.mockResolvedValueOnce([]); // attachments
+      mockSelect.mockResolvedValueOnce([]); // batch attachments
 
       mockSelect.mockResolvedValueOnce([
         {
+          message_guid: "msg-guid-001",
           id: 200,
           associated_message_type: 9999, // unknown type
           date: 700001000000000000,

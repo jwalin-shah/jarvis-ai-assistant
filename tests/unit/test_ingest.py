@@ -61,7 +61,7 @@ class TestIngestContacts:
     @pytest.fixture
     def mock_db(self):
         db = MagicMock()
-        db.get_contact_by_handle = Mock(return_value=None)
+        db.get_contact_by_handles = Mock(return_value=None)
         db.add_contact = Mock()
         return db
 
@@ -93,8 +93,8 @@ class TestIngestContacts:
         existing.relationship = None
         existing.style_notes = None
 
-        mock_db.get_contact_by_handle.side_effect = lambda h: (
-            existing if h == "+15551234567" else None
+        mock_db.get_contact_by_handles.side_effect = lambda handles: (
+            existing if "+15551234567" in handles else None
         )
 
         rows = [_row("+1 (555) 123-4567", "John", "Doe")]
@@ -111,8 +111,8 @@ class TestIngestContacts:
         existing.chat_id = "chat123"
         existing.phone_or_email = "+15551234567"
 
-        mock_db.get_contact_by_handle.side_effect = lambda h: (
-            existing if h == "+15551234567" else None
+        mock_db.get_contact_by_handles.side_effect = lambda handles: (
+            existing if "+15551234567" in handles else None
         )
 
         rows = [_row("+15551234567", "John", "Doe")]
@@ -145,7 +145,7 @@ class TestIngestContacts:
 
         for row_data, expected_name in cases:
             mock_db.reset_mock()
-            mock_db.get_contact_by_handle = Mock(return_value=None)
+            mock_db.get_contact_by_handles = Mock(return_value=None)
             with patch("jarvis.search.ingest._read_all_source_dbs", return_value=[row_data]):
                 ingest_contacts(mock_db)
                 assert mock_db.add_contact.call_args[1]["display_name"] == expected_name

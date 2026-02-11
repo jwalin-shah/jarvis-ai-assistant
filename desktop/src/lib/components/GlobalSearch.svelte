@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { api, APIError } from "../api/client";
   import type { Message, SearchFilters, SemanticSearchResultItem } from "../api/types";
-  import { navigateToMessage, conversationsStore } from "../stores/conversations";
+  import { navigateToMessage, conversationsStore } from "../stores/conversations.svelte";
 
   interface Props {
     onClose: () => void;
@@ -219,15 +219,20 @@
 
   /** Snapshot conversation names from the store once, after results arrive */
   function populateConversationNameCache(chatIds: string[]) {
-    for (const chatId of chatIds) {
-      if (!conversationNameCache.has(chatId)) {
-        const conv = conversationsStore.conversations.find(c => c.chat_id === chatId);
-        if (conv) {
-          conversationNameCache.set(
-            chatId,
-            conv.display_name || conv.participants?.join(", ") || chatId
-          );
-        }
+    // Build a Map once for O(1) lookup instead of O(n) .find() per chatId
+    const uncached = chatIds.filter(id => !conversationNameCache.has(id));
+    if (uncached.length === 0) return;
+
+    const convMap = new Map(
+      conversationsStore.conversations.map(c => [c.chat_id, c])
+    );
+    for (const chatId of uncached) {
+      const conv = convMap.get(chatId);
+      if (conv) {
+        conversationNameCache.set(
+          chatId,
+          conv.display_name || conv.participants?.join(", ") || chatId
+        );
       }
     }
     // Trigger reactivity by reassigning

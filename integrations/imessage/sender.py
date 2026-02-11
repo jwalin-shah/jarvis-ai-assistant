@@ -42,8 +42,8 @@ def _validate_file_path(file_path: Path) -> bool:
         True if path is in allowed directory, False otherwise
     """
     try:
-        # Resolve to absolute path to handle symlinks and ../ traversal
-        resolved = file_path.resolve()
+        # Resolve with strict=True to fully resolve symlinks before validation
+        resolved = file_path.resolve(strict=True)
 
         # Define allowed base directories
         allowed_bases = [
@@ -67,8 +67,8 @@ def _validate_file_path(file_path: Path) -> bool:
                     return True
 
         return False
-    except (OSError, RuntimeError):
-        # Error resolving path (circular symlink, etc.)
+    except (FileNotFoundError, OSError, RuntimeError):
+        # strict=True raises FileNotFoundError if path doesn't exist
         return False
 
 

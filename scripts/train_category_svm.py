@@ -168,7 +168,14 @@ def train(
     checker_thread = threading.Thread(target=memory_checker, daemon=True)
     checker_thread.start()
 
-    print(f"Starting training at {time.strftime('%H:%M:%S')}...")
+    total_fits = len(param_grid["svm__C"]) * cv.get_n_splits()
+    print(
+        f"Starting training at {time.strftime('%H:%M:%S')} "
+        f"({total_fits} fits: {len(param_grid['svm__C'])} C values x "
+        f"{cv.get_n_splits()} folds)...",
+        flush=True,
+    )
+    train_start = time.time()
     try:
         search.fit(X_train, y_train)
     finally:
@@ -177,7 +184,12 @@ def train(
         checker_thread.join(timeout=2.0)
         final_info = monitor.stop()
 
-        print(f"\nTraining completed at {time.strftime('%H:%M:%S')}")
+        elapsed = time.time() - train_start
+        print(
+            f"\nTraining completed at {time.strftime('%H:%M:%S')} "
+            f"(elapsed: {elapsed:.1f}s, {elapsed / total_fits:.1f}s/fit)",
+            flush=True,
+        )
         print(f"Peak RAM: {monitor.peak_rss_mb:.1f}MB")
         print(f"Peak swap: {monitor.peak_swap_mb:.1f}MB")
 

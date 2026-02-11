@@ -46,7 +46,7 @@ import logging
 import sqlite3
 import threading
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -400,7 +400,7 @@ class EmbeddingStore:
         self._init_schema()
         # Profile cache with TTL (contact_id -> (profile, cached_at))
         self._profile_cache: dict[str, tuple[EmbeddingStoreProfile, float]] = {}
-        self._profile_cache_ttl: float = 300.0  # 5 minutes
+        self._profile_cache_ttl: float = 3600.0  # 1 hour (profiles change infrequently)
 
     def _ensure_db_exists(self) -> None:
         """Ensure the database directory and file exist."""
@@ -668,8 +668,10 @@ class EmbeddingStore:
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
 
-            # Limit SQL results to bound memory usage before Python filtering
-            # We fetch more than `limit` since we filter by min_similarity in Python
+            # NOTE: Ideally similarity filtering would happen in SQL (e.g. via sqlite-vec),
+            # but without vector search extensions we must fetch candidates and filter in
+            # Python. The LIMIT caps memory usage; with chat_id filtering most queries
+            # hit far fewer rows. Don't raise this above 1000 without profiling.
             sql += " LIMIT 1000"
 
             rows = conn.execute(sql, params).fetchall()
@@ -746,39 +748,62 @@ class EmbeddingStore:
         if not similar:
             return []
 
-        # Group by conversation and get surrounding context
-        situations: list[ConversationContext] = []
-        seen_message_ids: set[int] = set()
-
+        # Batch-fetch all surrounding contexts in ONE query instead of N separate
+        # queries (one per similar message). Build OR conditions for each anchor.
         with self._get_connection() as conn:
+            # Collect (chat_id, timestamp) pairs for batch query
+            anchors = []
+            for msg in similar:
+                ts = int(msg.timestamp.timestamp())
+                anchors.append((msg.chat_id, ts))
+
+            # Build a single query with OR'd conditions, chunked to stay safe
+            or_clauses = []
+            params: list[Any] = []
+            for chat_id_val, ts in anchors:
+                or_clauses.append("(chat_id = ? AND timestamp BETWEEN ? AND ?)")
+                params.extend([chat_id_val, ts - 3600, ts + 3600])
+
+            all_context_rows = conn.execute(
+                f"""
+                SELECT message_id, chat_id, text_preview, sender, sender_name,
+                       timestamp, is_from_me
+                FROM message_embeddings
+                WHERE {" OR ".join(or_clauses)}
+                ORDER BY chat_id, timestamp
+                """,
+                params,
+            ).fetchall()
+
+            # Index rows by chat_id for fast grouping
+            rows_by_chat: dict[str, list[sqlite3.Row]] = defaultdict(list)
+            for row in all_context_rows:
+                rows_by_chat[row["chat_id"]].append(row)
+
+            # Build a lookup of message_id -> similarity from the similar results
+            similarity_map = {msg.message_id: msg.similarity for msg in similar}
+
+            # Now iterate similar messages, group context from pre-fetched rows
+            situations: list[ConversationContext] = []
+            seen_message_ids: set[int] = set()
+
             for msg in similar:
                 if msg.message_id in seen_message_ids:
                     continue
 
-                # Get surrounding messages
-                rows = conn.execute(
-                    """
-                    SELECT message_id, chat_id, text_preview, sender, sender_name,
-                           timestamp, is_from_me
-                    FROM message_embeddings
-                    WHERE chat_id = ?
-                      AND timestamp BETWEEN ? - 3600 AND ? + 3600
-                    ORDER BY timestamp
-                    LIMIT ?
-                    """,
-                    (
-                        msg.chat_id,
-                        int(msg.timestamp.timestamp()),
-                        int(msg.timestamp.timestamp()),
-                        context_window * 2 + 1,
-                    ),
-                ).fetchall()
+                ts = int(msg.timestamp.timestamp())
+                chat_rows = rows_by_chat.get(msg.chat_id, [])
+
+                # Filter to the time window for this anchor and apply context_window limit
+                window_rows = [
+                    r for r in chat_rows if ts - 3600 <= r["timestamp"] <= ts + 3600
+                ]
+                window_rows = window_rows[: context_window * 2 + 1]
 
                 context_messages = []
-                for row in rows:
+                for row in window_rows:
                     seen_message_ids.add(row["message_id"])
-                    is_match = row["message_id"] == msg.message_id
-                    sim = msg.similarity if is_match else 0.0
+                    sim = similarity_map.get(row["message_id"], 0.0)
                     context_messages.append(
                         SimilarMessage(
                             message_id=row["message_id"],
@@ -793,9 +818,10 @@ class EmbeddingStore:
                     )
 
                 if context_messages:
-                    # Detect topic from messages
                     topic = self._detect_topic(context_messages)
-                    avg_sim = sum(m.similarity for m in context_messages) / len(context_messages)
+                    avg_sim = sum(m.similarity for m in context_messages) / len(
+                        context_messages
+                    )
 
                     situations.append(
                         ConversationContext(
@@ -1019,18 +1045,26 @@ class EmbeddingStore:
             Dict with index stats
         """
         with self._get_connection() as conn:
-            total = conn.execute("SELECT COUNT(*) FROM message_embeddings").fetchone()[0]
-            chats = conn.execute(
-                "SELECT COUNT(DISTINCT chat_id) FROM message_embeddings"
-            ).fetchone()[0]
-            oldest = conn.execute("SELECT MIN(timestamp) FROM message_embeddings").fetchone()[0]
-            newest = conn.execute("SELECT MAX(timestamp) FROM message_embeddings").fetchone()[0]
+            # Single query instead of 4 separate full-table scans
+            row = conn.execute(
+                """
+                SELECT COUNT(*) as total,
+                       COUNT(DISTINCT chat_id) as unique_chats,
+                       MIN(timestamp) as oldest,
+                       MAX(timestamp) as newest
+                FROM message_embeddings
+                """
+            ).fetchone()
 
             return {
-                "total_embeddings": total,
-                "unique_chats": chats,
-                "oldest_message": datetime.fromtimestamp(oldest).isoformat() if oldest else None,
-                "newest_message": datetime.fromtimestamp(newest).isoformat() if newest else None,
+                "total_embeddings": row["total"],
+                "unique_chats": row["unique_chats"],
+                "oldest_message": datetime.fromtimestamp(row["oldest"]).isoformat()
+                if row["oldest"]
+                else None,
+                "newest_message": datetime.fromtimestamp(row["newest"]).isoformat()
+                if row["newest"]
+                else None,
                 "db_path": str(self.db_path),
                 "db_size_bytes": self.db_path.stat().st_size if self.db_path.exists() else 0,
             }

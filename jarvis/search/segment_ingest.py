@@ -18,6 +18,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from jarvis.db.contacts import _CONTACT_COLUMNS
+
 if TYPE_CHECKING:
     from jarvis.db import JarvisDB
     from jarvis.search.vec_search import VecSearcher
@@ -75,13 +77,51 @@ def extract_segments(
     conversations = chat_db_reader.get_conversations(limit=limit)
     total = len(conversations)
 
+    # Batch-load all contacts to avoid N+1 queries in the loop
+    chat_ids = [conv.chat_id for conv in conversations]
+    contact_by_chat_id: dict[str, Any] = {}
+    if chat_ids:
+        with jarvis_db.connection() as conn:
+            # Build placeholders for IN clause
+            placeholders = ",".join("?" * len(chat_ids))
+            cursor = conn.execute(
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id IN ({placeholders})",
+                chat_ids,
+            )
+            for row in cursor.fetchall():
+                contact = jarvis_db._row_to_contact(row)
+                if contact:
+                    contact_by_chat_id[contact.chat_id] = contact
+
+            # Also try extracting identifiers for iMessage-format chat_ids
+            # (e.g., "iMessage;-;+15551234567" -> "+15551234567")
+            missing_ids = [cid for cid in chat_ids if cid not in contact_by_chat_id]
+            identifier_map: dict[str, str] = {}  # identifier -> original chat_id
+            for cid in missing_ids:
+                if ";" in cid:
+                    identifier = cid.rsplit(";", 1)[-1]
+                    if identifier:
+                        identifier_map[identifier] = cid
+            if identifier_map:
+                id_placeholders = ",".join("?" * len(identifier_map))
+                cursor = conn.execute(
+                    f"SELECT {_CONTACT_COLUMNS} FROM contacts "
+                    f"WHERE chat_id IN ({id_placeholders})",
+                    list(identifier_map.keys()),
+                )
+                for row in cursor.fetchall():
+                    contact = jarvis_db._row_to_contact(row)
+                    if contact and contact.chat_id in identifier_map:
+                        orig_chat_id = identifier_map[contact.chat_id]
+                        contact_by_chat_id[orig_chat_id] = contact
+
     for idx, conv in enumerate(conversations):
         if progress_callback:
             progress_callback(idx, total, conv.chat_id)
 
         try:
-            # Resolve contact
-            contact = jarvis_db.get_contact_by_chat_id(conv.chat_id)
+            # Resolve contact from batch-loaded dict
+            contact = contact_by_chat_id.get(conv.chat_id)
             contact_id = contact.id if contact else None
 
             # Get messages

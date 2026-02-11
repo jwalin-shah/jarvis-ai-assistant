@@ -213,9 +213,10 @@ def load_bert_weights(model: BertModel, weights_path: Path, has_pooler: bool = T
     """Load weights from HuggingFace safetensors into our model."""
     hf_weights = mx.load(str(weights_path))
 
-    new_weights = {}
+    # Rename keys in-place to avoid building a second ~500MB dict (peak 1.5GB -> ~1GB)
+    for hf_name in list(hf_weights.keys()):
+        weight = hf_weights.pop(hf_name)
 
-    for hf_name, weight in hf_weights.items():
         if "position_ids" in hf_name:
             continue
 
@@ -239,16 +240,10 @@ def load_bert_weights(model: BertModel, weights_path: Path, has_pooler: bool = T
         # Pooler
         name = name.replace("pooler.dense", "pooler_dense")
 
-        new_weights[name] = weight
+        hf_weights[name] = weight
 
-    # CRITICAL: Delete original weights dict BEFORE loading into model to reduce peak memory
-    # This prevents holding 2 copies (hf_weights + model params) simultaneously on 8GB systems
+    model.load_weights(list(hf_weights.items()))
     del hf_weights
-
-    model.load_weights(list(new_weights.items()))
-
-    # FREE MEMORY: Delete new_weights dict (hf_weights already deleted above)
-    del new_weights
 
 
 # =============================================================================
@@ -430,30 +425,32 @@ class InProcessEmbedder:
 
             output_embeddings = []
 
-            for batch_start in range(0, len(texts), batch_size):
-                batch_end = min(batch_start + batch_size, len(texts))
-                batch_indices = sorted_indices[batch_start:batch_end]
-                batch_texts = [texts[i] for i in batch_indices]
+            # Hold GPU lock for entire encode call (not per-batch) to avoid
+            # 16+ lock acquire/release cycles for large inputs
+            with self._get_gpu_lock():
+                for batch_start in range(0, len(texts), batch_size):
+                    batch_end = min(batch_start + batch_size, len(texts))
+                    batch_indices = sorted_indices[batch_start:batch_end]
+                    batch_texts = [texts[i] for i in batch_indices]
 
-                batch_encodings = self.tokenizer.encode_batch(batch_texts)
-                input_ids = np.array([e.ids for e in batch_encodings], dtype=np.int32)
-                attention_mask = np.array(
-                    [e.attention_mask for e in batch_encodings], dtype=np.int32
-                )
+                    batch_encodings = self.tokenizer.encode_batch(batch_texts)
+                    input_ids = np.array([e.ids for e in batch_encodings], dtype=np.int32)
+                    attention_mask = np.array(
+                        [e.attention_mask for e in batch_encodings], dtype=np.int32
+                    )
 
-                input_ids_mx = mx.array(input_ids)
-                attention_mask_mx = mx.array(attention_mask)
+                    input_ids_mx = mx.array(input_ids)
+                    attention_mask_mx = mx.array(attention_mask)
 
-                # Hold the shared GPU lock during forward pass + eval to
-                # prevent concurrent Metal GPU access with LLM model loads.
-                with self._get_gpu_lock():
                     hidden_states = self.model(input_ids_mx, attention_mask_mx)
 
                     # CLS pooling
                     batch_emb = hidden_states[:, 0, :]
 
                     if normalize:
-                        norms = mx.maximum(mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9)
+                        norms = mx.maximum(
+                            mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9
+                        )
                         batch_emb = batch_emb / norms
 
                     mx.eval(batch_emb)
@@ -462,13 +459,7 @@ class InProcessEmbedder:
                     batch_emb_np = np.array(batch_emb)
                     del input_ids_mx, attention_mask_mx, hidden_states, batch_emb
 
-                output_embeddings.append(batch_emb_np)
-
-                # Clear MLX cache every 100 batches to prevent accumulation
-                # Do this OUTSIDE the GPU lock to reduce lock contention
-                if (batch_end // batch_size) % 100 == 0:
-                    if hasattr(mx, "clear_cache"):
-                        mx.clear_cache()
+                    output_embeddings.append(batch_emb_np)
 
             all_embeddings = np.vstack(output_embeddings)
             return all_embeddings[reverse_indices]

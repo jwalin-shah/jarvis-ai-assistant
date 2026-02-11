@@ -212,6 +212,15 @@ This system has **8GB RAM**. Large data processing MUST account for this:
 3. Fix ONE issue at a time
 4. Re-run tests after each fix
 
+### Writing Tests (CRITICAL)
+- **NEVER write tests that mirror the implementation** - tests must verify *behavior*, not parrot code structure
+- Tests should be written from the *spec*, not from reading the code. If you read the code first, you'll just restate it in test form.
+- A good test fails when behavior breaks. A bad test fails when you refactor internals.
+- **Test real scenarios**: use actual inputs/outputs, not mocked-to-the-gills stubs that just confirm "the mock was called"
+- **Integration > unit for new modules**: if a module talks to DB or embeddings, write at least one integration test with a real (in-memory) DB
+- **Never assert on mocks alone**: `mock.assert_called_once()` proves nothing about correctness. Assert on *output*.
+- Ask: "If I replaced the implementation with something totally different but correct, would this test still pass?" If no, the test is too coupled.
+
 ---
 
 ## Code Style

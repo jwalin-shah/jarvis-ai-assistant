@@ -1,11 +1,30 @@
 <script lang="ts">
   import type { GraphNode } from "../../api/types";
 
-  export let node: GraphNode;
-  export let x: number;
-  export let y: number;
+  interface Props {
+    node: GraphNode;
+    x: number;
+    y: number;
+  }
 
-  $: tooltipStyle = `left: ${x + 15}px; top: ${y - 10}px;`;
+  let { node, x, y }: Props = $props();
+
+  let tooltipEl = $state<HTMLDivElement | null>(null);
+
+  let tooltipStyle = $derived((() => {
+    let left = x + 15;
+    let top = y - 10;
+    if (tooltipEl) {
+      const rect = tooltipEl.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      if (left + rect.width > vw - 8) left = x - rect.width - 15;
+      if (top + rect.height > vh - 8) top = vh - rect.height - 8;
+      if (top < 8) top = 8;
+      if (left < 8) left = 8;
+    }
+    return `left: ${left}px; top: ${top}px;`;
+  })());
 
   function formatDate(dateStr: string | null): string {
     if (!dateStr) return "N/A";
@@ -35,10 +54,10 @@
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   }
 
-  $: sentiment = formatSentiment(node.sentiment_score);
+  let sentiment = $derived(formatSentiment(node.sentiment_score));
 </script>
 
-<div class="tooltip" style={tooltipStyle}>
+<div class="tooltip" style={tooltipStyle} bind:this={tooltipEl}>
   <div class="tooltip-header">
     <div class="node-indicator" style="background: {node.color}"></div>
     <h3>{node.label}</h3>
