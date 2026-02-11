@@ -4,7 +4,7 @@ Extracts facts (relationships, locations, work, preferences) from existing
 messages and populates the knowledge graph database.
 
 Usage:
-    uv run python scripts/backfill_contact_facts.py [--max-contacts 50] [--messages-per-contact 500] [--no-nli]
+    uv run python scripts/backfill_contact_facts.py [--max-contacts 50] [--messages-per-contact 500]
 """
 
 from __future__ import annotations
@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 def backfill(
     max_contacts: int = 50,
     messages_per_contact: int = 500,
-    use_nli: bool = True,
     output_file: str | None = None,
 ) -> None:
     """Extract facts from historical messages for top contacts."""
@@ -47,7 +46,7 @@ def backfill(
 
     print(
         f"Starting backfill: max_contacts={max_contacts}, "
-        f"messages_per_contact={messages_per_contact}, nli={use_nli}",
+        f"messages_per_contact={messages_per_contact}",
         flush=True,
     )
 
@@ -56,7 +55,7 @@ def backfill(
     conversations = reader.get_conversations(limit=max_contacts * 2)
     print(f"Found {len(conversations)} conversations", flush=True)
 
-    extractor = FactExtractor(use_nli=use_nli, entailment_threshold=0.6)
+    extractor = FactExtractor()
 
     total_facts = 0
     total_inserted = 0
@@ -164,7 +163,6 @@ def main() -> None:
     parser.add_argument(
         "--messages-per-contact", type=int, default=500, help="Messages per contact"
     )
-    parser.add_argument("--no-nli", action="store_true", help="Skip NLI verification")
     parser.add_argument(
         "--output",
         "-o",
@@ -177,7 +175,6 @@ def main() -> None:
     backfill(
         max_contacts=args.max_contacts,
         messages_per_contact=args.messages_per_contact,
-        use_nli=not args.no_nli,
         output_file=args.output,
     )
 
