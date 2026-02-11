@@ -596,13 +596,17 @@ class TopicSegmenter:
         # Media bursts - multiple attachments in quick succession
         if self._is_media_burst(messages, position):
             score = max(0.0, score - 0.4)
-            logger.debug("Boundary %d: media burst detected, score reduced to %.2f", position, score)
+            logger.debug(
+                "Boundary %d: media burst detected, score reduced to %.2f", position, score
+            )
 
         # Bidirectional check: if forward messages continue old topic, reduce score
         # This prevents false boundaries when someone briefly mentions something
         # but then continues the original conversation
         if score >= self.boundary_threshold:
-            forward_continuity = self._check_forward_continuity(messages, position, window_centroids)
+            forward_continuity = self._check_forward_continuity(
+                messages, position, window_centroids
+            )
             if forward_continuity > 0:
                 # Forward messages continue old topic - reduce score
                 # Higher continuity = more reduction

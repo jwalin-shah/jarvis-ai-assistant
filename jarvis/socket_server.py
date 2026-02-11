@@ -227,8 +227,13 @@ class JarvisSocketServer:
         )
 
         self._running = True
-        log_event(logger, "server.start", socket_path=str(SOCKET_PATH),
-                  ws_host=WEBSOCKET_HOST, ws_port=WEBSOCKET_PORT)
+        log_event(
+            logger,
+            "server.start",
+            socket_path=str(SOCKET_PATH),
+            ws_host=WEBSOCKET_HOST,
+            ws_port=WEBSOCKET_PORT,
+        )
 
         # Start the file watcher for real-time new message detection
         if self._enable_watcher:
@@ -583,8 +588,12 @@ class JarvisSocketServer:
                 query_params = parse_qs(urlparse(path).query)
                 client_token = query_params.get("token", [None])[0]
                 if client_token != self._ws_auth_token:
-                    log_event(logger, "websocket.auth_failed", level=logging.WARNING,
-                              remote=str(websocket.remote_address))
+                    log_event(
+                        logger,
+                        "websocket.auth_failed",
+                        level=logging.WARNING,
+                        remote=str(websocket.remote_address),
+                    )
                     await websocket.close(4001, "Unauthorized")
                     return
             except Exception:
@@ -594,14 +603,21 @@ class JarvisSocketServer:
         # Enforce connection limit (check inside lock to avoid TOCTOU race)
         async with self._clients_lock:
             if len(self._ws_clients) >= MAX_WS_CONNECTIONS:
-                log_event(logger, "websocket.capacity.rejected", level=logging.WARNING,
-                          max_connections=MAX_WS_CONNECTIONS)
+                log_event(
+                    logger,
+                    "websocket.capacity.rejected",
+                    level=logging.WARNING,
+                    max_connections=MAX_WS_CONNECTIONS,
+                )
                 await websocket.close(4002, "Too many connections")
                 return
             self._ws_clients.add(websocket)
-        log_event(logger, "websocket.connect",
-                  remote=str(websocket.remote_address),
-                  active_connections=len(self._ws_clients))
+        log_event(
+            logger,
+            "websocket.connect",
+            remote=str(websocket.remote_address),
+            active_connections=len(self._ws_clients),
+        )
 
         try:
             async for message in websocket:
@@ -682,8 +698,13 @@ class JarvisSocketServer:
                 else:
                     result = await handler(_writer=writer, _request_id=request_id)
                 _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
-                log_event(logger, "rpc.complete", method=method,
-                          streaming=True, latency_ms=round(_rpc_ms, 1))
+                log_event(
+                    logger,
+                    "rpc.complete",
+                    method=method,
+                    streaming=True,
+                    latency_ms=round(_rpc_ms, 1),
+                )
                 # For streaming, the handler sends the final response
                 return None
             else:
@@ -699,17 +720,28 @@ class JarvisSocketServer:
                     result = await handler()
 
                 _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
-                log_event(logger, "rpc.complete", method=method,
-                          streaming=False, latency_ms=round(_rpc_ms, 1))
+                log_event(
+                    logger,
+                    "rpc.complete",
+                    method=method,
+                    streaming=False,
+                    latency_ms=round(_rpc_ms, 1),
+                )
                 return self._success_response(request_id, result)
 
         except asyncio.CancelledError:
             raise
         except JsonRpcError as e:
             _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
-            log_event(logger, "rpc.error", level=logging.WARNING, method=method,
-                      error_code=e.code, error_message=e.message,
-                      latency_ms=round(_rpc_ms, 1))
+            log_event(
+                logger,
+                "rpc.error",
+                level=logging.WARNING,
+                method=method,
+                error_code=e.code,
+                error_message=e.message,
+                latency_ms=round(_rpc_ms, 1),
+            )
             return self._error_response(request_id, e.code, e.message, e.data)
 
         except TypeError as e:
@@ -717,8 +749,14 @@ class JarvisSocketServer:
 
         except Exception:
             _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
-            log_event(logger, "rpc.error", level=logging.ERROR, method=method,
-                      error_code=INTERNAL_ERROR, latency_ms=round(_rpc_ms, 1))
+            log_event(
+                logger,
+                "rpc.error",
+                level=logging.ERROR,
+                method=method,
+                error_code=INTERNAL_ERROR,
+                latency_ms=round(_rpc_ms, 1),
+            )
             logger.exception(f"Error handling {method}")
             return self._error_response(request_id, INTERNAL_ERROR, "Internal server error")
 
@@ -1420,6 +1458,7 @@ Summary:"""
             Dict with conversations list and count
         """
         import time
+
         start_time = time.time()
 
         try:
@@ -1605,9 +1644,7 @@ async def main(preload_models: bool = True) -> None:
 
     configure_structured_logging(level=logging.INFO)
 
-    logger.info(
-        f"Starting socket server (preload_models={preload_models})..."
-    )
+    logger.info(f"Starting socket server (preload_models={preload_models})...")
     server = JarvisSocketServer(enable_watcher=True, preload_models=preload_models)
 
     # Handle shutdown signals

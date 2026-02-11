@@ -266,12 +266,23 @@ class CategoryFeatureExtractor:
             nlp: Optional spaCy model. If None, lazy-loads en_core_web_sm.
         """
         self._nlp = nlp
+        self._spacy_available: bool | None = None  # None = not checked yet
 
     @property
     def nlp(self) -> spacy.Language:
         """Lazy-load spaCy model."""
         if self._nlp is None:
-            self._nlp = spacy.load("en_core_web_sm")
+            if self._spacy_available is False:
+                raise RuntimeError("spaCy model en_core_web_sm not available")
+            try:
+                self._nlp = spacy.load("en_core_web_sm")
+                self._spacy_available = True
+            except OSError as e:
+                self._spacy_available = False
+                raise RuntimeError(
+                    "spaCy model en_core_web_sm not installed. "
+                    "Run: python -m spacy download en_core_web_sm"
+                ) from e
         return self._nlp
 
     def extract_hand_crafted(

@@ -267,7 +267,10 @@ class ContextFetcher:
         else:
             # Fallback: no messages found, use current time
             # This preserves the original behavior while documenting the edge case
-            logger.debug("No messages found for summary context (chat_id=%s), using current time as fallback", chat_id)
+            logger.debug(
+                "No messages found for summary context (chat_id=%s), using current time as fallback",
+                chat_id,
+            )
             now = datetime.now()
             date_range = (now, now)
 

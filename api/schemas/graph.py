@@ -132,7 +132,9 @@ class ExportGraphRequest(BaseModel):
 class ContactFactSchema(BaseModel):
     """A single fact about a contact from the knowledge graph."""
 
-    category: str = Field(description="Fact category: relationship, location, work, preference, event")
+    category: str = Field(
+        description="Fact category: relationship, location, work, preference, event"
+    )
     subject: str = Field(description="The subject/entity of the fact")
     predicate: str = Field(description="The relationship type (e.g. lives_in, works_at)")
     value: str | None = Field(default=None, description="Optional value/detail")

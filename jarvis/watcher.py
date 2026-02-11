@@ -348,6 +348,11 @@ class ChatDBWatcher:
                 task = asyncio.create_task(self._resegment_chats(chats_to_resegment))
                 task.add_done_callback(self._log_task_exception)
 
+            # Passive feedback detection (background, non-blocking)
+            if new_messages:
+                task = asyncio.create_task(self._detect_passive_feedback(new_messages))
+                task.add_done_callback(self._log_task_exception)
+
         except Exception as e:
             logger.warning("Error checking new messages: %s", e)
 
@@ -397,6 +402,18 @@ class ChatDBWatcher:
         except Exception as e:
             logger.debug("Error indexing new messages: %s", e)
 
+    async def _detect_passive_feedback(self, messages: list[dict[str, Any]]) -> None:
+        """Detect passive feedback from user messages.
+
+        Identifies when a user sends a message that was previously suggested
+        by the AI, or when they send a message that implies feedback.
+        """
+        # TODO: Implement passive feedback detection logic
+        # 1. Check for messages where is_from_me is True
+        # 2. Compare against recent suggestions in FeedbackStore
+        # 3. If match found (and not already recorded), record as SuggestionAction.SENT
+        pass
+
     async def _extract_facts(self, messages: list[dict[str, Any]]) -> None:
         """Extract and persist facts from new messages (background task)."""
         try:
@@ -419,15 +436,15 @@ class ChatDBWatcher:
 
             for chat_id, chat_msgs in by_chat.items():
                 try:
-                    facts = await asyncio.to_thread(
-                        extractor.extract_facts, chat_msgs, chat_id
-                    )
+                    facts = await asyncio.to_thread(extractor.extract_facts, chat_msgs, chat_id)
                     if facts:
                         inserted = await asyncio.to_thread(save_facts, facts, chat_id)
                         if inserted:
                             logger.info(
                                 "Extracted %d facts (%d new) for %s",
-                                len(facts), inserted, chat_id[:20],
+                                len(facts),
+                                inserted,
+                                chat_id[:20],
                             )
                 except Exception as e:
                     logger.debug("Fact extraction failed for %s: %s", chat_id[:20], e)

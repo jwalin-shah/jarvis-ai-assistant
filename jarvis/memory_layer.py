@@ -24,9 +24,7 @@ class JARVISMemory:
 
     def __init__(self, user_id: str = "default_user") -> None:
         if Memory is None:
-            raise ImportError(
-                "mem0 is required for JARVISMemory. Install with: pip install mem0ai"
-            )
+            raise ImportError("mem0 is required for JARVISMemory. Install with: pip install mem0ai")
         self.user_id = user_id
         # Configure Mem0 for local operation
         # Note: By default it uses local storage if no API key provided

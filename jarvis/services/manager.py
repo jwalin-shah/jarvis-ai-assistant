@@ -97,9 +97,7 @@ class ServiceManager:
             ValueError: If timeout is not in valid range.
         """
         if timeout <= 0 or timeout > 600:
-            raise ValueError(
-                f"timeout must be between 1 and 600 seconds, got {timeout}"
-            )
+            raise ValueError(f"timeout must be between 1 and 600 seconds, got {timeout}")
 
         with self._lock:
             self._initialize_services()

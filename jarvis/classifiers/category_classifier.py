@@ -238,10 +238,15 @@ class CategoryClassifier(EmbedderMixin):
                 confidence=1.0,
                 method="fast_path",
             )
-            log_event(logger, "classifier.inference.complete",
-                      classifier="category", result=category, confidence=1.0,
-                      method="fast_path",
-                      latency_ms=round((time.perf_counter() - classify_start) * 1000, 2))
+            log_event(
+                logger,
+                "classifier.inference.complete",
+                classifier="category",
+                result=category,
+                confidence=1.0,
+                method="fast_path",
+                latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
+            )
             self._cache_put(cache_key, result)
             return result
 
@@ -252,10 +257,15 @@ class CategoryClassifier(EmbedderMixin):
                 confidence=1.0,
                 method="fast_path",
             )
-            log_event(logger, "classifier.inference.complete",
-                      classifier="category", result="acknowledge", confidence=1.0,
-                      method="fast_path",
-                      latency_ms=round((time.perf_counter() - classify_start) * 1000, 2))
+            log_event(
+                logger,
+                "classifier.inference.complete",
+                classifier="category",
+                result="acknowledge",
+                confidence=1.0,
+                method="fast_path",
+                latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
+            )
             self._cache_put(cache_key, result)
             return result
 
@@ -317,19 +327,28 @@ class CategoryClassifier(EmbedderMixin):
                     confidence=confidence,
                     method=method,
                 )
-                log_event(logger, "classifier.inference.complete",
-                          classifier="category", result=category,
-                          confidence=round(confidence, 3), method="lightgbm",
-                          latency_ms=round(
-                              (time.perf_counter() - classify_start) * 1000, 2))
+                log_event(
+                    logger,
+                    "classifier.inference.complete",
+                    classifier="category",
+                    result=category,
+                    confidence=round(confidence, 3),
+                    method="lightgbm",
+                    latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
+                )
                 self._cache_put(cache_key, result)
                 return result
             except Exception as e:
                 logger.error("Pipeline prediction failed: %s", e, exc_info=True)
 
         # Fallback: statement with low confidence
-        log_event(logger, "classifier.fallback", level=logging.WARNING,
-                  classifier="category", reason="no_pipeline")
+        log_event(
+            logger,
+            "classifier.fallback",
+            level=logging.WARNING,
+            classifier="category",
+            reason="no_pipeline",
+        )
         result = CategoryResult(
             category="statement",
             confidence=0.30,

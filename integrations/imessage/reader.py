@@ -1185,7 +1185,9 @@ class ChatDBReader:
                     # If query fails due to missing columns, use minimal fallback query
                     error_str = str(e).lower()
                     if "no such column" in error_str:
-                        logger.debug(f"Query failed with missing column ({e}), using minimal fallback")
+                        logger.debug(
+                            f"Query failed with missing column ({e}), using minimal fallback"
+                        )
                         try:
                             # Use v14 schema and replace all optional columns with NULL
                             # This handles test databases or older schemas with minimal columns

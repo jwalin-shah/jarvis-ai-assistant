@@ -22,10 +22,15 @@ class TestResourceManager:
     """Tests for ResourceManager."""
 
     def test_can_prefetch_default(self) -> None:
-        """Test can_prefetch with default values."""
+        """Test can_prefetch with deterministic healthy defaults."""
         rm = ResourceManager()
-        # With default high memory and low CPU, should allow prefetch
-        assert rm.can_prefetch()
+        rm._available_memory = 8 * 1024 * 1024 * 1024
+        rm._cpu_usage = 5.0
+        rm._battery_level = 1.0
+        rm._is_plugged_in = True
+        # Prevent can_prefetch() from refreshing with host-specific psutil values.
+        rm._last_update = time.time()
+        assert rm.can_prefetch() is True
 
     def test_get_concurrency_limit(self) -> None:
         """Test concurrency limit calculation."""

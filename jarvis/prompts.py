@@ -20,9 +20,9 @@ from jarvis.contacts.contact_profile_context import ContactProfileContext
 
 if TYPE_CHECKING:
     from contracts.imessage import Message
+    from jarvis.classifiers.response_mobilization import MobilizationResult
     from jarvis.contacts.contact_profile import Fact
     from jarvis.contracts.pipeline import GenerationRequest as PipelineGenerationRequest
-    from jarvis.classifiers.response_mobilization import MobilizationResult
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
 
@@ -1644,7 +1644,9 @@ def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
     else:
         thread_messages = req.context.metadata.get("thread", [])
         if isinstance(thread_messages, list):
-            formatted_context = "\n".join(str(msg) for msg in thread_messages if isinstance(msg, str))
+            formatted_context = "\n".join(
+                str(msg) for msg in thread_messages if isinstance(msg, str)
+            )
         else:
             formatted_context = ""
 
@@ -1683,11 +1685,7 @@ def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
     instruction_raw = req.context.metadata.get("instruction")
     instruction = instruction_raw if isinstance(instruction_raw, str) and instruction_raw else None
 
-    contact_name_raw = (
-        req.context.metadata.get("contact_name")
-        or req.context.sender_id
-        or "them"
-    )
+    contact_name_raw = req.context.metadata.get("contact_name") or req.context.sender_id or "them"
     contact_name = str(contact_name_raw)
 
     contact_facts_raw = req.context.metadata.get("contact_facts")

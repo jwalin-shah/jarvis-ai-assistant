@@ -21,11 +21,12 @@ Usage:
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from jarvis.classifiers.cascade import classify_with_cascade
@@ -258,7 +259,6 @@ class ReplyRouter:
                 logger.debug("Error closing iMessage reader: %s", e)
             self._imessage_reader = None
 
-
     @staticmethod
     def _build_mobilization_hint(mobilization: MobilizationResult) -> str | None:
         """Translate mobilization analysis into a lightweight prompt hint.
@@ -318,6 +318,34 @@ class ReplyRouter:
             return "medium"
         return "low"
 
+    @staticmethod
+    def _analyze_complexity(text: str) -> float:
+        """Analyze the complexity of the input text (0.0 to 1.0).
+
+        Factors: length, punctuation variety, word uniqueness.
+        """
+        if not text:
+            return 0.0
+
+        # Length score (logarithmic, caps at ~200 chars)
+        length_score = min(1.0, math.log(len(text) + 1) / 5.3)
+
+        # Punctuation complexity
+        punctuation = set("?.!,:;")
+        found_punc = [c for c in text if c in punctuation]
+        punc_score = min(1.0, len(set(found_punc)) / 3.0)
+
+        # Basic word variety
+        words = text.split()
+        if not words:
+            variety_score = 0.0
+        else:
+            variety_score = len(set(words)) / len(words)
+
+        # Weighted average
+        complexity = (length_score * 0.5) + (punc_score * 0.3) + (variety_score * 0.2)
+        return round(complexity, 2)
+
     def _build_classification_result(
         self,
         incoming: str,
@@ -344,6 +372,8 @@ class ReplyRouter:
         else:
             urgency = UrgencyLevel.LOW
 
+        complexity = self._analyze_complexity(incoming)
+
         return ClassificationResult(
             intent=self._to_intent_type(category_result.category),
             category=category,
@@ -358,6 +388,7 @@ class ReplyRouter:
                 "mobilization_response_type": mobilization.response_type.value,
                 "mobilization_confidence": mobilization.confidence,
                 "mobilization_method": mobilization.method,
+                "complexity_score": complexity,
             },
         )
 
