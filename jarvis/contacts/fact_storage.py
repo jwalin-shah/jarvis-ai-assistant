@@ -281,6 +281,31 @@ def save_candidate_facts(
     return save_facts(facts, contact_id)
 
 
+def delete_facts_by_predicate_prefix(prefix: str) -> int:
+    """Delete all facts whose predicate starts with the given prefix.
+
+    Args:
+        prefix: Predicate prefix to match (e.g. 'gliner_').
+
+    Returns:
+        Number of facts deleted.
+    """
+    from jarvis.db import get_db
+
+    db = get_db()
+
+    with db.connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM contact_facts WHERE predicate LIKE ?",
+            (f"{prefix}%",),
+        )
+        deleted = cursor.rowcount
+
+    if deleted:
+        logger.info("Deleted %d facts with predicate prefix '%s'", deleted, prefix)
+    return deleted
+
+
 def get_fact_count() -> int:
     """Get total number of facts in the database."""
     from jarvis.db import get_db

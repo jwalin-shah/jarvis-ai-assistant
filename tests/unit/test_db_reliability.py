@@ -16,38 +16,26 @@ import hashlib
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from jarvis.db.backup import (
     BackupManager,
-    BackupResult,
-    RestoreResult,
     WalArchive,
     get_latest_backup,
     quick_backup,
-    quick_restore,
 )
 from jarvis.db.migration import (
-    MigrationStage,
     MigrationStatus,
-    MigrationTestResult,
     MigrationTester,
     SchemaDiff,
-    test_migration_quick,
 )
-from jarvis.db.models import JARVIS_DB_PATH
 from jarvis.db.reliability import (
-    CorruptionReport,
-    HealthReport,
     HealthStatus,
     RecoveryLevel,
     RecoveryManager,
-    RecoveryResult,
     ReliabilityMonitor,
     quick_health_check,
-    run_health_report,
 )
 from jarvis.db.schema import CURRENT_SCHEMA_VERSION
 
@@ -142,7 +130,9 @@ class TestBackupManager:
         assert result.checksum == expected_checksum
 
     @pytest.mark.xfail(reason="Backup restore implementation needs safety_path mkdir fix")
-    def test_restore_from_backup_success(self, backup_manager: BackupManager, tmp_path: Path) -> None:
+    def test_restore_from_backup_success(
+        self, backup_manager: BackupManager, tmp_path: Path
+    ) -> None:
         """Test successful restore from backup."""
         # Create backup
         backup_result = backup_manager.create_hot_backup()

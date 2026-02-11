@@ -18,7 +18,6 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
 import pytest
 
 from jarvis.contacts.contact_profile import Fact
@@ -71,8 +70,16 @@ def _seed_facts(db, contact_id: str, facts: list[Fact]) -> None:
                  source_text, extracted_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (contact_id, f.category, f.subject, f.predicate,
-                 f.value or "", f.confidence, f.source_text or "", now),
+                (
+                    contact_id,
+                    f.category,
+                    f.subject,
+                    f.predicate,
+                    f.value or "",
+                    f.confidence,
+                    f.source_text or "",
+                    now,
+                ),
             )
 
 
@@ -87,12 +94,20 @@ FACTS = [
     Fact(category="work", subject="software engineer", predicate="job_title", confidence=0.9),
     Fact(category="location", subject="Austin, Texas", predicate="lives_in", confidence=0.9),
     Fact(
-        category="relationship", subject="Sarah", predicate="is_family_of",
-        value="sister", confidence=0.95,
+        category="relationship",
+        subject="Sarah",
+        predicate="is_family_of",
+        value="sister",
+        confidence=0.95,
     ),
     Fact(category="health", subject="peanuts", predicate="allergic_to", confidence=0.85),
-    Fact(category="personal", subject="Max", predicate="has_pet", value="golden retriever",
-         confidence=0.8),
+    Fact(
+        category="personal",
+        subject="Max",
+        predicate="has_pet",
+        value="golden retriever",
+        confidence=0.8,
+    ),
     Fact(category="personal", subject="UT Austin", predicate="attends", confidence=0.75),
 ]
 
@@ -160,9 +175,7 @@ class TestRealSemanticSearch:
 
     def test_location_query_returns_location_facts(self, fact_db):
         with patch("jarvis.db.get_db", return_value=fact_db):
-            results = search_relevant_facts(
-                "where do you live? which city?", CONTACT_ID, limit=3
-            )
+            results = search_relevant_facts("where do you live? which city?", CONTACT_ID, limit=3)
 
         predicates = {f.predicate for f in results}
         print(f"  Location query results: {[(f.predicate, f.subject) for f in results]}")
@@ -173,9 +186,7 @@ class TestRealSemanticSearch:
 
     def test_family_query_returns_family_facts(self, fact_db):
         with patch("jarvis.db.get_db", return_value=fact_db):
-            results = search_relevant_facts(
-                "how is your sister doing?", CONTACT_ID, limit=3
-            )
+            results = search_relevant_facts("how is your sister doing?", CONTACT_ID, limit=3)
 
         predicates = {f.predicate for f in results}
         print(f"  Family query results: {[(f.predicate, f.subject) for f in results]}")

@@ -114,26 +114,47 @@ def extract_full_features(
     logger.info("  - 384 context BERT embeddings (previous messages, mostly zero)")
     logger.info("  - 147 hand-crafted + spaCy features")
 
-    for i, ex in enumerate(tqdm(examples, desc="Extracting features", unit="ex")):
+    # Batch encode all texts at once (10-40x faster than one-at-a-time)
+    all_texts = [ex["text"] for ex in examples]
+    logger.info(f"Batch encoding {len(all_texts)} texts...")
+    all_text_embeddings = embedder_mixin.embedder.encode(all_texts)
+    logger.info("Text batch encoding complete")
+
+    # Collect and batch encode non-empty context strings
+    context_indices = []
+    context_texts = []
+    for idx, ex in enumerate(examples):
+        context = ex.get("thread", [])
+        if context and len(context) > 0:
+            context_texts.append(" ".join(context[-1:]))
+            context_indices.append(idx)
+
+    context_embedding_map: dict[int, np.ndarray] = {}
+    if context_texts:
+        logger.info(f"Batch encoding {len(context_texts)} context strings...")
+        all_context_embeddings = embedder_mixin.embedder.encode(context_texts)
+        for ci, idx in enumerate(context_indices):
+            context_embedding_map[idx] = all_context_embeddings[ci]
+        logger.info("Context batch encoding complete")
+
+    zero_context = np.zeros(384, dtype=np.float32)
+
+    for i, (ex, text_embedding) in enumerate(
+        tqdm(
+            zip(examples, all_text_embeddings),
+            desc="Extracting features",
+            total=len(examples),
+            unit="ex",
+        )
+    ):
         try:
             text = ex["text"]
             context = ex.get("thread", [])
 
-            # 1. Text BERT embedding (384 dims)
-            text_embedding = embedder_mixin.embedder.encode(text)
+            # Context BERT embedding (384 dims) - from pre-computed batch
+            context_embedding = context_embedding_map.get(i, zero_context)
 
-            # 2. Context BERT embedding (384 dims)
-            # For iMessages, context is mostly empty, so this will be mostly zeros
-            if context and len(context) > 0:
-                # Encode previous message(s)
-                context_text = " ".join(context[-1:])  # Last message only
-                context_embedding = embedder_mixin.embedder.encode(context_text)
-            else:
-                # No context - use zeros
-                context_embedding = np.zeros(384, dtype=np.float32)
-
-            # 3. Hand-crafted + spaCy features (147 dims)
-            # This already includes all spaCy NER, dependency, and hand-crafted features
+            # Hand-crafted + spaCy features (147 dims)
             hand_crafted = feature_extractor.extract_all(text=text, context=context)
 
             # Combine all: text BERT (384) + context BERT (384) + hand-crafted (147) = 915

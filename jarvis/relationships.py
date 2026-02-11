@@ -103,6 +103,69 @@ SIGNOFF_PATTERNS = frozenset(
     }
 )
 
+CASUAL_FORMALITY_INDICATORS = frozenset(
+    {
+        "lol",
+        "haha",
+        "hehe",
+        "lmao",
+        "omg",
+        "btw",
+        "brb",
+        "ttyl",
+        "idk",
+        "ikr",
+        "nvm",
+        "tbh",
+        "imo",
+        "np",
+        "k",
+        "kk",
+        "yeah",
+        "yep",
+        "nope",
+        "gonna",
+        "wanna",
+        "gotta",
+        "cuz",
+        "bc",
+        "u",
+        "ur",
+        "r",
+        "thx",
+        "ty",
+        "pls",
+        "plz",
+        "yo",
+        "dude",
+        "bro",
+        "sis",
+        "fam",
+    }
+)
+
+FORMAL_FORMALITY_INDICATORS = frozenset(
+    {
+        "regards",
+        "sincerely",
+        "please",
+        "kindly",
+        "thank you",
+        "appreciate",
+        "regarding",
+        "attached",
+        "discussed",
+        "confirmed",
+        "scheduled",
+        "deadline",
+        "meeting",
+        "mr.",
+        "mrs.",
+        "ms.",
+        "dr.",
+    }
+)
+
 # Topic keywords for classification
 TOPIC_KEYWORDS: dict[str, set[str]] = {
     "scheduling": {
@@ -518,65 +581,6 @@ def _analyze_formality(messages: list[Any]) -> float:
     if not messages:
         return 0.5
 
-    casual_indicators = {
-        "lol",
-        "haha",
-        "hehe",
-        "lmao",
-        "omg",
-        "btw",
-        "brb",
-        "ttyl",
-        "idk",
-        "ikr",
-        "nvm",
-        "tbh",
-        "imo",
-        "np",
-        "k",
-        "kk",
-        "yeah",
-        "yep",
-        "nope",
-        "gonna",
-        "wanna",
-        "gotta",
-        "cuz",
-        "bc",
-        "u",
-        "ur",
-        "r",
-        "thx",
-        "ty",
-        "pls",
-        "plz",
-        "yo",
-        "dude",
-        "bro",
-        "sis",
-        "fam",
-    }
-
-    formal_indicators = {
-        "regards",
-        "sincerely",
-        "please",
-        "kindly",
-        "thank you",
-        "appreciate",
-        "regarding",
-        "attached",
-        "discussed",
-        "confirmed",
-        "scheduled",
-        "deadline",
-        "meeting",
-        "mr.",
-        "mrs.",
-        "ms.",
-        "dr.",
-    }
-
     casual_score = 0.0
     formal_score = 0.0
 
@@ -590,8 +594,8 @@ def _analyze_formality(messages: list[Any]) -> float:
         normalized = _normalize_text(text)
         words = set(_tokenize(normalized))
 
-        casual_score += len(words & casual_indicators)
-        formal_score += len(words & formal_indicators)
+        casual_score += len(words & CASUAL_FORMALITY_INDICATORS)
+        formal_score += len(words & FORMAL_FORMALITY_INDICATORS)
 
         # Emoji presence indicates casual
         emoji_matches = EMOJI_PATTERN.findall(text)

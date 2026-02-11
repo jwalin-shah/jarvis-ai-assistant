@@ -357,10 +357,7 @@ class InProcessEmbedder:
 
             mx.eval(self.model.parameters())
 
-            # Clear cache after loading to free temp GPU buffers
             gc.collect()
-            if hasattr(mx, "clear_cache"):
-                mx.clear_cache()
 
             self.model_name = model_name
             logger.info("Model loaded in %.2fs", time.time() - start)
@@ -375,8 +372,6 @@ class InProcessEmbedder:
         gc.collect()
         if hasattr(mx, "clear_cache"):
             mx.clear_cache()
-        elif hasattr(mx, "metal") and hasattr(mx.metal, "clear_cache"):
-            mx.metal.clear_cache()
         if prev_model:
             logger.info("Unloaded %s", prev_model)
 
@@ -448,9 +443,7 @@ class InProcessEmbedder:
                     batch_emb = hidden_states[:, 0, :]
 
                     if normalize:
-                        norms = mx.maximum(
-                            mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9
-                        )
+                        norms = mx.maximum(mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9)
                         batch_emb = batch_emb / norms
 
                     mx.eval(batch_emb)

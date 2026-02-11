@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sqlite3
 import threading
 from dataclasses import dataclass
 from datetime import datetime
@@ -91,11 +92,27 @@ POSITIVE_PREF = {"love", "loves", "loved", "obsessed", "addicted", "favorite"}
 NEGATIVE_PREF = {"hate", "hates", "hated", "can't stand", "allergic"}
 
 # Family relationship types for predicate resolution
-_FAMILY_RELATIONS = frozenset({
-    "sister", "brother", "mom", "mother", "dad", "father",
-    "wife", "husband", "daughter", "son", "cousin", "aunt", "uncle",
-    "grandma", "grandmother", "grandpa", "grandfather",
-})
+_FAMILY_RELATIONS = frozenset(
+    {
+        "sister",
+        "brother",
+        "mom",
+        "mother",
+        "dad",
+        "father",
+        "wife",
+        "husband",
+        "daughter",
+        "son",
+        "cousin",
+        "aunt",
+        "uncle",
+        "grandma",
+        "grandmother",
+        "grandpa",
+        "grandfather",
+    }
+)
 
 
 @dataclass
@@ -193,7 +210,7 @@ def _get_shared_nlp() -> Any:
                     import spacy
 
                     _spacy_nlp = spacy.load("en_core_web_sm")
-                except Exception as e:
+                except (ImportError, OSError) as e:
                     logger.warning("spaCy not available, using regex-only extraction: %s", e)
                     _spacy_nlp = False  # sentinel: don't retry
     return _spacy_nlp if _spacy_nlp is not False else None
@@ -279,6 +296,14 @@ class FactExtractor:
         re.compile(r"\blike\s+(okay|yeah|yeah?|what|so|you know|omg|lol)"),
         re.compile(r"(?:^|[,;])\s+like\s+"),
         re.compile(r"^i\s+was\s+like\b"),
+        # "like how", "like when", "like where", "like why", "like if", "like a", "like the"
+        re.compile(r"\blike\s+(how|when|where|why|if|a\b|an?\b|the\b)"),
+        # "I like just", "I like literally", "I like actually" (filler adverbs)
+        re.compile(r"\bi\s+like\s+(just|already|really|literally|actually|basically)"),
+        # "like 5 minutes", "like 3 people" (approximation)
+        re.compile(r"\blike\s+\d"),
+        # "not like that", "isn't like", "wasn't like"
+        re.compile(r"\b(not|isn't|wasn't|ain't|don't|doesn't)\s+like\b"),
     ]
 
     def _is_like_filler_word(self, text: str, match_start: int, match_end: int) -> bool:
@@ -293,6 +318,27 @@ class FactExtractor:
                 return True
 
         return False
+
+    # Words that indicate a captured clause fragment, not a noun phrase subject
+    _PREF_REJECT_STARTS = re.compile(
+        r"^(how|when|where|why|if|what|i|he|she|they|we|you)\b", re.IGNORECASE
+    )
+    _PREF_REJECT_VERBS = re.compile(
+        r"\b(was|were|did|gonna|going to|realized|thought|said|told|know|knew)\b",
+        re.IGNORECASE,
+    )
+
+    def _is_valid_preference_subject(self, subject: str) -> bool:
+        """Reject preference subjects that are clause fragments, not noun phrases.
+
+        Rejects subjects starting with interrogatives/pronouns or containing
+        verb-like patterns that indicate a captured sentence fragment.
+        """
+        if self._PREF_REJECT_STARTS.match(subject.strip()):
+            return False
+        if self._PREF_REJECT_VERBS.search(subject):
+            return False
+        return True
 
     def _is_professional_message(self, text: str) -> bool:
         """Delegate to shared junk filter. See jarvis.contacts.junk_filters."""
@@ -608,6 +654,16 @@ class FactExtractor:
             if not thing:  # Skip if empty after cleaning
                 continue
 
+            # Reject captured clause fragments (not noun phrases)
+            if not self._is_valid_preference_subject(thing):
+                logger.debug("Skipping invalid preference subject: %s", thing[:60])
+                continue
+
+            # Coherence check (same as quality filter, applied early)
+            if not self._is_coherent_subject(thing):
+                logger.debug("Skipping incoherent preference subject: %s", thing[:60])
+                continue
+
             key = ("preference", thing.lower())
             if key not in _extracted:
                 # Determine sentiment
@@ -753,7 +809,7 @@ class FactExtractor:
                             extracted_at=timestamp,
                         )
                     )
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, AttributeError) as e:
             logger.warning("NER person extraction failed: %s", e)
 
         return facts
@@ -773,11 +829,10 @@ class FactExtractor:
 
             # Pre-tokenize contact names for O(1) reuse across calls
             self._contacts_cache = [
-                (str(cid), name, set(name.lower().split()))
-                for cid, name in rows
-                if name
+                (str(cid), name, set(name.lower().split())) for cid, name in rows if name
             ]
-        except Exception:
+        except (OSError, sqlite3.Error, ImportError) as e:
+            logger.debug("Contact resolution DB query failed: %s", e)
             self._contacts_cache = []
 
         return self._contacts_cache
@@ -830,7 +885,7 @@ class FactExtractor:
 
             return str(sorted_scores[0][0])
 
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             logger.warning("Person resolution failed: %s", e)
             return None
 

@@ -14,7 +14,6 @@ from jarvis.contracts.pipeline import (
     UrgencyLevel,
 )
 
-
 _CATEGORY_TO_INTENT: dict[str, IntentType] = {
     "question": IntentType.QUESTION,
     "request": IntentType.REQUEST,

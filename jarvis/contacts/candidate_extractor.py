@@ -469,9 +469,7 @@ class CandidateExtractor:
         return merged, current_start, current_end
 
     @staticmethod
-    def _find_entity_in_text(
-        raw_span: str, current_text: str
-    ) -> tuple[str, int, int] | None:
+    def _find_entity_in_text(raw_span: str, current_text: str) -> tuple[str, int, int] | None:
         """Case-insensitive search for *raw_span* inside *current_text*.
 
         Returns (raw_span, start, end) on match, or None.

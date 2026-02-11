@@ -22,13 +22,6 @@ from fastapi.testclient import TestClient
 
 from api.schemas.stats import TimeRangeEnum
 from contracts.imessage import Message
-from jarvis.analytics import (
-    ContactAnalytics,
-    EmojiStats,
-    OverviewMetrics,
-)
-from jarvis.analytics.trends import TrendResult
-
 
 # =============================================================================
 # Fixtures

@@ -19,7 +19,12 @@ def _make_fact_row(contact_id, category, subject, predicate, value, confidence):
     """Create a mock fact row with dict-like access."""
     row = MagicMock()
     row.keys.return_value = [
-        "contact_id", "category", "subject", "predicate", "value", "confidence"
+        "contact_id",
+        "category",
+        "subject",
+        "predicate",
+        "value",
+        "confidence",
     ]
     data = {
         "contact_id": contact_id,
@@ -37,9 +42,7 @@ def _make_fact_row(contact_id, category, subject, predicate, value, confidence):
 def _make_profile_row(contact_id, contact_name, relationship, message_count):
     """Create a mock profile row with dict-like access."""
     row = MagicMock()
-    row.keys.return_value = [
-        "contact_id", "contact_name", "relationship", "message_count"
-    ]
+    row.keys.return_value = ["contact_id", "contact_name", "relationship", "message_count"]
     data = {
         "contact_id": contact_id,
         "contact_name": contact_name,
@@ -109,8 +112,7 @@ class TestKnowledgeGraphBuild:
     def test_builds_contact_nodes(self, kg: KnowledgeGraph) -> None:
         """Contact profiles become contact nodes."""
         contacts = [
-            nid for nid, attrs in kg.graph.nodes(data=True)
-            if attrs.get("node_type") == "contact"
+            nid for nid, attrs in kg.graph.nodes(data=True) if attrs.get("node_type") == "contact"
         ]
         assert len(contacts) == 3
         assert "alice" in contacts
@@ -120,8 +122,7 @@ class TestKnowledgeGraphBuild:
     def test_builds_entity_nodes(self, kg: KnowledgeGraph) -> None:
         """Unique subjects become entity nodes."""
         entities = [
-            nid for nid, attrs in kg.graph.nodes(data=True)
-            if attrs.get("node_type") == "entity"
+            nid for nid, attrs in kg.graph.nodes(data=True) if attrs.get("node_type") == "entity"
         ]
         # san francisco, google, hiking, apple, alice smith, new york, cooking = 7
         assert len(entities) == 7
@@ -129,10 +130,7 @@ class TestKnowledgeGraphBuild:
     def test_deduplicates_entities(self, kg: KnowledgeGraph) -> None:
         """Same subject from different contacts creates one entity node."""
         # Both alice and bob live in San Francisco
-        sf_nodes = [
-            nid for nid in kg.graph.nodes()
-            if nid == "entity:san francisco"
-        ]
+        sf_nodes = [nid for nid in kg.graph.nodes() if nid == "entity:san francisco"]
         assert len(sf_nodes) == 1
 
     def test_builds_edges(self, kg: KnowledgeGraph) -> None:
@@ -277,14 +275,16 @@ class TestSearchPerformance:
         facts = []
         for i in range(num_contacts):
             for j in range(facts_per_contact):
-                facts.append(_make_fact_row(
-                    f"contact_{i}",
-                    "preference",
-                    f"entity_{i}_{j}",
-                    "enjoys",
-                    f"value_{j}",
-                    0.8,
-                ))
+                facts.append(
+                    _make_fact_row(
+                        f"contact_{i}",
+                        "preference",
+                        f"entity_{i}_{j}",
+                        "enjoys",
+                        f"value_{j}",
+                        0.8,
+                    )
+                )
 
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)

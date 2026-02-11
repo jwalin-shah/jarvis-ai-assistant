@@ -17,7 +17,6 @@ import hashlib
 import json
 import logging
 import sqlite3
-import struct
 import threading
 import time
 from collections import OrderedDict
@@ -29,6 +28,7 @@ from typing import Any, TypeVar
 import numpy as np
 
 from jarvis.errors import ErrorCode, JarvisError
+from jarvis.prefetch.cache_utils import deserialize_value, serialize_value
 
 logger = logging.getLogger(__name__)
 
@@ -508,7 +508,7 @@ class L2Cache:
             for conn in self._connections:
                 try:
                     conn.close()
-                except Exception:
+                except (OSError, sqlite3.Error):
                     pass
             self._connections.clear()
         self._local = threading.local()
@@ -520,66 +520,8 @@ class L2Cache:
         except Exception:
             pass
 
-    def _serialize(self, value: Any) -> tuple[bytes, str]:
-        """Serialize value to bytes.
-
-        Args:
-            value: Value to serialize.
-
-        Returns:
-            Tuple of (serialized bytes, type string).
-        """
-        if isinstance(value, np.ndarray):
-            # Efficient numpy serialization
-            buffer = value.tobytes()
-            # Prepend shape and dtype info
-            shape_bytes = struct.pack(f"{len(value.shape)}I", *value.shape)
-            dtype_bytes = str(value.dtype).encode()
-            header = struct.pack("II", len(shape_bytes), len(dtype_bytes))
-            return header + shape_bytes + dtype_bytes + buffer, "numpy"
-        elif isinstance(value, (dict, list)):
-            return json.dumps(value).encode(), "json"
-        elif isinstance(value, str):
-            return value.encode(), "str"
-        elif isinstance(value, bytes):
-            return value, "bytes"
-        else:
-            # Convert to JSON-compatible representation (no pickle for security)
-            try:
-                return json.dumps({"__repr__": repr(value)}).encode(), "json"
-            except (TypeError, ValueError):
-                return json.dumps({"__repr__": str(value)}).encode(), "json"
-
-    def _deserialize(self, data: bytes, value_type: str) -> Any:
-        """Deserialize bytes to value.
-
-        Args:
-            data: Serialized bytes.
-            value_type: Type string.
-
-        Returns:
-            Deserialized value.
-        """
-        if value_type == "numpy":
-            # Parse header
-            shape_len, dtype_len = struct.unpack("II", data[:8])
-            shape = struct.unpack(f"{shape_len // 4}I", data[8 : 8 + shape_len])
-            dtype_str = data[8 + shape_len : 8 + shape_len + dtype_len].decode()
-            buffer = data[8 + shape_len + dtype_len :]
-            return np.frombuffer(buffer, dtype=np.dtype(dtype_str)).reshape(shape)
-        elif value_type == "json":
-            return json.loads(data.decode())
-        elif value_type == "str":
-            return data.decode()
-        elif value_type == "bytes":
-            return data
-        elif value_type == "pickle":
-            # Legacy pickle data: clear entry instead of deserializing (security risk)
-            logger.warning("Refusing to deserialize pickle data (security risk). Returning None.")
-            return None
-        else:
-            logger.warning("Unknown value_type '%s', returning None.", value_type)
-            return None
+    _serialize = staticmethod(serialize_value)
+    _deserialize = staticmethod(deserialize_value)
 
 
 class L3Cache:
@@ -719,10 +661,7 @@ class L3Cache:
         """
         with self._lock:
             # Evict if needed using running total (O(1) check instead of O(n) sum)
-            while (
-                self._total_bytes + entry.size_bytes > self._max_bytes
-                and self._metadata
-            ):
+            while self._total_bytes + entry.size_bytes > self._max_bytes and self._metadata:
                 # Evict least recently accessed
                 oldest_key = min(
                     self._metadata.keys(),
@@ -823,48 +762,8 @@ class L3Cache:
                 "max_bytes": self._max_bytes,
             }
 
-    def _serialize(self, value: Any) -> tuple[bytes, str]:
-        """Serialize value to bytes."""
-        if isinstance(value, np.ndarray):
-            buffer = value.tobytes()
-            shape_bytes = struct.pack(f"{len(value.shape)}I", *value.shape)
-            dtype_bytes = str(value.dtype).encode()
-            header = struct.pack("II", len(shape_bytes), len(dtype_bytes))
-            return header + shape_bytes + dtype_bytes + buffer, "numpy"
-        elif isinstance(value, (dict, list)):
-            return json.dumps(value).encode(), "json"
-        elif isinstance(value, str):
-            return value.encode(), "str"
-        elif isinstance(value, bytes):
-            return value, "bytes"
-        else:
-            # Convert to JSON-compatible representation (no pickle for security)
-            try:
-                return json.dumps({"__repr__": repr(value)}).encode(), "json"
-            except (TypeError, ValueError):
-                return json.dumps({"__repr__": str(value)}).encode(), "json"
-
-    def _deserialize(self, data: bytes, value_type: str) -> Any:
-        """Deserialize bytes to value."""
-        if value_type == "numpy":
-            shape_len, dtype_len = struct.unpack("II", data[:8])
-            shape = struct.unpack(f"{shape_len // 4}I", data[8 : 8 + shape_len])
-            dtype_str = data[8 + shape_len : 8 + shape_len + dtype_len].decode()
-            buffer = data[8 + shape_len + dtype_len :]
-            return np.frombuffer(buffer, dtype=np.dtype(dtype_str)).reshape(shape)
-        elif value_type == "json":
-            return json.loads(data.decode())
-        elif value_type == "str":
-            return data.decode()
-        elif value_type == "bytes":
-            return data
-        elif value_type == "pickle":
-            # Legacy pickle data: clear entry instead of deserializing (security risk)
-            logger.warning("Refusing to deserialize pickle data (security risk). Returning None.")
-            return None
-        else:
-            logger.warning("Unknown value_type '%s', returning None.", value_type)
-            return None
+    _serialize = staticmethod(serialize_value)
+    _deserialize = staticmethod(deserialize_value)
 
 
 class MultiTierCache:

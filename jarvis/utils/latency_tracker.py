@@ -6,6 +6,7 @@ Integrates with metrics system for dashboard reporting.
 
 import logging
 import time
+from collections import deque
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 
@@ -45,7 +46,7 @@ class LatencyTracker:
     """Track operation latencies and detect performance regressions."""
 
     def __init__(self):
-        self._records: list[LatencyRecord] = []
+        self._records: deque[LatencyRecord] = deque(maxlen=10000)
         self._thresholds = LATENCY_THRESHOLDS.copy()
 
     @contextmanager

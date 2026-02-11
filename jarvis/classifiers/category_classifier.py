@@ -194,9 +194,7 @@ class CategoryClassifier(EmbedderMixin):
             logger.error("Failed to load pipeline: %s", e)
             return False
 
-    def _log_classification(
-        self, result: CategoryResult, classify_start: float
-    ) -> None:
+    def _log_classification(self, result: CategoryResult, classify_start: float) -> None:
         """Log a classification result with timing."""
         log_event(
             logger,
@@ -204,9 +202,7 @@ class CategoryClassifier(EmbedderMixin):
             classifier="category",
             result=result.category,
             confidence=(
-                round(result.confidence, 3)
-                if result.method != "fast_path"
-                else result.confidence
+                round(result.confidence, 3) if result.method != "fast_path" else result.confidence
             ),
             method=result.method,
             latency_ms=round((time.perf_counter() - classify_start) * 1000, 2),
@@ -316,8 +312,11 @@ class CategoryClassifier(EmbedderMixin):
             result = self._classify_pipeline(text, context, mobilization)
         if result is None:
             log_event(
-                logger, "classifier.fallback",
-                level=logging.WARNING, classifier="category", reason="no_pipeline",
+                logger,
+                "classifier.fallback",
+                level=logging.WARNING,
+                classifier="category",
+                reason="no_pipeline",
             )
             result = CategoryResult(category="statement", confidence=0.30, method="default")
 
@@ -395,22 +394,22 @@ class CategoryClassifier(EmbedderMixin):
                 embeddings = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
 
             # Batch non-BERT feature extraction
-            mob_pressures = [
-                m.pressure if m else "none" for m in pipeline_mobs
-            ]
-            mob_types = [
-                m.response_type if m else "answer" for m in pipeline_mobs
-            ]
+            mob_pressures = [m.pressure if m else "none" for m in pipeline_mobs]
+            mob_types = [m.response_type if m else "answer" for m in pipeline_mobs]
             extractor = _get_feature_extractor()
             non_bert_batch = extractor.extract_all_batch(
-                pipeline_texts, pipeline_contexts, mob_pressures, mob_types,
+                pipeline_texts,
+                pipeline_contexts,
+                mob_pressures,
+                mob_types,
             )
 
             # Build full feature matrix: BERT (384) + zero context (384) + non-BERT (147)
             zero_ctx = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
             non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
             feature_matrix = np.concatenate(
-                [embeddings, zero_ctx, non_bert_matrix], axis=1,
+                [embeddings, zero_ctx, non_bert_matrix],
+                axis=1,
             )
 
             # Single prediction call
@@ -427,7 +426,9 @@ class CategoryClassifier(EmbedderMixin):
                     category = classes[category_idx]
                     confidence = float(proba[category_idx])
                     result = CategoryResult(
-                        category=category, confidence=confidence, method="lightgbm",
+                        category=category,
+                        confidence=confidence,
+                        method="lightgbm",
                     )
                     results[idx] = result
                     ctx = contexts[idx] or []
@@ -441,7 +442,9 @@ class CategoryClassifier(EmbedderMixin):
         for i in range(n):
             if results[i] is None:
                 results[i] = CategoryResult(
-                    category="statement", confidence=0.30, method="default",
+                    category="statement",
+                    confidence=0.30,
+                    method="default",
                 )
                 ctx = contexts[i] or []
                 cache_input = texts[i] + "|" + "|".join(ctx)

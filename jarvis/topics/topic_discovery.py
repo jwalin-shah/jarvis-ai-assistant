@@ -217,7 +217,9 @@ class TopicDiscovery:
 
             # Extract keywords via simple TF-IDF-like scoring
             keywords = self._extract_keywords(
-                cluster_texts, texts, precomputed_idf=precomputed_idf,
+                cluster_texts,
+                texts,
+                precomputed_idf=precomputed_idf,
             )
 
             # Sample 3 representative texts (closest to centroid)

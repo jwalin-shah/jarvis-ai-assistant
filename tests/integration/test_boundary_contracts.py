@@ -7,9 +7,6 @@ This is a contract test - it ensures the interface between lanes remains stable.
 """
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from jarvis.contracts.pipeline import (
     CategoryType,
@@ -40,7 +37,7 @@ class TestClassificationBoundary:
             requires_knowledge=True,
             metadata={"model": "test-model"},
         )
-        
+
         # All these fields are required by Lane A
         assert result.intent is not None
         assert result.category is not None
@@ -62,7 +59,12 @@ class TestClassificationBoundary:
             # Lane A expects string values
             assert isinstance(result.intent.value, str)
             assert result.intent.value in [
-                "question", "statement", "request", "clarification", "greeting", "unknown"
+                "question",
+                "statement",
+                "request",
+                "clarification",
+                "greeting",
+                "unknown",
             ]
 
     def test_all_category_types_are_strings(self) -> None:
@@ -77,7 +79,11 @@ class TestClassificationBoundary:
             )
             assert isinstance(result.category.value, str)
             assert result.category.value in [
-                "acknowledge", "closing", "defer", "full_response", "off_topic"
+                "acknowledge",
+                "closing",
+                "defer",
+                "full_response",
+                "off_topic",
             ]
 
     def test_all_urgency_levels_are_strings(self) -> None:
@@ -96,7 +102,7 @@ class TestClassificationBoundary:
     def test_classification_result_serialization_for_api(self) -> None:
         """Test that ClassificationResult can be serialized for API transfer."""
         from dataclasses import asdict
-        
+
         result = ClassificationResult(
             intent=IntentType.QUESTION,
             category=CategoryType.FULL_RESPONSE,
@@ -105,10 +111,10 @@ class TestClassificationBoundary:
             requires_knowledge=True,
             metadata={"latency_ms": 45, "cache_hit": True},
         )
-        
+
         # Serialize as would happen in API
         data = asdict(result)
-        
+
         # Verify structure matches what Lane A expects
         assert data["intent"] == IntentType.QUESTION
         assert data["category"] == CategoryType.FULL_RESPONSE
@@ -124,7 +130,7 @@ class TestExtractionBoundary:
     def test_extraction_result_has_required_fields(self) -> None:
         """Verify ExtractionResult has all fields Lane A expects."""
         result = ExtractionResult()
-        
+
         # All these lists are required by Lane A
         assert isinstance(result.entities, list)
         assert isinstance(result.facts, list)
@@ -140,7 +146,7 @@ class TestExtractionBoundary:
             start_char=10,
             end_char=14,
         )
-        
+
         # Lane A expects these exact fields
         assert entity.name == "John Smith"
         assert entity.label == "PERSON"
@@ -157,7 +163,7 @@ class TestExtractionBoundary:
             confidence=0.88,
             source_text="John works at Google",
         )
-        
+
         # Lane A expects these exact fields
         assert fact.subject == "John"
         assert fact.predicate == "works_at"
@@ -173,7 +179,7 @@ class TestExtractionBoundary:
             relation_type="colleague",
             confidence=0.75,
         )
-        
+
         # Lane A expects these exact fields
         assert relationship.source_entity == "John"
         assert relationship.target_entity == "Mary"
@@ -206,7 +212,7 @@ class TestExtractionBoundary:
             ],
             topics=["location", "personal"],
         )
-        
+
         # Verify Lane A can access all the data it needs
         assert len(result.entities) == 2
         assert len(result.facts) == 1
@@ -216,7 +222,7 @@ class TestExtractionBoundary:
     def test_empty_extraction_is_valid(self) -> None:
         """Test that empty extraction result is valid (no entities/facts found)."""
         result = ExtractionResult()
-        
+
         # Lane A should handle empty results gracefully
         assert result.entities == []
         assert result.facts == []
@@ -239,7 +245,7 @@ class TestMessageContextBoundary:
             thread_id="thread-456",
             metadata={"source": "imessage"},
         )
-        
+
         # Lane B expects these fields
         assert context.chat_id == "chat-123"
         assert context.message_text == "What time is the meeting?"
@@ -255,7 +261,7 @@ class TestMessageContextBoundary:
             is_from_me=True,
             timestamp=now,
         )
-        
+
         # Optional fields should default appropriately
         assert context.sender_id is None
         assert context.thread_id is None
@@ -273,7 +279,7 @@ class TestRAGDocumentBoundary:
             score=0.95,
             metadata={"chunk_id": 42, "relevance": "high"},
         )
-        
+
         # Lane A expects these exact fields
         assert doc.content == "This is the retrieved content"
         assert doc.source == "knowledge_base.txt"
@@ -297,7 +303,7 @@ class TestGenerationRequestBoundary:
     def test_generation_request_structure(self) -> None:
         """Verify GenerationRequest has the structure generator expects."""
         now = datetime.now(tz=UTC)
-        
+
         request = GenerationRequest(
             context=MessageContext(
                 chat_id="chat-123",
@@ -327,7 +333,7 @@ class TestGenerationRequestBoundary:
                 {"input": "What is ML?", "output": "ML is machine learning"},
             ],
         )
-        
+
         # Verify all components are accessible
         assert request.context.message_text == "What is AI?"
         assert request.classification.intent == IntentType.QUESTION
@@ -338,7 +344,7 @@ class TestGenerationRequestBoundary:
     def test_generation_request_optional_extraction(self) -> None:
         """Test GenerationRequest with optional extraction as None."""
         now = datetime.now(tz=UTC)
-        
+
         request = GenerationRequest(
             context=MessageContext(
                 chat_id="chat-123",
@@ -355,7 +361,7 @@ class TestGenerationRequestBoundary:
             ),
             extraction=None,  # Optional field
         )
-        
+
         assert request.extraction is None
 
 
@@ -371,7 +377,7 @@ class TestGenerationResponseBoundary:
             streaming=False,
             metadata={"model": "lfm-1.2b", "tokens": 25},
         )
-        
+
         # Lane A expects these exact fields
         assert response.response == "This is the generated response"
         assert response.confidence == 0.92
@@ -385,7 +391,7 @@ class TestGenerationResponseBoundary:
             response="Hello!",
             confidence=0.95,
         )
-        
+
         # Defaults
         assert response.used_kg_facts == []
         assert response.streaming is False
@@ -397,10 +403,11 @@ class TestMockClassificationFlow:
 
     def test_mock_classify_returns_valid_result(self) -> None:
         """Mock classify() returning a valid ClassificationResult.
-        
+
         This simulates what Lane B's classify() function should produce
         for Lane A to consume.
         """
+
         def mock_classify(message_context: MessageContext) -> ClassificationResult:
             """Mock classifier that returns a valid result."""
             return ClassificationResult(
@@ -411,7 +418,7 @@ class TestMockClassificationFlow:
                 requires_knowledge=True,
                 metadata={"classifier": "mock", "latency_ms": 25},
             )
-        
+
         # Create a mock MessageContext
         now = datetime.now(tz=UTC)
         context = MessageContext(
@@ -420,10 +427,10 @@ class TestMockClassificationFlow:
             is_from_me=False,
             timestamp=now,
         )
-        
+
         # Pass through mock classify()
         result = mock_classify(context)
-        
+
         # Verify we get a valid ClassificationResult
         assert isinstance(result, ClassificationResult)
         assert result.intent == IntentType.QUESTION
@@ -431,21 +438,24 @@ class TestMockClassificationFlow:
 
     def test_mock_extraction_returns_valid_result(self) -> None:
         """Mock extract() returning a valid ExtractionResult.
-        
+
         This simulates what Lane B's extraction should produce
         for Lane A to consume.
         """
+
         def mock_extract(message_context: MessageContext) -> ExtractionResult:
             """Mock extractor that returns a valid result."""
             return ExtractionResult(
                 entities=[
-                    Entity(name="Weather", label="TOPIC", text="weather", start_char=12, end_char=19),
+                    Entity(
+                        name="Weather", label="TOPIC", text="weather", start_char=12, end_char=19
+                    ),
                 ],
                 facts=[],
                 relationships=[],
                 topics=["weather", "query"],
             )
-        
+
         now = datetime.now(tz=UTC)
         context = MessageContext(
             chat_id="chat-123",
@@ -453,10 +463,10 @@ class TestMockClassificationFlow:
             is_from_me=False,
             timestamp=now,
         )
-        
+
         # Pass through mock extract()
         result = mock_extract(context)
-        
+
         # Verify we get a valid ExtractionResult
         assert isinstance(result, ExtractionResult)
         assert len(result.entities) == 1

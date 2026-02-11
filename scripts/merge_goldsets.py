@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import logging
 import random
 import sys
 from collections import defaultdict
@@ -22,17 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
-def _setup_logging() -> None:
-    """Configure logging with FileHandler + StreamHandler."""
-    log_file = Path("merge_goldsets.log")
-    file_handler = logging.FileHandler(log_file, mode="a")
-    stream_handler = logging.StreamHandler(sys.stdout)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[file_handler, stream_handler],
-    )
+from jarvis.utils.logging import setup_script_logging
 
 
 @dataclass(frozen=True)
@@ -306,8 +295,8 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def main() -> int:
-    _setup_logging()
-    logging.info("Starting merge_goldsets.py")
+    logger = setup_script_logging("merge_goldsets")
+    logger.info("Starting merge_goldsets.py")
     args = parse_args()
 
     if not (0 < args.dev_frac < 1):

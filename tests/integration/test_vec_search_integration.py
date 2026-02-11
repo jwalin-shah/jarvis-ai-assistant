@@ -15,7 +15,6 @@ import pytest
 from jarvis.db import JarvisDB
 from jarvis.search.vec_search import VecSearcher, _validate_placeholders
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -28,9 +27,7 @@ def _make_normalized(seed: int, dim: int = 384) -> np.ndarray:
     return vec / np.linalg.norm(vec)
 
 
-def _make_cluster(
-    center_seed: int, n: int, noise: float = 0.05
-) -> list[np.ndarray]:
+def _make_cluster(center_seed: int, n: int, noise: float = 0.05) -> list[np.ndarray]:
     """Generate *n* vectors clustered around a center (normalized)."""
     center = _make_normalized(center_seed)
     rng = np.random.RandomState(center_seed + 1000)
@@ -83,7 +80,6 @@ def searcher(db):
 
 
 class TestValidatePlaceholders:
-
     def test_valid_placeholders(self):
         _validate_placeholders("?,?,?")
         _validate_placeholders("?")
@@ -126,8 +122,13 @@ class TestIndexMessages:
                 ) VALUES (?, vec_int8(?), ?, ?, ?, ?, ?)
                 """,
                 (
-                    rowid, int8_blob, chat_id, text[:200],
-                    sender, ts, 1 if is_from_me else 0,
+                    rowid,
+                    int8_blob,
+                    chat_id,
+                    text[:200],
+                    sender,
+                    ts,
+                    1 if is_from_me else 0,
                 ),
             )
 
@@ -149,12 +150,26 @@ class TestIndexMessages:
 
         for i, (emb, txt) in enumerate(zip(food_embs, food_texts)):
             self._insert_message(
-                db, i + 1, emb, "chat_food", txt, "Alice", 1000 + i, False,
+                db,
+                i + 1,
+                emb,
+                "chat_food",
+                txt,
+                "Alice",
+                1000 + i,
+                False,
             )
 
         for i, (emb, txt) in enumerate(zip(work_embs, work_texts)):
             self._insert_message(
-                db, i + 10, emb, "chat_work", txt, "Bob", 2000 + i, True,
+                db,
+                i + 10,
+                emb,
+                "chat_work",
+                txt,
+                "Bob",
+                2000 + i,
+                True,
             )
 
         # Search with a query near the food cluster
@@ -167,9 +182,7 @@ class TestIndexMessages:
         # Top 3 should be the food messages (closer to food cluster center)
         top_texts = [r.text for r in results[:3]]
         for txt in food_texts:
-            assert txt in top_texts, (
-                f"Expected '{txt}' in top 3, got {top_texts}"
-            )
+            assert txt in top_texts, f"Expected '{txt}' in top 3, got {top_texts}"
 
         # Scores should be monotonically non-increasing
         for i in range(len(results) - 1):
@@ -181,10 +194,24 @@ class TestIndexMessages:
         emb_b = _make_normalized(2)
 
         self._insert_message(
-            db, 1, emb_a, "chat_A", "msg in A", "Alice", 100, False,
+            db,
+            1,
+            emb_a,
+            "chat_A",
+            "msg in A",
+            "Alice",
+            100,
+            False,
         )
         self._insert_message(
-            db, 2, emb_b, "chat_B", "msg in B", "Bob", 200, True,
+            db,
+            2,
+            emb_b,
+            "chat_B",
+            "msg in B",
+            "Bob",
+            200,
+            True,
         )
 
         searcher._embedder = FakeEmbedder(emb_a)
@@ -202,7 +229,14 @@ class TestIndexMessages:
         """VecSearchResult contains all expected message metadata."""
         emb = _make_normalized(42)
         self._insert_message(
-            db, 77, emb, "chat_X", "hello world", "Eve", 1234, True,
+            db,
+            77,
+            emb,
+            "chat_X",
+            "hello world",
+            "Eve",
+            1234,
+            True,
         )
 
         searcher._embedder = FakeEmbedder(emb)
@@ -259,11 +293,20 @@ class TestSearchWithPairs:
                 )
                 """,
                 (
-                    int8_blob, contact_id, chat_id,
-                    "", source_timestamp, quality_score,
-                    topic_label, trigger_text, response_text,
-                    (trigger_text or "")[:500], None, 2,
-                    "chunk", f"seg_{hash(trigger_text or '') % 10000}",
+                    int8_blob,
+                    contact_id,
+                    chat_id,
+                    "",
+                    source_timestamp,
+                    quality_score,
+                    topic_label,
+                    trigger_text,
+                    response_text,
+                    (trigger_text or "")[:500],
+                    None,
+                    2,
+                    "chunk",
+                    f"seg_{hash(trigger_text or '') % 10000}",
                 ),
             )
 
@@ -271,10 +314,14 @@ class TestSearchWithPairs:
         """search_with_pairs returns joined trigger/response text."""
         emb = _make_normalized(50)
         self._insert_chunk(
-            db, emb, contact_id=1, chat_id="chat_1",
+            db,
+            emb,
+            contact_id=1,
+            chat_id="chat_1",
             trigger_text="Want to grab lunch?",
             response_text="Sure, how about noon?",
-            topic_label="food", quality_score=0.9,
+            topic_label="food",
+            quality_score=0.9,
         )
 
         searcher._embedder = FakeEmbedder(emb)
@@ -291,12 +338,20 @@ class TestSearchWithPairs:
         """contact_id partition key filters chunks by contact."""
         emb = _make_normalized(60)
         self._insert_chunk(
-            db, emb, contact_id=1, chat_id="c1",
-            trigger_text="hi", response_text="hey",
+            db,
+            emb,
+            contact_id=1,
+            chat_id="c1",
+            trigger_text="hi",
+            response_text="hey",
         )
         self._insert_chunk(
-            db, emb, contact_id=2, chat_id="c2",
-            trigger_text="yo", response_text="sup",
+            db,
+            emb,
+            contact_id=2,
+            chat_id="c2",
+            trigger_text="yo",
+            response_text="sup",
         )
 
         searcher._embedder = FakeEmbedder(emb)
@@ -315,12 +370,20 @@ class TestSearchWithPairs:
         far_emb = _make_normalized(999)
 
         self._insert_chunk(
-            db, close_emb, contact_id=0, chat_id="c",
-            trigger_text="close", response_text="near resp",
+            db,
+            close_emb,
+            contact_id=0,
+            chat_id="c",
+            trigger_text="close",
+            response_text="near resp",
         )
         self._insert_chunk(
-            db, far_emb, contact_id=0, chat_id="c",
-            trigger_text="far", response_text="far resp",
+            db,
+            far_emb,
+            contact_id=0,
+            chat_id="c",
+            trigger_text="far",
+            response_text="far resp",
         )
 
         searcher._embedder = FakeEmbedder(close_emb)
@@ -338,8 +401,12 @@ class TestSearchWithPairs:
         """The embedder= kwarg is used instead of the default."""
         emb = _make_normalized(80)
         self._insert_chunk(
-            db, emb, contact_id=0, chat_id="c",
-            trigger_text="test", response_text="resp",
+            db,
+            emb,
+            contact_id=0,
+            chat_id="c",
+            trigger_text="test",
+            response_text="resp",
         )
 
         # Default embedder points elsewhere
@@ -364,13 +431,10 @@ class TestQuantizationRoundTrip:
         """Round-tripped embedding has >0.99 cosine similarity."""
         original = _make_normalized(42)
         int8_bytes = (original * 127).astype(np.int8).tobytes()
-        recovered = (
-            np.frombuffer(int8_bytes, dtype=np.int8).astype(np.float32) / 127.0
-        )
+        recovered = np.frombuffer(int8_bytes, dtype=np.int8).astype(np.float32) / 127.0
 
         cos_sim = float(
-            np.dot(original, recovered)
-            / (np.linalg.norm(original) * np.linalg.norm(recovered))
+            np.dot(original, recovered) / (np.linalg.norm(original) * np.linalg.norm(recovered))
         )
         assert cos_sim > 0.99, f"Cosine similarity too low: {cos_sim}"
 
@@ -411,7 +475,6 @@ class TestQuantizationRoundTrip:
 
 
 class TestGetEmbeddingsByIds:
-
     def test_retrieves_indexed_embeddings(self, db, searcher):
         """get_embeddings_by_ids returns dequantized embeddings."""
         emb = _make_normalized(300)
@@ -429,10 +492,7 @@ class TestGetEmbeddingsByIds:
         assert 42 in result
         recovered = result[42]
         assert recovered.shape == (384,)
-        cos_sim = float(
-            np.dot(emb, recovered)
-            / (np.linalg.norm(emb) * np.linalg.norm(recovered))
-        )
+        cos_sim = float(np.dot(emb, recovered) / (np.linalg.norm(emb) * np.linalg.norm(recovered)))
         assert cos_sim > 0.99
 
     def test_empty_ids(self, db, searcher):
@@ -449,7 +509,6 @@ class TestGetEmbeddingsByIds:
 
 
 class TestGetStats:
-
     def test_stats_on_empty_db(self, db, searcher):
         stats = searcher.get_stats()
         assert stats["total_embeddings"] == 0
@@ -479,7 +538,6 @@ class TestGetStats:
 
 
 class TestDeleteChunksForChat:
-
     def _insert_chunk(self, db, embedding, chat_id, trigger="t", response="r"):
         int8_blob = (embedding * 127).astype(np.int8).tobytes()
         with db.connection() as conn:
@@ -528,7 +586,6 @@ class TestDeleteChunksForChat:
 
 
 class TestVecTablesExist:
-
     def test_tables_exist_after_init(self, db):
         searcher = VecSearcher(db)
         searcher._embedder = FakeEmbedder(_make_normalized(0))
@@ -557,7 +614,6 @@ class TestVecTablesExist:
 
 
 class TestDistanceToSimilarity:
-
     def test_exact_match(self):
         assert VecSearcher._distance_to_similarity(0.0) == 1.0
 
@@ -576,7 +632,6 @@ class TestDistanceToSimilarity:
 
 
 class TestPerformance:
-
     def test_index_and_search_100_vectors_under_50ms(self, db, searcher):
         """Index 120 vectors, then search in <50ms (wall clock)."""
         n = 120
@@ -594,8 +649,13 @@ class TestPerformance:
                 "VALUES (?, vec_int8(?), ?, ?, ?, ?, ?)",
                 [
                     (
-                        i + 1, int8_blobs[i], "perf_chat",
-                        f"msg {i}", "s", i, 0,
+                        i + 1,
+                        int8_blobs[i],
+                        "perf_chat",
+                        f"msg {i}",
+                        "s",
+                        i,
+                        0,
                     )
                     for i in range(n)
                 ],
@@ -612,6 +672,4 @@ class TestPerformance:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         assert len(results) == 10
-        assert elapsed_ms < 50, (
-            f"Search took {elapsed_ms:.1f}ms (should be <50ms)"
-        )
+        assert elapsed_ms < 50, f"Search took {elapsed_ms:.1f}ms (should be <50ms)"

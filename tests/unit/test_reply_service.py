@@ -27,13 +27,11 @@ from jarvis.classifiers.response_mobilization import (
 from jarvis.contracts.pipeline import (
     CategoryType,
     ClassificationResult,
-    GenerationRequest,
     IntentType,
     MessageContext,
     UrgencyLevel,
 )
 from jarvis.reply_service import ReplyService
-
 
 # =============================================================================
 # _compute_confidence Tests
@@ -402,7 +400,9 @@ class TestMaxTokensForPressure:
         ],
         ids=["none", "high", "medium", "low"],
     )
-    def test_max_tokens_for_pressure(self, pressure: ResponsePressure, expected_tokens: int) -> None:
+    def test_max_tokens_for_pressure(
+        self, pressure: ResponsePressure, expected_tokens: int
+    ) -> None:
         assert ReplyService._max_tokens_for_pressure(pressure) == expected_tokens
 
 
@@ -783,13 +783,15 @@ class TestGenerateReplyHappyPath:
         results = []
         for i in range(min(count, len(pairs))):
             trigger, response = pairs[i]
-            results.append({
-                "trigger_text": trigger,
-                "response_text": response,
-                "similarity": similarity - (i * 0.05),
-                "rerank_score": 0.75 - (i * 0.05),
-                "topic": "food",
-            })
+            results.append(
+                {
+                    "trigger_text": trigger,
+                    "response_text": response,
+                    "similarity": similarity - (i * 0.05),
+                    "rerank_score": 0.75 - (i * 0.05),
+                    "topic": "food",
+                }
+            )
         return results
 
     def _make_contact(
@@ -828,9 +830,9 @@ class TestGenerateReplyHappyPath:
 
         # Mock reranker to pass through candidates (preserving order)
         mock_reranker = MagicMock()
-        mock_reranker.rerank.side_effect = (
-            lambda query, candidates, **kw: candidates[: kw.get("top_k", 5)]
-        )
+        mock_reranker.rerank.side_effect = lambda query, candidates, **kw: candidates[
+            : kw.get("top_k", 5)
+        ]
         svc._reranker = mock_reranker
 
         return svc
@@ -892,9 +894,7 @@ class TestGenerateReplyHappyPath:
             "How about 7pm?",
         ]
         ctx = self._make_context(text="How about 7pm?", thread=thread)
-        classification = self._make_classification(
-            category_name="question", pressure="high"
-        )
+        classification = self._make_classification(category_name="question", pressure="high")
         search_results = self._make_search_results(count=2, similarity=0.75)
 
         result = svc.generate_reply(
@@ -963,3 +963,140 @@ class TestGenerateReplyHappyPath:
             f"Expected penalty to lower confidence below 0.65, got {result.confidence}"
         )
         assert result.confidence > 0.3, "Confidence shouldn't drop below 0.3"
+
+
+# =============================================================================
+# Confidence Range Exhaustive Tests
+# =============================================================================
+
+
+class TestConfidenceRangeExhaustive:
+    """Fuzz-style test: confidence is always in [0, 1] with a valid label."""
+
+    @pytest.mark.parametrize("pressure", list(ResponsePressure))
+    def test_confidence_always_valid(self, pressure: ResponsePressure) -> None:
+        """Confidence must be in [0, 1] for all pressures and random inputs."""
+        for _ in range(20):
+            sim = random.uniform(0.0, 1.0)
+            div = random.uniform(0.0, 1.0)
+            length = random.randint(0, 50)
+            text = "x" * random.randint(0, 20)
+
+            score, label = ReplyService._compute_confidence(
+                pressure=pressure,
+                rag_similarity=sim,
+                example_diversity=div,
+                reply_length=length,
+                reply_text=text,
+            )
+            assert 0.0 <= score <= 1.0, f"Score {score} out of range for {pressure}"
+            assert label in ("high", "medium", "low"), f"Invalid label: {label}"
+
+
+# =============================================================================
+# Example Deduplication Tests
+# =============================================================================
+
+
+class TestExampleDeduplication:
+    """Tests for ReplyService._dedupe_examples."""
+
+    def _make_service(self):
+        mock_gen = MagicMock()
+        mock_gen.is_loaded.return_value = True
+        return ReplyService(generator=mock_gen)
+
+    def test_identical_examples_are_deduped(self) -> None:
+        examples = [
+            ("hello", "hi there"),
+            ("hello", "hi there"),
+            ("goodbye", "see ya"),
+        ]
+        mock_embedder = MagicMock()
+        # Return distinct embeddings for distinct examples, same for duplicates
+        mock_embedder.encode.return_value = [
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ]
+        svc = self._make_service()
+        result = svc._dedupe_examples(examples, mock_embedder)
+        assert len(result) <= len(examples)
+        # Should have at most 2 unique examples
+        assert len(result) == 2
+
+    def test_unique_examples_preserved(self) -> None:
+        examples = [
+            ("hello", "hi"),
+            ("goodbye", "bye"),
+            ("thanks", "welcome"),
+        ]
+        mock_embedder = MagicMock()
+        mock_embedder.encode.return_value = [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+        svc = self._make_service()
+        result = svc._dedupe_examples(examples, mock_embedder)
+        assert len(result) == 3
+
+    def test_empty_input(self) -> None:
+        svc = self._make_service()
+        mock_embedder = MagicMock()
+        result = svc._dedupe_examples([], mock_embedder)
+        assert result == []
+
+
+# =============================================================================
+# No Context Documents Tests
+# =============================================================================
+
+
+class TestNoContextDocuments:
+    """Test that generation works even with no search results."""
+
+    @pytest.fixture(autouse=True)
+    def mock_health_check(self):
+        with patch("jarvis.generation.can_use_llm", return_value=(True, "ok")):
+            yield
+
+    def test_reply_with_no_search_results_still_valid(self) -> None:
+        """When search_results=[], response is still valid."""
+        mock_gen = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "I'm doing well, thanks!"
+        mock_gen.generate.return_value = mock_response
+        mock_gen.is_loaded.return_value = True
+
+        svc = ReplyService(generator=mock_gen)
+        mock_ctx_svc = MagicMock()
+        mock_ctx_svc.get_relationship_profile.return_value = (None, "")
+        mock_ctx_svc.fetch_conversation_context.return_value = []
+        svc._context_service = mock_ctx_svc
+
+        ctx = MessageContext(
+            chat_id="chat123",
+            message_text="How are you?",
+            is_from_me=False,
+            timestamp=datetime.utcnow(),
+            metadata={"thread": []},
+        )
+        classification = ClassificationResult(
+            intent=IntentType.QUESTION,
+            category=CategoryType.FULL_RESPONSE,
+            urgency=UrgencyLevel.MEDIUM,
+            confidence=0.8,
+            requires_knowledge=False,
+            metadata={
+                "category_name": "question",
+                "mobilization_pressure": "medium",
+                "mobilization_response_type": "answer",
+            },
+        )
+
+        result = svc.generate_reply(ctx, classification, search_results=[])
+
+        assert result.response == "I'm doing well, thanks!"
+        assert result.metadata["type"] == "generated"
+        assert 0.0 <= result.confidence <= 1.0

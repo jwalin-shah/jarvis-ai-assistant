@@ -6,20 +6,16 @@ queue safety, and recovery procedures.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import threading
 import time
-from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 
+from contracts.health import DegradationPolicy, FeatureState
 from core.health.circuit import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError, CircuitState
 from core.health.degradation import GracefulDegradationController
-from contracts.health import DegradationPolicy, FeatureState
 from jarvis.fallbacks import FailureReason, get_fallback_response
-from jarvis.tasks.models import Task, TaskStatus, TaskType
+from jarvis.tasks.models import TaskStatus, TaskType
 from jarvis.tasks.queue import TaskQueue, reset_task_queue
 
 
@@ -301,7 +297,7 @@ class TestGracefulDegradation:
             results.append(result)
             if result == "fallback":
                 break
-        
+
         # Should observe fallback behavior
         assert "fallback" in results
         # Circuit should be in FAILED state
@@ -693,7 +689,7 @@ class TestReliabilityIntegration:
             results.append(result)
             if result == "fallback":
                 break
-        
+
         # Should eventually get fallback
         assert "fallback" in results
         # Circuit should be open

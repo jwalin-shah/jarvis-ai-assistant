@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from eval_shared import DEFAULT_LABEL_ALIASES, spans_match
 from gliner_shared import parse_context_messages
+
 from jarvis.contacts.candidate_extractor import CandidateExtractor
 
 logger = logging.getLogger(__name__)
@@ -210,8 +211,9 @@ def _run_regex_extractor(
     output_dir: Path | None = None,
 ) -> dict:
     """Run regex FactExtractor against the gold set and return bakeoff metrics."""
-    from jarvis.contacts.fact_extractor import FactExtractor
     from regex_to_span_adapter import facts_to_spans
+
+    from jarvis.contacts.fact_extractor import FactExtractor
 
     extractor = FactExtractor(confidence_threshold=0.3)  # Low threshold; let eval measure quality
 
@@ -256,11 +258,13 @@ def _run_regex_extractor(
                 timing[msg_id] = 0
 
             inc_f.write(
-                json.dumps({
-                    "message_id": msg_id,
-                    "predictions": predictions[msg_id],
-                    "elapsed_ms": timing[msg_id],
-                })
+                json.dumps(
+                    {
+                        "message_id": msg_id,
+                        "predictions": predictions[msg_id],
+                        "elapsed_ms": timing[msg_id],
+                    }
+                )
                 + "\n"
             )
             inc_f.flush()

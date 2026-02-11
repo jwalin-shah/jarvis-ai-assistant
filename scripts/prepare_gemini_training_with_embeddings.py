@@ -107,11 +107,21 @@ def extract_features_with_embeddings(
 
     logger.info(f"Extracting BERT embeddings + features for {len(examples)} examples...")
 
-    for i, ex in enumerate(tqdm(examples, desc="Extracting features", unit="ex")):
-        try:
-            # Get BERT embedding (384 dims)
-            embedding = embedder_mixin.embedder.encode(ex["text"])
+    # Batch encode all texts at once (10-40x faster than one-at-a-time)
+    texts = [ex["text"] for ex in examples]
+    logger.info(f"Batch encoding {len(texts)} texts...")
+    all_embeddings = embedder_mixin.embedder.encode(texts)
+    logger.info("Batch encoding complete")
 
+    for i, (ex, embedding) in enumerate(
+        tqdm(
+            zip(examples, all_embeddings),
+            desc="Extracting features",
+            total=len(examples),
+            unit="ex",
+        )
+    ):
+        try:
             # Get hand-crafted features (147 dims)
             hand_crafted = feature_extractor.extract_all(text=ex["text"], context=[])
 

@@ -41,7 +41,6 @@ from jarvis.prompts.examples import (
     THREAD_EXAMPLES,
 )
 
-
 # =============================================================================
 # DSPy-Optimized Per-Category Prompt Loader
 # =============================================================================

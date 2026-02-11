@@ -88,25 +88,79 @@ IMPERATIVE_VERBS = {
 REQUEST_VERBS = {"send", "give", "help", "tell", "show", "let", "call", "get", "make", "take"}
 PROMISE_VERBS = {"promise", "guarantee", "commit", "swear"}
 AGREEMENT_WORDS = {
-    "sure", "okay", "ok", "yes", "yeah", "yep", "yup", "sounds good", "bet", "fs",
+    "sure",
+    "okay",
+    "ok",
+    "yes",
+    "yeah",
+    "yep",
+    "yup",
+    "sounds good",
+    "bet",
+    "fs",
 }
 FIRST_PERSON_PRONOUNS = {"i", "me", "my", "mine", "myself"}
 SECOND_PERSON_PRONOUNS = {"you", "your", "yours", "yourself"}
 THIRD_PERSON_PRONOUNS = {
-    "he", "she", "it", "they", "him", "her", "them", "his", "hers", "their",
+    "he",
+    "she",
+    "it",
+    "they",
+    "him",
+    "her",
+    "them",
+    "his",
+    "hers",
+    "their",
 }
 POS_TAGS = ["VERB", "NOUN", "ADJ", "ADV", "PRON", "DET", "ADP", "INTJ"]
 FINE_GRAINED_TAGS = [
-    "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "MD", "WDT", "WP", "WRB", "UH", "JJR",
+    "VB",
+    "VBD",
+    "VBG",
+    "VBN",
+    "VBP",
+    "VBZ",
+    "MD",
+    "WDT",
+    "WP",
+    "WRB",
+    "UH",
+    "JJR",
 ]
 DEP_LABELS = [
-    "nsubj", "dobj", "ROOT", "aux", "neg", "advmod", "amod", "prep", "pobj", "conj",
-    "ccomp", "xcomp", "acl", "relcl", "mark",
+    "nsubj",
+    "dobj",
+    "ROOT",
+    "aux",
+    "neg",
+    "advmod",
+    "amod",
+    "prep",
+    "pobj",
+    "conj",
+    "ccomp",
+    "xcomp",
+    "acl",
+    "relcl",
+    "mark",
 ]
 ENTITY_TYPES_ORIGINAL = ["PERSON", "DATE", "TIME", "GPE"]
 ENTITY_TYPES_NEW = [
-    "MONEY", "CARDINAL", "ORDINAL", "PERCENT", "QUANTITY", "FAC", "PRODUCT",
-    "EVENT", "LANGUAGE", "LAW", "WORK_OF_ART", "NORP", "LOC", "ORG",
+    "MONEY",
+    "CARDINAL",
+    "ORDINAL",
+    "PERCENT",
+    "QUANTITY",
+    "FAC",
+    "PRODUCT",
+    "EVENT",
+    "LANGUAGE",
+    "LAW",
+    "WORK_OF_ART",
+    "NORP",
+    "LOC",
+    "ORG",
 ]
 PAST_TENSE_TAGS = {"VBD", "VBN"}
 PRESENT_TENSE_TAGS = {"VBP", "VBZ", "VBG"}
@@ -392,13 +446,18 @@ class CategoryFeatureExtractor:
         return np.array(features, dtype=np.float32)
 
     def _extract_original_14(
-        self, text: str, text_lower: str, doc: spacy.tokens.Doc,
+        self,
+        text: str,
+        text_lower: str,
+        doc: spacy.tokens.Doc,
     ) -> tuple[list[float], float, float, int, int]:
         """Extract original 14 features. Returns (features, you_modal, modal_count, first_person, second_person)."""
         features: list[float] = []
         total_tokens = len(doc)
 
-        has_imperative = 1.0 if len(doc) > 0 and doc[0].pos_ == "VERB" and doc[0].tag_ == "VB" else 0.0
+        has_imperative = (
+            1.0 if len(doc) > 0 and doc[0].pos_ == "VERB" and doc[0].tag_ == "VB" else 0.0
+        )
         features.append(has_imperative)
 
         you_modal = (
@@ -516,7 +575,9 @@ class CategoryFeatureExtractor:
         stop_count = sum(1 for token in doc if token.is_stop)
         alpha_count = sum(1 for token in doc if token.is_alpha)
         digit_count = sum(1 for token in doc if token.is_digit)
-        avg_word_len = float(np.mean([len(token.text) for token in doc])) if total_tokens > 0 else 0.0
+        avg_word_len = (
+            float(np.mean([len(token.text) for token in doc])) if total_tokens > 0 else 0.0
+        )
         punct_count = sum(1 for token in doc if token.is_punct)
         url_count = sum(1 for token in doc if token.like_url)
         like_num_count = sum(1 for token in doc if token.like_num)
@@ -524,16 +585,27 @@ class CategoryFeatureExtractor:
         is_currency_count = sum(1 for token in doc if token.is_currency)
         is_quote_count = sum(1 for token in doc if token.is_quote)
         return [
-            stop_count / t, alpha_count / t, digit_count / t, avg_word_len,
-            punct_count / t, float(url_count), like_num_count / t,
-            float(like_email_count), float(is_currency_count), float(is_quote_count),
+            stop_count / t,
+            alpha_count / t,
+            digit_count / t,
+            avg_word_len,
+            punct_count / t,
+            float(url_count),
+            like_num_count / t,
+            float(like_email_count),
+            float(is_currency_count),
+            float(is_quote_count),
             url_count / t,
         ]
 
     @staticmethod
     def _extract_morphology(
-        doc: spacy.tokens.Doc, text_lower: str, total_tokens: int,
-        modal_count: float, first_person: int, second_person: int,
+        doc: spacy.tokens.Doc,
+        text_lower: str,
+        total_tokens: int,
+        modal_count: float,
+        first_person: int,
+        second_person: int,
     ) -> list[float]:
         """Extract 8 morphology features."""
         t = max(total_tokens, 1)
@@ -561,8 +633,13 @@ class CategoryFeatureExtractor:
                     break
 
         return [
-            past_tense_count / t, present_tense_count / t, has_imperative_mood,
-            has_conditional, first_person / t, second_person / t, third_person / t,
+            past_tense_count / t,
+            present_tense_count / t,
+            has_imperative_mood,
+            has_conditional,
+            first_person / t,
+            second_person / t,
+            third_person / t,
             has_passive,
         ]
 
@@ -586,8 +663,8 @@ class CategoryFeatureExtractor:
         text_lower = text.lower()
         total_tokens = len(doc)
 
-        original, you_modal, modal_count, first_person, second_person = (
-            self._extract_original_14(text, text_lower, doc)
+        original, you_modal, modal_count, first_person, second_person = self._extract_original_14(
+            text, text_lower, doc
         )
 
         features: list[float] = original
@@ -597,9 +674,16 @@ class CategoryFeatureExtractor:
         features.extend(self._extract_entity_features(doc, total_tokens))
         features.extend(self._extract_sentence_structure(doc, total_tokens))
         features.extend(self._extract_token_properties(doc, total_tokens))
-        features.extend(self._extract_morphology(
-            doc, text_lower, total_tokens, modal_count, first_person, second_person,
-        ))
+        features.extend(
+            self._extract_morphology(
+                doc,
+                text_lower,
+                total_tokens,
+                modal_count,
+                first_person,
+                second_person,
+            )
+        )
 
         return np.array(features, dtype=np.float32)
 
@@ -942,7 +1026,6 @@ class CategoryFeatureExtractor:
         # Concatenate
         return np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats])
 
-
     def extract_all_batch(
         self,
         texts: list[str],
@@ -979,7 +1062,10 @@ class CategoryFeatureExtractor:
         results: list[NDArray[np.float32]] = []
         for i, (text, doc) in enumerate(zip(texts, docs)):
             hand_crafted = self.extract_hand_crafted(
-                text, contexts[i], mob_pressures[i], mob_types[i],
+                text,
+                contexts[i],
+                mob_pressures[i],
+                mob_types[i],
             )
             spacy_feats = self.extract_spacy_features(text, doc)
             new_hand_crafted = self.extract_new_hand_crafted(text, doc, contexts[i])

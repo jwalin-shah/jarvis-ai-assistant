@@ -20,27 +20,16 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from jarvis.utils.logging import setup_script_logging
+
 GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold.json")
 METRICS_PATH = Path("training_data/gliner_goldset/gliner_metrics.json")
 LOG_PATH = Path("eval_gliner_candidates.log")
 
-from eval_shared import jaccard_tokens, spans_match
+from eval_shared import spans_match
 from gliner_shared import enforce_runtime_stack, parse_context_messages
 
 log = logging.getLogger(__name__)
-
-
-def _setup_logging() -> None:
-    """Configure logging with both file and console handlers."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_PATH, mode="a"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-
 
 # ---------------------------------------------------------------------------
 # Metrics computation
@@ -602,7 +591,7 @@ def run_evaluation(
 
 
 def main():
-    _setup_logging()
+    setup_script_logging("eval_gliner_candidates")
     log.info("Starting eval_gliner_candidates.py")
     parser = argparse.ArgumentParser(description="Evaluate GLiNER candidate extraction")
     parser.add_argument("--gold", type=Path, default=GOLD_PATH, help="Path to gold set JSON")

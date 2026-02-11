@@ -1030,9 +1030,7 @@ def build_prompt_from_request(req: PipelineGenerationRequest) -> str:
     contact_facts = contact_facts_raw if isinstance(contact_facts_raw, str) else ""
 
     relationship_graph_raw = req.context.metadata.get("relationship_graph")
-    relationship_graph = (
-        relationship_graph_raw if isinstance(relationship_graph_raw, str) else ""
-    )
+    relationship_graph = relationship_graph_raw if isinstance(relationship_graph_raw, str) else ""
 
     return build_rag_reply_prompt(
         context=formatted_context,

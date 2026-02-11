@@ -2,7 +2,6 @@
 
 from dataclasses import asdict, fields
 from datetime import UTC, datetime
-from typing import get_type_hints
 
 import pytest
 
@@ -24,10 +23,8 @@ from contracts import (
     PermissionStatus,
     SchemaInfo,
 )
-from contracts.imessage import AttachmentSummary
 from contracts.health import DegradationPolicy, FeatureState
-from contracts.imessage import Attachment, Conversation, Message, Reaction
-from contracts.latency import Scenario
+from contracts.imessage import Attachment, AttachmentSummary, Conversation, Message, Reaction
 from contracts.memory import MemoryProfile
 from jarvis.contracts.pipeline import (
     CategoryType,
@@ -35,13 +32,17 @@ from jarvis.contracts.pipeline import (
     Entity,
     ExtractionResult,
     Fact,
-    GenerationRequest as PipelineGenerationRequest,
-    GenerationResponse as PipelineGenerationResponse,
     IntentType,
     MessageContext,
     RAGDocument,
     Relationship,
     UrgencyLevel,
+)
+from jarvis.contracts.pipeline import (
+    GenerationRequest as PipelineGenerationRequest,
+)
+from jarvis.contracts.pipeline import (
+    GenerationResponse as PipelineGenerationResponse,
 )
 
 
@@ -480,14 +481,14 @@ class TestContractSerialization:
             repetition_penalty=1.1,
             stop_sequences=["END"],
         )
-        
+
         # Serialize to dict
         data = asdict(original)
         assert data["prompt"] == "Test prompt"
         assert data["max_tokens"] == 50
         assert data["temperature"] == 0.5
         assert data["stop_sequences"] == ["END"]
-        
+
         # Round-trip
         restored = GenerationRequest(**data)
         assert restored.prompt == original.prompt
@@ -498,13 +499,13 @@ class TestContractSerialization:
         """Test GenerationRequest with default values."""
         req = GenerationRequest(prompt="Simple")
         data = asdict(req)
-        
+
         # Check defaults are present
         assert data["max_tokens"] == 100
         assert data["temperature"] == 0.1
         assert data["context_documents"] == []
         assert data["stop_sequences"] is None
-        
+
         # Round-trip
         restored = GenerationRequest(**data)
         assert restored.max_tokens == 100
@@ -520,7 +521,7 @@ class TestContractSerialization:
             template_name=None,
             finish_reason="stop",
         )
-        
+
         data = asdict(original)
         restored = GenerationResponse(**data)
         assert restored.text == original.text
@@ -538,7 +539,7 @@ class TestContractSerialization:
             finish_reason="error",
             error="Model failed to load",
         )
-        
+
         data = asdict(original)
         restored = GenerationResponse(**data)
         assert restored.error == "Model failed to load"
@@ -557,7 +558,7 @@ class TestContractSerialization:
             source_text="Let's meet tomorrow",
             message_id=123,
         )
-        
+
         data = asdict(original)
         restored = DetectedEvent(**data)
         assert restored.title == "Meeting"
@@ -572,7 +573,7 @@ class TestContractSerialization:
         restored = CreateEventResult(**data)
         assert restored.success is True
         assert restored.event_id == "evt-123"
-        
+
         # Failure case
         failure = CreateEventResult(success=False, error="Permission denied")
         data = asdict(failure)
@@ -584,7 +585,7 @@ class TestContractSerialization:
         """Test CalendarEvent serialization."""
         now = datetime(2024, 1, 15, 10, 0, tzinfo=UTC)
         later = datetime(2024, 1, 15, 11, 0, tzinfo=UTC)
-        
+
         original = CalendarEvent(
             id="evt-1",
             calendar_id="cal-1",
@@ -599,7 +600,7 @@ class TestContractSerialization:
             attendees=["a@example.com", "b@example.com"],
             status="confirmed",
         )
-        
+
         data = asdict(original)
         restored = CalendarEvent(**data)
         assert restored.title == "Team Meeting"
@@ -614,7 +615,7 @@ class TestContractSerialization:
             color="#FF0000",
             is_editable=True,
         )
-        
+
         data = asdict(original)
         restored = Calendar(**data)
         assert restored.name == "Personal"
@@ -628,7 +629,7 @@ class TestContractSerialization:
             by_type={"images": 5, "videos": 2},
             size_by_type={"images": 512000, "videos": 512000},
         )
-        
+
         data = asdict(original)
         restored = AttachmentSummary(**data)
         assert restored.total_count == 10
@@ -644,7 +645,7 @@ class TestContractSerialization:
             hhem_score=0.75,
             timestamp="2024-01-15T10:00:00Z",
         )
-        
+
         data = asdict(original)
         restored = HHEMResult(**data)
         assert restored.hhem_score == 0.75
@@ -660,7 +661,7 @@ class TestContractSerialization:
             hhem_score=0.8,
             timestamp="2024-01-15T10:00:00Z",
         )
-        
+
         original = HHEMBenchmarkResult(
             model_name="test-model",
             num_samples=1,
@@ -672,7 +673,7 @@ class TestContractSerialization:
             results=[result],
             timestamp="2024-01-15T10:00:00Z",
         )
-        
+
         data = asdict(original)
         restored = HHEMBenchmarkResult(**data)
         assert restored.num_samples == 1
@@ -692,7 +693,7 @@ class TestContractSerialization:
             tokens_per_second=50.0,
             timestamp="2024-01-15T10:00:00Z",
         )
-        
+
         data = asdict(original)
         restored = LatencyResult(**data)
         assert restored.scenario == "warm"
@@ -712,7 +713,7 @@ class TestContractSerialization:
             tokens_per_second=30.0,
             timestamp="2024-01-15T10:00:00Z",
         )
-        
+
         original = LatencyBenchmarkResult(
             scenario="cold",
             model_name="test-model",
@@ -725,7 +726,7 @@ class TestContractSerialization:
             results=[result],
             timestamp="2024-01-15T10:00:00Z",
         )
-        
+
         data = asdict(original)
         restored = LatencyBenchmarkResult(**data)
         assert restored.num_runs == 1
@@ -743,7 +744,7 @@ class TestContractSerialization:
             load_time_seconds=3.5,
             timestamp="2024-01-15T10:00:00Z",
         )
-        
+
         data = asdict(original)
         restored = MemoryProfile(**data)
         assert restored.rss_mb == 2048.5
@@ -758,7 +759,7 @@ class TestContractSerialization:
             current_mode=MemoryMode.LITE,
             pressure_level="green",
         )
-        
+
         data = asdict(original)
         restored = MemoryState(**data)
         assert restored.current_mode == MemoryMode.LITE
@@ -772,7 +773,7 @@ class TestContractSerialization:
             last_checked="2024-01-15T10:00:00Z",
             fix_instructions="Enable in System Settings",
         )
-        
+
         data = asdict(original)
         restored = PermissionStatus(**data)
         assert restored.permission == Permission.CALENDAR
@@ -787,7 +788,7 @@ class TestContractSerialization:
             migration_needed=False,
             known_schema=True,
         )
-        
+
         data = asdict(original)
         restored = SchemaInfo(**data)
         assert restored.version == "v1.0"
@@ -807,7 +808,7 @@ class TestContractSerialization:
             is_sticker=False,
             uti="public.jpeg",
         )
-        
+
         data = asdict(original)
         restored = Attachment(**data)
         assert restored.filename == "image.jpg"
@@ -821,7 +822,7 @@ class TestContractSerialization:
             sender_name="John",
             date=datetime.now(tz=UTC),
         )
-        
+
         data = asdict(original)
         restored = Reaction(**data)
         assert restored.type == "love"
@@ -841,7 +842,7 @@ class TestContractSerialization:
             sender_name="Jane",
             date=datetime.now(tz=UTC),
         )
-        
+
         original = Message(
             id=12345,
             chat_id="chat-abc",
@@ -854,7 +855,7 @@ class TestContractSerialization:
             reply_to_id=None,
             reactions=[reaction],
         )
-        
+
         data = asdict(original)
         restored = Message(**data)
         assert restored.text == "Hello!"
@@ -872,7 +873,7 @@ class TestContractSerialization:
             is_group=True,
             last_message_text="See you tomorrow!",
         )
-        
+
         data = asdict(original)
         restored = Conversation(**data)
         assert restored.chat_id == "chat-123"
@@ -918,7 +919,7 @@ class TestPipelineContractSerialization:
             thread_id="thread-456",
             metadata={"source": "imessage", "priority": "high"},
         )
-        
+
         data = asdict(original)
         restored = MessageContext(**data)
         assert restored.chat_id == "chat-123"
@@ -934,12 +935,12 @@ class TestPipelineContractSerialization:
             is_from_me=True,
             timestamp=now,
         )
-        
+
         data = asdict(original)
         assert data["sender_id"] is None
         assert data["thread_id"] is None
         assert data["metadata"] == {}
-        
+
         restored = MessageContext(**data)
         assert restored.sender_id is None
 
@@ -953,7 +954,7 @@ class TestPipelineContractSerialization:
             requires_knowledge=True,
             metadata={"model": "test", "latency_ms": 50},
         )
-        
+
         data = asdict(original)
         restored = ClassificationResult(**data)
         assert restored.intent == IntentType.QUESTION
@@ -970,10 +971,10 @@ class TestPipelineContractSerialization:
             confidence=0.95,
             requires_knowledge=False,
         )
-        
+
         data = asdict(original)
         assert data["metadata"] == {}
-        
+
         restored = ClassificationResult(**data)
         assert restored.metadata == {}
 
@@ -986,7 +987,7 @@ class TestPipelineContractSerialization:
             start_char=10,
             end_char=15,
         )
-        
+
         data = asdict(original)
         restored = Entity(**data)
         assert restored.name == "Apple Inc"
@@ -1003,7 +1004,7 @@ class TestPipelineContractSerialization:
             confidence=0.9,
             source_text="John works at Google",
         )
-        
+
         data = asdict(original)
         restored = Fact(**data)
         assert restored.subject == "John"
@@ -1019,7 +1020,7 @@ class TestPipelineContractSerialization:
             relation_type="colleague",
             confidence=0.8,
         )
-        
+
         data = asdict(original)
         restored = Relationship(**data)
         assert restored.source_entity == "John"
@@ -1042,14 +1043,14 @@ class TestPipelineContractSerialization:
             relation_type="friend",
             confidence=0.85,
         )
-        
+
         original = ExtractionResult(
             entities=[entity],
             facts=[fact],
             relationships=[relationship],
             topics=["food", "preferences"],
         )
-        
+
         data = asdict(original)
         restored = ExtractionResult(**data)
         assert len(restored.entities) == 1
@@ -1060,13 +1061,13 @@ class TestPipelineContractSerialization:
     def test_extraction_result_defaults(self) -> None:
         """Test ExtractionResult with default empty lists."""
         original = ExtractionResult()
-        
+
         data = asdict(original)
         assert data["entities"] == []
         assert data["facts"] == []
         assert data["relationships"] == []
         assert data["topics"] == []
-        
+
         restored = ExtractionResult(**data)
         assert restored.entities == []
 
@@ -1078,7 +1079,7 @@ class TestPipelineContractSerialization:
             score=0.92,
             metadata={"chunk_id": 1, "page": 5},
         )
-        
+
         data = asdict(original)
         restored = RAGDocument(**data)
         assert restored.content == "This is relevant content"
@@ -1092,10 +1093,10 @@ class TestPipelineContractSerialization:
             source="source.txt",
             score=0.8,
         )
-        
+
         data = asdict(original)
         assert data["metadata"] == {}
-        
+
         restored = RAGDocument(**data)
         assert restored.metadata == {}
 
@@ -1120,7 +1121,7 @@ class TestPipelineContractSerialization:
             topics=["weather"],
         )
         rag_doc = RAGDocument(content="Weather is sunny", source="weather.com", score=0.95)
-        
+
         original = PipelineGenerationRequest(
             context=context,
             classification=classification,
@@ -1128,13 +1129,13 @@ class TestPipelineContractSerialization:
             retrieved_docs=[rag_doc],
             few_shot_examples=[{"input": "Hi", "output": "Hello!"}],
         )
-        
+
         # Test structure by accessing fields directly
         assert original.context.message_text == "What is the weather?"
         assert original.classification.intent == IntentType.QUESTION
         assert len(original.retrieved_docs) == 1
         assert original.extraction is not None
-        
+
         # Verify the object can be converted to dict (serialization for API)
         data = asdict(original)
         assert data["context"]["message_text"] == "What is the weather?"
@@ -1150,7 +1151,7 @@ class TestPipelineContractSerialization:
             streaming=False,
             metadata={"model": "lfm-1.2b"},
         )
-        
+
         data = asdict(original)
         restored = PipelineGenerationResponse(**data)
         assert restored.response == "The weather is sunny today."
@@ -1163,12 +1164,12 @@ class TestPipelineContractSerialization:
             response="Hello!",
             confidence=0.95,
         )
-        
+
         data = asdict(original)
         assert data["used_kg_facts"] == []
         assert data["streaming"] is False
         assert data["metadata"] == {}
-        
+
         restored = PipelineGenerationResponse(**data)
         assert restored.used_kg_facts == []
 
@@ -1224,15 +1225,24 @@ class TestContractFieldCoverage:
         # This test documents the fields of each pipeline contract
         message_context_fields = {f.name for f in fields(MessageContext)}
         expected_mc_fields = {
-            "chat_id", "message_text", "is_from_me", "timestamp",
-            "sender_id", "thread_id", "metadata"
+            "chat_id",
+            "message_text",
+            "is_from_me",
+            "timestamp",
+            "sender_id",
+            "thread_id",
+            "metadata",
         }
         assert message_context_fields == expected_mc_fields
 
         classification_fields = {f.name for f in fields(ClassificationResult)}
         expected_cl_fields = {
-            "intent", "category", "urgency", "confidence",
-            "requires_knowledge", "metadata"
+            "intent",
+            "category",
+            "urgency",
+            "confidence",
+            "requires_knowledge",
+            "metadata",
         }
         assert classification_fields == expected_cl_fields
 
@@ -1258,10 +1268,20 @@ class TestContractFieldCoverage:
 
         gen_req_fields = {f.name for f in fields(PipelineGenerationRequest)}
         expected_gen_req_fields = {
-            "context", "classification", "extraction", "retrieved_docs", "few_shot_examples"
+            "context",
+            "classification",
+            "extraction",
+            "retrieved_docs",
+            "few_shot_examples",
         }
         assert gen_req_fields == expected_gen_req_fields
 
         gen_res_fields = {f.name for f in fields(PipelineGenerationResponse)}
-        expected_gen_res_fields = {"response", "confidence", "used_kg_facts", "streaming", "metadata"}
+        expected_gen_res_fields = {
+            "response",
+            "confidence",
+            "used_kg_facts",
+            "streaming",
+            "metadata",
+        }
         assert gen_res_fields == expected_gen_res_fields

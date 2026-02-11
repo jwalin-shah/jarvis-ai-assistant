@@ -87,10 +87,7 @@ class RateLimiter:
         """Remove stale client entries (call periodically)."""
         now = self._time.monotonic()
         # Clients whose buckets are full and haven't been seen in 10s
-        stale = [
-            k for k, v in self._buckets.items()
-            if now - v[1] > 10.0
-        ]
+        stale = [k for k, v in self._buckets.items() if now - v[1] > 10.0]
         for k in stale:
             del self._buckets[k]
 
@@ -418,7 +415,7 @@ class JarvisSocketServer:
                 generator._loader.load()
                 logger.debug("Generator LLM loader preloaded")
 
-        except Exception as e:
+        except (ImportError, OSError, RuntimeError) as e:
             logger.debug(f"LLM preload skipped: {e}")
 
     def _preload_embeddings(self) -> None:
@@ -431,7 +428,7 @@ class JarvisSocketServer:
                 # Warm up with a test embedding
                 embedder.encode(["test"])
                 logger.debug("Embeddings model preloaded")
-        except Exception as e:
+        except (ImportError, OSError, RuntimeError) as e:
             logger.debug(f"Embeddings preload skipped: {e}")
 
     def _preload_cross_encoder(self) -> None:
@@ -443,7 +440,7 @@ class JarvisSocketServer:
             if ce and not ce.is_loaded:
                 ce.load_model()
                 logger.debug("Cross-encoder model preloaded")
-        except Exception as e:
+        except (ImportError, OSError, RuntimeError) as e:
             logger.debug(f"Cross-encoder preload skipped: {e}")
 
     def _preload_vec_index(self) -> None:
@@ -457,7 +454,7 @@ class JarvisSocketServer:
                 searcher.backfill_vec_binary()
                 logger.debug("Vec searcher preloaded")
 
-        except Exception as e:
+        except (ImportError, OSError, RuntimeError) as e:
             logger.debug(f"Vec searcher preload skipped: {e}")
 
     async def stop(self) -> None:
@@ -668,7 +665,7 @@ class JarvisSocketServer:
                     )
                     await websocket.close(4001, "Unauthorized")
                     return
-            except Exception:
+            except (AttributeError, IndexError, KeyError, TypeError):
                 await websocket.close(4001, "Unauthorized")
                 return
 
@@ -757,8 +754,8 @@ class JarvisSocketServer:
         # Check if streaming is requested and supported
         stream_requested = isinstance(params, dict) and params.get("stream", False)
         if stream_requested:
-            # Shallow copy + pop instead of deepcopy (stream key is top-level only)
-            params = {k: v for k, v in params.items() if k != "stream"}
+            # Remove stream key in-place (no copy needed, dict is ours)
+            params.pop("stream", None)
         supports_streaming = method in self._streaming_methods
 
         # Call handler
@@ -929,6 +926,26 @@ class JarvisSocketServer:
             "models_ready": self._models_ready,
         }
 
+    @staticmethod
+    def _build_message_context(messages: list) -> tuple[list[str], set[str]]:
+        """Build context lines and participant set from messages.
+
+        Args:
+            messages: List of message objects (oldest-first iteration via reversed).
+
+        Returns:
+            Tuple of (context_lines, participants).
+        """
+        context = []
+        participants: set[str] = set()
+        for msg in reversed(messages):
+            sender = msg.sender_name or msg.sender
+            participants.add(sender)
+            prefix = "Me" if msg.is_from_me else sender
+            if msg.text:
+                context.append(f"{prefix}: {msg.text}")
+        return context, participants
+
     async def _generate_draft(
         self,
         chat_id: str,
@@ -974,14 +991,7 @@ class JarvisSocketServer:
                 raise JsonRpcError(INVALID_PARAMS, "No messages found in conversation")
 
             # Build context from messages
-            context = []
-            participants: set[str] = set()
-            for msg in reversed(messages):  # Oldest first
-                sender = msg.sender_name or msg.sender
-                participants.add(sender)
-                prefix = "Me" if msg.is_from_me else sender
-                if msg.text:
-                    context.append(f"{prefix}: {msg.text}")
+            context, participants = self._build_message_context(messages)
 
             # Get the last incoming message to respond to
             last_incoming = None
@@ -1133,12 +1143,7 @@ class JarvisSocketServer:
                 raise JsonRpcError(INVALID_PARAMS, "No messages found")
 
             # Build conversation text
-            conversation = []
-            for msg in reversed(messages):
-                sender = msg.sender_name or msg.sender
-                prefix = "Me" if msg.is_from_me else sender
-                if msg.text:
-                    conversation.append(f"{prefix}: {msg.text}")
+            conversation, _ = self._build_message_context(messages)
 
             if not conversation:
                 return {

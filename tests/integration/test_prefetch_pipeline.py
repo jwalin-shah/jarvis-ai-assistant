@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from contracts.imessage import Message
 from jarvis.prefetch import (
     CacheTier,
     Prediction,
@@ -96,9 +95,11 @@ def mock_chat_db():
 
         mock_reader.get_messages.return_value = mock_messages
 
-        # Setup context manager
-        mock_reader_class.return_value.__enter__.return_value = mock_reader
-        mock_reader_class.return_value.__exit__.return_value = False
+        # Setup both direct instantiation and context manager usage
+        # The executor uses ChatDBReader() directly (not as context manager)
+        mock_reader_class.return_value = mock_reader
+        mock_reader.__enter__ = Mock(return_value=mock_reader)
+        mock_reader.__exit__ = Mock(return_value=False)
 
         yield mock_reader
 
@@ -272,6 +273,16 @@ class TestPrefetchPipelineFlow:
         executor.start()
 
         try:
+            # Use a gate to keep the first handler busy while we test duplicate rejection
+            gate = threading.Event()
+            original_handler = executor._handle_draft_reply
+
+            def slow_handler(prediction):
+                gate.wait(timeout=5.0)
+                return original_handler(prediction)
+
+            executor._handlers[PredictionType.DRAFT_REPLY] = slow_handler
+
             # Create two predictions for the same chat
             pred1 = Prediction(
                 type=PredictionType.DRAFT_REPLY,
@@ -301,15 +312,23 @@ class TestPrefetchPipelineFlow:
             scheduled1 = executor.schedule(pred1)
             assert scheduled1 is True, "First prediction should be scheduled"
 
-            # Immediately try to schedule second (while first is in queue/executing)
-            # This should be rejected because chat789 already has an active draft
-            time.sleep(0.05)  # Small delay to let first enter execution
+            # Wait for first to enter execution (handler is blocked on gate)
+            # Poll until the task is marked active (worker picks it up)
+            max_wait_active = 2.0
+            start = time.time()
+            while time.time() - start < max_wait_active:
+                with executor._active_lock:
+                    if "chat789" in executor._active_drafts:
+                        break
+                time.sleep(0.05)
+
             scheduled2 = executor.schedule(pred2)
 
             # Second MUST be rejected: same chat_id is already active
-            assert scheduled2 is False, (
-                "Duplicate draft for same chat_id should be rejected"
-            )
+            assert scheduled2 is False, "Duplicate draft for same chat_id should be rejected"
+
+            # Release the gate so first completes
+            gate.set()
 
             # Wait for first to complete
             max_wait = 2.0
@@ -330,9 +349,7 @@ class TestPrefetchPipelineFlow:
         finally:
             executor.stop(timeout=2.0)
 
-    def test_manager_on_message_triggers_prediction(
-        self, mock_mlx_lock, mock_router, mock_chat_db
-    ):
+    def test_manager_on_message_triggers_prediction(self, mock_mlx_lock, mock_router, mock_chat_db):
         """Test that on_message() triggers immediate high-priority prediction.
 
         Verifies:
@@ -480,7 +497,9 @@ class TestPrefetchPipelineFlow:
         finally:
             executor.stop(timeout=1.0)
 
-    def test_cache_tier_assignment_based_on_priority(self, mock_mlx_lock, mock_router, mock_chat_db):
+    def test_cache_tier_assignment_based_on_priority(
+        self, mock_mlx_lock, mock_router, mock_chat_db
+    ):
         """Test that cache tier matches prediction priority.
 
         Verifies:

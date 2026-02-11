@@ -63,9 +63,7 @@ class TestCategoryClassifierPerformance:
         """Classifying a single message should complete in <50ms."""
         from jarvis.classifiers.category_classifier import CategoryClassifier
 
-        with patch.object(
-            CategoryClassifier, "classify", return_value=[("question", 0.6)]
-        ):
+        with patch.object(CategoryClassifier, "classify", return_value=[("question", 0.6)]):
             classifier = CategoryClassifier.__new__(CategoryClassifier)
             start = time.perf_counter()
             result = classifier.classify("What time does the meeting start?")
@@ -132,12 +130,14 @@ class TestSocketServerPerformance:
             enable_prefetch=False,
         )
 
-        message = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "ping",
-            "params": {},
-            "id": 1,
-        })
+        message = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "ping",
+                "params": {},
+                "id": 1,
+            }
+        )
 
         start = time.perf_counter()
         response = await server._process_message(message)

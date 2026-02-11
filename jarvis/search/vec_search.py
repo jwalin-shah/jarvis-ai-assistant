@@ -767,30 +767,26 @@ class VecSearcher:
                 logger.info("vec_binary already has %d rows, skipping backfill", existing)
                 return 0
 
-            # Read chunk embeddings via cursor iteration (avoids loading all into RAM)
+            # Read chunk embeddings in batches, vectorize binarization per batch
             cursor = conn.execute("SELECT rowid, embedding FROM vec_chunks")
 
             count = 0
-            batch = []
             batch_size = 1000
-            for row in cursor:
-                chunk_rowid = row["rowid"]
-                int8_blob = row["embedding"]
-                # Binarize directly from int8 (positive → 1, else → 0)
-                int8_arr = np.frombuffer(int8_blob, dtype=np.int8)
-                binary_blob = np.packbits((int8_arr > 0).astype(np.uint8)).tobytes()
-                batch.append((binary_blob, chunk_rowid, int8_blob))
+            while True:
+                rows = cursor.fetchmany(batch_size)
+                if not rows:
+                    break
 
-                if len(batch) >= batch_size:
-                    conn.executemany(
-                        "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
-                        "VALUES (vec_bit(?), ?, ?)",
-                        batch,
-                    )
-                    count += len(batch)
-                    batch = []
+                rowids = [r["rowid"] for r in rows]
+                int8_blobs = [r["embedding"] for r in rows]
 
-            if batch:
+                # Vectorize: stack into matrix, packbits across all rows at once
+                int8_matrix = np.vstack([np.frombuffer(b, dtype=np.int8) for b in int8_blobs])
+                binary_matrix = np.packbits((int8_matrix > 0).astype(np.uint8), axis=1)
+
+                batch = [
+                    (binary_matrix[i].tobytes(), rowids[i], int8_blobs[i]) for i in range(len(rows))
+                ]
                 conn.executemany(
                     "INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) "
                     "VALUES (vec_bit(?), ?, ?)",
@@ -821,8 +817,7 @@ class VecSearcher:
                 chunk = message_ids[chunk_start : chunk_start + 900]
                 placeholders = ",".join("?" * len(chunk))
                 rows = conn.execute(
-                    f"SELECT rowid, embedding FROM vec_messages "
-                    f"WHERE rowid IN ({placeholders})",
+                    f"SELECT rowid, embedding FROM vec_messages WHERE rowid IN ({placeholders})",
                     chunk,
                 ).fetchall()
                 for row in rows:

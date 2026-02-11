@@ -11,12 +11,10 @@ Tests comprehensive coverage of all contact endpoints including:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-
-from integrations.imessage import ContactAvatarData
 
 from api.routers.contacts import (
     AVATAR_COLORS,
@@ -26,7 +24,7 @@ from api.routers.contacts import (
     generate_svg_avatar,
     get_avatar_cache,
 )
-
+from integrations.imessage import ContactAvatarData
 
 # =============================================================================
 # Fixtures

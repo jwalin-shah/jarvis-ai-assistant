@@ -17,30 +17,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import random
-import sys
 from pathlib import Path
 
-
-from eval_shared import jaccard_tokens, spans_match
+from eval_shared import spans_match
 from gliner_shared import _safe_major, enforce_runtime_stack, parse_context_messages
 
-
-def _setup_logging() -> logging.Logger:
-    """Setup logging with file and stream handlers."""
-    log_file = Path("build_fact_filter_dataset.log")
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file, mode="a"),
-    ]
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=handlers,
-        force=True,
-    )
-    return logging.getLogger(__name__)
+from jarvis.utils.logging import setup_script_logging
 
 
 def warn_runtime_stack() -> None:
@@ -212,7 +195,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    logger = _setup_logging()
+    logger = setup_script_logging("build_fact_filter_dataset")
     args = parse_args()
     warn_runtime_stack()
     enforce_runtime_stack(args.allow_unstable_stack)

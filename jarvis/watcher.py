@@ -8,8 +8,8 @@ notifications via the socket server.
 
 import asyncio
 import logging
+import os
 import sqlite3
-import time
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -91,8 +91,8 @@ class ChatDBWatcher:
         self._resegment_locks_mutex = asyncio.Lock()  # Protect OrderedDict mutations
         # Persistent read-only connection for rowid polling (avoids 10-50ms connect overhead)
         self._poll_conn: sqlite3.Connection | None = None
-        self._poll_conn_last_health_check: float = 0.0  # Timestamp of last health check
-        self._poll_conn_health_check_interval: float = 30.0  # Check every 30 seconds
+        # Health check removed: SQLite read-only connections don't go stale.
+        # Error handlers in _query_last_rowid/_query_new_messages reset on failure.
 
     async def start(self) -> None:
         """Start watching chat.db for changes."""
@@ -344,9 +344,7 @@ class ChatDBWatcher:
                 # Keep top 500 by count using heapq (O(n log k) vs O(n log n) sort)
                 import heapq
 
-                top_500 = heapq.nlargest(
-                    500, self._chat_msg_counts.items(), key=lambda x: x[1]
-                )
+                top_500 = heapq.nlargest(500, self._chat_msg_counts.items(), key=lambda x: x[1])
                 self._chat_msg_counts = dict(top_500)
 
             if chats_to_resegment:
@@ -523,8 +521,76 @@ class ChatDBWatcher:
                 except Exception as e:
                     logger.debug("Profile cache invalidation error: %s", e)
 
+            # Shadow GLiNER extraction (if enabled via env var)
+            if os.environ.get("JARVIS_SHADOW_EXTRACT") == "1":
+                await self._shadow_extract_gliner(incoming, by_chat)
+
         except Exception as e:
             logger.debug("Fact extraction pipeline error: %s", e)
+
+    async def _shadow_extract_gliner(
+        self,
+        incoming: list[dict[str, Any]],
+        by_chat: dict[str, list[dict[str, Any]]],
+    ) -> None:
+        """Run GLiNER candidate extraction in shadow mode (log only, no DB writes).
+
+        Extracts candidates using CandidateExtractor, filters through the fact gate,
+        and writes results to ~/.jarvis/shadow_facts.jsonl for offline analysis.
+        """
+        try:
+            import json
+
+            from jarvis.contacts.candidate_extractor import CandidateExtractor
+
+            shadow_path = Path.home() / ".jarvis" / "shadow_facts.jsonl"
+            shadow_path.parent.mkdir(parents=True, exist_ok=True)
+
+            extractor = CandidateExtractor(label_profile="balanced")
+
+            total_candidates = 0
+            total_messages = 0
+
+            for chat_id, chat_msgs in by_chat.items():
+                for msg in chat_msgs:
+                    text = msg.get("text", "")
+                    msg_id = msg.get("id", 0)
+                    if not text or len(text) < 5:
+                        continue
+
+                    total_messages += 1
+                    try:
+                        candidates = await asyncio.to_thread(
+                            extractor.extract_candidates,
+                            text,
+                            msg_id,
+                            chat_id=None,
+                            is_from_me=msg.get("is_from_me", False),
+                            use_gate=True,
+                        )
+
+                        if candidates:
+                            total_candidates += len(candidates)
+                            # Append to JSONL (incremental, crash-safe)
+                            with open(shadow_path, "a") as f:
+                                for c in candidates:
+                                    record = c.to_dict()
+                                    record["watcher_chat_id"] = chat_id
+                                    f.write(json.dumps(record) + "\n")
+
+                    except Exception as e:
+                        logger.debug("Shadow GLiNER extraction failed for msg %d: %s", msg_id, e)
+
+            if total_messages > 0:
+                logger.info(
+                    "Shadow GLiNER: %d candidates from %d messages -> %s",
+                    total_candidates,
+                    total_messages,
+                    shadow_path,
+                )
+
+        except Exception as e:
+            logger.debug("Shadow GLiNER extraction error: %s", e)
 
     async def _get_resegment_lock(self, chat_id: str) -> asyncio.Lock:
         """Get or create a per-chat lock for serializing resegmentation.
@@ -653,28 +719,10 @@ class ChatDBWatcher:
     def _get_poll_conn(self) -> sqlite3.Connection | None:
         """Get or create persistent read-only connection for polling.
 
-        Includes periodic health check (every 30s) to detect stale connections.
+        SQLite read-only connections don't go stale, so no health check needed.
+        Error handlers in _query_last_rowid/_query_new_messages reset the
+        connection on failure, which forces reconnection on next call.
         """
-        current_time = time.time()
-
-        # Health check existing connection
-        if self._poll_conn is not None:
-            # Periodic health check
-            if current_time - self._poll_conn_last_health_check > self._poll_conn_health_check_interval:
-                try:
-                    cursor = self._poll_conn.cursor()
-                    cursor.execute("SELECT 1")
-                    cursor.fetchone()
-                    self._poll_conn_last_health_check = current_time
-                except Exception as e:
-                    logger.debug("Health check failed, reopening connection: %s", e)
-                    try:
-                        self._poll_conn.close()
-                    except Exception:
-                        pass
-                    self._poll_conn = None
-
-        # Return if still healthy
         if self._poll_conn is not None:
             return self._poll_conn
 
@@ -687,7 +735,6 @@ class ChatDBWatcher:
                 uri=True,
                 timeout=5.0,
             )
-            self._poll_conn_last_health_check = current_time
             return self._poll_conn
         except Exception as e:
             logger.debug("Error creating poll connection: %s", e)

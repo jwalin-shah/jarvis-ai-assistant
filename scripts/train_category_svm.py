@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import sys
 import threading
 import time
@@ -32,22 +31,10 @@ from sklearn.svm import LinearSVC
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from jarvis.utils.logging import setup_script_logging
 from jarvis.utils.memory import MemoryMonitor, get_swap_info, get_top_memory_processes
 
-# Setup logging to file for real-time progress tracking
-LOG_FILE = PROJECT_ROOT / "training_progress.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE, mode="w"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger(__name__)
-sys.path.insert(0, str(PROJECT_ROOT))
-
-logger = logging.getLogger(__name__)
+logger = setup_script_logging("train_category_svm")
 
 
 def train(
@@ -307,7 +294,6 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
     train(data_dir=args.data_dir, seed=args.seed, label_map=args.label_map)
     return 0
 

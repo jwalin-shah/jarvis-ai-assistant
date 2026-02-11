@@ -7,7 +7,6 @@ from jarvis.utils.memory import (
     get_swap_info,
     log_memory_snapshot,
 )
-
 from jarvis.utils.singleton import thread_safe_singleton
 
 __all__ = [

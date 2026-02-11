@@ -126,6 +126,7 @@ class TestInProcessCrossEncoder:
         mock_encoding.type_ids = [0, 0, 0, 1, 1]
 
         mock_tokenizer.encode = MagicMock(return_value=mock_encoding)
+        mock_tokenizer.encode_batch = MagicMock(return_value=[mock_encoding])
         ce.tokenizer = mock_tokenizer
 
         # Mock model forward pass

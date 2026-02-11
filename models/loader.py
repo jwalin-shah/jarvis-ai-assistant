@@ -639,13 +639,13 @@ class MLXModelLoader:
 
         # Strip the prompt from response
         if response.startswith(formatted_prompt):
-            response = response[len(formatted_prompt):].strip()
+            response = response[len(formatted_prompt) :].strip()
 
         # Apply stop sequences
         if stop_sequences:
             for stop_seq in stop_sequences:
                 if stop_seq in response:
-                    response = response[:response.index(stop_seq)]
+                    response = response[: response.index(stop_seq)]
 
         response = response.strip()
 
@@ -736,8 +736,14 @@ class MLXModelLoader:
         try:
             formatted_prompt, max_tokens, sampler, logits_processors = (
                 self._prepare_generation_params(
-                    prompt, max_tokens, temperature, top_p, min_p,
-                    top_k, repetition_penalty, pre_formatted,
+                    prompt,
+                    max_tokens,
+                    temperature,
+                    top_p,
+                    min_p,
+                    top_k,
+                    repetition_penalty,
+                    pre_formatted,
                 )
             )
 
@@ -827,8 +833,12 @@ class MLXModelLoader:
                 response, draft_accepted = _do_generate()
 
             return self._process_generation_result(
-                response, formatted_prompt, stop_sequences,
-                start_time, draft_accepted, using_speculative,
+                response,
+                formatted_prompt,
+                stop_sequences,
+                start_time,
+                draft_accepted,
+                using_speculative,
             )
 
         except ModelGenerationError:
@@ -897,8 +907,14 @@ class MLXModelLoader:
         try:
             formatted_prompt, max_tokens, sampler, logits_processors = (
                 self._prepare_generation_params(
-                    prompt, max_tokens, temperature, top_p, min_p,
-                    top_k, repetition_penalty, pre_formatted,
+                    prompt,
+                    max_tokens,
+                    temperature,
+                    top_p,
+                    min_p,
+                    top_k,
+                    repetition_penalty,
+                    pre_formatted,
                 )
             )
 

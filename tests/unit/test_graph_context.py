@@ -10,10 +10,8 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import patch
 
-import pytest
-
 from jarvis.graph.context import (
-    _get_relationship_description,
+    _get_fact_summary,
     _get_shared_connections,
     get_graph_context,
 )
@@ -93,28 +91,40 @@ def _seed_data(db) -> None:
         )
 
 
-class TestRelationshipDescription:
-    def test_returns_relationship_facts_as_natural_language(self, tmp_path):
+class TestFactSummary:
+    def test_returns_facts_as_natural_language(self, tmp_path):
         db = _make_test_db(tmp_path)
         _seed_data(db)
 
         with patch("jarvis.db.get_db", return_value=db):
-            result = _get_relationship_description(CONTACT_ID)
+            result = _get_fact_summary(CONTACT_ID)
 
         # Should mention the relationships
         assert "Sarah" in result
         assert "sister" in result
         assert "Mom" in result
         assert "mother" in result
-        # Should NOT include work facts
-        assert "Google" not in result
+        # Should now also include work facts (expanded context)
+        assert "Google" in result
         db.close()
 
-    def test_empty_when_no_relationship_facts(self, tmp_path):
+    def test_groups_by_category(self, tmp_path):
+        db = _make_test_db(tmp_path)
+        _seed_data(db)
+
+        with patch("jarvis.db.get_db", return_value=db):
+            result = _get_fact_summary(CONTACT_ID)
+
+        # Should have category labels
+        assert "Relationship:" in result
+        assert "Work:" in result
+        db.close()
+
+    def test_empty_when_no_facts(self, tmp_path):
         db = _make_test_db(tmp_path)
         # Don't seed any data
         with patch("jarvis.db.get_db", return_value=db):
-            result = _get_relationship_description(CONTACT_ID)
+            result = _get_fact_summary(CONTACT_ID)
         assert result == ""
         db.close()
 
@@ -122,7 +132,7 @@ class TestRelationshipDescription:
         db = _make_test_db(tmp_path)
         _seed_data(db)
         with patch("jarvis.db.get_db", return_value=db):
-            result = _get_relationship_description("nonexistent_chat_id")
+            result = _get_fact_summary("nonexistent_chat_id")
         assert result == ""
         db.close()
 

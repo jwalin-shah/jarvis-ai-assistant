@@ -875,3 +875,120 @@ class TestToLegacyResponse:
         assert result["type"] == "generated"
         assert result["similarity_score"] == 0.0
         assert result["reason"] == ""
+
+
+# =============================================================================
+# Validation Helper
+# =============================================================================
+
+VALID_TYPES = {"generated", "clarify", "skip", "acknowledge", "closing", "fallback"}
+VALID_CONFIDENCE_LABELS = {"high", "medium", "low"}
+
+
+def _assert_valid_route_result(result: dict) -> None:
+    """Validate structural correctness of a route result dict."""
+    assert "type" in result, f"Missing 'type' in result: {result}"
+    assert result["type"] in VALID_TYPES, f"Invalid type: {result['type']}"
+    assert "response" in result, f"Missing 'response' in result: {result}"
+    assert isinstance(result["response"], str), f"Response not a string: {type(result['response'])}"
+    assert "confidence" in result, f"Missing 'confidence' in result: {result}"
+    assert result["confidence"] in VALID_CONFIDENCE_LABELS, (
+        f"Invalid confidence: {result['confidence']}"
+    )
+    assert "similarity_score" in result, f"Missing 'similarity_score' in result: {result}"
+    assert isinstance(result["similarity_score"], (int, float)), (
+        f"similarity_score not numeric: {type(result['similarity_score'])}"
+    )
+
+
+# =============================================================================
+# Response Type By Category Tests
+# =============================================================================
+
+
+class TestResponseTypeByCategory:
+    """Verify that different message categories produce the correct response type."""
+
+    def test_question_produces_generated(
+        self, router: ReplyRouter, mock_generator: MagicMock
+    ) -> None:
+        result = router.route("What time is the meeting?")
+        assert result["type"] == "generated"
+        assert result["response"] == "Generated response"
+        _assert_valid_route_result(result)
+
+    def test_request_produces_generated(
+        self, router: ReplyRouter, mock_generator: MagicMock
+    ) -> None:
+        result = router.route("Can you send me the file?")
+        assert result["type"] == "generated"
+        _assert_valid_route_result(result)
+
+    def test_statement_produces_generated(
+        self, router: ReplyRouter, mock_generator: MagicMock
+    ) -> None:
+        result = router.route("The project deadline is next Friday")
+        assert result["type"] == "generated"
+        _assert_valid_route_result(result)
+
+
+# =============================================================================
+# Graceful Degradation Tests
+# =============================================================================
+
+
+class TestGracefulDegradation:
+    """Test that errors produce user-facing fallback responses, not crashes."""
+
+    def test_generation_error_produces_clarify_with_message(
+        self, router: ReplyRouter, mock_generator: MagicMock
+    ) -> None:
+        """Generation error → clarify with user-facing message."""
+        mock_generator.generate.side_effect = RuntimeError("GPU OOM")
+        result = router.route("What's the weather like?")
+        assert result["type"] == "clarify"
+        assert isinstance(result["response"], str)
+        assert len(result["response"]) > 0
+        _assert_valid_route_result(result)
+
+    def test_health_check_failure_produces_fallback(self, router: ReplyRouter) -> None:
+        """Health check failure → fallback response."""
+        with patch("jarvis.generation.can_use_llm", return_value=(False, "memory_pressure")):
+            result = router.route("Tell me a joke")
+        assert result["type"] in ("fallback", "clarify")
+        assert "reason" in result
+
+
+# =============================================================================
+# _build_thread_context Tests
+# =============================================================================
+
+
+class TestBuildThreadContext:
+    """Tests for ReplyRouter._build_thread_context static method."""
+
+    def test_dict_messages_formatted(self) -> None:
+        msgs = [
+            {"sender": "John", "text": "Hey!"},
+            {"sender": "You", "text": "Hi there"},
+        ]
+        result = ReplyRouter._build_thread_context(msgs)
+        assert result is not None
+        assert len(result) == 2
+
+    def test_empty_messages_returns_none(self) -> None:
+        result = ReplyRouter._build_thread_context([])
+        assert result is None
+
+    def test_none_input_returns_none(self) -> None:
+        result = ReplyRouter._build_thread_context([])
+        assert result is None
+
+    def test_skips_empty_text(self) -> None:
+        msgs = [
+            {"sender": "John", "text": ""},
+            {"sender": "Jane", "text": "Hello"},
+        ]
+        result = ReplyRouter._build_thread_context(msgs)
+        assert result is not None
+        assert len(result) == 1

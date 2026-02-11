@@ -269,6 +269,11 @@ class PrefetchExecutor:
         self._active_drafts: dict[str, str] = {}  # chat_id → active_key for O(1) lookup
         self._active_lock = threading.Lock()
 
+        # Shared ChatDBReader for handlers (thread-safe via connection pool).
+        # Lazily initialized on first use, closed on stop().
+        self._reader: Any = None  # integrations.imessage.ChatDBReader
+        self._reader_lock = threading.Lock()
+
         # Register default handlers
         self._register_default_handlers()
 
@@ -280,6 +285,22 @@ class PrefetchExecutor:
         self.register_handler(PredictionType.MODEL_WARM, self._handle_model_warm)
         self.register_handler(PredictionType.SEARCH_RESULTS, self._handle_search_results)
         self.register_handler(PredictionType.VEC_INDEX, self._handle_vec_index)
+
+    def _get_reader(self) -> Any:
+        """Get or create the shared ChatDBReader instance.
+
+        ChatDBReader uses a module-level connection pool and is thread-safe,
+        so a single instance can be shared across all worker threads.
+        """
+        if self._reader is not None:
+            return self._reader
+
+        with self._reader_lock:
+            if self._reader is None:
+                from integrations.imessage import ChatDBReader
+
+                self._reader = ChatDBReader()
+            return self._reader
 
     def register_handler(self, pred_type: PredictionType, handler: PrefetchHandler) -> None:
         """Register a handler for a prediction type.
@@ -343,6 +364,15 @@ class PrefetchExecutor:
         if self._executor:
             self._executor.shutdown(wait=True, cancel_futures=True)
             self._executor = None
+
+        # Close shared reader
+        with self._reader_lock:
+            if self._reader is not None:
+                try:
+                    self._reader.close()
+                except Exception:
+                    pass
+                self._reader = None
 
         with self._lock:
             self._state = ExecutorState.STOPPED
@@ -663,11 +693,9 @@ class PrefetchExecutor:
 
             router = get_reply_router()
 
-            # Get recent messages from chat.db
-            from integrations.imessage import ChatDBReader
-
-            with ChatDBReader() as reader:
-                messages = reader.get_messages(chat_id, limit=10)
+            # Get recent messages using shared reader (thread-safe via connection pool)
+            reader = self._get_reader()
+            messages = reader.get_messages(chat_id, limit=10)
 
             if not messages:
                 return None

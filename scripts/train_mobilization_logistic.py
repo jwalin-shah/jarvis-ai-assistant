@@ -9,28 +9,12 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from jarvis.utils.logging import setup_script_logging
+
 logger = logging.getLogger(__name__)
-
-
-def _setup_logging() -> None:
-    """Configure logging with both file and stream handlers."""
-    log_file = Path(__file__).resolve().parent.parent / "logs" / "train_mobilization_logistic.log"
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, mode="w"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    logger.info("Logging to %s", log_file)
-
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "mobilization_gemini"
@@ -140,7 +124,7 @@ def train_logistic_regression(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
-    _setup_logging()
+    setup_script_logging("train_mobilization_logistic")
     X_train, y_train, X_test, y_test = load_data(args.data_dir)
     results = train_logistic_regression(X_train, y_train, X_test, y_test)
 

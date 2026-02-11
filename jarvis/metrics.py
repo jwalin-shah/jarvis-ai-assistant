@@ -308,9 +308,7 @@ class RequestCounter:
         if len(self._counts) <= self.MAX_ENDPOINTS:
             return
         # Sort by total count, evict bottom 10%
-        sorted_keys = sorted(
-            self._counts.keys(), key=lambda k: sum(self._counts[k].values())
-        )
+        sorted_keys = sorted(self._counts.keys(), key=lambda k: sum(self._counts[k].values()))
         evict_count = len(sorted_keys) - self.MAX_ENDPOINTS + 100
         for key in sorted_keys[:evict_count]:
             del self._counts[key]
@@ -405,9 +403,7 @@ class LatencyHistogram:
         """Evict least-used operations if over MAX_OPERATIONS."""
         if len(self._histograms) <= self.MAX_OPERATIONS:
             return
-        sorted_keys = sorted(
-            self._histograms.keys(), key=lambda k: self._histograms[k].total_count
-        )
+        sorted_keys = sorted(self._histograms.keys(), key=lambda k: self._histograms[k].total_count)
         evict_count = len(sorted_keys) - self.MAX_OPERATIONS + 100
         for key in sorted_keys[:evict_count]:
             del self._histograms[key]

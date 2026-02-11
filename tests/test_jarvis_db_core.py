@@ -1,8 +1,8 @@
 import sqlite3
 import threading
-from pathlib import Path
 
 import pytest
+
 from jarvis.db.core import JarvisDBBase
 from jarvis.db.schema import CURRENT_SCHEMA_VERSION, EXPECTED_INDICES
 

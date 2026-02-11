@@ -8,7 +8,6 @@ Tests cover:
 - Integration scenarios (real-world formats)
 """
 
-
 from integrations.imessage.parser import normalize_phone_number
 
 

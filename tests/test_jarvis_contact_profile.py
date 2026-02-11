@@ -1,20 +1,19 @@
-import json
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
+
 from contracts.imessage import Message
 from jarvis.contacts.contact_profile import (
     ContactProfile,
     ContactProfileBuilder,
     Fact,
     format_style_guide,
-    load_profile,
-    save_profile,
     get_contact_profile,
     invalidate_profile_cache,
+    load_profile,
+    save_profile,
 )
 
 

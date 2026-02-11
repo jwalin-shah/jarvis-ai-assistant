@@ -15,25 +15,10 @@ import argparse
 import logging
 import sys
 from collections.abc import Sequence
-from pathlib import Path
+
+from jarvis.utils.logging import setup_script_logging
 
 logger = logging.getLogger(__name__)
-
-
-def _setup_logging() -> None:
-    """Configure logging with both file and stream handlers."""
-    log_file = Path(__file__).resolve().parent.parent / "logs" / "train_personal.log"
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, mode="w"),
-            logging.StreamHandler(),
-        ],
-    )
-    logger.info("Logging to %s", log_file)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
@@ -62,7 +47,7 @@ def parse_args(argv: Sequence[str] | None = None) -> tuple[argparse.Namespace, l
 
 def main(argv: Sequence[str] | None = None) -> None:
     args, passthrough = parse_args(argv)
-    _setup_logging()
+    setup_script_logging("train_personal")
     import mlx.core as mx
 
     # Set memory limits BEFORE any model loading
