@@ -101,7 +101,8 @@ cmd_setup() {
         local wt_path
         wt_path=$(get_worktree_path "$lane")
         local label="${LANE_LABELS[$lane]}"
-        local agent="${LANE_AGENTS[$lane]}"
+        local agent
+        agent=$(get_lane_agent "$lane")
 
         if worktree_exists "$lane"; then
             hub_warn "Worktree already exists: $wt_path (skipping)"
@@ -153,7 +154,7 @@ OWNEREOF
     for lane in $ALL_LANES; do
         local wt_path
         wt_path=$(get_worktree_path "$lane")
-        echo "  Lane ${lane^^} (${LANE_AGENTS[$lane]}): $wt_path"
+        echo "  Lane ${lane^^} ($(get_lane_agent "$lane")): $wt_path"
     done
     echo ""
     hub_log "Next: hub.sh dispatch <task-file>"
@@ -199,7 +200,8 @@ cmd_dispatch() {
 
         local wt_path
         wt_path=$(get_worktree_path "$lane")
-        local agent="${LANE_AGENTS[$lane]}"
+        local agent
+        agent=$(get_lane_agent "$lane")
         local label="${LANE_LABELS[$lane]}"
 
         if ! worktree_exists "$lane"; then
@@ -394,7 +396,8 @@ cmd_status() {
     for lane in $ALL_LANES; do
         local status
         status=$(get_lane_status "$lane")
-        local agent="${LANE_AGENTS[$lane]}"
+        local agent
+        agent=$(get_lane_agent "$lane")
         local wt_path
         wt_path=$(get_worktree_path "$lane")
 
@@ -772,7 +775,7 @@ FEEDBACKEOF
         for reviewer_lane in $ALL_LANES; do
             [[ "$reviewer_lane" == "$lane" ]] && continue
 
-            local reviewer_agent="${LANE_AGENTS[$reviewer_lane]}"
+            local reviewer_agent="$REVIEW_AGENT"
             local reviewer_label="${LANE_LABELS[$reviewer_lane]}"
             local review_file="$REVIEWS_DIR/${lane}_reviewed_by_${reviewer_lane}.md"
 
@@ -867,7 +870,8 @@ cmd_rework() {
 
     local wt_path
     wt_path=$(get_worktree_path "$lane")
-    local agent="${LANE_AGENTS[$lane]}"
+    local agent
+        agent=$(get_lane_agent "$lane")
     local label="${LANE_LABELS[$lane]}"
     local feedback_file="$REVIEWS_DIR/${lane}_feedback.md"
 

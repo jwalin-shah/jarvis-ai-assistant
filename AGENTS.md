@@ -104,3 +104,122 @@ Before submitting PRs with data processing or ML code:
 4. Are connections/resources reused or reopened each time?
 5. Could this blow past 500MB RAM?
 6. Is there visible progress for long operations?
+
+
+---
+
+## Test Flake Prevention Guidelines
+
+All tests must be deterministic and reliable. Flaky tests waste CI resources and undermine confidence in the test suite.
+
+### Flake Prevention Checklist
+
+Before submitting tests, verify:
+
+- [ ] **No Arbitrary Sleeps**: Use event-driven synchronization, not `time.sleep()`
+- [ ] **Seeded Randomness**: Use `seeded_random` fixture for any random operations
+- [ ] **Frozen Time**: Use `frozen_time` fixture for time-dependent tests
+- [ ] **Isolated State**: Each test cleans up after itself (files, DB, caches)
+- [ ] **Hardware Declared**: Use `@hardware_required()` for Apple Silicon dependencies
+- [ ] **Resource Budgets**: Use `ResourceBudget` for memory-intensive operations
+
+### Critical Anti-Patterns
+
+```python
+# ❌ BAD: Arbitrary sleep (timing flake)
+def test_async():
+    task = asyncio.create_task(op())
+    time.sleep(0.1)  # May be too short!
+    assert task.done()
+
+# ✅ GOOD: Event-driven synchronization
+def test_async():
+    task = asyncio.create_task(op())
+    await asyncio.wait_for(task, timeout=5.0)
+    assert task.done()
+
+# ❌ BAD: Unseeded random (randomness flake)
+def test_random():
+    result = np.random.randn(384)  # Different every run
+    assert result[0] > 0  # Sometimes fails!
+
+# ✅ GOOD: Seeded random
+def test_random(seeded_random):
+    rng = seeded_random["numpy"]
+    result = rng.randn(384)  # Deterministic
+    assert result[0] == 1.4967  # Always passes
+
+# ❌ BAD: Real time (timing flake)
+def test_timestamp():
+    before = datetime.now()
+    operation()
+    after = datetime.now()
+    assert (after - before).seconds < 1
+
+# ✅ GOOD: Frozen time
+def test_timestamp(frozen_time):
+    with frozen_time.freeze():
+        before = datetime.now()
+        operation()
+        after = datetime.now()
+        # Time only advances when we say so
+        assert before == after  # Unless frozen_time.advance() called
+
+# ❌ BAD: Shared state (state flake)
+_GLOBAL_CACHE = {}
+
+def test_caching():
+    _GLOBAL_CACHE["key"] = "value"
+    # Leaks to other tests!
+
+# ✅ GOOD: Isolated fixtures
+@pytest.fixture
+def isolated_cache():
+    cache = {}
+    yield cache
+    cache.clear()  # Guaranteed cleanup
+
+# ❌ BAD: Undeclared hardware dependency
+def test_mlx():
+    import mlx.core as mx  # Fails on Linux!
+    mx.array([1, 2, 3])
+
+# ✅ GOOD: Hardware requirement declared
+@hardware_required(requires_apple_silicon=True)
+def test_mlx():
+    import mlx.core as mx
+    mx.array([1, 2, 3])
+```
+
+### Hardened Fixture Reference
+
+| Need | Import From | Use |
+|------|-------------|-----|
+| Deterministic time | `tests.utils.time_mocking` | `freeze_time("2024-01-01")` |
+| Seeded RNG | `tests.fixtures.isolated_fixtures` | `seeded_random["numpy"]` |
+| Isolated env | `tests.fixtures.isolated_fixtures` | `isolated_env["VAR"]` |
+| Temp workspace | `tests.fixtures.isolated_fixtures` | `temp_workspace / "file"` |
+| Resource budget | `tests.utils.resource_mocking` | `ResourceBudget(max_memory_mb=500)` |
+| Async control | `tests.utils.async_determinism` | `controlled_timeout()` |
+| No network | `tests.fixtures.isolated_fixtures` | `@pytest.mark.usefixtures("no_network")` |
+
+### Running with Quarantine
+
+```bash
+# Record flake data
+uv run pytest --flake-detection --flake-db=.flake_history.db
+
+# Generate report
+uv run python -m tests.ci.flake_report --output=report.html
+
+# Auto-quarantine flaky tests
+uv run python -m tests.ci.auto_quarantine --threshold=0.5
+
+# Skip quarantined tests
+uv run pytest --skip-quarantined
+```
+
+### See Also
+
+- Full program: `docs/TEST_FLAKE_ERADICATION_PROGRAM.md`
+- Implementation guide: `docs/TEST_FLAKE_IMPLEMENTATION_GUIDE.md`

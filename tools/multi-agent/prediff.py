@@ -19,8 +19,24 @@ from pathlib import Path
 
 # Lane ownership definitions (must match hub_lib.sh)
 LANE_OWNED: dict[str, list[str]] = {
-    "a": ["desktop/", "api/", "jarvis/router.py", "jarvis/prompts.py", "jarvis/retrieval/", "jarvis/reply_service.py"],
-    "b": ["models/", "jarvis/classifiers/", "jarvis/extractors/", "jarvis/contacts/", "jarvis/graph/", "jarvis/search/", "scripts/train", "scripts/extract"],
+    "a": [
+        "desktop/",
+        "api/",
+        "jarvis/router.py",
+        "jarvis/prompts.py",
+        "jarvis/retrieval/",
+        "jarvis/reply_service.py",
+    ],
+    "b": [
+        "models/",
+        "jarvis/classifiers/",
+        "jarvis/extractors/",
+        "jarvis/contacts/",
+        "jarvis/graph/",
+        "jarvis/search/",
+        "scripts/train",
+        "scripts/extract",
+    ],
     "c": ["tests/", "benchmarks/", "evals/"],
 }
 SHARED_PATHS = ["jarvis/contracts/"]
@@ -120,7 +136,9 @@ def classify_ownership(path: str, lane: str | None) -> str:
     return ""
 
 
-def format_summary(files: list[FileDiff], lane: str | None = None, contracts_text: str | None = None) -> str:
+def format_summary(
+    files: list[FileDiff], lane: str | None = None, contracts_text: str | None = None
+) -> str:
     """Format parsed diff into a structured review summary."""
     lines: list[str] = []
 
@@ -217,7 +235,9 @@ def main():
     parser.add_argument("diff_file", nargs="?", help="Diff file path (reads stdin if omitted)")
     parser.add_argument("--lane", choices=["a", "b", "c"], help="Lane to check ownership against")
     parser.add_argument("--contracts-file", help="Path to contracts/pipeline.py for reference")
-    parser.add_argument("--raw-diff", action="store_true", help="Also append raw diff at end (for detailed review)")
+    parser.add_argument(
+        "--raw-diff", action="store_true", help="Also append raw diff at end (for detailed review)"
+    )
     args = parser.parse_args()
 
     # Read diff

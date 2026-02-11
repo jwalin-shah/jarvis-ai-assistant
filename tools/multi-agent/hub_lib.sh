@@ -15,6 +15,7 @@ STATE_FILE="$HUB_DIR/state.json"
 REVIEWS_DIR="$HUB_DIR/reviews"
 LOGS_DIR="$HUB_DIR/logs"
 REVIEW_TIMEOUT="${REVIEW_TIMEOUT:-300}"
+REVIEW_AGENT="${REVIEW_AGENT:-claude-haiku}"  # Agent for cross-lane reviews (cheap/fast)
 PREDIFF="$SCRIPT_DIR/prediff.py"
 CONTRACTS_FILE="$REPO_ROOT/jarvis/contracts/pipeline.py"
 
@@ -57,8 +58,8 @@ declare -A LANE_LABELS=(
 
 # Ownership paths per lane (space-separated)
 declare -A LANE_OWNED_PATHS=(
-    [a]="desktop/ api/ jarvis/router.py jarvis/prompts.py jarvis/retrieval/"
-    [b]="models/ jarvis/classifiers/ jarvis/extractors/ jarvis/graph/ scripts/train scripts/extract"
+    [a]="desktop/ api/ jarvis/router.py jarvis/prompts.py jarvis/retrieval/ jarvis/reply_service.py"
+    [b]="models/ jarvis/classifiers/ jarvis/extractors/ jarvis/contacts/ jarvis/graph/ jarvis/search/ scripts/train scripts/extract"
     [c]="tests/ benchmarks/ evals/"
 )
 
@@ -84,10 +85,30 @@ hub_success() {
     echo -e "${GREEN}[hub]${NC} $1"
 }
 
+get_lane_agent() {
+    # Read agent from state.json (persisted during setup), fall back to env/default
+    local lane=$1
+    if [[ -f "$STATE_FILE" ]]; then
+        local saved
+        saved=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+print(state['lanes']['$lane']['agent'])
+" 2>/dev/null)
+        if [[ -n "$saved" && "$saved" != "None" && "$saved" != "null" ]]; then
+            echo "$saved"
+            return
+        fi
+    fi
+    echo "${LANE_AGENTS[$lane]}"
+}
+
 lane_log() {
     local lane=$1
     local msg=$2
-    local agent="${LANE_AGENTS[$lane]}"
+    local agent
+    agent=$(get_lane_agent "$lane")
     echo -e "${BLUE}[lane-${lane}/${agent}]${NC} $msg"
 }
 
@@ -499,7 +520,7 @@ FEEDBACKEOF
     for reviewer_lane in $ALL_LANES; do
         [[ "$reviewer_lane" == "$lane" ]] && continue
 
-        local reviewer_agent="${LANE_AGENTS[$reviewer_lane]}"
+        local reviewer_agent="$REVIEW_AGENT"
         local reviewer_label="${LANE_LABELS[$reviewer_lane]}"
         local review_file="$REVIEWS_DIR/${lane}_reviewed_by_${reviewer_lane}.md"
 
@@ -606,7 +627,8 @@ with open('$STATE_FILE', 'w') as f:
 
     local wt_path
     wt_path=$(get_worktree_path "$lane")
-    local agent="${LANE_AGENTS[$lane]}"
+    local agent
+    agent=$(get_lane_agent "$lane")
     local label="${LANE_LABELS[$lane]}"
 
     # Collect all rejection feedback
@@ -620,7 +642,7 @@ with open('$STATE_FILE', 'w') as f:
             if [[ "$verdict" == "REJECT" ]]; then
                 feedback="${feedback}
 
-## Feedback from Lane ${reviewer_lane^^} (${LANE_AGENTS[$reviewer_lane]})
+## Feedback from Lane ${reviewer_lane^^} ($(get_lane_agent "$reviewer_lane"))
 $(cat "$review_file")
 "
             fi
@@ -857,6 +879,12 @@ run_agent_review() {
     local timeout_secs=$4
 
     case $agent in
+        claude-haiku)
+            timeout "$timeout_secs" claude -p "$prompt" --model haiku --print > "$review_file" 2>&1 || true
+            ;;
+        claude-sonnet)
+            timeout "$timeout_secs" claude -p "$prompt" --model sonnet --print > "$review_file" 2>&1 || true
+            ;;
         claude)
             timeout "$timeout_secs" claude -p "$prompt" --print > "$review_file" 2>&1 || true
             ;;
