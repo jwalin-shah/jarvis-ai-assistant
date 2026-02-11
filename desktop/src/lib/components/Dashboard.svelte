@@ -43,10 +43,6 @@
     return `${(ms / 1000).toFixed(1)}s`;
   }
 
-  function truncateHash(hash: string): string {
-    return hash.length > 8 ? hash.slice(0, 8) : hash;
-  }
-
   // Compute max latency for bar chart scaling
   function getMaxLatency(requests: MetricsRequest[]): number {
     if (requests.length === 0) return 100;

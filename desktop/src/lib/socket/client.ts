@@ -391,7 +391,7 @@ class JarvisSocket {
           this.batchQueue.forEach((req) => req.reject(new Error("WebSocket disconnected")));
           this.batchQueue = [];
           // Reject all pending requests on disconnect
-          for (const [requestId, pending] of this.wsPendingRequests) {
+          for (const [_requestId, pending] of this.wsPendingRequests) {
             pending.reject(new Error("WebSocket disconnected"));
           }
           this.wsPendingRequests.clear();
@@ -437,7 +437,7 @@ class JarvisSocket {
       if (!("id" in message) && message.method) {
         // Handle streaming tokens
         if (message.method === "stream.token") {
-          const { token, index, final } = message.params;
+          const { token, index, final: _final } = message.params;
           const streamRequestId = (message.params as { request_id?: number }).request_id;
           if (streamRequestId !== undefined) {
             // Dispatch token to the specific request that owns this stream
@@ -686,10 +686,13 @@ class JarvisSocket {
 
     // If only one request, send it directly (no batching overhead)
     if (batch.length === 1) {
-      const { method, params, resolve, reject } = batch[0];
-      this.callWebSocket(method, params)
-        .then(resolve)
-        .catch(reject);
+      const first = batch[0];
+      if (first) {
+        const { method, params, resolve, reject } = first;
+        this.callWebSocket(method, params)
+          .then(resolve)
+          .catch(reject);
+      }
       return;
     }
 

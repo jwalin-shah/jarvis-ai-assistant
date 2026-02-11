@@ -53,6 +53,7 @@ export interface OptimisticMessage {
   status: "sending" | "sent" | "failed";
   error?: string;
   timestamp: number;
+  stableId: number; // Negative ID assigned once for stable rendering
 }
 
 // Conversation types

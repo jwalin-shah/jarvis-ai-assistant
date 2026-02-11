@@ -44,7 +44,7 @@ export async function checkApiConnection(): Promise<boolean> {
     try {
       const connected = await jarvis.connect();
       if (connected) {
-        const result = await jarvis.ping();
+        await jarvis.ping();
         const newState = { connected: true, source: "socket" as const };
         // Only update if connection state actually changed
         if (!cachedConnectionState || cachedConnectionState.connected !== newState.connected || cachedConnectionState.source !== newState.source) {

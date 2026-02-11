@@ -343,7 +343,7 @@ const NS_SKIP_STRINGS = new Set([
 function readBE(bytes: Uint8Array, offset: number, size: number): number {
   let value = 0;
   for (let i = 0; i < size; i++) {
-    value = value * 256 + bytes[offset + i];
+    value = value * 256 + bytes[offset + i]!;
   }
   return value;
 }
@@ -357,7 +357,7 @@ function readObjectLength(
   if (info !== 0x0f) {
     return [info, offset + 1];
   }
-  const intMarker = bytes[offset + 1];
+  const intMarker = bytes[offset + 1]!;
   const intSize = 1 << (intMarker & 0x0f);
   const length = readBE(bytes, offset + 2, intSize);
   return [length, offset + 2 + intSize];
@@ -384,10 +384,10 @@ function parseBplistObject(ctx: BplistCtx, index: number): BplistValue {
 
   ctx.cache.set(index, null); // prevent infinite recursion
 
-  const off = ctx.offsets[index];
+  const off = ctx.offsets[index]!;
   if (off >= ctx.bytes.length) return null;
 
-  const marker = ctx.bytes[off];
+  const marker = ctx.bytes[off]!;
   const type = (marker & 0xf0) >> 4;
   const info = marker & 0x0f;
   let result: BplistValue = null;
@@ -477,8 +477,8 @@ function extractTextFromBplist(data: Uint8Array): string | null {
 
   // Trailer: last 32 bytes
   const t = data.length - 32;
-  const offsetSize = data[t + 6];
-  const objRefSize = data[t + 7];
+  const offsetSize = data[t + 6]!;
+  const objRefSize = data[t + 7]!;
   const numObjects = readBE(data, t + 8, 8);
   const topObject = readBE(data, t + 16, 8);
   const offsetTableOffset = readBE(data, t + 24, 8);
@@ -554,7 +554,7 @@ function extractFromTypedstream(data: Uint8Array): string | null {
       if (data[i] === 0x2b) { // "+" byte precedes length
         const lengthPos = i + 1;
         if (lengthPos >= data.length) break;
-        const length = data[lengthPos];
+        const length = data[lengthPos]!;
         const textStart = lengthPos + 1;
         const textEnd = textStart + length;
         if (textEnd <= data.length && length > 0) {

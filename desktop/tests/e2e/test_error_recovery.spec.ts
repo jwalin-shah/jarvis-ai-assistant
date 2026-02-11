@@ -27,11 +27,17 @@ test.describe("Error States and Recovery", () => {
       await page.waitForSelector(".sidebar", { state: "visible" });
 
       // Wait for error to appear
-      await page.waitForTimeout(3000);
-
-      // Error indicator should be visible
       const errorBanner = page.locator(".error, .error-banner, [role='alert']");
       const disconnectedStatus = page.locator(".status-dot.disconnected");
+
+      // Wait for either error banner or disconnected status
+      await Promise.race([
+        errorBanner.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {}),
+        disconnectedStatus.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {}),
+      ]);
+
+      // Wait for DOM to update
+      await page.waitForFunction(() => true, { timeout: 100 });
 
       // Either error banner or disconnected status should show
       const hasError =
@@ -48,10 +54,13 @@ test.describe("Error States and Recovery", () => {
 
       // Navigate to messages
       await page.locator('.nav-item[title="Messages"]').click();
-      await page.waitForTimeout(2000);
 
-      // Error should be displayed
+      // Wait for error to appear
       const errorElement = page.locator(".error, .empty-state.error");
+      await Promise.race([
+        errorElement.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {}),
+        page.waitForSelector(".conversation-list, .messages-container", { timeout: 5000 }).catch(() => {}),
+      ]);
 
       if ((await errorElement.count()) > 0) {
         await expect(errorElement).toBeVisible();
@@ -84,12 +93,15 @@ test.describe("Error States and Recovery", () => {
       await page.goto("/");
       await page.waitForSelector(".sidebar");
       await page.locator('.nav-item[title="Health Status"]').click();
-      await page.waitForTimeout(2000);
 
-      // Should show the specific error message
+      // Wait for health status view to load and show error
       const errorText = page.locator(
         ".error-message, .error-detail, .status-banner"
       );
+      await Promise.race([
+        errorText.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {}),
+        page.waitForSelector(".health-status, .status-container", { timeout: 5000 }).catch(() => {}),
+      ]);
 
       if ((await errorText.count()) > 0) {
         const text = await errorText.textContent();
@@ -160,7 +172,12 @@ test.describe("Error States and Recovery", () => {
 
       // Go offline
       await simulateOffline(page);
-      await page.waitForTimeout(2000);
+
+      // Wait for disconnected status to appear
+      const disconnectedIndicator = page.locator(
+        ".status-dot.disconnected, .offline-banner, .connection-lost"
+      );
+      await disconnectedIndicator.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
 
       // Status should change to disconnected
       // Note: This depends on the app detecting the offline state
@@ -179,7 +196,9 @@ test.describe("Error States and Recovery", () => {
 
       // Go offline
       await simulateOffline(page);
-      await page.waitForTimeout(500);
+
+      // Wait for offline state to be applied
+      await page.waitForFunction(() => !navigator.onLine, { timeout: 500 }).catch(() => {});
 
       // Messages should still be visible (cached)
       await expect(page.locator(".message")).toBeVisible();
@@ -194,12 +213,12 @@ test.describe("Error States and Recovery", () => {
     test("shows offline indicator prominently", async ({ disconnectedPage: page }) => {
       await page.goto("/");
       await page.waitForSelector(".sidebar");
-      await page.waitForTimeout(2000);
 
-      // Offline indicator should be visible
+      // Wait for offline indicator to appear
       const offlineIndicator = page.locator(
         ".status-dot.disconnected, .offline-banner, .connection-lost"
       );
+      await offlineIndicator.first().waitFor({ state: "visible", timeout: 10000 });
 
       await expect(offlineIndicator.first()).toBeVisible();
     });
@@ -212,10 +231,18 @@ test.describe("Error States and Recovery", () => {
 
       // Go offline then online
       await simulateOffline(page);
-      await page.waitForTimeout(1000);
+
+      // Wait for disconnected state
+      const disconnectedIndicator = page.locator(
+        ".status-dot.disconnected, .offline-banner"
+      );
+      await disconnectedIndicator.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       await simulateOnline(page);
-      await page.waitForTimeout(3000);
+
+      // Wait for connected state
+      const connectedIndicator = page.locator(".status-dot.connected");
+      await connectedIndicator.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
 
       // Should reconnect
       const status = await getConnectionStatus(page);
@@ -266,7 +293,10 @@ test.describe("Error States and Recovery", () => {
       await page.goto("/");
       await page.waitForSelector(".sidebar");
       await page.locator('.nav-item[title="Health Status"]').click();
-      await page.waitForTimeout(2000);
+
+      // Wait for error state to appear (since first request fails)
+      const errorElement = page.locator(".error-message, .error-banner, [role='alert']");
+      await errorElement.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       // Find retry/refresh button
       const retryButton = page.locator(
@@ -275,7 +305,9 @@ test.describe("Error States and Recovery", () => {
 
       if ((await retryButton.count()) > 0) {
         await retryButton.first().click();
-        await page.waitForTimeout(2000);
+
+        // Wait for successful health data to load
+        await page.waitForSelector(".health-status, .status-container", { timeout: 5000 }).catch(() => {});
 
         // Second request should succeed
         expect(requestCount).toBeGreaterThanOrEqual(2);
@@ -302,8 +334,15 @@ test.describe("Error States and Recovery", () => {
       await page.waitForSelector(".sidebar");
       await page.locator('.nav-item[title="Health Status"]').click();
 
-      // Wait for multiple retry attempts
-      await page.waitForTimeout(10000);
+      // Wait for error state indicating connection failure
+      const errorElement = page.locator(
+        ".error-message, .connection-error, [role='alert']"
+      );
+      await errorElement.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+
+      // Wait for multiple retry attempts (exponential backoff test)
+      // Need sufficient time for at least 3 retry attempts - this tests actual timing behavior
+      await page.waitForTimeout(10000); // INTENTIONAL: Testing exponential backoff timing
 
       // Should have made multiple attempts
       // With exponential backoff, gaps between attempts should increase
@@ -394,10 +433,11 @@ test.describe("Error States and Recovery", () => {
       await page.goto("/");
       await page.waitForSelector(".sidebar");
       await page.locator('.nav-item[title="Health Status"]').click();
-      await page.waitForTimeout(2000);
 
-      // Should show degraded status
+      // Wait for degraded status to appear
       const degradedIndicator = page.locator(".status-banner.degraded");
+      await degradedIndicator.waitFor({ state: "visible", timeout: 5000 });
+
       await expect(degradedIndicator).toBeVisible();
     });
   });
@@ -446,8 +486,9 @@ test.describe("Error States and Recovery", () => {
       await page.goto("/");
       await page.waitForSelector(".sidebar");
 
-      // Initial error
-      await page.waitForTimeout(2000);
+      // Wait for initial error to appear (first request fails)
+      const errorElement = page.locator(".error, .error-banner, [role='alert']");
+      await errorElement.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       // Retry (click refresh or reload)
       await page.reload();
@@ -479,11 +520,16 @@ test.describe("Error States and Recovery", () => {
 
       // Navigate to health (which will fail)
       await navigateToView(page, "health");
-      await page.waitForTimeout(2000);
+
+      // Wait for error state in health view
+      const healthError = page.locator(".error, .error-message, [role='alert']");
+      await healthError.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
       // Navigate back to messages
       await navigateToView(page, "messages");
-      await page.waitForTimeout(500);
+
+      // Wait for view to load
+      await page.waitForSelector(".conversation, .message-list", { timeout: 1000 }).catch(() => {});
 
       // Previous selection should be preserved
       // (This depends on state management implementation)
@@ -494,11 +540,12 @@ test.describe("Error States and Recovery", () => {
     test("error messages are in plain language", async ({ errorPage: page }) => {
       await page.goto("/");
       await page.waitForSelector(".sidebar");
-      await page.waitForTimeout(3000);
 
+      // Wait for error message to appear
       const errorText = page.locator(
         ".error-message, .error-text, .error-detail"
       );
+      await errorText.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
 
       if ((await errorText.count()) > 0) {
         const text = await errorText.textContent();
@@ -518,7 +565,12 @@ test.describe("Error States and Recovery", () => {
 
       await page.goto("/");
       await page.waitForSelector(".sidebar");
-      await page.waitForTimeout(3000);
+
+      // Wait for connection error to appear
+      const errorElement = page.locator(
+        ".error, .connection-error, .error-banner, [role='alert']"
+      );
+      await errorElement.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
 
       // Should provide retry option or troubleshooting steps
       const retryButton = page.locator(

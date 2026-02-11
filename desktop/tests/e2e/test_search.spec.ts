@@ -48,8 +48,11 @@ test.describe("Search Functionality", () => {
     // Type a search term
     await searchInput.fill("John");
 
-    // Wait for filtering
-    await page.waitForTimeout(300);
+    // Wait for filtering to stabilize - either results change or value is set
+    await page.waitForFunction(
+      () => document.querySelector('.search input[type="text"]')?.value === "John",
+      { timeout: 1000 }
+    );
 
     // Note: The current implementation may not have client-side filtering
     // This test documents the expected behavior
@@ -121,8 +124,11 @@ test.describe("Search Functionality", () => {
     // Search for something that doesn't exist
     await searchInput.fill("zzzznonexistent");
 
-    // Wait for filtering
-    await page.waitForTimeout(300);
+    // Wait for filtering to stabilize
+    await page.waitForFunction(
+      () => document.querySelector('.search input[type="text"]')?.value === "zzzznonexistent",
+      { timeout: 1000 }
+    );
 
     // Note: If filtering is implemented, should show empty state
     // This test documents expected behavior
@@ -164,8 +170,11 @@ test.describe("Search Functionality", () => {
     // Type quickly
     await searchInput.type("John Doe", { delay: 50 });
 
-    // Give time for debounce
-    await page.waitForTimeout(500);
+    // Wait for debounce to complete by checking final value is stable
+    await page.waitForFunction(
+      () => document.querySelector('.search input[type="text"]')?.value === "John Doe",
+      { timeout: 1000 }
+    );
 
     // Final value should be present
     await expect(searchInput).toHaveValue("John Doe");

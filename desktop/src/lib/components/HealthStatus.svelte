@@ -49,7 +49,6 @@
 
   // Calculate pie chart percentages
   function getPieChartStyle(templatePercent: number): string {
-    const modelPercent = 100 - templatePercent;
     return `conic-gradient(#34c759 0% ${templatePercent}%, #ff9f0a ${templatePercent}% 100%)`;
   }
 

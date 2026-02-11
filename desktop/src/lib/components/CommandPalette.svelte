@@ -150,7 +150,7 @@
       if (!groups[cmd.category]) {
         groups[cmd.category] = [];
       }
-      groups[cmd.category].push(cmd);
+      groups[cmd.category]!.push(cmd);
     }
     return groups;
   });
@@ -185,7 +185,7 @@
       case "Enter":
         event.preventDefault();
         if (cmds[selectedIndex]) {
-          cmds[selectedIndex].action();
+          cmds[selectedIndex]!.action();
         }
         break;
       case "Escape":
@@ -222,6 +222,9 @@
   }
 
   function handleOverlayKeydown(event: KeyboardEvent) {
+    // Don't close if typing in the input field
+    if (event.target === inputRef) return;
+
     if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onClose();

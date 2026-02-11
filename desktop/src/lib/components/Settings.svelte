@@ -15,7 +15,6 @@
     reducedMotion,
     setReducedMotion,
     accentColors,
-    type ThemeMode,
     type AccentColorKey,
   } from "../stores/theme";
 

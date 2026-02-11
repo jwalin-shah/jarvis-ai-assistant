@@ -184,15 +184,23 @@ test.describe("Accessibility Tests", () => {
       await waitForAppLoad(page);
 
       // Focus first nav item
-      await page.locator(".nav-item").first().focus();
+      const firstNavItem = page.locator(".nav-item").first();
+      await firstNavItem.focus();
 
       // Press arrow down to navigate
       await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(100);
+
+      // Wait for focus to move to next nav item
+      await expect(page.locator(".nav-item:nth-child(2), .nav-item.focused, .nav-item[data-focused='true']")).toBeFocused({ timeout: 1000 });
 
       // Should be able to press Enter to activate
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(200);
+
+      // Wait for view change indicator (active state or route change)
+      await page.waitForFunction(() => {
+        const activeNav = document.querySelector(".nav-item.active, .nav-item[aria-current]");
+        return activeNav !== null;
+      }, { timeout: 1000 });
 
       // Some view should have changed
       // (Hard to verify without knowing which item was focused)
@@ -209,11 +217,15 @@ test.describe("Accessibility Tests", () => {
 
       // Arrow down should move to next conversation
       await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(100);
+
+      // Wait for focus to move to second conversation
+      await expect(page.locator(".conversation:nth-child(2), .conversation.focused, .conversation[aria-selected='true']").first()).toBeFocused({ timeout: 1000 });
 
       // Enter should select the conversation
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(200);
+
+      // Wait for conversation to become active
+      await expect(page.locator(".conversation.active")).toBeVisible({ timeout: 1000 });
 
       // A conversation should be selected
       await expect(page.locator(".conversation.active")).toBeVisible();
@@ -235,7 +247,11 @@ test.describe("Accessibility Tests", () => {
 
       // Escape should close it
       await page.keyboard.press("Escape");
-      await page.waitForTimeout(200);
+
+      // Wait for modal to be hidden
+      await expect(
+        page.locator(".search-modal, .global-search, .search-overlay")
+      ).not.toBeVisible({ timeout: 1000 });
 
       // Should be closed
       await expect(
@@ -254,11 +270,15 @@ test.describe("Accessibility Tests", () => {
 
       // Type to get results
       await page.locator(".search-input").fill("lunch");
-      await page.waitForTimeout(500);
+
+      // Wait for search results to appear
+      await page.waitForSelector(".result-item, .search-result, [role='option']", { timeout: 2000 });
 
       // Navigate with arrow keys
       await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(100);
+
+      // Wait for first result to be selected
+      await page.waitForSelector(".result-item.selected, [aria-selected='true'], .result-item.focused", { timeout: 1000 });
 
       // First result should be selected
       const selectedResult = page.locator(".result-item.selected, [aria-selected='true']");
@@ -303,8 +323,14 @@ test.describe("Accessibility Tests", () => {
       // Enter should activate it
       await page.keyboard.press("Enter");
 
-      // Button should have been clicked (may show success message)
-      await page.waitForTimeout(500);
+      // Wait for button action to complete (success message or state change)
+      await page.waitForFunction(() => {
+        // Check for success indicators
+        const success = document.querySelector(".success, .toast, [role='status']");
+        const loading = document.querySelector("[aria-busy='true']");
+        // Either success appears or button is no longer in loading state
+        return success !== null || loading === null;
+      }, { timeout: 2000 });
     });
 
     test("Space key activates checkboxes and toggles", async ({ mockedPage: page }) => {
@@ -317,9 +343,27 @@ test.describe("Accessibility Tests", () => {
 
       if ((await toggle.count()) > 0) {
         const initialState = await toggle.getAttribute("class");
+        const initialChecked = await toggle.evaluate((el) =>
+          el instanceof HTMLInputElement ? el.checked : el.getAttribute("aria-checked")
+        );
+
         await toggle.focus();
         await page.keyboard.press("Space");
-        await page.waitForTimeout(200);
+
+        // Wait for state change
+        await page.waitForFunction(
+          ({ el, initial }) => {
+            const element = document.querySelector(el);
+            if (!element) return false;
+            const currentClass = element.getAttribute("class");
+            const currentChecked = element instanceof HTMLInputElement
+              ? element.checked
+              : element.getAttribute("aria-checked");
+            return currentClass !== initial.state || currentChecked !== initial.checked;
+          },
+          { el: ".toggle-btn, input[type='checkbox']", initial: { state: initialState, checked: initialChecked } },
+          { timeout: 1000 }
+        );
 
         const newState = await toggle.getAttribute("class");
         // State should have changed (class or checked attribute)
@@ -365,9 +409,12 @@ test.describe("Accessibility Tests", () => {
       await openGlobalSearch(page);
 
       // Tab many times - focus should stay in modal
+      // Check focus stays in modal after each tab
       for (let i = 0; i < 20; i++) {
         await page.keyboard.press("Tab");
-        await page.waitForTimeout(50);
+
+        // Wait for focus to stabilize by checking activeElement changes
+        await page.waitForFunction(() => document.activeElement !== null, { timeout: 500 });
       }
 
       // Active element should still be in the modal
@@ -396,7 +443,15 @@ test.describe("Accessibility Tests", () => {
       await page.keyboard.press("Meta+k");
       await page.waitForSelector(".search-modal, .global-search", { state: "visible" });
       await page.keyboard.press("Escape");
-      await page.waitForTimeout(200);
+
+      // Wait for modal to close
+      await page.waitForSelector(".search-modal, .global-search", { state: "hidden", timeout: 1000 });
+
+      // Wait for focus to be restored
+      await page.waitForFunction(() => {
+        const active = document.activeElement;
+        return active !== null && active.tagName !== "BODY";
+      }, { timeout: 1000 });
 
       // Focus should be somewhere reasonable (body or previously focused)
       const activeElement = await page.evaluate(
@@ -410,13 +465,12 @@ test.describe("Accessibility Tests", () => {
       await page.waitForSelector(".sidebar", { state: "visible" });
 
       // Wait for error to appear
-      await page.waitForTimeout(3000);
-
-      // Error messages should be focusable or announced
       const errorElement = page.locator(
         ".error, .error-banner, .error-message, [role='alert']"
       );
+      await errorElement.first().waitFor({ state: "visible", timeout: 5000 });
 
+      // Error messages should be focusable or announced
       if ((await errorElement.count()) > 0) {
         const role = await errorElement.first().getAttribute("role");
         // Errors should have alert or status role for screen readers
@@ -552,9 +606,10 @@ test.describe("Accessibility Tests", () => {
     test("error states use more than just color", async ({ errorPage: page }) => {
       await page.goto("/");
       await page.waitForSelector(".sidebar", { state: "visible" });
-      await page.waitForTimeout(3000);
 
+      // Wait for error element to appear
       const errorElement = page.locator(".error, .error-banner, [role='alert']");
+      await errorElement.first().waitFor({ state: "visible", timeout: 5000 });
 
       if ((await errorElement.count()) > 0) {
         // Error should have icon or text, not just color

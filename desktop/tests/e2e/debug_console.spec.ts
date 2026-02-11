@@ -27,8 +27,9 @@ test("capture console output", async ({ page }) => {
   // Navigate
   await page.goto("/");
 
-  // Wait a bit for any async errors
-  await page.waitForTimeout(5000);
+  // Wait for page to be fully loaded
+  await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+  await page.waitForSelector(".sidebar, .app", { timeout: 5000 }).catch(() => {});
 
   // Log all console messages
   console.log("=== Console Messages ===");

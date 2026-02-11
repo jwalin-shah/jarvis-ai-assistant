@@ -254,7 +254,7 @@ export async function getConversations(
       // Get display name or resolve from contacts
       let displayName = row.display_name || null;
       if (!displayName && !isGroup && participants.length === 1) {
-        displayName = resolveContactName(participants[0]);
+        displayName = resolveContactName(participants[0]!);
       }
 
       // Get last message text
@@ -458,7 +458,7 @@ export async function getMessage(
   try {
     const rows = await chatDb.select<MessageRow[]>(query, [chatId, messageId]);
     if (rows.length === 0) return null;
-    return await rowToMessage(rows[0], chatId);
+    return await rowToMessage(rows[0]!, chatId);
   } catch (error) {
     console.error("[DirectDB] getMessage error:", error);
     return null;
@@ -675,8 +675,8 @@ async function getMessageRowidByGuid(guid: string): Promise<number | null> {
       guid,
     ]);
     if (rows.length > 0) {
-      guidToRowidCache.set(guid, rows[0].id);
-      return rows[0].id;
+      guidToRowidCache.set(guid, rows[0]!.id);
+      return rows[0]!.id;
     }
     return null;
   } catch {
