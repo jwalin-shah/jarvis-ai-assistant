@@ -30,7 +30,7 @@ from typing import Any
 # Adjust path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from jarvis.contacts.extractors import create_extractor, list_extractors
+from jarvis.contacts.candidate_extractor import CandidateExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -267,33 +267,32 @@ def run_extractor(
     limit: int | None = None,
     args_output_dir: Path | None = None,
 ) -> dict:
-    """Run a single extractor against the gold set."""
+    """Run GLiNER extractor against the gold set."""
     logger.info(f"\n{'=' * 60}")
     logger.info(f"Running extractor: {extractor_name}")
     logger.info(f"{'=' * 60}")
 
-    # Create extractor
+    cfg = config or {}
+
+    # Create CandidateExtractor with config overrides
     try:
-        extractor = create_extractor(extractor_name, config=config)
-        logger.info(f"Created extractor: {extractor.name}")
-        logger.info(f"Supported labels: {extractor.supported_labels}")
-    except ValueError as e:
-        logger.error(f"Failed to create extractor {extractor_name}: {e}")
-        return {"extractor_name": extractor_name, "error": str(e)}
-    except ImportError as e:
-        logger.error(f"Import error for {extractor_name}: {e}")
+        extractor = CandidateExtractor(
+            model_name=cfg.get("model_name", "urchade/gliner_medium-v2.1"),
+            label_profile=cfg.get("label_profile"),
+            global_threshold=cfg.get("threshold", 0.35),
+        )
+        logger.info("Created CandidateExtractor")
+    except Exception as e:
+        logger.error(f"Failed to create extractor: {e}")
         return {"extractor_name": extractor_name, "error": str(e)}
 
     # Load model
     logger.info("Loading model...")
     try:
-        model = extractor._load_model()
-        if model == "mock":
-            logger.error(f"Extractor {extractor_name} fell back to mock (not installed)")
-            return {"error": f"{extractor_name} not installed", "extractor_name": extractor_name}
+        extractor._load_model()
         logger.info("Model loaded")
     except Exception as e:
-        logger.error(f"Failed to load model for {extractor_name}: {e}")
+        logger.error(f"Failed to load model: {e}")
         return {"extractor_name": extractor_name, "error": str(e)}
 
     # Run extraction - write predictions incrementally to JSONL for crash safety
@@ -325,14 +324,18 @@ def run_extractor(
             msg_id = rec["message_id"]
 
             # Extract
+            apply_thresh = cfg.get("apply_thresholds", True)
+            use_gate = cfg.get("use_gate", True)
             msg_start = time.perf_counter()
             try:
-                candidates = extractor.extract_from_text(
+                candidates = extractor.extract_candidates(
                     text=rec["message_text"],
                     message_id=msg_id,
                     is_from_me=rec.get("is_from_me"),
-                    context_prev=parse_context_messages(rec.get("context_prev")),
-                    context_next=parse_context_messages(rec.get("context_next")),
+                    prev_messages=parse_context_messages(rec.get("context_prev")),
+                    next_messages=parse_context_messages(rec.get("context_next")),
+                    apply_label_thresholds=apply_thresh,
+                    use_gate=use_gate,
                 )
                 elapsed = (time.perf_counter() - msg_start) * 1000
 
@@ -341,7 +344,7 @@ def run_extractor(
                         "span_text": c.span_text,
                         "span_label": c.span_label,
                         "fact_type": c.fact_type,
-                        "score": c.score,
+                        "score": c.gliner_score,
                     }
                     for c in candidates
                 ]
@@ -356,11 +359,16 @@ def run_extractor(
                 elapsed = 0
 
             # Write incrementally - one JSON line per message
-            inc_f.write(json.dumps({
-                "message_id": msg_id,
-                "predictions": predictions[msg_id],
-                "elapsed_ms": timing[msg_id],
-            }) + "\n")
+            inc_f.write(
+                json.dumps(
+                    {
+                        "message_id": msg_id,
+                        "predictions": predictions[msg_id],
+                        "elapsed_ms": timing[msg_id],
+                    }
+                )
+                + "\n"
+            )
             inc_f.flush()
 
     total_time = time.time() - start_time
@@ -509,8 +517,8 @@ def main() -> None:
     parser.add_argument(
         "--extractors",
         type=str,
-        default="gliner,gliner2,nuextract",
-        help="Comma-separated list of extractors to evaluate (e.g., gliner,spacy,ensemble)",
+        default="gliner",
+        help="Comma-separated list of extractor names (labels only, all use CandidateExtractor)",
     )
     parser.add_argument(
         "--output-dir",
@@ -570,13 +578,6 @@ def main() -> None:
 
     # Parse extractors
     extractor_names = [e.strip() for e in args.extractors.split(",")]
-    available = list_extractors()
-
-    for name in extractor_names:
-        if name not in available:
-            logger.error(f"Unknown extractor: {name}. Available: {', '.join(available)}")
-            sys.exit(1)
-
     logger.info(f"Evaluating extractors: {', '.join(extractor_names)}")
 
     # Load gold set
@@ -599,7 +600,10 @@ def main() -> None:
             config["use_gate"] = False
 
         result = run_extractor(
-            name, gold_records, config=config, limit=args.limit,
+            name,
+            gold_records,
+            config=config,
+            limit=args.limit,
             args_output_dir=args.output_dir,
         )
         results.append(result)

@@ -308,6 +308,8 @@ class CandidateExtractor:
         per_label_min: dict[str, float] | None = None,
         default_min: float = DEFAULT_MIN,
         backend: str = "auto",
+        use_entailment: bool = True,
+        entailment_threshold: float = 0.5,
     ):
         self._model: Any = None
         self._mlx_model: Any = None
@@ -341,6 +343,8 @@ class CandidateExtractor:
                 else dict(PER_LABEL_MIN)
             )
         self._default_min = default_min
+        self._use_entailment = use_entailment
+        self._entailment_threshold = entailment_threshold
 
     @staticmethod
     def _to_model_label(canonical_label: str) -> str:
@@ -566,7 +570,7 @@ class CandidateExtractor:
         """
         if is_junk_message(text):
             return []
-        
+
         if use_gate and not is_fact_likely(text, is_from_me=is_from_me or False):
             logger.debug("Gate closed for message: %s", text[:50])
             return []
@@ -627,6 +631,9 @@ class CandidateExtractor:
                     message_date=message_date,
                 )
             )
+
+        if self._use_entailment and out:
+            out = self._verify_entailment(out)
 
         return out
 
@@ -747,7 +754,80 @@ class CandidateExtractor:
                 len(all_candidates),
             )
 
+        if self._use_entailment and all_candidates:
+            all_candidates = self._verify_entailment(all_candidates)
+
         return all_candidates
+
+    # ------------------------------------------------------------------
+    # Entailment gate
+    # ------------------------------------------------------------------
+
+    _HYPOTHESIS_TEMPLATES: dict[str, str] = {
+        "relationship.family": "The user's {label} is named {span}",
+        "relationship.friend": "{span} is a friend of the user",
+        "relationship.partner": "{span} is the user's romantic partner",
+        "location.current": "The user lives in {span}",
+        "location.past": "The user used to live in {span}",
+        "location.future": "The user is moving to {span}",
+        "location.hometown": "The user is from {span}",
+        "work.employer": "The user works at {span}",
+        "work.former_employer": "The user used to work at {span}",
+        "work.job_title": "The user's job is {span}",
+        "preference.food_like": "The user likes {span}",
+        "preference.food_dislike": "The user dislikes {span}",
+        "preference.activity": "The user enjoys {span}",
+        "health.allergy": "The user is allergic to {span}",
+        "health.dietary": "The user has a dietary restriction related to {span}",
+        "health.condition": "The user has a health condition related to {span}",
+        "personal.birthday": "The user's birthday is {span}",
+        "personal.school": "The user attends or attended {span}",
+        "personal.pet": "The user has a pet named {span}",
+    }
+
+    def _candidate_to_hypothesis(self, candidate: FactCandidate) -> str:
+        """Convert a FactCandidate to a natural language hypothesis for NLI."""
+        template = self._HYPOTHESIS_TEMPLATES.get(candidate.fact_type)
+        if template:
+            return template.format(span=candidate.span_text, label=candidate.span_label)
+        return f"The message contains a fact about {candidate.span_text}"
+
+    def _verify_entailment(
+        self,
+        candidates: list[FactCandidate],
+    ) -> list[FactCandidate]:
+        """Filter candidates by NLI entailment score."""
+        if not candidates:
+            return candidates
+
+        from jarvis.nlp.entailment import verify_entailment_batch
+
+        pairs = []
+        for c in candidates:
+            hypothesis = self._candidate_to_hypothesis(c)
+            pairs.append((c.source_text, hypothesis))
+
+        results = verify_entailment_batch(pairs, threshold=self._entailment_threshold)
+
+        verified = []
+        for candidate, (is_entailed, score) in zip(candidates, results):
+            if is_entailed:
+                candidate.gliner_score = min(candidate.gliner_score, score)
+                verified.append(candidate)
+            else:
+                logger.debug(
+                    "Entailment rejected: '%s' (%s) score=%.2f",
+                    candidate.span_text,
+                    candidate.fact_type,
+                    score,
+                )
+
+        logger.debug(
+            "Entailment gate: %d -> %d candidates",
+            len(candidates),
+            len(verified),
+        )
+        return verified
 
     def _resolve_fact_type(self, text: str, span: str, span_label: str) -> str:
         """Map (text_pattern, span_label) -> fact_type.

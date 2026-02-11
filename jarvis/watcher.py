@@ -425,7 +425,7 @@ class ChatDBWatcher:
             if not incoming:
                 return
 
-            extractor = FactExtractor(use_nli=True, entailment_threshold=0.6)
+            extractor = FactExtractor()
 
             # Group by chat_id (proxy for contact)
             by_chat: dict[str, list[dict[str, Any]]] = {}

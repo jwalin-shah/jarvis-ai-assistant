@@ -110,12 +110,8 @@ class FactExtractor:
 
     def __init__(
         self,
-        entailment_threshold: float = 0.7,
-        use_nli: bool = True,  # Enable by default
         confidence_threshold: float = 0.5,
     ) -> None:
-        self.threshold = entailment_threshold
-        self.use_nli = use_nli
         self.confidence_threshold = confidence_threshold
         self._nlp = None
         self._contacts_cache: dict[str, Any] | None = None
@@ -174,10 +170,6 @@ class FactExtractor:
 
         # Deduplicate
         facts = self._deduplicate(facts)
-
-        # NLI verification pass
-        if self.use_nli and facts:
-            facts = self._verify_facts_nli(facts)
 
         logger.info(
             "Extracted %d facts from %d messages for %s (after quality filtering)",
@@ -434,53 +426,6 @@ class FactExtractor:
             (len(filtered) / len(facts) * 100) if facts else 0,
         )
         return filtered
-
-    def _verify_facts_nli(self, facts: list[Fact]) -> list[Fact]:
-        """Filter facts by NLI entailment verification (batched).
-
-        Skips verification if the NLI model is not already loaded to avoid
-        cold-loading a heavy model mid-extraction (adds 2-7s of latency).
-        """
-        try:
-            from models.nli_cross_encoder import _nli_encoder
-
-            # Skip NLI if model not already warm - cold load is too expensive
-            # for inline extraction
-            if _nli_encoder is None or not _nli_encoder.is_loaded():
-                logger.debug("NLI model not warm, skipping verification")
-                return facts
-
-            from jarvis.nlp.entailment import (
-                fact_to_hypothesis,
-                verify_entailment_batch,
-            )
-
-            # Build (premise, hypothesis) pairs for batch scoring
-            pairs: list[tuple[str, str]] = []
-            for fact in facts:
-                hypothesis = fact_to_hypothesis(
-                    fact.category, fact.subject, fact.predicate, fact.value
-                )
-                pairs.append((fact.source_text, hypothesis))
-
-            results = verify_entailment_batch(pairs, threshold=self.threshold)
-
-            verified: list[Fact] = []
-            for fact, (is_entailed, score) in zip(facts, results):
-                if is_entailed:
-                    fact.confidence = score
-                    verified.append(fact)
-                else:
-                    logger.debug(
-                        "NLI rejected fact: %s/%s (score=%.2f)",
-                        fact.category,
-                        fact.subject,
-                        score,
-                    )
-            return verified
-        except Exception as e:
-            logger.warning("NLI verification failed, returning unverified facts: %s", e)
-            return facts
 
     def _clean_subject(self, subject: str) -> str:
         """Clean extracted subject: strip trailing prepositions, conjunctions, etc."""

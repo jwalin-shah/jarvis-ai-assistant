@@ -9,7 +9,7 @@ def extractor():
     with patch("gliner.GLiNER.from_pretrained") as mock_from:
         mock_model = MagicMock()
         mock_from.return_value = mock_model
-        ext = CandidateExtractor()
+        ext = CandidateExtractor(use_entailment=False)
         # Trigger lazy load
         ext._load_model()
         return ext
