@@ -263,13 +263,13 @@ class InProcessEmbedder:
     """In-process MLX BERT embedder with CLS pooling.
 
     Thread-safe:
-    - _encode_lock serializes encode() calls (Rust tokenizer is not thread-safe)
-    - MLXModelLoader._mlx_load_lock serializes model load/unload with the LLM loader
+    - MLXModelLoader._mlx_load_lock serializes both tokenization and GPU operations,
+      preventing race conditions where another thread changes tokenizer padding state
+      between tokenization and the forward pass.
     """
 
     def __init__(self, model_name: str = "bge-small") -> None:
         self._default_model = model_name
-        self._encode_lock = threading.Lock()
         self.model: BertModel | None = None
         self.tokenizer: Tokenizer | None = None
         self.model_name: str | None = None
@@ -402,17 +402,17 @@ class InProcessEmbedder:
         if not texts:
             return np.array([], dtype=np.float32)
 
-        # Serialize encode calls: tokenizer mutates internal state (padding on/off)
-        # and the Rust tokenizer is not thread-safe for concurrent access.
-        with self._encode_lock:
-            # Tokenize without padding to get lengths
-            try:
-                self.tokenizer.no_padding()
-                encodings = self.tokenizer.encode_batch(texts)
-                lengths = [len(e.ids) for e in encodings]
-            finally:
-                # Re-enable padding for batch processing (always restore state)
-                self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
+        # Single critical section: tokenization + GPU forward pass.
+        # The GPU lock protects both the tokenizer state (padding config)
+        # and the Metal GPU operations, preventing race conditions where
+        # another thread changes padding between tokenization and forward pass.
+        with self._get_gpu_lock():
+            # Tokenize once WITHOUT padding to get actual lengths for sorting.
+            # We manually pad per-batch below so each batch only pads to its
+            # own max length (not the global max), saving memory.
+            self.tokenizer.no_padding()
+            encodings = self.tokenizer.encode_batch(texts)
+            lengths = [len(e.ids) for e in encodings]
 
             # Sort by length (longest first) to minimize padding waste
             sorted_indices = np.argsort([-length for length in lengths])
@@ -420,42 +420,48 @@ class InProcessEmbedder:
 
             output_embeddings = []
 
-            # Hold GPU lock for entire encode call (not per-batch) to avoid
-            # 16+ lock acquire/release cycles for large inputs
-            with self._get_gpu_lock():
-                for batch_start in range(0, len(texts), batch_size):
-                    batch_end = min(batch_start + batch_size, len(texts))
-                    batch_indices = sorted_indices[batch_start:batch_end]
-                    batch_texts = [texts[i] for i in batch_indices]
+            for batch_start in range(0, len(texts), batch_size):
+                batch_end = min(batch_start + batch_size, len(texts))
+                batch_indices = sorted_indices[batch_start:batch_end]
 
-                    batch_encodings = self.tokenizer.encode_batch(batch_texts)
-                    input_ids = np.array([e.ids for e in batch_encodings], dtype=np.int32)
-                    attention_mask = np.array(
-                        [e.attention_mask for e in batch_encodings], dtype=np.int32
-                    )
+                # Reuse pre-computed encodings, manually pad to batch max
+                batch_encodings = [encodings[i] for i in batch_indices]
+                max_len = max(len(e.ids) for e in batch_encodings)
 
-                    input_ids_mx = mx.array(input_ids)
-                    attention_mask_mx = mx.array(attention_mask)
+                input_ids = np.array(
+                    [e.ids + [0] * (max_len - len(e.ids)) for e in batch_encodings],
+                    dtype=np.int32,
+                )
+                attention_mask = np.array(
+                    [
+                        e.attention_mask + [0] * (max_len - len(e.attention_mask))
+                        for e in batch_encodings
+                    ],
+                    dtype=np.int32,
+                )
 
-                    hidden_states = self.model(input_ids_mx, attention_mask_mx)
+                input_ids_mx = mx.array(input_ids)
+                attention_mask_mx = mx.array(attention_mask)
 
-                    # CLS pooling
-                    batch_emb = hidden_states[:, 0, :]
+                hidden_states = self.model(input_ids_mx, attention_mask_mx)
 
-                    if normalize:
-                        norms = mx.maximum(mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9)
-                        batch_emb = batch_emb / norms
+                # CLS pooling
+                batch_emb = hidden_states[:, 0, :]
 
-                    mx.eval(batch_emb)
+                if normalize:
+                    norms = mx.maximum(mx.linalg.norm(batch_emb, axis=1, keepdims=True), 1e-9)
+                    batch_emb = batch_emb / norms
 
-                    # Convert to numpy and free MLX arrays immediately
-                    batch_emb_np = np.array(batch_emb)
-                    del input_ids_mx, attention_mask_mx, hidden_states, batch_emb
+                mx.eval(batch_emb)
 
-                    output_embeddings.append(batch_emb_np)
+                # Convert to numpy and free MLX arrays immediately
+                batch_emb_np = np.array(batch_emb)
+                del input_ids_mx, attention_mask_mx, hidden_states, batch_emb
 
-            all_embeddings = np.vstack(output_embeddings)
-            return all_embeddings[reverse_indices]
+                output_embeddings.append(batch_emb_np)
+
+        all_embeddings = np.vstack(output_embeddings)
+        return all_embeddings[reverse_indices]
 
     @property
     def is_loaded(self) -> bool:
