@@ -8,7 +8,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from collections.abc import Sequence
@@ -31,6 +30,7 @@ def _setup_logging() -> None:
         ],
     )
     logger.info("Logging to %s", log_file)
+
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "mobilization_gemini"
@@ -66,8 +66,9 @@ def load_data(data_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.nd
     return X_train, y_train, X_test, y_test
 
 
-def train_lightgbm(X_train: np.ndarray, y_train: np.ndarray,
-                    X_test: np.ndarray, y_test: np.ndarray) -> dict:
+def train_lightgbm(
+    X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y_test: np.ndarray
+) -> dict:
     """Train LightGBM model."""
     from lightgbm import LGBMClassifier
     from sklearn.metrics import classification_report, confusion_matrix
@@ -144,7 +145,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger.info("\n" + "=" * 70)
     logger.info("COMPARISON: Current Rule-Based vs LightGBM")
     logger.info("=" * 70)
-    logger.info(f"Rule-based (current):  F1 = 0.3420 (baseline)")
+    logger.info("Rule-based (current):  F1 = 0.3420 (baseline)")
     logger.info(f"LightGBM:              F1 = {results['macro_f1']:.4f}")
 
     improvement = ((results["macro_f1"] - 0.342) / 0.342) * 100

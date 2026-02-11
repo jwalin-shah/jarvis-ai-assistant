@@ -25,11 +25,14 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
 import numpy as np
 import spacy
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -163,7 +166,8 @@ NEED_WANT_YOU_RE = re.compile(
     r"\b(i need you to|i want you to|i'd like you to|need you to|want you to)\b", re.IGNORECASE
 )
 
-# Additional feature patterns (context overlap, question types, thanks/apology, urgency, emoji sentiment)
+# Additional feature patterns
+# (context overlap, question types, thanks/apology, urgency, emoji sentiment)
 THANKS_MARKERS = {"thanks", "thank you", "thx", "ty", "tysm", "appreciate", "appreciated"}
 APOLOGY_MARKERS = {"sorry", "my bad", "apologize", "apologies", "oops", "whoops", "my fault"}
 URGENCY_MARKERS = {
@@ -269,9 +273,16 @@ class CategoryFeatureExtractor:
 
     @property
     def nlp(self) -> spacy.Language:
-        """Lazy-load spaCy model."""
+        """Lazy-load spaCy model, falling back to blank model if unavailable."""
         if self._nlp is None:
-            self._nlp = spacy.load("en_core_web_sm")
+            try:
+                self._nlp = spacy.load("en_core_web_sm")
+            except OSError:
+                logger.warning(
+                    "en_core_web_sm not installed, using blank spaCy model. "
+                    "Install with: python -m spacy download en_core_web_sm"
+                )
+                self._nlp = spacy.blank("en")
         return self._nlp
 
     def extract_hand_crafted(
@@ -597,7 +608,8 @@ class CategoryFeatureExtractor:
         features.append(1.0 if "ORG" in ent_labels else 0.0)
         features.append(1.0 if ("CARDINAL" in ent_labels or "MONEY" in ent_labels) else 0.0)
 
-        # Sentence structure (5): sent_count, avg_sent_len, max_sent_len, noun_chunk_count, noun_chunk_ratio
+        # Sentence structure (5): sent_count, avg_sent_len,
+        # max_sent_len, noun_chunk_count, noun_chunk_ratio
         sents = list(doc.sents)
         sent_count = len(sents)
         features.append(float(sent_count))
@@ -649,7 +661,8 @@ class CategoryFeatureExtractor:
         like_url_ratio = url_count / max(total_tokens, 1)
         features.append(like_url_ratio)
 
-        # Morphology (8): past_tense_ratio, present_tense_ratio, has_imperative_mood, has_conditional,
+        # Morphology (8): past_tense_ratio, present_tense_ratio,
+        # has_imperative_mood, has_conditional,
         # person_1/2/3, has_passive
         past_tense_tags = {"VBD", "VBN"}
         past_tense_count = sum(1 for token in doc if token.tag_ in past_tense_tags)

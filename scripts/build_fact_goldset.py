@@ -48,6 +48,7 @@ def _setup_logging() -> logging.Logger:
     )
     return logging.getLogger(__name__)
 
+
 APPLE_EPOCH_UNIX = 978307200  # 2001-01-01 00:00:00 UTC
 NANOSECONDS_PER_SECOND = 1_000_000_000
 
@@ -629,7 +630,9 @@ def main() -> int:
                 per_chat_cap=args.per_chat_cap,
                 rng=rng,
             )
-            logger.info("Bucket '%s': selected %d/%d", bucket, len(selected), bucket_targets[bucket])
+            logger.info(
+                "Bucket '%s': selected %d/%d", bucket, len(selected), bucket_targets[bucket]
+            )
             if len(selected) < bucket_targets[bucket]:
                 print(
                     f"WARNING: bucket '{bucket}' requested {bucket_targets[bucket]} "
@@ -719,8 +722,13 @@ def main() -> int:
         msg = str(e).lower()
         if "unable to open database" in msg or "operation not permitted" in msg:
             print("ERROR: Could not read chat.db (macOS privacy restriction).", flush=True)
-            print("Grant Terminal/iTerm Full Disk Access in System Settings > Privacy & Security.", flush=True)
-            print(f"Then rerun: python3 scripts/build_fact_goldset.py --db-path {db_path}", flush=True)
+            print(
+                "Grant Terminal/iTerm Full Disk Access in System Settings > Privacy & Security.",
+                flush=True,
+            )
+            print(
+                f"Then rerun: python3 scripts/build_fact_goldset.py --db-path {db_path}", flush=True
+            )
             return 2
         print(f"ERROR: SQLite failure: {e}", flush=True)
         return 2

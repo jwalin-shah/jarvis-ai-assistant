@@ -8,7 +8,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from collections.abc import Sequence
@@ -19,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 def _setup_logging() -> None:
     """Configure logging with both file and stream handlers."""
-    log_file = (
-        Path(__file__).resolve().parent.parent / "logs" / "train_mobilization_logistic.log"
-    )
+    log_file = Path(__file__).resolve().parent.parent / "logs" / "train_mobilization_logistic.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
@@ -33,6 +30,7 @@ def _setup_logging() -> None:
         ],
     )
     logger.info("Logging to %s", log_file)
+
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "mobilization_gemini"
@@ -68,8 +66,9 @@ def load_data(data_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.nd
     return X_train, y_train, X_test, y_test
 
 
-def train_logistic_regression(X_train: np.ndarray, y_train: np.ndarray,
-                               X_test: np.ndarray, y_test: np.ndarray) -> dict:
+def train_logistic_regression(
+    X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y_test: np.ndarray
+) -> dict:
     """Train logistic regression model."""
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import classification_report, confusion_matrix
@@ -148,7 +147,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger.info("\n" + "=" * 70)
     logger.info("COMPARISON: Current Rule-Based vs Logistic Regression")
     logger.info("=" * 70)
-    logger.info(f"Rule-based (current):      F1 = 0.3420 (baseline)")
+    logger.info("Rule-based (current):      F1 = 0.3420 (baseline)")
     logger.info(f"Logistic Regression:       F1 = {results['macro_f1']:.4f}")
 
     improvement = ((results["macro_f1"] - 0.342) / 0.342) * 100

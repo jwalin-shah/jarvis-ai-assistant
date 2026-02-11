@@ -27,7 +27,6 @@ import numpy as np
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
-    precision_recall_fscore_support,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,6 +45,8 @@ def _setup_logging() -> None:
             logging.StreamHandler(sys.stdout),
         ],
     )
+
+
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval_labeled.jsonl"
 RESULTS_DIR = ROOT / "evals" / "results"
 
@@ -73,22 +74,28 @@ def analyze_label_agreement(examples: list[dict]) -> dict:
     logger.info("\n" + "=" * 60)
     logger.info("LABEL CONFIDENCE DISTRIBUTION")
     logger.info("=" * 60)
-    logger.info(f"Gemini labels:  {len(gemini_labels):5d} ({100*len(gemini_labels)//len(examples):3d}%)")
-    logger.info(f"Auto labels:    {len(auto_labels):5d} ({100*len(auto_labels)//len(examples):3d}%)")
-    logger.info(f"Needs review:   {len(needs_review):5d} ({100*len(needs_review)//len(examples):3d}%)")
+    logger.info(
+        f"Gemini labels:  {len(gemini_labels):5d} ({100 * len(gemini_labels) // len(examples):3d}%)"
+    )
+    logger.info(
+        f"Auto labels:    {len(auto_labels):5d} ({100 * len(auto_labels) // len(examples):3d}%)"
+    )
+    logger.info(
+        f"Needs review:   {len(needs_review):5d} ({100 * len(needs_review) // len(examples):3d}%)"
+    )
     logger.info(f"Total:          {len(examples):5d}")
 
     # Category distribution
     cat_dist = Counter(e.get("category") for e in examples if e.get("category"))
     logger.info("\nCATEGORY DISTRIBUTION (all):")
     for cat, count in sorted(cat_dist.items()):
-        logger.info(f"  {cat:15s}: {count:4d} ({100*count//len(examples):3d}%)")
+        logger.info(f"  {cat:15s}: {count:4d} ({100 * count // len(examples):3d}%)")
 
     # Mobilization distribution
     mob_dist = Counter(e.get("mobilization") for e in examples if e.get("mobilization"))
     logger.info("\nMOBILIZATION DISTRIBUTION (all):")
     for mob, count in sorted(mob_dist.items()):
-        logger.info(f"  {mob:15s}: {count:4d} ({100*count//len(examples):3d}%)")
+        logger.info(f"  {mob:15s}: {count:4d} ({100 * count // len(examples):3d}%)")
 
     return {
         "total": len(examples),
@@ -127,7 +134,7 @@ def eval_mobilization_baseline(examples: list[dict]) -> dict:
         y_pred.append(result.pressure.value.upper())
 
         if (i + 1) % 500 == 0:
-            logger.info(f"  {i+1}/{len(labeled)} evaluated")
+            logger.info(f"  {i + 1}/{len(labeled)} evaluated")
 
     return _compute_metrics(y_true, y_pred, latencies, "mobilization")
 
@@ -159,7 +166,7 @@ def eval_category_baseline(examples: list[dict]) -> dict:
         y_pred.append(result.category)
 
         if (i + 1) % 500 == 0:
-            logger.info(f"  {i+1}/{len(labeled)} evaluated")
+            logger.info(f"  {i + 1}/{len(labeled)} evaluated")
 
     return _compute_metrics(y_true, y_pred, latencies, "category")
 
@@ -232,23 +239,19 @@ def compare_label_sources(examples: list[dict]) -> dict:
 
     # Category agreement
     cat_agreement = sum(
-        1
-        for e in paired
-        if e.get("category") and e.get("old_label") == e.get("category")
+        1 for e in paired if e.get("category") and e.get("old_label") == e.get("category")
     )
     cat_accuracy = cat_agreement / len(paired)
 
-    logger.info(f"\nCategory Agreement (Gemini vs Auto):")
+    logger.info("\nCategory Agreement (Gemini vs Auto):")
     logger.info(f"  Examples with both labels: {len(paired)}")
-    logger.info(f"  Agreement: {cat_agreement}/{len(paired)} ({100*cat_accuracy:.1f}%)")
+    logger.info(f"  Agreement: {cat_agreement}/{len(paired)} ({100 * cat_accuracy:.1f}%)")
 
     # Confusion between labels
     mismatches = [e for e in paired if e.get("old_label") != e.get("category")]
     if mismatches:
-        logger.info(f"\n  Top Disagreements (Auto → Gemini):")
-        mismatch_pairs = Counter(
-            (e.get("old_label"), e.get("category")) for e in mismatches
-        )
+        logger.info("\n  Top Disagreements (Auto → Gemini):")
+        mismatch_pairs = Counter((e.get("old_label"), e.get("category")) for e in mismatches)
         for (auto, gemini), count in mismatch_pairs.most_common(10):
             logger.info(f"    {auto:15s} → {gemini:15s}: {count:3d} cases")
 
@@ -265,9 +268,7 @@ def compare_label_sources(examples: list[dict]) -> dict:
     }
 
 
-def generate_training_data(
-    examples: list[dict], output_dir: Path | None = None
-) -> Path:
+def generate_training_data(examples: list[dict], output_dir: Path | None = None) -> Path:
     """Generate training data from Gemini labels.
 
     Extracts text+features and creates train/test split.
@@ -305,7 +306,7 @@ def generate_training_data(
             f.write(json.dumps(record) + "\n")
 
     logger.info(f"Saved {len(labeled)} examples to {output_file}")
-    logger.info(f"Category distribution:")
+    logger.info("Category distribution:")
     cat_dist = Counter(e.get("category") for e in labeled)
     for cat, count in sorted(cat_dist.items()):
         logger.info(f"  {cat:15s}: {count:4d}")
@@ -367,7 +368,7 @@ def main() -> None:
     logger.info(f"Gemini labels:           {confidence_stats['gemini']:4d}")
     logger.info(f"Category baseline F1:    {baseline_results['category']['macro_f1']:.4f}")
     logger.info(f"Mobilization baseline F1: {baseline_results['mobilization']['macro_f1']:.4f}")
-    logger.info(f"Label agreement (auto):  {100*comparison['category_agreement']:.1f}%")
+    logger.info(f"Label agreement (auto):  {100 * comparison['category_agreement']:.1f}%")
 
 
 if __name__ == "__main__":

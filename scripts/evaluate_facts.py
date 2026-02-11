@@ -10,13 +10,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -136,7 +136,7 @@ class FactEvaluator:
                     issue_type="short_phrase",
                     severity="medium",
                     description=f"'{subject}' is only {word_count} word(s), likely loses context",
-                    suggestion=f"Extract longer phrase for clarity (e.g., 'driving in sf' not 'sf')",
+                    suggestion="Extract longer phrase for clarity (e.g., 'driving in sf' not 'sf')",
                 )
             )
             self.stats["short_phrase"] += 1
@@ -148,7 +148,7 @@ class FactEvaluator:
                     fact_id=fact_id,
                     issue_type="bot_message",
                     severity="high",
-                    description=f"Fact extracted from automated message (pharmacy, job posting, etc.)",
+                    description="Fact extracted from automated message (pharmacy, job posting, etc.)",
                     suggestion="Filter bot messages before extraction (e.g., check for known bot keywords)",
                 )
             )
@@ -270,7 +270,9 @@ def generate_report(
     for category in sorted(by_category.keys()):
         cats = by_category[category]
         avg_conf = sum(f["confidence"] for f in cats) / len(cats)
-        issues_in_cat = len([i for i in issues if f"/{i.fact_id.split('/')[1]}" in str([f for f in cats])])
+        issues_in_cat = len(
+            [i for i in issues if f"/{i.fact_id.split('/')[1]}" in str([f for f in cats])]
+        )
         report.append(f"  {category:15s}: {len(cats):3d} facts (avg conf: {avg_conf:.2f})")
     report.append("")
 
@@ -375,7 +377,10 @@ def main():
 
     print(f"Loading facts from {args.facts}...", flush=True)
     facts, sources = parse_contact_facts_file(args.facts)
-    print(f"Loaded {len(facts)} facts from {len(set(f['contact'] for f in facts))} contacts", flush=True)
+    print(
+        f"Loaded {len(facts)} facts from {len(set(f['contact'] for f in facts))} contacts",
+        flush=True,
+    )
     print(flush=True)
 
     evaluator = FactEvaluator()

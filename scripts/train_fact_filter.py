@@ -52,8 +52,18 @@ class FactFilterFeatures:
 
     # Vague words that suggest false positive
     VAGUE_WORDS = {
-        "it", "that", "this", "them", "there", "these", "those",
-        "what", "something", "thing", "stuff", "anything",
+        "it",
+        "that",
+        "this",
+        "them",
+        "there",
+        "these",
+        "those",
+        "what",
+        "something",
+        "thing",
+        "stuff",
+        "anything",
     }
 
     # Preference verbs
@@ -62,20 +72,45 @@ class FactFilterFeatures:
 
     # Location markers
     LOCATION_MARKERS = {
-        "live", "lived", "living", "moving", "moved", "from", "based",
-        "grew up", "born", "located", "staying", "visiting",
+        "live",
+        "lived",
+        "living",
+        "moving",
+        "moved",
+        "from",
+        "based",
+        "grew up",
+        "born",
+        "located",
+        "staying",
+        "visiting",
     }
 
     # Relationship markers
     RELATIONSHIP_MARKERS = {
-        "my", "our", "mom", "dad", "mother", "father", "sister", "brother",
-        "wife", "husband", "girlfriend", "boyfriend", "partner", "friend",
+        "my",
+        "our",
+        "mom",
+        "dad",
+        "mother",
+        "father",
+        "sister",
+        "brother",
+        "wife",
+        "husband",
+        "girlfriend",
+        "boyfriend",
+        "partner",
+        "friend",
     }
 
     # Bot indicators
     BOT_INDICATORS = [
-        "CVS Pharmacy", "Rx Ready", "Check out this job",
-        "prescription is ready", "unsubscribe",
+        "CVS Pharmacy",
+        "Rx Ready",
+        "Check out this job",
+        "prescription is ready",
+        "unsubscribe",
     ]
 
     # Canonical stage-1 labels currently emitted by CandidateExtractor.
@@ -159,14 +194,14 @@ class FactFilterFeatures:
         features["is_negative_pref"] = 1.0 if has_neg_pref else 0.0
 
         # Location indicators
-        features["has_location_marker"] = 1.0 if any(
-            m in text_lower for m in self.LOCATION_MARKERS
-        ) else 0.0
+        features["has_location_marker"] = (
+            1.0 if any(m in text_lower for m in self.LOCATION_MARKERS) else 0.0
+        )
 
         # Relationship indicators
-        features["has_relationship_marker"] = 1.0 if any(
-            m in text_lower for m in self.RELATIONSHIP_MARKERS
-        ) else 0.0
+        features["has_relationship_marker"] = (
+            1.0 if any(m in text_lower for m in self.RELATIONSHIP_MARKERS) else 0.0
+        )
 
         # 4. Text quality features
         features["text_length"] = len(text)
@@ -176,9 +211,9 @@ class FactFilterFeatures:
         features["is_first_person"] = 1.0 if text_lower.startswith(("i ", "my ")) else 0.0
 
         # 5. Bot/spam detection
-        features["is_likely_bot"] = 1.0 if any(
-            b.lower() in text_lower for b in self.BOT_INDICATORS
-        ) else 0.0
+        features["is_likely_bot"] = (
+            1.0 if any(b.lower() in text_lower for b in self.BOT_INDICATORS) else 0.0
+        )
 
         # 6. Entity type features
         entity_type_onehot = {k: 0.0 for k in self.ENTITY_TYPES}
@@ -239,9 +274,9 @@ class FactFilterClassifier:
         # Extract features
         X = []
         total = len(texts)
-        for i, (text, cand, etype, ftype, score) in enumerate(zip(
-            texts, candidates, entity_types, fact_types, gliner_scores
-        )):
+        for i, (text, cand, etype, ftype, score) in enumerate(
+            zip(texts, candidates, entity_types, fact_types, gliner_scores)
+        ):
             if (i + 1) % 500 == 0 or i + 1 == total:
                 print(f"Extracting features {i + 1}/{total}...", flush=True)
             features = self.feature_extractor.extract(
@@ -329,12 +364,15 @@ class FactFilterClassifier:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(path, "wb") as f:
-            pickle.dump({
-                "model": self.model,
-                "scaler": self.scaler,
-                "is_fitted": self.is_fitted,
-                "model_type": self.model_type,
-            }, f)
+            pickle.dump(
+                {
+                    "model": self.model,
+                    "scaler": self.scaler,
+                    "is_fitted": self.is_fitted,
+                    "model_type": self.model_type,
+                },
+                f,
+            )
 
         logger.info(f"Saved classifier to {path}")
 
@@ -386,13 +424,15 @@ def evaluate_classifier(classifier: FactFilterClassifier, test_data: dict) -> di
     confidences = []
 
     total = len(test_data["texts"])
-    for i, (text, cand, etype, ftype, score) in enumerate(zip(
-        test_data["texts"],
-        test_data["candidates"],
-        test_data["entity_types"],
-        test_data.get("fact_types", [""] * len(test_data["texts"])),
-        test_data.get("gliner_scores", [0.0] * len(test_data["texts"])),
-    )):
+    for i, (text, cand, etype, ftype, score) in enumerate(
+        zip(
+            test_data["texts"],
+            test_data["candidates"],
+            test_data["entity_types"],
+            test_data.get("fact_types", [""] * len(test_data["texts"])),
+            test_data.get("gliner_scores", [0.0] * len(test_data["texts"])),
+        )
+    ):
         if (i + 1) % 500 == 0 or i + 1 == total:
             print(f"Evaluating {i + 1}/{total}...", flush=True)
         pred, conf = classifier.predict(
@@ -425,9 +465,7 @@ def evaluate_classifier(classifier: FactFilterClassifier, test_data: dict) -> di
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Train fact filter classifier"
-    )
+    parser = argparse.ArgumentParser(description="Train fact filter classifier")
     parser.add_argument(
         "--input",
         type=Path,

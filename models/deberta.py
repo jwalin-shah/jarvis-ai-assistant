@@ -19,7 +19,6 @@ import math
 import mlx.core as mx
 import mlx.nn as nn
 
-
 # ---------------------------------------------------------------------------
 # Embeddings
 # ---------------------------------------------------------------------------
@@ -31,9 +30,7 @@ class DebertaEmbeddings(nn.Module):
     def __init__(self, config: dict) -> None:
         super().__init__()
         self.word_embeddings = nn.Embedding(config["vocab_size"], config["hidden_size"])
-        self.LayerNorm = nn.LayerNorm(
-            config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7)
-        )
+        self.LayerNorm = nn.LayerNorm(config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7))
 
     def __call__(self, input_ids: mx.array) -> mx.array:
         return self.LayerNorm(self.word_embeddings(input_ids))
@@ -101,9 +98,7 @@ class DisentangledAttention(nn.Module):
             pq_proj = self.query_proj if self.share_att_key else self.pos_query_proj
             pq = self._heads(pq_proj(rel_embeddings), 1, -1)
             p2c_all = k @ pq.transpose(0, 1, 3, 2)  # (B, H, S, 2*buckets)
-            idx_t = mx.broadcast_to(
-                rel_idx.transpose(1, 0)[None, None], (B, self.num_heads, S, S)
-            )
+            idx_t = mx.broadcast_to(rel_idx.transpose(1, 0)[None, None], (B, self.num_heads, S, S))
             scores = scores + mx.take_along_axis(p2c_all, idx_t, axis=-1).transpose(0, 1, 3, 2)
 
         scores = scores * self._scale
@@ -181,9 +176,7 @@ class DebertaEncoder(nn.Module):
         buckets = config.get("position_buckets", 256)
         self.rel_embeddings = nn.Embedding(2 * buckets, config["hidden_size"])
         if config.get("norm_rel_ebd", "") == "layer_norm":
-            self.norm = nn.LayerNorm(
-                config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7)
-            )
+            self.norm = nn.LayerNorm(config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7))
         self.layers = [DebertaLayer(config) for _ in range(config["num_hidden_layers"])]
 
     def __call__(self, hidden_states: mx.array, attention_mask: mx.array | None) -> mx.array:

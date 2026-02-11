@@ -229,9 +229,7 @@ class LouvainClustering:
                 neighbor_comms: set[int] = {community[j] for j in neighbors[node]}
 
                 for comm in neighbor_comms:
-                    sum_to_comm = sum(
-                        w for j, w in neighbors[node].items() if community[j] == comm
-                    )
+                    sum_to_comm = sum(w for j, w in neighbors[node].items() if community[j] == comm)
 
                     # Calculate modularity gain
                     delta_q = (
