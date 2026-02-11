@@ -50,6 +50,7 @@ dependencies = [
     "groq>=1.0.0",
     "typer>=0.21.1",
     "gliner>=0.2.24",
+    "symspellpy>=6.9.0",
 ]
 
 [project.optional-dependencies]
@@ -140,7 +141,7 @@ warn_unused_ignores = true
 testpaths = ["tests", "tests/tools/unit", "tests/tools/integration", "tests/tools/e2e"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --doctest-modules --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing"
+addopts = "-v --doctest-modules --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing -m 'not benchmark'"
 timeout = 30
 timeout_method = "thread"
 markers = [
@@ -149,6 +150,7 @@ markers = [
     "slow: mark test as slow (> 30s)",
     "statistical: mark test as using statistical assertions (may have variance)",
     "requires_deps(name1,name2): mark test as requiring specific dependencies",
+    "benchmark: mark test as a performance benchmark (run with -m benchmark)",
 ]
 
 [tool.coverage.run]
@@ -156,6 +158,7 @@ source = ["jarvis", "api", "models", "core", "integrations", "contracts", "bench
 omit = ["tests/*", "*/test_*.py"]
 
 [tool.coverage.report]
+fail_under = 60
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

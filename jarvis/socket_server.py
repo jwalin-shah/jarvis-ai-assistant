@@ -19,6 +19,7 @@ Features speculative prefetching for near-instant responses:
 
 import asyncio
 import copy
+import hmac
 import json
 import logging
 import os
@@ -36,6 +37,54 @@ from jarvis.observability.logging import log_event, timed_operation
 from jarvis.utils.latency_tracker import track_latency
 
 logger = logging.getLogger(__name__)
+
+
+class RateLimiter:
+    """Simple in-memory sliding-window rate limiter.
+
+    Tracks request timestamps per client and rejects requests exceeding the limit.
+    """
+
+    def __init__(self, max_requests: int = 100, window_seconds: float = 1.0) -> None:
+        self._max_requests = max_requests
+        self._window = window_seconds
+        self._requests: dict[str, list[float]] = {}
+        import time as _time
+
+        self._time = _time
+
+    def is_allowed(self, client_id: str) -> bool:
+        """Check if a request from client_id is allowed.
+
+        Returns True if under rate limit, False if exceeded.
+        """
+        now = self._time.monotonic()
+        cutoff = now - self._window
+
+        if client_id not in self._requests:
+            self._requests[client_id] = [now]
+            return True
+
+        # Remove expired timestamps
+        timestamps = self._requests[client_id]
+        # Find the first timestamp within the window (list is chronological)
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.pop(0)
+
+        if len(timestamps) >= self._max_requests:
+            return False
+
+        timestamps.append(now)
+        return True
+
+    def cleanup(self) -> None:
+        """Remove stale client entries (call periodically)."""
+        now = self._time.monotonic()
+        cutoff = now - self._window * 2
+        stale = [k for k, v in self._requests.items() if not v or v[-1] < cutoff]
+        for k in stale:
+            del self._requests[k]
+
 
 # Socket configuration
 SOCKET_PATH = Path.home() / ".jarvis" / "jarvis.sock"
@@ -140,6 +189,9 @@ class JarvisSocketServer:
 
         # Prefetch manager for speculative caching
         self._prefetch_manager: Any = None
+
+        # Rate limiter: 100 req/s per client
+        self._rate_limiter = RateLimiter(max_requests=100, window_seconds=1.0)
 
         # Register built-in methods
         self._register_methods()
@@ -551,6 +603,12 @@ class JarvisSocketServer:
                         response = self._error_response(None, INVALID_REQUEST, "Message too large")
                         writer.write(response.encode() + b"\n")
                         await writer.drain()
+                    elif not self._rate_limiter.is_allowed(str(peer)):
+                        response = self._error_response(
+                            None, INVALID_REQUEST, "Rate limit exceeded"
+                        )
+                        writer.write(response.encode() + b"\n")
+                        await writer.drain()
                     else:
                         # Pass writer for streaming support
                         response = await self._process_message(line.decode(), writer)
@@ -590,7 +648,7 @@ class JarvisSocketServer:
                 path = websocket.request.path if websocket.request else ""
                 query_params = parse_qs(urlparse(path).query)
                 client_token = query_params.get("token", [None])[0]
-                if client_token != self._ws_auth_token:
+                if not client_token or not hmac.compare_digest(client_token, self._ws_auth_token):
                     log_event(
                         logger,
                         "websocket.auth_failed",
@@ -629,6 +687,9 @@ class JarvisSocketServer:
 
                 if len(message) > MAX_MESSAGE_SIZE:
                     response = self._error_response(None, INVALID_REQUEST, "Message too large")
+                    await websocket.send(response)
+                elif not self._rate_limiter.is_allowed(str(websocket.remote_address)):
+                    response = self._error_response(None, INVALID_REQUEST, "Rate limit exceeded")
                     await websocket.send(response)
                 else:
                     # Create a WebSocket writer wrapper for streaming

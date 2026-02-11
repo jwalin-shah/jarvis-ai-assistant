@@ -33,6 +33,31 @@ logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path.home() / ".jarvis" / "config.json"
 
+
+def validate_path(path: str | Path, description: str = "path") -> Path:
+    """Validate a filesystem path, rejecting path traversal attempts.
+
+    Args:
+        path: The path to validate.
+        description: Human-readable description for error messages.
+
+    Returns:
+        Resolved Path object.
+
+    Raises:
+        ValueError: If the path contains traversal sequences or is invalid.
+    """
+    path_str = str(path)
+    # Reject explicit traversal sequences
+    if ".." in path_str.split(os.sep) or ".." in path_str.split("/"):
+        raise ValueError(f"Path traversal detected in {description}: {path_str}")
+    # Reject null bytes (common injection technique)
+    if "\x00" in path_str:
+        raise ValueError(f"Null byte detected in {description}")
+    resolved = Path(path_str).resolve()
+    return resolved
+
+
 # Current config schema version for migration tracking
 CONFIG_VERSION = 13
 
@@ -437,8 +462,8 @@ class NormalizationConfig(BaseModel):
             preserve_url_domain=True,
             replace_codes=True,
             ner_enabled=False,  # Don't need NER for storage
-            expand_slang=False,  # Keep original slang for LLM style
-            spell_check=True,  # Fix typos (mistakes, not style)
+            expand_slang=True,  # Expand slang for better entity extraction
+            spell_check=False,  # Disabled: mangles entity names (mom→mon, Xbox→box)
             filter_non_english=False,
             min_length=1,
             max_length=2000,
