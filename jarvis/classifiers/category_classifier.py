@@ -79,6 +79,9 @@ CATEGORIES = [
 # Feature extractor singleton
 _feature_extractor = None
 
+# Cached zero context embedding (avoids 1.5KB allocation per classification)
+_ZERO_CONTEXT = np.zeros(384, dtype=np.float32)
+
 
 def _get_feature_extractor() -> CategoryFeatureExtractor:
     """Get or initialize feature extractor."""
@@ -292,7 +295,7 @@ class CategoryClassifier(EmbedderMixin):
                 # Zero-context-at-inference strategy: model trained WITH context for auxiliary
                 # supervision, but we zero it out at inference for better generalization.
                 # The 3 hand-crafted context stats in non-BERT features still use context.
-                context_embedding = np.zeros(384, dtype=np.float32)
+                context_embedding = _ZERO_CONTEXT
 
                 # 3. All non-BERT features (147) - still pass context for hand-crafted features
                 # These include 3 context stats + context_lexical_overlap (minimal contribution)

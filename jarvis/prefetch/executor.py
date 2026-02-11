@@ -258,6 +258,7 @@ class PrefetchExecutor:
 
         # Active tasks tracking
         self._active_tasks: set[str] = set()
+        self._active_drafts: dict[str, str] = {}  # chat_id → active_key for O(1) lookup
         self._active_lock = threading.Lock()
 
         # Register default handlers
@@ -388,15 +389,11 @@ class PrefetchExecutor:
             with self._active_lock:
                 if prediction.key in self._active_tasks:
                     return False
-                # Block duplicate drafts for the same chat
+                # Block duplicate drafts for the same chat (O(1) lookup)
                 if prediction.type == PredictionType.DRAFT_REPLY:
                     draft_cid = prediction.params.get("chat_id", "")
-                    if draft_cid:
-                        for active_key in self._active_tasks:
-                            if active_key.startswith("draft:") and active_key.endswith(
-                                f":{draft_cid}"
-                            ):
-                                return False
+                    if draft_cid and draft_cid in self._active_drafts:
+                        return False
 
         # Create task with inverted priority (lower = higher priority)
         task = PrefetchTask(
@@ -514,6 +511,11 @@ class PrefetchExecutor:
             if prediction.key in self._active_tasks:
                 return  # Already being processed
             self._active_tasks.add(prediction.key)
+            # Track active drafts by chat_id for O(1) duplicate check
+            if prediction.type == PredictionType.DRAFT_REPLY:
+                draft_cid = prediction.params.get("chat_id", "")
+                if draft_cid:
+                    self._active_drafts[draft_cid] = prediction.key
 
         try:
             # Get handler
@@ -567,6 +569,11 @@ class PrefetchExecutor:
             # Mark as inactive
             with self._active_lock:
                 self._active_tasks.discard(prediction.key)
+                # Remove from active drafts tracking
+                if prediction.type == PredictionType.DRAFT_REPLY:
+                    draft_cid = prediction.params.get("chat_id", "")
+                    if draft_cid:
+                        self._active_drafts.pop(draft_cid, None)
             self._stats.queue_size = self._queue.qsize()
 
     def _get_cache_tier(self, prediction: Prediction) -> CacheTier:

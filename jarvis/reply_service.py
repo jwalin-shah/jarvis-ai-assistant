@@ -422,6 +422,7 @@ class ReplyService:
             search_results=search_results,
             contact=contact,
             thread=thread_messages,
+            cached_embedder=cached_embedder,
         )
         result = self._generate_llm_reply(request, search_results, thread_messages)
         latency_ms["generation"] = (time.perf_counter() - gen_start) * 1000
@@ -466,6 +467,7 @@ class ReplyService:
         contact: Contact | None,
         thread: list[str] | None = None,
         instruction: str | None = None,
+        cached_embedder: CachedEmbedder | None = None,
     ) -> GenerationRequest:
         """Build a typed GenerationRequest with context, classification, and RAG docs."""
         from jarvis.prompts import get_optimized_examples, get_optimized_instruction
@@ -535,7 +537,7 @@ class ReplyService:
                 )
         context.metadata["instruction"] = instruction or ""
 
-        if len(search_results) > 1:
+        if len(search_results) > 3:
             search_results = self.reranker.rerank(
                 query=incoming,
                 candidates=search_results,
@@ -561,7 +563,8 @@ class ReplyService:
             len(all_exchanges) - len(similar_exchanges)
         )
 
-        cached_embedder = get_embedder()
+        if cached_embedder is None:
+            cached_embedder = get_embedder()
         all_exchanges = self._dedupe_examples(
             all_exchanges, cached_embedder, rerank_scores=all_rerank_scores
         )
@@ -727,6 +730,10 @@ class ReplyService:
         # Score for tiebreaking: prefer rerank_score, fallback to context length
         scores = rerank_scores or [0.0] * len(examples)
 
+        # Compute full similarity matrix once (replaces ~n^2 individual dot products)
+        emb_array = np.array(embeddings)
+        sim_matrix = np.dot(emb_array, emb_array.T)
+
         # Find near-duplicates (cosine sim > 0.85)
         keep = [True] * len(examples)
         for i in range(len(examples)):
@@ -735,8 +742,7 @@ class ReplyService:
             for j in range(i + 1, len(examples)):
                 if not keep[j]:
                     continue
-                sim = float(np.dot(embeddings[i], embeddings[j]))
-                if sim > 0.85:
+                if sim_matrix[i, j] > 0.85:
                     # Keep the one with higher rerank score, break ties by context length
                     i_score = (scores[i], len(examples[i][0]))
                     j_score = (scores[j], len(examples[j][0]))
@@ -747,25 +753,20 @@ class ReplyService:
                         break
 
         kept = [ex for ex, k in zip(examples, keep) if k]
-        kept_embs = [emb for emb, k in zip(embeddings, keep) if k]
+        kept_indices = [i for i, k in enumerate(keep) if k]
 
         # Topic diversity: if all remaining examples are too similar to each other
         # (avg pairwise sim > 0.75), drop the least unique one to make room
         if len(kept) > 2:
             n = len(kept)
-            pair_sims = []
-            for i in range(n):
-                for j in range(i + 1, n):
-                    pair_sims.append(float(np.dot(kept_embs[i], kept_embs[j])))
-            avg_sim = sum(pair_sims) / len(pair_sims) if pair_sims else 0.0
+            # Extract sub-matrix for kept items
+            kept_sim = sim_matrix[np.ix_(kept_indices, kept_indices)]
+            # Average pairwise sim (exclude diagonal)
+            mask = ~np.eye(n, dtype=bool)
+            avg_sim = float(kept_sim[mask].mean()) if n > 1 else 0.0
             if avg_sim > 0.75:
                 # Drop the example most similar to all others
-                avg_per_ex = []
-                for i in range(n):
-                    s = sum(
-                        float(np.dot(kept_embs[i], kept_embs[j])) for j in range(n) if j != i
-                    ) / (n - 1)
-                    avg_per_ex.append(s)
+                avg_per_ex = (kept_sim.sum(axis=1) - 1.0) / (n - 1)  # exclude self-sim
                 drop_idx = int(np.argmax(avg_per_ex))
                 kept.pop(drop_idx)
 

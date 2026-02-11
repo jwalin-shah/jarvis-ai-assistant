@@ -401,7 +401,7 @@ class TestWebSocketWriter:
         writer.write(b"Hello ")
         writer.write(b"World")
 
-        assert writer._buffer == "Hello World"
+        assert writer._parts == [b"Hello ", b"World"]
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(10)
@@ -414,7 +414,7 @@ class TestWebSocketWriter:
         await writer.drain()
 
         mock_ws.send.assert_called_once_with("Test message")
-        assert writer._buffer == ""
+        assert writer._parts == []
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(10)

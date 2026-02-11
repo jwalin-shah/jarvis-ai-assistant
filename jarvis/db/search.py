@@ -352,40 +352,33 @@ class PairSearchMixin:
             return [self._row_to_pair(row) for row in cursor]
 
     def get_split_stats(self: JarvisDBBase) -> dict[str, Any]:
-        """Get statistics about the current train/test split."""
+        """Get statistics about the current train/test split (single query)."""
         with self.connection() as conn:
-            stats: dict[str, Any] = {}
-
-            # Training pairs
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = FALSE")
-            stats["training_pairs"] = cursor.fetchone()["cnt"]
-
-            # Holdout pairs
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = TRUE")
-            stats["holdout_pairs"] = cursor.fetchone()["cnt"]
-
-            # Training contacts
             cursor = conn.execute(
                 """
-                SELECT COUNT(DISTINCT contact_id) as cnt
-                FROM pairs WHERE is_holdout = FALSE AND contact_id IS NOT NULL
+                SELECT
+                    SUM(CASE WHEN is_holdout = FALSE THEN 1 ELSE 0 END) as training_pairs,
+                    SUM(CASE WHEN is_holdout = TRUE THEN 1 ELSE 0 END) as holdout_pairs,
+                    COUNT(DISTINCT CASE
+                        WHEN is_holdout = FALSE AND contact_id IS NOT NULL
+                        THEN contact_id END) as training_contacts,
+                    COUNT(DISTINCT CASE
+                        WHEN is_holdout = TRUE AND contact_id IS NOT NULL
+                        THEN contact_id END) as holdout_contacts
+                FROM pairs
                 """
             )
-            stats["training_contacts"] = cursor.fetchone()["cnt"]
-
-            # Holdout contacts
-            cursor = conn.execute(
-                """
-                SELECT COUNT(DISTINCT contact_id) as cnt
-                FROM pairs WHERE is_holdout = TRUE AND contact_id IS NOT NULL
-                """
-            )
-            stats["holdout_contacts"] = cursor.fetchone()["cnt"]
-
-            total = stats["training_pairs"] + stats["holdout_pairs"]
-            stats["holdout_ratio"] = stats["holdout_pairs"] / total if total > 0 else 0
-
-            return stats
+            row = cursor.fetchone()
+            training_pairs = row["training_pairs"] or 0
+            holdout_pairs = row["holdout_pairs"] or 0
+            total = training_pairs + holdout_pairs
+            return {
+                "training_pairs": training_pairs,
+                "holdout_pairs": holdout_pairs,
+                "training_contacts": row["training_contacts"] or 0,
+                "holdout_contacts": row["holdout_contacts"] or 0,
+                "holdout_ratio": holdout_pairs / total if total > 0 else 0,
+            }
 
     def get_valid_pairs(
         self: JarvisDBBase, min_quality: float = 0.0, limit: int = 100000

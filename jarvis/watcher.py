@@ -88,6 +88,8 @@ class ChatDBWatcher:
         self._resegment_locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
         self._max_resegment_locks = 100  # LRU eviction limit
         self._resegment_locks_mutex = asyncio.Lock()  # Protect OrderedDict mutations
+        # Persistent read-only connection for rowid polling (avoids 10-50ms connect overhead)
+        self._poll_conn: sqlite3.Connection | None = None
 
     async def start(self) -> None:
         """Start watching chat.db for changes."""
@@ -134,6 +136,14 @@ class ChatDBWatcher:
     async def stop(self) -> None:
         """Stop watching."""
         self._running = False
+
+        # Close persistent polling connection
+        if self._poll_conn:
+            try:
+                self._poll_conn.close()
+            except Exception:
+                pass
+            self._poll_conn = None
 
         if self._monitor_task:
             self._monitor_task.cancel()
@@ -284,30 +294,24 @@ class ChatDBWatcher:
                 task = asyncio.create_task(self._index_new_messages(new_messages))
                 task.add_done_callback(self._log_task_exception)
 
+            # Pre-build all payloads, then broadcast (avoids dict creation inside loop)
             for msg in new_messages:
                 try:
-                    # Broadcast new message notification with concurrency bound
-                    async with self._concurrency:
-                        await self._broadcast_handler.broadcast(
-                            "new_message",
-                            {
-                                "message_id": msg["id"],
-                                "chat_id": msg["chat_id"],
-                                "sender": msg["sender"],
-                                "text": msg["text"],
-                                "date": msg["date"],
-                                "is_from_me": msg["is_from_me"],
-                            },
-                        )
+                    await self._broadcast_handler.broadcast(
+                        "new_message",
+                        {
+                            "message_id": msg["id"],
+                            "chat_id": msg["chat_id"],
+                            "sender": msg["sender"],
+                            "text": msg["text"],
+                            "date": msg["date"],
+                            "is_from_me": msg["is_from_me"],
+                        },
+                    )
 
                     # Only advance rowid after successful broadcast
                     self._last_rowid = max(self._last_rowid or 0, msg["id"])
 
-                    logger.debug(
-                        "New message in %s (length=%d)",
-                        msg["chat_id"],
-                        len(msg["text"]) if msg["text"] else 0,
-                    )
                 except Exception as e:
                     logger.warning(
                         "Failed to broadcast message %d in %s: %s",
@@ -315,10 +319,6 @@ class ChatDBWatcher:
                         msg["chat_id"],
                         e,
                     )
-                    # Skip advancing rowid on failure - will retry on next check
-                    # This means failed messages will be retried, but if the broadcast
-                    # handler is persistently broken, we'll retry forever. That's acceptable
-                    # since the alternative (skipping messages) loses data.
 
             # Extract facts from new messages (background, non-blocking)
             if new_messages:
@@ -576,26 +576,37 @@ class ChatDBWatcher:
         """Get the current maximum message ROWID."""
         return await asyncio.to_thread(self._query_last_rowid)
 
-    def _query_last_rowid(self) -> int | None:
-        """Query the last message ROWID (sync)."""
+    def _get_poll_conn(self) -> sqlite3.Connection | None:
+        """Get or create persistent read-only connection for polling."""
+        if self._poll_conn is not None:
+            return self._poll_conn
         if not CHAT_DB_PATH.exists():
             return None
-
         try:
-            conn = sqlite3.connect(
+            self._poll_conn = sqlite3.connect(
                 f"file:{CHAT_DB_PATH}?mode=ro",
                 uri=True,
                 timeout=5.0,
             )
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT MAX(ROWID) FROM message")
-                row = cursor.fetchone()
-                return row[0] if row and row[0] else None
-            finally:
-                conn.close()
+            return self._poll_conn
+        except Exception as e:
+            logger.debug("Error creating poll connection: %s", e)
+            return None
+
+    def _query_last_rowid(self) -> int | None:
+        """Query the last message ROWID (sync)."""
+        conn = self._get_poll_conn()
+        if conn is None:
+            return None
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(ROWID) FROM message")
+            row = cursor.fetchone()
+            return row[0] if row and row[0] else None
         except Exception as e:
             logger.debug("Error getting last ROWID: %s", e)
+            # Connection may be stale, reset it
+            self._poll_conn = None
             return None
 
     async def _get_new_messages(self) -> list[dict[str, Any]]:
@@ -633,65 +644,58 @@ class ChatDBWatcher:
             since_rowid: Only fetch messages with ROWID > this value
             limit: Maximum number of messages to fetch in one query
         """
-        if not CHAT_DB_PATH.exists():
+        conn = self._get_poll_conn()
+        if conn is None:
             return []
 
         try:
-            conn = sqlite3.connect(
-                f"file:{CHAT_DB_PATH}?mode=ro",
-                uri=True,
-                timeout=5.0,
-            )
             conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    message.ROWID as id,
+                    chat.guid as chat_id,
+                    COALESCE(handle.id, 'me') as sender,
+                    message.text,
+                    message.date,
+                    message.is_from_me
+                FROM message
+                JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+                JOIN chat ON chat_message_join.chat_id = chat.ROWID
+                LEFT JOIN handle ON message.handle_id = handle.ROWID
+                WHERE message.ROWID > ?
+                ORDER BY message.date ASC
+                LIMIT ?
+                """,
+                (since_rowid, limit),
+            )
 
-            try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT
-                        message.ROWID as id,
-                        chat.guid as chat_id,
-                        COALESCE(handle.id, 'me') as sender,
-                        message.text,
-                        message.date,
-                        message.is_from_me
-                    FROM message
-                    JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
-                    JOIN chat ON chat_message_join.chat_id = chat.ROWID
-                    LEFT JOIN handle ON message.handle_id = handle.ROWID
-                    WHERE message.ROWID > ?
-                    ORDER BY message.date ASC
-                    LIMIT ?
-                    """,
-                    (since_rowid, limit),
+            messages = []
+            for row in cursor.fetchall():
+                # Parse Apple timestamp
+                date = None
+                if row["date"]:
+                    unix_ts = (row["date"] / 1_000_000_000) + APPLE_EPOCH_OFFSET
+                    date = datetime.fromtimestamp(unix_ts, tz=UTC).isoformat()
+
+                messages.append(
+                    {
+                        "id": row["id"],
+                        "chat_id": row["chat_id"],
+                        "sender": row["sender"],
+                        "text": row["text"],
+                        "date": date,
+                        "is_from_me": bool(row["is_from_me"]),
+                    }
                 )
 
-                messages = []
-                for row in cursor.fetchall():
-                    # Parse Apple timestamp
-                    date = None
-                    if row["date"]:
-                        unix_ts = (row["date"] / 1_000_000_000) + APPLE_EPOCH_OFFSET
-                        date = datetime.fromtimestamp(unix_ts, tz=UTC).isoformat()
-
-                    messages.append(
-                        {
-                            "id": row["id"],
-                            "chat_id": row["chat_id"],
-                            "sender": row["sender"],
-                            "text": row["text"],
-                            "date": date,
-                            "is_from_me": bool(row["is_from_me"]),
-                        }
-                    )
-
-                return messages
-
-            finally:
-                conn.close()
+            return messages
 
         except Exception as e:
             logger.warning("Error querying new messages: %s", e)
+            # Connection may be stale, reset it
+            self._poll_conn = None
             return []
 
 
