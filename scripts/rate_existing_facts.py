@@ -28,6 +28,7 @@ def _setup_logging() -> None:
         handlers=[file_handler, stream_handler],
     )
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
@@ -165,22 +166,22 @@ def main(argv: Sequence[str] | None = None) -> None:
             f.write("- Rating 3 (borderline): ___\n")
             f.write("- Rating 2 (wrong): ___\n")
             f.write("- Rating 1 (useless): ___\n\n")
-            f.write("**Precision (3+):** ___ / {} = ___%\n".format(len(facts)))
+            f.write(f"**Precision (3+):** ___ / {len(facts)} = ___%\n")
             f.write("**(Borderline + Good + Excellent combined)\n\n")
-            f.write("**Precision (4+):** ___ / {} = ___%\n".format(len(facts)))
+            f.write(f"**Precision (4+):** ___ / {len(facts)} = ___%\n")
             f.write("**(Good + Excellent only - stricter)\n\n")
     except OSError as exc:
         print(f"Error writing output file '{output_file}': {exc}", flush=True)
         raise SystemExit(1) from exc
 
     print(f"\nRating template created: {output_file}", flush=True)
-    print(f"\nNext steps:", flush=True)
+    print("\nNext steps:", flush=True)
     print(f"1. Open {output_file}", flush=True)
-    print(f"2. Read the source message + fact for each one", flush=True)
-    print(f"3. Rate each fact 1-5 (replace [ ] with [1], [2], etc.)", flush=True)
-    print(f"4. Fill in the summary section at the end", flush=True)
+    print("2. Read the source message + fact for each one", flush=True)
+    print("3. Rate each fact 1-5 (replace [ ] with [1], [2], etc.)", flush=True)
+    print("4. Fill in the summary section at the end", flush=True)
     print(f"5. Calculate precision = (ratings 3+) / {len(facts)}", flush=True)
-    print(f"\nThis will show us baseline precision before quality filters.", flush=True)
+    print("\nThis will show us baseline precision before quality filters.", flush=True)
     logging.info("Finished rate_existing_facts.py")
 
 

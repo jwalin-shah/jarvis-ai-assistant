@@ -30,5 +30,6 @@ echo "Syncing GLiNER compatibility dependencies..."
   "torch>=2.5.0"
 
 PYTHONPATH="${ROOT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
+  HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-1}" \
   "${VENV_DIR}/bin/python" \
   "$@"

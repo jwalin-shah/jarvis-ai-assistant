@@ -13,11 +13,14 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -682,26 +685,36 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # Setup logging
+    log_path = PROJECT_ROOT / "results" / "batch_eval.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(log_path), logging.StreamHandler(sys.stdout)],
+    )
+    logger = logging.getLogger(__name__)
+
     strategy = "dspy_optimized" if args.optimized else "xml_drafter"
-    print("=" * 70)
-    print("JARVIS BATCH EVAL - Response Generation")
-    print("=" * 70)
-    print(f"Test cases:  {len(TEST_CASES)}")
-    print(f"Strategy:    {strategy}")
+    print("=" * 70, flush=True)
+    print("JARVIS BATCH EVAL - Response Generation", flush=True)
+    print("=" * 70, flush=True)
+    print(f"Test cases:  {len(TEST_CASES)}", flush=True)
+    print(f"Strategy:    {strategy}", flush=True)
     judge_label = f"{JUDGE_MODEL} via DeepInfra" if args.judge else "disabled (use --judge)"
-    print(f"LLM judge:   {judge_label}")
-    print()
+    print(f"LLM judge:   {judge_label}", flush=True)
+    print(flush=True)
 
     # Init judge
     judge_client = None
     if args.judge:
         judge_client = get_judge_client()
         if judge_client is None:
-            print("WARNING: CEREBRAS_API_KEY not set in .env - skipping judge")
-            print("         Put your key in .env and re-run with --judge")
+            print("WARNING: CEREBRAS_API_KEY not set in .env - skipping judge", flush=True)
+            print("         Put your key in .env and re-run with --judge", flush=True)
         else:
-            print(f"Judge ready: {JUDGE_MODEL} via Cerebras")
-    print()
+            print(f"Judge ready: {JUDGE_MODEL} via Cerebras", flush=True)
+    print(flush=True)
 
     # Load model / compiled program
     dspy_program = None
@@ -710,10 +723,10 @@ def main() -> int:
     if args.optimized:
         optimized_dir = PROJECT_ROOT / "evals" / "optimized_reply"
         if not optimized_dir.exists():
-            print("ERROR: No compiled program found at evals/optimized_reply/")
-            print("       Run: uv run python evals/dspy_optimize.py")
+            print("ERROR: No compiled program found at evals/optimized_reply/", flush=True)
+            print("       Run: uv run python evals/dspy_optimize.py", flush=True)
             return 1
-        print("Loading DSPy compiled program...")
+        print("Loading DSPy compiled program...", flush=True)
         load_start = time.perf_counter()
         try:
             import dspy
@@ -726,12 +739,12 @@ def main() -> int:
             dspy_program = ReplyModule()
             dspy_program.load(str(optimized_dir))
             load_ms = (time.perf_counter() - load_start) * 1000
-            print(f"Compiled program loaded in {load_ms:.0f}ms")
+            print(f"Compiled program loaded in {load_ms:.0f}ms", flush=True)
         except Exception as e:
-            print(f"FATAL: Failed to load compiled program: {e}")
+            print(f"FATAL: Failed to load compiled program: {e}", flush=True)
             return 1
     else:
-        print("Loading MLX model...")
+        print("Loading MLX model...", flush=True)
         load_start = time.perf_counter()
         try:
             from models.loader import get_model
@@ -740,18 +753,18 @@ def main() -> int:
             if not loader.is_loaded():
                 loader.load()
             load_ms = (time.perf_counter() - load_start) * 1000
-            print(f"Model loaded in {load_ms:.0f}ms")
+            print(f"Model loaded in {load_ms:.0f}ms", flush=True)
         except Exception as e:
-            print(f"FATAL: Failed to load model: {e}")
+            print(f"FATAL: Failed to load model: {e}", flush=True)
             return 1
 
-    print()
-    print("-" * 70)
+    print(flush=True)
+    print("-" * 70, flush=True)
 
     results: list[EvalResult] = []
     total_start = time.perf_counter()
 
-    for i, tc in enumerate(TEST_CASES, 1):
+    for i, tc in enumerate(tqdm(TEST_CASES, desc="Evaluating"), 1):
         # Generate via DSPy compiled program or raw model
         gen_start = time.perf_counter()
         try:
@@ -805,25 +818,25 @@ def main() -> int:
         # Print per-case
         status = "PASS" if all_passed else "FAIL"
         cat = tc.get("category", "?")
-        print(f"\n[{i:2d}/{len(TEST_CASES)}] [{cat}] {tc['name']}")
-        print(f'  Output:  "{output}"')
+        print(f"\n[{i:2d}/{len(TEST_CASES)}] [{cat}] {tc['name']}", flush=True)
+        print(f'  Output:  "{output}"', flush=True)
         judge_str = ""
         if judge_score is not None and judge_score >= 0:
             judge_str = f" | Judge: {judge_score:.0f}/10"
-        print(f"  Latency: {latency_ms:.0f}ms | Local: {status}{judge_str}")
+        print(f"  Latency: {latency_ms:.0f}ms | Local: {status}{judge_str}", flush=True)
         if failed_checks:
             for f in failed_checks:
-                print(f"  FAIL: {f}")
+                print(f"  FAIL: {f}", flush=True)
         if judge_reasoning:
-            print(f"  Judge: {judge_reasoning}")
+            print(f"  Judge: {judge_reasoning}", flush=True)
 
     total_ms = (time.perf_counter() - total_start) * 1000
 
     # Summary
-    print()
-    print("=" * 70)
-    print("SUMMARY")
-    print("=" * 70)
+    print(flush=True)
+    print("=" * 70, flush=True)
+    print("SUMMARY", flush=True)
+    print("=" * 70, flush=True)
 
     n_passed = sum(1 for r in results if r.passed)
     n_failed = len(results) - n_passed
@@ -834,12 +847,15 @@ def main() -> int:
     p95_idx = min(int(len(sorted_lat) * 0.95), len(sorted_lat) - 1)
     p95 = sorted_lat[p95_idx] if sorted_lat else 0
 
-    print(f"Local pass:   {n_passed}/{len(results)} ({n_passed / len(results) * 100:.0f}%)")
-    print(f"Failed:       {n_failed}")
-    print(f"Total time:   {total_ms:.0f}ms")
-    print(f"Avg latency:  {avg_latency:.0f}ms")
-    print(f"P50 latency:  {p50:.0f}ms")
-    print(f"P95 latency:  {p95:.0f}ms")
+    print(
+        f"Local pass:   {n_passed}/{len(results)} ({n_passed / len(results) * 100:.0f}%)",
+        flush=True,
+    )
+    print(f"Failed:       {n_failed}", flush=True)
+    print(f"Total time:   {total_ms:.0f}ms", flush=True)
+    print(f"Avg latency:  {avg_latency:.0f}ms", flush=True)
+    print(f"P50 latency:  {p50:.0f}ms", flush=True)
+    print(f"P95 latency:  {p95:.0f}ms", flush=True)
 
     # Judge summary
     scored = [r for r in results if r.judge_score is not None and r.judge_score >= 0]
@@ -849,20 +865,26 @@ def main() -> int:
         min_score = min(scores)
         max_score = max(scores)
         pass_7 = sum(1 for s in scores if s >= 7)
-        print()
-        print(f"Judge scores: avg={avg_score:.1f}/10  min={min_score:.0f}  max={max_score:.0f}")
-        print(f"Judge pass (>=7): {pass_7}/{len(scored)} ({pass_7 / len(scored) * 100:.0f}%)")
+        print(flush=True)
+        print(
+            f"Judge scores: avg={avg_score:.1f}/10  min={min_score:.0f}  max={max_score:.0f}",
+            flush=True,
+        )
+        print(
+            f"Judge pass (>=7): {pass_7}/{len(scored)} ({pass_7 / len(scored) * 100:.0f}%)",
+            flush=True,
+        )
 
     if n_failed:
-        print("\nLocal failures:")
+        print("\nLocal failures:", flush=True)
         for r in results:
             if not r.passed:
-                print(f"  - {r.name}: {', '.join(r.checks_failed)}")
+                print(f"  - {r.name}: {', '.join(r.checks_failed)}", flush=True)
 
     # Per-category breakdown
-    print()
-    print("PER-CATEGORY BREAKDOWN")
-    print("-" * 70)
+    print(flush=True)
+    print("PER-CATEGORY BREAKDOWN", flush=True)
+    print("-" * 70, flush=True)
     for cat in CATEGORIES:
         cat_results = [r for r in results if r.category == cat]
         if not cat_results:
@@ -875,15 +897,16 @@ def main() -> int:
             cat_judge = f"  judge_avg={cat_avg:.1f}/10"
         print(
             f"  {cat:20s}  local={cat_passed}/{len(cat_results)}"
-            f" ({cat_passed / len(cat_results) * 100:.0f}%){cat_judge}"
+            f" ({cat_passed / len(cat_results) * 100:.0f}%){cat_judge}",
+            flush=True,
         )
 
     if scored:
         low = [r for r in scored if r.judge_score < 7]
         if low:
-            print("\nLow judge scores (<7):")
+            print("\nLow judge scores (<7):", flush=True)
             for r in low:
-                print(f"  - {r.name}: {r.judge_score:.0f}/10 - {r.judge_reasoning}")
+                print(f"  - {r.name}: {r.judge_score:.0f}/10 - {r.judge_reasoning}", flush=True)
 
     # Save results
     output_path = PROJECT_ROOT / "results" / "batch_eval_latest.json"
@@ -919,8 +942,8 @@ def main() -> int:
         ],
     }
     output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"\nResults saved to: {output_path}")
-    print("=" * 70)
+    print(f"\nResults saved to: {output_path}", flush=True)
+    print("=" * 70, flush=True)
 
     return 0 if n_failed == 0 else 1
 

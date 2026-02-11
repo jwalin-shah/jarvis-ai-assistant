@@ -42,6 +42,7 @@ def _setup_logging() -> None:
         ],
     )
 
+
 # Emoji pattern for style matching
 EMOJI_PAT = re.compile(
     "["

@@ -24,6 +24,7 @@ def _setup_logging() -> None:
         handlers=[file_handler, stream_handler],
     )
 
+
 # Model matrix
 MODELS = [
     {
@@ -122,7 +123,9 @@ def generate_configs(out_dir: Path = Path("ft_configs")) -> None:
                 try:
                     with path.open("w") as f:
                         # Add header comment
-                        f.write(f"# Personal fine-tune: {model['id']} {adapter.upper()} {data['id']}\n")
+                        f.write(
+                            f"# Personal fine-tune: {model['id']} {adapter.upper()} {data['id']}\n"
+                        )
                         f.write(f"# Run: uv run mlx_lm.lora --config {path}\n\n")
                         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
                 except OSError as exc:

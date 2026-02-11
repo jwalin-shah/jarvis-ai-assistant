@@ -87,7 +87,9 @@ def load_labeled_examples(labeled_data: Path, logger: logging.Logger) -> list[di
     return examples
 
 
-def extract_features_with_embeddings(examples: list[dict], logger: logging.Logger) -> tuple[np.ndarray, list[str], list[str]]:
+def extract_features_with_embeddings(
+    examples: list[dict], logger: logging.Logger
+) -> tuple[np.ndarray, list[str], list[str]]:
     """Extract BERT embeddings + hand-crafted features."""
     import numpy as np
     from tqdm import tqdm
@@ -131,7 +133,9 @@ def extract_features_with_embeddings(examples: list[dict], logger: logging.Logge
     y = np.array(categories)
 
     logger.info(f"Extracted {X.shape[0]} examples with {X.shape[1]} features")
-    logger.info(f"Feature breakdown: 384 BERT + {X.shape[1] - 384} hand-crafted = {X.shape[1]} total")
+    logger.info(
+        f"Feature breakdown: 384 BERT + {X.shape[1] - 384} hand-crafted = {X.shape[1]} total"
+    )
 
     return X, y, ids
 

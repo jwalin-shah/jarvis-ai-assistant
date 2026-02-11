@@ -237,7 +237,7 @@ def generate_reply(prompt: str, config: dict) -> dict:
 def main():
     # promptfoo exec provider passes: argv[1]=prompt, argv[2]=config_json, argv[3]=context_json
     if len(sys.argv) < 4:
-        print(json.dumps({"error": f"Expected 3 args, got {len(sys.argv) - 1}"}))
+        print(json.dumps({"error": f"Expected 3 args, got {len(sys.argv) - 1}"}), flush=True)
         sys.exit(1)
 
     raw_prompt = sys.argv[1]  # e.g. "strategy:xml_drafter"
@@ -248,7 +248,7 @@ def main():
     try:
         context_obj = json.loads(sys.argv[3])
     except json.JSONDecodeError as e:
-        print(json.dumps({"error": f"Invalid context JSON: {e}"}))
+        print(json.dumps({"error": f"Invalid context JSON: {e}"}), flush=True)
         sys.exit(1)
 
     vars_dict = context_obj.get("vars", {})
@@ -277,12 +277,12 @@ def main():
             user_style=user_style,
         )
     except Exception as e:
-        print(json.dumps({"error": f"Prompt build failed: {e}"}))
+        print(json.dumps({"error": f"Prompt build failed: {e}"}), flush=True)
         sys.exit(1)
 
     # Generate and return
     result = generate_reply(prompt, config)
-    print(json.dumps(result))
+    print(json.dumps(result), flush=True)
 
 
 if __name__ == "__main__":
