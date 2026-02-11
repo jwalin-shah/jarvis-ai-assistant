@@ -81,6 +81,27 @@ def train(
     embedding_dims = metadata["embedding_dims"]
     hand_crafted_dims = metadata["hand_crafted_dims"]
 
+    # Strip context BERT columns if present in training data.
+    # Old layout (915): BERT(384) + context_BERT(384) + hand-crafted(147)
+    # New layout (531): BERT(384) + hand-crafted(147)
+    # Context BERT was zeroed at inference, creating train-serve skew.
+    # Removing it from training eliminates the distribution mismatch.
+    total_features = X_train.shape[1]
+    if total_features == embedding_dims + 384 + hand_crafted_dims:
+        print(
+            f"Stripping context BERT columns (indices {embedding_dims}:{embedding_dims + 384}) "
+            f"to fix train-serve skew"
+        )
+        # Keep BERT embeddings [0:384] and hand-crafted [768:915], drop context BERT [384:768]
+        context_bert_end = embedding_dims + 384
+        X_train = np.concatenate(
+            [X_train[:, :embedding_dims], X_train[:, context_bert_end:]], axis=1
+        )
+        X_test = np.concatenate(
+            [X_test[:, :embedding_dims], X_test[:, context_bert_end:]], axis=1
+        )
+        print(f"Features reduced: {total_features} → {X_train.shape[1]}")
+
     print(f"Train: {X_train.shape}, Test: {X_test.shape}")
     print(f"Embedding dims: {embedding_dims}, Hand-crafted dims: {hand_crafted_dims}")
     print(f"Labels: {sorted(set(y_train))}")
@@ -268,6 +289,7 @@ def train(
         "feature_dims": int(X_train.shape[1]),
         "embedding_dims": embedding_dims,
         "hand_crafted_dims": hand_crafted_dims,
+        "feature_layout": f"BERT({embedding_dims}) + hand-crafted({hand_crafted_dims})",
         "train_size": len(X_train),
         "test_size": len(X_test),
     }
