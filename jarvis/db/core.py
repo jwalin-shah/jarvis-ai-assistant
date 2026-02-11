@@ -244,6 +244,44 @@ class JarvisDBBase:
         except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
             logger.warning("Could not create vec tables (sqlite-vec unavailable): %s", e)
 
+    def _ensure_contact_facts_columns(self, conn: sqlite3.Connection) -> None:
+        """Backfill contact_facts columns for partially migrated databases.
+
+        Some environments can have an older contact_facts table present even when
+        schema_version is behind. Ensure newer columns exist before SCHEMA_SQL
+        creates indices that depend on them.
+        """
+        try:
+            table_exists = (
+                conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facts'"
+                ).fetchone()
+                is not None
+            )
+            if not table_exists:
+                return
+
+            existing_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(contact_facts)").fetchall()
+            }
+            required_columns = {
+                "linked_contact_id": "TEXT",
+                "valid_from": "TIMESTAMP",
+                "valid_until": "TIMESTAMP",
+            }
+
+            for col_name, col_type in required_columns.items():
+                if col_name in existing_columns:
+                    continue
+                conn.execute(f"ALTER TABLE contact_facts ADD COLUMN {col_name} {col_type}")
+                logger.info("Added %s column to contact_facts table", col_name)
+        except sqlite3.OperationalError as e:
+            if "duplicate column" in str(e).lower():
+                logger.debug("contact_facts migration encountered existing column: %s", e)
+            else:
+                logger.error("contact_facts migration failed: %s", e)
+                raise
+
     def init_schema(self) -> bool:
         """Initialize database schema.
 
@@ -467,6 +505,9 @@ class JarvisDBBase:
             # Migration v11 -> v12: contact_facts table for knowledge graph
             # Table is created by SCHEMA_SQL with CREATE TABLE IF NOT EXISTS
             # No column migrations needed since this is a new table
+
+            # Handle partially-migrated DBs where contact_facts exists without newer columns.
+            self._ensure_contact_facts_columns(conn)
 
             # Apply schema
             conn.executescript(SCHEMA_SQL)
