@@ -205,6 +205,13 @@ class LFMAdapter(ExtractorAdapter):
                 sampler=sampler,
                 verbose=False,
             )
+
+        # Periodic cache clear to prevent OOM on long runs (8GB system)
+        self._gen_count = getattr(self, "_gen_count", 0) + 1
+        if self._gen_count % 10 == 0:
+            import mlx.core as mx
+            mx.clear_cache()
+
         return response
 
     def _parse_response(self, response: str, text: str) -> list[ExtractedCandidate]:

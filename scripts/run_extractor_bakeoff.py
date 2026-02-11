@@ -265,6 +265,7 @@ def run_extractor(
     gold_records: list[dict],
     config: dict[str, Any] | None = None,
     limit: int | None = None,
+    args_output_dir: Path | None = None,
 ) -> dict:
     """Run a single extractor against the gold set."""
     logger.info(f"\n{'=' * 60}")
@@ -295,7 +296,7 @@ def run_extractor(
         logger.error(f"Failed to load model for {extractor_name}: {e}")
         return {"extractor_name": extractor_name, "error": str(e)}
 
-    # Run extraction
+    # Run extraction - write predictions incrementally to JSONL for crash safety
     records = gold_records[:limit] if limit else gold_records
     logger.info(f"Extracting from {len(records)} messages...")
 
@@ -303,43 +304,64 @@ def run_extractor(
     timing: dict[int, float] = {}
     total_raw_entities = 0
 
+    # Incremental output file - survives crashes
+    out_dir = args_output_dir or OUTPUT_DIR
+    incremental_path = out_dir / f"{extractor_name}_predictions.jsonl"
+    incremental_path.parent.mkdir(parents=True, exist_ok=True)
+
     start_time = time.time()
 
-    for i, rec in enumerate(records):
-        if (i + 1) % 50 == 0:
-            logger.info(f"  Processed {i + 1}/{len(records)} messages")
+    with open(incremental_path, "w") as inc_f:
+        for i, rec in enumerate(records):
+            if (i + 1) % 50 == 0:
+                elapsed_so_far = time.time() - start_time
+                rate = (i + 1) / elapsed_so_far
+                eta = (len(records) - i - 1) / rate if rate > 0 else 0
+                logger.info(
+                    f"  Processed {i + 1}/{len(records)} messages "
+                    f"({elapsed_so_far:.0f}s elapsed, ETA {eta:.0f}s)"
+                )
 
-        msg_id = rec["message_id"]
+            msg_id = rec["message_id"]
 
-        # Extract
-        msg_start = time.perf_counter()
-        try:
-            candidates = extractor.extract_from_text(
-                text=rec["message_text"],
-                message_id=msg_id,
-                is_from_me=rec.get("is_from_me"),
-                context_prev=parse_context_messages(rec.get("context_prev")),
-                context_next=parse_context_messages(rec.get("context_next")),
-            )
-            elapsed = (time.perf_counter() - msg_start) * 1000
+            # Extract
+            msg_start = time.perf_counter()
+            try:
+                candidates = extractor.extract_from_text(
+                    text=rec["message_text"],
+                    message_id=msg_id,
+                    is_from_me=rec.get("is_from_me"),
+                    context_prev=parse_context_messages(rec.get("context_prev")),
+                    context_next=parse_context_messages(rec.get("context_next")),
+                )
+                elapsed = (time.perf_counter() - msg_start) * 1000
 
-            pred_list = [
-                {
-                    "span_text": c.span_text,
-                    "span_label": c.span_label,
-                    "fact_type": c.fact_type,
-                    "score": c.score,
-                }
-                for c in candidates
-            ]
-            predictions[msg_id] = pred_list
-            total_raw_entities += len(pred_list)
-            timing[msg_id] = elapsed
+                pred_list = [
+                    {
+                        "span_text": c.span_text,
+                        "span_label": c.span_label,
+                        "fact_type": c.fact_type,
+                        "score": c.score,
+                    }
+                    for c in candidates
+                ]
+                predictions[msg_id] = pred_list
+                total_raw_entities += len(pred_list)
+                timing[msg_id] = elapsed
 
-        except Exception as e:
-            logger.error(f"Extraction failed for message {msg_id}: {e}")
-            predictions[msg_id] = []
-            timing[msg_id] = 0
+            except Exception as e:
+                logger.error(f"Extraction failed for message {msg_id}: {e}")
+                predictions[msg_id] = []
+                timing[msg_id] = 0
+                elapsed = 0
+
+            # Write incrementally - one JSON line per message
+            inc_f.write(json.dumps({
+                "message_id": msg_id,
+                "predictions": predictions[msg_id],
+                "elapsed_ms": timing[msg_id],
+            }) + "\n")
+            inc_f.flush()
 
     total_time = time.time() - start_time
     msgs_with_preds = sum(1 for v in predictions.values() if v)
@@ -576,7 +598,10 @@ def main() -> None:
         if args.no_gate:
             config["use_gate"] = False
 
-        result = run_extractor(name, gold_records, config=config, limit=args.limit)
+        result = run_extractor(
+            name, gold_records, config=config, limit=args.limit,
+            args_output_dir=args.output_dir,
+        )
         results.append(result)
 
         # Save individual result
