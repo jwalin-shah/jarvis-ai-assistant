@@ -26,7 +26,6 @@ from tests.conftest import hardware_required, slow_test
 @slow_test(timeout=30)
 def test_mlx_model_generation():
     """Test actual MLX model generation."""
-    from contracts.models import GenerationRequest
     from models.loader import MLXModelLoader
 
     loader = MLXModelLoader()
@@ -86,9 +85,7 @@ def test_generation_latency_budget():
 
         # Measure
         start = time.perf_counter()
-        result = loader.generate_sync(
-            prompt=request.prompt, max_tokens=request.max_tokens
-        )
+        result = loader.generate_sync(prompt=request.prompt, max_tokens=request.max_tokens)
         latency = (time.perf_counter() - start) * 1000
 
         print(f"\nGeneration latency: {latency:.2f}ms")

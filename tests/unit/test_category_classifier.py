@@ -155,9 +155,7 @@ class TestAPIContract:
             confidence=0.90,
             features={},
         )
-        result = classify_category(
-            "What time?", context=["Let's meet up"], mobilization=mob
-        )
+        result = classify_category("What time?", context=["Let's meet up"], mobilization=mob)
         assert result is not None
         # Should be one of valid categories
         valid = {"closing", "acknowledge", "question", "request", "emotion", "statement"}
@@ -206,6 +204,7 @@ def _spacy_model_available() -> bool:
     """Check if en_core_web_sm spaCy model is installed."""
     try:
         import spacy
+
         spacy.load("en_core_web_sm")
         return True
     except (ImportError, OSError):
@@ -281,6 +280,7 @@ class TestLabelMapping:
         assert clf._mlb is not None, "mlb should be stored from model artifact"
         # mlb.classes_ should match VALID_CATEGORIES
         from jarvis.classifiers.category_classifier import VALID_CATEGORIES
+
         assert set(clf._mlb.classes_) == VALID_CATEGORIES
 
 
@@ -298,9 +298,11 @@ class TestModelPath:
             loaded = clf._load_pipeline()
             # Should still find the model (or gracefully fail if not present)
             assert clf._pipeline_loaded is True
-            if Path(original_cwd).joinpath(
-                "models/category_multilabel_lightgbm_hardclass.joblib"
-            ).exists():
+            if (
+                Path(original_cwd)
+                .joinpath("models/category_multilabel_lightgbm_hardclass.joblib")
+                .exists()
+            ):
                 assert loaded is True, "Model should load regardless of CWD"
         finally:
             os.chdir(original_cwd)

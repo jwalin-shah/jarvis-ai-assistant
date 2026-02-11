@@ -188,9 +188,7 @@ class ContactMixin:
             row = cursor.fetchone()
             return self._row_to_contact(row) if row else None
 
-    def get_contact_by_handles(
-        self: JarvisDBBase, handles: list[str]
-    ) -> Contact | None:
+    def get_contact_by_handles(self: JarvisDBBase, handles: list[str]) -> Contact | None:
         """Get first matching contact for any of the given handles.
 
         Batch version of get_contact_by_handle - checks all handles in a single

@@ -13,7 +13,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -21,25 +21,25 @@ logger = logging.getLogger(__name__)
 def get_graph_context(contact_id: str, chat_id: str) -> str:
     """Extract graph-based context relevant to this contact.
 
-    Combines relationship facts with interaction recency to produce
-    a compact context string for prompt injection.
+    Combines relationship facts, knowledge facts, interaction recency,
+    and shared connections into a compact context string for prompt injection.
 
     Args:
         contact_id: Contact identifier (usually same as chat_id).
         chat_id: Chat identifier for message stats lookup.
 
     Returns:
-        Compact relationship context string, or empty string if unavailable.
+        Compact context string, or empty string if unavailable.
     """
     parts: list[str] = []
 
-    # 1. Get relationship facts for this contact
+    # 1. Get all fact summaries (relationships, location, work, preferences, etc.)
     try:
-        relationship_desc = _get_relationship_description(contact_id)
-        if relationship_desc:
-            parts.append(relationship_desc)
+        fact_summary = _get_fact_summary(contact_id)
+        if fact_summary:
+            parts.append(fact_summary)
     except Exception as e:
-        logger.debug("Failed to get relationship facts: %s", e)
+        logger.debug("Failed to get fact summary: %s", e)
 
     # 2. Get interaction recency
     try:
@@ -60,11 +60,11 @@ def get_graph_context(contact_id: str, chat_id: str) -> str:
     return " ".join(parts)
 
 
-def _get_relationship_description(contact_id: str) -> str:
-    """Build relationship description from contact facts.
+def _get_fact_summary(contact_id: str) -> str:
+    """Build a comprehensive fact summary across all categories.
 
-    Looks for relationship-type facts (is_family_of, is_friend_of, etc.)
-    and formats them as natural language.
+    Queries all fact types (relationship, location, work, preference, health,
+    personal) and formats them as grouped natural language descriptions.
     """
     from jarvis.db import get_db
 
@@ -73,11 +73,11 @@ def _get_relationship_description(contact_id: str) -> str:
     with db.connection() as conn:
         rows = conn.execute(
             """
-            SELECT subject, predicate, value
+            SELECT category, subject, predicate, value
             FROM contact_facts
-            WHERE contact_id = ? AND category = 'relationship'
+            WHERE contact_id = ?
             ORDER BY confidence DESC
-            LIMIT 5
+            LIMIT 15
             """,
             (contact_id,),
         ).fetchall()
@@ -85,32 +85,84 @@ def _get_relationship_description(contact_id: str) -> str:
     if not rows:
         return ""
 
-    # Map predicates to natural language
-    predicate_templates = {
-        "is_family_of": "{subject} is your {value}" if "{value}" else "{subject} is family",
+    # Map predicates to natural language templates
+    predicate_templates: dict[str, str] = {
+        # Relationship
+        "is_family_of": "{subject} is your {value}",
         "is_friend_of": "{subject} is your friend",
         "is_partner_of": "{subject} is your partner",
         "is_coworker_of": "{subject} is your coworker",
+        "is_associated_with": "{subject} is your {value}",
+        # Location
+        "lives_in": "They live in {subject}",
+        "lived_in": "They used to live in {subject}",
+        "moving_to": "They're moving to {subject}",
+        "from": "They're from {subject}",
+        # Work
+        "works_at": "They work at {subject}",
+        "worked_at": "They used to work at {subject}",
+        "job_title": "Their job title is {subject}",
+        # Preference
+        "likes": "They like {subject}",
+        "dislikes": "They dislike {subject}",
+        "likes_food": "They like {subject}",
+        "dislikes_food": "They dislike {subject}",
+        "enjoys": "They enjoy {subject}",
+        # Health
+        "allergic_to": "They're allergic to {subject}",
+        "has_condition": "They have {subject}",
+        "dietary": "They have a dietary restriction: {subject}",
+        # Personal
+        "attends": "They attend {subject}",
+        "birthday_is": "Their birthday is {subject}",
+        "has_pet": "They have a pet named {subject}",
     }
 
-    descriptions: list[str] = []
+    # Group descriptions by category for readability
+    by_category: dict[str, list[str]] = {}
     for row in rows:
         predicate = row["predicate"]
         subject = row["subject"]
         value = row["value"] or ""
+        category = row["category"]
 
-        if predicate in predicate_templates:
-            if value:
+        template = predicate_templates.get(predicate)
+        if template:
+            # Relationship predicates use value for the role type
+            if predicate in ("is_family_of", "is_associated_with") and value:
                 desc = f"{subject} is your {value}"
             else:
-                template = predicate_templates[predicate]
                 desc = template.format(subject=subject, value=value)
-            descriptions.append(desc)
+            by_category.setdefault(category, []).append(desc)
 
-    if not descriptions:
+    if not by_category:
         return ""
 
-    return ". ".join(descriptions) + "."
+    # Format: "Relationship: X. Y. Location: Z."
+    parts: list[str] = []
+    # Order categories for consistent output
+    category_order = ["relationship", "location", "work", "preference", "health", "personal"]
+    category_labels = {
+        "relationship": "Relationship",
+        "location": "Location",
+        "work": "Work",
+        "preference": "Preferences",
+        "health": "Health",
+        "personal": "Personal",
+    }
+
+    for cat in category_order:
+        descs = by_category.get(cat)
+        if descs:
+            label = category_labels.get(cat, cat.title())
+            parts.append(f"{label}: {'. '.join(descs)}.")
+
+    # Include any categories not in the predefined order
+    for cat, descs in by_category.items():
+        if cat not in category_order:
+            parts.append(f"{cat.title()}: {'. '.join(descs)}.")
+
+    return " ".join(parts)
 
 
 def _get_interaction_recency(chat_id: str) -> str:
@@ -130,10 +182,10 @@ def _get_interaction_recency(chat_id: str) -> str:
         if not hasattr(last_msg, "date") or last_msg.date is None:
             return ""
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         msg_time = last_msg.date
         if msg_time.tzinfo is None:
-            msg_time = msg_time.replace(tzinfo=timezone.utc)
+            msg_time = msg_time.replace(tzinfo=UTC)
 
         delta = now - msg_time
         days = delta.days

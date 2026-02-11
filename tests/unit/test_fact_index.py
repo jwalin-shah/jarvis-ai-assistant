@@ -28,7 +28,6 @@ from jarvis.contacts.fact_index import (
     search_relevant_facts,
 )
 
-
 # ---------------------------------------------------------------------------
 # Deterministic fake embedder
 # ---------------------------------------------------------------------------
@@ -47,19 +46,48 @@ _CLUSTER_SEEDS = {
 
 # Map keywords to clusters
 _WORD_CLUSTERS = {
-    "food": "food", "sushi": "food", "pizza": "food", "dinner": "food",
-    "lunch": "food", "eat": "food", "grab": "food", "restaurant": "food",
-    "peanuts": "food", "allergic": "food",
-    "work": "work", "google": "work", "engineer": "work", "job": "work",
-    "office": "work", "company": "work", "works_at": "work", "job_title": "work",
-    "live": "location", "austin": "location", "city": "location",
-    "move": "location", "lives_in": "location", "where": "location",
-    "sister": "family", "sarah": "family", "family": "family",
-    "is_family_of": "family", "mother": "family", "brother": "family",
-    "allergy": "health", "allergic_to": "health", "health": "health",
-    "hiking": "activity", "running": "activity", "enjoys": "activity",
-    "outdoor": "activity", "trail": "activity",
-    "pet": "pet", "dog": "pet", "max": "pet", "has_pet": "pet",
+    "food": "food",
+    "sushi": "food",
+    "pizza": "food",
+    "dinner": "food",
+    "lunch": "food",
+    "eat": "food",
+    "grab": "food",
+    "restaurant": "food",
+    "peanuts": "food",
+    "allergic": "food",
+    "work": "work",
+    "google": "work",
+    "engineer": "work",
+    "job": "work",
+    "office": "work",
+    "company": "work",
+    "works_at": "work",
+    "job_title": "work",
+    "live": "location",
+    "austin": "location",
+    "city": "location",
+    "move": "location",
+    "lives_in": "location",
+    "where": "location",
+    "sister": "family",
+    "sarah": "family",
+    "family": "family",
+    "is_family_of": "family",
+    "mother": "family",
+    "brother": "family",
+    "allergy": "health",
+    "allergic_to": "health",
+    "health": "health",
+    "hiking": "activity",
+    "running": "activity",
+    "enjoys": "activity",
+    "outdoor": "activity",
+    "trail": "activity",
+    "pet": "pet",
+    "dog": "pet",
+    "max": "pet",
+    "has_pet": "pet",
 }
 
 
@@ -111,6 +139,7 @@ class FakeEmbedder:
 # Pure function tests
 # ---------------------------------------------------------------------------
 
+
 class TestFactToText:
     def test_predicate_and_subject(self):
         fact = Fact(category="preference", subject="sushi", predicate="likes_food")
@@ -151,6 +180,7 @@ class TestDistanceToSimilarity:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_test_db(tmp_path: Path):
     from jarvis.db import JarvisDB
 
@@ -180,8 +210,16 @@ def _seed_facts(db, contact_id: str, facts: list[Fact]) -> None:
                  source_text, extracted_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (contact_id, f.category, f.subject, f.predicate,
-                 f.value or "", f.confidence, f.source_text or "", now),
+                (
+                    contact_id,
+                    f.category,
+                    f.subject,
+                    f.predicate,
+                    f.value or "",
+                    f.confidence,
+                    f.source_text or "",
+                    now,
+                ),
             )
 
 
@@ -193,8 +231,11 @@ SAMPLE_FACTS = [
     Fact(category="work", subject="software engineer", predicate="job_title", confidence=0.9),
     Fact(category="location", subject="Austin", predicate="lives_in", confidence=0.9),
     Fact(
-        category="relationship", subject="Sarah", predicate="is_family_of",
-        value="sister", confidence=0.95,
+        category="relationship",
+        subject="Sarah",
+        predicate="is_family_of",
+        value="sister",
+        confidence=0.95,
     ),
     Fact(category="health", subject="peanuts", predicate="allergic_to", confidence=0.85),
     Fact(category="personal", subject="Max", predicate="has_pet", value="dog", confidence=0.8),
@@ -207,6 +248,7 @@ CONTACT_ID = "iMessage;-;+15551234567"
 # ---------------------------------------------------------------------------
 # Integration tests with real sqlite-vec + fake embedder
 # ---------------------------------------------------------------------------
+
 
 class TestSemanticFactRetrieval:
     """Does search_relevant_facts return the RIGHT facts for a given query?"""
@@ -249,9 +291,7 @@ class TestSemanticFactRetrieval:
         )
         # Work facts should NOT dominate
         work_count = sum(1 for f in results if f.predicate in ("works_at", "job_title"))
-        food_count = sum(
-            1 for f in results if f.predicate in ("likes_food", "allergic_to")
-        )
+        food_count = sum(1 for f in results if f.predicate in ("likes_food", "allergic_to"))
         assert food_count > work_count, (
             f"Food query returned more work ({work_count}) than food ({food_count}) facts"
         )

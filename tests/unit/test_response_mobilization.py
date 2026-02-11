@@ -1,6 +1,5 @@
 """Tests for jarvis/classifiers/response_mobilization.py - Response pressure classification."""
 
-
 from jarvis.classifiers.cascade import MobilizationCascade, reset_mobilization_cascade
 from jarvis.classifiers.intent_classifier import IntentResult, KeywordIntentClassifier
 from jarvis.classifiers.response_mobilization import (
@@ -379,6 +378,7 @@ class TestNonePressureBackchannels:
         assert result.pressure == ResponsePressure.NONE
         assert result.response_type == ResponseType.CLOSING
         assert result.confidence >= 0.95
+
 
 # =============================================================================
 # Test Greetings

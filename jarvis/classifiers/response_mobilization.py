@@ -566,7 +566,8 @@ def _make_result(
 
 
 def _classify_question_mark(
-    text_lower: str, features: dict[str, bool | int],
+    text_lower: str,
+    features: dict[str, bool | int],
 ) -> MobilizationResult:
     """Handle messages with explicit question mark."""
     if features["has_wh_word"] or features["has_aux_inversion"]:
@@ -577,12 +578,11 @@ def _classify_question_mark(
 
 
 def _classify_recipient_oriented(
-    text_lower: str, features: dict[str, bool | int],
+    text_lower: str,
+    features: dict[str, bool | int],
 ) -> MobilizationResult:
     """Handle recipient-oriented questions."""
-    if re.match(
-        r"^(are|is) (you|u|ya) (coming|going|in|down|free|busy|available)\b", text_lower
-    ):
+    if re.match(r"^(are|is) (you|u|ya) (coming|going|in|down|free|busy|available)\b", text_lower):
         return _make_result(ResponsePressure.HIGH, ResponseType.COMMITMENT, 0.90, features)
     return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.90, features)
 
@@ -600,7 +600,11 @@ def classify_response_pressure(text: str) -> MobilizationResult:
     """
     if not text or not text.strip():
         return _make_result(
-            ResponsePressure.NONE, ResponseType.CLOSING, 0.0, {}, method="empty",
+            ResponsePressure.NONE,
+            ResponseType.CLOSING,
+            0.0,
+            {},
+            method="empty",
         )
 
     text_lower = _normalize_for_classification(text)
@@ -650,7 +654,11 @@ def classify_response_pressure(text: str) -> MobilizationResult:
         return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.80, features)
 
     return _make_result(
-        ResponsePressure.LOW, ResponseType.OPTIONAL, 0.50, features, method="default",
+        ResponsePressure.LOW,
+        ResponseType.OPTIONAL,
+        0.50,
+        features,
+        method="default",
     )
 
 

@@ -11,12 +11,13 @@ import json
 import logging
 import random
 import sqlite3
-import sys
 import time
 import argparse
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from jarvis.utils.logging import setup_script_logging
 
 if TYPE_CHECKING:
     from jarvis.contacts.contact_profile import Fact
@@ -278,24 +279,9 @@ def get_extraction_stats(facts: list[Fact]) -> dict:
     return stats
 
 
-def _setup_logging() -> None:
-    """Configure logging with file and stream handlers."""
-    handlers: list[logging.Handler] = [logging.StreamHandler()]
-    try:
-        handlers.append(logging.FileHandler("extract_and_validate_facts.log"))
-    except OSError as exc:
-        print(f"Warning: could not open log file for writing: {exc}", flush=True)
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=handlers,
-    )
-
-
 def main(argv: Sequence[str] | None = None) -> None:
     """Run fact extraction and generate review report."""
-    _setup_logging()
+    setup_script_logging("extract_and_validate_facts")
     args = parse_args(argv)
     logger.info("Starting fact extraction validation...")
     print("\n" + "=" * 70, flush=True)

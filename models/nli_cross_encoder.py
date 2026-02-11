@@ -69,6 +69,10 @@ class NLICrossEncoder:
             return
 
         with self._get_gpu_lock():
+            # Set MLX memory limits to prevent memory spikes on 8GB systems
+            mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
+            mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB
+
             if self._loaded:
                 return
 
@@ -210,9 +214,9 @@ class NLICrossEncoder:
             # Tokenize
             with self._encode_lock:
                 self.tokenizer.no_padding()
-                encodings = [
-                    self.tokenizer.encode(premise, hypothesis) for premise, hypothesis in batch
-                ]
+                encodings = self.tokenizer.encode_batch(
+                    [(premise, hypothesis) for premise, hypothesis in batch]
+                )
 
             # Pad to uniform length
             max_len = max(len(e.ids) for e in encodings)

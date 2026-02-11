@@ -18,6 +18,7 @@ from jarvis.contacts.candidate_extractor import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_entity(text, label, score=0.8, start=0, end=None):
     """Build a GLiNER entity dict."""
     return {
@@ -74,8 +75,12 @@ class TestExtractCandidates:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I live in Austin", message_id=1, chat_id=42,
-            is_from_me=True, sender_handle_id=5, message_date=700000000,
+            "I live in Austin",
+            message_id=1,
+            chat_id=42,
+            is_from_me=True,
+            sender_handle_id=5,
+            message_date=700000000,
         )
 
         assert len(candidates) == 1
@@ -100,7 +105,9 @@ class TestExtractCandidates:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I work at Google as a software engineer", message_id=2, use_gate=False,
+            "I work at Google as a software engineer",
+            message_id=2,
+            use_gate=False,
         )
         assert len(candidates) == 2
         assert candidates[0].span_text == "Google"
@@ -110,6 +117,7 @@ class TestExtractCandidates:
 # ---------------------------------------------------------------------------
 # Threshold filtering
 # ---------------------------------------------------------------------------
+
 
 class TestThresholdFiltering:
     def test_per_label_threshold_rejects_low_score(self):
@@ -150,6 +158,7 @@ class TestThresholdFiltering:
 # Vague word rejection
 # ---------------------------------------------------------------------------
 
+
 class TestVagueWordRejection:
     @pytest.mark.parametrize("word", sorted(VAGUE))
     def test_vague_words_rejected(self, word):
@@ -185,13 +194,12 @@ class TestVagueWordRejection:
 # Junk message filtering
 # ---------------------------------------------------------------------------
 
+
 class TestJunkFiltering:
     def test_bot_message_skipped(self):
         ext = _mock_extractor([_make_entity("CVS", "org", 0.9)])
 
-        candidates = ext.extract_candidates(
-            "Your CVS Pharmacy prescription is ready", message_id=1
-        )
+        candidates = ext.extract_candidates("Your CVS Pharmacy prescription is ready", message_id=1)
         assert len(candidates) == 0
         # Model should not even be called
         ext._model.predict_entities.assert_not_called()
@@ -222,6 +230,7 @@ class TestJunkFiltering:
 # Fact type mapping
 # ---------------------------------------------------------------------------
 
+
 class TestFactTypeMapping:
     def test_location_current(self):
         ents = [_make_entity("Austin", "place", 0.8)]
@@ -235,7 +244,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "moving to LA next month", message_id=1, use_gate=False,
+            "moving to LA next month",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "location.future"
 
@@ -251,7 +262,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "my sister Sarah is visiting", message_id=1, use_gate=False,
+            "my sister Sarah is visiting",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "relationship.family"
 
@@ -260,7 +273,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "my girlfriend Alex", message_id=1, use_gate=False,
+            "my girlfriend Alex",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "relationship.partner"
 
@@ -269,7 +284,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I love Thai food", message_id=1, use_gate=False,
+            "I love Thai food",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "preference.food_like"
 
@@ -278,7 +295,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I hate cilantro", message_id=1, use_gate=False,
+            "I hate cilantro",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "preference.food_dislike"
 
@@ -287,7 +306,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I'm allergic to peanuts", message_id=1, use_gate=False,
+            "I'm allergic to peanuts",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "health.allergy"
 
@@ -296,7 +317,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I graduated from MIT", message_id=1, use_gate=False,
+            "I graduated from MIT",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "personal.school"
 
@@ -305,7 +328,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "my dog Buddy is adorable", message_id=1, use_gate=False,
+            "my dog Buddy is adorable",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "personal.pet"
 
@@ -316,7 +341,9 @@ class TestFactTypeMapping:
 
         # Unknown label "animal" -> other_personal_fact -> filtered
         candidates = ext.extract_candidates(
-            "Fluffy ran around the yard", message_id=1, use_gate=False,
+            "Fluffy ran around the yard",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 0
 
@@ -326,7 +353,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "Sarah told me about it", message_id=1, use_gate=False,
+            "Sarah told me about it",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
         assert candidates[0].fact_type == "relationship.friend"
@@ -338,7 +367,9 @@ class TestFactTypeMapping:
 
         # No "work at" pattern, but label is "employer"
         candidates = ext.extract_candidates(
-            "Acme Corp laid off 200 people", message_id=1, use_gate=False,
+            "Acme Corp laid off 200 people",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "work.employer"
 
@@ -348,7 +379,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I deal with migraines often", message_id=1, use_gate=False,
+            "I deal with migraines often",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
         assert candidates[0].fact_type == "health.condition"
@@ -359,7 +392,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "Had sushi for dinner", message_id=1, use_gate=False,
+            "Had sushi for dinner",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
         assert candidates[0].fact_type == "preference.food_like"
@@ -370,7 +405,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "Went surfing this weekend", message_id=1, use_gate=False,
+            "Went surfing this weekend",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
         assert candidates[0].fact_type == "preference.activity"
@@ -381,7 +418,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "She is an engineer at the company", message_id=1, use_gate=False,
+            "She is an engineer at the company",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
         assert candidates[0].fact_type == "work.job_title"
@@ -393,7 +432,9 @@ class TestFactTypeMapping:
 
         # No work/school pattern in text -> DIRECT_LABEL_MAP fallback
         candidates = ext.extract_candidates(
-            "Netflix released a new show", message_id=1, use_gate=False,
+            "Netflix released a new show",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
         assert candidates[0].fact_type == "work.employer"
@@ -403,7 +444,9 @@ class TestFactTypeMapping:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I quit Meta last year", message_id=1, use_gate=False,
+            "I quit Meta last year",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].fact_type == "work.former_employer"
 
@@ -411,6 +454,7 @@ class TestFactTypeMapping:
 # ---------------------------------------------------------------------------
 # Strict dedup
 # ---------------------------------------------------------------------------
+
 
 class TestStrictDedup:
     def test_duplicate_span_label_deduplicated(self):
@@ -422,7 +466,9 @@ class TestStrictDedup:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "Austin is great, I live in Austin", message_id=1, use_gate=False,
+            "Austin is great, I live in Austin",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
 
@@ -437,7 +483,9 @@ class TestStrictDedup:
         # "work at" matches org -> work.employer, "employer" direct maps -> work.employer
         # But same span+label dedup catches "Google"+"org" and "Google"+"employer" separately
         candidates = ext.extract_candidates(
-            "I work at Google and Google is great", message_id=1, use_gate=False,
+            "I work at Google and Google is great",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 2
 
@@ -450,7 +498,9 @@ class TestStrictDedup:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "sushi vs Sushi", message_id=1, use_gate=False,
+            "sushi vs Sushi",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
 
@@ -463,7 +513,9 @@ class TestStrictDedup:
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I love sushi so much", message_id=1, use_gate=False,
+            "I love sushi so much",
+            message_id=1,
+            use_gate=False,
         )
         assert len(candidates) == 1
 
@@ -472,13 +524,16 @@ class TestStrictDedup:
 # Character offsets
 # ---------------------------------------------------------------------------
 
+
 class TestCharOffsets:
     def test_offsets_from_gliner(self):
         ents = [_make_entity("Google", "org", 0.9, start=10, end=16)]
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates(
-            "I work at Google", message_id=1, use_gate=False,
+            "I work at Google",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].start_char == 10
         assert candidates[0].end_char == 16
@@ -489,7 +544,9 @@ class TestCharOffsets:
         ext = _mock_extractor([ent])
 
         candidates = ext.extract_candidates(
-            "I work at Google", message_id=1, use_gate=False,
+            "I work at Google",
+            message_id=1,
+            use_gate=False,
         )
         assert candidates[0].start_char == 10
         assert candidates[0].end_char == 16
@@ -498,6 +555,7 @@ class TestCharOffsets:
 # ---------------------------------------------------------------------------
 # Batch extraction
 # ---------------------------------------------------------------------------
+
 
 class TestBatchExtraction:
     def test_batch_basic(self):
@@ -568,6 +626,7 @@ class TestBatchExtraction:
 # ---------------------------------------------------------------------------
 # Context window anchoring
 # ---------------------------------------------------------------------------
+
 
 class TestContextWindowAnchoring:
     def test_extract_candidates_context_keeps_only_current_spans(self):
@@ -699,14 +758,22 @@ class TestContextWindowAnchoring:
 # Serialization
 # ---------------------------------------------------------------------------
 
+
 class TestSerialization:
     def test_to_dict_roundtrip(self):
         c = FactCandidate(
-            message_id=1, span_text="Austin", span_label="place",
-            gliner_score=0.85, fact_type="location.current",
-            start_char=10, end_char=16,
-            source_text="I live in Austin", chat_id=42,
-            is_from_me=True, sender_handle_id=5, message_date=700000000,
+            message_id=1,
+            span_text="Austin",
+            span_label="place",
+            gliner_score=0.85,
+            fact_type="location.current",
+            start_char=10,
+            end_char=16,
+            source_text="I live in Austin",
+            chat_id=42,
+            is_from_me=True,
+            sender_handle_id=5,
+            message_date=700000000,
         )
         d = c.to_dict()
 
@@ -721,9 +788,13 @@ class TestSerialization:
 
     def test_to_dict_none_fields(self):
         c = FactCandidate(
-            message_id=1, span_text="X", span_label="org",
-            gliner_score=0.5, fact_type="other_personal_fact",
-            start_char=0, end_char=1,
+            message_id=1,
+            span_text="X",
+            span_label="org",
+            gliner_score=0.5,
+            fact_type="other_personal_fact",
+            start_char=0,
+            end_char=1,
         )
         d = c.to_dict()
         assert d["chat_id"] is None

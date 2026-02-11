@@ -105,8 +105,7 @@ def extract_segments(
             if identifier_map:
                 id_placeholders = ",".join("?" * len(identifier_map))
                 cursor = conn.execute(
-                    f"SELECT {_CONTACT_COLUMNS} FROM contacts "
-                    f"WHERE chat_id IN ({id_placeholders})",
+                    f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id IN ({id_placeholders})",
                     list(identifier_map.keys()),
                 )
                 for row in cursor.fetchall():

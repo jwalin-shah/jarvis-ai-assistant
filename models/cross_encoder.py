@@ -173,6 +173,10 @@ class InProcessCrossEncoder:
             )
 
         with self._get_gpu_lock():
+            # Set MLX memory limits to prevent memory spikes on 8GB systems
+            mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
+            mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB
+
             if self.model_name == model_name:
                 return
 
@@ -251,8 +255,8 @@ class InProcessCrossEncoder:
         self.model_name = None
         self.config = None
         gc.collect()
-        if hasattr(mx, "metal") and hasattr(mx.metal, "clear_cache"):
-            mx.metal.clear_cache()
+        if hasattr(mx, "clear_cache"):
+            mx.clear_cache()
         if prev:
             logger.info("Unloaded cross-encoder %s", prev)
 
@@ -285,7 +289,7 @@ class InProcessCrossEncoder:
             # Tokenize pairs - encode(text_a, text_b) produces correct
             # token_type_ids for sentence pair classification
             self.tokenizer.no_padding()
-            encodings = [self.tokenizer.encode(query, doc) for query, doc in pairs]
+            encodings = self.tokenizer.encode_batch([(query, doc) for query, doc in pairs])
             lengths = [len(e.ids) for e in encodings]
             self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
 
@@ -297,10 +301,8 @@ class InProcessCrossEncoder:
                 batch_end = min(batch_start + batch_size, len(pairs))
                 batch_indices = sorted_indices[batch_start:batch_end]
 
-                # Re-encode batch with padding to uniform length
-                batch_encodings = [
-                    self.tokenizer.encode(pairs[i][0], pairs[i][1]) for i in batch_indices
-                ]
+                # Reuse pre-computed encodings (avoid double tokenization)
+                batch_encodings = [encodings[i] for i in batch_indices]
                 # Pad all sequences in this batch to the same length
                 max_len = max(len(e.ids) for e in batch_encodings)
                 input_ids = np.array(

@@ -13,7 +13,6 @@ import pytest
 
 from contracts.imessage import Message
 from jarvis.router import ReplyRouter, reset_reply_router
-
 from tests.integration.conftest import create_mock_message
 
 

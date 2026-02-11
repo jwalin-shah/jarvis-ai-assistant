@@ -9,29 +9,23 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import AsyncIterator
-from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
-import pytest_asyncio
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from api.errors import register_exception_handlers
 from api.ratelimit import rate_limit_exceeded_handler, with_timeout
-from core.health.circuit import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError, CircuitState
-from core.health.degradation import GracefulDegradationController, get_degradation_controller, reset_degradation_controller
+from contracts.health import DegradationPolicy, FeatureState
+from core.health.circuit import CircuitBreaker, CircuitBreakerConfig, CircuitState
+from core.health.degradation import (
+    GracefulDegradationController,
+    get_degradation_controller,
+    reset_degradation_controller,
+)
 from core.memory.controller import DefaultMemoryController, MemoryMode
 from core.memory.monitor import MemoryMonitor
-from contracts.health import DegradationPolicy, FeatureState
 from jarvis.errors import MemoryResourceError, ModelLoadError
-from jarvis.fallbacks import FailureReason
-from jarvis.tasks.models import Task, TaskStatus, TaskType
-from jarvis.tasks.queue import TaskQueue, get_task_queue, reset_task_queue
-
-
-
+from jarvis.tasks.models import TaskStatus, TaskType
+from jarvis.tasks.queue import TaskQueue, reset_task_queue
 
 
 @pytest.fixture(autouse=True)
@@ -322,15 +316,15 @@ class TestMemoryPressureIntegration:
 
     def test_memory_mode_determination(self):
         """Memory mode is correctly determined based on available memory."""
-        with patch.object(MemoryMonitor, 'get_available_mb', return_value=10000):
+        with patch.object(MemoryMonitor, "get_available_mb", return_value=10000):
             controller = DefaultMemoryController()
             assert controller.get_mode() == MemoryMode.FULL
 
-        with patch.object(MemoryMonitor, 'get_available_mb', return_value=1000):
+        with patch.object(MemoryMonitor, "get_available_mb", return_value=1000):
             controller = DefaultMemoryController()
             assert controller.get_mode() == MemoryMode.LITE
 
-        with patch.object(MemoryMonitor, 'get_available_mb', return_value=400):
+        with patch.object(MemoryMonitor, "get_available_mb", return_value=400):
             controller = DefaultMemoryController()
             assert controller.get_mode() == MemoryMode.MINIMAL
 
@@ -346,7 +340,7 @@ class TestMemoryPressureIntegration:
         controller.register_pressure_callback(pressure_callback)
 
         # Simulate pressure change
-        with patch.object(MemoryMonitor, 'get_percent_used', return_value=90):
+        with patch.object(MemoryMonitor, "get_percent_used", return_value=90):
             controller.get_state()  # This checks pressure
 
         # Should have received callback for red pressure
@@ -354,7 +348,7 @@ class TestMemoryPressureIntegration:
 
     def test_can_load_model_with_buffer(self):
         """Model loading respects memory buffer."""
-        with patch.object(MemoryMonitor, 'get_available_mb', return_value=1000):
+        with patch.object(MemoryMonitor, "get_available_mb", return_value=1000):
             controller = DefaultMemoryController()
 
             # Should be able to load model requiring less than available/buffer
@@ -504,6 +498,7 @@ class TestEndToEndScenarios:
         assert stats["by_status"]["cancelled"] == 15
         assert stats["by_status"]["pending"] == 10
 
+
 class TestRecoveryProceduresIntegration:
     """Integration tests for recovery procedures."""
 
@@ -517,7 +512,7 @@ class TestRecoveryProceduresIntegration:
 
         # Corrupt the file
         content = queue_path.read_text()
-        queue_path.write_text(content[:len(content) // 2])
+        queue_path.write_text(content[: len(content) // 2])
 
         # New instance should start fresh
         new_queue = TaskQueue(persistence_path=queue_path, auto_persist=True)

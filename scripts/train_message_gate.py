@@ -31,23 +31,9 @@ from typing import Any
 
 import numpy as np
 
+from jarvis.utils.logging import setup_script_logging
+
 logger = logging.getLogger(__name__)
-
-
-def _setup_logging() -> None:
-    """Configure logging with both file and stream handlers."""
-    log_file = Path(__file__).resolve().parent.parent / "logs" / "train_message_gate.log"
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, mode="w"),
-            logging.StreamHandler(),
-        ],
-    )
-    logger.info("Logging to %s", log_file)
 
 
 @dataclass
@@ -431,7 +417,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    _setup_logging()
+    setup_script_logging("train_message_gate")
 
     logger.info("Loading train data from %s", args.train)
     train = load_dataset(args.train)

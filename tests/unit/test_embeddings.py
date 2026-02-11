@@ -409,7 +409,10 @@ class TestEmbeddingStoreSimilarSearch:
         """Test that min_similarity filters results."""
         # Create very different embeddings
         mock_embed_batch.return_value = np.array(
-            [np.random.RandomState(i).randn(384).astype(np.float32) for i, _ in enumerate(sample_messages)]
+            [
+                np.random.RandomState(i).randn(384).astype(np.float32)
+                for i, _ in enumerate(sample_messages)
+            ]
         )
         # Query with orthogonal embedding
         query_embedding = np.zeros(384, dtype=np.float32)

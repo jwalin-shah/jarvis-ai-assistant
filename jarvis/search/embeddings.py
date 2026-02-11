@@ -795,9 +795,7 @@ class EmbeddingStore:
                 chat_rows = rows_by_chat.get(msg.chat_id, [])
 
                 # Filter to the time window for this anchor and apply context_window limit
-                window_rows = [
-                    r for r in chat_rows if ts - 3600 <= r["timestamp"] <= ts + 3600
-                ]
+                window_rows = [r for r in chat_rows if ts - 3600 <= r["timestamp"] <= ts + 3600]
                 window_rows = window_rows[: context_window * 2 + 1]
 
                 context_messages = []
@@ -819,9 +817,7 @@ class EmbeddingStore:
 
                 if context_messages:
                     topic = self._detect_topic(context_messages)
-                    avg_sim = sum(m.similarity for m in context_messages) / len(
-                        context_messages
-                    )
+                    avg_sim = sum(m.similarity for m in context_messages) / len(context_messages)
 
                     situations.append(
                         ConversationContext(

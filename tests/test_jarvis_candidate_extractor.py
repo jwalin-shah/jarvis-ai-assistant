@@ -79,7 +79,9 @@ def test_extract_candidates(mock_junk, extractor):
     ]
 
     candidates = extractor.extract_candidates(
-        "I live in Austin and work at Google", message_id=1, use_gate=False,
+        "I live in Austin and work at Google",
+        message_id=1,
+        use_gate=False,
     )
 
     assert len(candidates) == 2
@@ -130,8 +132,7 @@ def test_resolve_fact_type_defaults(extractor):
         == "relationship.friend"
     )
     assert (
-        extractor._resolve_fact_type("random text", "March 5th", "date_ref")
-        == "personal.birthday"
+        extractor._resolve_fact_type("random text", "March 5th", "date_ref") == "personal.birthday"
     )
 
 
@@ -143,19 +144,13 @@ def test_resolve_fact_type_patterns_override_defaults(extractor):
         == "location.hometown"
     )
     # "go to" -> personal.school, NOT the default work.employer
-    assert (
-        extractor._resolve_fact_type("I go to Stanford", "Stanford", "org")
-        == "personal.school"
-    )
+    assert extractor._resolve_fact_type("I go to Stanford", "Stanford", "org") == "personal.school"
 
 
 def test_resolve_fact_type_new_patterns(extractor):
     """New regex patterns fire for common chat phrasing."""
     # "already in" -> location.current
-    assert (
-        extractor._resolve_fact_type("I'm already in sf", "sf", "place")
-        == "location.current"
-    )
+    assert extractor._resolve_fact_type("I'm already in sf", "sf", "place") == "location.current"
     # "here in" -> location.current (via "here...in" pattern)
     assert (
         extractor._resolve_fact_type("here in charlotte", "charlotte", "place")
@@ -168,8 +163,7 @@ def test_resolve_fact_type_new_patterns(extractor):
     )
     # "interning at" -> work.employer
     assert (
-        extractor._resolve_fact_type("I'm interning at Google", "Google", "org")
-        == "work.employer"
+        extractor._resolve_fact_type("I'm interning at Google", "Google", "org") == "work.employer"
     )
     # "applied to" -> personal.school
     assert (
@@ -178,17 +172,21 @@ def test_resolve_fact_type_new_patterns(extractor):
     )
     # "flying to" -> location.future
     assert (
-        extractor._resolve_fact_type("flying to NYC tomorrow", "NYC", "place")
-        == "location.future"
+        extractor._resolve_fact_type("flying to NYC tomorrow", "NYC", "place") == "location.future"
     )
 
 
 def test_candidate_to_hypothesis_speaker_aware(extractor):
     """is_from_me=True -> 'the user', is_from_me=False -> 'the contact'."""
     base = FactCandidate(
-        message_id=1, span_text="Austin", span_label="place",
-        gliner_score=0.9, fact_type="location.current",
-        start_char=0, end_char=6, source_text="I live in Austin",
+        message_id=1,
+        span_text="Austin",
+        span_label="place",
+        gliner_score=0.9,
+        fact_type="location.current",
+        start_char=0,
+        end_char=6,
+        source_text="I live in Austin",
     )
 
     # is_from_me=True (default None treated as True)

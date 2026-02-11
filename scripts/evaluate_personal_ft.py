@@ -23,25 +23,14 @@ from pathlib import Path
 
 import numpy as np
 
+from jarvis.utils.logging import setup_script_logging
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 RESULTS_PATH = Path("evals/results/personal-ft-comparison.json")
 LOG_PATH = Path("evaluate_personal.log")
 
 log = logging.getLogger(__name__)
-
-
-def _setup_logging() -> None:
-    """Configure logging with both file and console handlers."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_PATH, mode="a"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-
 
 # Emoji pattern for style matching
 EMOJI_PAT = re.compile(
@@ -265,7 +254,7 @@ def print_leaderboard(results: list[dict]) -> None:
 
 
 def main() -> None:
-    _setup_logging()
+    setup_script_logging("evaluate_personal_ft")
     log.info("Starting evaluate_personal_ft.py")
     parser = argparse.ArgumentParser(description="Evaluate personal fine-tuned models")
     parser.add_argument("--report-only", action="store_true", help="Just print leaderboard")

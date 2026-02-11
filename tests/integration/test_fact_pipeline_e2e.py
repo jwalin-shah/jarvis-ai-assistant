@@ -12,16 +12,15 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from jarvis.contacts.candidate_extractor import CandidateExtractor, FactCandidate
+from jarvis.contacts.candidate_extractor import FactCandidate
 from jarvis.contacts.contact_profile import Fact
 from jarvis.contacts.fact_extractor import FactExtractor
 from jarvis.contacts.fact_index import (
-    _fact_to_text,
     index_facts,
     reindex_all_facts,
     search_relevant_facts,
@@ -32,33 +31,69 @@ from jarvis.contacts.fact_storage import (
     save_facts,
 )
 
-
 # ---------------------------------------------------------------------------
 # Deterministic fake embedder (same as test_fact_index.py)
 # ---------------------------------------------------------------------------
 
 _CLUSTER_SEEDS = {
-    "food": 1, "work": 2, "location": 3, "family": 4,
-    "health": 5, "activity": 6, "pet": 7,
+    "food": 1,
+    "work": 2,
+    "location": 3,
+    "family": 4,
+    "health": 5,
+    "activity": 6,
+    "pet": 7,
 }
 
 _WORD_CLUSTERS = {
-    "food": "food", "sushi": "food", "pizza": "food", "dinner": "food",
-    "lunch": "food", "eat": "food", "grab": "food", "restaurant": "food",
-    "peanuts": "food", "allergic": "food", "likes_food": "food",
-    "dislikes_food": "food", "allergic_to": "food",
-    "work": "work", "google": "work", "engineer": "work", "job": "work",
-    "office": "work", "company": "work", "works_at": "work", "job_title": "work",
-    "meta": "work", "apple": "work",
-    "live": "location", "austin": "location", "city": "location",
-    "move": "location", "lives_in": "location", "where": "location",
-    "chicago": "location", "boston": "location",
-    "sister": "family", "sarah": "family", "family": "family",
-    "is_family_of": "family", "mother": "family", "brother": "family",
-    "allergy": "health", "health": "health",
-    "hiking": "activity", "running": "activity", "enjoys": "activity",
-    "outdoor": "activity", "trail": "activity",
-    "pet": "pet", "dog": "pet", "max": "pet", "has_pet": "pet",
+    "food": "food",
+    "sushi": "food",
+    "pizza": "food",
+    "dinner": "food",
+    "lunch": "food",
+    "eat": "food",
+    "grab": "food",
+    "restaurant": "food",
+    "peanuts": "food",
+    "allergic": "food",
+    "likes_food": "food",
+    "dislikes_food": "food",
+    "allergic_to": "food",
+    "work": "work",
+    "google": "work",
+    "engineer": "work",
+    "job": "work",
+    "office": "work",
+    "company": "work",
+    "works_at": "work",
+    "job_title": "work",
+    "meta": "work",
+    "apple": "work",
+    "live": "location",
+    "austin": "location",
+    "city": "location",
+    "move": "location",
+    "lives_in": "location",
+    "where": "location",
+    "chicago": "location",
+    "boston": "location",
+    "sister": "family",
+    "sarah": "family",
+    "family": "family",
+    "is_family_of": "family",
+    "mother": "family",
+    "brother": "family",
+    "allergy": "health",
+    "health": "health",
+    "hiking": "activity",
+    "running": "activity",
+    "enjoys": "activity",
+    "outdoor": "activity",
+    "trail": "activity",
+    "pet": "pet",
+    "dog": "pet",
+    "max": "pet",
+    "has_pet": "pet",
 }
 
 
@@ -99,8 +134,10 @@ class FakeEmbedder:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_test_db(tmp_path: Path):
     from jarvis.db import JarvisDB
+
     db_path = tmp_path / "test_e2e.db"
     db = JarvisDB(db_path=db_path)
     db.init_schema()
@@ -134,8 +171,16 @@ def _seed_facts(db, contact_id: str, facts: list[Fact]) -> None:
                  source_text, extracted_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (contact_id, f.category, f.subject, f.predicate,
-                 f.value or "", f.confidence, f.source_text or "", now),
+                (
+                    contact_id,
+                    f.category,
+                    f.subject,
+                    f.predicate,
+                    f.value or "",
+                    f.confidence,
+                    f.source_text or "",
+                    now,
+                ),
             )
 
 
@@ -151,8 +196,11 @@ CONTACT_A_FACTS = [
     Fact(category="work", subject="Google", predicate="works_at", confidence=0.95),
     Fact(category="location", subject="Austin", predicate="lives_in", confidence=0.9),
     Fact(
-        category="relationship", subject="Sarah", predicate="is_family_of",
-        value="sister", confidence=0.95,
+        category="relationship",
+        subject="Sarah",
+        predicate="is_family_of",
+        value="sister",
+        confidence=0.95,
     ),
     Fact(category="health", subject="peanuts", predicate="allergic_to", confidence=0.85),
 ]
@@ -162,8 +210,11 @@ CONTACT_B_FACTS = [
     Fact(category="work", subject="Meta", predicate="works_at", confidence=0.9),
     Fact(category="location", subject="Chicago", predicate="lives_in", confidence=0.9),
     Fact(
-        category="relationship", subject="Tom", predicate="is_family_of",
-        value="brother", confidence=0.9,
+        category="relationship",
+        subject="Tom",
+        predicate="is_family_of",
+        value="brother",
+        confidence=0.9,
     ),
 ]
 
@@ -225,9 +276,7 @@ class TestEndToEndPipeline:
                 "SELECT COUNT(*) FROM vec_facts WHERE contact_id = ?",
                 (CONTACT_A,),
             ).fetchone()
-            assert row[0] == inserted, (
-                f"Expected {inserted} indexed facts, got {row[0]}"
-            )
+            assert row[0] == inserted, f"Expected {inserted} indexed facts, got {row[0]}"
 
         # Step 5: Search for food-related facts
         results = search_relevant_facts("want to grab food for dinner?", CONTACT_A, limit=3)
@@ -237,11 +286,13 @@ class TestEndToEndPipeline:
         subjects = {f.subject.lower() for f in results}
         predicates = {f.predicate for f in results}
         food_related = subjects & {"sushi", "cilantro"} or predicates & {
-            "likes_food", "likes", "dislikes", "allergic_to",
+            "likes_food",
+            "likes",
+            "dislikes",
+            "allergic_to",
         }
         assert food_related, (
-            f"Expected food facts in results, got: "
-            f"{[(f.predicate, f.subject) for f in results]}"
+            f"Expected food facts in results, got: {[(f.predicate, f.subject) for f in results]}"
         )
 
     def test_extract_store_index_retrieve_work(self):
@@ -304,9 +355,7 @@ class TestEndToEndPipeline:
 
         # Should deduplicate "Austin" / "lives_in"
         austin_facts = [f for f in facts if f.subject.lower() == "austin"]
-        assert len(austin_facts) <= 1, (
-            f"Expected dedup of Austin facts, got {len(austin_facts)}"
-        )
+        assert len(austin_facts) <= 1, f"Expected dedup of Austin facts, got {len(austin_facts)}"
 
     def test_quality_filter_rejects_vague_subjects(self):
         """Quality filter should reject vague pronoun subjects."""
@@ -331,13 +380,17 @@ class TestEndToEndPipeline:
         facts = [
             # Rich context (4+ words) should get 1.1x boost
             Fact(
-                category="location", subject="San Francisco Bay Area",
-                predicate="lives_in", confidence=0.7,
+                category="location",
+                subject="San Francisco Bay Area",
+                predicate="lives_in",
+                confidence=0.7,
             ),
             # Short preference (< 3 words) should be filtered by _is_too_short
             Fact(
-                category="preference", subject="ok",
-                predicate="likes", confidence=0.7,
+                category="preference",
+                subject="ok",
+                predicate="likes",
+                confidence=0.7,
             ),
         ]
         filtered = extractor._apply_quality_filters(facts)
@@ -353,8 +406,11 @@ class TestEndToEndPipeline:
         """Saving the same facts twice should not create duplicates."""
         facts = [
             Fact(
-                category="work", subject="Google", predicate="works_at",
-                confidence=0.9, contact_id=CONTACT_A,
+                category="work",
+                subject="Google",
+                predicate="works_at",
+                confidence=0.9,
+                contact_id=CONTACT_A,
             ),
         ]
 
@@ -432,9 +488,7 @@ class TestCrossContactIsolation:
         results = search_relevant_facts("what food do you like?", CONTACT_B, limit=5)
         subjects = {f.subject.lower() for f in results}
 
-        assert "pizza" in subjects, (
-            f"Expected pizza for contact B, got {subjects}"
-        )
+        assert "pizza" in subjects, f"Expected pizza for contact B, got {subjects}"
         assert "sushi" not in subjects, (
             f"Contact A's sushi leaked into contact B results: {subjects}"
         )
@@ -468,12 +522,8 @@ class TestCrossContactIsolation:
         subjects_b = {f.subject.lower() for f in results_b}
 
         # No cross-contamination
-        assert "chicago" not in subjects_a, (
-            f"Contact B's Chicago leaked into A: {subjects_a}"
-        )
-        assert "austin" not in subjects_b, (
-            f"Contact A's Austin leaked into B: {subjects_b}"
-        )
+        assert "chicago" not in subjects_a, f"Contact B's Chicago leaked into A: {subjects_a}"
+        assert "austin" not in subjects_b, f"Contact A's Austin leaked into B: {subjects_b}"
 
     def test_family_isolation(self):
         """Contact A's sister Sarah should not appear for contact B."""
@@ -612,9 +662,7 @@ class TestCandidateToStoragePipeline:
         # Should find the food fact
         if results:
             subjects = {f.subject.lower() for f in results}
-            assert "sushi" in subjects, (
-                f"Expected sushi in food search results, got {subjects}"
-            )
+            assert "sushi" in subjects, f"Expected sushi in food search results, got {subjects}"
 
     def test_unmapped_fact_type_skipped(self):
         """Candidates with unmapped fact_type should be skipped."""
@@ -709,12 +757,14 @@ class TestFactPipelinePerformance:
         categories = ["preference", "work", "location", "relationship", "health"]
         for i in range(50):
             cat = categories[i % len(categories)]
-            facts.append(Fact(
-                category=cat,
-                subject=f"entity_{i}",
-                predicate=f"pred_{cat}",
-                confidence=0.8,
-            ))
+            facts.append(
+                Fact(
+                    category=cat,
+                    subject=f"entity_{i}",
+                    predicate=f"pred_{cat}",
+                    confidence=0.8,
+                )
+            )
         _seed_facts(self.db, CONTACT_A, facts)
         index_facts(facts, CONTACT_A)
 

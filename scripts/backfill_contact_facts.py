@@ -182,15 +182,17 @@ def _build_batch_dicts(msgs_with_text: list, chat_id: str) -> list[dict]:
         prev = texts[max(0, i - 2) : i]
         nxt = texts[i + 1 : min(len(texts), i + 2)]
 
-        batch.append({
-            "text": msg.text,
-            "message_id": msg.id,
-            "chat_id": chat_id,
-            "is_from_me": msg.is_from_me,
-            "message_date": msg.date,
-            "context_prev": prev if prev else None,
-            "context_next": nxt if nxt else None,
-        })
+        batch.append(
+            {
+                "text": msg.text,
+                "message_id": msg.id,
+                "chat_id": chat_id,
+                "is_from_me": msg.is_from_me,
+                "message_date": msg.date,
+                "context_prev": prev if prev else None,
+                "context_next": nxt if nxt else None,
+            }
+        )
 
     return batch
 

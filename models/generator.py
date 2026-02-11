@@ -161,7 +161,8 @@ class MLXGenerator:
                         model_name="fallback",
                         used_template=False,
                         template_name=None,
-                        finish_reason="memory_pressure",
+                        finish_reason="fallback",
+                        error="memory_pressure: skipping model load",
                     )
                 with timed_operation(logger, "model.load", model_id=self.config.model_path):
                     load_ok = self._loader.load()
@@ -174,7 +175,8 @@ class MLXGenerator:
                         model_name="fallback",
                         used_template=False,
                         template_name=None,
-                        finish_reason="load_failed",
+                        finish_reason="fallback",
+                        error="load_failed: model load returned False",
                     )
                 loaded_for_this_call = True
                 # Prefill cache after first load
@@ -253,6 +255,7 @@ class MLXGenerator:
                 used_template=False,
                 template_name=None,
                 finish_reason="error",
+                error=str(e),
             )
 
     def _ensure_prompt_cache(self) -> None:

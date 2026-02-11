@@ -14,8 +14,6 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from contracts.models import GenerationResponse as ModelGenerationResponse
 from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.classification_result import build_classification_result
@@ -23,14 +21,12 @@ from jarvis.classifiers.response_mobilization import ResponsePressure
 from jarvis.contracts.pipeline import (
     CategoryType,
     ClassificationResult,
-    GenerationResponse,
     IntentType,
     MessageContext,
     UrgencyLevel,
 )
 from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES
 from jarvis.reply_service import ReplyService
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -121,9 +117,7 @@ class TestClassificationFlowsDownstream:
         """Acknowledge short-circuits to template; LLM never called."""
         svc = _make_service()
         ctx = _make_context("ok")
-        classification = _make_classification(
-            CategoryType.ACKNOWLEDGE, category_name="acknowledge"
-        )
+        classification = _make_classification(CategoryType.ACKNOWLEDGE, category_name="acknowledge")
 
         result = svc.generate_reply(ctx, classification)
 
@@ -136,9 +130,7 @@ class TestClassificationFlowsDownstream:
         """Closing short-circuits to closing template; no LLM call."""
         svc = _make_service()
         ctx = _make_context("bye")
-        classification = _make_classification(
-            CategoryType.CLOSING, category_name="closing"
-        )
+        classification = _make_classification(CategoryType.CLOSING, category_name="closing")
 
         result = svc.generate_reply(ctx, classification)
 
@@ -186,9 +178,7 @@ class TestMobilizationAffectsClassification:
         mobilization = classify_with_cascade("ok")
         assert mobilization.pressure == ResponsePressure.NONE
 
-        classification = build_classification_result(
-            "ok", thread=[], mobilization=mobilization
-        )
+        classification = build_classification_result("ok", thread=[], mobilization=mobilization)
         assert classification.urgency == UrgencyLevel.LOW
 
     def test_emotional_message_maps_to_medium(self):
@@ -226,9 +216,7 @@ class TestSearchResultsPassthrough:
             },
         ]
 
-        result = svc.generate_reply(
-            ctx, classification, search_results=search_results
-        )
+        result = svc.generate_reply(ctx, classification, search_results=search_results)
 
         assert result.metadata.get("type") == "generated"
         gen.generate.assert_called_once()
@@ -246,9 +234,7 @@ class TestErrorHandling:
         gen.generate.side_effect = RuntimeError("GPU out of memory")
         svc = _make_service(generator=gen)
         ctx = _make_context("Tell me about your day")
-        classification = _make_classification(
-            CategoryType.FULL_RESPONSE, category_name="statement"
-        )
+        classification = _make_classification(CategoryType.FULL_RESPONSE, category_name="statement")
 
         result = svc.generate_reply(ctx, classification)
 
@@ -261,9 +247,7 @@ class TestErrorHandling:
         """Bad system health -> fallback, no LLM call."""
         svc = _make_service()
         ctx = _make_context("What's up?")
-        classification = _make_classification(
-            CategoryType.FULL_RESPONSE, category_name="question"
-        )
+        classification = _make_classification(CategoryType.FULL_RESPONSE, category_name="question")
 
         result = svc.generate_reply(ctx, classification)
 
@@ -301,9 +285,7 @@ class TestEndToEndPipelineFlow:
         }
 
         # Stage 2: Classification (real fast-path + fallback)
-        classification = build_classification_result(
-            incoming, thread=[], mobilization=mobilization
-        )
+        classification = build_classification_result(incoming, thread=[], mobilization=mobilization)
         assert classification.category in {
             CategoryType.FULL_RESPONSE,
             CategoryType.DEFER,
@@ -329,9 +311,7 @@ class TestEndToEndPipelineFlow:
         assert mobilization.pressure == ResponsePressure.NONE
 
         # Stage 2: Classification (real - fast path detects ack)
-        classification = build_classification_result(
-            incoming, thread=[], mobilization=mobilization
-        )
+        classification = build_classification_result(incoming, thread=[], mobilization=mobilization)
         assert classification.category == CategoryType.ACKNOWLEDGE
 
         # Stage 3: Generation (template, no LLM)

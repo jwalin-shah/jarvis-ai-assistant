@@ -21,23 +21,12 @@ from pathlib import Path
 
 import numpy as np
 
+from jarvis.utils.logging import setup_script_logging
+
 ROOT = Path(__file__).resolve().parent.parent
 LOG_PATH = ROOT / "eval_classifiers.log"
 
 logger = logging.getLogger(__name__)
-
-
-def _setup_logging() -> None:
-    """Configure logging with both file and console handlers."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_PATH, mode="a"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-
 
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval.jsonl"
 DEFAULT_OUTPUT = ROOT / "evals" / "results" / "classifier_eval.json"
@@ -243,7 +232,7 @@ def _compute_metrics(
 
 
 def main() -> None:
-    _setup_logging()
+    setup_script_logging("eval_classifiers")
     logger.info("Starting eval_classifiers.py")
     parser = argparse.ArgumentParser(description="Evaluate classifiers")
     parser.add_argument(

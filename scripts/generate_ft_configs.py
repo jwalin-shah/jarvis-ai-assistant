@@ -12,18 +12,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-
-def _setup_logging() -> None:
-    """Configure logging with FileHandler + StreamHandler."""
-    log_file = Path("generate_ft_configs.log")
-    file_handler = logging.FileHandler(log_file, mode="a")
-    stream_handler = logging.StreamHandler(sys.stdout)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[file_handler, stream_handler],
-    )
-
+from jarvis.utils.logging import setup_script_logging
 
 # Model matrix
 MODELS = [
@@ -139,7 +128,7 @@ def generate_configs(out_dir: Path = Path("ft_configs")) -> None:
 
 
 if __name__ == "__main__":
-    _setup_logging()
+    setup_script_logging("generate_ft_configs")
     logging.info("Starting generate_ft_configs.py")
     args = parse_args()
     generate_configs(args.output_dir)

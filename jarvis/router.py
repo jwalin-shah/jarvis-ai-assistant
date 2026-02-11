@@ -30,7 +30,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from jarvis.classifiers.cascade import classify_with_cascade
-from jarvis.classifiers.classification_result import build_classification_result, to_intent_type
+from jarvis.classifiers.classification_result import build_classification_result
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
@@ -439,9 +439,7 @@ class ReplyRouter:
         thread: list[str] = []
         for msg in reversed(conversation_messages):
             msg_text = (
-                msg.get("text", "")
-                if isinstance(msg, dict)
-                else (getattr(msg, "text", None) or "")
+                msg.get("text", "") if isinstance(msg, dict) else (getattr(msg, "text", None) or "")
             )
             if msg_text:
                 is_from_me = (
@@ -452,9 +450,7 @@ class ReplyRouter:
                 if isinstance(msg, dict):
                     sender = msg.get("sender_name") or msg.get("sender", "")
                 else:
-                    sender = getattr(msg, "sender_name", None) or getattr(
-                        msg, "sender", ""
-                    )
+                    sender = getattr(msg, "sender_name", None) or getattr(msg, "sender", "")
                 prefix = "Me" if is_from_me else sender
                 thread.append(f"{prefix}: {msg_text}")
         return thread[-10:] if thread else None

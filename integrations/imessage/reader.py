@@ -782,7 +782,8 @@ class ChatDBReader:
         Includes timeout protection to prevent hanging on large contact databases.
         Uses ThreadPoolExecutor for thread-safe timeout (works on any thread).
         """
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+        from concurrent.futures import ThreadPoolExecutor
+        from concurrent.futures import TimeoutError as FuturesTimeoutError
 
         # Load into a local dict first to avoid partial cache state
         new_cache: dict[str, str] = {}
@@ -812,8 +813,7 @@ class ChatDBReader:
                     logger.debug(f"Loaded contacts from {loaded_count} AddressBook sources")
                 except FuturesTimeoutError:
                     logger.warning(
-                        "Contact loading timed out after 5s. "
-                        "Using partial cache with %d contacts.",
+                        "Contact loading timed out after 5s. Using partial cache with %d contacts.",
                         len(new_cache),
                     )
         except PermissionError:
@@ -1306,7 +1306,9 @@ class ChatDBReader:
             query = get_query("context", self._schema_version or "v14")
 
             rows = self._execute_with_fallback(
-                cursor, query, (chat_id, around_message_id, total_limit),
+                cursor,
+                query,
+                (chat_id, around_message_id, total_limit),
             )
 
             messages = self._rows_to_messages(rows, chat_id)
@@ -1583,7 +1585,13 @@ class ChatDBReader:
         group_action_type = row_dict.get("group_action_type", 0) or 0
         if group_action_type != 0:
             return self._parse_system_message(
-                row, row_dict, message_id, chat_id, sender, sender_name, group_action_type,
+                row,
+                row_dict,
+                message_id,
+                chat_id,
+                sender,
+                sender_name,
+                group_action_type,
             )
 
         # Extract text (tries text column, falls back to attributedBody)

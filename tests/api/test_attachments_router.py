@@ -21,9 +21,7 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from api.routers.attachments import format_bytes
-from api.schemas import AttachmentTypeEnum
 from contracts.imessage import Attachment
-
 
 # =============================================================================
 # Fixtures
@@ -253,7 +251,6 @@ class TestListAttachmentsEndpoint:
 
         def override_get_imessage_reader():
             # Simulate the dependency raising an exception for no access
-            from fastapi import HTTPException
 
             no_access_reader.close()
             raise HTTPException(status_code=403, detail="No access")

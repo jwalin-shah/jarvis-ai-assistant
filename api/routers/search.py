@@ -43,6 +43,10 @@ def _get_searcher(reader: ChatDBReader, threshold: float) -> SemanticSearcher:
     """
     global _searcher_instance
 
+    # Fast path: skip lock if already initialized (double-check locking)
+    if _searcher_instance is not None:
+        return _searcher_instance
+
     with _searcher_lock:
         if _searcher_instance is None:
             # Create a dedicated reader for the singleton so it isn't closed by DI

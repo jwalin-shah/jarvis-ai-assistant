@@ -506,9 +506,9 @@ class TestConfigMigrationEdgeCases:
                 json.dump(v2_config, f)
 
             config = load_config(config_file)
-            assert (
-                config.model.model_id == expected_model_id
-            ), f"Expected {expected_model_id} for {model_path}"
+            assert config.model.model_id == expected_model_id, (
+                f"Expected {expected_model_id} for {model_path}"
+            )
 
     def test_corrupted_json_returns_defaults(self, tmp_path):
         """Corrupted JSON file returns default configuration."""
@@ -1001,7 +1001,9 @@ class TestConfigThreadSafety:
 class TestErrorHandlerIntegration:
     """Tests for error handler integration with the app."""
 
-    @pytest.mark.skip(reason="Covered indirectly by endpoint tests and unit tests in test_errors.py")
+    @pytest.mark.skip(
+        reason="Covered indirectly by endpoint tests and unit tests in test_errors.py"
+    )
     def test_jarvis_error_returns_proper_response(self, app, client):
         """JarvisError subclasses return proper HTTP responses."""
         pass

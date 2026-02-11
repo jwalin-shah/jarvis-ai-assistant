@@ -11,11 +11,10 @@ from __future__ import annotations
 import pytest
 
 from jarvis.classifiers.category_classifier import classify_category
-from tests.dependencies import requires, skip_if_missing
+from tests.dependencies import skip_if_missing
 from tests.utils.statistical_assertions import (
     CONFIDENCE_THRESHOLDS,
     StatisticalValidator,
-    assert_category_in_set,
     assert_confidence_in_range,
 )
 
@@ -90,9 +89,9 @@ class TestCategoryClassifierStatistical:
 
         for text in test_inputs:
             result = classify_category(text)
-            assert (
-                0.0 <= result.confidence <= 1.0
-            ), f"Confidence {result.confidence} out of range for '{text}'"
+            assert 0.0 <= result.confidence <= 1.0, (
+                f"Confidence {result.confidence} out of range for '{text}'"
+            )
 
     def test_all_categories_reachable(self) -> None:
         """Each category should be reachable by at least one test case."""
@@ -146,14 +145,12 @@ class TestCategoryClassifierStatistical:
         ]
 
         real_failures = [
-            f
-            for f in failures
-            if not any(acceptable in f for acceptable in acceptable_failures)
+            f for f in failures if not any(acceptable in f for acceptable in acceptable_failures)
         ]
 
-        assert (
-            accuracy >= 0.70
-        ), f"Accuracy {accuracy:.2%} below threshold. Failures: {real_failures}"
+        assert accuracy >= 0.70, (
+            f"Accuracy {accuracy:.2%} below threshold. Failures: {real_failures}"
+        )
 
     @pytest.mark.skipif(
         skip_if_missing("spacy"),

@@ -92,46 +92,50 @@ class ReplyService:
 
     @property
     def generator(self) -> MLXGenerator:
-        with self._lock:
-            if self._generator is None:
-                from models import get_generator
+        if self._generator is None:
+            with self._lock:
+                if self._generator is None:
+                    from models import get_generator
 
-                self._generator = get_generator(skip_templates=True)
-            return self._generator
+                    self._generator = get_generator(skip_templates=True)
+        return self._generator
 
     @property
     def imessage_reader(self) -> ChatDBReader | None:
-        with self._lock:
-            if self._imessage_reader is None:
-                try:
-                    from integrations.imessage.reader import ChatDBReader
+        if self._imessage_reader is None:
+            with self._lock:
+                if self._imessage_reader is None:
+                    try:
+                        from integrations.imessage.reader import ChatDBReader
 
-                    self._imessage_reader = ChatDBReader()
-                except Exception as e:
-                    logger.warning("Could not initialize iMessage reader: %s", e)
-                    return None
-            return self._imessage_reader
+                        self._imessage_reader = ChatDBReader()
+                    except (ImportError, OSError) as e:
+                        logger.warning("Could not initialize iMessage reader: %s", e)
+                        return None
+        return self._imessage_reader
 
     @property
     def context_service(self) -> ContextService:
         """Get or create the context service."""
-        with self._lock:
-            if self._context_service is None:
-                self._context_service = ContextService(
-                    db=self.db,
-                    imessage_reader=self.imessage_reader,
-                )
-            return self._context_service
+        if self._context_service is None:
+            with self._lock:
+                if self._context_service is None:
+                    self._context_service = ContextService(
+                        db=self.db,
+                        imessage_reader=self.imessage_reader,
+                    )
+        return self._context_service
 
     @property
     def reranker(self):
         """Get or create the cross-encoder reranker (lazy-loaded)."""
-        with self._lock:
-            if self._reranker is None:
-                from models.reranker import get_reranker
+        if self._reranker is None:
+            with self._lock:
+                if self._reranker is None:
+                    from models.reranker import get_reranker
 
-                self._reranker = get_reranker()
-            return self._reranker
+                    self._reranker = get_reranker()
+        return self._reranker
 
     def can_use_llm(self) -> tuple[bool, str]:
         """Check if LLM can be used based on system health."""
@@ -212,9 +216,6 @@ class ReplyService:
 
         if cached_embedder is None:
             cached_embedder = get_embedder()
-        # Pre-encode so downstream search_examples gets a cache hit
-        if normalized_incoming:
-            cached_embedder.encode(normalized_incoming)
 
         if contact is None:
             contact = self.context_service.get_contact(None, chat_id)
@@ -228,6 +229,9 @@ class ReplyService:
             )
 
         if search_results is None:
+            # Pre-encode so search_examples gets a cache hit (skip if results pre-provided)
+            if normalized_incoming:
+                cached_embedder.encode(normalized_incoming)
             search_results = self.context_service.search_examples(
                 normalized_incoming,
                 chat_id=chat_id,
@@ -423,65 +427,29 @@ class ReplyService:
 
     # --- Internal Helpers ---
 
-    def build_generation_request(
-        self,
-        context: MessageContext,
-        classification: ClassificationResult,
-        search_results: list[dict[str, Any]],
-        contact: Contact | None,
-        thread: list[str] | None = None,
-        instruction: str | None = None,
-        cached_embedder: CachedEmbedder | None = None,
-    ) -> GenerationRequest:
-        """Build a typed GenerationRequest with context, classification, and RAG docs."""
-        from jarvis.prompts import get_optimized_examples, get_optimized_instruction
+    def _fetch_contact_facts(self, context: MessageContext, chat_id):
+        try:
+            from jarvis.contacts.fact_index import search_relevant_facts
+            from jarvis.prompts import format_facts_for_prompt
 
-        incoming = context.message_text.strip()
-        chat_id = context.chat_id or None
-        category_name = str(
-            classification.metadata.get("category_name", classification.category.value)
-        )
-        category_config = get_category_config(category_name)
-        context_depth = category_config.context_depth
+            incoming_text = context.text or ""
+            facts = search_relevant_facts(incoming_text, chat_id, limit=5)
+            context.metadata["contact_facts"] = format_facts_for_prompt(facts)
+        except Exception as e:
+            logger.debug(f"Optional fact fetch failed: {e}")
 
-        context_messages: list[str] = []
-        if thread:
-            context_messages = thread[-context_depth:] if context_depth > 0 else []
-        elif chat_id and context_depth > 0:
-            context_messages = self.context_service.fetch_conversation_context(
-                chat_id, limit=context_depth
-            )
+    def _fetch_graph_context(self, context: MessageContext, chat_id):
+        try:
+            from jarvis.graph.context import get_graph_context
 
-        relationship_profile, contact_context = self.context_service.get_relationship_profile(
-            contact, chat_id
-        )
-        context.metadata["context_messages"] = context_messages
-        context.metadata["relationship_profile"] = relationship_profile
-        context.metadata["contact_context"] = contact_context
-        if contact and contact.display_name:
-            context.metadata.setdefault("contact_name", contact.display_name)
+            graph_ctx = get_graph_context(contact_id=chat_id, chat_id=chat_id)
+            if graph_ctx:
+                context.metadata["relationship_graph"] = graph_ctx
+        except Exception as e:
+            logger.debug(f"Optional graph context fetch failed: {e}")
 
-        # Fetch semantically relevant facts about this contact for grounded replies
-        if chat_id:
-            try:
-                from jarvis.contacts.fact_index import search_relevant_facts
-                from jarvis.prompts import format_facts_for_prompt
-
-                incoming_text = context.text or ""
-                facts = search_relevant_facts(incoming_text, chat_id, limit=5)
-                context.metadata["contact_facts"] = format_facts_for_prompt(facts)
-            except (ImportError, KeyError, Exception) as e:
-                logger.debug(f"Optional fact fetch failed: {e}")
-
-            # Inject graph-based relationship context
-            try:
-                from jarvis.graph.context import get_graph_context
-
-                graph_ctx = get_graph_context(contact_id=chat_id, chat_id=chat_id)
-                if graph_ctx:
-                    context.metadata["relationship_graph"] = graph_ctx
-            except (ImportError, KeyError, Exception) as e:
-                logger.debug(f"Optional graph context fetch failed: {e}")
+    def _resolve_instruction(self, instruction, category_name, category_config, classification):
+        from jarvis.prompts import get_optimized_instruction
 
         if instruction is None:
             optimized_instruction = get_optimized_instruction(category_name)
@@ -510,6 +478,53 @@ class ReplyService:
                         method="contract_bridge",
                     )
                 )
+        return instruction
+
+    def build_generation_request(
+        self,
+        context: MessageContext,
+        classification: ClassificationResult,
+        search_results: list[dict[str, Any]],
+        contact: Contact | None,
+        thread: list[str] | None = None,
+        instruction: str | None = None,
+        cached_embedder: CachedEmbedder | None = None,
+    ) -> GenerationRequest:
+        """Build a typed GenerationRequest with context, classification, and RAG docs."""
+        from jarvis.prompts import get_optimized_examples
+
+        incoming = context.message_text.strip()
+        chat_id = context.chat_id or None
+        category_name = str(
+            classification.metadata.get("category_name", classification.category.value)
+        )
+        category_config = get_category_config(category_name)
+        context_depth = category_config.context_depth
+
+        context_messages: list[str] = []
+        if thread:
+            context_messages = thread[-context_depth:] if context_depth > 0 else []
+        elif chat_id and context_depth > 0:
+            context_messages = self.context_service.fetch_conversation_context(
+                chat_id, limit=context_depth
+            )
+
+        relationship_profile, contact_context = self.context_service.get_relationship_profile(
+            contact, chat_id
+        )
+        context.metadata["context_messages"] = context_messages
+        context.metadata["relationship_profile"] = relationship_profile
+        context.metadata["contact_context"] = contact_context
+        if contact and contact.display_name:
+            context.metadata.setdefault("contact_name", contact.display_name)
+
+        if chat_id:
+            self._fetch_contact_facts(context, chat_id)
+            self._fetch_graph_context(context, chat_id)
+
+        instruction = self._resolve_instruction(
+            instruction, category_name, category_config, classification
+        )
         context.metadata["instruction"] = instruction or ""
 
         if len(search_results) > 3:
@@ -903,8 +918,10 @@ class ReplyService:
         which produces dramatically better results than raw XML prompts
         on small instruct models.
         """
-        tokenizer = getattr(self.generator, "_loader", None)
-        tokenizer = getattr(tokenizer, "_tokenizer", None) if tokenizer else None
+        if not hasattr(self, "_tokenizer_cache"):
+            loader = getattr(self.generator, "_loader", None)
+            self._tokenizer_cache = getattr(loader, "_tokenizer", None) if loader else None
+        tokenizer = self._tokenizer_cache
         if tokenizer is None or not hasattr(tokenizer, "apply_chat_template"):
             # Fallback to raw prompt if no chat template
             from jarvis.prompts import build_rag_reply_prompt

@@ -22,32 +22,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import logging
 import random
 import sqlite3
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
-def _setup_logging() -> logging.Logger:
-    """Setup logging with file and stream handlers."""
-    log_file = Path("build_fact_goldset.log")
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file, mode="a"),
-    ]
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=handlers,
-        force=True,
-    )
-    return logging.getLogger(__name__)
-
+from jarvis.utils.logging import setup_script_logging
 
 APPLE_EPOCH_UNIX = 978307200  # 2001-01-01 00:00:00 UTC
 NANOSECONDS_PER_SECOND = 1_000_000_000
@@ -577,7 +560,7 @@ def build_records(
 
 
 def main() -> int:
-    logger = _setup_logging()
+    logger = setup_script_logging("build_fact_goldset")
     args = parse_args()
 
     validate_counts(

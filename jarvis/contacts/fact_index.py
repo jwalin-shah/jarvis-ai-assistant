@@ -114,8 +114,7 @@ def index_facts(facts: list[Fact], contact_id: str) -> int:
         ).fetchall()
         # O(1) lookup: (category, subject, predicate) -> fact_id
         fact_id_lookup: dict[tuple[str, str, str], int] = {
-            (row["category"], row["subject"], row["predicate"]): row["id"]
-            for row in rows
+            (row["category"], row["subject"], row["predicate"]): row["id"] for row in rows
         }
         all_fact_ids = set(fact_id_lookup.values())
 

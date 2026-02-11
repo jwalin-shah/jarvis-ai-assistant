@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from jarvis.topics.topic_discovery import TopicCluster, TopicDiscovery, TopicResult, _tokenize
 

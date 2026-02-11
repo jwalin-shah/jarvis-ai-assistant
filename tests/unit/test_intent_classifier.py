@@ -86,9 +86,7 @@ class TestKeywordClassifier:
         assert result.intent == "reply_casual_chat"
         assert result.confidence == 0.0
 
-    def test_keyword_casual_chat_is_moderate_baseline(
-        self, clf: KeywordIntentClassifier
-    ) -> None:
+    def test_keyword_casual_chat_is_moderate_baseline(self, clf: KeywordIntentClassifier) -> None:
         """Casual chat gets a moderate score when no strong pattern matches."""
         candidates = ["no_reply_ack", "reply_casual_chat"]
         result = clf.classify("hey what's going on with that new show", candidates)
@@ -135,9 +133,7 @@ class TestClosestIntentOption:
         assert score == 0.88
 
     def test_partial_match_substring(self) -> None:
-        label, score = _closest_intent_option(
-            "the intent is reply_question_info here", ALL_INTENTS
-        )
+        label, score = _closest_intent_option("the intent is reply_question_info here", ALL_INTENTS)
         assert label == "reply_question_info"
         assert score == 0.72
 
@@ -162,9 +158,7 @@ class TestMLXExtractLabel:
     """Test the label extraction/parsing logic in isolation."""
 
     def test_exact_label_in_output(self) -> None:
-        label, conf = MLXPromptIntentClassifier._extract_label(
-            "reply_question_info", ALL_INTENTS
-        )
+        label, conf = MLXPromptIntentClassifier._extract_label("reply_question_info", ALL_INTENTS)
         assert label == "reply_question_info"
         assert conf == 0.88
 
@@ -176,9 +170,7 @@ class TestMLXExtractLabel:
         assert conf == 0.88
 
     def test_label_wrapped_in_quotes(self) -> None:
-        label, conf = MLXPromptIntentClassifier._extract_label(
-            '"no_reply_closing"', ALL_INTENTS
-        )
+        label, conf = MLXPromptIntentClassifier._extract_label('"no_reply_closing"', ALL_INTENTS)
         assert label == "no_reply_closing"
         assert conf == 0.88
 
@@ -221,30 +213,26 @@ class TestMLXExtractLabel:
 
 class TestBuildZeroShotCandidates:
     def test_all_known_intents_get_descriptions(self) -> None:
-        candidates, label_to_intent = (
-            HFTransformersIntentClassifier._build_zero_shot_candidates(ALL_INTENTS)
+        candidates, label_to_intent = HFTransformersIntentClassifier._build_zero_shot_candidates(
+            ALL_INTENTS
         )
         assert len(candidates) == len(ALL_INTENTS)
         # Every candidate is a natural language description, not a raw label
         for c in candidates:
-            assert "_" not in c, (
-                f"Candidate '{c}' looks like a raw label, not a description"
-            )
+            assert "_" not in c, f"Candidate '{c}' looks like a raw label, not a description"
         # Reverse map covers all
         assert set(label_to_intent.values()) == set(ALL_INTENTS)
 
     def test_unknown_intent_uses_underscore_replacement(self) -> None:
-        candidates, label_to_intent = (
-            HFTransformersIntentClassifier._build_zero_shot_candidates(
-                ["custom_new_intent"]
-            )
+        candidates, label_to_intent = HFTransformersIntentClassifier._build_zero_shot_candidates(
+            ["custom_new_intent"]
         )
         assert candidates == ["custom new intent"]
         assert label_to_intent["custom new intent"] == "custom_new_intent"
 
     def test_round_trip_mapping(self) -> None:
-        candidates, label_to_intent = (
-            HFTransformersIntentClassifier._build_zero_shot_candidates(ALL_INTENTS)
+        candidates, label_to_intent = HFTransformersIntentClassifier._build_zero_shot_candidates(
+            ALL_INTENTS
         )
         for candidate in candidates:
             intent = label_to_intent[candidate]

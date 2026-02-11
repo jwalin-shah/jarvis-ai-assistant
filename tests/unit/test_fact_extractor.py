@@ -1,12 +1,11 @@
 """Unit tests for fact extraction with quality filters and NER."""
 
-import re
 import time
 
 import pytest
 
-from jarvis.contacts.fact_extractor import FactExtractor
 from jarvis.contacts.contact_profile import Fact
+from jarvis.contacts.fact_extractor import FactExtractor
 
 
 class TestBotMessageDetection:
@@ -148,7 +147,6 @@ class TestShortPhraseFiltering:
         assert not extractor._is_too_short("location", "San Francisco")  # 2 words OK
         # Lowercase single word should still fail
         assert extractor._is_too_short("location", "city")  # lowercase, no context
-
 
 
 class TestConfidenceRecalibration:

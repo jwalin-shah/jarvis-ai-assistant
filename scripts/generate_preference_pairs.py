@@ -26,18 +26,7 @@ import sys
 import time
 from pathlib import Path
 
-
-def _setup_logging() -> None:
-    """Configure logging with FileHandler + StreamHandler."""
-    log_file = Path("generate_preference_pairs.log")
-    file_handler = logging.FileHandler(log_file, mode="a")
-    stream_handler = logging.StreamHandler(sys.stdout)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[file_handler, stream_handler],
-    )
-
+from jarvis.utils.logging import setup_script_logging
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -153,7 +142,7 @@ def generate_local_reply(loader, system_msg: str, user_msg: str) -> str:
 
 
 def main() -> int:
-    _setup_logging()
+    setup_script_logging("generate_preference_pairs")
     logging.info("Starting generate_preference_pairs.py")
     parser = argparse.ArgumentParser(description="Generate ORPO preference pairs")
     parser.add_argument(
