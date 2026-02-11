@@ -94,7 +94,13 @@ class TTLCache:
 # Register custom timestamp converter that handles timezone-aware timestamps
 def _convert_timestamp(val: bytes) -> datetime:
     """Convert timestamp bytes to datetime, handling timezone info."""
-    datepart, timepart = val.split(b" ")
+    # Handle both space separator ("2025-02-11 14:30:00") and ISO T separator
+    # ("2025-02-11T14:30:00") — the latter is produced by datetime.isoformat()
+    # and stored by FactExtractor for valid_from/valid_until fields.
+    if b"T" in val:
+        datepart, timepart = val.split(b"T", 1)
+    else:
+        datepart, timepart = val.split(b" ", 1)
     year, month, day = (int(x) for x in datepart.split(b"-"))
 
     # Handle timezone offset (e.g., "14:30:00.123456+00:00")
