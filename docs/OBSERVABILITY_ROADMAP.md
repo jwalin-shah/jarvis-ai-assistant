@@ -1,7 +1,9 @@
 # JARVIS Observability Roadmap
 
-> **Version:** 1.0  
-> **Status:** Draft  
+> **Last Updated:** 2026-02-10
+
+> **Version:** 1.0
+> **Status:** Draft
 > **Target:** Apple Silicon 8GB, Production-Ready Monitoring
 
 ---

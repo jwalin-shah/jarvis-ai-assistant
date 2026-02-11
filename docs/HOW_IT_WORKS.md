@@ -1,5 +1,7 @@
 # How JARVIS Works
 
+> **Last Updated:** 2026-02-10
+
 This document explains the JARVIS system architecture, services, and message flow.
 
 ---
@@ -94,24 +96,40 @@ Incoming: "Want to grab lunch tomorrow?"
 
 ### Phase 3: Fact Extraction (Background)
 
-When new messages arrive, the watcher also extracts structured facts in a background task:
+When new messages arrive, the watcher extracts structured facts using a two-stage pipeline: high-recall candidate extraction followed by quality filtering.
 
 ```
 Incoming: "My sister Sarah just started at Google in Austin"
     │
-    ├─→ 1. Rule-based regex patterns
-    │      ├─→ Relationship: "sister Sarah" (is_family_of)
-    │      ├─→ Work: "started at Google" (works_at)
-    │      └─→ Location: "in Austin" (lives_in)
+    ├─→ 1. Candidate extraction (two paths, merged)
+    │      ├─→ GLiNER NER (zero-shot, urchade/gliner_medium-v2.1)
+    │      │      ├─→ person_name: "Sarah"
+    │      │      ├─→ org: "Google"
+    │      │      └─→ place: "Austin"
+    │      └─→ Rule-based regex patterns
+    │             ├─→ Relationship: "sister Sarah" (is_family_of)
+    │             ├─→ Work: "started at Google" (works_at)
+    │             └─→ Location: "in Austin" (lives_in)
     │
-    ├─→ 2. NLI verification (optional, via MLX DeBERTa-v3)
+    ├─→ 2. Quality filtering (4-filter pipeline, precision 37%→80%+)
+    │      ├─→ Bot detection (CVS/Rx/LinkedIn/URL patterns)
+    │      ├─→ Vague subject rejection (pronouns: me, you, that, etc.)
+    │      ├─→ Short phrase filtering (min 3 words for prefs, 2 for others)
+    │      └─→ Confidence recalibration (threshold ≥0.5)
+    │
+    ├─→ 3. NLI verification (optional, via MLX DeBERTa-v3)
     │      ├─→ "Sarah is a family member" → entailment (0.94) ✓
     │      ├─→ "Someone works at Google" → entailment (0.88) ✓
     │      └─→ "Someone lives in Austin" → entailment (0.91) ✓
     │
-    └─→ 3. Persist to contact_facts table (dedup by UNIQUE constraint)
+    ├─→ 4. NER person linking (fuzzy Jaccard match to known contacts)
+    │      └─→ "Sarah" → linked_contact_id (if match ≥0.7)
+    │
+    └─→ 5. Persist to contact_facts table (dedup by UNIQUE constraint)
            └─→ Knowledge graph queries now return these facts
 ```
+
+**GLiNER Model**: `urchade/gliner_medium-v2.1` (DeBERTa backbone, ~1.5GB). 9 span labels: person_name, family_member, place, org, date_ref, food_item, job_role, health_condition, activity. Requires `transformers<5`.
 
 **NLI Model**: `cross-encoder/nli-deberta-v3-xsmall` (22M params, 87.77% MNLI accuracy, ~90MB in memory). Implemented as a pure MLX DeBERTa-v3 with disentangled attention. We chose this over using the LLM for entailment because:
 - Dedicated NLI models are more accurate for entailment tasks than zero-shot LLM prompting

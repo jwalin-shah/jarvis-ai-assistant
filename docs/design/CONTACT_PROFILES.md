@@ -1,5 +1,7 @@
 # Contact Profiles & Topic Discovery
 
+> **Last Updated:** 2026-02-10
+
 ## Design Decisions & Rationale
 
 ### Why Per-Contact Topics (Not Global)?

@@ -1,5 +1,7 @@
 # Testing Guidelines and Best Practices
 
+> **Last Updated:** 2026-02-10
+
 ## Overview
 
 This document outlines testing patterns, conventions, and best practices for the JARVIS codebase.

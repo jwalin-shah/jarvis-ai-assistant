@@ -1,5 +1,7 @@
 # JARVIS Architecture V2: Direct SQLite + Unix Sockets
 
+> **Last Updated:** 2026-02-10
+
 ## Overview
 
 This document describes the optimized architecture for JARVIS, replacing HTTP polling with direct SQLite reads and Unix socket communication.
@@ -734,8 +736,8 @@ These require V2's socket infrastructure:
 
 | Optimization | File | Status | Description |
 |-------------|------|--------|-------------|
-| Speculative prefetching | `stores/conversations.ts` | ⏳ Post-V2 | Prefetch likely-next conversations on hover |
-| Pre-warm common queries | `jarvis/socket_server.py` | ⏳ Post-V2 | Cache common queries on startup |
+| Speculative prefetching | `jarvis/prefetch/` | ✅ Done | ML predictor + 3-tier cache (L1/L2/L3) + executor with resource awareness |
+| Pre-warm common queries | `jarvis/socket_server.py` | ✅ Done | Model preloading at startup via `model_warmer.py` |
 | Message virtualization | `MessageView.svelte` | ⏳ Post-V2 | Cache heights in localStorage, reduce buffer |
 | WebSocket multiplexing | `socket/client.ts` | ⏳ Post-V2 | Multiple streams over one connection |
 
@@ -772,7 +774,7 @@ async def warmup():
 | Metric | Current | Target |
 |--------|---------|--------|
 | Cold start time | ~4-5s | <2s to interactive |
-| Conversation switch | ~100-150ms | <100ms perceived |
+| Conversation switch | ~1-5ms (direct SQLite) | <100ms perceived ✅ |
 | Message send feedback | ~200ms | Instant (optimistic) |
 | Search response (10k messages) | ~800ms | <500ms |
 

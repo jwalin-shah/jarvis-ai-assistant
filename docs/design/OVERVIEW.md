@@ -1,5 +1,7 @@
 # JARVIS Design Overview
 
+> **Last Updated:** 2026-02-10
+
 > **TLDR**: Local-first AI assistant for iMessage on Apple Silicon. Uses 3-layer hybrid classifiers (structural → centroid → SVM) achieving ~82% F1. Retrieval + generation via MLX models. All data stays on device.
 
 ## Quick Reference

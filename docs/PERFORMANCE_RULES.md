@@ -1,5 +1,7 @@
 # Performance Rules & N+1 Prevention Strategy
 
+> **Last Updated:** 2026-02-10
+
 **Status**: Established after fixing critical N+1 queries that caused 1400ms startup delay.
 
 ## What Happened

@@ -1,5 +1,7 @@
 # Metrics & Evaluation
 
+> **Last Updated:** 2026-02-10
+
 ## Classifier Performance
 
 | Classifier | Macro F1 | 95% CI | Test Set |

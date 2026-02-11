@@ -1,5 +1,7 @@
 # Embedding Architecture
 
+> **Last Updated:** 2026-02-10
+
 ## Text Normalization
 
 All text is normalized before embedding for consistency between training and inference.
