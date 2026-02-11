@@ -61,5 +61,4 @@ When your work is done:
 ## Pre-existing Failures
 
 These tests fail BEFORE your changes (not your fault, ignore them):
-- `CentroidMixin` not defined in `jarvis/classifiers/mixins.py` - causes collection errors
 - Category classifier tests may fail due to missing training data
