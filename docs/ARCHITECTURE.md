@@ -1,6 +1,6 @@
 # JARVIS Architecture V2: Direct SQLite + Unix Sockets
 
-> **Last Updated:** 2026-02-10
+> **Last Updated:** 2026-02-11
 
 ## Overview
 
@@ -27,7 +27,13 @@ The socket server runs at `~/.jarvis/jarvis.sock` with JSON-RPC 2.0 protocol.
 | `summarize` | Summarize conversation | `chat_id`, `num_messages?` |
 | `get_smart_replies` | Quick reply suggestions | `last_message`, `num_suggestions?` |
 | `semantic_search` | Search messages | `query`, `limit?`, `threshold?`, `filters?` |
-| `classify_intent` | Classify message intent | `text` |
+| `list_conversations` | List recent conversations | `limit?` |
+| `batch` | Execute multiple RPC calls | `requests` (array) |
+| `resolve_contacts` | Resolve contact info | `handles` |
+| `get_routing_metrics` | Get routing metrics | None |
+| `prefetch_stats` | Get prefetch cache stats | None |
+| `prefetch_focus` | Signal conversation focused | `chat_id` |
+| `prefetch_hover` | Signal conversation hovered | `chat_id` |
 
 **Push Notifications:**
 | Event | Description | Data |
@@ -155,13 +161,8 @@ export async function getConversations(): Promise<Conversation[]> {
   `);
 }
 
-export async function getEmbedding(messageId: number): Promise<Float32Array | null> {
-  const row = await jarvisDb.select(
-    'SELECT embedding FROM message_embeddings WHERE message_id = ?',
-    [messageId]
-  );
-  return row[0]?.embedding;
-}
+// Vector search is handled server-side via sqlite-vec
+// Use the socket client for semantic_search instead of direct embedding access
 ```
 
 **Tauri Config (src-tauri/tauri.conf.json):**
@@ -217,7 +218,6 @@ class JarvisSocketServer:
         self.handlers = {
             "generate_draft": self.handle_generate_draft,
             "semantic_search": self.handle_semantic_search,
-            "classify_intent": self.handle_classify_intent,
             "get_smart_replies": self.handle_smart_replies,
         }
 
@@ -304,7 +304,7 @@ class JarvisSocketServer:
         return {"drafts": result}
 
     async def handle_semantic_search(self, params: dict) -> dict:
-        from jarvis.semantic_search import search
+        from jarvis.search.vec_search import search
         results = await asyncio.to_thread(
             search,
             query=params["query"],
@@ -312,11 +312,6 @@ class JarvisSocketServer:
             limit=params.get("limit", 20)
         )
         return {"results": results}
-
-    async def handle_classify_intent(self, params: dict) -> dict:
-        from jarvis.intent import classify
-        result = await asyncio.to_thread(classify, params["text"])
-        return {"intent": result}
 
     async def handle_smart_replies(self, params: dict) -> dict:
         from jarvis.router import get_smart_replies
@@ -488,23 +483,13 @@ class ChatDBWatcher:
 
     async def _index_message(self, row):
         """Compute and store embedding for new message."""
-        from jarvis.embedding_adapter import get_embedder
-        from jarvis.embeddings import EmbeddingStore
+        from models.bert_embedder import get_embedder
 
         embedder = get_embedder()
-        store = EmbeddingStore()
-
         embedding = await asyncio.to_thread(
             embedder.encode, row["text"]
         )
-
-        await asyncio.to_thread(
-            store.add_embedding,
-            message_id=row["id"],
-            chat_id=row["chat_id"],
-            embedding=embedding,
-            text_preview=row["text"][:200]
-        )
+        # Store via vec_search for sqlite-vec indexing
 ```
 
 ---
@@ -708,7 +693,7 @@ These optimizations are independent of V2 and improve base performance:
 
 | Optimization | File | Status | Impact |
 |-------------|------|--------|--------|
-| Vectorized semantic search | `jarvis/semantic_search.py`, `jarvis/embeddings.py` | ✅ Done | 10-50x faster for large searches |
+| Vectorized semantic search | `jarvis/search/vec_search.py` | ✅ Done | 10-50x faster for large searches |
 | Scale thread pool | `jarvis/router.py` | ✅ Done | `max_workers=min(4, cpu_count)` for multi-core |
 | Batch message indexing | `jarvis/embeddings.py` | ✅ Already had | Uses `executemany` + batch encoding |
 | Embedding result cache | `jarvis/embedding_adapter.py` | ✅ Done | Increased LRU cache to 1000 entries |

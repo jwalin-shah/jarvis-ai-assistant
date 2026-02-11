@@ -54,6 +54,7 @@ JSON-RPC 2.0 over newline-delimited JSON.
 | `semantic_search` | No | Search message history by meaning |
 | `batch` | No | Execute multiple RPC calls in one request |
 | `resolve_contacts` | No | Resolve contact info from handles |
+| `list_conversations` | No | List recent conversations |
 | `get_routing_metrics` | No | Get routing/classification metrics |
 | `prefetch_stats` | No | Get prefetch cache statistics |
 | `prefetch_invalidate` | No | Invalidate prefetch cache entries |
