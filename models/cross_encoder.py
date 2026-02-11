@@ -139,13 +139,13 @@ class InProcessCrossEncoder:
     """In-process MLX cross-encoder for scoring (query, document) pairs.
 
     Thread-safe:
-    - _encode_lock serializes tokenizer calls (Rust tokenizer is not thread-safe)
-    - MLXModelLoader._mlx_load_lock serializes GPU operations
+    - MLXModelLoader._mlx_load_lock serializes both tokenization and GPU operations,
+      preventing race conditions where another thread changes tokenizer padding state
+      between tokenization and the forward pass.
     """
 
     def __init__(self, model_name: str = "ms-marco-MiniLM-L-6-v2") -> None:
         self._default_model = model_name
-        self._encode_lock = threading.Lock()
         self.model: BertForSequenceClassification | None = None
         self.tokenizer: Tokenizer | None = None
         self.model_name: str | None = None
@@ -285,13 +285,15 @@ class InProcessCrossEncoder:
         if not pairs:
             return np.array([], dtype=np.float32)
 
-        with self._encode_lock:
-            # Tokenize pairs - encode(text_a, text_b) produces correct
-            # token_type_ids for sentence pair classification
-            self.tokenizer.no_padding()
+        # Single critical section: tokenization + GPU forward pass.
+        # The GPU lock protects both the tokenizer state (padding config)
+        # and the Metal GPU operations, preventing race conditions where
+        # another thread changes padding between tokenization and forward pass.
+        with self._get_gpu_lock():
+            # Tokenize ONCE with padding enabled — extract both encodings
+            # and actual lengths from the attention_mask in a single pass.
             encodings = self.tokenizer.encode_batch([(query, doc) for query, doc in pairs])
-            lengths = [len(e.ids) for e in encodings]
-            self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
+            lengths = [sum(e.attention_mask) for e in encodings]
 
             # Sort by length for efficient batching
             sorted_indices = np.argsort([-length for length in lengths])
@@ -301,23 +303,21 @@ class InProcessCrossEncoder:
                 batch_end = min(batch_start + batch_size, len(pairs))
                 batch_indices = sorted_indices[batch_start:batch_end]
 
-                # Reuse pre-computed encodings (avoid double tokenization)
+                # Reuse pre-computed encodings, trim to sub-batch max length
                 batch_encodings = [encodings[i] for i in batch_indices]
-                # Pad all sequences in this batch to the same length
-                max_len = max(len(e.ids) for e in batch_encodings)
+                batch_lengths = [lengths[i] for i in batch_indices]
+                max_len = max(batch_lengths)
+
                 input_ids = np.array(
-                    [e.ids + [0] * (max_len - len(e.ids)) for e in batch_encodings],
+                    [e.ids[:max_len] for e in batch_encodings],
                     dtype=np.int32,
                 )
                 attention_mask = np.array(
-                    [
-                        e.attention_mask + [0] * (max_len - len(e.attention_mask))
-                        for e in batch_encodings
-                    ],
+                    [e.attention_mask[:max_len] for e in batch_encodings],
                     dtype=np.int32,
                 )
                 token_type_ids = np.array(
-                    [e.type_ids + [0] * (max_len - len(e.type_ids)) for e in batch_encodings],
+                    [e.type_ids[:max_len] for e in batch_encodings],
                     dtype=np.int32,
                 )
 
@@ -325,19 +325,18 @@ class InProcessCrossEncoder:
                 attention_mask_mx = mx.array(attention_mask)
                 token_type_ids_mx = mx.array(token_type_ids)
 
-                with self._get_gpu_lock():
-                    logits = self.model(input_ids_mx, attention_mask_mx, token_type_ids_mx)
+                logits = self.model(input_ids_mx, attention_mask_mx, token_type_ids_mx)
 
-                    if self._activation == "sigmoid":
-                        scores = mx.sigmoid(logits)
-                    else:
-                        scores = logits
+                if self._activation == "sigmoid":
+                    scores = mx.sigmoid(logits)
+                else:
+                    scores = logits
 
-                    # Squeeze num_labels dim if single label
-                    if self._num_labels == 1:
-                        scores = scores.squeeze(-1)
+                # Squeeze num_labels dim if single label
+                if self._num_labels == 1:
+                    scores = scores.squeeze(-1)
 
-                    mx.eval(scores)
+                mx.eval(scores)
 
                 all_scores.append(np.array(scores))
 
