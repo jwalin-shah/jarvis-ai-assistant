@@ -361,6 +361,10 @@ class MLXModelLoader:
                 )
                 start_time = time.perf_counter()
 
+                # Set MLX memory limits before loading (critical on 8GB systems)
+                mx.set_memory_limit(2 * 1024 * 1024 * 1024)  # 2 GB
+                mx.set_cache_limit(1 * 1024 * 1024 * 1024)  # 1 GB
+
                 # mlx_lm.load returns (model, tokenizer) tuple
                 result = load(self.config.model_path)
                 self._model = result[0]
@@ -582,6 +586,87 @@ class MLXModelLoader:
         # Use estimated size since MLX doesn't expose exact GPU memory
         return self.config.estimated_memory_mb
 
+    def _prepare_generation_params(
+        self,
+        prompt: str,
+        max_tokens: int | None,
+        temperature: float | None,
+        top_p: float | None,
+        min_p: float | None,
+        top_k: int | None,
+        repetition_penalty: float | None,
+        pre_formatted: bool,
+    ) -> tuple[str, int, Any, list[Any] | None]:
+        """Resolve defaults and prepare shared generation parameters.
+
+        Returns:
+            Tuple of (formatted_prompt, max_tokens, sampler, logits_processors).
+        """
+        max_tokens = max_tokens or self.config.default_max_tokens
+        temperature = temperature if temperature is not None else self.config.default_temperature
+        top_p = top_p if top_p is not None else 0.1
+        top_k = top_k if top_k is not None else 50
+        repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
+
+        if pre_formatted:
+            formatted_prompt = prompt
+        else:
+            messages = [{"role": "user", "content": prompt}]
+            formatted_prompt = self._tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+
+        min_p = min_p if min_p is not None else 0.0
+        sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
+
+        logits_processors = None
+        if repetition_penalty > 1.0:
+            logits_processors = [make_repetition_penalty(repetition_penalty)]
+
+        return formatted_prompt, max_tokens, sampler, logits_processors
+
+    def _process_generation_result(
+        self,
+        response: str,
+        formatted_prompt: str,
+        stop_sequences: list[str] | None,
+        start_time: float,
+        draft_accepted: int,
+        using_speculative: bool,
+    ) -> GenerationResult:
+        """Post-process generation output into a GenerationResult."""
+        generation_time = (time.perf_counter() - start_time) * 1000
+
+        # Strip the prompt from response
+        if response.startswith(formatted_prompt):
+            response = response[len(formatted_prompt):].strip()
+
+        # Apply stop sequences
+        if stop_sequences:
+            for stop_seq in stop_sequences:
+                if stop_seq in response:
+                    response = response[:response.index(stop_seq)]
+
+        response = response.strip()
+
+        # Count tokens using tokenizer for accuracy
+        try:
+            tokens_generated = len(self._tokenizer.encode(response))
+        except Exception:
+            tokens_generated = len(response.split())
+
+        generation_time_s = generation_time / 1000
+        tps = tokens_generated / generation_time_s if generation_time_s > 0 else 0.0
+
+        return GenerationResult(
+            text=response,
+            tokens_generated=tokens_generated,
+            generation_time_ms=generation_time,
+            tokens_per_second=round(tps, 1),
+            draft_accepted_tokens=draft_accepted,
+            speculative_enabled=using_speculative,
+        )
+
     def generate_sync(
         self,
         prompt: str,
@@ -641,13 +726,6 @@ class MLXModelLoader:
                 code=ErrorCode.MDL_LOAD_FAILED,
             )
 
-        max_tokens = max_tokens or self.config.default_max_tokens
-        temperature = temperature if temperature is not None else self.config.default_temperature
-        # LFM2.5-1.2B-Instruct optimal defaults
-        top_p = top_p if top_p is not None else 0.1
-        top_k = top_k if top_k is not None else 50
-        repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
-
         # Use provided timeout, fall back to config, then None (no timeout)
         effective_timeout: float | None
         if timeout_seconds is not None:
@@ -656,23 +734,12 @@ class MLXModelLoader:
             effective_timeout = self.config.generation_timeout_seconds
 
         try:
-            # Format prompt for chat template (skip if already formatted)
-            if pre_formatted:
-                formatted_prompt = prompt
-            else:
-                messages = [{"role": "user", "content": prompt}]
-                formatted_prompt = self._tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
+            formatted_prompt, max_tokens, sampler, logits_processors = (
+                self._prepare_generation_params(
+                    prompt, max_tokens, temperature, top_p, min_p,
+                    top_k, repetition_penalty, pre_formatted,
                 )
-
-            # Create sampler with LFM-optimal parameters
-            min_p = min_p if min_p is not None else 0.0
-            sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
-
-            # Create logits processors for repetition penalty
-            logits_processors = None
-            if repetition_penalty > 1.0:
-                logits_processors = [make_repetition_penalty(repetition_penalty)]
+            )
 
             # Generate with timeout handling
             start_time = time.perf_counter()
@@ -759,37 +826,9 @@ class MLXModelLoader:
                 # No timeout - run directly
                 response, draft_accepted = _do_generate()
 
-            generation_time = (time.perf_counter() - start_time) * 1000
-
-            # Strip the prompt from response
-            if response.startswith(formatted_prompt):
-                response = response[len(formatted_prompt) :].strip()
-
-            # Apply stop sequences
-            if stop_sequences:
-                for stop_seq in stop_sequences:
-                    if stop_seq in response:
-                        response = response[: response.index(stop_seq)]
-
-            response = response.strip()
-
-            # Count tokens using tokenizer for accuracy
-            try:
-                tokens_generated = len(self._tokenizer.encode(response))
-            except Exception:
-                # Fallback to word count if tokenizer fails
-                tokens_generated = len(response.split())
-
-            generation_time_s = generation_time / 1000
-            tps = tokens_generated / generation_time_s if generation_time_s > 0 else 0.0
-
-            return GenerationResult(
-                text=response,
-                tokens_generated=tokens_generated,
-                generation_time_ms=generation_time,
-                tokens_per_second=round(tps, 1),
-                draft_accepted_tokens=draft_accepted,
-                speculative_enabled=using_speculative,
+            return self._process_generation_result(
+                response, formatted_prompt, stop_sequences,
+                start_time, draft_accepted, using_speculative,
             )
 
         except ModelGenerationError:
@@ -855,31 +894,13 @@ class MLXModelLoader:
                 code=ErrorCode.MDL_LOAD_FAILED,
             )
 
-        max_tokens = max_tokens or self.config.default_max_tokens
-        temperature = temperature if temperature is not None else self.config.default_temperature
-        # LFM2.5-1.2B-Instruct optimal defaults
-        top_p = top_p if top_p is not None else 0.1
-        top_k = top_k if top_k is not None else 50
-        repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
-
         try:
-            # Format prompt for chat template (skip if already formatted)
-            if pre_formatted:
-                formatted_prompt = prompt
-            else:
-                messages = [{"role": "user", "content": prompt}]
-                formatted_prompt = self._tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
+            formatted_prompt, max_tokens, sampler, logits_processors = (
+                self._prepare_generation_params(
+                    prompt, max_tokens, temperature, top_p, min_p,
+                    top_k, repetition_penalty, pre_formatted,
                 )
-
-            # Create sampler with LFM-optimal parameters
-            min_p = min_p if min_p is not None else 0.0
-            sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
-
-            # Create logits processors for repetition penalty
-            logits_processors = None
-            if repetition_penalty > 1.0:
-                logits_processors = [make_repetition_penalty(repetition_penalty)]
+            )
 
             # Use real streaming with mlx_lm.stream_generate
             # Hold the shared GPU lock for the entire generation to prevent
@@ -986,6 +1007,22 @@ class MLXModelLoader:
         # Update configuration
         self.config = ModelConfig(model_id=model_id)
         logger.info("Model configuration updated to %s", spec.display_name)
+
+        # Eagerly load the new model and prefill prompt cache to avoid
+        # full prefill cost on first generation after switch
+        try:
+            if self.load():
+                # Prefill cache while holding the GPU lock to ensure thread-safety
+                with MLXModelLoader._mlx_load_lock:
+                    # Import system prefix lazily to avoid circular imports
+                    from jarvis.prompts import SYSTEM_PREFIX
+
+                    self.prefill_prompt_cache(SYSTEM_PREFIX)
+        except Exception as e:
+            # Best-effort: log warning but don't fail the switch
+            # The model will still work, just without the cache optimization
+            logger.warning("Failed to prefill prompt cache after model switch: %s", e)
+
         return True
 
     def get_current_model_info(self) -> dict[str, Any]:

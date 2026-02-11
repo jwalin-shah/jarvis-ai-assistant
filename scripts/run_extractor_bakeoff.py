@@ -30,6 +30,8 @@ from typing import Any
 # Adjust path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from eval_shared import DEFAULT_LABEL_ALIASES, spans_match
+from gliner_shared import parse_context_messages
 from jarvis.contacts.candidate_extractor import CandidateExtractor
 
 logger = logging.getLogger(__name__)
@@ -57,66 +59,6 @@ def load_gold_set(gold_path: Path) -> list[dict]:
         data = json.load(f)
     logger.info(f"Loaded {len(data)} gold records")
     return data
-
-
-def parse_context_messages(raw: object) -> list[str]:
-    """Parse context from goldset format."""
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return [str(x).strip() for x in raw if str(x).strip()]
-    if not isinstance(raw, str):
-        return []
-
-    payload = raw.strip()
-    if not payload:
-        return []
-
-    # CSV format: "id|speaker|text || id|speaker|text"
-    chunks = [c.strip() for c in payload.split("||") if c.strip()]
-    messages: list[str] = []
-    for chunk in chunks:
-        parts = chunk.split("|", 2)
-        if len(parts) == 3:
-            messages.append(parts[2].strip())
-        else:
-            messages.append(chunk)
-    return messages
-
-
-def jaccard_tokens(a: str, b: str) -> float:
-    """Token-level Jaccard similarity."""
-    ta = set(a.lower().split())
-    tb = set(b.lower().split())
-    if not ta or not tb:
-        return 0.0
-    return len(ta & tb) / len(ta | tb)
-
-
-# Label aliasing: generic GLiNER predictions → fine-grained gold labels.
-# E.g. GLiNER predicts "place" but goldset has "current_location".
-LABEL_ALIASES: dict[str, set[str]] = {
-    "place": {"current_location", "future_location", "past_location", "place", "hometown"},
-    "org": {"employer", "org", "school"},
-    "person_name": {"friend_name", "partner_name", "person_name", "family_member"},
-    "health_condition": {"allergy", "health_condition", "dietary"},
-    "email": {"email"},
-    "phone_number": {"phone_number", "phone"},
-}
-
-
-def spans_match(pred_text: str, pred_label: str, gold_text: str, gold_label: str) -> bool:
-    """Check if predicted span matches gold span."""
-    allowed = LABEL_ALIASES.get(pred_label, {pred_label})
-    if gold_label not in allowed:
-        return False
-    pl = pred_text.lower().strip()
-    gl = gold_text.lower().strip()
-    if pl in gl or gl in pl:
-        return True
-    if jaccard_tokens(pred_text, gold_text) >= 0.5:
-        return True
-    return False
 
 
 @dataclass
@@ -206,6 +148,7 @@ def compute_metrics(
                     pc.get("span_label", ""),
                     gc.get("span_text", ""),
                     gc.get("span_label", ""),
+                    label_aliases=DEFAULT_LABEL_ALIASES,
                 ):
                     gold_matched[gi] = True
                     pred_matched[pi] = True
@@ -260,6 +203,85 @@ def compute_metrics(
     }
 
 
+def _run_regex_extractor(
+    gold_records: list[dict],
+    config: dict[str, Any] | None = None,
+    limit: int | None = None,
+    output_dir: Path | None = None,
+) -> dict:
+    """Run regex FactExtractor against the gold set and return bakeoff metrics."""
+    from jarvis.contacts.fact_extractor import FactExtractor
+    from regex_to_span_adapter import facts_to_spans
+
+    extractor = FactExtractor(confidence_threshold=0.3)  # Low threshold; let eval measure quality
+
+    records = gold_records[:limit] if limit else gold_records
+    logger.info(f"Running regex extractor on {len(records)} messages...")
+
+    predictions: dict[int, list[dict]] = {}
+    timing: dict[int, float] = {}
+
+    out_dir = output_dir or OUTPUT_DIR
+    incremental_path = out_dir / "regex_predictions.jsonl"
+    incremental_path.parent.mkdir(parents=True, exist_ok=True)
+
+    start_time = time.time()
+
+    with open(incremental_path, "w") as inc_f:
+        for i, rec in enumerate(records):
+            if (i + 1) % 100 == 0:
+                elapsed = time.time() - start_time
+                rate = (i + 1) / elapsed
+                eta = (len(records) - i - 1) / rate if rate > 0 else 0
+                logger.info(
+                    f"  Processed {i + 1}/{len(records)} messages "
+                    f"({elapsed:.0f}s elapsed, ETA {eta:.0f}s)"
+                )
+
+            msg_id = rec["message_id"]
+            msg_text = rec["message_text"]
+
+            msg_start = time.perf_counter()
+            try:
+                msg_dict = {"text": msg_text, "id": msg_id}
+                facts = extractor.extract_facts([msg_dict])
+                elapsed_ms = (time.perf_counter() - msg_start) * 1000
+
+                pred_list = facts_to_spans(facts, msg_text)
+                predictions[msg_id] = pred_list
+                timing[msg_id] = elapsed_ms
+            except (ValueError, RuntimeError, OSError) as e:
+                logger.error(f"Regex extraction failed for message {msg_id}: {e}")
+                predictions[msg_id] = []
+                timing[msg_id] = 0
+
+            inc_f.write(
+                json.dumps({
+                    "message_id": msg_id,
+                    "predictions": predictions[msg_id],
+                    "elapsed_ms": timing[msg_id],
+                })
+                + "\n"
+            )
+            inc_f.flush()
+
+    total_time = time.time() - start_time
+    total_spans = sum(len(v) for v in predictions.values())
+    msgs_with_preds = sum(1 for v in predictions.values() if v)
+    logger.info(
+        f"Regex extraction complete in {total_time:.1f}s: "
+        f"{total_spans} spans from {msgs_with_preds}/{len(records)} messages"
+    )
+
+    metrics = compute_metrics(records, predictions, timing)
+    metrics["extractor_name"] = "regex"
+    metrics["config"] = config or {}
+    metrics["num_messages"] = len(records)
+    metrics["total_time_s"] = round(total_time, 2)
+    metrics["ms_per_message"] = round(total_time / len(records) * 1000, 1) if records else 0
+    return metrics
+
+
 def run_extractor(
     extractor_name: str,
     gold_records: list[dict],
@@ -267,7 +289,10 @@ def run_extractor(
     limit: int | None = None,
     args_output_dir: Path | None = None,
 ) -> dict:
-    """Run GLiNER extractor against the gold set."""
+    """Run an extractor against the gold set. Dispatches to regex or GLiNER."""
+    if extractor_name == "regex":
+        return _run_regex_extractor(gold_records, config, limit, args_output_dir)
+
     logger.info(f"\n{'=' * 60}")
     logger.info(f"Running extractor: {extractor_name}")
     logger.info(f"{'=' * 60}")
@@ -282,7 +307,7 @@ def run_extractor(
             global_threshold=cfg.get("threshold", 0.35),
         )
         logger.info("Created CandidateExtractor")
-    except Exception as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error(f"Failed to create extractor: {e}")
         return {"extractor_name": extractor_name, "error": str(e)}
 
@@ -291,7 +316,7 @@ def run_extractor(
     try:
         extractor._load_model()
         logger.info("Model loaded")
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.error(f"Failed to load model: {e}")
         return {"extractor_name": extractor_name, "error": str(e)}
 
@@ -352,7 +377,7 @@ def run_extractor(
                 total_raw_entities += len(pred_list)
                 timing[msg_id] = elapsed
 
-            except Exception as e:
+            except (ValueError, RuntimeError, OSError) as e:
                 logger.error(f"Extraction failed for message {msg_id}: {e}")
                 predictions[msg_id] = []
                 timing[msg_id] = 0
@@ -518,7 +543,7 @@ def main() -> None:
         "--extractors",
         type=str,
         default="gliner",
-        help="Comma-separated list of extractor names (labels only, all use CandidateExtractor)",
+        help="Comma-separated extractor names: 'regex' (rule-based) or GLiNER label names",
     )
     parser.add_argument(
         "--output-dir",

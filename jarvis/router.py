@@ -30,18 +30,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from jarvis.classifiers.cascade import classify_with_cascade
-from jarvis.classifiers.category_classifier import classify_category
+from jarvis.classifiers.classification_result import build_classification_result, to_intent_type
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
 )
 from jarvis.contracts.pipeline import (
-    CategoryType,
     ClassificationResult,
     GenerationResponse,
-    IntentType,
     MessageContext,
-    UrgencyLevel,
 )
 from jarvis.db import JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
@@ -56,7 +53,6 @@ from jarvis.services import ContextService
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
-    from jarvis.search.semantic_search import SemanticSearcher
     from models import MLXGenerator
 
 logger = logging.getLogger(__name__)
@@ -172,7 +168,6 @@ class ReplyRouter:
                 Created lazily if None.
         """
         self._db = db
-        self._semantic_searcher: SemanticSearcher | None = None
         self._generator = generator
         self._imessage_reader = imessage_reader
         self._lock = threading.RLock()
@@ -188,16 +183,6 @@ class ReplyRouter:
             self._db = get_db()
             self._db.init_schema()
         return self._db
-
-    @property
-    def semantic_searcher(self) -> SemanticSearcher | None:
-        """Get or create the semantic searcher."""
-        with self._lock:
-            if self._semantic_searcher is None and self.imessage_reader:
-                from jarvis.search.semantic_search import get_semantic_searcher
-
-                self._semantic_searcher = get_semantic_searcher(self.imessage_reader)
-            return self._semantic_searcher
 
     @property
     def generator(self) -> MLXGenerator:
@@ -299,18 +284,6 @@ class ReplyRouter:
             logger.debug("Routing metrics write failed: %s", e)
 
     @staticmethod
-    def _to_intent_type(category: str) -> IntentType:
-        mapping = {
-            "question": IntentType.QUESTION,
-            "request": IntentType.REQUEST,
-            "statement": IntentType.STATEMENT,
-            "emotion": IntentType.STATEMENT,
-            "closing": IntentType.STATEMENT,
-            "acknowledge": IntentType.STATEMENT,
-        }
-        return mapping.get(category, IntentType.UNKNOWN)
-
-    @staticmethod
     def _to_confidence_label(confidence: float) -> str:
         if confidence >= 0.7:
             return "high"
@@ -352,44 +325,11 @@ class ReplyRouter:
         thread: list[str],
         mobilization: MobilizationResult,
     ) -> ClassificationResult:
-        category_result = classify_category(
+        return build_classification_result(
             incoming,
-            context=thread,
-            mobilization=mobilization,
-        )
-
-        if category_result.category == "closing":
-            category = CategoryType.CLOSING
-        elif category_result.category == "acknowledge":
-            category = CategoryType.ACKNOWLEDGE
-        else:
-            category = CategoryType.FULL_RESPONSE
-
-        if mobilization.pressure == ResponsePressure.HIGH:
-            urgency = UrgencyLevel.HIGH
-        elif mobilization.pressure == ResponsePressure.MEDIUM:
-            urgency = UrgencyLevel.MEDIUM
-        else:
-            urgency = UrgencyLevel.LOW
-
-        complexity = self._analyze_complexity(incoming)
-
-        return ClassificationResult(
-            intent=self._to_intent_type(category_result.category),
-            category=category,
-            urgency=urgency,
-            confidence=min(1.0, (mobilization.confidence + category_result.confidence) / 2.0),
-            requires_knowledge=category_result.category in {"question", "request"},
-            metadata={
-                "category_name": category_result.category,
-                "category_confidence": category_result.confidence,
-                "category_method": category_result.method,
-                "mobilization_pressure": mobilization.pressure.value,
-                "mobilization_response_type": mobilization.response_type.value,
-                "mobilization_confidence": mobilization.confidence,
-                "mobilization_method": mobilization.method,
-                "complexity_score": complexity,
-            },
+            thread,
+            mobilization,
+            extra_metadata={"complexity_score": self._analyze_complexity(incoming)},
         )
 
     @staticmethod
@@ -459,12 +399,73 @@ class ReplyRouter:
             cached_embedder=cached_embedder,
         )
 
+    @staticmethod
+    def _check_prefetch_cache(chat_id: str | None) -> dict[str, Any] | None:
+        """Check prefetch cache for a cached draft reply.
+
+        Only checks if a prefetch manager already exists (does not create one).
+        Returns cached result dict or None if no cache hit.
+        """
+        if not chat_id:
+            return None
+        try:
+            import jarvis.prefetch as _pfx
+
+            manager = _pfx._manager
+            if manager is None:
+                return None
+            cached_draft = manager.get_draft(chat_id)
+            if cached_draft and "suggestions" in cached_draft:
+                suggestions = cached_draft["suggestions"]
+                if suggestions and isinstance(suggestions, list) and suggestions[0].get("text"):
+                    return {
+                        "type": "generated",
+                        "response": suggestions[0]["text"],
+                        "confidence": "high"
+                        if suggestions[0].get("confidence", 0) >= 0.8
+                        else "medium",
+                        "similarity_score": 0.0,
+                        "similar_triggers": None,
+                        "reason": "",
+                        "from_cache": True,
+                    }
+        except Exception as e:
+            logger.debug("Prefetch cache check failed: %s", e)
+        return None
+
+    @staticmethod
+    def _build_thread_context(conversation_messages: list[Any]) -> list[str] | None:
+        """Build thread context from pre-fetched conversation messages."""
+        thread: list[str] = []
+        for msg in reversed(conversation_messages):
+            msg_text = (
+                msg.get("text", "")
+                if isinstance(msg, dict)
+                else (getattr(msg, "text", None) or "")
+            )
+            if msg_text:
+                is_from_me = (
+                    msg.get("is_from_me", False)
+                    if isinstance(msg, dict)
+                    else getattr(msg, "is_from_me", False)
+                )
+                if isinstance(msg, dict):
+                    sender = msg.get("sender_name") or msg.get("sender", "")
+                else:
+                    sender = getattr(msg, "sender_name", None) or getattr(
+                        msg, "sender", ""
+                    )
+                prefix = "Me" if is_from_me else sender
+                thread.append(f"{prefix}: {msg_text}")
+        return thread[-10:] if thread else None
+
     def route(
         self,
         incoming: str,
         contact_id: int | None = None,
         thread: list[str] | None = None,
         chat_id: str | None = None,
+        conversation_messages: list[Any] | None = None,
     ) -> dict[str, Any]:
         """Route an incoming message to LLM generation with RAG context.
 
@@ -476,6 +477,9 @@ class ReplyRouter:
             contact_id: Optional contact ID for personalization.
             thread: Optional list of recent messages for context.
             chat_id: Optional chat ID for context lookup.
+            conversation_messages: Optional pre-fetched conversation messages.
+                When provided, the router builds the thread from these instead
+                of re-fetching from the DB.
 
         Returns:
             Dict with routing result containing:
@@ -490,6 +494,17 @@ class ReplyRouter:
 
         # Normalize incoming message early
         incoming = incoming.strip() if incoming else ""
+
+        # Check prefetch cache BEFORE classification/embedding
+        cached_result = self._check_prefetch_cache(chat_id)
+        if cached_result is not None:
+            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+            logger.info(
+                "ROUTE CACHE HIT | chat_id=%s latency=%.1fms",
+                chat_id,
+                latency_ms["total"],
+            )
+            return cached_result
 
         # Precompute embedding (reused by vec search)
         if incoming:
@@ -529,6 +544,10 @@ class ReplyRouter:
             logger.info("ROUTE OUTPUT | %s", result.get("response", "")[:100])
             logger.info("=" * 60)
             return result
+
+        # Build thread from pre-fetched messages if provided
+        if thread is None and conversation_messages is not None:
+            thread = self._build_thread_context(conversation_messages)
 
         # Empty message check (incoming already normalized/stripped above)
         message_context = MessageContext(

@@ -18,7 +18,6 @@ Features speculative prefetching for near-instant responses:
 """
 
 import asyncio
-import copy
 import hmac
 import json
 import logging
@@ -40,15 +39,19 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
-    """Simple in-memory sliding-window rate limiter.
+    """Token bucket rate limiter — O(1) per request.
 
-    Tracks request timestamps per client and rejects requests exceeding the limit.
+    Each client gets a bucket that refills at ``refill_rate`` tokens/sec up to
+    ``max_tokens``.  Every request consumes one token; requests are rejected
+    when the bucket is empty.
     """
 
     def __init__(self, max_requests: int = 100, window_seconds: float = 1.0) -> None:
-        self._max_requests = max_requests
-        self._window = window_seconds
-        self._requests: dict[str, list[float]] = {}
+        # max_requests tokens refill over window_seconds → steady-state rate
+        self._max_tokens = float(max_requests)
+        self._refill_rate = max_requests / window_seconds  # tokens per second
+        # Per-client state: (tokens_remaining, last_refill_time)
+        self._buckets: dict[str, list[float]] = {}
         import time as _time
 
         self._time = _time
@@ -56,34 +59,40 @@ class RateLimiter:
     def is_allowed(self, client_id: str) -> bool:
         """Check if a request from client_id is allowed.
 
-        Returns True if under rate limit, False if exceeded.
+        Returns True if under rate limit, False if exceeded.  O(1) per call.
         """
         now = self._time.monotonic()
-        cutoff = now - self._window
 
-        if client_id not in self._requests:
-            self._requests[client_id] = [now]
+        bucket = self._buckets.get(client_id)
+        if bucket is None:
+            # New client: full bucket minus this request
+            self._buckets[client_id] = [self._max_tokens - 1.0, now]
             return True
 
-        # Remove expired timestamps
-        timestamps = self._requests[client_id]
-        # Find the first timestamp within the window (list is chronological)
-        while timestamps and timestamps[0] < cutoff:
-            timestamps.pop(0)
+        # Refill tokens based on elapsed time
+        elapsed = now - bucket[1]
+        tokens = min(self._max_tokens, bucket[0] + elapsed * self._refill_rate)
 
-        if len(timestamps) >= self._max_requests:
+        if tokens < 1.0:
+            # Update timestamp even on rejection so next refill is accurate
+            bucket[0] = tokens
+            bucket[1] = now
             return False
 
-        timestamps.append(now)
+        bucket[0] = tokens - 1.0
+        bucket[1] = now
         return True
 
     def cleanup(self) -> None:
         """Remove stale client entries (call periodically)."""
         now = self._time.monotonic()
-        cutoff = now - self._window * 2
-        stale = [k for k, v in self._requests.items() if not v or v[-1] < cutoff]
+        # Clients whose buckets are full and haven't been seen in 10s
+        stale = [
+            k for k, v in self._buckets.items()
+            if now - v[1] > 10.0
+        ]
         for k in stale:
-            del self._requests[k]
+            del self._buckets[k]
 
 
 # Socket configuration
@@ -493,16 +502,16 @@ class JarvisSocketServer:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                except Exception:
-                    pass
+                except OSError as e:
+                    logger.debug(f"Failed to close Unix socket connection: {e}")
             self._clients.clear()
 
             # Close all WebSocket client connections
             for ws in self._ws_clients.copy():
                 try:
                     await ws.close()
-                except Exception:
-                    pass
+                except OSError as e:
+                    logger.debug(f"Failed to close WebSocket connection: {e}")
             self._ws_clients.clear()
 
         # Stop Unix socket server
@@ -550,14 +559,16 @@ class JarvisSocketServer:
                 try:
                     writer.write(notification_bytes)
                     await writer.drain()
-                except Exception:
+                except ConnectionError as e:
+                    logger.debug(f"Failed to broadcast to Unix socket client: {e}")
                     self._clients.discard(writer)
 
             # Broadcast to WebSocket clients
             for ws in self._ws_clients.copy():
                 try:
                     await ws.send(notification)
-                except Exception:
+                except ConnectionError as e:
+                    logger.debug(f"Failed to broadcast to WebSocket client: {e}")
                     self._ws_clients.discard(ws)
 
         # Hook into prefetch system for new message events
@@ -630,8 +641,8 @@ class JarvisSocketServer:
             try:
                 writer.close()
                 await writer.wait_closed()
-            except Exception:
-                pass
+            except OSError as e:
+                logger.debug(f"Failed to close client writer: {e}")
             logger.debug(f"Client disconnected: {peer}")
 
     async def _handle_websocket_client(self, websocket: ServerConnection) -> None:
@@ -744,11 +755,10 @@ class JarvisSocketServer:
             return self._error_response(request_id, METHOD_NOT_FOUND, f"Method not found: {method}")
 
         # Check if streaming is requested and supported
-        # Only deepcopy when stream param needs to be popped (avoids cost on non-streaming calls)
         stream_requested = isinstance(params, dict) and params.get("stream", False)
         if stream_requested:
-            params = copy.deepcopy(params)
-            params.pop("stream", None)
+            # Shallow copy + pop instead of deepcopy (stream key is top-level only)
+            params = {k: v for k, v in params.items() if k != "stream"}
         supports_streaming = method in self._streaming_methods
 
         # Call handler

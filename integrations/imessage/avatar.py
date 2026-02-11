@@ -81,7 +81,7 @@ def get_contact_avatar(identifier: str) -> ContactAvatarData | None:
                     return result
     except PermissionError:
         logger.debug("Permission denied accessing AddressBook database")
-    except Exception as e:
+    except (OSError, sqlite3.Error) as e:
         logger.debug(f"Error accessing AddressBook: {e}")
 
     return None

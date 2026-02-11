@@ -9,7 +9,7 @@
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import Toast from './lib/components/Toast.svelte';
   import { checkApiConnection } from './lib/stores/health';
-  import { clearSelection } from './lib/stores/conversations';
+  import { clearSelection } from './lib/stores/conversations.svelte';
   import { initializeTheme } from './lib/stores/theme';
   import { initAnnouncer } from './lib/stores/keyboard';
 
@@ -118,8 +118,18 @@
     // Initialize ARIA announcer
     initAnnouncer();
 
-    // Check API connection on start
-    void checkApiConnection();
+    // Show window after first paint to avoid white flash
+    if (isTauri) {
+      requestAnimationFrame(() => {
+        void import('@tauri-apps/api/webviewWindow')
+          .then(({ getCurrentWebviewWindow }) => getCurrentWebviewWindow().show())
+          .catch((e) => console.warn('Failed to show window:', e));
+      });
+    }
+
+    // Defer socket connection check - not needed for initial conversation list
+    // (direct SQLite handles that). Socket is only for real-time push + AI features.
+    const apiCheckTimer = setTimeout(() => void checkApiConnection(), 3000);
 
     let unlisten: (() => void) | null = null;
 
@@ -154,6 +164,7 @@
     window.addEventListener('keydown', handleKeydown);
 
     return () => {
+      clearTimeout(apiCheckTimer);
       if (unlisten) unlisten();
       window.removeEventListener('keydown', handleKeydown);
       cleanupTheme();

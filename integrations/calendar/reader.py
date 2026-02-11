@@ -10,13 +10,10 @@ import re
 import subprocess
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from contracts.calendar import Calendar, CalendarEvent
 from jarvis.errors import CalendarAccessError
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +288,7 @@ class CalendarReaderImpl:
                 item = parser(part)
                 if item:
                     items.append(item)
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.debug("Failed to parse item: %s, error: %s", part[:100], e)
 
         return items
@@ -320,7 +317,7 @@ class CalendarReaderImpl:
                 color=data.get("color") or None,
                 is_editable=is_editable,
             )
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             logger.debug("Failed to parse calendar: %s", e)
             return None
 
@@ -360,7 +357,7 @@ class CalendarReaderImpl:
                 attendees=[],
                 status="confirmed",
             )
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             logger.debug("Failed to parse event: %s", e)
             return None
 
