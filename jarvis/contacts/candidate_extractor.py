@@ -370,7 +370,7 @@ class CandidateExtractor:
         per_label_min: dict[str, float] | None = None,
         default_min: float = DEFAULT_MIN,
         backend: str = "auto",
-        use_entailment: bool = True,
+        use_entailment: bool = False,  # disabled: NLI scores ~0 for all non-preference types
         entailment_threshold: float = 0.12,
     ):
         self._model: Any = None
