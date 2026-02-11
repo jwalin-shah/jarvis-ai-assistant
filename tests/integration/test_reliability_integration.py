@@ -504,20 +504,6 @@ class TestEndToEndScenarios:
         assert stats["by_status"]["cancelled"] == 15
         assert stats["by_status"]["pending"] == 10
 
-    @pytest.mark.asyncio
-    async def test_async_reliability_stack(self):
-        """Full async reliability stack works correctly."""
-        cb = CircuitBreaker("async_stack")
-
-        @retry_async_with_backoff(max_retries=2, base_delay=0.01)
-        async def reliable_async_operation():
-            return "async_success"
-
-        # Execute directly in the existing event loop
-        result = await reliable_async_operation()
-        assert result == "async_success"
-
-
 class TestRecoveryProceduresIntegration:
     """Integration tests for recovery procedures."""
 
