@@ -13,11 +13,14 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -107,9 +110,19 @@ def main() -> int:
     parser.add_argument("--similarity", action="store_true", help="Enable BERT cosine similarity")
     args = parser.parse_args()
 
+    # Setup logging
+    log_path = PROJECT_ROOT / "results" / "eval_pipeline.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(log_path), logging.StreamHandler(sys.stdout)],
+    )
+    logger = logging.getLogger(__name__)
+
     # Load dataset
     if not EVAL_DATASET_PATH.exists():
-        print(f"ERROR: Eval dataset not found at {EVAL_DATASET_PATH}")
+        print(f"ERROR: Eval dataset not found at {EVAL_DATASET_PATH}", flush=True)
         return 1
 
     examples = load_eval_dataset(EVAL_DATASET_PATH)
@@ -161,7 +174,7 @@ def main() -> int:
     results: list[EvalResult] = []
     total_start = time.perf_counter()
 
-    for i, ex in enumerate(examples, 1):
+    for i, ex in enumerate(tqdm(examples, desc="Evaluating"), 1):
         print(f"\n[{i:2d}/{len(examples)}] [{ex.category}] {ex.last_message[:50]}...", flush=True)
 
         gen_start = time.perf_counter()

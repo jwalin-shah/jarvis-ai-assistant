@@ -37,6 +37,8 @@ def _setup_logging() -> None:
             logging.StreamHandler(sys.stdout),
         ],
     )
+
+
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval.jsonl"
 DEFAULT_OUTPUT = ROOT / "evals" / "results" / "classifier_eval.json"
 
@@ -245,11 +247,16 @@ def main() -> None:
     logger.info("Starting eval_classifiers.py")
     parser = argparse.ArgumentParser(description="Evaluate classifiers")
     parser.add_argument(
-        "--stages", nargs="+", choices=ALL_STAGES, default=list(ALL_STAGES),
+        "--stages",
+        nargs="+",
+        choices=ALL_STAGES,
+        default=list(ALL_STAGES),
         help="Which stages to evaluate",
     )
     parser.add_argument(
-        "--output", type=Path, default=DEFAULT_OUTPUT,
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT,
         help="Output JSON path",
     )
     args = parser.parse_args()

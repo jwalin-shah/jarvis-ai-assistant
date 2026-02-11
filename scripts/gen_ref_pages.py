@@ -73,13 +73,21 @@ def generate_reference_pages(
                     ident = ".".join(parts)
                     fd.write(f"::: {ident}")
             except OSError as exc:
-                print(f"Error writing reference page '{full_doc_path}': {exc}", file=sys.stderr, flush=True)
+                print(
+                    f"Error writing reference page '{full_doc_path}': {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 raise SystemExit(1) from exc
 
             mkdocs_gen_files.set_edit_path(full_doc_path, path)
             total_docs += 1
 
-            if len(paths) > 10 and progress_every > 0 and (idx % progress_every == 0 or idx == len(paths)):
+            if (
+                len(paths) > 10
+                and progress_every > 0
+                and (idx % progress_every == 0 or idx == len(paths))
+            ):
                 print(f"  {src}: {idx}/{len(paths)} modules processed", flush=True)
 
     summary_path = Path(reference_root, "SUMMARY.md")

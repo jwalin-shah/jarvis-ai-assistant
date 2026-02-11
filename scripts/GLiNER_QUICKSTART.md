@@ -56,15 +56,15 @@ for ent in entities:
 ## 4. Evaluate on Your Data
 
 ```bash
-# Generate training data from your messages (creates JSONL)
-python scripts/prepare_gliner_training.py \
-    --source imessage \
-    --limit 100 \
-    --output training_data/my_facts.jsonl \
-    --apply-heuristics
+# IMPORTANT: use compatibility runner for reliable GLiNER behavior
+scripts/run_gliner_eval_compat.sh \
+  --gold training_data/gliner_goldset/candidate_gold.json \
+  --no-label-min \
+  --mode pipeline \
+  --context-window 0
 
-# Review the output
-cat training_data/my_facts.jsonl | head -20
+# Metrics are written to:
+# training_data/gliner_goldset/gliner_metrics.json
 ```
 
 ## 5. Train Classifier (if needed)
@@ -72,19 +72,52 @@ cat training_data/my_facts.jsonl | head -20
 If GLiNER precision < 80%, train a filter:
 
 ```bash
-# 1. Label ~100-200 examples manually
-# Edit training_data/my_facts.jsonl and set "label": 1 or 0
+# 1. Build candidate-level train/dev data from candidate_gold.json
+scripts/run_gliner_compat.sh scripts/build_fact_filter_dataset.py \
+  --gold training_data/gliner_goldset/candidate_gold.json \
+  --output-all training_data/fact_candidates.jsonl \
+  --output-train training_data/fact_candidates_train.jsonl \
+  --output-dev training_data/fact_candidates_dev.jsonl \
+  --manifest training_data/fact_candidates_manifest.json \
+  --threshold 0.35 \
+  --no-label-min \
+  --context-window 0
 
 # 2. Train classifier
 python scripts/train_fact_filter.py \
-    --input training_data/my_facts.jsonl \
-    --output models/fact_filter.pkl
+  --input training_data/fact_candidates_train.jsonl \
+  --test training_data/fact_candidates_dev.jsonl \
+  --evaluate \
+  --output models/fact_filter.pkl
 
-# 3. Test the classifier
-python scripts/train_fact_filter.py \
-    --input training_data/my_facts.jsonl \
-    --evaluate
+# 3. Model artifact
+# models/fact_filter.pkl
 ```
+
+## 6. Expand Goldset (Manual)
+
+Build a new annotation pack focused on weak labels (org/location/health):
+
+```bash
+scripts/run_gliner_compat.sh scripts/build_gliner_candidate_goldset.py \
+  --total 300 \
+  --org-count 100 \
+  --location-count 100 \
+  --health-count 70 \
+  --negative-count 30 \
+  --label-profile balanced \
+  --threshold 0.35 \
+  --no-label-min \
+  --output-dir training_data/gliner_goldset_round3 \
+  --overwrite
+```
+
+Outputs:
+- `training_data/gliner_goldset_round3/sampled_messages.csv`
+- `training_data/gliner_goldset_round3/sampled_messages.json`
+- `training_data/gliner_goldset_round3/batch_*.json`
+
+Fill `expected_candidates` manually, then merge into your gold corpus.
 
 ## Expected Timeline
 

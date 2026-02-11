@@ -158,7 +158,9 @@ def extract_simple_features(text: str) -> np.ndarray:
     return np.array(features, dtype=np.float32)
 
 
-def extract_all_features(examples: list[dict], logger: logging.Logger) -> tuple[np.ndarray, np.ndarray, list[str]]:
+def extract_all_features(
+    examples: list[dict], logger: logging.Logger
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """Extract features for all examples."""
     import numpy as np
     from tqdm import tqdm
@@ -186,6 +188,7 @@ def extract_all_features(examples: list[dict], logger: logging.Logger) -> tuple[
 
     # Label distribution
     from collections import Counter
+
     label_dist = Counter(y)
     logger.info("Label distribution:")
     for label, count in sorted(label_dist.items()):
@@ -195,8 +198,12 @@ def extract_all_features(examples: list[dict], logger: logging.Logger) -> tuple[
 
 
 def create_splits(
-    X: np.ndarray, y: np.ndarray, ids: list[str], test_size: float = 0.2, seed: int = 42,
-    logger: logging.Logger | None = None
+    X: np.ndarray,
+    y: np.ndarray,
+    ids: list[str],
+    test_size: float = 0.2,
+    seed: int = 42,
+    logger: logging.Logger | None = None,
 ) -> tuple:
     """Create stratified train/test split."""
     from sklearn.model_selection import train_test_split
@@ -206,11 +213,12 @@ def create_splits(
     )
 
     if logger:
-        logger.info(f"\nTrain/test split:")
+        logger.info("\nTrain/test split:")
         logger.info(f"  Train: {X_train.shape}")
         logger.info(f"  Test: {X_test.shape}")
 
         from collections import Counter
+
         logger.info("\nTrain distribution:")
         for label, count in sorted(Counter(y_train).items()):
             logger.info(f"  {label:10s}: {count:4d}")
@@ -222,8 +230,14 @@ def create_splits(
     return X_train, X_test, y_train, y_test, ids_train, ids_test
 
 
-def save_training_data(output_dir: Path, X_train: np.ndarray, X_test: np.ndarray,
-                       y_train: np.ndarray, y_test: np.ndarray, logger: logging.Logger) -> None:
+def save_training_data(
+    output_dir: Path,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    logger: logging.Logger,
+) -> None:
     """Save training data."""
     import numpy as np
 
@@ -249,10 +263,21 @@ def save_training_data(output_dir: Path, X_train: np.ndarray, X_test: np.ndarray
         "train_size": len(X_train),
         "test_size": len(X_test),
         "features": [
-            "message_length", "word_count", "question_marks", "exclamation_marks",
-            "punct_density", "has_wh", "has_aux", "has_request", "has_closing",
-            "emotional_count", "caps_density", "emoji_count", "is_short", "has_negation"
-        ]
+            "message_length",
+            "word_count",
+            "question_marks",
+            "exclamation_marks",
+            "punct_density",
+            "has_wh",
+            "has_aux",
+            "has_request",
+            "has_closing",
+            "emotional_count",
+            "caps_density",
+            "emoji_count",
+            "is_short",
+            "has_negation",
+        ],
     }
 
     try:
@@ -264,7 +289,7 @@ def save_training_data(output_dir: Path, X_train: np.ndarray, X_test: np.ndarray
     logger.info(f"\n✓ Training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
     logger.info(f"  - test.npz: {X_test.shape}")
-    logger.info(f"  - metadata.json")
+    logger.info("  - metadata.json")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -283,7 +308,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     save_training_data(args.output_dir, X_train, X_test, y_train, y_test, logger)
 
-    logger.info(f"\n" + "=" * 70)
+    logger.info("\n" + "=" * 70)
     logger.info("READY TO TRAIN")
     logger.info("=" * 70)
     logger.info("Next:")

@@ -1,0 +1,145 @@
+{
+  "registry_version": "1.0",
+  "last_updated": "2026-02-10",
+  "prompts": [
+    {
+      "name": "reply_generation",
+      "current_version": "1.0.0",
+      "min_compatible": "1.0.0",
+      "max_compatible": "1.9.9",
+      "deprecated": false,
+      "description": "Core reply generation template with tone-aware few-shot examples",
+      "templates": ["REPLY_PROMPT"],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "date": "2026-01-26",
+          "changes": ["Initial stable release with casual/professional tone support"],
+          "author": "eng-team",
+          "commit": "initial",
+          "evaluation_summary": {
+            "category_accuracy": 0.87,
+            "anti_ai_clean_rate": 0.94
+          }
+        }
+      ]
+    },
+    {
+      "name": "rag_reply_generation",
+      "current_version": "1.0.0",
+      "min_compatible": "1.0.0",
+      "max_compatible": "1.9.9",
+      "deprecated": false,
+      "description": "RAG-enhanced reply generation with contact profile and similar exchanges",
+      "templates": ["RAG_REPLY_PROMPT", "SYSTEM_PREFIX"],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "date": "2026-01-26",
+          "changes": ["Initial stable release with RAG support"],
+          "author": "eng-team",
+          "commit": "initial",
+          "evaluation_summary": {
+            "category_accuracy": 0.89,
+            "anti_ai_clean_rate": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "name": "conversation_summary",
+      "current_version": "1.0.0",
+      "min_compatible": "1.0.0",
+      "max_compatible": "1.9.9",
+      "deprecated": false,
+      "description": "Conversation summarization with action item extraction",
+      "templates": ["SUMMARY_PROMPT"],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "date": "2026-01-26",
+          "changes": ["Initial stable release"],
+          "author": "eng-team",
+          "commit": "initial"
+        }
+      ]
+    },
+    {
+      "name": "search_answer",
+      "current_version": "1.0.0",
+      "min_compatible": "1.0.0",
+      "max_compatible": "1.9.9",
+      "deprecated": false,
+      "description": "Question answering over retrieved conversation context",
+      "templates": ["SEARCH_PROMPT"],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "date": "2026-01-26",
+          "changes": ["Initial stable release"],
+          "author": "eng-team",
+          "commit": "initial"
+        }
+      ]
+    },
+    {
+      "name": "threaded_reply",
+      "current_version": "1.0.0",
+      "min_compatible": "1.0.0",
+      "max_compatible": "1.9.9",
+      "deprecated": false,
+      "description": "Thread-aware reply generation with topic-specific instructions",
+      "templates": ["THREADED_REPLY_PROMPT"],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "date": "2026-01-26",
+          "changes": ["Initial stable release with thread topic support"],
+          "author": "eng-team",
+          "commit": "initial",
+          "evaluation_summary": {
+            "category_accuracy": 0.88,
+            "anti_ai_clean_rate": 0.94
+          }
+        }
+      ]
+    }
+  ],
+  "few_shot_collections": [
+    {
+      "name": "casual_reply_examples",
+      "version": "1.0.0",
+      "count": 5,
+      "description": "Casual tone reply examples"
+    },
+    {
+      "name": "professional_reply_examples",
+      "version": "1.0.0",
+      "count": 5,
+      "description": "Professional tone reply examples"
+    },
+    {
+      "name": "thread_examples",
+      "version": "1.0.0",
+      "collections": [
+        "logistics",
+        "warm",
+        "planning",
+        "social",
+        "brief"
+      ],
+      "description": "Thread-topic specific examples"
+    }
+  ],
+  "compatibility": {
+    "model_versions": {
+      "category_classifier": {
+        "min": "2.0.0",
+        "max": "2.9.9"
+      },
+      "embedding_model": {
+        "required": "BAAI/bge-small-en-v1.5"
+      }
+    }
+  }
+}

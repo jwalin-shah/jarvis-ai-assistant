@@ -19,8 +19,9 @@ import argparse
 import json
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
+
 
 def _setup_logging() -> logging.Logger:
     """Setup logging with file and stream handlers."""
@@ -174,13 +175,15 @@ def load_archive_data() -> list[dict]:
             seen_texts.add(text)
 
             mapping = map_label(text, old_label)
-            examples.append({
-                "text": text,
-                "old_label": old_label,
-                **mapping,
-                "source": "archive",
-                "source_file": filename,
-            })
+            examples.append(
+                {
+                    "text": text,
+                    "old_label": old_label,
+                    **mapping,
+                    "source": "archive",
+                    "source_file": filename,
+                }
+            )
             count += 1
 
         logger.info("Loaded %d examples from %s", count, filename)
@@ -243,24 +246,28 @@ def load_imessage_data(limit: int = 200) -> list[dict]:
                     thread.append(prefix + prev.text.strip())
 
             text = msg.text.strip()
-            examples.append({
-                "text": text,
-                "old_label": None,
-                "category": None,  # needs manual labeling
-                "mobilization": None,
-                "label_confidence": "needs_review",
-                "source": "imessage",
-                "should_reply": reply_text is not None,
-                "actual_reply": reply_text,
-                "contact_name": msg.sender_name or msg.sender,
-                "thread": thread,
-                "chat_id": conv.chat_id,
-            })
+            examples.append(
+                {
+                    "text": text,
+                    "old_label": None,
+                    "category": None,  # needs manual labeling
+                    "mobilization": None,
+                    "label_confidence": "needs_review",
+                    "source": "imessage",
+                    "should_reply": reply_text is not None,
+                    "actual_reply": reply_text,
+                    "contact_name": msg.sender_name or msg.sender,
+                    "thread": thread,
+                    "chat_id": conv.chat_id,
+                }
+            )
 
         if (conv_idx + 1) % 10 == 0:
             logger.info(
                 "  Scanned %d/%d conversations, %d examples so far",
-                conv_idx + 1, len(conversations), len(examples),
+                conv_idx + 1,
+                len(conversations),
+                len(examples),
             )
 
     logger.info("Loaded %d iMessage examples", len(examples))
@@ -319,7 +326,8 @@ def build_dataset(skip_imessage: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build pipeline evaluation dataset")
     parser.add_argument(
-        "--skip-imessage", action="store_true",
+        "--skip-imessage",
+        action="store_true",
         help="Skip iMessage data (archive only)",
     )
     args = parser.parse_args()
