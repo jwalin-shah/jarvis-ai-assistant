@@ -873,6 +873,10 @@ class EmbeddingStore:
 
         Returns:
             RelationshipProfile with aggregated statistics
+
+        Note: If this function is ever called in a batch loop for multiple contacts,
+        consider adding a get_relationship_profiles_batch() method that fetches stats
+        and recent messages for all contacts in bulk queries instead of per-contact.
         """
         # Check cache first
         now = time.time()
@@ -901,27 +905,30 @@ class EmbeddingStore:
             if not row or row["total"] == 0:
                 return RelationshipProfile(contact_id=contact_id)
 
-            # Get all messages for tone detection
-            messages = conn.execute(
+            # Fetch recent messages ONCE for both tone/topic detection and response
+            # pattern analysis. Previously this was 2 separate queries (100 messages
+            # for tone, 500 for response patterns via _analyze_response_patterns).
+            recent_messages = conn.execute(
                 """
-                SELECT text_preview, is_from_me
+                SELECT text_preview, is_from_me, timestamp
                 FROM message_embeddings
                 WHERE chat_id = ?
                 ORDER BY timestamp DESC
-                LIMIT 100
+                LIMIT 500
                 """,
                 (contact_id,),
             ).fetchall()
 
-            # Detect tone from messages
-            tone = self._detect_tone([r["text_preview"] for r in messages if r["text_preview"]])
-
-            # Extract common topics
-            texts_for_topics = [r["text_preview"] for r in messages if r["text_preview"]]
+            # Use first 100 messages for tone and topic detection
+            tone_messages = recent_messages[:100]
+            tone = self._detect_tone(
+                [r["text_preview"] for r in tone_messages if r["text_preview"]]
+            )
+            texts_for_topics = [r["text_preview"] for r in tone_messages if r["text_preview"]]
             topics = self._extract_topics(texts_for_topics)
 
-            # Analyze response patterns
-            response_patterns = self._analyze_response_patterns(contact_id, conn)
+            # Compute response patterns from the same fetched messages (no extra query)
+            response_patterns = self._compute_response_patterns(recent_messages)
 
             profile = RelationshipProfile(
                 contact_id=contact_id,
@@ -992,6 +999,9 @@ class EmbeddingStore:
     ) -> dict[str, Any]:
         """Analyze response patterns for a contact.
 
+        DEPRECATED: Use _compute_response_patterns() with pre-fetched rows instead.
+        This method exists for backwards compatibility but performs its own DB query.
+
         Args:
             contact_id: Chat ID to analyze
             conn: Database connection
@@ -1011,8 +1021,27 @@ class EmbeddingStore:
             (contact_id,),
         ).fetchall()
 
+        return self._compute_response_patterns(rows)
+
+    def _compute_response_patterns(self, rows: list[sqlite3.Row]) -> dict[str, Any]:
+        """Compute response patterns from pre-fetched message rows.
+
+        Expects rows with 'timestamp' and 'is_from_me' columns, sorted by timestamp
+        ascending. If rows are in descending order (e.g. from ORDER BY timestamp DESC),
+        they will be reversed internally.
+
+        Args:
+            rows: Pre-fetched message rows with timestamp and is_from_me columns
+
+        Returns:
+            Dict with pattern analysis
+        """
         if len(rows) < 2:
             return {}
+
+        # Ensure chronological order (callers may pass DESC-ordered rows)
+        if rows[0]["timestamp"] > rows[-1]["timestamp"]:
+            rows = list(reversed(rows))
 
         # Calculate response times
         response_times: list[int] = []
