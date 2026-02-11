@@ -1,6 +1,7 @@
 """Tests for the JARVIS socket server."""
 
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -214,3 +215,86 @@ class TestSocketServerMethods:
             assert len(result["suggestions"]) >= 1
             assert result["suggestions"][0]["text"] == "Sure, that sounds great!"
             assert result["suggestions"][0]["score"] == 0.9  # high confidence
+
+
+class TestRotateWsToken:
+    """Tests for WebSocket token rotation."""
+
+    def _make_server(self):
+        with patch.multiple(
+            "jarvis.socket_server",
+            WS_TOKEN_PATH=MagicMock(),
+        ):
+            server = MagicMock(spec=JarvisSocketServer)
+            server._ws_auth_token = "old-token"
+            server._token_created_at = time.monotonic() - 100
+            server._previous_ws_auth_token = None
+            server._previous_token_expired_at = 0.0
+            server._rotate_ws_token = (
+                JarvisSocketServer._rotate_ws_token.__get__(server)
+            )
+            server._verify_ws_token = (
+                JarvisSocketServer._verify_ws_token.__get__(server)
+            )
+            return server
+
+    def test_generates_new_token(self):
+        server = self._make_server()
+        with patch("jarvis.socket_server.WS_TOKEN_PATH"):
+            with patch("jarvis.socket_server.os.chmod"):
+                server._rotate_ws_token()
+        assert server._ws_auth_token != "old-token"
+        assert len(server._ws_auth_token) > 0
+
+    def test_saves_previous_token(self):
+        server = self._make_server()
+        with patch("jarvis.socket_server.WS_TOKEN_PATH"):
+            with patch("jarvis.socket_server.os.chmod"):
+                server._rotate_ws_token()
+        assert server._previous_ws_auth_token == "old-token"
+
+    def test_sets_grace_period(self):
+        server = self._make_server()
+        with patch("jarvis.socket_server.WS_TOKEN_PATH"):
+            with patch("jarvis.socket_server.os.chmod"):
+                server._rotate_ws_token()
+        # Grace period should be ~60s from now
+        remaining = server._previous_token_expired_at - time.monotonic()
+        assert 55 < remaining < 65
+
+
+class TestVerifyWsToken:
+    """Tests for WebSocket token verification."""
+
+    def _make_server(self):
+        server = MagicMock(spec=JarvisSocketServer)
+        server._ws_auth_token = "current-token"
+        server._previous_ws_auth_token = "old-token"
+        server._previous_token_expired_at = time.monotonic() + 60.0
+        server._verify_ws_token = (
+            JarvisSocketServer._verify_ws_token.__get__(server)
+        )
+        return server
+
+    def test_accepts_current_token(self):
+        server = self._make_server()
+        assert server._verify_ws_token("current-token") is True
+
+    def test_accepts_previous_within_grace(self):
+        server = self._make_server()
+        assert server._verify_ws_token("old-token") is True
+
+    def test_rejects_previous_after_grace(self):
+        server = self._make_server()
+        server._previous_token_expired_at = time.monotonic() - 1.0
+        assert server._verify_ws_token("old-token") is False
+
+    def test_rejects_invalid_token(self):
+        server = self._make_server()
+        assert server._verify_ws_token("wrong-token") is False
+
+    def test_rejects_when_no_tokens(self):
+        server = self._make_server()
+        server._ws_auth_token = None
+        server._previous_ws_auth_token = None
+        assert server._verify_ws_token("any-token") is False
