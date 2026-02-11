@@ -5,7 +5,7 @@ name = "python"
 enabled = true
 
   [analyzers.meta]
-  runtime_version = "3.x"
+  runtime_version = "3.12.x"
   max_line_length = 100
 
 [[analyzers]]
@@ -17,7 +17,7 @@ name = "javascript"
 enabled = true
 
   [analyzers.meta]
-  environment = ["browser", "node"]
+  environment = ["browser", "nodejs"]
 
 test_patterns = [
   "tests/**",
