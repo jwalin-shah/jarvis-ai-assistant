@@ -1,95 +1,16 @@
-"""Data models, cache, and constants for JARVIS database."""
+"""Data models and constants for JARVIS database."""
 
 import json
 import sqlite3
-import threading
-import time
-from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# TTL-enabled LRU Cache for query results
-# ---------------------------------------------------------------------------
+from jarvis.cache import TTLCache
 
-
-class TTLCache:
-    """Thread-safe LRU cache with TTL expiration.
-
-    Provides caching for frequently called database queries with automatic
-    expiration to prevent stale data.
-    """
-
-    def __init__(self, maxsize: int = 128, ttl_seconds: float = 30.0) -> None:
-        """Initialize cache.
-
-        Args:
-            maxsize: Maximum number of entries to cache.
-            ttl_seconds: Time-to-live for cache entries in seconds.
-        """
-        self._cache: OrderedDict[Any, tuple[Any, float]] = OrderedDict()
-        self._maxsize = maxsize
-        self._ttl = ttl_seconds
-        self._lock = threading.RLock()
-
-    def get(self, key: Any) -> tuple[bool, Any]:
-        """Get value from cache.
-
-        Args:
-            key: Cache key.
-
-        Returns:
-            Tuple of (hit, value). hit is True if found and not expired.
-        """
-        with self._lock:
-            if key not in self._cache:
-                return (False, None)
-
-            value, timestamp = self._cache[key]
-            if time.time() - timestamp > self._ttl:
-                # Expired - remove and return miss
-                del self._cache[key]
-                return (False, None)
-
-            # Update access order for LRU (move to end)
-            self._cache.move_to_end(key)
-            return (True, value)
-
-    def set(self, key: Any, value: Any) -> None:
-        """Set value in cache.
-
-        Args:
-            key: Cache key.
-            value: Value to cache.
-        """
-        with self._lock:
-            # Evict oldest if at capacity
-            while len(self._cache) >= self._maxsize:
-                self._cache.popitem(last=False)  # Remove oldest (FIFO)
-
-            self._cache[key] = (value, time.time())
-            self._cache.move_to_end(key)  # Move to end (newest)
-
-    def invalidate(self, key: Any) -> None:
-        """Remove a specific key from cache."""
-        with self._lock:
-            self._cache.pop(key, None)
-
-    def clear(self) -> None:
-        """Clear all cache entries."""
-        with self._lock:
-            self._cache.clear()
-
-    def stats(self) -> dict[str, int]:
-        """Get cache statistics."""
-        with self._lock:
-            return {
-                "size": len(self._cache),
-                "maxsize": self._maxsize,
-            }
-
+# Re-export TTLCache for backward compatibility
+__all__ = ["TTLCache"]
 
 # Register custom timestamp converter that handles timezone-aware timestamps
 def _convert_timestamp(val: bytes) -> datetime:

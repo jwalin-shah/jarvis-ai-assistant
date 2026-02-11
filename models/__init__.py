@@ -41,6 +41,11 @@ from models.registry import (
     get_recommended_model,
     is_model_available,
 )
+from models.lifecycle import (
+    ModelLifecycleManager,
+    get_lifecycle_manager,
+    reset_lifecycle_manager,
+)
 from models.resilience import (
     FallbackTier,
     check_memory_pressure,
@@ -72,6 +77,10 @@ __all__ = [
     "get_model_spec_by_path",
     "get_recommended_model",
     "is_model_available",
+    # Lifecycle
+    "ModelLifecycleManager",
+    "get_lifecycle_manager",
+    "reset_lifecycle_manager",
     # Resilience
     "FallbackTier",
     "check_memory_pressure",

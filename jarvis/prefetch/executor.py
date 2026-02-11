@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from queue import PriorityQueue
 from typing import Any
 
@@ -33,7 +33,7 @@ from jarvis.prefetch.predictor import Prediction, PredictionPriority, Prediction
 logger = logging.getLogger(__name__)
 
 
-class ExecutorState(str, Enum):
+class ExecutorState(StrEnum):
     """Executor states."""
 
     STOPPED = "stopped"
@@ -731,7 +731,11 @@ class PrefetchExecutor:
             return None
 
     def _handle_model_warm(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Warm up model weights.
+        """Warm up model weights via the unified ModelWarmer.
+
+        Delegates to ModelWarmer.ensure_warm() which checks memory constraints
+        and respects the idle timeout configuration, preventing the prefetch
+        system from warming a model that the warmer would immediately unload.
 
         Args:
             prediction: Prediction with model_type in params.
@@ -744,19 +748,16 @@ class PrefetchExecutor:
             return None
 
         try:
-            from models.loader import MLXModelLoader
-
             if model_type == "llm":
-                from models.loader import get_model
+                from jarvis.model_warmer import get_model_warmer
 
-                model = get_model()
-                if model and not model.is_loaded():
-                    with MLXModelLoader._mlx_load_lock:
-                        model.load()
-                return {"model": "llm", "warm": True, "prefetch_time": time.time()}
+                warmer = get_model_warmer()
+                loaded = warmer.ensure_warm()
+                return {"model": "llm", "warm": loaded, "prefetch_time": time.time()}
 
             elif model_type == "embeddings":
                 from jarvis.embedding_adapter import get_embedder
+                from models.loader import MLXModelLoader
 
                 embedder = get_embedder()
                 # Warm up with a test embedding

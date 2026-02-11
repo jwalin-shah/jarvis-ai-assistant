@@ -6,7 +6,7 @@ Workstream 8 implements against these contracts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
 @dataclass
@@ -148,4 +148,31 @@ class Generator(Protocol):
         Returns:
             Memory usage in megabytes, or 0.0 if model is not loaded.
         """
+        ...
+
+
+@runtime_checkable
+class ManagedModel(Protocol):
+    """Lifecycle interface for any model managed by the ModelLifecycleManager.
+
+    All model types (generators, embedders, classifiers, cross-encoders) can
+    implement this protocol to be tracked by the unified lifecycle manager.
+
+    This enables:
+    - Single point to query total memory usage across all models
+    - Coordinated loading/unloading under 8GB memory constraint
+    - Preventing multiple expensive models from loading simultaneously
+    """
+
+    @property
+    def model_name(self) -> str:
+        """Unique name identifying this model instance."""
+        ...
+
+    def is_loaded(self) -> bool:
+        """Check if model weights are currently in memory."""
+        ...
+
+    def get_memory_usage_mb(self) -> float:
+        """Return current memory usage in MB, or 0.0 if not loaded."""
         ...

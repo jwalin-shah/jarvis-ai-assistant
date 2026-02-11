@@ -24,7 +24,7 @@ from abc import ABC, abstractmethod
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +37,7 @@ CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
 APPLE_EPOCH_OFFSET = 978307200
 
 
-class PredictionType(str, Enum):
+class PredictionType(StrEnum):
     """Types of predictions."""
 
     DRAFT_REPLY = "draft_reply"  # Pre-generate draft for likely conversation
@@ -652,6 +652,11 @@ class UIFocusStrategy(PredictionStrategy):
 class ModelWarmingStrategy(PredictionStrategy):
     """Predict need for model warming.
 
+    Delegates to the singleton ModelWarmer for lifecycle state rather than
+    tracking warming independently. This prevents the two systems from
+    conflicting (e.g., prefetch warming a model that ModelWarmer then
+    immediately unloads due to idle timeout).
+
     Keep models warm during active usage periods to
     avoid cold start latency.
     """
@@ -662,24 +667,51 @@ class ModelWarmingStrategy(PredictionStrategy):
 
     def __init__(self, idle_threshold_seconds: int = 300) -> None:
         self._idle_threshold = idle_threshold_seconds
-        self._last_activity: float = time.time()
-        self._models_warm: set[str] = set()
+
+    def _get_warmer(self):
+        """Get the singleton ModelWarmer (lazy import to avoid circular deps)."""
+        from jarvis.model_warmer import get_model_warmer
+
+        return get_model_warmer()
+
+    def _is_generator_loaded(self) -> bool:
+        """Check if the LLM generator is currently loaded."""
+        try:
+            from models import get_generator
+
+            return get_generator().is_loaded()
+        except Exception:
+            return False
+
+    def _is_embedder_loaded(self) -> bool:
+        """Check if the embedding model is currently loaded."""
+        try:
+            from jarvis.embedding_adapter import get_embedder
+
+            return get_embedder().is_available()
+        except Exception:
+            return False
 
     def record_activity(self) -> None:
-        """Record user activity."""
-        self._last_activity = time.time()
+        """Record user activity via the singleton ModelWarmer."""
+        try:
+            self._get_warmer().touch()
+        except Exception:
+            pass
 
     def predict(self, context: PredictionContext) -> list[Prediction]:
         predictions: list[Prediction] = []
-        now = time.time()
 
-        # Check if we're in active period
-        idle_time = now - self._last_activity
-        if idle_time > self._idle_threshold:
-            return []  # Too idle, don't waste resources
+        # Delegate idle check to ModelWarmer instead of tracking independently
+        try:
+            warmer = self._get_warmer()
+            if warmer.is_idle():
+                return []  # ModelWarmer says we're idle, don't waste resources
+        except Exception:
+            pass
 
-        # Predict LLM warming if not warm
-        if "llm" not in self._models_warm:
+        # Check actual model state instead of maintaining a separate warm set
+        if not self._is_generator_loaded():
             predictions.append(
                 Prediction(
                     type=PredictionType.MODEL_WARM,
@@ -694,8 +726,7 @@ class ModelWarmingStrategy(PredictionStrategy):
                 )
             )
 
-        # Predict embedding model warming
-        if "embeddings" not in self._models_warm:
+        if not self._is_embedder_loaded():
             predictions.append(
                 Prediction(
                     type=PredictionType.MODEL_WARM,
@@ -717,12 +748,10 @@ class ModelWarmingStrategy(PredictionStrategy):
         return predictions
 
     def mark_warm(self, model_type: str) -> None:
-        """Mark a model as warm."""
-        self._models_warm.add(model_type)
+        """Mark a model as warm (no-op, state is now queried directly)."""
 
     def mark_cold(self, model_type: str) -> None:
-        """Mark a model as cold."""
-        self._models_warm.discard(model_type)
+        """Mark a model as cold (no-op, state is now queried directly)."""
 
 
 class PrefetchPredictor:

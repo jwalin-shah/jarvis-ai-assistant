@@ -6,6 +6,11 @@ All implementations should code against these contracts, not concrete implementa
 
 from __future__ import annotations
 
+from contracts.cache import (
+    Cache,
+    CacheWithInvalidation,
+    CacheWithStats,
+)
 from contracts.calendar import (
     Calendar,
     CalendarEvent,
@@ -15,6 +20,7 @@ from contracts.calendar import (
     DetectedEvent,
     EventDetector,
 )
+from contracts.features import FeatureExtractor
 from contracts.hallucination import (
     HallucinationEvaluator,
     HHEMBenchmarkResult,
@@ -55,9 +61,14 @@ from contracts.models import (
     GenerationRequest,
     GenerationResponse,
     Generator,
+    ManagedModel,
 )
 
 __all__ = [
+    # Cache
+    "Cache",
+    "CacheWithInvalidation",
+    "CacheWithStats",
     # Calendar
     "Calendar",
     "CalendarEvent",
@@ -66,6 +77,8 @@ __all__ = [
     "CreateEventResult",
     "DetectedEvent",
     "EventDetector",
+    # Features
+    "FeatureExtractor",
     # Hallucination (WS2)
     "HallucinationEvaluator",
     "HHEMBenchmarkResult",
@@ -101,4 +114,5 @@ __all__ = [
     "GenerationRequest",
     "GenerationResponse",
     "Generator",
+    "ManagedModel",
 ]
