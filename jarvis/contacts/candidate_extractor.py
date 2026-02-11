@@ -71,16 +71,17 @@ LABEL_PROFILES: dict[str, list[str]] = {
 
 # Natural-language prompts sent to GLiNER.
 # Keep these semantically explicit and close to everyday wording.
+# Tuned via scripts/sweep_gliner_thresholds.py --label-variants
 NATURAL_LANGUAGE_LABELS: dict[str, str] = {
-    "person_name": "person name",
+    "person_name": "first name or nickname of a person",
     "family_member": "family member (mom, sister, etc)",
-    "place": "place or location",
-    "org": "organization or company",
+    "place": "city, town, country, or geographic location",
+    "org": "company, school, university, or employer",
     "date_ref": "date or time reference",
     "food_item": "food or drink",
     "job_role": "job title or profession",
     "health_condition": "medical condition or symptom",
-    "activity": "hobby, sport, or activity",
+    "activity": "hobby, sport, game, or pastime",
     # Optional aliases retained for custom label sets.
     "allergy": "allergy",
     "employer": "employer",
@@ -93,15 +94,15 @@ NATURAL_LANGUAGE_LABELS: dict[str, str] = {
 
 # Per-label minimum thresholds (after global threshold)
 PER_LABEL_MIN: dict[str, float] = {
-    "person_name": 0.55,
-    "family_member": 0.50,
-    "place": 0.50,
-    "org": 0.60,
+    "person_name": 0.45,  # Was 0.55; lowered for recall with improved prompt
+    "family_member": 0.45,  # Was 0.50; high-signal label, entailment filters FPs
+    "place": 0.45,  # Was 0.50; entailment gate handles precision
+    "org": 0.55,  # Was 0.60; lowered slightly for recall
     "date_ref": 0.60,
     "food_item": 0.50,
-    "job_role": 0.65,  # Tightened from 0.55
-    "health_condition": 0.50,
-    "activity": 0.65,  # Tightened from 0.55
+    "job_role": 0.60,  # Was 0.65; entailment gate handles FP reduction
+    "health_condition": 0.45,
+    "activity": 0.40,  # Was 0.65; lowered for recall, entailment gate filters FPs
     # Optional aliases retained for custom label sets.
     "allergy": 0.45,
     "employer": 0.50,
@@ -111,7 +112,7 @@ PER_LABEL_MIN: dict[str, float] = {
     "friend_name": 0.50,
     "partner_name": 0.50,
 }
-DEFAULT_MIN = 0.55
+DEFAULT_MIN = 0.50
 CONTEXT_SEPARATOR = "\n[CTX]\n"
 
 # Profile-specific per-label minimum score overrides.
@@ -121,25 +122,58 @@ PER_LABEL_MIN_PROFILE_OVERRIDES: dict[str, dict[str, float]] = {
     "high_recall": {},
     # Slightly tighter on historically noisy labels.
     "balanced": {
-        "place": 0.60,
-        "org": 0.62,
-        "activity": 0.70,
-        "job_role": 0.68,
+        "place": 0.55,
+        "org": 0.60,
+        "activity": 0.50,
+        "job_role": 0.65,
     },
     # Stronger precision-oriented thresholds.
     "high_precision": {
-        "family_member": 0.65,
-        "place": 0.65,
-        "org": 0.68,
-        "food_item": 0.60,
-        "job_role": 0.70,
-        "health_condition": 0.55,
-        "activity": 0.65,
+        "family_member": 0.55,
+        "place": 0.60,
+        "org": 0.65,
+        "food_item": 0.55,
+        "job_role": 0.68,
+        "health_condition": 0.50,
+        "activity": 0.55,
+    },
+}
+
+# Common abbreviation -> canonical name for entity normalization
+ENTITY_ALIASES: dict[str, dict[str, str]] = {
+    "place": {
+        "sf": "San Francisco",
+        "nyc": "New York City",
+        "ny": "New York",
+        "la": "Los Angeles",
+        "dc": "Washington DC",
+        "philly": "Philadelphia",
+        "chi": "Chicago",
+        "atl": "Atlanta",
+        "bos": "Boston",
     },
 }
 
 # Vague words to reject as span_text
-VAGUE = {"it", "this", "that", "thing", "stuff", "them", "there", "here", "me", "you"}
+VAGUE = {
+    "it",
+    "this",
+    "that",
+    "thing",
+    "stuff",
+    "them",
+    "there",
+    "here",
+    "me",
+    "you",
+    "i",
+    "i'm",
+    "i'll",
+    "i've",
+    "i'd",
+    "we",
+    "we're",
+}
 
 # ---------------------------------------------------------------------------
 # Fact type ontology (~20 high-value memory types)
@@ -183,13 +217,23 @@ FACT_TYPE_RULES: list[tuple[str, set[str], str]] = [
     # location
     (r"(live|living|based) in", {"place", "current_location"}, "location.current"),
     (r"(stay|staying|reside) +(in|at|near)", {"place", "current_location"}, "location.current"),
+    (
+        r"(already|currently|right now|here|back) +in",
+        {"place", "current_location"},
+        "location.current",
+    ),
+    (r"(came|arrived|just got) +(to|in|at)", {"place", "current_location"}, "location.current"),
     (r"(moving|headed|relocating) to", {"place", "future_location"}, "location.future"),
+    (r"(going|headed|flying|driving|drove) +to", {"place", "future_location"}, "location.future"),
+    (r"(visiting|trip to|vacation in)", {"place"}, "location.current"),
     (r"(grew up|from|raised) in", {"place", "past_location"}, "location.hometown"),
     (r"(born|hometown|originally) +(in|from)", {"place", "past_location"}, "location.hometown"),
     (r"(moved from|used to live|lived in)", {"place", "past_location"}, "location.past"),
     # work
     (r"(work|working|started|joined) at", {"org", "employer"}, "work.employer"),
     (r"(hired|promoted|intern) at", {"org", "employer"}, "work.employer"),
+    (r"(interning|internship) +(at|with)", {"org", "employer"}, "work.employer"),
+    (r"(applied|applying|app) +(to|at|for)", {"org"}, "personal.school"),
     (r"(left|quit|fired from|used to work)", {"org", "employer"}, "work.former_employer"),
     (r"(i'm a|i am a|i am an|work as|job as|position as)", {"job_role"}, "work.job_title"),
     # relationship
@@ -218,6 +262,8 @@ FACT_TYPE_RULES: list[tuple[str, set[str], str]] = [
     ),
     # personal
     (r"birthday is", {"date_ref"}, "personal.birthday"),
+    (r"(born|bday|b-day) +(on|is)?", {"date_ref"}, "personal.birthday"),
+    (r"(birthday|bday).{0,10}(on|is)", {"date_ref"}, "personal.birthday"),
     (r"(go to|attend|graduated from|studying at)", {"org"}, "personal.school"),
     (r"my (dog|cat|pet|puppy|kitten)", {"person_name"}, "personal.pet"),
 ]
@@ -236,6 +282,11 @@ DIRECT_LABEL_MAP: dict[str, str] = {
     "food_item": "preference.food_like",
     "activity": "preference.activity",
     "job_role": "work.job_title",
+    # Fallback defaults for generic GLiNER labels (pattern rules take priority)
+    "place": "location.current",
+    "org": "work.employer",
+    "person_name": "relationship.friend",
+    "date_ref": "personal.birthday",
 }
 
 
@@ -599,6 +650,11 @@ class CandidateExtractor:
             if apply_vague_filter and (span.casefold() in VAGUE or len(span) < 2):
                 continue
 
+            # Entity canonicalization (e.g. "sf" -> "San Francisco")
+            canonical = ENTITY_ALIASES.get(label, {}).get(span.casefold())
+            if canonical:
+                span = canonical
+
             # Strict dedup: same span + label + message_id emitted once
             dedup_key = (span.casefold(), label)
             if dedup_key in seen:
@@ -718,6 +774,11 @@ class CandidateExtractor:
                     if span.casefold() in VAGUE or len(span) < 2:
                         continue
 
+                    # Entity canonicalization (e.g. "sf" -> "San Francisco")
+                    canonical = ENTITY_ALIASES.get(label, {}).get(span.casefold())
+                    if canonical:
+                        span = canonical
+
                     dedup_key = (span.casefold(), label)
                     if dedup_key in seen:
                         continue
@@ -763,40 +824,66 @@ class CandidateExtractor:
     # Entailment gate
     # ------------------------------------------------------------------
 
+    # Per-type entailment thresholds (replaces global self._entailment_threshold).
+    # Tuned via scripts/sweep_gliner_thresholds.py entailment sweep.
+    # Types not listed here fall back to self._entailment_threshold (default 0.12).
+    _ENTAILMENT_THRESHOLDS: dict[str, float] = {
+        "preference.activity": 0.03,  # Activity hypotheses score low on NLI; very permissive
+        "relationship.family": 0.05,  # Family mentions are high-signal, low NLI scores
+        "preference.food_like": 0.08,
+        "health.condition": 0.08,
+        "health.allergy": 0.08,
+        "location.current": 0.12,
+        "work.employer": 0.12,
+        "work.job_title": 0.12,
+        "personal.school": 0.10,
+        "relationship.friend": 0.25,  # person_name fallback is noisy, strict gate
+        "personal.birthday": 0.20,  # date_ref fallback catches irrelevant dates
+    }
+
     _HYPOTHESIS_TEMPLATES: dict[str, str] = {
-        "relationship.family": "The user's {label} is named {span}",
-        "relationship.friend": "{span} is a friend of the user",
-        "relationship.partner": "{span} is the user's romantic partner",
-        "location.current": "The user lives in {span}",
-        "location.past": "The user used to live in {span}",
-        "location.future": "The user is moving to {span}",
-        "location.hometown": "The user is from {span}",
-        "work.employer": "{span} is the user's employer",
-        "work.former_employer": "The user previously worked at {span}",
-        "work.job_title": "The user's job title is {span}",
-        "preference.food_like": "The user likes {span}",
-        "preference.food_dislike": "The user dislikes {span}",
-        "preference.activity": "The user enjoys {span}",
-        "health.allergy": "The user is allergic to {span}",
-        "health.dietary": "The user has a dietary restriction related to {span}",
-        "health.condition": "The user has a health condition related to {span}",
-        "personal.birthday": "The user's birthday is {span}",
-        "personal.school": "The user attends or attended {span}",
-        "personal.pet": "The user has a pet named {span}",
+        "relationship.family": "The message mentions a family member named {span}",
+        "relationship.friend": "{span} is a friend of {subject}",
+        "relationship.partner": "{span} is {poss} romantic partner",
+        "location.current": "{subject} lives in {span}",
+        "location.past": "{subject} used to live in {span}",
+        "location.future": "{subject} is moving to {span}",
+        "location.hometown": "{subject} is from {span}",
+        "work.employer": "{span} is {poss} employer",
+        "work.former_employer": "{subject} previously worked at {span}",
+        "work.job_title": "{poss} job title is {span}",
+        "preference.food_like": "{subject} likes {span}",
+        "preference.food_dislike": "{subject} dislikes {span}",
+        "preference.activity": "Someone does {span} as an activity or hobby",
+        "health.allergy": "{subject} is allergic to {span}",
+        "health.dietary": "{subject} has a dietary restriction related to {span}",
+        "health.condition": "{subject} has a health condition related to {span}",
+        "personal.birthday": "{poss} birthday is {span}",
+        "personal.school": "{subject} attends or attended {span}",
+        "personal.pet": "{subject} has a pet named {span}",
     }
 
     def _candidate_to_hypothesis(self, candidate: FactCandidate) -> str:
         """Convert a FactCandidate to a natural language hypothesis for NLI."""
         template = self._HYPOTHESIS_TEMPLATES.get(candidate.fact_type)
         if template:
-            return template.format(span=candidate.span_text, label=candidate.span_label)
+            if candidate.is_from_me is False:
+                subject, poss = "the contact", "the contact's"
+            else:
+                subject, poss = "the user", "the user's"
+            return template.format(
+                span=candidate.span_text,
+                label=candidate.span_label,
+                subject=subject,
+                poss=poss,
+            )
         return f"The message contains a fact about {candidate.span_text}"
 
     def _verify_entailment(
         self,
         candidates: list[FactCandidate],
     ) -> list[FactCandidate]:
-        """Filter candidates by NLI entailment score."""
+        """Filter candidates by NLI entailment score with per-type thresholds."""
         if not candidates:
             return candidates
 
@@ -807,11 +894,16 @@ class CandidateExtractor:
             hypothesis = self._candidate_to_hypothesis(c)
             pairs.append((c.source_text, hypothesis))
 
-        results = verify_entailment_batch(pairs, threshold=self._entailment_threshold)
+        # Score all pairs at threshold=0 so we get raw scores back
+        results = verify_entailment_batch(pairs, threshold=0.0)
 
         verified = []
-        for candidate, (is_entailed, score) in zip(candidates, results):
-            if is_entailed:
+        for candidate, (_, score) in zip(candidates, results):
+            # Use per-type threshold, falling back to the global threshold
+            type_threshold = self._ENTAILMENT_THRESHOLDS.get(
+                candidate.fact_type, self._entailment_threshold
+            )
+            if score > type_threshold:
                 candidate.gliner_score = min(candidate.gliner_score, score)
                 verified.append(candidate)
             else:
@@ -820,7 +912,7 @@ class CandidateExtractor:
                     candidate.span_text,
                     candidate.fact_type,
                     score,
-                    self._entailment_threshold,
+                    type_threshold,
                 )
 
         logger.debug(
