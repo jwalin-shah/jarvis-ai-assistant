@@ -1,0 +1,1502 @@
+[
+  {
+    "sample_id": "r3_cand_0201",
+    "message_id": 280784,
+    "chat_rowid": 63,
+    "chat_id": "chat79793312544466299",
+    "chat_display_name": "Tejas’s Snapchat Story",
+    "sender_handle": "+15109329691",
+    "is_from_me": false,
+    "message_date": "2022-11-11T23:47:11.024071+00:00",
+    "message_text": "I only now realized its a federal holiday but not every company gives the day off",
+    "slice": "weak_org",
+    "context_prev": "280673|them|But to think of it I only really considered thanksgiving break as the holiday in Nov || 280602|them|Ayush came up to sf for it lol",
+    "context_next": "280411|them|￼ || 280354|them|Today, 5 years ago",
+    "suggested_candidates": [
+      {
+        "span_text": "company",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6219
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0202",
+    "message_id": 529204,
+    "chat_rowid": 576,
+    "chat_id": "+15109696903",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2020-01-19T03:03:48.932000+00:00",
+    "message_text": "Went to demo in Austin today that was fun",
+    "slice": "weak_location",
+    "context_prev": "529102|me|Hop in that Prius that godly gas mileage || 529191|me|Lowkey yeah",
+    "context_next": "529158|me|Felt bad parts of the day but overall good || 529219|me|Yo dude that’s lit",
+    "suggested_candidates": [
+      {
+        "span_text": "Austin",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9282
+      },
+      {
+        "span_text": "demo",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5401
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0203",
+    "message_id": 68634,
+    "chat_rowid": 222,
+    "chat_id": "+15103382232",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2023-12-17T20:38:53.247012+00:00",
+    "message_text": "whatre u doin today? imma steal u from shreya",
+    "slice": "weak_location",
+    "context_prev": "68830|me|🥲 just forgot me || 68427|them|Yep it be like that",
+    "context_next": "68220|me|u gonna be back in fremont tmrw night? || 68540|them|nah ill probably be back in a couple day s",
+    "suggested_candidates": [
+      {
+        "span_text": "shreya",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9151
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0204",
+    "message_id": 311680,
+    "chat_rowid": 604,
+    "chat_id": "+14083931150",
+    "chat_display_name": "",
+    "sender_handle": "+14083931150",
+    "is_from_me": false,
+    "message_date": "2022-08-29T03:59:58.879962+00:00",
+    "message_text": "I've been doing well - So my family has settled into the new home in Dallas but I'm in LA ",
+    "slice": "weak_location",
+    "context_prev": "312168|me|Hey dude what's up. You in Dallas now? || 311752|them|Jwalin I'm sorry for not responding man!",
+    "context_next": "311756|them|And yep - so I was at Indeed when we went bowling, but then I got a call from Google last September and they gave me an offer (I was rejected last May, but they kept my profile in their system) || 311735|them|How're things going with you?",
+    "suggested_candidates": [
+      {
+        "span_text": "Dallas",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9653
+      },
+      {
+        "span_text": "LA",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9214
+      },
+      {
+        "span_text": "my family",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4869
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0205",
+    "message_id": 558256,
+    "chat_rowid": 466,
+    "chat_id": "+12146075998",
+    "chat_display_name": "",
+    "sender_handle": "+12146075998",
+    "is_from_me": false,
+    "message_date": "2019-07-25T07:28:28.306148+00:00",
+    "message_text": "We went to Florida, but I didn’t go to the beach much. I just like to stay in the hotel and away from life (including my phone) when I go on vacation. Honestly, there is literally no rush to finish school. A few more months changes literally nothing. This free agency was insane. Like teams who had no chance to go to playoffs became championship contenders. And no I don’t fallow NfL, I’m not even too sure how football works ",
+    "slice": "weak_org",
+    "context_prev": "558278|me|But this is gonna be so much fun now || 558286|me|Do you follow the nfl",
+    "context_next": "558022|me|Oh ok cool. Yeah I feel that. It's nice to just go somewhere else and just chill and actually relax for a little || 558069|me|Sometimes vacation is fun but you just do too much and it becomes more tiring then actually helping you feel better",
+    "suggested_candidates": [
+      {
+        "span_text": "Florida",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9079
+      },
+      {
+        "span_text": "NfL",
+        "span_label": "org",
+        "fact_type": "personal.school",
+        "gliner_score": 0.6989
+      },
+      {
+        "span_text": "football",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4866
+      },
+      {
+        "span_text": "hotel",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.438
+      },
+      {
+        "span_text": "teams",
+        "span_label": "org",
+        "fact_type": "personal.school",
+        "gliner_score": 0.4073
+      },
+      {
+        "span_text": "playoffs",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.3951
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0206",
+    "message_id": 362692,
+    "chat_rowid": 294,
+    "chat_id": "+19175964124",
+    "chat_display_name": "",
+    "sender_handle": "+19175964124",
+    "is_from_me": false,
+    "message_date": "2022-04-26T05:22:47.762329+00:00",
+    "message_text": "rachel i also know from tufts but she lives in boston ",
+    "slice": "weak_location",
+    "context_prev": "362719|them|kayla goes to columbia dental school in the city || 362868|them|ik her from tufts",
+    "context_next": "362743|them|lauren lives in nyc and i’ve known her basically my whole life || 362862|me|Ok well I think I would prefer you didn’t if I’m being honest",
+    "suggested_candidates": [
+      {
+        "span_text": "boston",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9637
+      },
+      {
+        "span_text": "rachel",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9275
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0207",
+    "message_id": 337971,
+    "chat_rowid": 364,
+    "chat_id": "+17245167753",
+    "chat_display_name": "",
+    "sender_handle": "+17245167753",
+    "is_from_me": false,
+    "message_date": "2022-06-01T00:27:06.620210+00:00",
+    "message_text": "The safety officer thing is just something the school needs or we can’t be a club",
+    "slice": "weak_org",
+    "context_prev": "337859|them|Liked “I’ll do it then” || 337880|them|Yes we’re still working on other officer stuff",
+    "context_next": "337886|them|Fill out that form if u decide to want to do something else || 334848|me|Can u send me the form again",
+    "suggested_candidates": [
+      {
+        "span_text": "safety officer",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8573
+      },
+      {
+        "span_text": "school",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7006
+      },
+      {
+        "span_text": "club",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4562
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0208",
+    "message_id": 601910,
+    "chat_rowid": 1151,
+    "chat_id": "+13147554451",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2018-11-23T22:23:23.459026+00:00",
+    "message_text": "Also when you come to the bay from the 24th to 30th stay at our house",
+    "slice": "weak_location",
+    "context_prev": "601911|me|I’ve been dying the past couple days || 601930|me|Hbu",
+    "context_next": "601919|them|that’s fun || 601938|them|its probably the vegan diet 😂 and the quinoa salad",
+    "suggested_candidates": [
+      {
+        "span_text": "bay",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4501
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0209",
+    "message_id": 545391,
+    "chat_rowid": 222,
+    "chat_id": "+15103382232",
+    "chat_display_name": "",
+    "sender_handle": "+15103382232",
+    "is_from_me": false,
+    "message_date": "2019-11-02T22:40:41.283685+00:00",
+    "message_text": "But that injury is actually so clutch for you",
+    "slice": "weak_health",
+    "context_prev": "545508|me|Lessgo || 545552|them|Yea no shit I voted against LOL",
+    "context_next": "545585|me|Disliked “Yea no shit I voted against LOL” || 545596|them|Jesus it couldn’t have come at a better time",
+    "suggested_candidates": [
+      {
+        "span_text": "injury",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4091
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0210",
+    "message_id": 426542,
+    "chat_rowid": 1078,
+    "chat_id": "chat356980450801550676",
+    "chat_display_name": "goonzz ",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2021-09-01T17:00:44.233135+00:00",
+    "message_text": "WE HAVE NOTIFIED THE MANAGER AND WILL BE COMING TO DO A CHECK AND IF NEEDED CONTACT THE AUTHORITIES",
+    "slice": "weak_org",
+    "context_prev": "426666|them|TENANTS OF APT 622: WE HAVE BEEN NOTIFIED OF AN EXTRA PERSON LIVING WHO IS NOT ON THE LEASE || 426733|them|r u fr",
+    "context_next": "426633|them|yes bro what the hell how || 426676|them|yea and they didn’t say when",
+    "suggested_candidates": [
+      {
+        "span_text": "MANAGER",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8664
+      },
+      {
+        "span_text": "AUTHORITIES",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6401
+      },
+      {
+        "span_text": "WE",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4374
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0211",
+    "message_id": 394531,
+    "chat_rowid": 10,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2022-01-10T03:45:51.130000+00:00",
+    "message_text": "But his team is like nah fam",
+    "slice": "weak_org",
+    "context_prev": "394622|me|￼ || 394405|me|Lebron is tryna carry so hard",
+    "context_next": "394474|them|Laughed at “But his team is like nah fam” || 394555|them|Lakers really suck",
+    "suggested_candidates": [
+      {
+        "span_text": "team",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5415
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0212",
+    "message_id": 560214,
+    "chat_rowid": 359,
+    "chat_id": "+12146075998",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-07-15T01:05:44.984385+00:00",
+    "message_text": "I'm definitely getting better and starting to exercise and move more. Have the vision therapy until exam this Thursday. And cancelled housing and going to apply for deferall so not coming back this fall.",
+    "slice": "weak_health",
+    "context_prev": "581347|me|Luckily I have spring break to catch up pretty soon || 572430|me|Yo what's up",
+    "context_next": "560271|me|How are you? || 558846|me|What's up",
+    "suggested_candidates": [
+      {
+        "span_text": "housing",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7895
+      },
+      {
+        "span_text": "exercise",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5173
+      },
+      {
+        "span_text": "vision therapy",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5083
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0213",
+    "message_id": 80333,
+    "chat_rowid": 707,
+    "chat_id": "+12812109243",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2023-10-21T21:57:51.756186+00:00",
+    "message_text": "It from some donut shop in forney Texas which is like 40 minutes from UTD",
+    "slice": "weak_location",
+    "context_prev": "80388|me|Lowen || 80291|me|still hasn’t responded",
+    "context_next": "80169|them|Oh damn nvm || 80318|me|Yea lol",
+    "suggested_candidates": [
+      {
+        "span_text": "UTD",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9091
+      },
+      {
+        "span_text": "forney Texas",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9025
+      },
+      {
+        "span_text": "donut shop",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6283
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0214",
+    "message_id": 543456,
+    "chat_rowid": 701,
+    "chat_id": "+18179053105",
+    "chat_display_name": "",
+    "sender_handle": "+18179053105",
+    "is_from_me": false,
+    "message_date": "2019-11-17T19:49:19.895445+00:00",
+    "message_text": "I actually had to do some nursing prerequisite classes Fall 2018, but the actual nursing part where I get to go to hospitals started back in January 2019",
+    "slice": "weak_health",
+    "context_prev": "543546|me|Also sorry but I’m not feeling that good, not gonna be able to call today || 543618|them|So it’s a 4 year program (bachelors in nursing), but since I got my bachelors in biology already, some of the classes overlapped and nursing takes 2 and a 1/2 years for me",
+    "context_next": "543571|them|And no worries bro! Take it easy, we can talk another time 😄 || 543513|me|Oh ok makes sense, so right now it’s kinda of like a residency cause your at the hospital? you still have actual classes while working right",
+    "suggested_candidates": [
+      {
+        "span_text": "hospitals",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5274
+      },
+      {
+        "span_text": "nursing",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.3988
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0215",
+    "message_id": 47999,
+    "chat_rowid": 20,
+    "chat_id": "+14699755410",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-03-01T00:03:04.700000+00:00",
+    "message_text": "these ppl be gettin passed around idek whose on whose team",
+    "slice": "weak_org",
+    "context_prev": "48015|me|zubac? || 48172|me|im ngl idek what trade ur talkin about",
+    "context_next": "47848|them|yeah zubac || 47856|them|bane jamal murray for injured bane injured og and zubac",
+    "suggested_candidates": [
+      {
+        "span_text": "idek",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8458
+      },
+      {
+        "span_text": "these ppl",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.4089
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0216",
+    "message_id": 63727,
+    "chat_rowid": 10,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-01-09T18:35:06.925000+00:00",
+    "message_text": "so prolly just watchin football 🔥 and settlin back in in dallas",
+    "slice": "weak_location",
+    "context_prev": "63769|me|southwest the 🐐 || 63641|me|i fly saturday morning",
+    "context_next": "63728|me|￼ || 63622|me|lets look at flights?",
+    "suggested_candidates": [
+      {
+        "span_text": "dallas",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9134
+      },
+      {
+        "span_text": "football",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5253
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0217",
+    "message_id": 64063,
+    "chat_rowid": 222,
+    "chat_id": "+15103382232",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-01-07T02:21:06.021000+00:00",
+    "message_text": "can u scoop a package from my house ",
+    "slice": "weak_location",
+    "context_prev": "65439|them|OOO good choice I’ll send it over to the crew || 64244|me|yo u home",
+    "context_next": "64037|me|el airpods is there || 64181|them|Yo so sorry I’ve been in the city",
+    "suggested_candidates": [
+      {
+        "span_text": "my house",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6273
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0218",
+    "message_id": 342442,
+    "chat_rowid": 294,
+    "chat_id": "+19175964124",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2022-05-13T20:04:06.881000+00:00",
+    "message_text": "And I dreamed about some white girl I met from New York",
+    "slice": "weak_location",
+    "context_prev": "342490|me|I dreamed about brian last night || 342489|me|We were playing frisbee",
+    "context_next": "342539|me|But she’s like you || 342465|me|But not you",
+    "suggested_candidates": [
+      {
+        "span_text": "New York",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.956
+      },
+      {
+        "span_text": "white girl",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.5317
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0219",
+    "message_id": 589954,
+    "chat_rowid": 757,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "+14089089638",
+    "is_from_me": false,
+    "message_date": "2019-01-22T07:29:48.809978+00:00",
+    "message_text": "yeah honestly, refs did a terrible job",
+    "slice": "weak_org",
+    "context_prev": "590153|me|It was so close || 590254|me|Saints was such a blown call",
+    "context_next": "589917|them|rams had two terrible defensive plays || 590056|them|they could've intercepted that brees to ginn throw late in the game",
+    "suggested_candidates": [
+      {
+        "span_text": "refs",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8642
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0220",
+    "message_id": 469720,
+    "chat_rowid": 679,
+    "chat_id": "chat260775705926112932",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2021-06-04T21:04:11.624733+00:00",
+    "message_text": "I think they don't have occupational therapy but they were going to get it",
+    "slice": "weak_health",
+    "context_prev": "469853|me|Will try searching online if they have anything else like this || 469900|me|Or worst case just do vestibular and vision at Stanford",
+    "context_next": "469824|me|Will reschedule with utd || 469893|them|They have all there therapy (occupational, speech etc.) available at Stanford",
+    "suggested_candidates": [
+      {
+        "span_text": "occupational therapy",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5771
+      },
+      {
+        "span_text": "they",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.3556
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0221",
+    "message_id": 18534,
+    "chat_rowid": 32,
+    "chat_id": "chat87138921661165489",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-05-20T05:10:04.444000+00:00",
+    "message_text": "u can live in yashs living room and pay some rent",
+    "slice": "weak_location",
+    "context_prev": "18674|them|sf || 18569|me|go work there",
+    "context_next": "18696|me|yea prolly next wknd || 18496|them|Shanay wyd tn",
+    "suggested_candidates": [
+      {
+        "span_text": "yashs living room",
+        "span_label": "place",
+        "fact_type": "location.current",
+        "gliner_score": 0.7464
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0222",
+    "message_id": 335815,
+    "chat_rowid": 299,
+    "chat_id": "+17204963920",
+    "chat_display_name": "",
+    "sender_handle": "+17204963920",
+    "is_from_me": false,
+    "message_date": "2022-07-03T22:40:53.047751+00:00",
+    "message_text": "I’ll text when I’m like 15 mins from being done bc the place is only a 10 mins drive from the temple",
+    "slice": "weak_location",
+    "context_prev": "335939|me|So shud I like come get you or do u have the car w you? || 335753|them|I don’t have a car, you’ll have to come get me",
+    "context_next": "335985|me|Ok sounds good || 335969|me|Do uk approx when you’ll be done",
+    "suggested_candidates": [
+      {
+        "span_text": "temple",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5097
+      },
+      {
+        "span_text": "the place",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4628
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0223",
+    "message_id": 665963,
+    "chat_rowid": 299,
+    "chat_id": "+17204963920",
+    "chat_display_name": "",
+    "sender_handle": "+17204963920",
+    "is_from_me": true,
+    "message_date": "2025-11-18T02:42:34.459412+00:00",
+    "message_text": "Yea I mean I think technical roles are just so much harder to get ",
+    "slice": "weak_org",
+    "context_prev": "665961|them|I mean I’ve only gotten technical interviews rn || 665962|them|So if that’s working for you I should try it out",
+    "context_next": "665965|me|Did u ever text Rohith? || 665966|me|He was interviewing for a long time",
+    "suggested_candidates": [
+      {
+        "span_text": "technical roles",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6769
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0224",
+    "message_id": 601709,
+    "chat_rowid": 718,
+    "chat_id": "+17735924094",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2018-11-25T07:56:18.185029+00:00",
+    "message_text": "Back in Dallas",
+    "slice": "weak_location",
+    "context_prev": "601766|them|how are you || 601793|me|I am good",
+    "context_next": "601727|me|At someone’s house now || 601858|me|Chillin",
+    "suggested_candidates": [
+      {
+        "span_text": "Dallas",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.781
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0225",
+    "message_id": 208544,
+    "chat_rowid": 550,
+    "chat_id": "chat35368443819246017",
+    "chat_display_name": "Hyderabaddies",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2023-04-04T22:37:43.586925+00:00",
+    "message_text": "It’s only fair if the hospital that misdiagnosed you w meningitis should be responsible for paying your remaining tuition",
+    "slice": "weak_health",
+    "context_prev": "208510|them|yes def thankful for that || 208482|them|Oh shit whattt you ran out of it?",
+    "context_next": "208502|them|Liked “It’s only fair if the hospital that misdiagnosed y…” || 208487|me|after this sem im out",
+    "suggested_candidates": [
+      {
+        "span_text": "meningitis",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8002
+      },
+      {
+        "span_text": "hospital",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7942
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0226",
+    "message_id": 566735,
+    "chat_rowid": 1014,
+    "chat_id": "+17205238579",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-05-27T00:18:43.886454+00:00",
+    "message_text": "What are your plans for the summer aside from coming to cali",
+    "slice": "weak_location",
+    "context_prev": "566635|them|(: that's awesome hope you get well soon! || 566593|me|Ohh ok",
+    "context_next": "566641|me|Yeah me too thanks || 563301|them|Through security",
+    "suggested_candidates": [
+      {
+        "span_text": "cali",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7905
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0227",
+    "message_id": 213918,
+    "chat_rowid": 4,
+    "chat_id": "chat166285255827482084",
+    "chat_display_name": "quj",
+    "sender_handle": "+12172201479",
+    "is_from_me": false,
+    "message_date": "2023-02-28T18:31:30.542919+00:00",
+    "message_text": "Not getting back till later tonight after work and gotta pick some friends up from the airport so I’m probably out tonight",
+    "slice": "weak_location",
+    "context_prev": "213927|them|Yep, keep me posted || 213856|them|We making moves tonight or nah",
+    "context_next": "213815|them|Ok so no topgolf this week haha || 213832|them|Yuh unless it’s after 8:30 ish like I wouldn’t be free till 9",
+    "suggested_candidates": [
+      {
+        "span_text": "airport",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.79
+      },
+      {
+        "span_text": "work",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5979
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0228",
+    "message_id": 559162,
+    "chat_rowid": 280,
+    "chat_id": "+12134217178",
+    "chat_display_name": "",
+    "sender_handle": "+12134217178",
+    "is_from_me": false,
+    "message_date": "2019-07-19T05:50:59.619588+00:00",
+    "message_text": "Hey jwalin i reached home late from work so did not come. How was it? ",
+    "slice": "weak_location",
+    "context_prev": "559859|me|Ok are you coming to the utsav today? || 559718|them|Hey yes i am coming!!",
+    "context_next": "559034|them|shreyanshkakadiya@gmail.con || 559022|me|It was fun. Played ultimate and satodyu and went over rules for the other 2 games",
+    "suggested_candidates": [
+      {
+        "span_text": "jwalin",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.868
+      },
+      {
+        "span_text": "home",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.802
+      },
+      {
+        "span_text": "work",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7543
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0229",
+    "message_id": 535676,
+    "chat_rowid": 155,
+    "chat_id": "+15109329691",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-12-30T06:51:35.814000+00:00",
+    "message_text": "And it’s like that’s the one thing I really care about the pain ",
+    "slice": "weak_health",
+    "context_prev": "535460|me|Like I’m a lot stronger || 535581|me|But my neck and shoulders and chest and everything still hurts",
+    "context_next": "535482|me|Low key tho I might check out converse || 535587|me|Cause it rains a lot more in Dallas so idt white vans is the move",
+    "suggested_candidates": [
+      {
+        "span_text": "pain",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5693
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0230",
+    "message_id": 13768,
+    "chat_rowid": 162,
+    "chat_id": "+15105797012",
+    "chat_display_name": "",
+    "sender_handle": "+15105797012",
+    "is_from_me": false,
+    "message_date": "2024-06-30T02:28:29.241614+00:00",
+    "message_text": "I hate driving in sf",
+    "slice": "weak_location",
+    "context_prev": "13851|them|Ubering || 13758|me|we can go together",
+    "context_next": "13695|me|we can walk to urs || 13761|me|when u goin",
+    "suggested_candidates": [
+      {
+        "span_text": "sf",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8951
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0231",
+    "message_id": 663812,
+    "chat_rowid": 2470,
+    "chat_id": "+16124749541",
+    "chat_display_name": "",
+    "sender_handle": "+16124749541",
+    "is_from_me": false,
+    "message_date": "2025-11-04T20:22:59.500815+00:00",
+    "message_text": "Hi,\nThis is Esha from Select Source International! \n🏈 We’re hiring Event Staff for the Super Bowl Experience 2026 — the NFL’s biggest fan event in San Francisco (Feb 4–7, 2026). Pay is $22/hr.\nIf you’re energetic, love working with fans, and want to be part of this iconic event, let me know — I’ll share all the details!",
+    "slice": "weak_location",
+    "context_prev": "",
+    "context_next": "",
+    "suggested_candidates": [
+      {
+        "span_text": "San Francisco",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9494
+      },
+      {
+        "span_text": "Select Source International",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9435
+      },
+      {
+        "span_text": "NFL",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9421
+      },
+      {
+        "span_text": "Event Staff",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8982
+      },
+      {
+        "span_text": "Super Bowl Experience 2026",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4464
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0232",
+    "message_id": 97165,
+    "chat_rowid": 158,
+    "chat_id": "+18324277499",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2023-08-27T04:12:13.943000+00:00",
+    "message_text": "when u gonna be in dallas again bitch",
+    "slice": "weak_location",
+    "context_prev": "111838|them|Yeah I’ll lyk I’m tryna get my dads Costco login || 111870|me|aight bet",
+    "context_next": "96984|them|Hey || 97089|them|September 15th for sure for the Drake concert",
+    "suggested_candidates": [
+      {
+        "span_text": "dallas",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8589
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0233",
+    "message_id": 662290,
+    "chat_rowid": 2443,
+    "chat_id": "chat867666962273299348",
+    "chat_display_name": "",
+    "sender_handle": "+16509543233",
+    "is_from_me": false,
+    "message_date": "2025-10-08T02:04:50.430492+00:00",
+    "message_text": "we can meet at mylapore and go from there ",
+    "slice": "weak_location",
+    "context_prev": "662288|them|they’re also right across each other || 662289|them|korean and pizza",
+    "context_next": "662291|them|Liked “we can meet at mylapore and go from there ” || 662292|them|what are etas?",
+    "suggested_candidates": [
+      {
+        "span_text": "mylapore",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8983
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0234",
+    "message_id": 658701,
+    "chat_rowid": 2344,
+    "chat_id": "+14698650659",
+    "chat_display_name": "",
+    "sender_handle": "+14698650659",
+    "is_from_me": true,
+    "message_date": "2025-07-23T05:01:47.620510+00:00",
+    "message_text": "Thanks so much! Appreciate it.\n\nHonestly very relatable, being alive is a pretty good place to be at.\n\nDo you still play? How do you like the city?\n\nI am back in the bay finally graduated in December, but then I got another concussion in February, got rear ended.\nnot as bad as last time and I am alive so that’s a win \nNot where I thought I’d be or wanted to, just life tho\n\nGonna be here for the foreseeable future got vision therapy to finish while I’m still on my dad’s insurance then we’ll see where I end up. Either the bay or Dallas",
+    "slice": "weak_health",
+    "context_prev": "658599|me|Hey Griffin this is Jwalin. Can I put you as a reference for my first job? But how are you doing? Are the old man knees still cracking? || 658604|them|What’s up Jwalin? 1. Yes of course 2. Still alive, that’s all that counts. Old man knees are the least of my worries now lol but we’re doing well up here Hbu? You still in Dallas or did you go back to the Bay?",
+    "context_next": "",
+    "suggested_candidates": [
+      {
+        "span_text": "the bay",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9179
+      },
+      {
+        "span_text": "dad",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9152
+      },
+      {
+        "span_text": "Dallas",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8812
+      },
+      {
+        "span_text": "concussion",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4973
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0235",
+    "message_id": 333196,
+    "chat_rowid": 550,
+    "chat_id": "chat35368443819246017",
+    "chat_display_name": "Hyderabaddies",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2022-07-14T16:34:03.772930+00:00",
+    "message_text": "Wait so you have a developer role not a consulting role right",
+    "slice": "weak_org",
+    "context_prev": "333372|them|Laughed at “I woulda never expected all that at a chicken finger place LOL” || 333267|them|Darth*",
+    "context_next": "333213|them|Yeah I’m dev || 333299|them|So raising canes is your client?",
+    "suggested_candidates": [
+      {
+        "span_text": "developer role",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8536
+      },
+      {
+        "span_text": "consulting role",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7207
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0236",
+    "message_id": 515968,
+    "chat_rowid": 8,
+    "chat_id": "+16503913948",
+    "chat_display_name": "",
+    "sender_handle": "+16503913948",
+    "is_from_me": false,
+    "message_date": "2020-02-26T22:47:08.269945+00:00",
+    "message_text": "Provide Dr Gajjar's contact information Jonathan. He needs medical necessity and it will not be available from vision therapy office",
+    "slice": "weak_health",
+    "context_prev": "516461|them|Outside. Will call afterward || 516324|me|Ok",
+    "context_next": "516011|me|Sent the number || 516180|me|I called vision therapy and left message for John also",
+    "suggested_candidates": [
+      {
+        "span_text": "Jonathan",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9216
+      },
+      {
+        "span_text": "vision therapy office",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.657
+      },
+      {
+        "span_text": "medical necessity",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6455
+      },
+      {
+        "span_text": "Dr Gajjar",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.3769
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0237",
+    "message_id": 671459,
+    "chat_rowid": 6,
+    "chat_id": "chat253448981538040427",
+    "chat_display_name": "Utd ppl",
+    "sender_handle": "+17373142337",
+    "is_from_me": false,
+    "message_date": "2026-01-22T23:43:53.856563+00:00",
+    "message_text": "Freezing rain is not ice dropping from sky",
+    "slice": "weak_location",
+    "context_prev": "671457|them|Sure bro || 671458|them|Don’t back track now",
+    "context_next": "671460|them|Sure bro || 671461|them|That’s sleet",
+    "suggested_candidates": [
+      {
+        "span_text": "sky",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4628
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0238",
+    "message_id": 52500,
+    "chat_rowid": 548,
+    "chat_id": "+17178506727",
+    "chat_display_name": "",
+    "sender_handle": "+17178506727",
+    "is_from_me": false,
+    "message_date": "2024-02-14T16:20:24.010014+00:00",
+    "message_text": "I just kept my mouth shut and let my mom pretend she still had an accent after 30 years of living in the US",
+    "slice": "weak_location",
+    "context_prev": "52480|me|did u successfully pass as indian || 52281|me|and its the last practice before our first tmt",
+    "context_next": "52237|me|i wanted to see stickman play || 52376|me|😭",
+    "suggested_candidates": [
+      {
+        "span_text": "US",
+        "span_label": "place",
+        "fact_type": "location.current",
+        "gliner_score": 0.8461
+      },
+      {
+        "span_text": "my mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.7732
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0239",
+    "message_id": 588036,
+    "chat_rowid": 48,
+    "chat_id": "chat260775705926112932",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-02-01T00:02:56.905919+00:00",
+    "message_text": "Yes got email from University housing",
+    "slice": "weak_location",
+    "context_prev": "588262|them|￼ || 588052|them|USPS 9505511462099029324884, Delivered, Front Desk/Reception/Mail Room 01/31/2019 1:31pm RICHARDSON TX 75080 Reply STOP to cancel",
+    "context_next": "587957|them|Jwalin if u have many thepla left but them in refrigerator || 587770|them|Awake Jwalin?",
+    "suggested_candidates": [
+      {
+        "span_text": "University housing",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7449
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0240",
+    "message_id": 550814,
+    "chat_rowid": 963,
+    "chat_id": "+14088071089",
+    "chat_display_name": "",
+    "sender_handle": "+14088071089",
+    "is_from_me": false,
+    "message_date": "2019-09-12T00:42:38.990004+00:00",
+    "message_text": "Yea makes sense. One step at a time but it's good you have stuff in mind that you wanna do.\r\nYeaaa man Vikas knows so much stuff man. We're lucky he's out here for the year. Pick his brain as much as you can while you can haha.\r\nOhh that's interesting. Shaking my head would hurt my head. I get like really strong headaches because of motion sickness and shaking my head would definitely trigger it lol.\r\nOh man that's unfortunate. Well one other way of potentially mapping progress could be to see how long it takes for this sort of pain, vertigo, sensitivity to light comes back. Meaning if last year, it'd come back once a week, and now it comes back once every 3 months, then that's still progress. Even though the immediate shows that you have to wait it out until you feel better, the frequency at which that happens has lessened which is good. And beyond that, I could imagine things would be worse off if you didn't do anything so definitely keep that motivation up bro. It's necessary.\r\nHow's the new therapist?",
+    "slice": "weak_health",
+    "context_prev": "550795|me|Yeah if I do I would go somewhere in Europe so I dont think that would be too much of a problem. But it's just something to worry about another day. First gotta go back to school can't even do anything till you've finished a year so when I go back I can start applying. Yeah still haven't gotten them kinda forgot. It's just a matter of actually doing something everyday to work towards that which is hard. Vikas just talked about why he ended up picking medicine and we also talked about bhavferi and yuva Kendra and what goes into it. He knows a lot of stuff too so good to hear his experience and outlook on everything. That's nice tho, kinda the same as Vatsal he knew what he liked and it grew into what he does now even tho the actions changed, what he was good at and enjoyed stayed constant. I basically just shake my head did ETO side and back and forth focusing on looking at something. If you did it it would mess with you too but less then me. So just like exposing me to the symptoms and getting used to it. Yeah it was going good but actually since like last week on Sunday and part of Saturday I've been worse. Symptoms I haven't felt in about 3 months. Vertigo and my head hurting more and hearing noises more and lights worse and stopped driving. Just basically havent done anything but watch Netflix and football really || 550831|me|Just frustrating cause Im back to not being able to do things and can't focus or concentrate much at all. But it's been getting better the last few days but still not doing anything so just kinda sitting around. Saw Stanford pt today so slowly gonna try to get back to where I was but hmjust kinda back to wanting to give up and just do nothing. But it'll just be more time now till I do anything",
+    "context_next": "550402|them|How're you doing? || 549800|them|How'd your appointment go?",
+    "suggested_candidates": [
+      {
+        "span_text": "motion sickness",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8192
+      },
+      {
+        "span_text": "vertigo",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8006
+      },
+      {
+        "span_text": "sensitivity to light",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0241",
+    "message_id": 586813,
+    "chat_rowid": 13,
+    "chat_id": "+17202069207",
+    "chat_display_name": "",
+    "sender_handle": "+17202069207",
+    "is_from_me": false,
+    "message_date": "2019-02-07T04:36:07.742064+00:00",
+    "message_text": "Like how much system resources is the program using? Thats why you check task manager",
+    "slice": "weak_org",
+    "context_prev": "586839|them|So you can compare the specs on both your computers and see how much better his computer is than yours || 586697|them|10%? Then i doubt it will make much of a difference",
+    "context_next": "586851|them|Then maybe see if its software, try using a different way of running it through terminal instead of code blocks || 586713|them|Could be some phantom process which is taking up all the compute on your machine, try giving your laptop a reboot",
+    "suggested_candidates": [
+      {
+        "span_text": "task manager",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8393
+      },
+      {
+        "span_text": "program",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.3898
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0242",
+    "message_id": 543956,
+    "chat_rowid": 155,
+    "chat_id": "+15109329691",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-11-14T04:24:50.942000+00:00",
+    "message_text": "I don’t think I am up to it, definitely be really hard, ideally stay home and get a job or internship learn cs by myself get back to teaching chess, play tournaments regardless of how well I’m playing just to play, and then I can take 2-3 classes at ohlone over summer and gradually build up to fall",
+    "slice": "weak_org",
+    "context_prev": "544073|me|And even my advisor since registration happening rn if I call I don’t get put on the waitlist, anyone in the lobby takes priority and that’ll never stop || 543946|me|Luckily got it all done but just frustrating, registered for my last 4 GE’s and a cs class",
+    "context_next": "544081|me|And also still got appts and stuff, and physically def better but mentally still not good at all || 543910|me|Like me finishing in 2022? Or 4 years total?",
+    "suggested_candidates": [
+      {
+        "span_text": "ohlone",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7615
+      },
+      {
+        "span_text": "chess",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.728
+      },
+      {
+        "span_text": "internship",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5169
+      },
+      {
+        "span_text": "job",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4593
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0243",
+    "message_id": 570991,
+    "chat_rowid": 1236,
+    "chat_id": "+15106762004",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-04-26T04:08:38.010069+00:00",
+    "message_text": "Pain is a little less but still there. Got an MRI done last night. Waiting for results. And got the Stanford appointment moved too may 20th. Going to keep on calling them everyday",
+    "slice": "weak_health",
+    "context_prev": "571318|me|Warriors should play better today || 571412|me|Hopefully don't collapse again",
+    "context_next": "570947|them|Hey man || 571066|them|Thanks for the update",
+    "suggested_candidates": [
+      {
+        "span_text": "Stanford",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9374
+      },
+      {
+        "span_text": "MRI",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.903
+      },
+      {
+        "span_text": "Pain",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8165
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0244",
+    "message_id": 607164,
+    "chat_rowid": 885,
+    "chat_id": "+18478092441",
+    "chat_display_name": "",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2018-11-02T00:43:37+00:00",
+    "message_text": "I think I'm gonna take electromagnetism at CC over the summer if I can't get an internship",
+    "slice": "weak_org",
+    "context_prev": "607041|me|i want my schedule set up how i like more then a proffessor thats a bit better || 607185|them|Good point I guess",
+    "context_next": "607042|them|Wait how does the shopping cart work? Do you put the schedule with all the classes you want || 607132|me|yeah",
+    "suggested_candidates": [
+      {
+        "span_text": "internship",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9142
+      },
+      {
+        "span_text": "CC",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.857
+      },
+      {
+        "span_text": "electromagnetism",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.645
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0245",
+    "message_id": 100373,
+    "chat_rowid": 326,
+    "chat_id": "+14089661504",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2023-08-17T00:46:20.098000+00:00",
+    "message_text": "why is ur manager scheduling calls for 8pm",
+    "slice": "weak_org",
+    "context_prev": "100462|me|also wait real quick || 100346|them|Nothing?",
+    "context_next": "100572|them|Time differences || 100360|them|One of our members is traveling",
+    "suggested_candidates": [
+      {
+        "span_text": "manager",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8487
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0246",
+    "message_id": 8490,
+    "chat_rowid": 10,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "+14089089638",
+    "is_from_me": false,
+    "message_date": "2024-07-10T03:39:09.195961+00:00",
+    "message_text": "i think wiggins probably gone tbh, didn’t even let him join the canadian team this year",
+    "slice": "weak_org",
+    "context_prev": "8905|me|hield solid pickup || 8370|me|how was date #2",
+    "context_next": "8578|them|yeah melton is pretty durable outside of last year so probably will get good minutes and podz will be spark plug off the bench tbh || 8442|them|like the hield pickup too, points off the bench will be really nice to have. good 10 man rotation for now",
+    "suggested_candidates": [
+      {
+        "span_text": "canadian team",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8769
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0247",
+    "message_id": 90113,
+    "chat_rowid": 326,
+    "chat_id": "+14089661504",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2023-09-17T06:10:15.132072+00:00",
+    "message_text": "Idk ur the manager",
+    "slice": "weak_org",
+    "context_prev": "90170|them|Is Nc7 even theory || 90003|me|uhh i know 0 theory",
+    "context_next": "90164|me|U tell me || 90110|me|Dang tinder girl",
+    "suggested_candidates": [
+      {
+        "span_text": "manager",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8065
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0248",
+    "message_id": 352761,
+    "chat_rowid": 294,
+    "chat_id": "+19175964124",
+    "chat_display_name": "",
+    "sender_handle": "+19175964124",
+    "is_from_me": false,
+    "message_date": "2022-05-01T23:41:33.782151+00:00",
+    "message_text": "so you’re saying you don’t wish you were with me bc you want to sleep or bc you’re with your team hahah ",
+    "slice": "weak_org",
+    "context_prev": "352834|them|hahha no but more || 352946|me|True haha",
+    "context_next": "352987|me|Ok bye gonna get the weed || 352784|them|Liked “Ok bye gonna get the weed”",
+    "suggested_candidates": [
+      {
+        "span_text": "team",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4183
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0249",
+    "message_id": 558072,
+    "chat_rowid": 328,
+    "chat_id": "+16316629686",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-07-25T06:19:24.999596+00:00",
+    "message_text": "Initial exam for vision therapy was good. Going to do 12 visits over 12 weeks and should be good. Saw Stanford again, just have to keep doing everything and ramping up exercises and activities. My predictivness went up to 84th percentile from 5th 2 months ago so progress and I can start to drive now",
+    "slice": "weak_location",
+    "context_prev": "561802|me|I've actually never been to philly || 560278|me|I'm definitely getting better and starting to exercise and move more. Have the vision therapy until exam this Thursday. And cancelled housing and going to apply for deferall so not coming back this fall.",
+    "context_next": "556799|them|What's your schedule like for vision therapy? Got your dates??? || 556617|me|Starting Tuesday",
+    "suggested_candidates": [
+      {
+        "span_text": "Stanford",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7126
+      },
+      {
+        "span_text": "activities",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4046
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0250",
+    "message_id": 96908,
+    "chat_rowid": 691,
+    "chat_id": "chat136881871871965425",
+    "chat_display_name": "kishan’s bullies",
+    "sender_handle": "+14695791393",
+    "is_from_me": false,
+    "message_date": "2023-08-27T19:56:27.849551+00:00",
+    "message_text": "if y’all wanna work from home on wednesday",
+    "slice": "weak_location",
+    "context_prev": "97047|them|i leave thurs || 97021|me|Bitch thats 4 days",
+    "context_next": "96972|them|i was here for 3 weeks || 97044|them|i’ll be back in sept",
+    "suggested_candidates": [
+      {
+        "span_text": "home",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6858
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  }
+]

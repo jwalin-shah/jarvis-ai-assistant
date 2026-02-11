@@ -1,0 +1,25 @@
+{
+  "source_mode": "chat.db",
+  "source_csv": null,
+  "db_path": "/Users/jwalinshah/Library/Messages/chat.db",
+  "total": 400,
+  "requested_total": 400,
+  "counts": {
+    "weak_org": 140,
+    "weak_location": 140,
+    "weak_health": 90,
+    "hard_negative": 30
+  },
+  "settings": {
+    "label_profile": "balanced",
+    "drop_labels": [],
+    "threshold": 0.35,
+    "apply_label_min": false,
+    "context_window": 2,
+    "per_chat_cap": 8,
+    "candidate_multiplier": 12,
+    "seed": 42
+  },
+  "messages_scored": 935,
+  "avg_suggestions_per_scored_message": 1.205
+}

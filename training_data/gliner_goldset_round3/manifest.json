@@ -1,0 +1,26 @@
+{
+  "source_mode": "csv",
+  "source_csv": "training_data/fact_goldset_merged/all.csv",
+  "db_path": null,
+  "total": 300,
+  "requested_total": 300,
+  "counts": {
+    "weak_org": 60,
+    "weak_location": 71,
+    "weak_health": 8,
+    "hard_negative": 30,
+    "backfill": 131
+  },
+  "settings": {
+    "label_profile": "balanced",
+    "drop_labels": [],
+    "threshold": 0.35,
+    "apply_label_min": false,
+    "context_window": 2,
+    "per_chat_cap": 8,
+    "candidate_multiplier": 12,
+    "seed": 42
+  },
+  "messages_scored": 593,
+  "avg_suggestions_per_scored_message": 0.882
+}

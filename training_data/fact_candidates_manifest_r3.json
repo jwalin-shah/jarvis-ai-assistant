@@ -1,0 +1,26 @@
+{
+  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r3.json",
+  "num_messages": 398,
+  "num_gold_candidates": 230,
+  "num_predicted_candidates": 411,
+  "num_rows": 411,
+  "positives": 109,
+  "negatives": 302,
+  "positive_rate": 0.2652,
+  "estimated_candidate_precision": 0.2652,
+  "estimated_candidate_recall": 0.4739,
+  "train_rows": 336,
+  "dev_rows": 75,
+  "train_positives": 89,
+  "dev_positives": 20,
+  "settings": {
+    "threshold": 0.35,
+    "apply_label_min": false,
+    "apply_vague_filter": true,
+    "context_window": 0,
+    "label_profile": "high_precision",
+    "drop_labels": [],
+    "dev_frac": 0.2,
+    "seed": 42
+  }
+}

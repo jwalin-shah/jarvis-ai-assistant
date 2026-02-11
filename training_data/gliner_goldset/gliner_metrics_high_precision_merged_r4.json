@@ -1,0 +1,507 @@
+{
+  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r4.json",
+  "num_records": 796,
+  "num_predictions": 774,
+  "mode": "pipeline",
+  "raw_threshold": 0.01,
+  "disable_label_min": true,
+  "context_window": 0,
+  "label_profile": "high_precision",
+  "drop_labels": [],
+  "active_labels": [
+    "family_member",
+    "org",
+    "food_item",
+    "job_role",
+    "health_condition",
+    "activity"
+  ],
+  "num_raw_predictions": 2872,
+  "extraction_time_s": 122.88,
+  "ms_per_message": 154.4,
+  "overall": {
+    "precision": 0.1716,
+    "recall": 0.5548,
+    "f1": 0.2622,
+    "tp": 167,
+    "fp": 806,
+    "fn": 134,
+    "support": 301
+  },
+  "per_label": {
+    "activity": {
+      "precision": 0.1418,
+      "recall": 0.3725,
+      "f1": 0.2054,
+      "tp": 19,
+      "fp": 115,
+      "fn": 32,
+      "support": 51
+    },
+    "current_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "support": 4
+    },
+    "employer": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "support": 4
+    },
+    "family_member": {
+      "precision": 0.2917,
+      "recall": 0.6829,
+      "f1": 0.4088,
+      "tp": 56,
+      "fp": 136,
+      "fn": 26,
+      "support": 82
+    },
+    "food_item": {
+      "precision": 0.2264,
+      "recall": 0.7059,
+      "f1": 0.3429,
+      "tp": 12,
+      "fp": 41,
+      "fn": 5,
+      "support": 17
+    },
+    "friend_name": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "support": 3
+    },
+    "future_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "support": 3
+    },
+    "health_condition": {
+      "precision": 0.2798,
+      "recall": 0.7344,
+      "f1": 0.4052,
+      "tp": 47,
+      "fp": 121,
+      "fn": 17,
+      "support": 64
+    },
+    "job_role": {
+      "precision": 0.0874,
+      "recall": 0.8182,
+      "f1": 0.1579,
+      "tp": 9,
+      "fp": 94,
+      "fn": 2,
+      "support": 11
+    },
+    "org": {
+      "precision": 0.0743,
+      "recall": 0.8,
+      "f1": 0.136,
+      "tp": 24,
+      "fp": 299,
+      "fn": 6,
+      "support": 30
+    },
+    "past_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 6,
+      "support": 6
+    },
+    "person_name": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 2,
+      "support": 2
+    },
+    "place": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 24,
+      "support": 24
+    }
+  },
+  "per_type": {
+    "health.allergy": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "support": 1
+    },
+    "health.condition": {
+      "precision": 1.0,
+      "recall": 0.7424,
+      "f1": 0.8522,
+      "tp": 49,
+      "fp": 0,
+      "fn": 17,
+      "support": 66
+    },
+    "location.current": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 10,
+      "support": 10
+    },
+    "location.future": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "support": 4
+    },
+    "location.past": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 14,
+      "support": 14
+    },
+    "other_personal_fact": {
+      "precision": 0.0124,
+      "recall": 0.4706,
+      "f1": 0.0241,
+      "tp": 8,
+      "fp": 638,
+      "fn": 9,
+      "support": 17
+    },
+    "personal.school": {
+      "precision": 0.4444,
+      "recall": 0.5333,
+      "f1": 0.4848,
+      "tp": 8,
+      "fp": 10,
+      "fn": 7,
+      "support": 15
+    },
+    "preference": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "support": 1
+    },
+    "preference.activity": {
+      "precision": 1.0,
+      "recall": 0.3333,
+      "f1": 0.5,
+      "tp": 15,
+      "fp": 0,
+      "fn": 30,
+      "support": 45
+    },
+    "preference.food_dislike": {
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6667,
+      "tp": 1,
+      "fp": 1,
+      "fn": 0,
+      "support": 1
+    },
+    "preference.food_like": {
+      "precision": 0.6429,
+      "recall": 0.6923,
+      "f1": 0.6667,
+      "tp": 9,
+      "fp": 5,
+      "fn": 4,
+      "support": 13
+    },
+    "relationship.family": {
+      "precision": 0.2917,
+      "recall": 0.6829,
+      "f1": 0.4088,
+      "tp": 56,
+      "fp": 136,
+      "fn": 26,
+      "support": 82
+    },
+    "relationship.friend": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "support": 3
+    },
+    "relationship.partner": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "support": 1
+    },
+    "work.employer": {
+      "precision": 0.5238,
+      "recall": 0.6471,
+      "f1": 0.5789,
+      "tp": 11,
+      "fp": 10,
+      "fn": 6,
+      "support": 17
+    },
+    "work.former_employer": {
+      "precision": 0.3333,
+      "recall": 1.0,
+      "f1": 0.5,
+      "tp": 1,
+      "fp": 2,
+      "fn": 0,
+      "support": 1
+    },
+    "work.job_title": {
+      "precision": 0.6667,
+      "recall": 0.8,
+      "f1": 0.7273,
+      "tp": 8,
+      "fp": 4,
+      "fn": 2,
+      "support": 10
+    }
+  },
+  "per_slice": {
+    "hard_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 28,
+      "fn": 0,
+      "support": 0
+    },
+    "near_miss": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 103,
+      "fn": 0,
+      "support": 0
+    },
+    "positive": {
+      "precision": 0.5,
+      "recall": 0.5548,
+      "f1": 0.526,
+      "tp": 167,
+      "fp": 167,
+      "fn": 134,
+      "support": 301
+    },
+    "random_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 508,
+      "fn": 0,
+      "support": 0
+    }
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.3,
+      "precision": 0.1446,
+      "recall": 0.5615,
+      "f1": 0.2299,
+      "tp": 169,
+      "fp": 1000,
+      "fn": 132,
+      "support": 301
+    },
+    {
+      "threshold": 0.35,
+      "precision": 0.1525,
+      "recall": 0.5548,
+      "f1": 0.2393,
+      "tp": 167,
+      "fp": 928,
+      "fn": 134,
+      "support": 301
+    },
+    {
+      "threshold": 0.4,
+      "precision": 0.1608,
+      "recall": 0.5449,
+      "f1": 0.2483,
+      "tp": 164,
+      "fp": 856,
+      "fn": 137,
+      "support": 301
+    },
+    {
+      "threshold": 0.45,
+      "precision": 0.1715,
+      "recall": 0.5316,
+      "f1": 0.2593,
+      "tp": 160,
+      "fp": 773,
+      "fn": 141,
+      "support": 301
+    },
+    {
+      "threshold": 0.5,
+      "precision": 0.1817,
+      "recall": 0.5083,
+      "f1": 0.2677,
+      "tp": 153,
+      "fp": 689,
+      "fn": 148,
+      "support": 301
+    },
+    {
+      "threshold": 0.55,
+      "precision": 0.1844,
+      "recall": 0.4485,
+      "f1": 0.2614,
+      "tp": 135,
+      "fp": 597,
+      "fn": 166,
+      "support": 301
+    },
+    {
+      "threshold": 0.6,
+      "precision": 0.1943,
+      "recall": 0.4319,
+      "f1": 0.268,
+      "tp": 130,
+      "fp": 539,
+      "fn": 171,
+      "support": 301
+    },
+    {
+      "threshold": 0.65,
+      "precision": 0.2035,
+      "recall": 0.3854,
+      "f1": 0.2664,
+      "tp": 116,
+      "fp": 454,
+      "fn": 185,
+      "support": 301
+    },
+    {
+      "threshold": 0.7,
+      "precision": 0.2056,
+      "recall": 0.3422,
+      "f1": 0.2569,
+      "tp": 103,
+      "fp": 398,
+      "fn": 198,
+      "support": 301
+    },
+    {
+      "threshold": 0.75,
+      "precision": 0.2128,
+      "recall": 0.299,
+      "f1": 0.2486,
+      "tp": 90,
+      "fp": 333,
+      "fn": 211,
+      "support": 301
+    },
+    {
+      "threshold": 0.8,
+      "precision": 0.2336,
+      "recall": 0.2724,
+      "f1": 0.2515,
+      "tp": 82,
+      "fp": 269,
+      "fn": 219,
+      "support": 301
+    }
+  ],
+  "error_slices": {
+    "short_message_errors": 92,
+    "fp_on_negatives": 536,
+    "message_length_distribution": {
+      "<20": 173,
+      "20-50": 275,
+      "50-100": 207,
+      ">100": 141
+    },
+    "total_errors": 940
+  },
+  "raw_stats": {
+    "raw_total_predictions": 2872,
+    "raw_messages_with_predictions": 646,
+    "raw_messages_total": 648,
+    "raw_predictions_per_message": 4.4321,
+    "raw_score_summary": {
+      "min": 0.01,
+      "p25": 0.0338,
+      "p50": 0.1173,
+      "p75": 0.4743,
+      "p90": 0.7923,
+      "p95": 0.8958,
+      "max": 0.9879
+    },
+    "raw_top_labels": [
+      {
+        "label": "activity",
+        "count": 880
+      },
+      {
+        "label": "family_member",
+        "count": 815
+      },
+      {
+        "label": "org",
+        "count": 610
+      },
+      {
+        "label": "health_condition",
+        "count": 254
+      },
+      {
+        "label": "food_item",
+        "count": 172
+      },
+      {
+        "label": "job_role",
+        "count": 141
+      }
+    ]
+  }
+}

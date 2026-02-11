@@ -1,0 +1,498 @@
+{
+  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r3.json",
+  "num_records": 398,
+  "num_predictions": 411,
+  "mode": "pipeline",
+  "raw_threshold": 0.01,
+  "disable_label_min": true,
+  "context_window": 0,
+  "label_profile": "high_precision",
+  "drop_labels": [],
+  "active_labels": [
+    "family_member",
+    "org",
+    "food_item",
+    "job_role",
+    "health_condition",
+    "activity"
+  ],
+  "num_raw_predictions": 1521,
+  "extraction_time_s": 70.0,
+  "ms_per_message": 175.9,
+  "overall": {
+    "precision": 0.2628,
+    "recall": 0.4696,
+    "f1": 0.337,
+    "tp": 108,
+    "fp": 303,
+    "fn": 122,
+    "support": 230
+  },
+  "per_label": {
+    "activity": {
+      "precision": 0.3958,
+      "recall": 0.3725,
+      "f1": 0.3838,
+      "tp": 19,
+      "fp": 29,
+      "fn": 32,
+      "support": 51
+    },
+    "current_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "support": 4
+    },
+    "employer": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "support": 4
+    },
+    "family_member": {
+      "precision": 0.2523,
+      "recall": 0.675,
+      "f1": 0.3673,
+      "tp": 54,
+      "fp": 160,
+      "fn": 26,
+      "support": 80
+    },
+    "food_item": {
+      "precision": 0.2353,
+      "recall": 0.7059,
+      "f1": 0.3529,
+      "tp": 12,
+      "fp": 39,
+      "fn": 5,
+      "support": 17
+    },
+    "friend_name": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "support": 3
+    },
+    "future_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "support": 3
+    },
+    "health_condition": {
+      "precision": 0.2353,
+      "recall": 0.2222,
+      "f1": 0.2286,
+      "tp": 4,
+      "fp": 13,
+      "fn": 14,
+      "support": 18
+    },
+    "job_role": {
+      "precision": 0.125,
+      "recall": 0.5,
+      "f1": 0.2,
+      "tp": 2,
+      "fp": 14,
+      "fn": 2,
+      "support": 4
+    },
+    "org": {
+      "precision": 0.2615,
+      "recall": 0.7391,
+      "f1": 0.3864,
+      "tp": 17,
+      "fp": 48,
+      "fn": 6,
+      "support": 23
+    },
+    "past_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 6,
+      "support": 6
+    },
+    "person_name": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 2,
+      "support": 2
+    },
+    "place": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 15,
+      "support": 15
+    }
+  },
+  "per_type": {
+    "health.allergy": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "support": 1
+    },
+    "health.condition": {
+      "precision": 1.0,
+      "recall": 0.3,
+      "f1": 0.4615,
+      "tp": 6,
+      "fp": 0,
+      "fn": 14,
+      "support": 20
+    },
+    "location.current": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 8,
+      "support": 8
+    },
+    "location.future": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "support": 4
+    },
+    "location.past": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 7,
+      "support": 7
+    },
+    "other_personal_fact": {
+      "precision": 0.0563,
+      "recall": 0.4706,
+      "f1": 0.1006,
+      "tp": 8,
+      "fp": 134,
+      "fn": 9,
+      "support": 17
+    },
+    "personal.school": {
+      "precision": 0.8333,
+      "recall": 0.4167,
+      "f1": 0.5556,
+      "tp": 5,
+      "fp": 1,
+      "fn": 7,
+      "support": 12
+    },
+    "preference": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "support": 1
+    },
+    "preference.activity": {
+      "precision": 1.0,
+      "recall": 0.3333,
+      "f1": 0.5,
+      "tp": 15,
+      "fp": 0,
+      "fn": 30,
+      "support": 45
+    },
+    "preference.food_dislike": {
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6667,
+      "tp": 1,
+      "fp": 1,
+      "fn": 0,
+      "support": 1
+    },
+    "preference.food_like": {
+      "precision": 0.75,
+      "recall": 0.6923,
+      "f1": 0.72,
+      "tp": 9,
+      "fp": 3,
+      "fn": 4,
+      "support": 13
+    },
+    "relationship.family": {
+      "precision": 0.2523,
+      "recall": 0.675,
+      "f1": 0.3673,
+      "tp": 54,
+      "fp": 160,
+      "fn": 26,
+      "support": 80
+    },
+    "relationship.friend": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "support": 3
+    },
+    "relationship.partner": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "support": 1
+    },
+    "work.employer": {
+      "precision": 0.6,
+      "recall": 0.5,
+      "f1": 0.5455,
+      "tp": 6,
+      "fp": 4,
+      "fn": 6,
+      "support": 12
+    },
+    "work.job_title": {
+      "precision": 1.0,
+      "recall": 0.6,
+      "f1": 0.75,
+      "tp": 3,
+      "fp": 0,
+      "fn": 2,
+      "support": 5
+    }
+  },
+  "per_slice": {
+    "hard_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 7,
+      "fn": 0,
+      "support": 0
+    },
+    "near_miss": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 47,
+      "fn": 0,
+      "support": 0
+    },
+    "positive": {
+      "precision": 0.6506,
+      "recall": 0.4696,
+      "f1": 0.5455,
+      "tp": 108,
+      "fp": 58,
+      "fn": 122,
+      "support": 230
+    },
+    "random_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 191,
+      "fn": 0,
+      "support": 0
+    }
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.3,
+      "precision": 0.2099,
+      "recall": 0.4783,
+      "f1": 0.2918,
+      "tp": 110,
+      "fp": 414,
+      "fn": 120,
+      "support": 230
+    },
+    {
+      "threshold": 0.35,
+      "precision": 0.2218,
+      "recall": 0.4696,
+      "f1": 0.3013,
+      "tp": 108,
+      "fp": 379,
+      "fn": 122,
+      "support": 230
+    },
+    {
+      "threshold": 0.4,
+      "precision": 0.2318,
+      "recall": 0.4565,
+      "f1": 0.3075,
+      "tp": 105,
+      "fp": 348,
+      "fn": 125,
+      "support": 230
+    },
+    {
+      "threshold": 0.45,
+      "precision": 0.2423,
+      "recall": 0.4435,
+      "f1": 0.3134,
+      "tp": 102,
+      "fp": 319,
+      "fn": 128,
+      "support": 230
+    },
+    {
+      "threshold": 0.5,
+      "precision": 0.2506,
+      "recall": 0.4217,
+      "f1": 0.3144,
+      "tp": 97,
+      "fp": 290,
+      "fn": 133,
+      "support": 230
+    },
+    {
+      "threshold": 0.55,
+      "precision": 0.2607,
+      "recall": 0.3957,
+      "f1": 0.3143,
+      "tp": 91,
+      "fp": 258,
+      "fn": 139,
+      "support": 230
+    },
+    {
+      "threshold": 0.6,
+      "precision": 0.2747,
+      "recall": 0.387,
+      "f1": 0.3213,
+      "tp": 89,
+      "fp": 235,
+      "fn": 141,
+      "support": 230
+    },
+    {
+      "threshold": 0.65,
+      "precision": 0.2955,
+      "recall": 0.3739,
+      "f1": 0.3301,
+      "tp": 86,
+      "fp": 205,
+      "fn": 144,
+      "support": 230
+    },
+    {
+      "threshold": 0.7,
+      "precision": 0.2939,
+      "recall": 0.3348,
+      "f1": 0.313,
+      "tp": 77,
+      "fp": 185,
+      "fn": 153,
+      "support": 230
+    },
+    {
+      "threshold": 0.75,
+      "precision": 0.3167,
+      "recall": 0.3043,
+      "f1": 0.3104,
+      "tp": 70,
+      "fp": 151,
+      "fn": 160,
+      "support": 230
+    },
+    {
+      "threshold": 0.8,
+      "precision": 0.3351,
+      "recall": 0.2783,
+      "f1": 0.304,
+      "tp": 64,
+      "fp": 127,
+      "fn": 166,
+      "support": 230
+    }
+  ],
+  "error_slices": {
+    "short_message_errors": 45,
+    "fp_on_negatives": 198,
+    "message_length_distribution": {
+      "<20": 127,
+      "20-50": 136,
+      "50-100": 89,
+      ">100": 46
+    },
+    "total_errors": 425
+  },
+  "raw_stats": {
+    "raw_total_predictions": 1521,
+    "raw_messages_with_predictions": 395,
+    "raw_messages_total": 398,
+    "raw_predictions_per_message": 3.8216,
+    "raw_score_summary": {
+      "min": 0.01,
+      "p25": 0.035,
+      "p50": 0.1321,
+      "p75": 0.5137,
+      "p90": 0.8543,
+      "p95": 0.9344,
+      "max": 0.9879
+    },
+    "raw_top_labels": [
+      {
+        "label": "family_member",
+        "count": 600
+      },
+      {
+        "label": "activity",
+        "count": 475
+      },
+      {
+        "label": "org",
+        "count": 189
+      },
+      {
+        "label": "food_item",
+        "count": 154
+      },
+      {
+        "label": "health_condition",
+        "count": 56
+      },
+      {
+        "label": "job_role",
+        "count": 47
+      }
+    ]
+  }
+}

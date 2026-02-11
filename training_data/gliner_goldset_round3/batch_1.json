@@ -1,0 +1,1323 @@
+[
+  {
+    "sample_id": "r3_cand_0051",
+    "message_id": 575066,
+    "chat_rowid": 696,
+    "chat_id": "+15105792477",
+    "chat_display_name": "",
+    "sender_handle": "+15105792477",
+    "is_from_me": false,
+    "message_date": "2019-03-22T02:48:47.417685+00:00",
+    "message_text": "it’s in texas",
+    "slice": "weak_location",
+    "context_prev": "575031|me|Today is way better btw || 574944|them|hahaha ily san antonio isn’t in mexico",
+    "context_next": "575178|them|but i am going to mexico in the summer and san antonio was rlly fun and relaxing! but i’m back now just took an exam || 574953|them|and hey that’s good",
+    "suggested_candidates": [
+      {
+        "span_text": "texas",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8039
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0052",
+    "message_id": 489229,
+    "chat_rowid": 757,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2020-09-13T20:51:31.771521+00:00",
+    "message_text": "Fucking hell",
+    "slice": "weak_location",
+    "context_prev": "489276|them|Bruh blocked point || 489130|them|Punt",
+    "context_next": "489272|me|And they scored || 489101|me|Big rip",
+    "suggested_candidates": [
+      {
+        "span_text": "Fucking hell",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5503
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0053",
+    "message_id": 423737,
+    "chat_rowid": 723,
+    "chat_id": "+14695791393",
+    "chat_display_name": "",
+    "sender_handle": "+14695791393",
+    "is_from_me": false,
+    "message_date": "2021-09-06T05:38:57.172179+00:00",
+    "message_text": "i hate walnut",
+    "slice": "hard_negative",
+    "context_prev": "423808|me|DONT U WANT HIM || 423912|me|Ik",
+    "context_next": "423885|me|What’d he do || 423896|them|nothing hes just ugly",
+    "suggested_candidates": [],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0054",
+    "message_id": 4676,
+    "chat_rowid": 6,
+    "chat_id": "chat253448981538040427",
+    "chat_display_name": "Utd ppl",
+    "sender_handle": "+17373142337",
+    "is_from_me": false,
+    "message_date": "2024-07-28T03:09:41.667955+00:00",
+    "message_text": "Or just moving to dallas",
+    "slice": "weak_location",
+    "context_prev": "4720|them|Liked “I’m Aditya Desai (og Adi)” || 4575|them|He coming to UTD this semester?!",
+    "context_next": "4564|them|Also aum from Irving right || 4503|them|So we running vball tomorrow?",
+    "suggested_candidates": [
+      {
+        "span_text": "dallas",
+        "span_label": "place",
+        "fact_type": "location.future",
+        "gliner_score": 0.902
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0055",
+    "message_id": 58012,
+    "chat_rowid": 77,
+    "chat_id": "chat405620999465107993",
+    "chat_display_name": "5 Shahs",
+    "sender_handle": "+17202069207",
+    "is_from_me": false,
+    "message_date": "2024-01-27T20:29:53.411898+00:00",
+    "message_text": "have a coworker who just bought one",
+    "slice": "backfill",
+    "context_prev": "57989|them|https://www.cnbc.com/2023/12/28/7500-ev-tax-credit-may-be-easier-and-harder-to-get-in-2024.html || 58255|them|hyundai ioniq doesn’t give the 7500 federal rebate but they’re just giving it as a discount in order to compete",
+    "context_next": "58200|me|how much is it || 58132|me|doesnt it start at 40",
+    "suggested_candidates": [
+      {
+        "span_text": "have a coworker",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.448
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0056",
+    "message_id": 512083,
+    "chat_rowid": 155,
+    "chat_id": "+15109329691",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2020-03-14T21:48:57.987000+00:00",
+    "message_text": "Yesterday I called my dad at like 1 and he was like aight just come home and we’ll figure the rest of it out so I packed everything up",
+    "slice": "weak_location",
+    "context_prev": "512020|me|Laughed at “yee i was on fing my friends and saw you back ahah” || 511968|me|Yeah lol it was hella last min",
+    "context_next": "511986|me|And flew at like 7am || 512016|me|U feelin better?",
+    "suggested_candidates": [
+      {
+        "span_text": "my dad",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.8005
+      },
+      {
+        "span_text": "home",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4183
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0057",
+    "message_id": 17688,
+    "chat_rowid": 91,
+    "chat_id": "898287",
+    "chat_display_name": "",
+    "sender_handle": "898287",
+    "is_from_me": false,
+    "message_date": "2024-06-01T01:50:56.825776+00:00",
+    "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip & get speedy delivery: i.cvs.com/I4paGx9t6",
+    "slice": "hard_negative",
+    "context_prev": "17877|them|CVS Pharmacy: Jwalin, your Dr did not send a refill for SER. Please call your Dr to request a refill || 17833|them|Jwalin, CVS Pharmacy: Pick up SER from Dr. J Moore @ 43950 PACIFIC COMMON before Fri, 06/07. We got your back. Delivery: i.cvs.com/Bh1HFln7g",
+    "context_next": "17721|them|Friendly reminder, Jwalin: 5 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip & get speedy delivery: i.cvs.com/SGOHP2a4I || 17659|them|Friendly reminder, Jwalin: 4 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip & get speedy delivery: i.cvs.com/lTMbqFvw8",
+    "suggested_candidates": [],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0058",
+    "message_id": 382471,
+    "chat_rowid": 123,
+    "chat_id": "+15104587112",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2022-03-19T05:39:47.563000+00:00",
+    "message_text": "Hi son",
+    "slice": "backfill",
+    "context_prev": "382689|me|Manav got me || 382675|me|Thanks",
+    "context_next": "382462|them|￼ || 382562|me|Evergreeen at 9am right",
+    "suggested_candidates": [
+      {
+        "span_text": "Hi son",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.7948
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0059",
+    "message_id": 411705,
+    "chat_rowid": 723,
+    "chat_id": "+14695791393",
+    "chat_display_name": "",
+    "sender_handle": "+14695791393",
+    "is_from_me": false,
+    "message_date": "2021-10-12T19:21:59.017156+00:00",
+    "message_text": "my dad is gonna be home",
+    "slice": "weak_location",
+    "context_prev": "411886|them|bc i don’t get to school u tim then || 411893|me|Can I come hang out w walnut then?",
+    "context_next": "411859|me|Me and mr. Gorkhaly are tight || 411892|me|Didn’t u know",
+    "suggested_candidates": [
+      {
+        "span_text": "my dad",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9464
+      },
+      {
+        "span_text": "home",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.519
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0060",
+    "message_id": 171172,
+    "chat_rowid": 753,
+    "chat_id": "+14087848434",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2023-05-22T04:14:45.880000+00:00",
+    "message_text": "i ahve to chaufer my brother around for his externship for culinary school",
+    "slice": "weak_org",
+    "context_prev": "171248|me|are u free || 171126|me|ill def be comin back since im only like 3 hours away if u aren’t this week",
+    "context_next": "171211|me|drove from texas lol || 171160|me|hows work",
+    "suggested_candidates": [
+      {
+        "span_text": "my brother",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9607
+      },
+      {
+        "span_text": "culinary school",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9514
+      },
+      {
+        "span_text": "externship",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7011
+      },
+      {
+        "span_text": "i ahve",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.6354
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0061",
+    "message_id": 207826,
+    "chat_rowid": 77,
+    "chat_id": "chat405620999465107993",
+    "chat_display_name": "5 Shahs",
+    "sender_handle": "+17204963920",
+    "is_from_me": false,
+    "message_date": "2023-04-07T22:01:53.844169+00:00",
+    "message_text": "Wait why can’t u live in their housing?",
+    "slice": "weak_location",
+    "context_prev": "207985|them|I present, housing || 207893|me|lmfao thanks sangati bhen",
+    "context_next": "207964|me|only like 8000 dollars a month || 207983|me|its like 25 min away driving",
+    "suggested_candidates": [
+      {
+        "span_text": "housing",
+        "span_label": "place",
+        "fact_type": "location.current",
+        "gliner_score": 0.4201
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0062",
+    "message_id": 553290,
+    "chat_rowid": 757,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-08-25T01:59:50.140589+00:00",
+    "message_text": "My brother is prob gonna come too",
+    "slice": "backfill",
+    "context_prev": "553201|them|Can you use yours? || 553350|me|Probably yeah",
+    "context_next": "553270|them|Kk || 553293|them|What time we want to leave?",
+    "suggested_candidates": [
+      {
+        "span_text": "My brother",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9762
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0063",
+    "message_id": 552988,
+    "chat_rowid": 757,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-08-26T20:37:24.011409+00:00",
+    "message_text": "Requested",
+    "slice": "hard_negative",
+    "context_prev": "553068|me|Are you going to Bindu auntie's house tomorrow night for dinner? || 552871|them|Send my venmo request",
+    "context_next": "553088|them|kk || 552785|me|When are you coming?",
+    "suggested_candidates": [],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0064",
+    "message_id": 670311,
+    "chat_rowid": 2307,
+    "chat_id": "chat628145223105261174",
+    "chat_display_name": "The Ochos",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2026-01-03T18:34:30.790664+00:00",
+    "message_text": "Laughed at “I LOVEEEE seeing the pretty scenery but absolutely dislike the cold so I’d be crying and enjoying the views”",
+    "slice": "weak_location",
+    "context_prev": "670309|them|One day I’ll make you’ll do a winter trip lol || 670310|them|I LOVEEEE seeing the pretty scenery but absolutely dislike the cold so I’d be crying and enjoying the views",
+    "context_next": "670322|them|Laughed at “I LOVEEEE seeing the pretty scenery but absolutely dislike the cold so I’d be crying and enjoying the views” || 670323|them|Laughed at “I LOVEEEE seeing the pretty scenery but absolutely dislike the cold so I’d be crying and enjoying the views”",
+    "suggested_candidates": [
+      {
+        "span_text": "cold",
+        "span_label": "health_condition",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6664
+      },
+      {
+        "span_text": "pretty scenery",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4488
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0065",
+    "message_id": 35117,
+    "chat_rowid": 102,
+    "chat_id": "chat115386234607847274",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-03-16T01:03:15.534000+00:00",
+    "message_text": "i lazy",
+    "slice": "backfill",
+    "context_prev": "35040|me|lets just do tmrw || 34958|them|Kk",
+    "context_next": "35125|me|we will prolly leave around like 11-12 || 34892|me|stay tmrw night",
+    "suggested_candidates": [
+      {
+        "span_text": "i lazy",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.3534
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0066",
+    "message_id": 18047,
+    "chat_rowid": 77,
+    "chat_id": "chat405620999465107993",
+    "chat_display_name": "5 Shahs",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-05-25T22:08:57.420000+00:00",
+    "message_text": "my moms down for ramen nagi",
+    "slice": "backfill",
+    "context_prev": "18017|me|mihir may come || 17999|them|Sounds good!",
+    "context_next": "18034|me|if u guys wanna || 17992|me|jk she rmred there be a loooong line",
+    "suggested_candidates": [
+      {
+        "span_text": "my moms",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.8976
+      },
+      {
+        "span_text": "ramen nagi",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.855
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0067",
+    "message_id": 391559,
+    "chat_rowid": 1078,
+    "chat_id": "chat356980450801550676",
+    "chat_display_name": "goonzz ",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2022-01-22T04:38:52.448746+00:00",
+    "message_text": "my mom thought about it but we decided we don’t want it",
+    "slice": "backfill",
+    "context_prev": "391637|them|i might cop for media room || 391553|them|take it",
+    "context_next": "391624|them|although Shonty I was gonna ask if you still wanna sell the dining table? || 391656|them|no van why",
+    "suggested_candidates": [
+      {
+        "span_text": "my mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9807
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0068",
+    "message_id": 421038,
+    "chat_rowid": 723,
+    "chat_id": "+14695791393",
+    "chat_display_name": "",
+    "sender_handle": "+14695791393",
+    "is_from_me": false,
+    "message_date": "2021-09-11T03:03:38.782933+00:00",
+    "message_text": "it wasn’t for me it was for my mom",
+    "slice": "backfill",
+    "context_prev": "420981|me|Okay good || 421041|me|How was ur tea",
+    "context_next": "420982|them|and dad || 421006|me|Imagine not drinking tea",
+    "suggested_candidates": [
+      {
+        "span_text": "my mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.7982
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0069",
+    "message_id": 55888,
+    "chat_rowid": 158,
+    "chat_id": "+18324277499",
+    "chat_display_name": "",
+    "sender_handle": "+18324277499",
+    "is_from_me": false,
+    "message_date": "2024-02-01T19:29:29.457930+00:00",
+    "message_text": "I like bookies sweet sweet FG%",
+    "slice": "weak_org",
+    "context_prev": "55879|them|Insane || 55719|me|so why dont u keep him hmm",
+    "context_next": "55600|them|And a steal or 2 per game || 55956|them|And 3 3s a game is enticing",
+    "suggested_candidates": [
+      {
+        "span_text": "bookies",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7258
+      },
+      {
+        "span_text": "sweet",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4767
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0070",
+    "message_id": 21829,
+    "chat_rowid": 6,
+    "chat_id": "chat253448981538040427",
+    "chat_display_name": "Utd ppl",
+    "sender_handle": "+15123329049",
+    "is_from_me": false,
+    "message_date": "2024-05-03T16:32:23.487853+00:00",
+    "message_text": "adi chef it up man",
+    "slice": "weak_org",
+    "context_prev": "21913|them|i wanted to explode || 21710|them|Loved “i just had rodeo goat last night, i’m 5’5 but ate …”",
+    "context_next": "21894|them|i hear you be cooking || 21644|them|I literally only have 5 eggs left in my fridge 😭",
+    "suggested_candidates": [
+      {
+        "span_text": "adi",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6364
+      },
+      {
+        "span_text": "chef",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5393
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0071",
+    "message_id": 27143,
+    "chat_rowid": 263,
+    "chat_id": "+19726261443",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-04-18T04:45:57.488483+00:00",
+    "message_text": "i kinda do",
+    "slice": "hard_negative",
+    "context_prev": "27248|me|tea goes bad? || 27192|me|wait when did we decide that i understand mgu",
+    "context_next": "27257|me|but ill learn it || 27321|me|u learn the reduction wtv that bs is",
+    "suggested_candidates": [],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0072",
+    "message_id": 379032,
+    "chat_rowid": 80,
+    "chat_id": "chat211477764109205880",
+    "chat_display_name": "Gujews",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2022-04-04T06:03:01.514382+00:00",
+    "message_text": "That’s what my dad said",
+    "slice": "backfill",
+    "context_prev": "379006|me|Ram mofo wtf || 378922|them|Actually I’m p tired I’ll come tomorrow morning w the milk",
+    "context_next": "378900|them|But he never did 😔 || 378810|them|Ram don’t leave yet",
+    "suggested_candidates": [
+      {
+        "span_text": "my dad",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.912
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0073",
+    "message_id": 559269,
+    "chat_rowid": 222,
+    "chat_id": "+15103382232",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-07-18T21:06:52.402433+00:00",
+    "message_text": "Jk on sunday",
+    "slice": "weak_location",
+    "context_prev": "559361|me|Lit || 559373|me|Hibbity hoppity onto my property",
+    "context_next": "558828|them|Im back bb || 558829|me|Yum",
+    "suggested_candidates": [
+      {
+        "span_text": "Jk",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5691
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0074",
+    "message_id": 545240,
+    "chat_rowid": 576,
+    "chat_id": "+15109696903",
+    "chat_display_name": "",
+    "sender_handle": "+15109696903",
+    "is_from_me": false,
+    "message_date": "2019-11-06T01:15:54.603111+00:00",
+    "message_text": "Nice bro, apparently my mama has an iPhone x that he no longer uses, so I think I'm just going to buy it from him, and have my dad fly it over",
+    "slice": "backfill",
+    "context_prev": "545007|me|Next weekend tho || 545161|me|Or actually finish your apps then we’ll play",
+    "context_next": "545122|them|Wait, driving to Colorado and flying back? Is your cousin already here? || 545164|them|For sure",
+    "suggested_candidates": [
+      {
+        "span_text": "my mama",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.8616
+      },
+      {
+        "span_text": "my dad",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.6751
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0075",
+    "message_id": 546715,
+    "chat_rowid": 13,
+    "chat_id": "+17202069207",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2019-10-25T02:37:45.840000+00:00",
+    "message_text": "My mom was wondering if you’re gonna come over anytime this weekend cause it’s Diwali",
+    "slice": "backfill",
+    "context_prev": "547053|them|Hbu? || 546823|me|Oh ok all right",
+    "context_next": "546769|them|You guys free tomorrow night? || 546724|me|Yeah",
+    "suggested_candidates": [
+      {
+        "span_text": "My mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9826
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0076",
+    "message_id": 480830,
+    "chat_rowid": 559,
+    "chat_id": "+16269228806",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2020-10-21T01:04:15.875749+00:00",
+    "message_text": "Like my brother won't even go outside for a walk he's just sitting inside all day",
+    "slice": "weak_location",
+    "context_prev": "481055|them|Lol yeah pizza does take some effort...I'm lazy too so i get what you mean || 480724|me|Yeah I think everyone has trouble with focus cause you're in the same place everyday and you don't really get to interact with people",
+    "context_next": "480844|me|Can't you give tests? Using one of the online proctoring things || 480714|me|Are quest and whip and all the projects still happening?",
+    "suggested_candidates": [
+      {
+        "span_text": "my brother",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9343
+      },
+      {
+        "span_text": "walk",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.669
+      },
+      {
+        "span_text": "inside",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4653
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0077",
+    "message_id": 599816,
+    "chat_rowid": 459,
+    "chat_id": "+15104492787",
+    "chat_display_name": "",
+    "sender_handle": "+15104492787",
+    "is_from_me": false,
+    "message_date": "2018-12-01T09:56:58.297535+00:00",
+    "message_text": "*like",
+    "slice": "hard_negative",
+    "context_prev": "599696|them|But she's lik || 599762|me|Or previously",
+    "context_next": "599701|them|Out || 599729|them|No I met him halloweekend",
+    "suggested_candidates": [],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0078",
+    "message_id": 409667,
+    "chat_rowid": 98,
+    "chat_id": "+14693450436",
+    "chat_display_name": "",
+    "sender_handle": "+14693450436",
+    "is_from_me": false,
+    "message_date": "2021-10-28T17:20:39.344563+00:00",
+    "message_text": "yeah I'm 20 but I think imma polish my essay tonight so I can't do anything today😭😭 and I'm eating with my brother tomorrow for dinner but I think I'll try to do sumn Saturday idk",
+    "slice": "backfill",
+    "context_prev": "409519|me|Get your work done || 409579|me|Lets party it up tonight",
+    "context_next": "408663|them|ayo jwalin.. || 408562|them|You mind uhhhhhhhhhhhhhh mfingggg sending that hw",
+    "suggested_candidates": [
+      {
+        "span_text": "dinner",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7356
+      },
+      {
+        "span_text": "my brother",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.7103
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0079",
+    "message_id": 26764,
+    "chat_rowid": 299,
+    "chat_id": "+17204963920",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-04-20T05:22:52.364000+00:00",
+    "message_text": "i eating ill head over near u",
+    "slice": "backfill",
+    "context_prev": "26968|me|and nalin tho || 26955|them|AHHHHH",
+    "context_next": "26701|them|I HATE U FRFR || 26776|them|Loved “i eating ill head over near u ”",
+    "suggested_candidates": [
+      {
+        "span_text": "eating",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.3897
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0080",
+    "message_id": 57683,
+    "chat_rowid": 61,
+    "chat_id": "+19727466026",
+    "chat_display_name": "",
+    "sender_handle": "+19727466026",
+    "is_from_me": false,
+    "message_date": "2024-01-29T18:19:28.617627+00:00",
+    "message_text": "Lowkey I know you weren’t there but Wednesday if we doing more drill based evals, I liked legions 2v2 drill and think it could be something we could implement",
+    "slice": "weak_org",
+    "context_prev": "57529|me|i am not tryna watch nikhil guard jorge || 57506|me|it tells us nothing",
+    "context_next": "57592|them|True || 57608|me|wednesday will be that",
+    "suggested_candidates": [
+      {
+        "span_text": "legions",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9114
+      },
+      {
+        "span_text": "2v2 drill",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0081",
+    "message_id": 468121,
+    "chat_rowid": 679,
+    "chat_id": "chat260775705926112932",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2021-06-19T16:01:26.544860+00:00",
+    "message_text": "Make black beans",
+    "slice": "backfill",
+    "context_prev": "468449|me|Going to gym with rohith at 10 || 468284|me|Lab draw at San Tomas tomorrow at 8:30 am",
+    "context_next": "468033|me|I'm going to run home || 467927|them|Ok",
+    "suggested_candidates": [
+      {
+        "span_text": "black beans",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7417
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0082",
+    "message_id": 522241,
+    "chat_rowid": 16,
+    "chat_id": "+13614429486",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2020-02-08T20:04:55.920000+00:00",
+    "message_text": "Laughed at “I hate Unix homework ”",
+    "slice": "backfill",
+    "context_prev": "522126|them|I hate Unix homework || 522238|them|Physics",
+    "context_next": "522098|me|Issk u can do it || 522186|me|And damn",
+    "suggested_candidates": [
+      {
+        "span_text": "homework",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4125
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0083",
+    "message_id": 64654,
+    "chat_rowid": 343,
+    "chat_id": "+15106967170",
+    "chat_display_name": "",
+    "sender_handle": "+15106967170",
+    "is_from_me": false,
+    "message_date": "2024-01-05T09:53:10.408679+00:00",
+    "message_text": "My mom is the one who sends an ok",
+    "slice": "backfill",
+    "context_prev": "64815|me|like the msg || 64510|them|I’m lucky if I get an ok",
+    "context_next": "64872|them|But dad is the thumbs up || 64557|them|LOL",
+    "suggested_candidates": [
+      {
+        "span_text": "My mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9852
+      },
+      {
+        "span_text": "ok",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6115
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0084",
+    "message_id": 511571,
+    "chat_rowid": 543,
+    "chat_id": "chat736900609834138900",
+    "chat_display_name": "",
+    "sender_handle": "+15105090426",
+    "is_from_me": false,
+    "message_date": "2020-03-17T04:59:34.756826+00:00",
+    "message_text": "Bruh I love the matter of fact style",
+    "slice": "backfill",
+    "context_prev": "511372|them|Lmaoo || 511418|them|Laughed at an image",
+    "context_next": "511301|me|Disliked an image || 511390|them|When Androids fuck up... Gdi",
+    "suggested_candidates": [
+      {
+        "span_text": "Bruh",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.3637
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0085",
+    "message_id": 566046,
+    "chat_rowid": 222,
+    "chat_id": "+15103382232",
+    "chat_display_name": "",
+    "sender_handle": "+15103382232",
+    "is_from_me": false,
+    "message_date": "2019-05-30T20:29:07.684929+00:00",
+    "message_text": "Idts today tho my dads working from home today",
+    "slice": "weak_location",
+    "context_prev": "565975|me|? || 566151|them|Oh sorry bby",
+    "context_next": "566162|them|And he’s got a few meetingds || 566152|me|Aight yeah fsho",
+    "suggested_candidates": [
+      {
+        "span_text": "my dads",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9408
+      },
+      {
+        "span_text": "home",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7683
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0086",
+    "message_id": 213918,
+    "chat_rowid": 4,
+    "chat_id": "chat166285255827482084",
+    "chat_display_name": "quj",
+    "sender_handle": "+12172201479",
+    "is_from_me": false,
+    "message_date": "2023-02-28T18:31:30.542919+00:00",
+    "message_text": "Not getting back till later tonight after work and gotta pick some friends up from the airport so I’m probably out tonight",
+    "slice": "weak_org",
+    "context_prev": "213927|them|Yep, keep me posted || 213856|them|We making moves tonight or nah",
+    "context_next": "213815|them|Ok so no topgolf this week haha || 213832|them|Yuh unless it’s after 8:30 ish like I wouldn’t be free till 9",
+    "suggested_candidates": [
+      {
+        "span_text": "airport",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.79
+      },
+      {
+        "span_text": "work",
+        "span_label": "job_role",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5979
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0087",
+    "message_id": 62472,
+    "chat_rowid": 393,
+    "chat_id": "chat329737407532715132",
+    "chat_display_name": "Dana Lilly’s 🥳",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2024-01-17T00:53:23.983982+00:00",
+    "message_text": "And I’ll most likely have my brother drop me off at her place fri night",
+    "slice": "weak_location",
+    "context_prev": "62452|them|Im paying, yall can contribute if you like || 62528|them|Nili and I figured she gets spas done p regularly as self care, and it would make more sense if we all surprised her and did lunch/activtiy or whatever the plan is Sid",
+    "context_next": "62319|them|She got an suv so it’ll comfortably fit the 4 of us || 62302|me|yea especially ur fat ass",
+    "suggested_candidates": [
+      {
+        "span_text": "my brother",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.8913
+      },
+      {
+        "span_text": "her place",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8865
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0088",
+    "message_id": 538873,
+    "chat_rowid": 757,
+    "chat_id": "+14089089638",
+    "chat_display_name": "",
+    "sender_handle": "+14089089638",
+    "is_from_me": false,
+    "message_date": "2019-12-18T02:37:01.487837+00:00",
+    "message_text": "Hey can you send me sohams contact",
+    "slice": "backfill",
+    "context_prev": "539218|me|Aight fsho || 539138|them|What's the added cost of being on visible",
+    "context_next": "538912|them|Forgot to save it || 538960|me|Oh yeah for sure",
+    "suggested_candidates": [
+      {
+        "span_text": "sohams",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9036
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0089",
+    "message_id": 108467,
+    "chat_rowid": 326,
+    "chat_id": "+14089661504",
+    "chat_display_name": "",
+    "sender_handle": "+14089661504",
+    "is_from_me": false,
+    "message_date": "2023-08-03T17:58:48.762316+00:00",
+    "message_text": "Loved “and yea my brother is p good at boba but hes doin …”",
+    "slice": "backfill",
+    "context_prev": "108363|them|Yup hybrid || 108381|them|Just have to go in minimum once",
+    "context_next": "108355|me|Emphasized “Ya him and cam were pretty wild about poker lol” || 108172|me|Loved “Just have to go in minimum once ”",
+    "suggested_candidates": [
+      {
+        "span_text": "boba",
+        "span_label": "food_item",
+        "fact_type": "preference.food_like",
+        "gliner_score": 0.933
+      },
+      {
+        "span_text": "my brother",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.8112
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0090",
+    "message_id": 337449,
+    "chat_rowid": 158,
+    "chat_id": "+18324277499",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2022-06-04T02:13:59.135000+00:00",
+    "message_text": "We’re mostly buying it assuming it lasts like 5-7 years max",
+    "slice": "weak_org",
+    "context_prev": "337470|me|Why not? || 337527|them|They’re flimsy as fuck",
+    "context_next": "337468|me|If it goes longer cool || 337555|them|I would go for the ford out of all of these",
+    "suggested_candidates": [
+      {
+        "span_text": "We",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.5826
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0091",
+    "message_id": 61673,
+    "chat_rowid": 548,
+    "chat_id": "+17178506727",
+    "chat_display_name": "",
+    "sender_handle": "+17178506727",
+    "is_from_me": false,
+    "message_date": "2024-01-21T03:19:24.902910+00:00",
+    "message_text": "My dad turned 60, so we did a family trip to Egypt lol",
+    "slice": "weak_location",
+    "context_prev": "61696|them|Oof that sounds rough || 61650|them|Yup I did but still won’t know for sure where I’m going until March 😢",
+    "context_next": "61736|them|Emphasized “ML, AI, databases, and automata ” || 52325|me|hello random question do u want tix to tns mavs spurs game",
+    "suggested_candidates": [
+      {
+        "span_text": "My dad",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9794
+      },
+      {
+        "span_text": "Egypt",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.9407
+      },
+      {
+        "span_text": "family trip",
+        "span_label": "activity",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.4833
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0092",
+    "message_id": 63009,
+    "chat_rowid": 98,
+    "chat_id": "+14693450436",
+    "chat_display_name": "",
+    "sender_handle": "+14693450436",
+    "is_from_me": false,
+    "message_date": "2024-01-15T03:13:53.343707+00:00",
+    "message_text": "Ohhh shit 1:30? I prolly can't then lmaooo my mom was needing me to help her translate for a doctor's appointment at 1 smh I thought it was at 7:30 or something",
+    "slice": "backfill",
+    "context_prev": "62834|me|its at 1:30 || 62869|me|so lets see in da morning?",
+    "context_next": "63008|me|ahh damn || 62891|me|yea nah cuz mlk day",
+    "suggested_candidates": [
+      {
+        "span_text": "my mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9147
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0093",
+    "message_id": 315884,
+    "chat_rowid": 80,
+    "chat_id": "chat211477764109205880",
+    "chat_display_name": "Gujews",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2022-08-17T14:57:47.507796+00:00",
+    "message_text": "Zach was a g",
+    "slice": "backfill",
+    "context_prev": "315798|them|Why is he not paying || 315973|them|No dude",
+    "context_next": "315855|them|He paid within 2 minutes of me telling him about it || 315891|them|About what it was literally his fault",
+    "suggested_candidates": [
+      {
+        "span_text": "Zach",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9134
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0094",
+    "message_id": 379742,
+    "chat_rowid": 550,
+    "chat_id": "chat35368443819246017",
+    "chat_display_name": "Hyderabaddies",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2022-03-31T18:01:15.094668+00:00",
+    "message_text": "Didn’t even wish my man a happy bday",
+    "slice": "backfill",
+    "context_prev": "379761|me|I was gonna ask if y’all wanted to come get brunch w us || 379863|them|You guys are fake friends",
+    "context_next": "379986|me|I like u guys more then kishan anyways || 379964|them|ITS YOUR BDAY",
+    "suggested_candidates": [
+      {
+        "span_text": "my man",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.4052
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0095",
+    "message_id": 9569,
+    "chat_rowid": 109,
+    "chat_id": "+12245320003",
+    "chat_display_name": "",
+    "sender_handle": "me",
+    "is_from_me": true,
+    "message_date": "2024-07-08T22:11:37.847000+00:00",
+    "message_text": "i mean yea shes cool i like her",
+    "slice": "backfill",
+    "context_prev": "9552|me|leav eme alone || 9621|them|Aww ur crushing huh?",
+    "context_next": "9693|me|she also smart 🧠 || 9535|me|princeton",
+    "suggested_candidates": [
+      {
+        "span_text": "shes",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.443
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0096",
+    "message_id": 1438,
+    "chat_rowid": 49,
+    "chat_id": "chat901232531525723865",
+    "chat_display_name": "",
+    "sender_handle": "+15125909683",
+    "is_from_me": false,
+    "message_date": "2024-03-21T18:52:26.420053+00:00",
+    "message_text": "Byu sucks",
+    "slice": "backfill",
+    "context_prev": "1489|me|what happened || 1380|them|Basically the wingman is not vulnerable from viper pit and does not lose its health. So when viper mollies it isn’t strong enough to kill wingman alone. The sova had to let tenz which saved wingman. I’m not sure if the wingman is supposed to interact that way but thats how it just worked.",
+    "context_next": "1515|me|i thought wingman would die to the viper pit || 1463|me|viper molly*",
+    "suggested_candidates": [
+      {
+        "span_text": "Byu",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.3892
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0097",
+    "message_id": 60925,
+    "chat_rowid": 459,
+    "chat_id": "+15104492787",
+    "chat_display_name": "",
+    "sender_handle": "+15104492787",
+    "is_from_me": false,
+    "message_date": "2024-01-21T06:05:07.397109+00:00",
+    "message_text": "My mom always tells me like oh what if u just brought sahil to kendra or yk",
+    "slice": "weak_location",
+    "context_prev": "61066|them|All depends on when we get home tn || 60935|them|Yeah and also it’s like",
+    "context_next": "60895|them|Like encourage him to come || 60886|them|Or like the welcome events or like festivals where we invite friends/outside ppl",
+    "suggested_candidates": [
+      {
+        "span_text": "My mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9716
+      },
+      {
+        "span_text": "sahil",
+        "span_label": "food_item",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.731
+      },
+      {
+        "span_text": "kendra",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.6019
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0098",
+    "message_id": 12752,
+    "chat_rowid": 21,
+    "chat_id": "chat997045922903807030",
+    "chat_display_name": "",
+    "sender_handle": "+18478092441",
+    "is_from_me": false,
+    "message_date": "2024-07-02T22:50:46.227821+00:00",
+    "message_text": "I like lauri woulda been nice to see him on the warriors ngl",
+    "slice": "weak_org",
+    "context_prev": "12746|them|Fine by me tho || 12744|me|lol",
+    "context_next": "12717|them|they’re tryin to make it happen || 12672|me|i think we trade wiggs tbh",
+    "suggested_candidates": [
+      {
+        "span_text": "warriors",
+        "span_label": "org",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.7546
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0099",
+    "message_id": 670752,
+    "chat_rowid": 2307,
+    "chat_id": "chat628145223105261174",
+    "chat_display_name": "The Ochos",
+    "sender_handle": "+12245320003",
+    "is_from_me": false,
+    "message_date": "2026-01-16T04:22:34.857700+00:00",
+    "message_text": "No :( he is ok my mom is leaving to india in a day i hope she gets to see him at least.. so far he is ok",
+    "slice": "weak_location",
+    "context_prev": "670750|them|Hey any updates? How is he? || 670751|me|Danu I have something to tell u",
+    "context_next": "670753|me|Hard pass they just raised 1.4 billion at 14b value || 670754|me|Emphasized “Bears Niners NFC championship 🤝”",
+    "suggested_candidates": [
+      {
+        "span_text": "my mom",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.9668
+      },
+      {
+        "span_text": "india",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8388
+      },
+      {
+        "span_text": "he",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.6196
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  },
+  {
+    "sample_id": "r3_cand_0100",
+    "message_id": 391065,
+    "chat_rowid": 158,
+    "chat_id": "+18324277499",
+    "chat_display_name": "",
+    "sender_handle": "+18324277499",
+    "is_from_me": false,
+    "message_date": "2022-01-24T03:30:16.776553+00:00",
+    "message_text": "I’m staying in a hotel w my dad so I’ll come p early",
+    "slice": "weak_location",
+    "context_prev": "390933|me|Aight || 390987|me|Wait everything’s closed?",
+    "context_next": "390934|them|Yeah everything fucking closed I’m pissed || 390929|me|Tough",
+    "suggested_candidates": [
+      {
+        "span_text": "hotel",
+        "span_label": "place",
+        "fact_type": "other_personal_fact",
+        "gliner_score": 0.8747
+      },
+      {
+        "span_text": "my dad",
+        "span_label": "family_member",
+        "fact_type": "relationship.family",
+        "gliner_score": 0.862
+      }
+    ],
+    "expected_candidates": [],
+    "gold_notes": ""
+  }
+]
