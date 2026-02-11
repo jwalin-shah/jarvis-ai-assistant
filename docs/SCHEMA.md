@@ -1,6 +1,6 @@
 # JARVIS Database Schema
 
-> **Last Updated:** 2026-02-10
+> **Last Updated:** 2026-02-11
 
 This document describes the database schemas used by JARVIS.
 
@@ -143,7 +143,7 @@ JARVIS uses the `sqlite-vec` extension for high-performance vector search direct
 ### JARVIS Primary Database
 
 **Location**: `~/.jarvis/jarvis.db`
-**Current Schema Version**: 13
+**Current Schema Version**: 15
 
 #### `contacts`
 Stores contact relationship metadata and handle mappings.
@@ -318,7 +318,7 @@ Aggregated communication patterns cached per model.
 | profile_data | TEXT | JSON blob of style, tone, and topics |
 
 #### `contact_facts`
-Extracted facts about contacts from message history (v12+, v13 adds `linked_contact_id`). Used by the knowledge graph for relationship/location/work/preference tracking.
+Extracted facts about contacts from message history. Used by the knowledge graph for relationship/location/work/preference tracking.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -333,10 +333,20 @@ Extracted facts about contacts from message history (v12+, v13 adds `linked_cont
 | source_text | TEXT | Source message text (truncated to 500 chars) |
 | extracted_at | TIMESTAMP | When the fact was extracted |
 | linked_contact_id | TEXT | Resolved contact reference from NER person linking (v13+) |
+| valid_from | TIMESTAMP | When the fact became true (v14+) |
+| valid_until | TIMESTAMP | When the fact stopped being true (v14+) |
 
 **Unique constraint**: `(contact_id, category, subject, predicate)` prevents duplicate facts.
 
 **Indexes**: `idx_facts_contact` on contact_id, `idx_facts_category` on category, `idx_facts_linked_contact` on linked_contact_id.
+
+#### `vec_facts` (sqlite-vec, v15+)
+Semantic vector index over contact facts for similarity search.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| rowid | INTEGER | Primary key (matches contact_facts.id) |
+| embedding | BLOB | 384-dim embedding of fact text |
 
 ### Quality Metrics (In-Memory)
 
@@ -367,11 +377,20 @@ iMessage DB (read-only)
         └──▶ Quality Metrics (tracking)
 ```
 
+## Schema Version History
+
+| Version | Changes |
+|---------|---------|
+| v12 | `contact_facts` table for knowledge graph |
+| v13 | `linked_contact_id` column + NER person linking |
+| v14 | Temporal fields: `valid_from`, `valid_until` on contact_facts |
+| v15 | `vec_facts` semantic index for contact fact similarity search |
+
 ## Migration Notes
 
 ### Schema Changes
 
-JARVIS does not modify the iMessage database. Internal schemas (in `jarvis.db`) are versioned and migrated automatically.
+JARVIS does not modify the iMessage database. Internal schemas (in `jarvis.db`) are versioned and migrated automatically via `jarvis/db/migration.py`.
 
 When upgrading:
 1. Internal caches in `~/.jarvis/embeddings/` can be safely deleted.
