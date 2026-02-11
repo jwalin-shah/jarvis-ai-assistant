@@ -757,8 +757,9 @@ class MLXModelLoader:
             def _do_generate() -> tuple[str, int]:
                 """Inner function for generation to run in executor.
 
-                Holds the shared GPU lock to prevent concurrent Metal access
-                with embedding encode() or other generation calls.
+                Acquires the shared GPU lock per forward pass to prevent
+                concurrent Metal access with embedding encode() or other
+                generation calls, releasing between steps to allow interleaving.
 
                 Returns:
                     Tuple of (response_text, draft_accepted_count).
@@ -767,31 +768,37 @@ class MLXModelLoader:
                 if prompt_cache is not None:
                     kwargs["prompt_cache"] = prompt_cache
 
-                with MLXModelLoader._mlx_load_lock:
-                    if self._draft_model is not None:
-                        # Speculative decoding: use stream_generate with draft_model
-                        # to track per-token acceptance
-                        text = ""
-                        total = 0
-                        accepted = 0
-                        for resp in stream_generate(
-                            model=self._model,
-                            tokenizer=self._tokenizer,
-                            prompt=formatted_prompt,
-                            max_tokens=max_tokens,
-                            sampler=sampler,
-                            logits_processors=logits_processors,
-                            draft_model=self._draft_model,
-                            num_draft_tokens=num_draft_tokens or 3,
-                            **kwargs,
-                        ):
-                            text = resp.text
-                            total += 1
-                            if getattr(resp, "from_draft", False):
-                                accepted += 1
-                        return text, accepted
-                    else:
-                        # Standard generation
+                if self._draft_model is not None:
+                    # Speculative decoding: acquire/release lock per forward pass
+                    # to allow other GPU ops (embeddings, other generations) between steps
+                    text = ""
+                    total = 0
+                    accepted = 0
+                    stream = stream_generate(
+                        model=self._model,
+                        tokenizer=self._tokenizer,
+                        prompt=formatted_prompt,
+                        max_tokens=max_tokens,
+                        sampler=sampler,
+                        logits_processors=logits_processors,
+                        draft_model=self._draft_model,
+                        num_draft_tokens=num_draft_tokens or 3,
+                        **kwargs,
+                    )
+                    while True:
+                        with MLXModelLoader._mlx_load_lock:
+                            try:
+                                resp = next(stream)
+                            except StopIteration:
+                                break
+                        text = resp.text
+                        total += 1
+                        if getattr(resp, "from_draft", False):
+                            accepted += 1
+                    return text, accepted
+                else:
+                    # Standard generation: single atomic call, lock covers entire op
+                    with MLXModelLoader._mlx_load_lock:
                         result = generate(
                             model=self._model,
                             tokenizer=self._tokenizer,
@@ -802,7 +809,7 @@ class MLXModelLoader:
                             verbose=False,
                             **kwargs,
                         )
-                        return result, 0
+                    return result, 0
 
             if effective_timeout is not None and effective_timeout > 0:
                 # Use ThreadPoolExecutor for timeout handling
@@ -919,8 +926,8 @@ class MLXModelLoader:
             )
 
             # Use real streaming with mlx_lm.stream_generate
-            # Hold the shared GPU lock for the entire generation to prevent
-            # concurrent Metal access with embedding encode() or other callers.
+            # Acquire/release GPU lock per forward pass to allow other GPU ops
+            # (embeddings, other generations) to interleave between token steps.
             accumulated_text = ""
             token_index = 0
             stream_start = time.perf_counter()
@@ -932,60 +939,68 @@ class MLXModelLoader:
                 stream_kwargs["draft_model"] = self._draft_model
                 stream_kwargs["num_draft_tokens"] = num_draft_tokens or 3
 
-            with MLXModelLoader._mlx_load_lock:
-                for response in stream_generate(
-                    model=self._model,
-                    tokenizer=self._tokenizer,
-                    prompt=formatted_prompt,
-                    max_tokens=max_tokens,
-                    sampler=sampler,
-                    logits_processors=logits_processors,
-                    **stream_kwargs,
-                ):
-                    # Check if caller requested cancellation (e.g. client disconnected)
-                    if stop_event is not None and stop_event.is_set():
-                        logger.debug("Streaming generation cancelled via stop_event")
+            stream_iter = stream_generate(
+                model=self._model,
+                tokenizer=self._tokenizer,
+                prompt=formatted_prompt,
+                max_tokens=max_tokens,
+                sampler=sampler,
+                logits_processors=logits_processors,
+                **stream_kwargs,
+            )
+
+            while True:
+                # Check cancellation before acquiring lock for next forward pass
+                if stop_event is not None and stop_event.is_set():
+                    logger.debug("Streaming generation cancelled via stop_event")
+                    break
+
+                # Acquire lock only for the GPU forward pass (next token step)
+                with MLXModelLoader._mlx_load_lock:
+                    try:
+                        response = next(stream_iter)
+                    except StopIteration:
                         break
 
-                    # response.text contains the full text so far
-                    # Extract just the new part
-                    new_text = response.text[len(accumulated_text) :]
-                    accumulated_text = response.text
+                # Process and yield token outside the lock
+                # response.text contains the full text so far — extract new part
+                new_text = response.text[len(accumulated_text) :]
+                accumulated_text = response.text
 
-                    # Check for stop sequences
-                    should_stop = False
-                    if stop_sequences and new_text:
-                        for stop_seq in stop_sequences:
-                            if stop_seq in accumulated_text:
-                                # Trim to stop sequence
-                                stop_idx = accumulated_text.index(stop_seq)
-                                new_text = accumulated_text[
-                                    len(accumulated_text) - len(new_text) : stop_idx
-                                ]
-                                should_stop = True
-                                break
+                # Check for stop sequences
+                should_stop = False
+                if stop_sequences and new_text:
+                    for stop_seq in stop_sequences:
+                        if stop_seq in accumulated_text:
+                            # Trim to stop sequence
+                            stop_idx = accumulated_text.index(stop_seq)
+                            new_text = accumulated_text[
+                                len(accumulated_text) - len(new_text) : stop_idx
+                            ]
+                            should_stop = True
+                            break
 
-                    if new_text:
-                        is_final = response.finish_reason is not None or should_stop
-                        # Track time to first token
-                        ttft = None
-                        if token_index == 0:
-                            ttft = (time.perf_counter() - stream_start) * 1000
-                        yield StreamToken(
-                            token=new_text,
-                            token_index=token_index,
-                            is_final=is_final,
-                            ttft_ms=ttft,
-                            from_draft=getattr(response, "from_draft", False),
-                        )
-                        token_index += 1
+                if new_text:
+                    is_final = response.finish_reason is not None or should_stop
+                    # Track time to first token
+                    ttft = None
+                    if token_index == 0:
+                        ttft = (time.perf_counter() - stream_start) * 1000
+                    yield StreamToken(
+                        token=new_text,
+                        token_index=token_index,
+                        is_final=is_final,
+                        ttft_ms=ttft,
+                        from_draft=getattr(response, "from_draft", False),
+                    )
+                    token_index += 1
 
-                    if should_stop:
-                        break
+                if should_stop:
+                    break
 
-                    # Yield on finish
-                    if response.finish_reason is not None:
-                        break
+                # Break on finish
+                if response.finish_reason is not None:
+                    break
 
         except ModelGenerationError:
             raise
