@@ -1,7 +1,13 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jarvis.contacts.candidate_extractor import CandidateExtractor, FactCandidate
+
+from jarvis.contacts.candidate_extractor import (
+    ENTITY_ALIASES,
+    VAGUE,
+    CandidateExtractor,
+    FactCandidate,
+)
 
 
 @pytest.fixture
@@ -33,10 +39,10 @@ def test_fact_candidate_to_dict():
 
 
 def test_label_conversion(extractor):
-    assert extractor._to_model_label("person_name") == "person name"
+    assert extractor._to_model_label("person_name") == "first name or nickname of a person"
     assert extractor._to_model_label("unknown_label") == "unknown label"
 
-    assert extractor._canonicalize_label("person name") == "person_name"
+    assert extractor._canonicalize_label("first name or nickname of a person") == "person_name"
     assert extractor._canonicalize_label("place") == "place"
 
 
@@ -112,6 +118,111 @@ def test_extract_batch(extractor):
     assert len(candidates) == 2
     assert candidates[0].span_text == "Austin"
     assert candidates[1].span_text == "Google"
+
+
+def test_resolve_fact_type_defaults(extractor):
+    """place/org/person_name/date_ref fall through to DIRECT_LABEL_MAP defaults."""
+    # No pattern match -> falls through to DIRECT_LABEL_MAP
+    assert extractor._resolve_fact_type("random text", "Charlotte", "place") == "location.current"
+    assert extractor._resolve_fact_type("random text", "Stripe", "org") == "work.employer"
+    assert (
+        extractor._resolve_fact_type("random text", "Rohith", "person_name")
+        == "relationship.friend"
+    )
+    assert (
+        extractor._resolve_fact_type("random text", "March 5th", "date_ref")
+        == "personal.birthday"
+    )
+
+
+def test_resolve_fact_type_patterns_override_defaults(extractor):
+    """Regex rules take priority over DIRECT_LABEL_MAP defaults."""
+    # "grew up in" -> hometown, NOT the default location.current
+    assert (
+        extractor._resolve_fact_type("I grew up in Charlotte", "Charlotte", "place")
+        == "location.hometown"
+    )
+    # "go to" -> personal.school, NOT the default work.employer
+    assert (
+        extractor._resolve_fact_type("I go to Stanford", "Stanford", "org")
+        == "personal.school"
+    )
+
+
+def test_resolve_fact_type_new_patterns(extractor):
+    """New regex patterns fire for common chat phrasing."""
+    # "already in" -> location.current
+    assert (
+        extractor._resolve_fact_type("I'm already in sf", "sf", "place")
+        == "location.current"
+    )
+    # "here in" -> location.current (via "here...in" pattern)
+    assert (
+        extractor._resolve_fact_type("here in charlotte", "charlotte", "place")
+        == "location.current"
+    )
+    # "born on" -> personal.birthday
+    assert (
+        extractor._resolve_fact_type("I was born on March 5", "March 5", "date_ref")
+        == "personal.birthday"
+    )
+    # "interning at" -> work.employer
+    assert (
+        extractor._resolve_fact_type("I'm interning at Google", "Google", "org")
+        == "work.employer"
+    )
+    # "applied to" -> personal.school
+    assert (
+        extractor._resolve_fact_type("I applied to Stanford", "Stanford", "org")
+        == "personal.school"
+    )
+    # "flying to" -> location.future
+    assert (
+        extractor._resolve_fact_type("flying to NYC tomorrow", "NYC", "place")
+        == "location.future"
+    )
+
+
+def test_candidate_to_hypothesis_speaker_aware(extractor):
+    """is_from_me=True -> 'the user', is_from_me=False -> 'the contact'."""
+    base = FactCandidate(
+        message_id=1, span_text="Austin", span_label="place",
+        gliner_score=0.9, fact_type="location.current",
+        start_char=0, end_char=6, source_text="I live in Austin",
+    )
+
+    # is_from_me=True (default None treated as True)
+    base.is_from_me = True
+    h = extractor._candidate_to_hypothesis(base)
+    assert "the user lives in Austin" == h
+
+    # is_from_me=False -> "the contact"
+    base.is_from_me = False
+    h = extractor._candidate_to_hypothesis(base)
+    assert "the contact lives in Austin" == h
+
+    # is_from_me=None -> defaults to "the user"
+    base.is_from_me = None
+    h = extractor._candidate_to_hypothesis(base)
+    assert "the user lives in Austin" == h
+
+
+def test_vague_filter_expanded():
+    """Expanded VAGUE set includes pronouns/contractions."""
+    for word in ["i", "i'm", "i'll", "i've", "i'd", "we", "we're"]:
+        assert word in VAGUE, f"'{word}' should be in VAGUE set"
+    # Original words still present
+    for word in ["it", "this", "that", "me", "you"]:
+        assert word in VAGUE
+
+
+def test_entity_canonicalization():
+    """Common abbreviations are expanded to canonical names."""
+    assert ENTITY_ALIASES["place"]["sf"] == "San Francisco"
+    assert ENTITY_ALIASES["place"]["nyc"] == "New York City"
+    assert ENTITY_ALIASES["place"]["la"] == "Los Angeles"
+    # Labels without aliases return nothing
+    assert ENTITY_ALIASES.get("org", {}).get("goog") is None
 
 
 def test_extract_candidates_junk_filter(extractor):
