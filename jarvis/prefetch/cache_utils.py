@@ -11,6 +11,13 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Safety limits for deserialization
+_MAX_DESERIALIZE_BYTES = 10 * 1024 * 1024  # 10MB
+_MAX_JSON_NESTING_DEPTH = 20
+_ALLOWED_NUMPY_DTYPES = frozenset({
+    "float32", "float64", "int32", "int64", "uint8", "bool",
+})
+
 
 def serialize_value(value: Any) -> tuple[bytes, str]:
     """Serialize a value to bytes for cache storage.
@@ -40,6 +47,22 @@ def serialize_value(value: Any) -> tuple[bytes, str]:
             return json.dumps({"__repr__": str(value)}).encode(), "json"
 
 
+def _check_json_nesting_depth(raw: str, max_depth: int = _MAX_JSON_NESTING_DEPTH) -> bool:
+    """Check if a JSON string exceeds the maximum nesting depth.
+
+    Scans for bracket/brace depth without fully parsing. Returns True if safe.
+    """
+    depth = 0
+    for ch in raw:
+        if ch in ("{", "["):
+            depth += 1
+            if depth > max_depth:
+                return False
+        elif ch in ("}", "]"):
+            depth -= 1
+    return True
+
+
 def deserialize_value(data: bytes, value_type: str) -> Any:
     """Deserialize bytes back to a value.
 
@@ -49,15 +72,44 @@ def deserialize_value(data: bytes, value_type: str) -> Any:
 
     Returns:
         Deserialized value.
+
+    Raises:
+        ValueError: If data exceeds size limits or contains invalid types.
     """
+    if len(data) > _MAX_DESERIALIZE_BYTES:
+        logger.warning(
+            "Refusing to deserialize %d bytes (limit %d). Returning None.",
+            len(data),
+            _MAX_DESERIALIZE_BYTES,
+        )
+        return None
+
     if value_type == "numpy":
+        if len(data) < 8:
+            logger.warning("NumPy data too short (%d bytes). Returning None.", len(data))
+            return None
         shape_len, dtype_len = struct.unpack("II", data[:8])
         shape = struct.unpack(f"{shape_len // 4}I", data[8 : 8 + shape_len])
         dtype_str = data[8 + shape_len : 8 + shape_len + dtype_len].decode()
+        if dtype_str not in _ALLOWED_NUMPY_DTYPES:
+            logger.warning(
+                "Refusing to deserialize numpy array with dtype '%s' "
+                "(allowed: %s). Returning None.",
+                dtype_str,
+                ", ".join(sorted(_ALLOWED_NUMPY_DTYPES)),
+            )
+            return None
         buffer = data[8 + shape_len + dtype_len :]
         return np.frombuffer(buffer, dtype=np.dtype(dtype_str)).reshape(shape)
     elif value_type == "json":
-        return json.loads(data.decode())
+        raw = data.decode()
+        if not _check_json_nesting_depth(raw):
+            logger.warning(
+                "Refusing to deserialize JSON with nesting depth > %d. Returning None.",
+                _MAX_JSON_NESTING_DEPTH,
+            )
+            return None
+        return json.loads(raw)
     elif value_type == "str":
         return data.decode()
     elif value_type == "bytes":
