@@ -309,7 +309,7 @@ class CandidateExtractor:
         default_min: float = DEFAULT_MIN,
         backend: str = "auto",
         use_entailment: bool = True,
-        entailment_threshold: float = 0.5,
+        entailment_threshold: float = 0.12,
     ):
         self._model: Any = None
         self._mlx_model: Any = None
@@ -771,9 +771,9 @@ class CandidateExtractor:
         "location.past": "The user used to live in {span}",
         "location.future": "The user is moving to {span}",
         "location.hometown": "The user is from {span}",
-        "work.employer": "The user works at {span}",
-        "work.former_employer": "The user used to work at {span}",
-        "work.job_title": "The user's job is {span}",
+        "work.employer": "{span} is the user's employer",
+        "work.former_employer": "The user previously worked at {span}",
+        "work.job_title": "The user's job title is {span}",
         "preference.food_like": "The user likes {span}",
         "preference.food_dislike": "The user dislikes {span}",
         "preference.activity": "The user enjoys {span}",
@@ -816,10 +816,11 @@ class CandidateExtractor:
                 verified.append(candidate)
             else:
                 logger.debug(
-                    "Entailment rejected: '%s' (%s) score=%.2f",
+                    "Entailment rejected: '%s' (%s) score=%.3f < %.2f",
                     candidate.span_text,
                     candidate.fact_type,
                     score,
+                    self._entailment_threshold,
                 )
 
         logger.debug(
