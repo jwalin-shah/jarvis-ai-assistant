@@ -24,6 +24,7 @@ import logging
 import os
 import secrets
 import signal
+import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
@@ -181,6 +182,9 @@ class JarvisSocketServer:
         self._ws_clients: set[ServerConnection] = set()  # WebSocket clients
         self._clients_lock = asyncio.Lock()  # Protect client set mutations
         self._ws_auth_token: str | None = None
+        self._token_created_at: float = 0.0
+        self._previous_ws_auth_token: str | None = None
+        self._previous_token_expired_at: float = 0.0
         self._running = False
         self._enable_watcher = enable_watcher
         self._preload_models = preload_models
@@ -273,6 +277,7 @@ class JarvisSocketServer:
 
         # Generate WebSocket auth token and write to file
         self._ws_auth_token = secrets.token_urlsafe(32)
+        self._token_created_at = time.monotonic()
         WS_TOKEN_PATH.write_text(self._ws_auth_token)
         os.chmod(WS_TOKEN_PATH, 0o600)
 
@@ -533,6 +538,51 @@ class JarvisSocketServer:
 
         logger.info("Socket server stopped")
 
+    def _rotate_ws_token(self) -> None:
+        """Rotate the WebSocket auth token.
+
+        Generates a new token and writes it to the token file. The previous
+        token remains valid for a 60-second grace period so existing
+        connections can re-authenticate without being immediately killed.
+        """
+        # Keep the old token valid for a grace period
+        self._previous_ws_auth_token = self._ws_auth_token
+        self._previous_token_expired_at = time.monotonic() + 60.0
+
+        # Generate and persist the new token
+        self._ws_auth_token = secrets.token_urlsafe(32)
+        self._token_created_at = time.monotonic()
+        WS_TOKEN_PATH.write_text(self._ws_auth_token)
+        os.chmod(WS_TOKEN_PATH, 0o600)
+
+        log_event(logger, "websocket.token_rotated")
+
+    def _verify_ws_token(self, client_token: str) -> bool:
+        """Verify a client-provided WebSocket auth token.
+
+        Accepts the current token, or the previous token if still within
+        the 60-second grace period after rotation.
+
+        Args:
+            client_token: Token from the client query params.
+
+        Returns:
+            True if the token is valid.
+        """
+        # Check current token
+        if self._ws_auth_token and hmac.compare_digest(client_token, self._ws_auth_token):
+            return True
+
+        # Check previous token within grace period
+        if (
+            self._previous_ws_auth_token
+            and time.monotonic() < self._previous_token_expired_at
+            and hmac.compare_digest(client_token, self._previous_ws_auth_token)
+        ):
+            return True
+
+        return False
+
     async def broadcast(self, method: str, params: dict[str, Any]) -> None:
         """Broadcast a notification to all connected clients (Unix + WebSocket).
 
@@ -650,13 +700,18 @@ class JarvisSocketServer:
         Args:
             websocket: WebSocket connection
         """
+        # Rotate token if older than 24 hours
+        token_max_age_secs = 24 * 3600
+        if self._ws_auth_token and (time.monotonic() - self._token_created_at) > token_max_age_secs:
+            self._rotate_ws_token()
+
         # Validate auth token from query params
         if self._ws_auth_token:
             try:
                 path = websocket.request.path if websocket.request else ""
                 query_params = parse_qs(urlparse(path).query)
                 client_token = query_params.get("token", [None])[0]
-                if not client_token or not hmac.compare_digest(client_token, self._ws_auth_token):
+                if not client_token or not self._verify_ws_token(client_token):
                     log_event(
                         logger,
                         "websocket.auth_failed",
