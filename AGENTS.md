@@ -223,3 +223,25 @@ uv run pytest --skip-quarantined
 
 - Full program: `docs/TEST_FLAKE_ERADICATION_PROGRAM.md`
 - Implementation guide: `docs/TEST_FLAKE_IMPLEMENTATION_GUIDE.md`
+
+---
+
+## Domain Expert Skills
+
+Skill definitions live in `.claude/skills/` and provide domain-specific context for code review and implementation. When working on a particular area, load the relevant skill:
+
+| Domain | Skill | Key Files |
+|--------|-------|-----------|
+| Backend/Server | backend-expert | `jarvis/socket_server.py`, `jarvis/prefetch/`, `jarvis/watcher.py` |
+| LLM/Generation | ai-llm-expert | `jarvis/reply_service.py`, `models/`, `jarvis/prompts.py` |
+| Data/Search | data-expert | `jarvis/search/`, `jarvis/contacts/`, `jarvis/db/` |
+| ML/Classifiers | ml-expert | `jarvis/classifiers/`, `jarvis/features/`, `scripts/train_*` |
+| Frontend | frontend-expert | `desktop/src/**/*.svelte`, `desktop/src/**/*.ts` |
+| Tauri/Rust | tauri-expert | `desktop/src-tauri/**/*.rs` |
+| Testing | testing-expert | `tests/`, `test_*.py` |
+| Performance | performance-expert | `scripts/`, `models/`, any I/O or encoding code |
+| Security | security-expert | `jarvis/socket_server.py`, `jarvis/db/`, `api/routers/` |
+| Docs | docs-expert | `docs/`, architectural changes |
+| Refactoring | refactor-expert | Any file with functions >50 lines or files >300 lines |
+
+**Cross-cutting:** Always apply performance-expert and security-expert alongside domain skills when relevant.

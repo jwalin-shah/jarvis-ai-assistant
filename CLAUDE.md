@@ -356,3 +356,28 @@ def test_get_conversations_performance():
 - Graph building, embeddings, ML inference
 
 **Rule: If you can't benchmark it, don't merge it.**
+
+---
+
+## Skill Auto-Load Rules
+
+Skills in `.claude/skills/` provide domain expertise. Load the right skill based on the files you're touching:
+
+| File Pattern | Skill | When |
+|---|---|---|
+| `jarvis/socket_server.py`, `jarvis/prefetch/`, `jarvis/watcher.py` | backend-expert | Server, IPC, background tasks |
+| `jarvis/reply_service.py`, `models/`, `jarvis/prompts.py` | ai-llm-expert | LLM generation, prompts, inference |
+| `jarvis/search/`, `jarvis/contacts/`, `jarvis/graph/`, `jarvis/db/` | data-expert | Embeddings, RAG, knowledge graph, DB |
+| `jarvis/classifiers/`, `jarvis/features/`, `scripts/train_*` | ml-expert | Classifiers, training, feature engineering |
+| `desktop/src/**/*.svelte`, `desktop/src/**/*.ts` | frontend-expert | Svelte components, TypeScript, stores |
+| `desktop/src-tauri/**/*.rs` | tauri-expert | Rust backend, Tauri IPC, permissions |
+| `tests/`, `test_*.py` | testing-expert | Test patterns, fixtures, mocking |
+| `scripts/`, `jarvis/prefetch/`, `models/` (I/O, encoding) | performance-expert | Memory, batching, caching, profiling |
+| `jarvis/socket_server.py`, `jarvis/db/`, `api/routers/` | security-expert | Injection, permissions, secrets |
+| `docs/` or architectural changes | docs-expert | Documentation sync |
+| Any `.py`/`.ts` file with functions >50 lines | refactor-expert | Code quality, dead code, complexity |
+
+**Cross-cutting rules:**
+- Performance reviews: always load `performance-expert` alongside the domain skill
+- Security-sensitive changes: always load `security-expert` alongside the domain skill
+- When writing tests for new code: load `testing-expert` alongside the domain skill

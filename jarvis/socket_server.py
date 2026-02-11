@@ -54,18 +54,19 @@ class WebSocketWriter:
 
     def __init__(self, websocket: ServerConnection) -> None:
         self._websocket = websocket
-        self._buffer = ""
+        self._parts: list[bytes] = []
 
     def write(self, data: bytes) -> None:
-        """Buffer data to send."""
-        self._buffer += data.decode("utf-8", errors="replace")
+        """Buffer data to send (O(1) append instead of string concat)."""
+        self._parts.append(data)
 
     async def drain(self) -> None:
         """Send buffered data over WebSocket."""
-        if self._buffer:
-            # WebSocket doesn't need newline delimiters, but we keep them for consistency
-            await self._websocket.send(self._buffer.rstrip("\n"))
-            self._buffer = ""
+        if self._parts:
+            # Join once, decode once (avoids O(n^2) string concat per token)
+            combined = b"".join(self._parts).decode("utf-8", errors="replace")
+            await self._websocket.send(combined.rstrip("\n"))
+            self._parts.clear()
 
 
 class JsonRpcError(Exception):
@@ -488,12 +489,14 @@ class JarvisSocketServer:
                 "params": params,
             }
         )
+        # Pre-encode once for all Unix socket clients
+        notification_bytes = notification.encode() + b"\n"
 
         # Broadcast to Unix socket clients
         async with self._clients_lock:
             for writer in self._clients.copy():
                 try:
-                    writer.write(notification.encode() + b"\n")
+                    writer.write(notification_bytes)
                     await writer.drain()
                 except Exception:
                     self._clients.discard(writer)
@@ -680,10 +683,11 @@ class JarvisSocketServer:
             return self._error_response(request_id, METHOD_NOT_FOUND, f"Method not found: {method}")
 
         # Check if streaming is requested and supported
-        # Make a deep copy to avoid mutating the original params (handles nested dicts/lists)
-        if isinstance(params, dict):
+        # Only deepcopy when stream param needs to be popped (avoids cost on non-streaming calls)
+        stream_requested = isinstance(params, dict) and params.get("stream", False)
+        if stream_requested:
             params = copy.deepcopy(params)
-        stream_requested = isinstance(params, dict) and params.pop("stream", False)
+            params.pop("stream", None)
         supports_streaming = method in self._streaming_methods
 
         # Call handler
