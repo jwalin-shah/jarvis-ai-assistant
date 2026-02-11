@@ -106,13 +106,26 @@
 
   {#if barState === "streaming"}
     <div class="bar-content streaming">
-      <span class="streaming-text">{streamingText}<span class="cursor"></span></span>
+      {#if streamingText}
+        <span class="streaming-text">{streamingText}<span class="cursor"></span></span>
+      {:else}
+        <div class="typing-indicator">
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+        </div>
+        <span class="loading-text">AI is thinking...</span>
+      {/if}
     </div>
   {/if}
 
   {#if barState === "loading"}
     <div class="bar-content loading">
-      <span class="spinner"></span>
+      <div class="typing-indicator">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+      </div>
       <span class="loading-text">Generating suggestions...</span>
     </div>
   {/if}
@@ -239,21 +252,6 @@
     font-size: 13px;
   }
 
-  .spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--border-color);
-    border-top-color: var(--accent-color);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
 
   .loading-text,
   .error-text {
@@ -310,5 +308,39 @@
   }
   .bar-content.chips::-webkit-scrollbar {
     display: none;
+  }
+
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 4px;
+  }
+
+  .typing-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--text-secondary);
+    border-radius: 50%;
+    animation: typingBounce 1.4s ease-in-out infinite;
+  }
+
+  .typing-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes typingBounce {
+    0%, 60%, 100% {
+      transform: translateY(0);
+      opacity: 0.4;
+    }
+    30% {
+      transform: translateY(-4px);
+      opacity: 1;
+    }
   }
 </style>

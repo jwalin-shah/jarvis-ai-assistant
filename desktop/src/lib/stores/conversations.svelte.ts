@@ -48,7 +48,9 @@ class ConversationsState {
   hasMore = $state(false);
   error = $state<string | null>(null);
   connectionStatus = $state<ConnectionStatus>("disconnected");
-  conversationsWithNewMessages = $state(new Set<string>());
+  unreadCounts = $state(new Map<string, number>());
+  pinnedChats = $state(new Set<string>());
+  archivedChats = $state(new Set<string>());
   lastKnownMessageDates = $state(new Map<string, string>());
   isWindowFocused = $state(true);
   optimisticMessages = $state<OptimisticMessage[]>([]);
@@ -91,7 +93,11 @@ class ConversationsState {
   });
 
   hasNewMessages(chatId: string) {
-    return this.conversationsWithNewMessages.has(chatId);
+    return (this.unreadCounts.get(chatId) ?? 0) > 0;
+  }
+
+  getUnreadCount(chatId: string): number {
+    return this.unreadCounts.get(chatId) ?? 0;
   }
 }
 
@@ -105,11 +111,68 @@ export const scrollToMessageId = writable<number | null>(null);
 
 // Actions
 export function markConversationAsNew(chatId: string) {
-  conversationsStore.conversationsWithNewMessages.add(chatId);
+  const current = conversationsStore.unreadCounts.get(chatId) ?? 0;
+  conversationsStore.unreadCounts.set(chatId, current + 1);
+  conversationsStore.unreadCounts = new Map(conversationsStore.unreadCounts);
 }
 
 export function clearNewMessageIndicator(chatId: string) {
-  conversationsStore.conversationsWithNewMessages.delete(chatId);
+  conversationsStore.unreadCounts.delete(chatId);
+  conversationsStore.unreadCounts = new Map(conversationsStore.unreadCounts);
+}
+
+// Pinning & Archiving
+const PINNED_STORAGE_KEY = 'jarvis-pinned-chats';
+const ARCHIVED_STORAGE_KEY = 'jarvis-archived-chats';
+
+function loadPinnedChats(): Set<string> {
+  try {
+    const stored = localStorage.getItem(PINNED_STORAGE_KEY);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch { return new Set(); }
+}
+
+function loadArchivedChats(): Set<string> {
+  try {
+    const stored = localStorage.getItem(ARCHIVED_STORAGE_KEY);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch { return new Set(); }
+}
+
+function savePinnedChats() {
+  localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify([...conversationsStore.pinnedChats]));
+}
+
+function saveArchivedChats() {
+  localStorage.setItem(ARCHIVED_STORAGE_KEY, JSON.stringify([...conversationsStore.archivedChats]));
+}
+
+export function togglePinChat(chatId: string) {
+  if (conversationsStore.pinnedChats.has(chatId)) {
+    conversationsStore.pinnedChats.delete(chatId);
+  } else {
+    conversationsStore.pinnedChats.add(chatId);
+  }
+  conversationsStore.pinnedChats = new Set(conversationsStore.pinnedChats);
+  savePinnedChats();
+}
+
+export function toggleArchiveChat(chatId: string) {
+  if (conversationsStore.archivedChats.has(chatId)) {
+    conversationsStore.archivedChats.delete(chatId);
+  } else {
+    conversationsStore.archivedChats.add(chatId);
+  }
+  conversationsStore.archivedChats = new Set(conversationsStore.archivedChats);
+  saveArchivedChats();
+}
+
+export function isPinned(chatId: string): boolean {
+  return conversationsStore.pinnedChats.has(chatId);
+}
+
+export function isArchived(chatId: string): boolean {
+  return conversationsStore.archivedChats.has(chatId);
 }
 
 export function addOptimisticMessage(text: string): string {
@@ -429,6 +492,9 @@ export function stopMessagePolling() {
 
 export async function initializePolling(): Promise<() => void> {
   await initDatabases();
+  // Load pinned/archived state from localStorage
+  conversationsStore.pinnedChats = loadPinnedChats();
+  conversationsStore.archivedChats = loadArchivedChats();
   if (isDirectAccessAvailable()) {
     conversationsStore.lastKnownGlobalRowid = await getLastMessageRowid();
 

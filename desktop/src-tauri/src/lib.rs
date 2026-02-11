@@ -39,12 +39,27 @@ fn save_window_state(state: &WindowState) {
     }
 }
 
+/// Update the tray tooltip with unread count
+#[tauri::command]
+fn update_tray_badge(app: tauri::AppHandle, count: u32) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let tooltip = if count > 0 {
+            format!("JARVIS — {} unread", count)
+        } else {
+            "JARVIS".to_string()
+        };
+        let _ = tray.set_tooltip(Some(&tooltip));
+    }
+}
+
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::default().build())
         // Register socket state for persistent connection
         .manage(socket::SocketState::default())
         .invoke_handler(tauri::generate_handler![
@@ -55,6 +70,7 @@ pub fn run() {
             socket::send_streaming_message,
             socket::is_socket_connected,
             logging::frontend_log,
+            update_tray_badge,
         ])
         .setup(|app| {
             // Set up the system tray

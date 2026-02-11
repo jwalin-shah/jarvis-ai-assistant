@@ -146,6 +146,9 @@
   --bg-bubble-me: var(--bubble-me);
   --bg-bubble-other: var(--bubble-other);
   --border-color: var(--border-default);
+  --bg-elevated: var(--surface-elevated);
+  --bg-surface: var(--surface-surface);
+  --error-color: var(--color-error);
   --accent-color: var(--color-primary);
 }
 

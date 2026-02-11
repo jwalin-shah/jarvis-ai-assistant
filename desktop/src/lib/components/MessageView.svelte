@@ -725,12 +725,14 @@
       {/if}
     </div>
 
-    {#if hasNewMessagesBelow}
-      <button class="new-messages-button" onclick={handleNewMessagesClick}>
+    {#if !isAtBottom || hasNewMessagesBelow}
+      <button class="scroll-to-bottom-fab" onclick={handleNewMessagesClick} aria-label="Scroll to bottom">
+        {#if newMessageIds.size > 0}
+          <span class="fab-badge">{newMessageIds.size > 99 ? '99+' : newMessageIds.size}</span>
+        {/if}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
-        New messages below
       </button>
     {/if}
 
@@ -955,21 +957,19 @@
     border-radius: var(--radius-full);
   }
 
-  .new-messages-button {
+  .scroll-to-bottom-fab {
     position: absolute;
     bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
+    right: var(--space-4);
     display: flex;
     align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-4);
-    background: var(--color-primary);
-    color: white;
-    border: none;
-    border-radius: var(--radius-full);
-    font-size: var(--text-sm);
-    font-weight: var(--font-weight-medium);
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--surface-elevated);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: 50%;
     cursor: pointer;
     box-shadow: var(--shadow-md);
     transition: all var(--duration-fast) var(--ease-out);
@@ -977,24 +977,44 @@
     z-index: var(--z-sticky);
   }
 
-  .new-messages-button:hover {
-    background: var(--color-primary-hover);
-    transform: translateX(-50%) scale(1.05);
+  .scroll-to-bottom-fab:hover {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+    transform: scale(1.1);
   }
 
-  .new-messages-button svg {
-    width: 16px;
-    height: 16px;
+  .scroll-to-bottom-fab svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .fab-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: var(--color-error);
+    color: white;
+    font-size: 10px;
+    font-weight: var(--font-weight-bold);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
   }
 
   @keyframes fadeInUp {
     from {
       opacity: 0;
-      transform: translateX(-50%) translateY(10px);
+      transform: translateY(10px);
     }
     to {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      transform: translateY(0);
     }
   }
 </style>

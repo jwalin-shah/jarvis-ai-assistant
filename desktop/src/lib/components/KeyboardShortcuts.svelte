@@ -17,6 +17,7 @@
         { keys: ["⌘", "2"], description: "Go to Messages" },
         { keys: ["⌘", "3"], description: "Go to Templates" },
         { keys: ["⌘", ","], description: "Open Settings" },
+        { keys: ["⌘", "⇧", "]"], description: "Next unread conversation" },
       ],
     },
     {

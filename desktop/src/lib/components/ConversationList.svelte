@@ -4,6 +4,8 @@
     conversationsStore,
     selectConversation,
     initializePolling,
+    togglePinChat,
+    toggleArchiveChat,
   } from '../stores/conversations.svelte';
   import { api } from '../api/client';
   import type { Topic, Conversation } from '../types';
@@ -36,6 +38,30 @@
   let allTopicsMap = $state<Map<string, Topic[]>>(new Map());
   let loadingTopics = $state<Set<string>>(new Set());
   let topicFetchControllers = $state<Map<string, AbortController>>(new Map());
+
+  // Context menu state
+  let contextMenu = $state<{ x: number; y: number; chatId: string } | null>(null);
+
+  // Show archived section
+  let showArchived = $state(false);
+
+  // Sort conversations: pinned first, then by last_message_date, archived filtered
+  let sortedConversations = $derived.by(() => {
+    const convs = conversationsStore.conversations.filter(
+      c => !conversationsStore.archivedChats.has(c.chat_id)
+    );
+    return convs.sort((a, b) => {
+      const aPinned = conversationsStore.pinnedChats.has(a.chat_id);
+      const bPinned = conversationsStore.pinnedChats.has(b.chat_id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return new Date(b.last_message_date).getTime() - new Date(a.last_message_date).getTime();
+    });
+  });
+
+  let archivedConversations = $derived(
+    conversationsStore.conversations.filter(c => conversationsStore.archivedChats.has(c.chat_id))
+  );
 
   // Avatar state with LRU cache to prevent unbounded memory growth
   // Max 50 avatars (~5-10MB) - enough for visible + scroll buffer
@@ -362,12 +388,35 @@
   }
 
   function hasNewMessages(chatId: string): boolean {
-    return conversationsStore.conversationsWithNewMessages.has(chatId);
+    return conversationsStore.hasNewMessages(chatId);
+  }
+
+  function getUnreadCount(chatId: string): number {
+    return conversationsStore.getUnreadCount(chatId);
   }
 
   function getPrimaryIdentifier(conv: Conversation): string | null {
     if (conv.is_group) return null;
     return conv.participants[0] || null;
+  }
+
+  function handleContextMenu(event: MouseEvent, chatId: string) {
+    event.preventDefault();
+    contextMenu = { x: event.clientX, y: event.clientY, chatId };
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function handlePin(chatId: string) {
+    togglePinChat(chatId);
+    closeContextMenu();
+  }
+
+  function handleArchive(chatId: string) {
+    toggleArchiveChat(chatId);
+    closeContextMenu();
   }
 
   function getInitials(name: string): string {
@@ -398,7 +447,7 @@
     <div class="empty">No conversations found</div>
   {:else}
     <div class="list" bind:this={_listRef} role="listbox" aria-label="Conversations">
-      {#each conversationsStore.conversations as conv, index (conv.chat_id)}
+      {#each sortedConversations as conv, index (conv.chat_id)}
         {@const identifier = getPrimaryIdentifier(conv)}
         {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
         {@const avatarState = identifier ? avatarStates.get(identifier) : null}
@@ -410,10 +459,12 @@
           class:focused={isFocused}
           class:group={conv.is_group}
           class:has-new={hasNewMessages(conv.chat_id)}
+          class:pinned={conversationsStore.pinnedChats.has(conv.chat_id)}
           onclick={() => {
             selectConversation(conv.chat_id);
             setConversationIndex(index);
           }}
+          oncontextmenu={(e) => handleContextMenu(e, conv.chat_id)}
           role="option"
           aria-selected={conversationsStore.selectedChatId === conv.chat_id}
           tabindex={isFocused ? 0 : -1}
@@ -439,13 +490,20 @@
                 {getInitials(getDisplayName(conv))}
               {/if}
             </div>
-            {#if hasNewMessages(conv.chat_id)}
-              <span class="new-indicator" aria-label="New messages"></span>
+            {#if getUnreadCount(conv.chat_id) > 0}
+              <span class="unread-badge" aria-label="{getUnreadCount(conv.chat_id)} unread messages">
+                {getUnreadCount(conv.chat_id) > 99 ? '99+' : getUnreadCount(conv.chat_id)}
+              </span>
             {/if}
           </div>
           <div class="info">
             <div class="name-row">
               <span class="name" class:has-new={hasNewMessages(conv.chat_id)}>
+                {#if conversationsStore.pinnedChats.has(conv.chat_id)}
+                  <svg class="pin-icon" viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                  </svg>
+                {/if}
                 {getDisplayName(conv)}
               </span>
               <span class="date" class:has-new={hasNewMessages(conv.chat_id)}>
@@ -475,6 +533,69 @@
           </div>
         </button>
       {/each}
+
+      {#if archivedConversations.length > 0}
+        <button class="archived-toggle" onclick={() => showArchived = !showArchived}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points={showArchived ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}></polyline>
+          </svg>
+          Archived ({archivedConversations.length})
+        </button>
+        {#if showArchived}
+          {#each archivedConversations as conv (conv.chat_id)}
+            {@const identifier = getPrimaryIdentifier(conv)}
+            {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
+            {@const avatarState = identifier ? avatarStates.get(identifier) : null}
+            <button
+              class="conversation archived"
+              class:active={conversationsStore.selectedChatId === conv.chat_id}
+              onclick={() => selectConversation(conv.chat_id)}
+              oncontextmenu={(e) => handleContextMenu(e, conv.chat_id)}
+            >
+              <div class="avatar-container">
+                <div class="avatar" class:group={conv.is_group} class:has-image={avatarState === 'loaded' && avatarUrl} use:observeAvatar={identifier || ''}>
+                  {#if conv.is_group}
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6z" /></svg>
+                  {:else if avatarState === 'loaded' && avatarUrl}
+                    <img src={avatarUrl} alt="" class="avatar-image" />
+                  {:else}
+                    {getInitials(getDisplayName(conv))}
+                  {/if}
+                </div>
+              </div>
+              <div class="info">
+                <div class="name-row">
+                  <span class="name">{getDisplayName(conv)}</span>
+                  <span class="date">{formatConversationDate(conv.last_message_date)}</span>
+                </div>
+                <div class="preview">{conv.last_message_text || 'No messages'}</div>
+              </div>
+            </button>
+          {/each}
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
+  {#if contextMenu}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="context-menu-overlay" onclick={closeContextMenu} role="presentation">
+      <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
+        <button class="context-menu-item" onclick={() => handlePin(contextMenu!.chatId)}>
+          {#if conversationsStore.pinnedChats.has(contextMenu.chatId)}
+            Unpin
+          {:else}
+            Pin to Top
+          {/if}
+        </button>
+        <button class="context-menu-item" onclick={() => handleArchive(contextMenu!.chatId)}>
+          {#if conversationsStore.archivedChats.has(contextMenu.chatId)}
+            Unarchive
+          {:else}
+            Archive
+          {/if}
+        </button>
+      </div>
     </div>
   {/if}
 </div>
@@ -614,29 +735,6 @@
     }
   }
 
-  .new-indicator {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 12px;
-    height: 12px;
-    background: var(--color-primary);
-    border-radius: 50%;
-    border: 2px solid var(--surface-elevated);
-    animation: newPulse 2s var(--ease-in-out) infinite;
-  }
-
-  @keyframes newPulse {
-    0%,
-    100% {
-      opacity: 1;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.8;
-      transform: scale(1.1);
-    }
-  }
 
   .info {
     flex: 1;
@@ -763,5 +861,101 @@
 
   .error {
     color: var(--color-error);
+  }
+
+  .unread-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: var(--color-error);
+    color: white;
+    font-size: 10px;
+    font-weight: var(--font-weight-bold);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    border: 2px solid var(--surface-elevated);
+  }
+
+  .pin-icon {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    margin-right: 2px;
+  }
+
+  .conversation.pinned {
+    border-left: 2px solid var(--color-primary);
+  }
+
+  .conversation.archived {
+    opacity: 0.6;
+  }
+
+  .archived-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-4);
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    cursor: pointer;
+    transition: color var(--duration-fast) var(--ease-out);
+  }
+
+  .archived-toggle:hover {
+    color: var(--text-secondary);
+  }
+
+  .context-menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-popover);
+  }
+
+  .context-menu {
+    position: fixed;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-1);
+    min-width: 160px;
+    z-index: var(--z-popover);
+    animation: fadeIn 0.1s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .context-menu-item {
+    display: block;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .context-menu-item:hover {
+    background: var(--surface-hover);
   }
 </style>

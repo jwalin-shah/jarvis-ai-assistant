@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, onMount } from "svelte";
   import Icon, { type IconName } from "./Icon.svelte";
+  import { conversationsStore, selectConversation } from '../stores/conversations.svelte';
 
   interface Command {
     id: string;
@@ -14,7 +15,7 @@
 
   interface Props {
     onClose: () => void;
-    onNavigate: (view: "messages" | "dashboard" | "health" | "settings" | "templates") => void;
+    onNavigate: (view: "messages" | "dashboard" | "health" | "settings" | "templates" | "network") => void;
     onOpenSearch: () => void;
     onOpenShortcuts: () => void;
   }
@@ -90,6 +91,24 @@
       icon: "settings",
       category: "Actions",
       action: () => { onClose(); onOpenShortcuts(); },
+    },
+    {
+      id: "action-next-unread",
+      label: "Next Unread Conversation",
+      description: "Jump to the next conversation with unread messages",
+      shortcut: ["⌘", "⇧", "]"],
+      icon: "message-circle",
+      category: "Actions",
+      action: () => {
+        for (const [chatId] of conversationsStore.unreadCounts) {
+          if (chatId !== conversationsStore.selectedChatId) {
+            selectConversation(chatId);
+            onClose();
+            return;
+          }
+        }
+        onClose();
+      },
     },
     {
       id: "action-refresh",
