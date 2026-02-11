@@ -473,16 +473,16 @@ class ChatDBWatcher:
             from jarvis.contacts.fact_extractor import FactExtractor
             from jarvis.contacts.fact_storage import save_facts
 
-            # Only process incoming messages with text (not from me)
-            incoming = [m for m in messages if m.get("text") and not m.get("is_from_me")]
-            if not incoming:
+            # Process all messages with text (both incoming and outgoing)
+            extractable = [m for m in messages if m.get("text")]
+            if not extractable:
                 return
 
             extractor = FactExtractor()
 
             # Group by chat_id (proxy for contact)
             by_chat: dict[str, list[dict[str, Any]]] = {}
-            for msg in incoming:
+            for msg in extractable:
                 cid = msg.get("chat_id", "")
                 if cid:
                     by_chat.setdefault(cid, []).append(msg)

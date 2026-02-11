@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from jarvis.contacts.attribution import AttributionResolver
 from jarvis.contacts.contact_profile import Fact
 from jarvis.contacts.junk_filters import is_bot_message, is_professional_message
 from jarvis.contracts.pipeline import Fact as ContractFact
@@ -230,6 +231,7 @@ class FactExtractor:
     ) -> None:
         self.confidence_threshold = confidence_threshold
         self._contacts_cache: dict[str, Any] | None = None
+        self._attribution_resolver = AttributionResolver()
 
     def _get_nlp(self) -> Any:
         """Return shared spaCy model singleton."""
@@ -274,6 +276,9 @@ class FactExtractor:
 
         # Apply quality filters and recalibrate confidence
         facts = self._apply_quality_filters(facts)
+
+        # Resolve attribution (who is each fact about?)
+        self._resolve_attribution(facts, messages)
 
         # Deduplicate
         facts = self._deduplicate(facts)
@@ -549,6 +554,33 @@ class FactExtractor:
             (len(filtered) / len(facts) * 100) if facts else 0,
         )
         return filtered
+
+    def _resolve_attribution(self, facts: list[Fact], messages: list[Any]) -> None:
+        """Resolve attribution for each fact in-place.
+
+        Builds a msg_id -> is_from_me lookup from messages, then runs the
+        resolver on each fact.
+        """
+        # Build lookup: source_message_id -> is_from_me
+        msg_lookup: dict[int | None, bool] = {}
+        for msg in messages:
+            if isinstance(msg, dict):
+                msg_id = msg.get("id")
+                is_from_me = bool(msg.get("is_from_me", False))
+            else:
+                msg_id = getattr(msg, "id", None)
+                is_from_me = bool(getattr(msg, "is_from_me", False))
+            if msg_id is not None:
+                msg_lookup[msg_id] = is_from_me
+
+        for fact in facts:
+            is_from_me = msg_lookup.get(fact.source_message_id, False)
+            fact.attribution = self._attribution_resolver.resolve(
+                source_text=fact.source_text,
+                subject=fact.subject,
+                is_from_me=is_from_me,
+                category=fact.category,
+            )
 
     def _clean_subject(self, subject: str) -> str:
         """Clean extracted subject: strip trailing prepositions, conjunctions, etc."""

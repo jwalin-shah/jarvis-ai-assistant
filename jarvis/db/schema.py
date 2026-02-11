@@ -197,6 +197,7 @@ CREATE TABLE IF NOT EXISTS contact_facts (
     linked_contact_id TEXT,                  -- resolved contact reference (v13+)
     valid_from TIMESTAMP,                    -- when fact became true (v14+)
     valid_until TIMESTAMP,                   -- when fact stopped being true (v14+)
+    attribution TEXT DEFAULT 'contact',      -- who fact is about: contact/user/third_party (v16+)
     UNIQUE(contact_id, category, subject, predicate)
 );
 
@@ -241,7 +242,7 @@ EXPECTED_INDICES = {
     "idx_facts_category",
 }
 
-CURRENT_SCHEMA_VERSION = 15  # vec_facts semantic index for contact facts
+CURRENT_SCHEMA_VERSION = 16  # attribution column on contact_facts
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {
@@ -266,7 +267,16 @@ VALID_MIGRATION_COLUMNS = {
     "content_hash",
     # v13: NER person linking
     "linked_contact_id",
+    # v16: attribution
+    "attribution",
 }
 
 # Allowlist of valid column types for ALTER TABLE migrations
-VALID_COLUMN_TYPES = {"TEXT", "REAL", "INTEGER", "BOOLEAN", "BOOLEAN DEFAULT FALSE"}
+VALID_COLUMN_TYPES = {
+    "TEXT",
+    "TEXT DEFAULT 'contact'",
+    "REAL",
+    "INTEGER",
+    "BOOLEAN",
+    "BOOLEAN DEFAULT FALSE",
+}

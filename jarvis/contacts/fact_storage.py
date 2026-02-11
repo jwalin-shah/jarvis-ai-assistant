@@ -56,6 +56,7 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 fact.linked_contact_id,
                 fact.valid_from,
                 fact.valid_until,
+                fact.attribution,
             )
             for fact in facts
         ]
@@ -74,8 +75,8 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 INSERT OR IGNORE INTO contact_facts
                 (contact_id, category, subject, predicate, value, confidence,
                  source_message_id, source_text, extracted_at, linked_contact_id,
-                 valid_from, valid_until)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 valid_from, valid_until, attribution)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 fact_data,
             )
@@ -119,7 +120,7 @@ def get_facts_for_contact(contact_id: str) -> list[Fact]:
             """
             SELECT category, subject, predicate, value, confidence,
                    source_text, source_message_id, extracted_at,
-                   valid_from, valid_until
+                   valid_from, valid_until, attribution
             FROM contact_facts
             WHERE contact_id = ?
             ORDER BY confidence DESC
@@ -140,6 +141,7 @@ def get_facts_for_contact(contact_id: str) -> list[Fact]:
             extracted_at=row["extracted_at"] or "",
             valid_from=row["valid_from"],
             valid_until=row["valid_until"],
+            attribution=row["attribution"] or "contact",
         )
         for row in rows
     ]
@@ -170,7 +172,7 @@ def get_all_facts() -> list[Fact]:
             """
             SELECT contact_id, category, subject, predicate, value,
                    confidence, source_text, source_message_id, extracted_at,
-                   valid_from, valid_until
+                   valid_from, valid_until, attribution
             FROM contact_facts
             ORDER BY confidence DESC
             """,
@@ -189,6 +191,7 @@ def get_all_facts() -> list[Fact]:
             extracted_at=row["extracted_at"] or "",
             valid_from=row["valid_from"],
             valid_until=row["valid_until"],
+            attribution=row["attribution"] or "contact",
         )
         for row in rows
     ]
