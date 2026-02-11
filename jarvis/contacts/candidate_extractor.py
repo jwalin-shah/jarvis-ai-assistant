@@ -154,7 +154,9 @@ ENTITY_ALIASES: dict[str, dict[str, str]] = {
     },
 }
 
-# Vague words to reject as span_text
+# Vague words to reject as span_text.
+# Includes both straight (') and curly (\u2019) apostrophe variants
+# since iMessage uses curly quotes.
 VAGUE = {
     "it",
     "this",
@@ -168,11 +170,20 @@ VAGUE = {
     "you",
     "i",
     "i'm",
+    "i\u2019m",
     "i'll",
+    "i\u2019ll",
     "i've",
+    "i\u2019ve",
     "i'd",
+    "i\u2019d",
     "we",
     "we're",
+    "we\u2019re",
+    # Common chat abbreviations GLiNER falsely tags as person_name
+    "ik",  # "I know"
+    "ai",  # the word "AI"
+    "boi",  # slang
 }
 
 # ---------------------------------------------------------------------------

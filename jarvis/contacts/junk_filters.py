@@ -77,12 +77,24 @@ def is_professional_message(text: str) -> bool:
     return False
 
 
+_TAPBACK_RE = re.compile(
+    r"^(Loved|Liked|Disliked|Laughed at|Emphasized|Questioned) \u201c",
+)
+
+
+def is_tapback_reaction(text: str) -> bool:
+    """Detect iMessage tapback reaction messages (e.g. 'Loved "some text"')."""
+    return bool(_TAPBACK_RE.match(text))
+
+
 def is_junk_message(text: str, chat_id: str = "", min_length: int = 5) -> bool:
-    """Combined junk check: too short, bot, or professional message.
+    """Combined junk check: too short, bot, professional, or tapback reaction.
 
     Single entry point for all pre-extraction filtering.
     """
     if not text or len(text) < min_length:
+        return True
+    if is_tapback_reaction(text):
         return True
     if is_bot_message(text, chat_id):
         return True
