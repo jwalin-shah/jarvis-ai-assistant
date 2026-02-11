@@ -58,10 +58,7 @@ def verify_entailment_batch(
     nli = get_nli_cross_encoder()
     all_scores = nli.predict_batch(pairs)
 
-    return [
-        (scores["entailment"] > threshold, scores["entailment"])
-        for scores in all_scores
-    ]
+    return [(scores["entailment"] > threshold, scores["entailment"]) for scores in all_scores]
 
 
 def fact_to_hypothesis(category: str, subject: str, predicate: str, value: str = "") -> str:

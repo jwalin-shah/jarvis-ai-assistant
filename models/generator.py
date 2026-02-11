@@ -84,9 +84,12 @@ class MLXGenerator:
         # Try template match first
         template_response = self._try_template_match(request, embedder=embedder)
         if template_response is not None:
-            log_event(logger, "generation.template_match",
-                      template_name=template_response.template_name or "",
-                      latency_ms=round((time.perf_counter() - start_time) * 1000, 1))
+            log_event(
+                logger,
+                "generation.template_match",
+                template_name=template_response.template_name or "",
+                latency_ms=round((time.perf_counter() - start_time) * 1000, 1),
+            )
             return template_response
 
         # Fall back to model generation
@@ -160,8 +163,7 @@ class MLXGenerator:
                         template_name=None,
                         finish_reason="memory_pressure",
                     )
-                with timed_operation(logger, "model.load",
-                                     model_id=self.config.model_path):
+                with timed_operation(logger, "model.load", model_id=self.config.model_path):
                     load_ok = self._loader.load()
                 if not load_ok:
                     logger.warning("Model load failed, returning fallback response")
@@ -216,11 +218,14 @@ class MLXGenerator:
 
             total_time = (time.perf_counter() - start_time) * 1000
 
-            log_event(logger, "generation.complete",
-                      model_id=self.config.model_path,
-                      tokens_generated=result.tokens_generated,
-                      latency_ms=round(total_time, 1),
-                      used_cache=prompt_cache is not None)
+            log_event(
+                logger,
+                "generation.complete",
+                model_id=self.config.model_path,
+                tokens_generated=result.tokens_generated,
+                latency_ms=round(total_time, 1),
+                used_cache=prompt_cache is not None,
+            )
             return GenerationResponse(
                 text=result.text,
                 tokens_used=result.tokens_generated,

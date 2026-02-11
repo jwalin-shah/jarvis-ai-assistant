@@ -146,21 +146,35 @@ class ResourceManager:
 
         # Check memory
         if self._available_memory < self._memory_threshold:
-            log_event(logger, "prefetch.resource_blocked", level=logging.DEBUG,
-                      resource="memory",
-                      available_mb=self._available_memory // (1024 * 1024))
+            log_event(
+                logger,
+                "prefetch.resource_blocked",
+                level=logging.DEBUG,
+                resource="memory",
+                available_mb=self._available_memory // (1024 * 1024),
+            )
             return False
 
         # Check CPU
         if self._cpu_usage > self._cpu_threshold:
-            log_event(logger, "prefetch.resource_blocked", level=logging.DEBUG,
-                      resource="cpu", cpu_percent=self._cpu_usage)
+            log_event(
+                logger,
+                "prefetch.resource_blocked",
+                level=logging.DEBUG,
+                resource="cpu",
+                cpu_percent=self._cpu_usage,
+            )
             return False
 
         # Check battery (only if not plugged in)
         if not self._is_plugged_in and self._battery_level < self._battery_threshold:
-            log_event(logger, "prefetch.resource_blocked", level=logging.DEBUG,
-                      resource="battery", battery_level=self._battery_level)
+            log_event(
+                logger,
+                "prefetch.resource_blocked",
+                level=logging.DEBUG,
+                resource="battery",
+                battery_level=self._battery_level,
+            )
             return False
 
         return True
@@ -330,10 +344,13 @@ class PrefetchExecutor:
                 except Exception:
                     break
 
-        log_event(logger, "prefetch.executor.stop",
-                  executed=self._stats.predictions_executed,
-                  failed=self._stats.predictions_failed,
-                  avg_latency_ms=round(self._stats.avg_latency_ms, 1))
+        log_event(
+            logger,
+            "prefetch.executor.stop",
+            executed=self._stats.predictions_executed,
+            failed=self._stats.predictions_failed,
+            avg_latency_ms=round(self._stats.avg_latency_ms, 1),
+        )
 
     def pause(self) -> None:
         """Pause execution (tasks remain in queue)."""
@@ -535,10 +552,14 @@ class PrefetchExecutor:
                 )
                 cost_ms = int((time.time() - start_time) * 1000)
                 self._stats.record_execution(cost_ms, cached=True)
-                log_event(logger, "prefetch.execute.complete",
-                          prediction_type=prediction.type.value,
-                          key=prediction.key, execution_ms=cost_ms,
-                          tier=tier.value)
+                log_event(
+                    logger,
+                    "prefetch.execute.complete",
+                    prediction_type=prediction.type.value,
+                    key=prediction.key,
+                    execution_ms=cost_ms,
+                    tier=tier.value,
+                )
             else:
                 self._stats.predictions_skipped += 1
 

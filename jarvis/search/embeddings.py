@@ -488,6 +488,7 @@ class EmbeddingStore:
             True if indexed, False if skipped (too short or duplicate)
         """
         import warnings
+
         warnings.warn(
             "index_message() is inefficient for batch operations. "
             "Use index_messages([message]) instead.",

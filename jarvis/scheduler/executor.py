@@ -307,10 +307,7 @@ class SendExecutor:
             )
 
             # Determine if chat_id is a phone number or email
-            chat_id = (
-                item.chat_id.replace("\\", "\\\\")
-                .replace('"', '\\"')
-            )
+            chat_id = item.chat_id.replace("\\", "\\\\").replace('"', '\\"')
 
             script = f"""
             tell application "Messages"

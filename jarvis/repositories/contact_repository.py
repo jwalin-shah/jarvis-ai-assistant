@@ -9,7 +9,6 @@ step only.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from jarvis.contacts.contact_profile import (
     ContactProfile,

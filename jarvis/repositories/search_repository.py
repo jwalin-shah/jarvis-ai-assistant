@@ -12,12 +12,11 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from jarvis.repositories.base import BaseRepository
-from jarvis.search.vec_search import VecSearchResult, VecSearcher
+from jarvis.search.vec_search import VecSearcher, VecSearchResult
 
 if TYPE_CHECKING:
     from contracts.imessage import Message
-    from jarvis.search.semantic_search import EmbeddingCache, SearchFilters, SemanticSearchResult
-    from jarvis.topics.topic_segmenter import TopicSegment
+    from jarvis.search.semantic_search import EmbeddingCache
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +123,7 @@ class SearchRepository(BaseRepository):
         """Store an embedding in the cache."""
         self.cache.set(message_id, chat_id, text_hash, embedding)
 
-    def cache_embeddings_batch(
-        self, items: list[tuple[int, str, str, Any]]
-    ) -> None:
+    def cache_embeddings_batch(self, items: list[tuple[int, str, str, Any]]) -> None:
         """Batch-store embeddings."""
         self.cache.set_batch(items)
 

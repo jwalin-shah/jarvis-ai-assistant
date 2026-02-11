@@ -38,9 +38,7 @@ def can_use_llm() -> tuple[bool, str]:
         return True, ""
 
     except Exception as e:
-        logger.warning(
-            "Failed to check memory state (assuming LLM is available): %s", str(e)
-        )
+        logger.warning("Failed to check memory state (assuming LLM is available): %s", str(e))
         # If we can't check memory, err on the side of caution by allowing use
         # (the alternative would be to disable all generation if monitoring fails)
         return True, ""
