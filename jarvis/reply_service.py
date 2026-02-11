@@ -18,7 +18,7 @@ import numpy as np
 
 from contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.classifiers.cascade import classify_with_cascade
-from jarvis.classifiers.category_classifier import classify_category
+from jarvis.classifiers.classification_result import build_classification_result
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
     ResponsePressure,
@@ -29,7 +29,6 @@ from jarvis.contracts.pipeline import (
     ClassificationResult,
     GenerationRequest,
     GenerationResponse,
-    IntentType,
     MessageContext,
     RAGDocument,
     UrgencyLevel,
@@ -53,7 +52,6 @@ from jarvis.services.context_service import ContextService
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
-    from jarvis.search.semantic_search import SemanticSearcher
     from models import MLXGenerator
 
 logger = logging.getLogger(__name__)
@@ -81,7 +79,6 @@ class ReplyService:
         self._db = db
         self._generator = generator
         self._imessage_reader = imessage_reader
-        self._semantic_searcher: SemanticSearcher | None = None
         self._context_service: ContextService | None = None
         self._reranker = None
         self._lock = threading.RLock()
@@ -116,15 +113,6 @@ class ReplyService:
             return self._imessage_reader
 
     @property
-    def semantic_searcher(self) -> SemanticSearcher:
-        with self._lock:
-            if self._semantic_searcher is None and self.imessage_reader:
-                from jarvis.search.semantic_search import get_semantic_searcher
-
-                self._semantic_searcher = get_semantic_searcher(self.imessage_reader)
-            return self._semantic_searcher
-
-    @property
     def context_service(self) -> ContextService:
         """Get or create the context service."""
         with self._lock:
@@ -132,7 +120,6 @@ class ReplyService:
                 self._context_service = ContextService(
                     db=self.db,
                     imessage_reader=self.imessage_reader,
-                    semantic_searcher=self.semantic_searcher,
                 )
             return self._context_service
 
@@ -158,18 +145,6 @@ class ReplyService:
             return float(value)
         except (TypeError, ValueError):
             return default
-
-    @staticmethod
-    def _to_intent_type(category: str) -> IntentType:
-        mapping = {
-            "question": IntentType.QUESTION,
-            "request": IntentType.REQUEST,
-            "statement": IntentType.STATEMENT,
-            "emotion": IntentType.STATEMENT,
-            "closing": IntentType.STATEMENT,
-            "acknowledge": IntentType.STATEMENT,
-        }
-        return mapping.get(category, IntentType.UNKNOWN)
 
     @staticmethod
     def _pressure_from_classification(classification: ClassificationResult) -> ResponsePressure:
@@ -201,42 +176,7 @@ class ReplyService:
         thread: list[str],
         mobilization: MobilizationResult,
     ) -> ClassificationResult:
-        category_result = classify_category(
-            incoming,
-            context=thread,
-            mobilization=mobilization,
-        )
-
-        if category_result.category == "closing":
-            category = CategoryType.CLOSING
-        elif category_result.category == "acknowledge":
-            category = CategoryType.ACKNOWLEDGE
-        else:
-            category = CategoryType.FULL_RESPONSE
-
-        if mobilization.pressure == ResponsePressure.HIGH:
-            urgency = UrgencyLevel.HIGH
-        elif mobilization.pressure == ResponsePressure.MEDIUM:
-            urgency = UrgencyLevel.MEDIUM
-        else:
-            urgency = UrgencyLevel.LOW
-
-        return ClassificationResult(
-            intent=self._to_intent_type(category_result.category),
-            category=category,
-            urgency=urgency,
-            confidence=min(1.0, (mobilization.confidence + category_result.confidence) / 2.0),
-            requires_knowledge=category_result.category in {"question", "request"},
-            metadata={
-                "category_name": category_result.category,
-                "category_confidence": category_result.confidence,
-                "category_method": category_result.method,
-                "mobilization_pressure": mobilization.pressure.value,
-                "mobilization_response_type": mobilization.response_type.value,
-                "mobilization_confidence": mobilization.confidence,
-                "mobilization_method": mobilization.method,
-            },
-        )
+        return build_classification_result(incoming, thread, mobilization)
 
     def prepare_streaming_context(
         self,
@@ -244,6 +184,10 @@ class ReplyService:
         thread: list[str] | None = None,
         chat_id: str | None = None,
         instruction: str | None = None,
+        classification_result: ClassificationResult | None = None,
+        contact: Contact | None = None,
+        search_results: list[dict[str, Any]] | None = None,
+        cached_embedder: CachedEmbedder | None = None,
     ) -> tuple[ModelGenerationRequest, dict[str, Any]]:
         """Prepare a model GenerationRequest through the typed pipeline for streaming.
 
@@ -251,6 +195,13 @@ class ReplyService:
         lookup, classification, RAG search, prompt assembly) but returns the
         model request instead of generating. Designed to be called via
         asyncio.to_thread() before streaming tokens.
+
+        Pre-computed results can be passed to skip redundant work:
+            classification_result: Skip re-running classification cascade.
+            contact: Skip re-running contact lookup.
+            search_results: Skip re-running RAG search.
+            cached_embedder: Reuse pre-computed embeddings to avoid
+                re-encoding the query text.
         """
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
@@ -258,18 +209,31 @@ class ReplyService:
 
         normalized_incoming = incoming.strip()
         thread_messages = [msg for msg in (thread or []) if isinstance(msg, str)]
-        contact = self.context_service.get_contact(None, chat_id)
-        mobilization = classify_with_cascade(normalized_incoming)
-        classification = self._build_classification_result(
-            normalized_incoming,
-            thread_messages,
-            mobilization,
-        )
-        search_results = self.context_service.search_examples(
-            normalized_incoming,
-            chat_id=chat_id,
-            contact_id=contact.id if contact else None,
-        )
+
+        if cached_embedder is None:
+            cached_embedder = get_embedder()
+        # Pre-encode so downstream search_examples gets a cache hit
+        if normalized_incoming:
+            cached_embedder.encode(normalized_incoming)
+
+        if contact is None:
+            contact = self.context_service.get_contact(None, chat_id)
+
+        if classification_result is None:
+            mobilization = classify_with_cascade(normalized_incoming)
+            classification_result = self._build_classification_result(
+                normalized_incoming,
+                thread_messages,
+                mobilization,
+            )
+
+        if search_results is None:
+            search_results = self.context_service.search_examples(
+                normalized_incoming,
+                chat_id=chat_id,
+                contact_id=contact.id if contact else None,
+                embedder=cached_embedder,
+            )
 
         message_context = MessageContext(
             chat_id=chat_id or "",
@@ -283,7 +247,7 @@ class ReplyService:
 
         pipeline_request = self.build_generation_request(
             context=message_context,
-            classification=classification,
+            classification=classification_result,
             search_results=search_results,
             contact=contact,
             thread=thread_messages,
@@ -293,7 +257,7 @@ class ReplyService:
 
         similarity = search_results[0]["similarity"] if search_results else 0.0
         example_diversity = self._compute_example_diversity(search_results)
-        pressure = self._pressure_from_classification(classification)
+        pressure = self._pressure_from_classification(classification_result)
 
         base_confidence = {
             ResponsePressure.HIGH: 0.85,
@@ -497,16 +461,27 @@ class ReplyService:
         if contact and contact.display_name:
             context.metadata.setdefault("contact_name", contact.display_name)
 
-        # Fetch known facts about this contact for grounded replies
+        # Fetch semantically relevant facts about this contact for grounded replies
         if chat_id:
             try:
-                from jarvis.contacts.fact_storage import get_facts_for_contact
+                from jarvis.contacts.fact_index import search_relevant_facts
                 from jarvis.prompts import format_facts_for_prompt
 
-                facts = get_facts_for_contact(chat_id)
+                incoming_text = context.text or ""
+                facts = search_relevant_facts(incoming_text, chat_id, limit=5)
                 context.metadata["contact_facts"] = format_facts_for_prompt(facts)
-            except Exception:
-                pass  # Facts are optional - don't block reply generation
+            except (ImportError, KeyError, Exception) as e:
+                logger.debug(f"Optional fact fetch failed: {e}")
+
+            # Inject graph-based relationship context
+            try:
+                from jarvis.graph.context import get_graph_context
+
+                graph_ctx = get_graph_context(contact_id=chat_id, chat_id=chat_id)
+                if graph_ctx:
+                    context.metadata["relationship_graph"] = graph_ctx
+            except (ImportError, KeyError, Exception) as e:
+                logger.debug(f"Optional graph context fetch failed: {e}")
 
         if instruction is None:
             optimized_instruction = get_optimized_instruction(category_name)

@@ -487,11 +487,9 @@ def main() -> int:
         print(f"ERROR: {e}", file=sys.stderr, flush=True)
         print("Use --overwrite to replace existing output files.", file=sys.stderr, flush=True)
         return 3
-    except Exception as e:
+    except (ValueError, RuntimeError, OSError) as e:
         print(f"ERROR: {e}", file=sys.stderr, flush=True)
         return 4
-
-    logging.info("Finished merge_goldsets.py")
 
 
 if __name__ == "__main__":

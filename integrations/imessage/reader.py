@@ -241,6 +241,9 @@ class ConnectionPool:
                     self._checked_out.add(conn)
                     return conn
                 except Exception:
+                    # Broad catch: _create_connection raises our custom error hierarchy
+                    # (iMessageAccessError, iMessageQueryError) which don't share a
+                    # common non-Exception base. Must decrement count for any failure.
                     self._created_count -= 1
                     raise
 
@@ -268,7 +271,7 @@ class ConnectionPool:
         if self._closed:
             try:
                 conn.close()
-            except Exception:
+            except (sqlite3.Error, OSError):
                 pass
             return
 
@@ -278,7 +281,7 @@ class ConnectionPool:
             # Pool is full (shouldn't happen), close the connection
             try:
                 conn.close()
-            except Exception:
+            except (sqlite3.Error, OSError):
                 pass
 
     @contextmanager
@@ -317,7 +320,7 @@ class ConnectionPool:
                 conn = self._pool.get_nowait()
                 try:
                     conn.close()
-                except Exception:
+                except (sqlite3.Error, OSError):
                     pass
             except queue.Empty:
                 break
@@ -332,7 +335,7 @@ class ConnectionPool:
                 for conn in self._checked_out:
                     try:
                         conn.close()
-                    except Exception:
+                    except (sqlite3.Error, OSError):
                         pass
                 self._checked_out.clear()
             self._created_count = 0
@@ -581,9 +584,9 @@ class ChatDBReader:
                     cause=e,
                 ) from e
             except Exception as e:
-                # Last resort catch-all for truly unexpected errors during connection
-                # (e.g., memory issues, threading problems). This ensures we always
-                # wrap errors in our error hierarchy for consistent handling.
+                # Intentionally broad: catches MemoryError, threading issues, and any
+                # other truly unexpected errors during connection setup. Wraps them in
+                # our error hierarchy so callers get consistent iMessageAccessError.
                 logger.exception("Unexpected error connecting to database: %s", db_path_str)
                 raise iMessageAccessError(
                     f"Failed to connect to database: {e}",
@@ -605,8 +608,8 @@ class ChatDBReader:
                 # Pool mode: release connection back to pool
                 try:
                     self._pool.release(self._connection)
-                except Exception:
-                    logger.debug("Error releasing connection to pool", exc_info=True)
+                except (OSError, sqlite3.Error) as e:
+                    logger.debug("Error releasing connection to pool: %s", e)
             else:
                 # Legacy mode: close dedicated connection
                 try:
@@ -619,10 +622,10 @@ class ChatDBReader:
                     # File system errors during close are recoverable and can be ignored.
                     logger.debug("I/O error closing database connection", exc_info=True)
                 except Exception:
-                    # Last resort catch-all for truly unexpected cleanup errors (e.g., threading).
-                    # These are logged but not propagated to avoid masking the original error
-                    # in context manager exit. This is intentionally broad because cleanup
-                    # must not raise to avoid exception chaining issues.
+                    # Intentionally broad: cleanup must never raise to avoid masking
+                    # the original error in context manager __exit__. sqlite3.Error and
+                    # OSError are handled above; this catches truly unexpected errors
+                    # (e.g., threading race conditions during interpreter shutdown).
                     logger.debug("Unexpected error closing database connection", exc_info=True)
 
             self._connection = None
@@ -777,33 +780,9 @@ class ChatDBReader:
         If unavailable (no Full Disk Access or different OS), cache remains empty.
 
         Includes timeout protection to prevent hanging on large contact databases.
+        Uses ThreadPoolExecutor for thread-safe timeout (works on any thread).
         """
-        import signal
-        from contextlib import contextmanager
-
-        @contextmanager
-        def timeout_context(seconds: int):
-            """Context manager with timeout for I/O operations."""
-            import threading as _threading
-
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Contact loading timed out")
-
-            # Use signal.SIGALRM only on Unix and from main thread
-            use_signal = (
-                hasattr(signal, "SIGALRM")
-                and _threading.current_thread() is _threading.main_thread()
-            )
-            if use_signal:
-                try:
-                    signal.signal(signal.SIGALRM, timeout_handler)
-                    signal.alarm(seconds)
-                    yield
-                finally:
-                    signal.alarm(0)  # Disable alarm
-            else:
-                # Fallback: no timeout enforcement (safe for non-main threads)
-                yield
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
         # Load into a local dict first to avoid partial cache state
         new_cache: dict[str, str] = {}
@@ -814,24 +793,29 @@ class ChatDBReader:
             self._contacts_cache = new_cache
             return
 
-        try:
-            # Load from ALL AddressBook source databases (iCloud, Google, etc.)
-            # with 5-second timeout to prevent hanging
+        def _do_load_contacts() -> int:
             loaded_count = 0
-            with timeout_context(5):
-                for source_dir in ADDRESSBOOK_DB_PATH.iterdir():
-                    if not source_dir.is_dir():
-                        continue
-                    ab_db = source_dir / "AddressBook-v22.abcddb"
-                    if ab_db.exists():
-                        self._load_contacts_from_db_to_dict(ab_db, new_cache)
-                        loaded_count += 1
-            logger.debug(f"Loaded contacts from {loaded_count} AddressBook sources")
-        except TimeoutError:
-            logger.warning(
-                "Contact loading timed out after 5s. Using partial cache with %d contacts.",
-                len(new_cache),
-            )
+            for source_dir in ADDRESSBOOK_DB_PATH.iterdir():
+                if not source_dir.is_dir():
+                    continue
+                ab_db = source_dir / "AddressBook-v22.abcddb"
+                if ab_db.exists():
+                    self._load_contacts_from_db_to_dict(ab_db, new_cache)
+                    loaded_count += 1
+            return loaded_count
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_do_load_contacts)
+                try:
+                    loaded_count = future.result(timeout=5.0)
+                    logger.debug(f"Loaded contacts from {loaded_count} AddressBook sources")
+                except FuturesTimeoutError:
+                    logger.warning(
+                        "Contact loading timed out after 5s. "
+                        "Using partial cache with %d contacts.",
+                        len(new_cache),
+                    )
         except PermissionError:
             logger.debug("Permission denied accessing AddressBook directory")
         except OSError as e:
@@ -982,11 +966,10 @@ class ChatDBReader:
             # Configuration or type errors during access check
             logger.warning("Configuration error checking access: %s", e)
             return False
-        except Exception:
-            # Last resort catch-all for truly unexpected errors (e.g., memory issues,
-            # threading problems). Log with traceback for debugging, but return False
-            # to caller since this is a boolean check method.
-            logger.exception("Unexpected error checking access to %s", self.db_path)
+        except sqlite3.Error:
+            # Catch sqlite3.Error subclasses not covered above (e.g., DatabaseError,
+            # InternalError). PermissionError and OSError are already handled.
+            logger.exception("Unexpected DB error checking access to %s", self.db_path)
             return False
 
     def require_access(self) -> None:
@@ -1036,12 +1019,10 @@ class ChatDBReader:
                 db_path=db_path_str,
                 cause=e,
             ) from e
-        except Exception as e:
-            # Last resort catch-all for truly unexpected errors (e.g., memory issues,
-            # threading problems). Wraps in our error hierarchy and logs traceback
-            # for debugging. This is intentionally broad to ensure all errors are
-            # wrapped in iMessageAccessError for consistent handling.
-            logger.exception("Unexpected error checking access to %s", db_path_str)
+        except sqlite3.Error as e:
+            # Catch sqlite3.Error subclasses not covered above (e.g., DatabaseError,
+            # InternalError). PermissionError and OSError are already handled.
+            logger.exception("Unexpected DB error checking access to %s", db_path_str)
             raise iMessageAccessError(
                 f"Unexpected error checking access: {e}",
                 db_path=db_path_str,
@@ -1146,6 +1127,7 @@ class ChatDBReader:
         chat_id: str,
         limit: int = 100,
         before: datetime | None = None,
+        after: datetime | None = None,
     ) -> list[Message]:
         """Get messages from a conversation.
 
@@ -1153,6 +1135,7 @@ class ChatDBReader:
             chat_id: The conversation ID (chat.guid)
             limit: Maximum number of messages to return
             before: Only return messages before this date
+            after: Only return messages after this date
 
         Returns:
             List of Message objects, sorted by date (newest first)
@@ -1168,6 +1151,8 @@ class ChatDBReader:
 
                 # Build params list based on filters
                 params: list[Any] = [chat_id]
+                if after is not None:
+                    params.append(datetime_to_apple_timestamp(after))
                 if before is not None:
                     params.append(datetime_to_apple_timestamp(before))
                 params.append(limit)
@@ -1175,61 +1160,11 @@ class ChatDBReader:
                 query = get_query(
                     "messages",
                     self._schema_version or "v14",
+                    with_after_filter=after is not None,
                     with_before_filter=before is not None,
                 )
 
-                try:
-                    cursor.execute(query, params)
-                    rows = cursor.fetchall()
-                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                    # If query fails due to missing columns, use minimal fallback query
-                    error_str = str(e).lower()
-                    if "no such column" in error_str:
-                        logger.debug(
-                            f"Query failed with missing column ({e}), using minimal fallback"
-                        )
-                        try:
-                            # Use v14 schema and replace all optional columns with NULL
-                            # This handles test databases or older schemas with minimal columns
-                            fallback_query = get_query(
-                                "messages",
-                                "v14",
-                                with_before_filter=before is not None,
-                            )
-
-                            # Replace all optional columns with NULL
-                            fallback_query = (
-                                fallback_query.replace(
-                                    "message.date_delivered,",
-                                    "NULL as date_delivered,",
-                                )
-                                .replace(
-                                    "message.date_read,",
-                                    "NULL as date_read,",
-                                )
-                                .replace(
-                                    "message.group_action_type,",
-                                    "NULL as group_action_type,",
-                                )
-                                .replace(
-                                    "affected_handle.id as affected_handle_id",
-                                    "NULL as affected_handle_id",
-                                )
-                                .replace(
-                                    "LEFT JOIN handle AS affected_handle "
-                                    "ON message.other_handle = affected_handle.ROWID",
-                                    "",
-                                )
-                            )
-
-                            cursor.execute(fallback_query, params)
-                            rows = cursor.fetchall()
-                        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
-                            logger.warning(f"Query error after column fallback: {e2}")
-                            return []
-                    else:
-                        logger.warning(f"Query error in get_messages: {e}")
-                        return []
+                rows = self._execute_with_fallback(cursor, query, params)
 
             return self._rows_to_messages(rows, chat_id)
 
@@ -1370,41 +1305,9 @@ class ChatDBReader:
 
             query = get_query("context", self._schema_version or "v14")
 
-            try:
-                cursor.execute(query, (chat_id, around_message_id, total_limit))
-                rows = cursor.fetchall()
-            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                # If query fails due to missing columns, create a minimal fallback query
-                logger.debug(f"Context query failed ({e}), trying fallback")
-                fallback_query = query
-
-                # Replace all optional columns with NULL placeholders
-                affected_handle_join = (
-                    "LEFT JOIN handle AS affected_handle "
-                    "ON message.other_handle = affected_handle.ROWID"
-                )
-
-                fallback_query = (
-                    fallback_query.replace(
-                        "message.group_action_type,",
-                        "NULL as group_action_type,",
-                    )
-                    .replace(
-                        "affected_handle.id as affected_handle_id",
-                        "NULL as affected_handle_id",
-                    )
-                    .replace(
-                        affected_handle_join,
-                        "",
-                    )
-                )
-
-                try:
-                    cursor.execute(fallback_query, (chat_id, around_message_id, total_limit))
-                    rows = cursor.fetchall()
-                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
-                    logger.warning(f"Query error in get_conversation_context: {e2}")
-                    return []
+            rows = self._execute_with_fallback(
+                cursor, query, (chat_id, around_message_id, total_limit),
+            )
 
             messages = self._rows_to_messages(rows, chat_id)
 
@@ -1412,6 +1315,67 @@ class ChatDBReader:
         messages.sort(key=lambda m: m.date)
 
         return messages
+
+    def _execute_with_fallback(
+        self,
+        cursor: sqlite3.Cursor,
+        query: str,
+        params: list[Any] | tuple[Any, ...],
+    ) -> list[sqlite3.Row]:
+        """Execute a query with automatic fallback for missing columns.
+
+        If the query fails due to a missing column, replaces optional columns
+        (group_action_type, affected_handle_id, date_delivered, date_read) with
+        NULL and retries.
+
+        Args:
+            cursor: Database cursor
+            query: SQL query string
+            params: Query parameters
+
+        Returns:
+            List of result rows, empty list on failure
+        """
+        try:
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+            error_str = str(e).lower()
+            if "no such column" not in error_str:
+                logger.warning(f"Query error: {e}")
+                return []
+
+            logger.debug(f"Query failed with missing column ({e}), using fallback")
+            fallback_query = (
+                query.replace(
+                    "message.date_delivered,",
+                    "NULL as date_delivered,",
+                )
+                .replace(
+                    "message.date_read,",
+                    "NULL as date_read,",
+                )
+                .replace(
+                    "message.group_action_type,",
+                    "NULL as group_action_type,",
+                )
+                .replace(
+                    "affected_handle.id as affected_handle_id",
+                    "NULL as affected_handle_id",
+                )
+                .replace(
+                    "LEFT JOIN handle AS affected_handle "
+                    "ON message.other_handle = affected_handle.ROWID",
+                    "",
+                )
+            )
+
+            try:
+                cursor.execute(fallback_query, params)
+                return cursor.fetchall()
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e2:
+                logger.warning(f"Query error after column fallback: {e2}")
+                return []
 
     def _prefetch_attachments(
         self,
@@ -1617,39 +1581,15 @@ class ChatDBReader:
 
         # Check for group events (system messages)
         group_action_type = row_dict.get("group_action_type", 0) or 0
-        is_system_message = group_action_type != 0
-
-        if is_system_message:
-            text = self._generate_group_event_text(
-                group_action_type,
-                sender,
-                sender_name,
-                row_dict.get("affected_handle_id"),
-                bool(row["is_from_me"]),
-            )
-            # System messages have no attachments or reactions
-            return Message(
-                id=message_id,
-                chat_id=chat_id,
-                sender=sender,
-                sender_name=sender_name,
-                text=text,
-                date=parse_apple_timestamp(row["date"]),
-                is_from_me=bool(row["is_from_me"]),
-                attachments=[],
-                reply_to_id=None,
-                reactions=[],
-                is_system_message=True,
+        if group_action_type != 0:
+            return self._parse_system_message(
+                row, row_dict, message_id, chat_id, sender, sender_name, group_action_type,
             )
 
         # Extract text (tries text column, falls back to attributedBody)
         text = extract_text_from_row(row_dict) or ""
 
-        # Use prefetched attachments if available, otherwise fall back to per-message query
-        if prefetched_attachments is not None:
-            attachments = prefetched_attachments.get(message_id, [])
-        else:
-            attachments = self._get_attachments_for_message(message_id)
+        attachments = self._resolve_attachments(message_id, prefetched_attachments)
 
         # Skip messages with no text AND no attachments (and not a system message)
         if not text and not attachments:
@@ -1661,21 +1601,8 @@ class ChatDBReader:
         if reply_to_guid:
             reply_to_id = self._get_message_rowid_by_guid(reply_to_guid)
 
-        # Use prefetched reactions if available, otherwise fall back to per-message query
-        if prefetched_reactions is not None:
-            reactions = prefetched_reactions.get(message_id, [])
-        else:
-            reactions = self._get_reactions_for_message_id(message_id)
-
-        # Parse delivery/read receipts (only meaningful for messages you sent)
-        # These columns may not exist in all databases/test fixtures
-        date_delivered = None
-        date_read = None
-        if row["is_from_me"]:
-            if row_dict.get("date_delivered"):
-                date_delivered = parse_apple_timestamp(row_dict["date_delivered"])
-            if row_dict.get("date_read"):
-                date_read = parse_apple_timestamp(row_dict["date_read"])
+        reactions = self._resolve_reactions(message_id, prefetched_reactions)
+        date_delivered, date_read = self._parse_receipts(row, row_dict)
 
         return Message(
             id=message_id,
@@ -1692,6 +1619,112 @@ class ChatDBReader:
             date_read=date_read,
             is_system_message=False,
         )
+
+    def _parse_system_message(
+        self,
+        row: sqlite3.Row,
+        row_dict: dict[str, Any],
+        message_id: int,
+        chat_id: str,
+        sender: str,
+        sender_name: str | None,
+        group_action_type: int,
+    ) -> Message:
+        """Build a Message for a group event (system message).
+
+        Args:
+            row: Original database row
+            row_dict: Row as dictionary
+            message_id: The message ROWID
+            chat_id: The conversation ID
+            sender: Normalized sender identifier
+            sender_name: Resolved contact name
+            group_action_type: The group_action_type value from the database
+
+        Returns:
+            Message with is_system_message=True
+        """
+        text = self._generate_group_event_text(
+            group_action_type,
+            sender,
+            sender_name,
+            row_dict.get("affected_handle_id"),
+            bool(row["is_from_me"]),
+        )
+        return Message(
+            id=message_id,
+            chat_id=chat_id,
+            sender=sender,
+            sender_name=sender_name,
+            text=text,
+            date=parse_apple_timestamp(row["date"]),
+            is_from_me=bool(row["is_from_me"]),
+            attachments=[],
+            reply_to_id=None,
+            reactions=[],
+            is_system_message=True,
+        )
+
+    def _resolve_attachments(
+        self,
+        message_id: int,
+        prefetched: dict[int, list[Attachment]] | None,
+    ) -> list[Attachment]:
+        """Get attachments from prefetched map or fall back to per-message query.
+
+        Args:
+            message_id: The message ROWID
+            prefetched: Pre-fetched attachments keyed by message ID, or None
+
+        Returns:
+            List of Attachment objects
+        """
+        if prefetched is not None:
+            return prefetched.get(message_id, [])
+        return self._get_attachments_for_message(message_id)
+
+    def _resolve_reactions(
+        self,
+        message_id: int,
+        prefetched: dict[int, list[Reaction]] | None,
+    ) -> list[Reaction]:
+        """Get reactions from prefetched map or fall back to per-message query.
+
+        Args:
+            message_id: The message ROWID
+            prefetched: Pre-fetched reactions keyed by message ID, or None
+
+        Returns:
+            List of Reaction objects
+        """
+        if prefetched is not None:
+            return prefetched.get(message_id, [])
+        return self._get_reactions_for_message_id(message_id)
+
+    def _parse_receipts(
+        self,
+        row: sqlite3.Row,
+        row_dict: dict[str, Any],
+    ) -> tuple[datetime | None, datetime | None]:
+        """Parse delivery and read receipt timestamps.
+
+        Only meaningful for messages sent by the current user.
+
+        Args:
+            row: Original database row
+            row_dict: Row as dictionary
+
+        Returns:
+            Tuple of (date_delivered, date_read), either may be None
+        """
+        date_delivered = None
+        date_read = None
+        if row["is_from_me"]:
+            if row_dict.get("date_delivered"):
+                date_delivered = parse_apple_timestamp(row_dict["date_delivered"])
+            if row_dict.get("date_read"):
+                date_read = parse_apple_timestamp(row_dict["date_read"])
+        return date_delivered, date_read
 
     def _generate_group_event_text(
         self,

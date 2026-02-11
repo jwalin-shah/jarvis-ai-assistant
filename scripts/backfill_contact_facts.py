@@ -152,7 +152,7 @@ def backfill(
                         flush=True,
                     )
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.warning("Error processing %s: %s", chat_id[:20], e)
             continue
 
@@ -273,7 +273,22 @@ def main() -> None:
         default=32,
         help="GLiNER batch size (default: 32)",
     )
+    parser.add_argument(
+        "--reindex",
+        action="store_true",
+        help="Embed all existing facts into vec_facts for semantic retrieval",
+    )
     args = parser.parse_args()
+
+    if args.reindex:
+        from jarvis.contacts.fact_index import reindex_all_facts
+
+        print("Reindexing all facts into vec_facts...", flush=True)
+        t0 = time.time()
+        count = reindex_all_facts()
+        elapsed = time.time() - t0
+        print(f"Indexed {count} facts in {elapsed:.1f}s", flush=True)
+        return
 
     backfill(
         max_contacts=args.max_contacts,

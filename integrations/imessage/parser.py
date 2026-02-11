@@ -16,6 +16,7 @@ import hashlib
 import logging
 import plistlib
 import re
+import struct
 import threading
 from collections import OrderedDict
 from datetime import UTC, datetime
@@ -194,7 +195,7 @@ def _extract_from_typedstream(data: bytes) -> str | None:
                     return clean
 
         return None
-    except Exception as e:
+    except (struct.error, UnicodeDecodeError, ValueError) as e:
         logger.debug(f"Failed to parse typedstream: {e}")
         return None
 
@@ -274,8 +275,8 @@ def _parse_attributed_body_impl(data: bytes) -> str | None:
         # Plist parsing failed, try typedstream as fallback
         logger.debug("Failed to parse attributedBody as plist, trying typedstream")
         return _extract_from_typedstream(data)
-    except Exception as e:
-        logger.debug(f"Unexpected error parsing attributedBody: {e}")
+    except (struct.error, UnicodeDecodeError, ValueError) as e:
+        logger.debug(f"Error parsing attributedBody: {e}")
         return None
 
 

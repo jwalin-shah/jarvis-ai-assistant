@@ -16,9 +16,14 @@ import {
   isDirectAccessAvailable,
   getConversations as getConversationsDirect,
   getMessages as getMessagesDirect,
+  getMessage as getMessageDirect,
+  getMessagesBatch as getMessagesBatchDirect,
   getLastMessageRowid,
+  getNewMessagesSince,
+  populateContactsCache,
 } from "../db";
 import { jarvis } from "../socket";
+import type { NewMessageEvent } from "../socket/client";
 
 /** Check if running in Tauri context */
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -152,13 +157,14 @@ export async function fetchConversations(isPolling = false) {
     let conversations: Conversation[] = [];
     
     if (isTauri) {
-      try {
-        const result = await jarvis.call<{ conversations: Conversation[] }>("list_conversations", { limit: 50 });
-        conversations = result.conversations;
-      } catch (e) {
-        if (isDirectAccessAvailable()) {
-          conversations = await getConversationsDirect(50);
-        } else {
+      if (isDirectAccessAvailable()) {
+        // Direct SQLite is ~50ms vs 1-3s through socket RPC
+        conversations = await getConversationsDirect(50);
+      } else {
+        try {
+          const result = await jarvis.call<{ conversations: Conversation[] }>("list_conversations", { limit: 50 });
+          conversations = result.conversations;
+        } catch (e) {
           conversations = await api.getConversations();
         }
       }
@@ -193,7 +199,7 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
     } else {
       messages = await api.getMessages(chatId, PAGE_SIZE);
     }
-    return [...messages].reverse();
+    return messages.toReversed();
   } catch (e) {
     console.error("fetchMessages failed", e);
     return [];
@@ -207,22 +213,52 @@ export async function pollMessages(): Promise<Message[]> {
   const timeSinceLastSync = now - conversationsStore.lastSyncTimestamp;
 
   try {
+    const chatId = conversationsStore.selectedChatId;
+
     if (isDirectAccessAvailable()) {
       const currentGlobalRowid = await getLastMessageRowid();
       // Skip if nothing changed globally AND we synchronized recently
       if (
-        currentGlobalRowid > 0 && 
+        currentGlobalRowid > 0 &&
         currentGlobalRowid === conversationsStore.lastKnownGlobalRowid &&
         timeSinceLastSync < conversationsStore.SYNC_DEBOUNCE_MS
       ) {
         return [];
       }
+
+      // Incremental fetch: only get messages newer than last known ROWID
+      const newEntries = await getNewMessagesSince(conversationsStore.lastKnownGlobalRowid);
       conversationsStore.lastKnownGlobalRowid = currentGlobalRowid;
+
+      // Filter to messages for the current chat
+      const relevantEntries = newEntries.filter(e => e.chatId === chatId);
+      if (relevantEntries.length === 0) return [];
+
+      // Batch fetch all new messages in a single query (avoids N+1)
+      const existingIds = new Set(conversationsStore.messages.map(m => m.id));
+      const idsToFetch = relevantEntries
+        .map(e => e.messageId)
+        .filter(id => !existingIds.has(id));
+      if (idsToFetch.length === 0) return [];
+
+      const fetchedMessages = await getMessagesBatchDirect(chatId, idsToFetch);
+      const newMessages = fetchedMessages.filter(msg => !existingIds.has(msg.id));
+
+      if (conversationsStore.selectedChatId !== chatId) return [];
+
+      if (newMessages.length > 0) {
+        conversationsStore.messages = [...conversationsStore.messages, ...newMessages];
+        const cached = conversationsStore.messageCache.get(chatId);
+        if (cached) {
+          cached.messages = conversationsStore.messages;
+        }
+        conversationsStore.lastSyncTimestamp = now;
+      }
+      return newMessages;
     }
 
-    const chatId = conversationsStore.selectedChatId;
+    // Fallback: full re-fetch for non-direct access
     const freshMessages = await fetchMessages(chatId);
-    
     if (conversationsStore.selectedChatId !== chatId) return [];
 
     const currentIds = new Set(conversationsStore.messages.map(m => m.id));
@@ -248,11 +284,11 @@ export async function selectConversation(chatId: string) {
   clearNewMessageIndicator(chatId);
 
   // Background prefetch
-  jarvis.call("prefetch_focus", { chat_id: chatId }).then((result: any) => {
+  jarvis.call<{ status: string; prefetched?: boolean; draft?: { suggestions: DraftSuggestion[] }; error?: string }>("prefetch_focus", { chat_id: chatId }).then((result) => {
     if (result?.prefetched && result?.draft?.suggestions?.length) {
       conversationsStore.prefetchedDraft = { chatId, suggestions: result.draft.suggestions };
     }
-  }).catch(() => {});
+  }).catch((e) => { console.debug('prefetch_focus failed:', e); });
 
   const cached = conversationsStore.messageCache.get(chatId);
   if (cached) {
@@ -270,6 +306,7 @@ export async function selectConversation(chatId: string) {
   conversationsStore.messages = [];
   conversationsStore.loadingMessages = true;
   conversationsStore.hasMore = true;
+  conversationsStore.prefetchedDraft = null;
 
   try {
     const messages = await fetchMessages(chatId);
@@ -303,7 +340,12 @@ export async function loadMoreMessages(): Promise<boolean> {
   conversationsStore.loadingMore = true;
 
   try {
-    const olderMessages = await api.getMessages(selectedChatId, PAGE_SIZE, beforeDate);
+    let olderMessages: Message[];
+    if (isDirectAccessAvailable()) {
+      olderMessages = await getMessagesDirect(selectedChatId, PAGE_SIZE, new Date(beforeDate));
+    } else {
+      olderMessages = await api.getMessages(selectedChatId, PAGE_SIZE, beforeDate);
+    }
     const newHasMore = olderMessages.length >= PAGE_SIZE;
     const chronologicalOlder = [...olderMessages].reverse();
 
@@ -323,9 +365,42 @@ export async function loadMoreMessages(): Promise<boolean> {
   }
 }
 
+// Socket push handler for real-time new messages
+export async function handleNewMessagePush(data: NewMessageEvent) {
+  const { chat_id, message_id } = data;
+
+  if (chat_id !== conversationsStore.selectedChatId) {
+    markConversationAsNew(chat_id);
+  } else {
+    // Append to current conversation
+    if (isDirectAccessAvailable()) {
+      const msg = await getMessageDirect(chat_id, message_id);
+      if (msg && !conversationsStore.messages.some((m) => m.id === msg.id)) {
+        conversationsStore.messages = [...conversationsStore.messages, msg];
+        const cached = conversationsStore.messageCache.get(chat_id);
+        if (cached) {
+          cached.messages = conversationsStore.messages;
+        }
+      }
+    } else {
+      const freshMessages = await fetchMessages(chat_id);
+      if (conversationsStore.selectedChatId === chat_id) {
+        conversationsStore.messages = freshMessages;
+        const cached = conversationsStore.messageCache.get(chat_id);
+        if (cached) {
+          cached.messages = freshMessages;
+        }
+      }
+    }
+  }
+
+  // Always refresh conversation list (updates order, preview text)
+  fetchConversations(true);
+}
+
 // Polling Logic
-let conversationPollInterval: any = null;
-let messagePollInterval: any = null;
+let conversationPollInterval: ReturnType<typeof setInterval> | null = null;
+let messagePollInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startConversationPolling() {
   if (conversationPollInterval) clearInterval(conversationPollInterval);
@@ -356,6 +431,19 @@ export async function initializePolling(): Promise<() => void> {
   await initDatabases();
   if (isDirectAccessAvailable()) {
     conversationsStore.lastKnownGlobalRowid = await getLastMessageRowid();
+
+    // Pre-populate contact names in background (non-blocking)
+    jarvis.call<Record<string, string | null>>("get_contacts", {})
+      .then((contacts) => {
+        if (contacts && typeof contacts === "object") {
+          populateContactsCache(contacts);
+          // Refresh conversations to show resolved names
+          fetchConversations(true);
+        }
+      })
+      .catch(() => {
+        // Contact resolution not critical - will fall back to phone numbers
+      });
   }
 
   startConversationPolling();
@@ -372,11 +460,14 @@ export async function initializePolling(): Promise<() => void> {
   window.addEventListener("focus", handleFocus);
   window.addEventListener("blur", handleBlur);
 
+  const unlistenNewMsg = jarvis.on<NewMessageEvent>("new_message", handleNewMessagePush);
+
   return () => {
     stopConversationPolling();
     stopMessagePolling();
     window.removeEventListener("focus", handleFocus);
     window.removeEventListener("blur", handleBlur);
+    unlistenNewMsg();
   };
 }
 
@@ -394,5 +485,15 @@ export function clearScrollTarget() {
 export function clearSelection() {
   conversationsStore.selectedChatId = null;
   conversationsStore.messages = [];
+  conversationsStore.hasMore = false;
+  conversationsStore.loadingMore = false;
   stopMessagePolling();
+}
+
+export function invalidateMessageCache(chatId?: string) {
+  if (chatId) {
+    conversationsStore.messageCache.delete(chatId);
+  } else {
+    conversationsStore.messageCache.clear();
+  }
 }

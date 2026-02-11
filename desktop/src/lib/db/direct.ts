@@ -4,8 +4,11 @@
  */
 
 import type { Conversation, Message, Attachment, Reaction } from "../api/types";
+import { LRUCache } from "../utils/lru-cache";
 
-// Dynamic import for Tauri plugin - only works in Tauri context
+// Dynamic import for Tauri plugin - only works in Tauri context.
+// The plugin's default export is a class with static methods (e.g. Database.load()),
+// but @tauri-apps/plugin-sql doesn't export the class type separately.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let Database: any = null;
 interface SqlDatabase {
@@ -46,7 +49,8 @@ const contactsCache = new Map<string, string>();
 let contactsCacheLoaded = false;
 
 // GUID to ROWID cache for reply_to_id resolution
-const guidToRowidCache = new Map<string, number>();
+// LRU cache with max 10k entries to prevent unbounded memory growth
+const guidToRowidCache = new LRUCache<string, number>(10000);
 
 /**
  * Initialize database connections
@@ -393,6 +397,37 @@ export async function getMessages(
       }
     }
 
+    // Batch prefetch reply GUID→ROWID mappings to avoid N+1 queries
+    const replyGuidToRowid = new Map<string, number>();
+    const replyGuids = rows
+      .map((row) => row.reply_to_guid)
+      .filter((g): g is string => !!g && !guidToRowidCache.has(g));
+    // Deduplicate and also check which are already in LRU cache
+    const uncachedGuids = [...new Set(replyGuids)];
+    if (uncachedGuids.length > 0 && chatDb) {
+      const guidQuery = `
+        SELECT guid, ROWID as id FROM message
+        WHERE guid IN (${uncachedGuids.map(() => "?").join(",")})
+      `;
+      const guidRows = await chatDb.select<{ guid: string; id: number }[]>(
+        guidQuery,
+        uncachedGuids
+      );
+      for (const gr of guidRows) {
+        replyGuidToRowid.set(gr.guid, gr.id);
+        guidToRowidCache.set(gr.guid, gr.id);
+      }
+    }
+    // Also include already-cached values
+    for (const row of rows) {
+      if (row.reply_to_guid) {
+        const cached = guidToRowidCache.get(row.reply_to_guid);
+        if (cached !== undefined) {
+          replyGuidToRowid.set(row.reply_to_guid, cached);
+        }
+      }
+    }
+
     // Convert rows to messages using prefetched data
     const messages: Message[] = [];
     for (const row of rows) {
@@ -400,7 +435,8 @@ export async function getMessages(
         row,
         chatId,
         attachmentsByMessageId.get(row.id) || [],
-        reactionsByMessageGuid.get(row.guid) || []
+        reactionsByMessageGuid.get(row.guid) || [],
+        row.reply_to_guid ? replyGuidToRowid.get(row.reply_to_guid) ?? null : null
       );
       if (message) {
         messages.push(message);
@@ -466,6 +502,166 @@ export async function getMessage(
 }
 
 /**
+ * Get multiple messages by their ROWIDs in a single query (batch fetch)
+ * Used by pollMessages() to avoid N+1 when fetching new messages
+ */
+export async function getMessagesBatch(
+  chatId: string,
+  messageIds: number[]
+): Promise<Message[]> {
+  if (!chatDb || messageIds.length === 0) return [];
+
+  const placeholders = messageIds.map(() => "?").join(",");
+  const query = `
+    SELECT
+      message.ROWID as id,
+      message.guid,
+      chat.guid as chat_id,
+      COALESCE(handle.id, 'me') as sender,
+      message.text,
+      message.attributedBody,
+      message.date,
+      message.is_from_me,
+      message.thread_originator_guid as reply_to_guid,
+      message.date_delivered,
+      message.date_read,
+      message.group_action_type,
+      affected_handle.id as affected_handle_id
+    FROM message
+    JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+    JOIN chat ON chat_message_join.chat_id = chat.ROWID
+    LEFT JOIN handle ON message.handle_id = handle.ROWID
+    LEFT JOIN handle AS affected_handle ON message.other_handle = affected_handle.ROWID
+    WHERE chat.guid = ? AND message.ROWID IN (${placeholders})
+    ORDER BY message.date ASC
+  `;
+
+  try {
+    const rows = await chatDb.select<MessageRow[]>(query, [chatId, ...messageIds]);
+
+    // Batch prefetch attachments
+    const rowIds = rows.map((r) => r.id);
+    const attachmentsByMessageId = new Map<number, Attachment[]>();
+    if (rowIds.length > 0) {
+      const attachmentQuery = `
+        SELECT
+          message_attachment_join.message_id,
+          attachment.ROWID as attachment_id,
+          attachment.filename,
+          attachment.mime_type,
+          attachment.total_bytes as file_size,
+          attachment.transfer_name
+        FROM message_attachment_join
+        JOIN attachment ON message_attachment_join.attachment_id = attachment.ROWID
+        WHERE message_attachment_join.message_id IN (${rowIds.map(() => "?").join(",")})
+      `;
+      const attachmentRows = await chatDb.select<(AttachmentRow & { message_id: number })[]>(
+        attachmentQuery,
+        rowIds
+      );
+      for (const row of attachmentRows) {
+        if (!attachmentsByMessageId.has(row.message_id)) {
+          attachmentsByMessageId.set(row.message_id, []);
+        }
+        attachmentsByMessageId.get(row.message_id)!.push({
+          filename: row.transfer_name || row.filename || "attachment",
+          file_path: row.filename,
+          mime_type: row.mime_type,
+          file_size: row.file_size,
+        });
+      }
+    }
+
+    // Batch prefetch reactions
+    const guids = rows.map((r) => r.guid).filter((g) => g);
+    const reactionsByMessageGuid = new Map<string, Reaction[]>();
+    if (guids.length > 0) {
+      const reactionQuery = `
+        SELECT
+          associated_message.guid as message_guid,
+          reaction.ROWID as id,
+          reaction.associated_message_type,
+          reaction.date,
+          reaction.is_from_me,
+          COALESCE(handle.id, 'me') as sender
+        FROM message AS reaction
+        JOIN message AS associated_message ON reaction.associated_message_guid = associated_message.guid
+        LEFT JOIN handle ON reaction.handle_id = handle.ROWID
+        WHERE associated_message.guid IN (${guids.map(() => "?").join(",")})
+          AND reaction.associated_message_type IS NOT NULL
+      `;
+      const reactionRows = await chatDb.select<(ReactionRow & { message_guid: string })[]>(
+        reactionQuery,
+        guids
+      );
+      for (const rRow of reactionRows) {
+        const reactionType = parseReactionType(rRow.associated_message_type);
+        if (!reactionType || reactionType.startsWith("remove_")) continue;
+        const guid = rRow.message_guid;
+        if (!reactionsByMessageGuid.has(guid)) {
+          reactionsByMessageGuid.set(guid, []);
+        }
+        const sender = normalizePhoneNumber(rRow.sender) || rRow.sender;
+        reactionsByMessageGuid.get(guid)!.push({
+          type: reactionType,
+          sender,
+          sender_name: rRow.is_from_me ? null : resolveContactName(sender),
+          date: formatDate(parseAppleTimestamp(rRow.date)) || "",
+        });
+      }
+    }
+
+    // Batch prefetch reply GUID->ROWID
+    const replyGuidToRowid = new Map<string, number>();
+    const replyGuids = rows
+      .map((r) => r.reply_to_guid)
+      .filter((g): g is string => !!g && !guidToRowidCache.has(g));
+    const uncachedGuids = [...new Set(replyGuids)];
+    if (uncachedGuids.length > 0 && chatDb) {
+      const guidQuery = `
+        SELECT guid, ROWID as id FROM message
+        WHERE guid IN (${uncachedGuids.map(() => "?").join(",")})
+      `;
+      const guidRows = await chatDb.select<{ guid: string; id: number }[]>(
+        guidQuery,
+        uncachedGuids
+      );
+      for (const gr of guidRows) {
+        replyGuidToRowid.set(gr.guid, gr.id);
+        guidToRowidCache.set(gr.guid, gr.id);
+      }
+    }
+    for (const row of rows) {
+      if (row.reply_to_guid) {
+        const cached = guidToRowidCache.get(row.reply_to_guid);
+        if (cached !== undefined) {
+          replyGuidToRowid.set(row.reply_to_guid, cached);
+        }
+      }
+    }
+
+    const messages: Message[] = [];
+    for (const row of rows) {
+      const message = await rowToMessage(
+        row,
+        chatId,
+        attachmentsByMessageId.get(row.id) || [],
+        reactionsByMessageGuid.get(row.guid) || [],
+        row.reply_to_guid ? replyGuidToRowid.get(row.reply_to_guid) ?? null : null
+      );
+      if (message) {
+        messages.push(message);
+      }
+    }
+
+    return messages;
+  } catch (error) {
+    console.error("[DirectDB] getMessagesBatch error:", error);
+    return [];
+  }
+}
+
+/**
  * Get the last message ROWID (for detecting new messages)
  */
 export async function getLastMessageRowid(): Promise<number> {
@@ -513,12 +709,14 @@ export async function getNewMessagesSince(
  * @param chatId - Chat identifier
  * @param prefetchedAttachments - Optional prefetched attachments (to avoid N+1 query)
  * @param prefetchedReactions - Optional prefetched reactions (to avoid N+1 query)
+ * @param prefetchedReplyRowid - Optional prefetched reply ROWID (to avoid N+1 query)
  */
 async function rowToMessage(
   row: MessageRow,
   chatId: string,
   prefetchedAttachments?: Attachment[],
-  prefetchedReactions?: Reaction[]
+  prefetchedReactions?: Reaction[],
+  prefetchedReplyRowid?: number | null
 ): Promise<Message | null> {
   // Get sender and resolve name
   const sender = normalizePhoneNumber(row.sender) || row.sender;
@@ -570,10 +768,12 @@ async function rowToMessage(
     return null;
   }
 
-  // Resolve reply_to_id from GUID
+  // Resolve reply_to_id from GUID (use prefetched if available)
   let replyToId: number | null = null;
   if (row.reply_to_guid) {
-    replyToId = await getMessageRowidByGuid(row.reply_to_guid);
+    replyToId = prefetchedReplyRowid !== undefined
+      ? prefetchedReplyRowid
+      : await getMessageRowidByGuid(row.reply_to_guid);
   }
 
   // Get reactions (use prefetched if available to avoid N+1 query)
@@ -664,7 +864,7 @@ async function getReactionsForMessage(messageGuid: string): Promise<Reaction[]> 
  * Get message ROWID from GUID
  */
 async function getMessageRowidByGuid(guid: string): Promise<number | null> {
-  // Check cache first
+  // Check cache first (LRU automatically updates recency)
   const cached = guidToRowidCache.get(guid);
   if (cached !== undefined) return cached;
 

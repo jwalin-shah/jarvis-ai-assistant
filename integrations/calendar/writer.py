@@ -179,7 +179,7 @@ class CalendarWriterImpl:
                 success=False,
                 error="Calendar request timed out",
             )
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError) as e:
             logger.exception("Failed to create event")
             return CreateEventResult(
                 success=False,

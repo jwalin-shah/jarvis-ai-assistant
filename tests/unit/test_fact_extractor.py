@@ -86,45 +86,15 @@ class TestBotMessageDetection:
 class TestVagueSubjectRejection:
     """Test vague subject filtering."""
 
-    def test_reject_pronoun_me(self) -> None:
-        """Reject 'me' as subject."""
+    @pytest.mark.parametrize(
+        "pronoun",
+        ["me", "you", "that", "this", "it", "them", "he", "she"],
+        ids=lambda p: f"reject_{p}",
+    )
+    def test_reject_vague_pronouns(self, pronoun: str) -> None:
+        """Reject vague pronouns as subject."""
         extractor = FactExtractor()
-        assert extractor._is_vague_subject("me")
-
-    def test_reject_pronoun_you(self) -> None:
-        """Reject 'you' as subject."""
-        extractor = FactExtractor()
-        assert extractor._is_vague_subject("you")
-
-    def test_reject_pronoun_that(self) -> None:
-        """Reject 'that' as subject."""
-        extractor = FactExtractor()
-        assert extractor._is_vague_subject("that")
-
-    def test_reject_pronoun_this(self) -> None:
-        """Reject 'this' as subject."""
-        extractor = FactExtractor()
-        assert extractor._is_vague_subject("this")
-
-    def test_reject_pronoun_it(self) -> None:
-        """Reject 'it' as subject."""
-        extractor = FactExtractor()
-        assert extractor._is_vague_subject("it")
-
-    def test_reject_pronoun_them(self) -> None:
-        """Reject 'them' as subject."""
-        extractor = FactExtractor()
-        assert extractor._is_vague_subject("them")
-
-    def test_reject_pronoun_he(self) -> None:
-        """Reject 'he' as subject."""
-        extractor = FactExtractor()
-        assert extractor._is_vague_subject("he")
-
-    def test_reject_pronoun_she(self) -> None:
-        """Reject 'she' as subject."""
-        extractor = FactExtractor()
-        assert extractor._is_vague_subject("she")
+        assert extractor._is_vague_subject(pronoun)
 
     def test_accept_proper_name(self) -> None:
         """Keep proper names."""
@@ -327,23 +297,27 @@ class TestEndToEndExtraction:
         extractor = FactExtractor()
         messages = [
             {"text": "Your CVS Pharmacy prescription is ready"},
-            {"text": "I love coffee"},
+            {"text": "I love driving in san francisco"},
         ]
         facts = extractor.extract_facts(messages, contact_id="test")
-        # Only the coffee fact should be extracted
-        assert len(facts) >= 0  # May be 0 if "coffee" is too short
+        # Bot message should be skipped, only the real message extracted
+        subjects = {f.subject.lower() for f in facts}
+        assert "prescription" not in subjects
+        # The non-bot message should produce facts (4+ words survives filters)
+        assert len(facts) >= 1, f"Expected at least 1 fact, got {facts}"
 
     def test_extraction_filters_vague_subjects(self) -> None:
         """Vague subjects are filtered during extraction."""
         extractor = FactExtractor()
         messages = [
-            {"text": "I hate cilantro"},  # subject=cilantro, good
+            {"text": "I hate cilantro on my tacos"},  # 4+ words, survives filters
             {"text": "I love me"},  # subject=me, vague -> rejected
         ]
         facts = extractor.extract_facts(messages, contact_id="test")
-        # Should have cilantro fact but not me fact
-        subjects = {f.subject for f in facts}
-        assert "cilantro" in subjects or len(facts) == 0  # Depends on thresholds
+        subjects = {f.subject.lower() for f in facts}
+        assert any("cilantro" in s for s in subjects), (
+            f"Expected cilantro fact, got subjects: {subjects}"
+        )
         assert "me" not in subjects
 
     def test_extraction_respects_confidence_threshold(self) -> None:
@@ -353,22 +327,23 @@ class TestEndToEndExtraction:
             {"text": "I like sf"},  # short, will be penalized
         ]
         facts = extractor.extract_facts(messages, contact_id="test")
-        # 1-word subject gets short penalty: 0.6 * 0.7 = 0.42 < 0.6 threshold
-        # Should be filtered out
-        for fact in facts:
-            assert fact.confidence >= 0.6
+        # 1-word subject "sf" gets short penalty: 0.6 * 0.7 = 0.42 < 0.6 threshold
+        # Should be filtered out entirely
+        assert len(facts) == 0, f"Expected 0 facts after threshold filter, got {facts}"
 
     def test_extraction_deduplicates(self) -> None:
         """Extracted facts are deduplicated."""
         extractor = FactExtractor()
         messages = [
-            {"text": "I love sushi"},
-            {"text": "I really love sushi"},
+            {"text": "I love hiking in the mountains"},
+            {"text": "I really love hiking in the mountains"},
         ]
         facts = extractor.extract_facts(messages, contact_id="test")
-        # Should have only one sushi fact after dedup
-        sushi_facts = [f for f in facts if "sushi" in f.subject.lower()]
-        assert len(sushi_facts) <= 1
+        # Duplicate subjects with same predicate should be deduplicated to 1
+        hiking_facts = [f for f in facts if "hiking" in f.subject.lower()]
+        assert len(hiking_facts) == 1, (
+            f"Expected exactly 1 hiking fact after dedup, got {len(hiking_facts)}: {hiking_facts}"
+        )
 
 
 class TestExtractionPerformance:
