@@ -104,10 +104,11 @@ class KnowledgeGraph:
             start_time = time.perf_counter()
 
             with db.connection() as conn:
-                # Load contact profiles as contact nodes
+                # Load contacts as contact nodes
                 profiles = conn.execute(
-                    "SELECT contact_id, contact_name, relationship,"
-                    " message_count FROM contact_profiles"
+                    "SELECT chat_id AS contact_id, display_name AS contact_name,"
+                    " relationship, 0 AS message_count FROM contacts"
+                    " WHERE chat_id IS NOT NULL"
                 ).fetchall()
 
                 # PERF FIX: Use batch operations add_nodes_from() and add_edges_from()
