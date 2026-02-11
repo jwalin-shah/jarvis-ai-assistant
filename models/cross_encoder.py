@@ -290,10 +290,12 @@ class InProcessCrossEncoder:
         # and the Metal GPU operations, preventing race conditions where
         # another thread changes padding between tokenization and forward pass.
         with self._get_gpu_lock():
-            # Tokenize ONCE with padding enabled — extract both encodings
-            # and actual lengths from the attention_mask in a single pass.
+            # Tokenize once WITHOUT padding to get actual lengths for sorting.
+            # We manually pad per-batch below so each batch only pads to its
+            # own max length (not the global max), saving memory.
+            self.tokenizer.no_padding()
             encodings = self.tokenizer.encode_batch([(query, doc) for query, doc in pairs])
-            lengths = [sum(e.attention_mask) for e in encodings]
+            lengths = [len(e.ids) for e in encodings]
 
             # Sort by length for efficient batching
             sorted_indices = np.argsort([-length for length in lengths])
@@ -303,21 +305,26 @@ class InProcessCrossEncoder:
                 batch_end = min(batch_start + batch_size, len(pairs))
                 batch_indices = sorted_indices[batch_start:batch_end]
 
-                # Reuse pre-computed encodings, trim to sub-batch max length
+                # Reuse pre-computed encodings, manually pad to batch max
                 batch_encodings = [encodings[i] for i in batch_indices]
-                batch_lengths = [lengths[i] for i in batch_indices]
-                max_len = max(batch_lengths)
+                max_len = max(len(e.ids) for e in batch_encodings)
 
                 input_ids = np.array(
-                    [e.ids[:max_len] for e in batch_encodings],
+                    [e.ids + [0] * (max_len - len(e.ids)) for e in batch_encodings],
                     dtype=np.int32,
                 )
                 attention_mask = np.array(
-                    [e.attention_mask[:max_len] for e in batch_encodings],
+                    [
+                        e.attention_mask + [0] * (max_len - len(e.attention_mask))
+                        for e in batch_encodings
+                    ],
                     dtype=np.int32,
                 )
                 token_type_ids = np.array(
-                    [e.type_ids[:max_len] for e in batch_encodings],
+                    [
+                        e.type_ids + [0] * (max_len - len(e.type_ids))
+                        for e in batch_encodings
+                    ],
                     dtype=np.int32,
                 )
 
