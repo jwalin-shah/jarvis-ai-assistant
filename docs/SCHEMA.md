@@ -1,5 +1,7 @@
 # JARVIS Database Schema
 
+> **Last Updated:** 2026-02-10
+
 This document describes the database schemas used by JARVIS.
 
 ## iMessage Database (Read-Only)
@@ -77,13 +79,27 @@ ORDER BY m.date DESC
 LIMIT 50;
 ```
 
-Get recent conversations:
+Get recent conversations (uses `ROW_NUMBER()` to guarantee one message per chat, avoiding duplicate-timestamp multiplication):
 ```sql
-SELECT c.*, MAX(m.date) as last_date FROM chat c
-JOIN chat_message_join cmj ON c.ROWID = cmj.chat_id
-JOIN message m ON cmj.message_id = m.ROWID
-GROUP BY c.ROWID
-ORDER BY last_date DESC
+WITH chat_stats AS (
+    SELECT cmj.chat_id,
+           MAX(m.date) as last_date,
+           COUNT(*) as msg_count
+    FROM chat_message_join cmj
+    JOIN message m ON cmj.message_id = m.ROWID
+    GROUP BY cmj.chat_id
+),
+last_msgs AS (
+    SELECT cmj.chat_id, m.text, m.is_from_me,
+           ROW_NUMBER() OVER (PARTITION BY cmj.chat_id ORDER BY m.date DESC) as rn
+    FROM chat_message_join cmj
+    JOIN message m ON cmj.message_id = m.ROWID
+)
+SELECT c.*, cs.last_date, cs.msg_count, lm.text as last_message_text
+FROM chat c
+JOIN chat_stats cs ON c.ROWID = cs.chat_id
+LEFT JOIN last_msgs lm ON c.ROWID = lm.chat_id AND lm.rn = 1
+ORDER BY cs.last_date DESC
 LIMIT 50;
 ```
 
@@ -127,7 +143,7 @@ JARVIS uses the `sqlite-vec` extension for high-performance vector search direct
 ### JARVIS Primary Database
 
 **Location**: `~/.jarvis/jarvis.db`
-**Current Schema Version**: 12
+**Current Schema Version**: 13
 
 #### `contacts`
 Stores contact relationship metadata and handle mappings.
@@ -302,7 +318,7 @@ Aggregated communication patterns cached per model.
 | profile_data | TEXT | JSON blob of style, tone, and topics |
 
 #### `contact_facts`
-Extracted facts about contacts from message history (v12+). Used by the knowledge graph for relationship/location/work/preference tracking.
+Extracted facts about contacts from message history (v12+, v13 adds `linked_contact_id`). Used by the knowledge graph for relationship/location/work/preference tracking.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -316,10 +332,11 @@ Extracted facts about contacts from message history (v12+). Used by the knowledg
 | source_message_id | INTEGER | Which message this fact was extracted from |
 | source_text | TEXT | Source message text (truncated to 500 chars) |
 | extracted_at | TIMESTAMP | When the fact was extracted |
+| linked_contact_id | TEXT | Resolved contact reference from NER person linking (v13+) |
 
 **Unique constraint**: `(contact_id, category, subject, predicate)` prevents duplicate facts.
 
-**Indexes**: `idx_facts_contact` on contact_id, `idx_facts_category` on category.
+**Indexes**: `idx_facts_contact` on contact_id, `idx_facts_category` on category, `idx_facts_linked_contact` on linked_contact_id.
 
 ### Quality Metrics (In-Memory)
 

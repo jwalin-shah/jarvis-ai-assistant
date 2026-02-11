@@ -1,5 +1,7 @@
 # Phase 1: Candidate Extractor Bakeoff
 
+> **Last Updated:** 2026-02-10
+
 This document describes the Phase 1 implementation of the Fact KG Roadmap - a bakeoff evaluation system for comparing multiple candidate extraction backends.
 
 ## Overview

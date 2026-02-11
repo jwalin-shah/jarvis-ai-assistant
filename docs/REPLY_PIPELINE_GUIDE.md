@@ -1,5 +1,7 @@
 # Reply Pipeline Architecture Guide
 
+> **Last Updated:** 2026-02-10
+
 ## Overview
 
 This guide covers the complete architecture for generating text message replies that match your personal style.

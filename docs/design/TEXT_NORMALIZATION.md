@@ -1,5 +1,7 @@
 # Text Normalization for Embeddings
 
+> **Last Updated:** 2026-02-10
+
 ## Overview
 
 All text is normalized before embedding to ensure consistency between training and inference.

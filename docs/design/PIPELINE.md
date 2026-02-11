@@ -1,5 +1,7 @@
 # Classification & Routing Pipeline
 
+> **Last Updated:** 2026-02-10
+
 ## Message Response Flow
 
 When a new message arrives:

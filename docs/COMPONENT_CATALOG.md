@@ -1,5 +1,7 @@
 # JARVIS Desktop Component Catalog
 
+> **Last Updated:** 2026-02-10
+
 A comprehensive guide to all Svelte components in the JARVIS desktop application.
 
 ## Table of Contents

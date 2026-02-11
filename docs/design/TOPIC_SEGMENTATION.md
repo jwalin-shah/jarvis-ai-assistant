@@ -1,5 +1,7 @@
 # Topic Segmentation
 
+> **Last Updated:** 2026-02-10
+
 Semantic topic boundary detection for conversation chunking. Replaces arbitrary time-based turn bundling with intelligent boundary detection.
 
 **Module:** `jarvis/topic_segmenter.py`

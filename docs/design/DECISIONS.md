@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+> **Last Updated:** 2026-02-10
+
 This document captures key architectural decisions, their rationale, and lessons learned.
 
 ---
