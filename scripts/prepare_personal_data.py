@@ -215,7 +215,6 @@ def split_by_contact(
 def prepare_category_aware(pairs: list[dict], output_dir: Path, log: logging.Logger) -> None:
     """Prepare category-aware training data."""
     from tqdm import tqdm
-
     log.info("Preparing category-aware variant...")
     output_dir.mkdir(parents=True, exist_ok=True)
 

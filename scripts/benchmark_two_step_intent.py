@@ -13,9 +13,9 @@ import json
 import logging
 import sys
 import time
-from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Iterable
 
 from sklearn.metrics import accuracy_score, f1_score
 
@@ -102,9 +102,7 @@ def _partial_snapshot(
     )
 
 
-def _run_backend(
-    rows: Iterable[dict], backend_spec: str, *, progress_every: int = 0
-) -> BackendMetrics:
+def _run_backend(rows: Iterable[dict], backend_spec: str, *, progress_every: int = 0) -> BackendMetrics:
     classifier, backend_name = _parse_backend(backend_spec)
     # Fail fast for unavailable heavy backends (e.g., missing MLX models).
     classifier.classify("health-check", ["reply_casual_chat", "no_reply_ack"])

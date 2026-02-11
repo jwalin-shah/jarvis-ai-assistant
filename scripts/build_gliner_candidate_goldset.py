@@ -40,7 +40,6 @@ def _setup_logging() -> logging.Logger:
     )
     return logging.getLogger(__name__)
 
-
 APPLE_EPOCH_UNIX = 978307200  # 2001-01-01 00:00:00 UTC
 NANOSECONDS_PER_SECOND = 1_000_000_000
 
@@ -643,7 +642,8 @@ def main() -> int:
             args.org_count + args.location_count + args.health_count + args.negative_count
         )
         raise SystemExit(
-            f"Bucket counts must sum to --total. Got {total_requested} != {args.total}"
+            "Bucket counts must sum to --total. "
+            f"Got {total_requested} != {args.total}"
         )
 
     source_csv = args.source_csv.expanduser() if str(args.source_csv).strip() else None
@@ -651,7 +651,9 @@ def main() -> int:
 
     db_path = args.db_path.expanduser()
     if not use_csv_source and not db_path.exists():
-        raise SystemExit(f"chat.db not found at {db_path} and source CSV not found at {source_csv}")
+        raise SystemExit(
+            f"chat.db not found at {db_path} and source CSV not found at {source_csv}"
+        )
 
     from jarvis.contacts.candidate_extractor import CandidateExtractor, labels_for_profile
 
@@ -824,9 +826,9 @@ def main() -> int:
             if use_csv_source:
                 context_prev = str(row.get("context_prev", ""))
                 context_next = str(row.get("context_next", ""))
-                message_date = (
-                    str(row.get("message_date", "")) or parse_apple_timestamp(date_raw).isoformat()
-                )
+                message_date = str(row.get("message_date", "")) or parse_apple_timestamp(
+                    date_raw
+                ).isoformat()
             else:
                 assert conn is not None
                 prev_ctx, next_ctx = fetch_context(

@@ -142,16 +142,12 @@ def map_old_to_new(old_label: str) -> str:
 
 
 def merge_datasets(
-    X_orig: np.ndarray,
-    y_orig: np.ndarray,
-    X_gemini: np.ndarray,
-    y_gemini: np.ndarray,
-    logger: logging.Logger,
+    X_orig: np.ndarray, y_orig: np.ndarray, X_gemini: np.ndarray, y_gemini: np.ndarray,
+    logger: logging.Logger
 ) -> tuple[np.ndarray, np.ndarray]:
     """Merge original and Gemini datasets."""
-    from collections import Counter
-
     import numpy as np
+    from collections import Counter
 
     logger.info("\n" + "=" * 70)
     logger.info("MERGING DATASETS")
@@ -160,13 +156,13 @@ def merge_datasets(
     # Map original categories to new system
     y_orig_mapped = np.array([map_old_to_new(label) for label in y_orig])
 
-    logger.info("\nOriginal (mapped to new 6-category):")
+    logger.info(f"\nOriginal (mapped to new 6-category):")
 
     orig_dist = Counter(y_orig_mapped)
     for cat, count in sorted(orig_dist.items()):
         logger.info(f"  {cat:15s}: {count:5d}")
 
-    logger.info("\nGemini (native 6-category):")
+    logger.info(f"\nGemini (native 6-category):")
     gemini_dist = Counter(y_gemini)
     for cat, count in sorted(gemini_dist.items()):
         logger.info(f"  {cat:15s}: {count:5d}")
@@ -179,7 +175,7 @@ def merge_datasets(
     logger.info(f"Total examples: {len(y_combined)}")
 
     combined_dist = Counter(y_combined)
-    logger.info("\nCombined distribution:")
+    logger.info(f"\nCombined distribution:")
     for cat, count in sorted(combined_dist.items()):
         logger.info(f"  {cat:15s}: {count:5d}")
 
@@ -187,16 +183,12 @@ def merge_datasets(
 
 
 def create_splits(
-    X: np.ndarray,
-    y: np.ndarray,
-    test_size: float = 0.2,
-    seed: int = 42,
-    logger: logging.Logger | None = None,
+    X: np.ndarray, y: np.ndarray, test_size: float = 0.2, seed: int = 42,
+    logger: logging.Logger | None = None
 ) -> tuple:
     """Create stratified train/test split."""
-    from collections import Counter
-
     from sklearn.model_selection import train_test_split
+    from collections import Counter
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=seed
@@ -209,12 +201,12 @@ def create_splits(
         logger.info(f"Train: {X_train.shape}")
         logger.info(f"Test: {X_test.shape}")
 
-        logger.info("\nTrain distribution:")
+        logger.info(f"\nTrain distribution:")
         train_dist = Counter(y_train)
         for cat, count in sorted(train_dist.items()):
             logger.info(f"  {cat:15s}: {count:5d}")
 
-        logger.info("\nTest distribution:")
+        logger.info(f"\nTest distribution:")
         test_dist = Counter(y_test)
         for cat, count in sorted(test_dist.items()):
             logger.info(f"  {cat:15s}: {count:5d}")
@@ -269,7 +261,7 @@ def save_combined_data(
     logger.info(f"\n✓ Combined training data saved to {output_dir}")
     logger.info(f"  - train.npz: {X_train.shape}")
     logger.info(f"  - test.npz: {X_test.shape}")
-    logger.info("  - metadata.json")
+    logger.info(f"  - metadata.json")
 
 
 def main(argv: Sequence[str] | None = None) -> None:

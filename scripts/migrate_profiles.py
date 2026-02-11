@@ -72,7 +72,6 @@ def migrate_profiles(dry_run: bool = False, logger: logging.Logger | None = None
     migrated = 0
     errors = 0
     from tqdm import tqdm
-
     for f in tqdm(json_files, desc="Migrating profiles", unit="file"):
         try:
             data = json.loads(f.read_text())

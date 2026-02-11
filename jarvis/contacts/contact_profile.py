@@ -54,7 +54,6 @@ class Fact:
     valid_from: str | None = None  # When this fact became true (ISO timestamp)
     valid_until: str | None = None  # When this fact stopped being true (ISO timestamp)
 
-
 logger = logging.getLogger(__name__)
 
 # Storage

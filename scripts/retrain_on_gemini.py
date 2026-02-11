@@ -15,11 +15,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-
 
 def _setup_logging() -> None:
     """Configure logging with FileHandler + StreamHandler."""
@@ -183,7 +183,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger.info("\n" + "=" * 70)
     logger.info("COMPARISON: OLD vs NEW")
     logger.info("=" * 70)
-    logger.info("Baseline (on Gemini labels): F1 = 0.4020 (old model)")
+    logger.info(f"Baseline (on Gemini labels): F1 = 0.4020 (old model)")
     logger.info(f"Retrained on Gemini:         F1 = {results['test_f1']:.4f} (new model)")
 
     improvement = ((results["test_f1"] - 0.402) / 0.402) * 100

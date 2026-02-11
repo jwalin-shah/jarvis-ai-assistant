@@ -100,30 +100,17 @@ VAGUE = {"it", "this", "that", "thing", "stuff", "them", "there", "here", "me", 
 
 FACT_TYPES = {
     # location
-    "location.current",
-    "location.past",
-    "location.future",
-    "location.hometown",
+    "location.current", "location.past", "location.future", "location.hometown",
     # work
-    "work.employer",
-    "work.job_title",
-    "work.former_employer",
+    "work.employer", "work.job_title", "work.former_employer",
     # relationship
-    "relationship.family",
-    "relationship.friend",
-    "relationship.partner",
+    "relationship.family", "relationship.friend", "relationship.partner",
     # preference
-    "preference.food_like",
-    "preference.food_dislike",
-    "preference.activity",
+    "preference.food_like", "preference.food_dislike", "preference.activity",
     # health
-    "health.allergy",
-    "health.dietary",
-    "health.condition",
+    "health.allergy", "health.dietary", "health.condition",
     # personal
-    "personal.birthday",
-    "personal.school",
-    "personal.pet",
+    "personal.birthday", "personal.school", "personal.pet",
     # fallback
     "other_personal_fact",
 }
@@ -349,22 +336,20 @@ class CandidateExtractor:
 
             fact_type = self._resolve_fact_type(text, span, label)
 
-            out.append(
-                FactCandidate(
-                    message_id=message_id,
-                    span_text=span,
-                    span_label=label,
-                    gliner_score=score,
-                    fact_type=fact_type,
-                    start_char=start_char,
-                    end_char=end_char,
-                    source_text=text,
-                    chat_id=chat_id,
-                    is_from_me=is_from_me,
-                    sender_handle_id=sender_handle_id,
-                    message_date=message_date,
-                )
-            )
+            out.append(FactCandidate(
+                message_id=message_id,
+                span_text=span,
+                span_label=label,
+                gliner_score=score,
+                fact_type=fact_type,
+                start_char=start_char,
+                end_char=end_char,
+                source_text=text,
+                chat_id=chat_id,
+                is_from_me=is_from_me,
+                sender_handle_id=sender_handle_id,
+                message_date=message_date,
+            ))
 
         return out
 
@@ -383,7 +368,10 @@ class CandidateExtractor:
         self._load_model()
 
         # Pre-filter junk messages
-        valid_msgs = [m for m in messages if not is_junk_message(m.get("text", ""))]
+        valid_msgs = [
+            m for m in messages
+            if not is_junk_message(m.get("text", ""))
+        ]
 
         all_candidates: list[FactCandidate] = []
         total = len(valid_msgs)
@@ -420,29 +408,25 @@ class CandidateExtractor:
                     end_char = e.get("end", start_char + len(span))
                     fact_type = self._resolve_fact_type(msg["text"], span, label)
 
-                    all_candidates.append(
-                        FactCandidate(
-                            message_id=msg_id,
-                            span_text=span,
-                            span_label=label,
-                            gliner_score=score,
-                            fact_type=fact_type,
-                            start_char=start_char,
-                            end_char=end_char,
-                            source_text=msg["text"],
-                            chat_id=msg.get("chat_id"),
-                            is_from_me=msg.get("is_from_me"),
-                            sender_handle_id=msg.get("sender_handle_id"),
-                            message_date=msg.get("message_date"),
-                        )
-                    )
+                    all_candidates.append(FactCandidate(
+                        message_id=msg_id,
+                        span_text=span,
+                        span_label=label,
+                        gliner_score=score,
+                        fact_type=fact_type,
+                        start_char=start_char,
+                        end_char=end_char,
+                        source_text=msg["text"],
+                        chat_id=msg.get("chat_id"),
+                        is_from_me=msg.get("is_from_me"),
+                        sender_handle_id=msg.get("sender_handle_id"),
+                        message_date=msg.get("message_date"),
+                    ))
 
             processed = min(i + batch_size, total)
             logger.info(
                 "Batch progress: %d/%d messages (%d candidates so far)",
-                processed,
-                total,
-                len(all_candidates),
+                processed, total, len(all_candidates),
             )
 
         return all_candidates
