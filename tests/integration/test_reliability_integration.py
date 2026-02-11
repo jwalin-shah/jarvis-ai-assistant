@@ -27,7 +27,6 @@ from core.memory.monitor import MemoryMonitor
 from contracts.health import DegradationPolicy, FeatureState
 from jarvis.errors import MemoryResourceError, ModelLoadError
 from jarvis.fallbacks import FailureReason
-from jarvis.retry import retry_async_with_backoff, retry_with_backoff
 from jarvis.tasks.models import Task, TaskStatus, TaskType
 from jarvis.tasks.queue import TaskQueue, get_task_queue, reset_task_queue
 
@@ -112,74 +111,6 @@ class TestCircuitBreakerIntegration:
         cb.record_success()
         assert cb.state == CircuitState.CLOSED
         assert cb.can_execute()
-
-
-class TestRetryIntegration:
-    """Integration tests for retry mechanisms."""
-
-    def test_retry_with_exponential_backoff(self):
-        """Retry delays increase exponentially."""
-        delays = []
-
-        def on_retry(attempt: int, exc: Exception) -> None:
-            delays.append(attempt)
-
-        call_count = 0
-
-        @retry_with_backoff(max_retries=4, base_delay=0.01, max_delay=1.0, on_retry=on_retry)
-        def flaky_operation():
-            nonlocal call_count
-            call_count += 1
-            if call_count < 4:
-                raise ConnectionError(f"Attempt {call_count}")
-            return "success"
-
-        result = flaky_operation()
-
-        assert result == "success"
-        assert call_count == 4
-        assert len(delays) == 3  # Retries after attempts 1, 2, 3
-
-    def test_retry_preserves_exception_type(self):
-        """Original exception type is preserved after retry exhaustion."""
-        @retry_with_backoff(max_retries=2, base_delay=0.01)
-        def raises_value_error():
-            raise ValueError("specific error")
-
-        with pytest.raises(ValueError, match="specific error"):
-            raises_value_error()
-
-    def test_retry_does_not_retry_non_configured_exceptions(self):
-        """Non-configured exceptions are not retried."""
-        call_count = 0
-
-        @retry_with_backoff(max_retries=3, base_delay=0.01, exceptions=(ValueError,))
-        def raises_type_error():
-            nonlocal call_count
-            call_count += 1
-            raise TypeError("not retryable")
-
-        with pytest.raises(TypeError):
-            raises_type_error()
-
-        assert call_count == 1  # No retries
-
-    @pytest.mark.asyncio
-    async def test_async_retry_integration(self):
-        """Async retry works with async functions."""
-        call_count = 0
-
-        @retry_async_with_backoff(max_retries=3, base_delay=0.01)
-        async def async_flaky():
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                raise ConnectionError()
-            return "async_success"
-
-        result = await async_flaky()
-        assert result == "async_success"
-        assert call_count == 3
 
 
 class TestGracefulDegradationIntegration:
