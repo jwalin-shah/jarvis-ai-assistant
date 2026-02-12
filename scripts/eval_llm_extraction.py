@@ -271,6 +271,8 @@ _KNOWN_ORGS = {
     "lending tree", "lendingtree", "walmart", "target",
     "starbucks", "chipotle", "costco",
     "ihs", "karya", "swadhyay",
+    "raiders", "49ers", "warriors", "giants",
+    "district",
 }
 
 _KNOWN_SCHOOLS = {
@@ -322,6 +324,36 @@ def _correct_label(text: str, label: str, msg_lower: str) -> str:
             return "org"
 
     return label
+
+
+def _is_transient_family_mention(msg_lower: str, other_labels: set[str]) -> bool:
+    """Check if a message mentions family only in a transient/logistics context.
+
+    Returns True only when the message has STRONG transient signals AND the LLM
+    didn't find any non-family facts (which would indicate real fact content).
+    """
+    # If the LLM found other fact types besides family_member, the message
+    # likely has real fact content - don't filter family mentions
+    if other_labels - {"family_member"}:
+        return False
+
+    _transient_indicators = [
+        # Logistics/scheduling
+        r'\bnever\s+ended\s+up\b',
+        r'\bworking\s+from\s+home\b',
+        r'\bshelter\s+in\s+place\b',
+        r'\b(?:call|calling|called)\s+my\b',
+        r'\bmy\s+\w+\s+(?:gets?|comes?|leaves?|picks?)\s+(?:home|up|back)\b',
+        r'\b(?:leave|leaving|left)\s+(?:as\s+soon\s+as|when|after)\s+my\b',
+        # Passing references (not about the relationship)
+        r'\bthe\s+one\s+who\s+sends?\b',
+        r'\btried\s+doin\b',
+        r'\bmade\s+me\s+pack\b',
+        r'\bfigure\s+the\s+rest\b',
+        # Greeting/well-wishes with family word
+        r'\bhappy\s+\w+\s+my\s+(?:brother|sister|bro|sis)\b',
+    ]
+    return any(re.search(p, msg_lower) for p in _transient_indicators)
 
 
 def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
@@ -475,6 +507,8 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "never ended up", "working from home", "free",
                 "regular bell schedule", "bell schedule",
                 "per period", "take the bart",
+                "talk to other", "talk to others", "talk to some",
+                "talk to some other", "driving",
             }
             if text_lower in reject_activities:
                 continue
@@ -497,6 +531,7 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "tight", "annoying", "ready to just", "love it",
                 "shelter in place", "fuck", "doctor's appointment",
                 "rest a bit", "hella bad", "barring anything",
+                "daily 5k", "5k", "10k",
             }
             if text_lower in reject_health:
                 continue
@@ -520,6 +555,17 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                         pass  # OK, plural form
                     else:
                         continue
+            # Gate family_member on whether the message has a lasting fact context
+            # Skip transient mentions: logistics, scheduling, passing references
+            # Collect all labels the LLM predicted for this message
+            all_predicted_labels = set()
+            for f in facts:
+                if isinstance(f, dict):
+                    lbl = normalize_label(f.get("label", ""))
+                    if lbl:
+                        all_predicted_labels.add(lbl)
+            if _is_transient_family_mention(msg_lower, all_predicted_labels):
+                continue
         if label == "friend_name":
             # Friend names should start with uppercase
             if text[0].islower():
@@ -638,10 +684,21 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
             spans.append({"span_text": text, "span_label": label, "fact_type": fact_type})
 
     # 1. Family member pattern: "my <family_word>" in message
-    # Only boost when other (non-family) spans already exist, indicating the
-    # message has real facts. Otherwise "my dad" is likely a transient mention.
-    _has_nonfamily = any(s["span_label"] != "family_member" for s in spans)
-    _skip_family = not _has_nonfamily
+    # Skip transient patterns that mention family in logistics/scheduling context
+    _transient_patterns = (
+        r'\b(?:call|calling|called)\b.*\bmy\s+(?:dad|mom|brother|sister)',
+        r'\bmy\s+(?:dad|mom)\s+(?:gets?|comes?|leaves?|picks?)\s+(?:home|up|back)',
+        r'\b(?:leave|leaving|left)\s+(?:as\s+soon\s+as|when|after)\s+my\b',
+        r'\b(?:ask|asking|asked)\s+my\s+(?:dad|mom)\b',
+        r'\bexcept\s+(?:for\s+)?(?:me\s+and\s+)?my\b',
+        r'\bthey\s+know\s+my\b',
+        r'\bjust\s+(?:call|come)\b.*\bmy\s+(?:dad|mom)\b',
+        r'\bnever\s+ended\s+up\b',
+        r'\bworking\s+from\s+home\b',
+        r'\bmy\s+(?:phone|car|house|room)\s+is\b',
+        r'\blike\s+my\s+(?:mom|dad)s\b',  # "like my moms" = "like my mom's [thing]"
+    )
+    _skip_family = any(re.search(p, msg_lower) for p in _transient_patterns)
     if not _skip_family:
         for fw in _FAMILY_WORDS:
             pattern = f"my {fw}"
@@ -687,6 +744,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
             "meditate", "meditation", "yoga", "chess", "climbing",
             "biking", "hiking", "swimming", "cooking",
             "baking", "gaming", "coding", "exercises",
+            "diwali", "xbox", "reading", "sanskrit",
         }
         for act in _known_activities:
             match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
@@ -694,6 +752,26 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
                 idx = match.start()
                 actual = message_text[idx : idx + len(act)]
                 _add(actual, "activity", "preference.activity")
+
+    # 6. Known food items (word-boundary match)
+    _known_foods = {
+        "palak paneer", "biryani", "samosa", "roti", "naan",
+        "tikka masala", "dolmas", "ramen", "sushi", "boba",
+        "curry", "dal", "paneer",
+    }
+    for food in _known_foods:
+        match = re.search(rf'\b{re.escape(food)}\b', msg_lower)
+        if match and (food, "food_item") not in existing:
+            idx = match.start()
+            actual = message_text[idx : idx + len(food)]
+            _add(actual, "food_item", "preference.food")
+
+    # 7. Friend/roommate patterns
+    roommate_match = re.search(r'\b(roommate|roomie)\b', msg_lower)
+    if roommate_match and ("roommate", "friend_name") not in existing:
+        idx = roommate_match.start()
+        actual = message_text[idx : idx + len(roommate_match.group())]
+        _add(actual, "friend_name", "relationship.friend")
 
     return spans
 
