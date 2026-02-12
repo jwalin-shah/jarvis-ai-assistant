@@ -110,7 +110,9 @@ class TestCircuitBreakerIntegration:
 class TestGracefulDegradationIntegration:
     """Integration tests for graceful degradation."""
 
-    @pytest.mark.xfail(reason="Degradation cascade API mismatch with implementation")
+    @pytest.mark.xfail(
+        reason="Degradation cascade API mismatch with implementation (TODO: track in issue tracker)"
+    )
     def test_degradation_cascade(self):
         """Full degradation cascade: primary -> degraded -> fallback."""
         controller = GracefulDegradationController()
@@ -328,7 +330,9 @@ class TestMemoryPressureIntegration:
             controller = DefaultMemoryController()
             assert controller.get_mode() == MemoryMode.MINIMAL
 
-    @pytest.mark.xfail(reason="MemoryController pressure callback API not wired")
+    @pytest.mark.xfail(
+        reason="MemoryController pressure callback API not wired (TODO: track in issue tracker)"
+    )
     def test_memory_pressure_callbacks(self):
         """Pressure callbacks are invoked when pressure changes."""
         callback_calls = []
@@ -361,7 +365,9 @@ class TestMemoryPressureIntegration:
 class TestRateLimitIntegration:
     """Integration tests for rate limiting and backpressure."""
 
-    @pytest.mark.xfail(reason="RateLimitExceeded handler response format mismatch")
+    @pytest.mark.xfail(
+        reason="RateLimitExceeded handler response format mismatch (TODO: track in issue tracker)"
+    )
     def test_rate_limit_exceeded_handler(self):
         """Rate limit exceeded returns correct response format."""
         from slowapi.errors import RateLimitExceeded

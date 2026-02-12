@@ -233,7 +233,7 @@ class TestMemorySampler:
         """Background sampling can be started and stopped."""
         sampler = MemorySampler(interval_seconds=0.1)
         sampler.start()
-        time.sleep(0.25)
+        time.sleep(1.0)
         sampler.stop()
 
         # Should have collected some samples

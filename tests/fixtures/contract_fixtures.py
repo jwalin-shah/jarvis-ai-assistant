@@ -15,8 +15,14 @@ Usage:
 
 from __future__ import annotations
 
+import builtins
 from datetime import datetime
 from typing import Any
+
+# Keep a reference to the real builtin object type, since some factory
+# functions below use "object" as a parameter name (matching the Fact dataclass
+# field) which shadows the builtin.
+_builtin_object = builtins.object
 
 from jarvis.contracts.pipeline import (
     CategoryType,
@@ -114,7 +120,7 @@ def make_message_context(
         metadata=metadata or {"platform": "imessage", "version": "1.0"},
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -150,7 +156,7 @@ def make_classification_result(
         metadata=metadata or {"model": "test_classifier", "version": "1.0"},
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -183,7 +189,7 @@ def make_entity(
         end_char=end_char,
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -216,7 +222,7 @@ def make_fact(
         source_text=source_text,
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -246,7 +252,7 @@ def make_relationship(
         confidence=confidence,
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -276,7 +282,7 @@ def make_extraction_result(
         topics=topics or ["work", "people"],
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -306,7 +312,7 @@ def make_rag_document(
         metadata=metadata or {"chunk_index": 0, "total_chunks": 5},
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -339,7 +345,7 @@ def make_generation_request(
         few_shot_examples=few_shot_examples or [{"input": "Hi", "output": "Hello!"}],
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
@@ -372,7 +378,7 @@ def make_generation_response(
         metadata=metadata or {"model": "test_llm", "tokens": 42},
     )
     for key, value in overrides.items():
-        object.__setattr__(result, key, value)
+        _builtin_object.__setattr__(result, key, value)
     return result
 
 
