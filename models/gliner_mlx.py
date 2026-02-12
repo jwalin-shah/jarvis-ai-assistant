@@ -251,16 +251,15 @@ class GLiNERModel(nn.Module):
         label_embeds = self.projection(label_embeds)
         label_embeds = self.prompt_rep(label_embeds)  # (B, num_labels, 512)
 
-        # 3. Extract word embeddings (first subtoken per word)
+        # 3. Extract word embeddings (first subtoken per word) — vectorized scatter-add
         # word_mask: (B, seq_len) with 1-indexed word positions (0=skip)
-        word_embeds = mx.zeros((B, num_words, D))
-        for b in range(B):
-            for t in range(word_mask.shape[1]):
-                wid = word_mask[b, t].item()
-                if wid > 0:
-                    word_idx = int(wid) - 1  # 1-indexed -> 0-indexed
-                    if word_idx < num_words:
-                        word_embeds = word_embeds.at[b, word_idx].add(token_embeds[b, t])
+        # Build indicator matrix: (B, num_words, seq_len) where [b,w,t]=1 iff word_mask[b,t]==w+1
+        seq_len = word_mask.shape[1]
+        word_indices = mx.arange(1, num_words + 1).reshape(1, num_words, 1)  # (1, num_words, 1)
+        mask_expanded = word_mask.reshape(B, 1, seq_len)  # (B, 1, seq_len)
+        indicator = (mask_expanded == word_indices).astype(token_embeds.dtype)  # (B, num_words, seq_len)
+        # Matrix multiply: sum token embeddings per word
+        word_embeds = indicator @ token_embeds  # (B, num_words, D)
 
         # Project words: 768 -> 512
         word_embeds = self.projection(word_embeds)
