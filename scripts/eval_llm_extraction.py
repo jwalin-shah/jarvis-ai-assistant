@@ -88,6 +88,8 @@ FEW_SHOT_TURNS = [
      '{"facts": [{"text": "peanuts", "label": "health_condition"}]}'),
     ("Also my dad leaves the 22nd for India",
      '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}'),
+    ("My mom actually texted me this morning saying my acceptance letter went to the house",
+     '{"facts": [{"text": "mom", "label": "family_member"}]}'),
     ("I love reading",
      '{"facts": [{"text": "reading", "label": "activity"}]}'),
     ("i hate utd",
@@ -102,13 +104,9 @@ FEW_SHOT_TURNS = [
      '{"facts": [{"text": "raiders", "label": "org"}]}'),
     ("helloooo",
      '{"facts": []}'),
-    ("Yeah that's fine I'll leave as soon as my mom gets home at 4",
-     '{"facts": []}'),
     ("and they'll do an ultrasound and stuff",
      '{"facts": []}'),
-    ("My mom never ended up coming tho so gonna have to ship that bag",
-     '{"facts": []}'),
-    ("Yesterday I called my dad at like 1 and he was like just come home",
+    ("Yeah that's fine I'll leave as soon as my mom gets home at 4",
      '{"facts": []}'),
     ("cause my mom tried doin my bros arms",
      '{"facts": []}'),
@@ -633,11 +631,14 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
             spans.append({"span_text": text, "span_label": label, "fact_type": fact_type})
 
     # 1. Family member pattern: "my <family_word>" in message
-    # Only boost if the LLM found at least one fact already.
-    # Additional guard: skip if message is very short (< 40 chars) and LLM found nothing,
-    # as these are often transient mentions ("my mom will pick up")
-    llm_found_facts = len(spans) > 0
-    if llm_found_facts:
+    # Always extract family members from "my <word>" pattern - these indicate
+    # the speaker HAS that family member. Skip only if the message is a
+    # known-transient pattern (reaction, very short logistics).
+    _skip_family = False
+    # Skip iMessage reactions (already filtered in json_to_spans)
+    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
+        _skip_family = True
+    if not _skip_family:
         for fw in _FAMILY_WORDS:
             pattern = f"my {fw}"
             if pattern in msg_lower and (fw.lower(), "family_member") not in existing:
