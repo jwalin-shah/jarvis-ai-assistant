@@ -1343,14 +1343,13 @@ class ChatDBReader:
 
             # Collect message IDs and GUIDs for batch prefetch
             message_ids = []
-            id_guid_map: dict[int, str] = {}
+            id_guid_map: dict[int, str | None] = {}
             for row in rows:
                 try:
                     mid = row["id"]
                     message_ids.append(mid)
                     guid = row["guid"] if "guid" in row.keys() else None
-                    if guid:
-                        id_guid_map[mid] = guid
+                    id_guid_map[mid] = guid
                 except (IndexError, KeyError):
                     continue
 
@@ -1521,7 +1520,7 @@ class ChatDBReader:
     def _prefetch_reactions(
         self,
         message_ids: list[int],
-        id_guid_map: dict[int, str] | None = None,
+        id_guid_map: dict[int, str | None] | None = None,
     ) -> dict[int, list[Reaction]]:
         """Batch-fetch reactions for multiple messages in one query.
 
@@ -1554,8 +1553,8 @@ class ChatDBReader:
 
             if id_guid_map and len(id_guid_map) == len(message_ids):
                 # All GUIDs provided from query results - skip extra DB query
-                id_to_guid = id_guid_map
-                guid_to_id = {v: k for k, v in id_guid_map.items()}
+                id_to_guid = {k: v for k, v in id_guid_map.items() if v is not None}
+                guid_to_id = {v: k for k, v in id_to_guid.items()}
             else:
                 # Fallback: batch-fetch GUIDs from DB
                 for i in range(0, len(message_ids), CHUNK_SIZE):
@@ -1626,15 +1625,14 @@ class ChatDBReader:
         """
         # Collect message IDs and GUIDs for batch prefetch
         message_ids = []
-        id_guid_map: dict[int, str] = {}
+        id_guid_map: dict[int, str | None] = {}
         for row in rows:
             try:
                 mid = row["id"]
                 message_ids.append(mid)
                 # Extract GUID if available (avoids extra batch query in _prefetch_reactions)
                 guid = row["guid"] if "guid" in row.keys() else None
-                if guid:
-                    id_guid_map[mid] = guid
+                id_guid_map[mid] = guid
             except (IndexError, KeyError):
                 continue
 
