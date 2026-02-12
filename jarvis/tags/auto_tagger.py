@@ -96,6 +96,9 @@ NEEDS_ATTENTION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"^[A-Z\s]{10,}$", re.IGNORECASE),  # All caps messages
 ]
 
+# Pre-compiled pattern for keyword extraction (called per content analysis)
+_KEYWORD_EXTRACT_RE = re.compile(r"\b[a-zA-Z]{3,}\b")
+
 
 @dataclass
 class ContentAnalysis:
@@ -202,7 +205,7 @@ class AutoTagger:
         recent_messages = messages[-10:] if len(messages) > 10 else messages
 
         # Extract keywords (simple word frequency)
-        words = re.findall(r"\b[a-zA-Z]{3,}\b", all_text.lower())
+        words = _KEYWORD_EXTRACT_RE.findall(all_text.lower())
         word_counts = Counter(words)
         # Filter out common words
         common_words = {
