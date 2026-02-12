@@ -40,6 +40,11 @@ KEYWORD_TOPIC_WEIGHT = 0.3
 
 logger = logging.getLogger(__name__)
 
+# Pre-compiled regex patterns for hot-path functions (avoid recompiling per call)
+_NON_WORD_PATTERN = re.compile(r"[^\w\s']")
+_MULTI_SPACE_PATTERN = re.compile(r"\s+")
+_WORD_BOUNDARY_PATTERN_REL = re.compile(r"\b\w+\b")
+
 # Emoji pattern for detection
 EMOJI_PATTERN = re.compile(
     "["
@@ -505,15 +510,15 @@ def _hash_contact_id(contact_id: str) -> str:
 
 def _normalize_text(text: str) -> str:
     """Normalize text for token-level analysis."""
-    cleaned = re.sub(r"[^\w\s']", " ", text.lower())
-    return re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = _NON_WORD_PATTERN.sub(" ", text.lower())
+    return _MULTI_SPACE_PATTERN.sub(" ", cleaned).strip()
 
 
 def _tokenize(text: str) -> list[str]:
     """Tokenize normalized text into words."""
     if not text:
         return []
-    return re.findall(r"\b\w+\b", text)
+    return _WORD_BOUNDARY_PATTERN_REL.findall(text)
 
 
 def _contains_all_caps_word(text: str) -> bool:
