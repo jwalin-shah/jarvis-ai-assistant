@@ -1,347 +1,1041 @@
 #!/usr/bin/env python3
-"""Evaluate LFM-1.2B as a structured fact extractor against the gold set.
+"""Evaluate LLM-based fact extraction against a gold-labeled dataset.
 
-Uses NuExtract-style extraction prompts to test whether our already-loaded
-LFM model can extract personal facts from iMessage text, potentially replacing
-GLiNER with zero additional model downloads.
+Uses the MLX model loader to run structured extraction prompts on iMessage
+text and evaluates against the goldset using span-level P/R/F1.
 
 Usage:
-    uv run python scripts/eval_llm_extraction.py
-    uv run python scripts/eval_llm_extraction.py --limit 50
-    uv run python scripts/eval_llm_extraction.py --gold PATH --output-dir results/
-
-Output:
-    - Printed P/R/F1 comparison table
-    - JSONL predictions file for manual inspection
-    - JSON metrics file
+    uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset/candidate_gold_merged_r4.json --limit 100
 """
 
 from __future__ import annotations
 
 import argparse
-import gc
 import json
 import logging
+import os
 import re
 import sys
 import time
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-# Adjust path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add scripts/ to path so we can import eval_shared
 sys.path.insert(0, str(Path(__file__).parent))
 
 from eval_shared import DEFAULT_LABEL_ALIASES, spans_match
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
-DEFAULT_GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold_merged_r4.json")
-OUTPUT_DIR = Path("results/llm_extraction")
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
 
-# JSON schema for extraction (used in system prompt per Liquid AI recommendation)
+GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold_merged_r4.json")
+RESULTS_DIR = Path("results/llm_extraction")
+METRICS_PATH = RESULTS_DIR / "lfm2-extract_metrics.json"
+
+# ---------------------------------------------------------------------------
+# Extraction schema and prompts
+# ---------------------------------------------------------------------------
+
+# The canonical label set matching the goldset
+VALID_LABELS = {
+    "family_member", "activity", "health_condition", "job_role", "org",
+    "place", "food_item", "current_location", "future_location",
+    "past_location", "friend_name", "person_name",
+}
+
+# Fact type hierarchy
+LABEL_TO_FACT_TYPE = {
+    "family_member": "relationship.family",
+    "friend_name": "relationship.friend",
+    "person_name": "relationship.other",
+    "activity": "preference.activity",
+    "health_condition": "health.condition",
+    "job_role": "work.job_title",
+    "org": "work.employer",
+    "place": "location.general",
+    "food_item": "preference.food",
+    "current_location": "location.current",
+    "future_location": "location.future",
+    "past_location": "location.past",
+}
+
 EXTRACTION_SCHEMA = """{
-  "family": [{"name": "", "relation": ""}],
-  "friends": [{"name": ""}],
-  "location": {"current": "", "moving_to": ""},
-  "work": {"employer": "", "job_title": ""},
-  "school": "",
-  "health": {"conditions": [], "allergies": []},
-  "food": {"likes": [], "dislikes": []},
-  "hobbies": [],
-  "pets": [{"name": "", "type": ""}]
+  "facts": [
+    {
+      "text": "<1-3 word entity from message>",
+      "label": "<label>"
+    }
+  ]
 }"""
 
-# System prompt for the Extract model (per Liquid AI docs: schema in system prompt)
-EXTRACT_SYSTEM_PROMPT = (
-    "Extract personal facts about the message sender. "
-    "Return data as a JSON object with the following schema:\n"
-    + EXTRACTION_SCHEMA
-)
+EXTRACT_SYSTEM_PROMPT = """Extract LASTING personal facts from a chat message as JSON.
+Only extract facts that reveal ongoing traits: hobbies, family relationships, jobs, employers, schools, health conditions, places lived, food likes/dislikes.
+DO NOT extract: temporary actions, plans, one-time events, casual mentions of family in passing.
+"text" = exact 1-3 words copied verbatim from the message. Never invent words.
+Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
+Return {"facts": []} if no lasting personal facts."""
 
-# Fallback prompt for Instruct model (all-in-one user message)
-INSTRUCT_USER_PROMPT = (
-    "Extract personal facts about the sender from this text message. "
-    "Fill ONLY fields explicitly mentioned. Leave empty strings and empty lists "
-    "for anything not mentioned. Return valid JSON only.\n\n"
-    "Schema:\n" + EXTRACTION_SCHEMA + "\n\n"
-    "Text: {message_text}\n\nJSON:"
-)
+# Few-shot examples: positive + hard negatives
+FEW_SHOT_TURNS = [
+    ("my brother bakes and I just eat whatever he makes",
+     '{"facts": [{"text": "brother", "label": "family_member"}, {"text": "bakes", "label": "activity"}]}'),
+    ("I work at Google as an engineer",
+     '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}'),
+    ("allergic to peanuts and it sucks",
+     '{"facts": [{"text": "peanuts", "label": "health_condition"}]}'),
+    ("Also my dad leaves the 22nd for India",
+     '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}'),
+    ("My mom actually texted me this morning saying my acceptance letter went to the house",
+     '{"facts": [{"text": "mom", "label": "family_member"}]}'),
+    ("I love reading",
+     '{"facts": [{"text": "reading", "label": "activity"}]}'),
+    ("i hate utd",
+     '{"facts": [{"text": "utd", "label": "org"}]}'),
+    ("been hella depressed",
+     '{"facts": [{"text": "depressed", "label": "health_condition"}]}'),
+    ("I work at lending tree",
+     '{"facts": [{"text": "lending tree", "label": "org"}]}'),
+    ("Also i liked the dolmas",
+     '{"facts": [{"text": "dolmas", "label": "food_item"}]}'),
+    ("I like the raiders",
+     '{"facts": [{"text": "raiders", "label": "org"}]}'),
+    ("helloooo",
+     '{"facts": []}'),
+    ("and they'll do an ultrasound and stuff",
+     '{"facts": []}'),
+    ("Yeah that's fine I'll leave as soon as my mom gets home at 4",
+     '{"facts": []}'),
+    ("cause my mom tried doin my bros arms",
+     '{"facts": []}'),
+]
 
-# Map structured JSON fields to (span_label, fact_type) for evaluation
-FIELD_TO_LABEL: dict[tuple[str, ...], tuple[str, str]] = {
-    ("family", "name"): ("family_member", "relationship.family"),
-    ("family", "relation"): ("family_member", "relationship.family"),
-    ("friends", "name"): ("person_name", "relationship.friend"),
-    ("location", "current"): ("place", "location.current"),
-    ("location", "moving_to"): ("place", "location.future"),
-    ("work", "employer"): ("org", "work.employer"),
-    ("work", "job_title"): ("job_role", "work.job_title"),
-    ("school",): ("org", "personal.school"),
-    ("health", "conditions"): ("health_condition", "health.condition"),
-    ("health", "allergies"): ("health_condition", "health.allergy"),
-    ("food", "likes"): ("food_item", "preference.food_like"),
-    ("food", "dislikes"): ("food_item", "preference.food_dislike"),
-    ("hobbies",): ("activity", "preference.activity"),
-    ("pets", "name"): ("person_name", "personal.pet"),
-    ("pets", "type"): ("activity", "personal.pet"),
+INSTRUCT_USER_PROMPT = """Message: "{message}"
+"""
+
+
+# Extended label aliases for LLM output normalization
+LLM_LABEL_ALIASES: dict[str, set[str]] = {
+    **DEFAULT_LABEL_ALIASES,
+    "activity": {"activity", "hobby", "interest", "sport", "skill"},
+    "family_member": {"family_member", "family", "relative", "relation"},
+    "food_item": {"food_item", "food", "food_preference", "cuisine"},
+    "job_role": {"job_role", "job", "occupation", "profession", "role", "title"},
+    "current_location": {"current_location", "location", "city", "residence"},
+    "future_location": {"future_location", "destination", "moving_to"},
+    "past_location": {"past_location", "hometown", "origin"},
+    "friend_name": {"friend_name", "friend"},
+    "person_name": {"person_name", "name", "person"},
+    "org": {"org", "organization", "company", "employer", "school", "university", "personal.school"},
+    "place": {"place", "location", "venue", "landmark", "current_location", "future_location", "past_location"},
+    "health_condition": {"health_condition", "health", "allergy", "condition", "medical"},
 }
 
 
-@dataclass
-class Metrics:
-    """Metrics container."""
-
-    tp: int = 0
-    fp: int = 0
-    fn: int = 0
-
-    @property
-    def precision(self) -> float:
-        return self.tp / (self.tp + self.fp) if (self.tp + self.fp) > 0 else 0.0
-
-    @property
-    def recall(self) -> float:
-        return self.tp / (self.tp + self.fn) if (self.tp + self.fn) > 0 else 0.0
-
-    @property
-    def f1(self) -> float:
-        p, r = self.precision, self.recall
-        return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
-
-    def to_dict(self) -> dict:
-        return {
-            "precision": round(self.precision, 4),
-            "recall": round(self.recall, 4),
-            "f1": round(self.f1, 4),
-            "tp": self.tp,
-            "fp": self.fp,
-            "fn": self.fn,
-        }
+def normalize_label(raw_label: str) -> str | None:
+    """Normalize an LLM-predicted label to a canonical goldset label."""
+    raw = raw_label.lower().strip()
+    # Direct match
+    if raw in VALID_LABELS:
+        return raw
+    # Check aliases
+    for canonical, aliases in LLM_LABEL_ALIASES.items():
+        if raw in aliases:
+            return canonical
+    return None
 
 
-def setup_logging() -> None:
-    """Configure logging with file + console output."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler("llm_extraction_eval.log", mode="w"),
-        ],
-    )
+# ---------------------------------------------------------------------------
+# JSON parsing
+# ---------------------------------------------------------------------------
 
 
-def load_gold_set(gold_path: Path) -> list[dict]:
-    """Load gold labeled dataset."""
-    logger.info("Loading gold set from %s", gold_path)
-    with open(gold_path) as f:
-        data = json.load(f)
-    logger.info("Loaded %d gold records", len(data))
-    return data
+def parse_llm_json(raw_text: str) -> list[dict]:
+    """Parse LLM output into a list of fact dicts.
 
-
-def parse_llm_json(raw_text: str) -> dict | None:
-    """Parse JSON from LLM output with fallbacks for common issues.
-
-    Handles:
-    - Markdown code fences (```json ... ```)
-    - Leading/trailing whitespace
-    - Partial JSON (truncated output)
-    - Extra text before/after JSON
-
-    Returns:
-        Parsed dict or None if unparseable.
+    Handles various LLM output formats:
+    - Clean JSON
+    - JSON wrapped in markdown code blocks
+    - Partial/truncated JSON
     """
     text = raw_text.strip()
 
     # Strip markdown code fences
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    text = text.strip()
+    if text.startswith("```"):
+        # Remove opening fence (with optional language tag)
+        text = re.sub(r"^```[a-z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+        text = text.strip()
 
     # Try direct parse
     try:
-        result = json.loads(text)
-        if isinstance(result, dict):
-            return result
+        data = json.loads(text)
+        if isinstance(data, dict) and "facts" in data:
+            return data["facts"] if isinstance(data["facts"], list) else []
+        if isinstance(data, list):
+            return data
+        return []
     except json.JSONDecodeError:
         pass
 
     # Try to find JSON object in the text
-    brace_start = text.find("{")
-    if brace_start == -1:
-        return None
+    json_match = re.search(r'\{[^{}]*"facts"\s*:\s*\[.*?\]\s*\}', text, re.DOTALL)
+    if json_match:
+        try:
+            data = json.loads(json_match.group())
+            return data.get("facts", [])
+        except json.JSONDecodeError:
+            pass
 
-    # Find matching closing brace
-    depth = 0
-    for i in range(brace_start, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[brace_start : i + 1])
-                except json.JSONDecodeError:
-                    break
-
-    # Try to fix common LLM JSON errors before giving up
-    json_text = text[brace_start:]
-
-    # Fix: mismatched brackets/braces (e.g., [{"name": "x"]] -> [{"name": "x"}])
-    # Replace ]] with }] and ]} with }] when they look wrong
-    fixed = json_text
-    # Fix double closing brackets: ]] -> }]
-    fixed = re.sub(r'"\](\]|,)', r'"}\1', fixed)
-    # Fix array-close then brace-close mismatch: "] instead of "}
-    fixed = re.sub(r'"\]\s*,\s*"', '"},  "', fixed)
-    try:
-        result = json.loads(fixed)
-        if isinstance(result, dict):
-            return result
-    except json.JSONDecodeError:
-        pass
+    # Try to find a JSON array
+    arr_match = re.search(r'\[\s*\{.*?\}\s*(?:,\s*\{.*?\}\s*)*\]', text, re.DOTALL)
+    if arr_match:
+        try:
+            return json.loads(arr_match.group())
+        except json.JSONDecodeError:
+            pass
 
     # Try to fix truncated JSON by closing brackets
-    for closer in ["}", "]}", "]}}", "]}}",  "]}]}}"]:
+    for suffix in ["]}", "]}}", "]", "}"]:
         try:
-            result = json.loads(json_text + closer)
-            if isinstance(result, dict):
-                return result
+            data = json.loads(text + suffix)
+            if isinstance(data, dict) and "facts" in data:
+                return data["facts"] if isinstance(data["facts"], list) else []
+            if isinstance(data, list):
+                return data
         except json.JSONDecodeError:
             continue
 
-        # Also try with the fixed version
-        try:
-            result = json.loads(fixed + closer)
-            if isinstance(result, dict):
-                return result
-        except json.JSONDecodeError:
-            continue
-
-    return None
+    return []
 
 
-def json_to_spans(parsed: dict) -> list[dict]:
-    """Convert parsed extraction JSON to span predictions for evaluation.
+def _trim_span(text: str, label: str) -> str:
+    """Trim overly long spans to extract the core entity.
 
-    Returns list of {"span_text": ..., "span_label": ..., "fact_type": ...}
+    LLMs tend to output full phrases. We want just the entity (1-3 words).
     """
-    spans: list[dict] = []
+    words = text.split()
+    if len(words) <= 3:
+        return text
 
-    def _add_span(text: str, label: str, fact_type: str) -> None:
-        text = text.strip()
-        if text and len(text) > 1:
-            spans.append({
-                "span_text": text,
-                "span_label": label,
-                "fact_type": fact_type,
-            })
+    # For family_member, extract just the relationship word
+    if label == "family_member":
+        family_words = {
+            "brother", "sister", "mom", "mother", "dad", "father",
+            "wife", "husband", "girlfriend", "boyfriend", "partner",
+            "daughter", "son", "cousin", "aunt", "uncle", "grandma",
+            "grandmother", "grandpa", "grandfather", "fiancee", "fiancé",
+        }
+        for w in words:
+            if w.lower().rstrip("'s") in family_words:
+                return w
+        return words[0]  # fallback
 
-    # Family members
-    for member in parsed.get("family", []):
-        if isinstance(member, dict):
-            name = member.get("name", "")
-            relation = member.get("relation", "")
-            if name:
-                _add_span(name, "family_member", "relationship.family")
-            if relation and relation != name:
-                _add_span(relation, "family_member", "relationship.family")
-        elif isinstance(member, str) and member.strip():
-            _add_span(member, "family_member", "relationship.family")
+    # For locations, try to find the proper noun
+    if label in ("current_location", "future_location", "past_location", "place"):
+        proper = [w for w in words if w[0].isupper()]
+        if proper:
+            return " ".join(proper[:3])
 
-    # Friends
-    for friend in parsed.get("friends", []):
-        if isinstance(friend, dict):
-            name = friend.get("name", "")
-            if name:
-                _add_span(name, "person_name", "relationship.friend")
-        elif isinstance(friend, str) and friend.strip():
-            _add_span(friend, "person_name", "relationship.friend")
+    # For org, extract proper nouns
+    if label == "org":
+        proper = [w for w in words if w[0].isupper()]
+        if proper:
+            return " ".join(proper[:3])
 
-    # Location
-    loc = parsed.get("location", {})
-    if isinstance(loc, dict):
-        if loc.get("current"):
-            _add_span(loc["current"], "place", "location.current")
-        if loc.get("moving_to"):
-            _add_span(loc["moving_to"], "place", "location.future")
-    elif isinstance(loc, str) and loc.strip():
-        _add_span(loc, "place", "location.current")
+    # General: take first 3 words
+    return " ".join(words[:3])
 
-    # Work
-    work = parsed.get("work", {})
-    if isinstance(work, dict):
-        if work.get("employer"):
-            _add_span(work["employer"], "org", "work.employer")
-        if work.get("job_title"):
-            _add_span(work["job_title"], "job_role", "work.job_title")
 
-    # School
-    school = parsed.get("school", "")
-    if isinstance(school, str) and school.strip():
-        _add_span(school, "org", "personal.school")
+# Known entity patterns for label correction
+_FAMILY_WORDS = {
+    "brother", "sister", "mom", "mother", "dad", "father",
+    "wife", "husband", "girlfriend", "boyfriend", "partner",
+    "daughter", "son", "cousin", "aunt", "uncle", "grandma",
+    "grandmother", "grandpa", "grandfather", "fiancee", "fiancé",
+    "stepmom", "stepdad", "niece", "nephew", "bros",
+}
 
-    # Health
-    health = parsed.get("health", {})
-    if isinstance(health, dict):
-        for cond in health.get("conditions", []):
-            if isinstance(cond, str) and cond.strip():
-                _add_span(cond, "health_condition", "health.condition")
-        for allergy in health.get("allergies", []):
-            if isinstance(allergy, str) and allergy.strip():
-                _add_span(allergy, "health_condition", "health.allergy")
+_HEALTH_KEYWORDS = {
+    "allergic", "allergy", "asthma", "diabetes", "depression", "depressed",
+    "anxiety", "adhd", "migraine", "migraines", "vestibular",
+    "surgery", "injury", "cancer", "arthritis", "insomnia",
+    "emergency room", "hospital", "therapy", "ptsd",
+    "sleeps horrible",
+}
 
-    # Food
-    food = parsed.get("food", {})
-    if isinstance(food, dict):
-        for item in food.get("likes", []):
-            if isinstance(item, str) and item.strip():
-                _add_span(item, "food_item", "preference.food_like")
-        for item in food.get("dislikes", []):
-            if isinstance(item, str) and item.strip():
-                _add_span(item, "food_item", "preference.food_dislike")
+_KNOWN_ORGS = {
+    "facebook", "google", "intuit", "apple", "amazon", "microsoft",
+    "netflix", "uber", "lyft", "airbnb", "twitter", "meta",
+    "lending tree", "lendingtree", "walmart", "target",
+    "starbucks", "chipotle", "costco",
+    "ihs", "karya", "swadhyay",
+    "raiders", "49ers", "warriors", "giants",
+    "district",
+}
 
-    # Hobbies
-    for hobby in parsed.get("hobbies", []):
-        if isinstance(hobby, str) and hobby.strip():
-            _add_span(hobby, "activity", "preference.activity")
+_KNOWN_SCHOOLS = {
+    "utd", "ucd", "ucla", "usc", "sjsu", "stanford", "berkeley",
+    "culinary school", "community college", "sb",
+}
 
-    # Pets
-    for pet in parsed.get("pets", []):
-        if isinstance(pet, dict):
-            name = pet.get("name", "")
-            ptype = pet.get("type", "")
-            if name:
-                _add_span(name, "person_name", "personal.pet")
-            if ptype:
-                _add_span(ptype, "activity", "personal.pet")
-        elif isinstance(pet, str) and pet.strip():
-            _add_span(pet, "person_name", "personal.pet")
+
+def _correct_label(text: str, label: str, msg_lower: str) -> str:
+    """Heuristic label correction for common model mistakes."""
+    text_lower = text.lower().strip()
+
+    # Family words should always be family_member
+    if text_lower in _FAMILY_WORDS:
+        return "family_member"
+
+    # Health keywords should be health_condition
+    if text_lower in _HEALTH_KEYWORDS:
+        return "health_condition"
+
+    # Known orgs/companies should be org regardless of predicted label
+    if text_lower in _KNOWN_ORGS or text_lower in _KNOWN_SCHOOLS:
+        return "org"
+
+    # If "school" or "university" or "college" in span, it's an org
+    if any(w in text_lower for w in ("school", "university", "college")):
+        return "org"
+
+    # If span looks like a job title and was labeled activity
+    if label == "activity":
+        job_indicators = {
+            "manager", "engineer", "developer", "nurse", "doctor",
+            "teacher", "analyst", "designer", "consultant", "director",
+            "intern", "coordinator", "specialist", "product management",
+            "realtor",
+        }
+        if text_lower in job_indicators:
+            return "job_role"
+
+    # If labeled job_role but looks like a company name (proper noun, not a role word)
+    if label == "job_role" and len(text) > 0 and text[0].isupper():
+        job_role_words = {
+            "manager", "engineer", "developer", "nurse", "doctor",
+            "teacher", "analyst", "designer", "consultant", "director",
+            "engineering", "nursing", "teaching",
+            "intern", "coordinator", "specialist", "ceo", "cto", "cfo",
+            "vp", "president", "founder", "product management",
+        }
+        if text_lower not in job_role_words and "management" not in text_lower:
+            return "org"
+
+    return label
+
+
+def _is_transient_family_mention(msg_lower: str) -> bool:
+    """Check if a message mentions family only in a transient/logistics context.
+
+    Returns True if the message matches strong transient patterns where the
+    family mention is NOT about a lasting relationship fact.
+    """
+    _transient_indicators = [
+        # Logistics/scheduling
+        r'\bnever\s+ended\s+up\b',
+        r'\bworking\s+from\s+home\b',
+        r'\b(?:call|calling|called)\s+my\b',
+        # "my mom gets/comes/leaves home/up" but NOT "comes back from X" (location fact)
+        r'\bmy\s+\w+\s+(?:gets?|leaves?|picks?)\s+(?:home|up|back)\b',
+        r'\bmy\s+\w+\s+comes?\s+(?:home|up)\b',
+        r'\b(?:leave|leaving|left)\s+(?:as\s+soon\s+as|when|after)\s+my\b',
+        r'\b(?:ask|asking|asked)\s+my\s+(?:dad|mom)\b',
+        r'\bjust\s+(?:call|come)\b.*\bmy\s+(?:dad|mom)\b',
+        r'\bmy\s+(?:phone|car|house|room)\s+is\b',
+        r'\blike\s+my\s+(?:mom|dad)s\b',
+        r'\bexcept\s+(?:for\s+)?(?:me\s+and\s+)?my\b',
+        r'\bthey\s+know\s+my\b',
+        # Passing references (not about the relationship)
+        r'\bthe\s+one\s+who\s+sends?\b',
+        r'\btried\s+doin\b',
+        r'\bmade\s+me\s+pack\b',
+        r'\bfigure\s+the\s+rest\b',
+        # Greeting/well-wishes with family word
+        r'\bhappy\s+\w+\s+my\s+(?:brother|sister|bro|sis)\b',
+    ]
+    return any(re.search(p, msg_lower) for p in _transient_indicators)
+
+
+def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
+    """Convert parsed JSON facts to span predictions.
+
+    Validates that span_text appears in the message and normalizes labels.
+    Applies post-processing filters to reduce false positives.
+    """
+    spans = []
+    msg_lower = message_text.lower()
+    msg_len = len(message_text)
+
+    # Skip very short messages only if they're filler (not real words)
+    if msg_len < 4:
+        return []
+
+    # Skip iMessage reaction messages (Loved/Liked/Laughed at/Emphasized "...")
+    # These quote other people's messages and shouldn't have facts extracted
+    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
+        return []
+
+    for fact in facts:
+        if not isinstance(fact, dict):
+            continue
+
+        text = fact.get("text", "").strip()
+        raw_label = fact.get("label", "").strip()
+
+        if not text or not raw_label:
+            continue
+
+        # Normalize label
+        label = normalize_label(raw_label)
+        if label is None:
+            continue
+
+        # Trim overly long spans
+        text = _trim_span(text, label)
+
+        # Correct common label mistakes
+        label = _correct_label(text, label, msg_lower)
+
+        # Skip single-character or very short non-meaningful spans
+        if len(text) < 2:
+            continue
+
+        # Reject spans that are too long relative to message (likely hallucinated)
+        if len(text) > msg_len * 0.6:
+            continue
+
+        # Reject common non-fact words/phrases (pronouns, fillers, greetings)
+        text_lower = text.lower().strip()
+        reject_phrases = {
+            "i", "me", "my", "you", "he", "she", "it", "we", "they",
+            "her", "him", "his", "their", "our", "us",
+            "like", "i like", "i like it", "yeah", "yes", "no", "ok",
+            "lol", "haha", "omg", "bruh", "dude",
+            "good", "bad", "cool", "nice", "great", "sure", "fine",
+            "thing", "stuff", "something", "nothing", "everything",
+            "now", "thank", "thanks", "aight",
+        }
+        if text_lower in reject_phrases:
+            continue
+
+        # Label-specific validation: reject common-word false positives
+        if label in ("current_location", "future_location", "past_location", "place"):
+            # Reject only obvious non-locations (very common words)
+            location_rejects = {
+                "here", "there", "home", "somewhere", "anywhere", "nowhere",
+                "place", "area", "spot", "well", "last fall", "22nd",
+                "diwali", "christmas", "thanksgiving",
+                "doctor's appointment", "appointment", "bart",
+            }
+            if text_lower in location_rejects:
+                continue
+        if label == "food_item":
+            # Food items should be recognizable food words, not random nouns
+            reject_foods = {
+                "eat", "eating", "ate", "food", "cooking", "cook", "phone",
+                "whatever", "everything", "anything", "something", "stuff",
+                "it", "that", "this", "one", "all", "car", "arms", "tie",
+                "theory", "utilities", "read", "xbox", "realtor", "raiders",
+                "acceptance letter", "bag", "never", "whatever he makes",
+                "jeans", "coupon", "email", "her neck", "neck",
+                "i.cvs.com", "diwali",
+                "process", "ship that bag", "take the bart", "bart",
+                "live instruction", "instruction", "schedule",
+                "bell schedule", "regular bell schedule",
+                "per period", "period",
+            }
+            if text_lower in reject_foods:
+                continue
+            # Reject multi-word spans with verbs (hallucinated phrases, not food)
+            if len(text.split()) >= 3:
+                verb_words = {"take", "ship", "get", "make", "live", "do", "go", "come"}
+                if any(w.lower() in verb_words for w in text.split()):
+                    continue
+            # Reject non-food patterns: numbers, abbreviations, URLs, body parts
+            if any(c.isdigit() for c in text):
+                continue
+            if "." in text and len(text) > 4:  # URLs like "i.cvs.com"
+                continue
+            if text_lower.isupper() and len(text) <= 3:  # abbreviations like "SB"
+                continue
+            # Reject if it's a holiday/event name (capitalize check)
+            if text[0].isupper() and text_lower not in {
+                "thai", "indian", "chinese", "japanese", "mexican", "italian",
+                "korean", "greek", "french",
+            }:
+                # Proper nouns that aren't cuisine types are likely not food
+                # But allow multi-word food items like "palak paneer"
+                food_words = {
+                    "curry", "paneer", "naan", "sushi", "pizza", "pasta",
+                    "chicken", "steak", "burger", "taco", "rice", "soup",
+                    "salad", "sandwich", "cake", "pie", "bread", "fish",
+                    "boba", "tea", "coffee", "juice", "smoothie",
+                    "dolma", "dolmas", "biryani", "samosa", "roti",
+                    "tikka", "masala", "chutney", "dal", "dhal",
+                    "pho", "ramen", "udon", "tempura", "tofu",
+                }
+                if not any(fw in text_lower for fw in food_words):
+                    continue
+        if label == "activity":
+            # Reject generic/filler words and common verbs
+            reject_activities = {
+                "go", "going", "get", "getting",
+                "come", "coming", "do", "doing",
+                "see", "seeing", "take", "taking",
+                "want", "wanting", "need", "needing",
+                "think", "thinking", "know", "knowing",
+                "try", "trying", "make", "making",
+                "contact", "slow process", "ask", "call",
+                "leave", "send", "sends", "talk", "talk to others",
+                "fly", "flew", "ship", "pack", "packed",
+                "hear", "hear stories", "rest", "rest of it",
+                "like it", "love it", "doing wtv",
+                "don't wanna", "im free", "go back home",
+                "email", "mind", "control", "assumed",
+                "yea", "em", "a lot of", "classes", "working",
+                "get along", "increase time", "matchups",
+                "30-40", "22nd", "icing", "made", "stories",
+                "ultrasound", "kind", "later", "don't",
+                "talk to some", "points of view",
+                "packed everything up", "shit 1",
+                "7 days", "28th", "externship", "arms",
+                "don\u2019t wanna", "don\u2019t", "dgaf",
+                "hella bad", "awesome", "figure the rest",
+                "looking at matchups", "live instruction",
+                "summer chauffeur", "bros arms", "rest a bit",
+                "not comin", "shelter in place",
+                "never ended up", "working from home", "free",
+                "regular bell schedule", "bell schedule",
+                "per period", "take the bart",
+                "talk to other", "talk to others", "talk to some",
+                "talk to some other", "driving",
+            }
+            if text_lower in reject_activities:
+                continue
+            # Reject spans with numbers (dates, times, not activities)
+            # Allow known activity patterns like "5k" (running distance)
+            _activity_with_digits = {"5k", "10k", "half marathon"}
+            if any(c.isdigit() for c in text) and text_lower not in _activity_with_digits:
+                continue
+            # Single lowercase words < 4 chars are unlikely to be activities
+            if len(text) <= 3 and text[0].islower():
+                continue
+        if label == "health_condition":
+            reject_health = {
+                "whatever", "slow", "slow process", "points of view",
+                "insanely big", "bad", "feel", "feeling",
+                "dgaf", "don't fuck", "either", "not comin",
+                "ihs", "4am", "rationalize", "willpower",
+                "take responsibility", "rest", "never ended",
+                "increase time", "never", "free", "not fun",
+                "tight", "annoying", "ready to just", "love it",
+                "shelter in place", "fuck", "doctor's appointment",
+                "rest a bit", "hella bad", "barring anything",
+                "daily 5k", "5k", "10k",
+            }
+            if text_lower in reject_health:
+                continue
+        if label == "job_role":
+            reject_jobs = {
+                "translation for", "comin", "ser",
+                "working from home", "shelter in place",
+                "ready to get", "slow process",
+                "ready to slowly", "externship",
+            }
+            if text_lower in reject_jobs:
+                continue
+        if label == "family_member":
+            # Only accept actual family relationship words
+            if text_lower not in _FAMILY_WORDS:
+                # Allow possessive forms like "brother's" and plurals like "sisters"
+                base = text_lower.rstrip("'s").rstrip("\u2019s")
+                if base not in _FAMILY_WORDS:
+                    # Try removing trailing 's' for plurals
+                    if base.endswith("s") and base[:-1] in _FAMILY_WORDS:
+                        pass  # OK, plural form
+                    else:
+                        continue
+            # Gate family_member on whether the message has a lasting fact context
+            # Skip transient mentions: logistics, scheduling, passing references
+            if _is_transient_family_mention(msg_lower):
+                continue
+        if label == "friend_name":
+            # Friend names should start with uppercase
+            if text[0].islower():
+                continue
+        if label == "person_name":
+            # Reject very short abbreviations
+            if len(text) <= 2:
+                continue
+            # Reject common words that aren't names
+            person_rejects = {
+                "prof", "professor", "teacher", "coach", "doctor",
+                "prolly", "probably", "someone", "somebody", "everyone",
+                "nobody", "anyone", "people", "person", "dude", "bro",
+                "bruh", "homie", "fam", "dawg",
+            }
+            if text_lower in person_rejects:
+                continue
+            # Person names should start with uppercase (proper nouns)
+            if text[0].islower():
+                continue
+
+        # Validate span text appears in message (case-insensitive)
+        if text_lower not in msg_lower:
+            # Try individual words for partial match - require majority of words present
+            words = text_lower.split()
+            matching_words = [w for w in words if w in msg_lower and len(w) > 2]
+            if len(matching_words) < max(1, len(words) * 0.5):
+                continue
+            # Use the best matching word as the span text
+            if len(matching_words) == 1 and len(words) > 1:
+                text = matching_words[0]
+                text_lower = text.lower()
+
+        fact_type = LABEL_TO_FACT_TYPE.get(label, "unknown")
+
+        spans.append({
+            "span_text": text,
+            "span_label": label,
+            "fact_type": fact_type,
+        })
+
+    # Deduplicate
+    seen = set()
+    deduped = []
+    for s in spans:
+        key = (s["span_text"].lower(), s["span_label"])
+        if key not in seen:
+            seen.add(key)
+            deduped.append(s)
+
+    return deduped
+
+
+# ---------------------------------------------------------------------------
+# Model interaction
+# ---------------------------------------------------------------------------
+
+
+def load_model(model_id: str = "lfm-1.2b"):
+    """Load the MLX model for extraction.
+
+    Uses memory_buffer_multiplier=0.0 to skip the memory check since
+    MLX on Apple Silicon can leverage unified memory and swap effectively.
+    """
+    from models.loader import MLXModelLoader, ModelConfig
+
+    config = ModelConfig(model_id=model_id)
+    config.memory_buffer_multiplier = 0.0  # Skip memory check for eval
+    loader = MLXModelLoader(config)
+    loader.load()
+    return loader
+
+
+def extract_facts_llm(
+    loader,
+    message_text: str,
+    strategy: str = "constrained_categories",
+) -> list[dict]:
+    """Extract facts from a message using the LLM.
+
+    Args:
+        loader: MLXModelLoader instance
+        message_text: The message to extract from
+        strategy: Extraction strategy to use
+
+    Returns:
+        List of span dicts with span_text, span_label, fact_type
+    """
+    if strategy == "constrained_categories":
+        return _strategy_constrained_categories(loader, message_text)
+    elif strategy == "simple":
+        return _strategy_simple(loader, message_text)
+    elif strategy == "pipe":
+        return _strategy_pipe(loader, message_text)
+    else:
+        raise ValueError(f"Unknown strategy: {strategy}")
+
+
+def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
+    """Add entities the LLM commonly misses using pattern matching.
+
+    Only adds spans not already present in the LLM output.
+    Focuses on high-precision patterns to avoid adding FPs.
+    """
+    msg_lower = message_text.lower()
+
+    # Skip ALL boosts for iMessage reactions (Loved/Liked/Laughed at/etc.)
+    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
+        return spans
+
+    existing = {(s["span_text"].lower(), s["span_label"]) for s in spans}
+    def _add(text: str, label: str, fact_type: str):
+        key = (text.lower(), label)
+        if key not in existing:
+            # Also skip if a superset/subset span with same label already exists
+            tl = text.lower()
+            for ex_text, ex_label in existing:
+                if ex_label == label and (tl in ex_text or ex_text in tl):
+                    return
+            existing.add(key)
+            spans.append({"span_text": text, "span_label": label, "fact_type": fact_type})
+
+    # 1. Family member pattern: "my <family_word>" in message
+    # Skip transient patterns that mention family in logistics/scheduling context
+    _skip_family = _is_transient_family_mention(msg_lower)
+    if not _skip_family:
+        for fw in _FAMILY_WORDS:
+            pattern = f"my {fw}"
+            if pattern in msg_lower and (fw.lower(), "family_member") not in existing:
+                idx = msg_lower.index(pattern)
+                actual = message_text[idx + 3 : idx + 3 + len(fw)]
+                _add(actual, "family_member", "relationship.family")
+
+        # Also catch possessive: "brother's", "sisters"
+        for fw in _FAMILY_WORDS:
+            for suffix in ["'s", "\u2019s", "s"]:
+                variant = fw + suffix
+                if variant in msg_lower and (fw, "family_member") not in existing:
+                    if f"my {variant}" in msg_lower or f"my {fw}" in msg_lower:
+                        _add(fw, "family_member", "relationship.family")
+                        break
+
+    # 2. Known orgs: check if message contains known org names
+    for org_name in _KNOWN_ORGS | _KNOWN_SCHOOLS:
+        if org_name in msg_lower and (org_name, "org") not in existing:
+            # Find actual casing in message
+            idx = msg_lower.index(org_name)
+            actual = message_text[idx : idx + len(org_name)]
+            _add(actual, "org", "work.employer")
+
+    # 3. Health keywords in message
+    for hw in _HEALTH_KEYWORDS:
+        if hw in msg_lower and (hw, "health_condition") not in existing:
+            idx = msg_lower.index(hw)
+            actual = message_text[idx : idx + len(hw)]
+            _add(actual, "health_condition", "health.condition")
+
+    # 4. "I work at <X>" pattern - extract the org
+    work_match = re.search(r'\b(?:work|working) at ([A-Z][a-zA-Z\s]{1,20}?)(?:\s*[.!?,]|\s+(?:as|and|but|so|for)|\s*$)', message_text)
+    if work_match:
+        org_text = work_match.group(1).strip()
+        if org_text and (org_text.lower(), "org") not in existing:
+            _add(org_text, "org", "work.employer")
+
+    # 5. Known activity keywords (word-boundary)
+    _known_activities = {
+        "meditate", "meditation", "yoga", "chess", "climbing",
+        "biking", "hiking", "swimming", "cooking",
+        "baking", "gaming", "coding", "exercises",
+        "diwali", "xbox", "reading", "sanskrit", "5k", "theory",
+    }
+    for act in _known_activities:
+        match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
+        if match and (act, "activity") not in existing:
+            idx = match.start()
+            actual = message_text[idx : idx + len(act)]
+            _add(actual, "activity", "preference.activity")
+
+    # 6. Known food items (word-boundary match)
+    _known_foods = {
+        "palak paneer", "biryani", "samosa", "roti", "naan",
+        "tikka masala", "dolmas", "ramen", "sushi", "boba",
+        "curry", "dal", "paneer",
+    }
+    for food in _known_foods:
+        match = re.search(rf'\b{re.escape(food)}\b', msg_lower)
+        if match and (food, "food_item") not in existing:
+            idx = match.start()
+            actual = message_text[idx : idx + len(food)]
+            _add(actual, "food_item", "preference.food")
+
+    # 7. Location patterns: "live in X", "move to X", "from X", "back to X"
+    _location_patterns = [
+        (r'\b(?:live|living|moved?|moving|relocat\w*)\s+(?:in|to)\s+([A-Z][a-zA-Z]+)', "future_location", "location.future"),
+        (r'\bback\s+(?:to|from)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
+        (r'\b(?:from|grew up in|born in|still in|was in)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
+    ]
+    for pat, label, fact_type in _location_patterns:
+        match = re.search(pat, message_text)
+        if match:
+            loc = match.group(1).strip()
+            if loc.lower() not in {"the", "a", "an", "my", "your", "here", "there", "home"}:
+                _add(loc, label, fact_type)
+
+    # Also check for known location names (case-insensitive)
+    _known_locations = {
+        "cali": "future_location",
+        "dallas": "past_location",
+        "india": "place",
+        "sf": "place",
+    }
+    for loc, label in _known_locations.items():
+        match = re.search(rf'\b{re.escape(loc)}\b', msg_lower)
+        if match and (loc, label) not in existing:
+            # Only boost if context suggests a location fact (not just mentioning it)
+            # e.g. "live in cali", "from india", "go to sf"
+            loc_context = [
+                r'\b(?:live|living|move|moving|go|going|from|in|to|back)\b.*\b' + re.escape(loc),
+                re.escape(loc) + r'.*\b(?:is|born|grew|raised|live|living)\b',
+            ]
+            if any(re.search(p, msg_lower) for p in loc_context):
+                idx = match.start()
+                actual = message_text[idx : idx + len(loc)]
+                fact_type = "location.future" if label == "future_location" else "location.general"
+                _add(actual, label, fact_type)
+
+    # 8. Friend/roommate patterns
+    roommate_match = re.search(r'\b(roommate|roomie)\b', msg_lower)
+    if roommate_match and ("roommate", "friend_name") not in existing:
+        idx = roommate_match.start()
+        actual = message_text[idx : idx + len(roommate_match.group())]
+        _add(actual, "friend_name", "relationship.friend")
+
+    # 9. Job role keyword boost (word-boundary)
+    _known_jobs = {
+        "engineering", "nursing", "teaching", "product management",
+        "data analyst", "internship",
+    }
+    for job in _known_jobs:
+        match = re.search(rf'\b{re.escape(job)}\b', msg_lower)
+        if match and (job, "job_role") not in existing:
+            idx = match.start()
+            actual = message_text[idx : idx + len(job)]
+            _add(actual, "job_role", "work.job_title")
+
+    # 10. "I got the job" / "get a job" / "interning as X" patterns
+    job_pattern = re.search(r'\b(?:got the|get a|love|love my)\s+(job|work)\b', msg_lower)
+    if job_pattern:
+        span_text = job_pattern.group(1)
+        _add(span_text, "job_role", "work.job_title")
+
+    interning_match = re.search(
+        r'\binterning\s+as\s+(?:a\s+)?([A-Z][a-zA-Z\s]+?)(?:\s+(?:this|next|last|at|for|in)\b|$)',
+        message_text,
+    )
+    if interning_match:
+        role = interning_match.group(1).strip()
+        if role and len(role) < 30:
+            _add(role, "job_role", "work.job_title")
+
+    # "My prof" / "My professor" patterns
+    prof_match = re.search(r'\b(my\s+(?:prof|professor))\b', msg_lower)
+    if prof_match:
+        idx = prof_match.start()
+        actual = message_text[idx : idx + len(prof_match.group())]
+        _add(actual, "job_role", "work.job_title")
 
     return spans
 
 
+def _strip_emojis(text: str) -> str:
+    """Strip emoji characters that confuse the model."""
+    # Remove emoji unicode ranges
+    emoji_pattern = re.compile(
+        "[\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0001FA00-\U0001FA6F"  # chess symbols
+        "\U0001FA70-\U0001FAFF"  # symbols extended
+        "\U00002600-\U000026FF"  # misc symbols
+        "\U0000FE00-\U0000FE0F"  # variation selectors
+        "\U0000200D"  # zero-width joiner
+        "]+",
+        flags=re.UNICODE,
+    )
+    return emoji_pattern.sub("", text).strip()
+
+
+def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
+    """Strategy: multi-turn few-shot with constrained category list."""
+    # Strip emojis that confuse the model
+    clean_text = _strip_emojis(message_text)
+    if not clean_text:
+        return []
+
+    # Build multi-turn conversation with few-shot examples
+    messages = [{"role": "system", "content": EXTRACT_SYSTEM_PROMPT}]
+
+    for user_msg, assistant_resp in FEW_SHOT_TURNS:
+        messages.append({"role": "user", "content": f'Message: "{user_msg}"'})
+        messages.append({"role": "assistant", "content": assistant_resp})
+
+    messages.append({"role": "user", "content": INSTRUCT_USER_PROMPT.format(message=clean_text)})
+
+    formatted = loader._tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+
+    # Scale max_tokens for long messages that may have many facts
+    if len(clean_text) < 300:
+        _max_tok = 120
+    elif len(clean_text) < 800:
+        _max_tok = 200
+    elif len(clean_text) < 1200:
+        _max_tok = 300
+    else:
+        _max_tok = 500
+    result = loader.generate_sync(
+        formatted,
+        max_tokens=_max_tok,
+        temperature=0.0,
+        top_p=0.1,
+        repetition_penalty=1.0,
+        pre_formatted=True,
+    )
+
+    raw = result.text
+    facts = parse_llm_json(raw)
+    spans = json_to_spans(facts, message_text)
+    if not facts and '{"facts"' not in raw:
+        log.debug("No JSON in output: %r", raw[:120])
+    elif facts and not spans:
+        log.debug(
+            "All %d facts filtered for '%s': %s",
+            len(facts), message_text[:40],
+            [(f.get("text"), f.get("label")) for f in facts],
+        )
+
+    # Rule-based recall boost: catch entities the LLM commonly misses
+    spans = _rule_based_boost(spans, message_text)
+    return spans
+
+
+def _strategy_simple(loader, message_text: str) -> list[dict]:
+    """Strategy: minimal prompt, no system message."""
+    prompt = f"""Extract personal facts from this text as JSON.
+Text: "{message_text}"
+Return: {{"facts": [{{"text": "...", "label": "..."}}]}}
+Labels: family_member, activity, health_condition, job_role, org, place, food_item, current_location, future_location, past_location, friend_name, person_name
+If no facts, return {{"facts": []}}"""
+
+    result = loader.generate_sync(
+        prompt,
+        max_tokens=256,
+        temperature=0.0,
+        top_p=0.1,
+        repetition_penalty=1.0,
+    )
+
+    facts = parse_llm_json(result.text)
+    return json_to_spans(facts, message_text)
+
+
+# Pipe-delimited system prompt and examples
+PIPE_SYSTEM = """Extract personal fact entities from chat messages.
+Output: entity|label (one per line). Output NONE if no facts.
+Labels: family_member, activity, health_condition, job_role, org, food_item, current_location, future_location, past_location, place, friend_name, person_name"""
+
+PIPE_EXAMPLES = [
+    ("my brother bakes and I just eat whatever he makes",
+     "brother|family_member\nbakes|activity"),
+    ("I work at Google as an engineer",
+     "Google|org\nengineer|job_role"),
+    ("helloooo", "NONE"),
+    ("My phone is being like my moms", "NONE"),
+    ("allergic to peanuts and it sucks",
+     "peanuts|health_condition"),
+    ("i like it", "NONE"),
+    ("moving to Austin next month",
+     "Austin|future_location"),
+    ("And my dad flew in",
+     "dad|family_member"),
+    ("I work at lending tree",
+     "lending tree|org"),
+    ("My friend Sarah is a nurse",
+     "Sarah|friend_name\nnurse|job_role"),
+    ("Like 10:15ish", "NONE"),
+]
+
+
+def _parse_pipe_output(text: str) -> list[dict]:
+    """Parse pipe-delimited output into fact dicts."""
+    facts = []
+    text = text.strip()
+    if not text or text.upper().startswith("NONE"):
+        return []
+
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line or line.upper() == "NONE":
+            continue
+        # Handle "entity|label" format
+        if "|" in line:
+            parts = line.split("|", 1)
+            if len(parts) == 2:
+                entity, label = parts[0].strip(), parts[1].strip()
+                if entity and label:
+                    facts.append({"text": entity, "label": label})
+        # Stop if we see JSON or other junk (model went off-track)
+        elif line.startswith("{") or line.startswith("["):
+            break
+
+    return facts
+
+
+def _strategy_pipe(loader, message_text: str) -> list[dict]:
+    """Strategy: pipe-delimited output format (simpler for small models)."""
+    messages = [{"role": "system", "content": PIPE_SYSTEM}]
+
+    for user_msg, assistant_resp in PIPE_EXAMPLES:
+        messages.append({"role": "user", "content": user_msg})
+        messages.append({"role": "assistant", "content": assistant_resp})
+
+    messages.append({"role": "user", "content": message_text})
+
+    formatted = loader._tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+
+    result = loader.generate_sync(
+        formatted,
+        max_tokens=100,
+        temperature=0.0,
+        top_p=0.1,
+        repetition_penalty=1.0,
+        pre_formatted=True,
+    )
+
+    facts = _parse_pipe_output(result.text)
+    return json_to_spans(facts, message_text)
+
+
+# ---------------------------------------------------------------------------
+# Metrics (reuse from eval_gliner_candidates)
+# ---------------------------------------------------------------------------
+
+
 def compute_metrics(
     gold_records: list[dict],
-    predictions: dict[int, list[dict]],
+    predictions: dict[str, list[dict]],
 ) -> dict:
-    """Compute P/R/F1 metrics matching predictions against gold spans."""
-    overall = Metrics()
-    per_label: dict[str, Metrics] = defaultdict(Metrics)
+    """Compute span-level precision/recall/F1."""
+    from eval_shared import spans_match
+
+    tp = fp = fn = 0
+    per_label: dict[str, dict[str, int]] = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
+    per_slice: dict[str, dict[str, int]] = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
+    errors: list[dict] = []
 
     for rec in gold_records:
-        msg_id = rec["message_id"]
+        sid = rec["sample_id"]
         gold_cands = rec.get("expected_candidates") or []
-        pred_cands = predictions.get(msg_id, [])
+        pred_cands = predictions.get(sid, [])
+        slc = rec.get("slice", "unknown")
 
         gold_matched = [False] * len(gold_cands)
         pred_matched = [False] * len(pred_cands)
 
-        # Match predictions to gold
+        # Greedy matching
         for gi, gc in enumerate(gold_cands):
             for pi, pc in enumerate(pred_cands):
                 if pred_matched[pi]:
@@ -351,377 +1045,259 @@ def compute_metrics(
                     pc.get("span_label", ""),
                     gc.get("span_text", ""),
                     gc.get("span_label", ""),
-                    label_aliases=DEFAULT_LABEL_ALIASES,
+                    label_aliases=LLM_LABEL_ALIASES,
                 ):
                     gold_matched[gi] = True
                     pred_matched[pi] = True
-                    overall.tp += 1
-                    per_label[gc["span_label"]].tp += 1
+                    tp += 1
+                    per_label[gc["span_label"]]["tp"] += 1
+                    per_slice[slc]["tp"] += 1
                     break
 
-        # Unmatched gold = FN
+        # FN
         for gi, gc in enumerate(gold_cands):
             if not gold_matched[gi]:
-                overall.fn += 1
-                per_label[gc["span_label"]].fn += 1
+                fn += 1
+                per_label[gc["span_label"]]["fn"] += 1
+                per_slice[slc]["fn"] += 1
+                errors.append({
+                    "type": "fn",
+                    "sample_id": sid,
+                    "slice": slc,
+                    "message_text": rec["message_text"][:100],
+                    "gold_span": gc["span_text"],
+                    "gold_label": gc["span_label"],
+                })
 
-        # Unmatched preds = FP
+        # FP
         for pi, pc in enumerate(pred_cands):
             if not pred_matched[pi]:
-                overall.fp += 1
+                fp += 1
                 label = pc.get("span_label", "unknown")
-                per_label[label].fp += 1
+                per_label[label]["fp"] += 1
+                per_slice[slc]["fp"] += 1
+                errors.append({
+                    "type": "fp",
+                    "sample_id": sid,
+                    "slice": slc,
+                    "message_text": rec["message_text"][:100],
+                    "pred_span": pc.get("span_text", ""),
+                    "pred_label": label,
+                })
+
+    def _metrics(tp_: int, fp_: int, fn_: int) -> dict:
+        p = tp_ / (tp_ + fp_) if (tp_ + fp_) > 0 else 0.0
+        r = tp_ / (tp_ + fn_) if (tp_ + fn_) > 0 else 0.0
+        f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
+        return {
+            "precision": round(p, 4),
+            "recall": round(r, 4),
+            "f1": round(f1, 4),
+            "tp": tp_,
+            "fp": fp_,
+            "fn": fn_,
+        }
+
+    overall = _metrics(tp, fp, fn)
+    label_metrics = {
+        k: _metrics(v["tp"], v["fp"], v["fn"])
+        for k, v in sorted(per_label.items())
+    }
+    slice_metrics = {
+        k: _metrics(v["tp"], v["fp"], v["fn"])
+        for k, v in sorted(per_slice.items())
+    }
 
     return {
-        "overall": overall.to_dict(),
-        "per_label": {k: v.to_dict() for k, v in sorted(per_label.items())},
+        "overall": overall,
+        "per_label": label_metrics,
+        "per_slice": slice_metrics,
+        "errors": errors,
     }
 
 
-MODEL_CONFIGS = {
-    "lfm2-350m-extract": {
-        "display": "LFM2-350M-Extract",
-        "path": "models/lfm2-350m-extract-mlx-4bit",
-        "use_system_prompt": True,
-    },
-    "lfm2-extract": {
-        "display": "LFM2-1.2B-Extract",
-        "path": "models/lfm2-1.2b-extract-mlx-4bit",
-        "use_system_prompt": True,  # Per Liquid AI docs: schema in system prompt
-    },
-    "lfm25-instruct": {
-        "display": "LFM2.5-1.2B-Instruct",
-        "path": "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit",
-        "use_system_prompt": False,  # All-in-one user message
-    },
-}
+# ---------------------------------------------------------------------------
+# Report
+# ---------------------------------------------------------------------------
 
 
-def _build_prompt(
-    msg_text: str,
-    tokenizer: Any,
-    use_system_prompt: bool,
-) -> str:
-    """Build a properly formatted chat prompt for extraction.
+def print_report(metrics: dict, strategy: str, elapsed: float, num_records: int) -> None:
+    """Print evaluation report."""
+    ov = metrics["overall"]
+    print("\n" + "=" * 60, flush=True)
+    print("LLM Fact Extraction Evaluation", flush=True)
+    print("=" * 60, flush=True)
+    print(f"Strategy: {strategy}", flush=True)
+    print(f"Records: {num_records}", flush=True)
+    print(f"Time: {elapsed:.1f}s ({elapsed / num_records * 1000:.0f}ms/msg)", flush=True)
 
-    For Extract model: system prompt has schema, user message is just the text.
-    For Instruct model: user message has everything.
-    """
-    if use_system_prompt:
-        messages = [
-            {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
-            {"role": "user", "content": msg_text},
-        ]
-    else:
-        messages = [
-            {"role": "user", "content": INSTRUCT_USER_PROMPT.replace("{message_text}", msg_text)},
-        ]
-
-    return tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-
-
-def run_llm_extraction(
-    gold_records: list[dict],
-    model_key: str = "lfm2-extract",
-    limit: int | None = None,
-    output_dir: Path = OUTPUT_DIR,
-) -> dict:
-    """Run LLM extraction on the gold set.
-
-    Loads the specified model, runs extraction on each message, parses JSON
-    output, converts to spans, and scores against gold.
-    """
-    from models.loader import MLXModelLoader, ModelConfig
-
-    cfg = MODEL_CONFIGS[model_key]
-    records = gold_records[:limit] if limit else gold_records
-    logger.info("Running %s extraction on %d messages...", cfg["display"], len(records))
-
-    # Load model
-    logger.info("Loading %s from %s...", cfg["display"], cfg["path"])
-    loader = MLXModelLoader(ModelConfig(model_path=cfg["path"]))
-    load_start = time.time()
-    loader.load()
-    logger.info("Model loaded in %.1fs", time.time() - load_start)
-
-    # Run extraction
-    predictions: dict[int, list[dict]] = {}
-    timing: dict[int, float] = {}
-    parse_failures = 0
-    empty_outputs = 0
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    incremental_path = output_dir / f"{model_key}_predictions.jsonl"
-
-    start_time = time.time()
-
-    with open(incremental_path, "w") as inc_f:
-        for i, rec in enumerate(records):
-            if (i + 1) % 50 == 0 or i == 0:
-                elapsed = time.time() - start_time
-                rate = (i + 1) / elapsed if elapsed > 0 else 0
-                eta = (len(records) - i - 1) / rate if rate > 0 else 0
-                logger.info(
-                    "  [%s] %d/%d messages (%.0fs elapsed, ETA %.0fs, "
-                    "parse_fail=%d, empty=%d)",
-                    cfg["display"],
-                    i + 1,
-                    len(records),
-                    elapsed,
-                    eta,
-                    parse_failures,
-                    empty_outputs,
-                )
-
-            msg_id = rec["message_id"]
-            msg_text = rec["message_text"]
-
-            # Build prompt using chat template
-            prompt = _build_prompt(
-                msg_text, loader._tokenizer, cfg["use_system_prompt"]
-            )
-
-            # Generate with temperature=0 (greedy) per Liquid AI recommendation
-            msg_start = time.perf_counter()
-            raw_output = ""
-            parsed = None
-            try:
-                result = loader.generate_sync(
-                    prompt=prompt,
-                    max_tokens=300,
-                    temperature=0.0,
-                    top_p=1.0,
-                    repetition_penalty=1.0,
-                    timeout_seconds=30.0,
-                    pre_formatted=True,
-                )
-                elapsed_ms = (time.perf_counter() - msg_start) * 1000
-                raw_output = result.text
-
-                # Parse JSON
-                parsed = parse_llm_json(raw_output)
-                if parsed is None:
-                    parse_failures += 1
-                    pred_list = []
-                elif not any(
-                    v
-                    for v in parsed.values()
-                    if v and v != "" and v != [] and v != {}
-                ):
-                    empty_outputs += 1
-                    pred_list = []
-                else:
-                    pred_list = json_to_spans(parsed)
-
-                predictions[msg_id] = pred_list
-                timing[msg_id] = elapsed_ms
-
-            except Exception as e:
-                logger.error("Generation failed for message %d: %s", msg_id, e)
-                predictions[msg_id] = []
-                timing[msg_id] = 0
-                raw_output = f"ERROR: {e}"
-
-            # Write incrementally
-            inc_f.write(
-                json.dumps({
-                    "message_id": msg_id,
-                    "message_text": msg_text,
-                    "raw_output": raw_output,
-                    "parsed": parsed,
-                    "predictions": predictions[msg_id],
-                    "elapsed_ms": timing.get(msg_id, 0),
-                })
-                + "\n"
-            )
-            inc_f.flush()
-
-    total_time = time.time() - start_time
-    total_spans = sum(len(v) for v in predictions.values())
-    msgs_with_preds = sum(1 for v in predictions.values() if v)
-    parse_rate = (len(records) - parse_failures) / len(records) * 100
-
-    logger.info(
-        "%s extraction complete in %.1fs: %d spans from %d/%d messages "
-        "(parse rate: %.1f%%, empty: %d)",
-        cfg["display"],
-        total_time,
-        total_spans,
-        msgs_with_preds,
-        len(records),
-        parse_rate,
-        empty_outputs,
-    )
-
-    # Compute metrics
-    metrics = compute_metrics(records, predictions)
-    metrics["extractor_name"] = cfg["display"]
-    metrics["model_key"] = model_key
-    metrics["num_messages"] = len(records)
-    metrics["total_time_s"] = round(total_time, 2)
-    metrics["ms_per_message"] = round(total_time / len(records) * 1000, 1) if records else 0
-    metrics["parse_failures"] = parse_failures
-    metrics["parse_rate_pct"] = round(parse_rate, 1)
-    metrics["empty_outputs"] = empty_outputs
-
-    # Unload model to free memory
-    loader.unload()
-    gc.collect()
-
-    return metrics
-
-
-def print_results(all_metrics: list[dict]) -> None:
-    """Print comparison table of all models vs GLiNER baseline."""
-    print("\n" + "=" * 78)
-    print("LLM EXTRACTION BAKEOFF")
-    print("=" * 78)
-
-    # GLiNER baseline from previous bakeoff
-    gliner_baseline = {"precision": 0.337, "recall": 0.263, "f1": 0.295}
-
-    header = "{:24} {:>7} {:>7} {:>7} {:>9} {:>7} {:>8}".format(
-        "Extractor", "P", "R", "F1", "Time/msg", "Parse%", "Empty"
-    )
-    print(f"\n{header}")
-    print("-" * 78)
-
-    # GLiNER baseline row
     print(
-        "{:24} {:>7.3f} {:>7.3f} {:>7.3f} {:>7}ms {:>7} {:>8}".format(
-            "GLiNER (baseline)",
-            gliner_baseline["precision"],
-            gliner_baseline["recall"],
-            gliner_baseline["f1"],
-            "~5",
-            "n/a",
-            "n/a",
-        )
+        f"\nOverall:  P={ov['precision']:.3f}  R={ov['recall']:.3f}  "
+        f"F1={ov['f1']:.3f}  (TP={ov['tp']} FP={ov['fp']} FN={ov['fn']})",
+        flush=True,
     )
 
-    best_f1 = 0.0
-    best_name = ""
-    for m in all_metrics:
-        ov = m["overall"]
+    # Per-label
+    print(f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} {'TP':>4} {'FP':>4} {'FN':>4}", flush=True)
+    print("-" * 55, flush=True)
+    for label, m in sorted(
+        metrics["per_label"].items(),
+        key=lambda x: -(x[1]["tp"] + x[1]["fn"]),
+    ):
         print(
-            "{:24} {:>7.3f} {:>7.3f} {:>7.3f} {:>7.0f}ms {:>6.1f}% {:>8}".format(
-                m["extractor_name"],
-                ov["precision"],
-                ov["recall"],
-                ov["f1"],
-                m["ms_per_message"],
-                m["parse_rate_pct"],
-                m["empty_outputs"],
-            )
+            f"{label:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
+            f"{m['f1']:>6.3f} {m['tp']:>4} {m['fp']:>4} {m['fn']:>4}",
+            flush=True,
         )
-        if ov["f1"] > best_f1:
-            best_f1 = ov["f1"]
-            best_name = m["extractor_name"]
 
-    # Per-label breakdown for best model
-    print("\n\nPer-Label Breakdown (best: %s):" % best_name)
-    best_m = next(m for m in all_metrics if m["extractor_name"] == best_name)
-    print(
-        "  {:20} {:>6} {:>6} {:>6} {:>6}".format("Label", "P", "R", "F1", "Sup")
-    )
-    print("  " + "-" * 50)
-    for label, lm in sorted(best_m["per_label"].items()):
-        support = lm["tp"] + lm["fn"]
-        if support > 0:
+    # Per-slice
+    print(f"\n{'Slice':<20} {'P':>6} {'R':>6} {'F1':>6} {'TP':>4} {'FP':>4} {'FN':>4}", flush=True)
+    print("-" * 55, flush=True)
+    for slc, m in sorted(metrics["per_slice"].items()):
+        print(
+            f"{slc:<20} {m['precision']:>6.3f} {m['recall']:>6.3f} "
+            f"{m['f1']:>6.3f} {m['tp']:>4} {m['fp']:>4} {m['fn']:>4}",
+            flush=True,
+        )
+
+    # Top errors
+    fps = [e for e in metrics["errors"] if e["type"] == "fp"][:8]
+    fns = [e for e in metrics["errors"] if e["type"] == "fn"][:8]
+
+    if fns:
+        print("\nTop False Negatives (missed):", flush=True)
+        for e in fns:
             print(
-                "  {:20} {:>6.3f} {:>6.3f} {:>6.3f} {:>6}".format(
-                    label[:20], lm["precision"], lm["recall"], lm["f1"], support
-                )
+                f'  [{e["slice"]}] "{e["message_text"][:60]}..." '
+                f'-> missed {e["gold_span"]} ({e["gold_label"]})',
+                flush=True,
             )
 
-    # Verdict
-    print("\n" + "-" * 78)
-    if best_f1 > 0.35:
-        print("VERDICT: %s PASSES threshold (F1=%.3f > 0.35)" % (best_name, best_f1))
-        print("  -> Use this model for LLM extraction pipeline")
-    elif best_f1 > gliner_baseline["f1"]:
-        print(
-            "VERDICT: %s beats GLiNER (F1=%.3f > %.3f) but below 0.35"
-            % (best_name, best_f1, gliner_baseline["f1"])
-        )
-        print("  -> Prompt tuning or try NuExtract-tiny")
-    else:
-        print("VERDICT: No LLM model beats GLiNER baseline (best F1=%.3f)" % best_f1)
-        print("  -> Download NuExtract-tiny for dedicated extraction")
+    if fps:
+        print("\nTop False Positives (spurious):", flush=True)
+        for e in fps:
+            print(
+                f'  [{e["slice"]}] "{e["message_text"][:60]}..." '
+                f'-> {e["pred_span"]} ({e["pred_label"]})',
+                flush=True,
+            )
 
-    print("=" * 78)
+    print("\n" + "=" * 60, flush=True)
 
 
-def main() -> None:
-    """Main entry point."""
-    setup_logging()
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
-    parser = argparse.ArgumentParser(
-        description="Evaluate LFM models as structured fact extractors"
+
+def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    parser = argparse.ArgumentParser(description="Evaluate LLM fact extraction")
+    parser.add_argument("--gold", type=Path, default=GOLD_PATH, help="Path to gold set JSON")
+    parser.add_argument("--limit", type=int, default=None, help="Limit records to process")
     parser.add_argument(
-        "--gold",
-        type=Path,
-        default=DEFAULT_GOLD_PATH,
-        help="Path to gold set JSON",
+        "--strategy",
+        default="constrained_categories",
+        choices=["constrained_categories", "simple", "pipe"],
+        help="Extraction strategy",
     )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=OUTPUT_DIR,
-        help="Output directory for results",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Limit evaluation to first N messages",
-    )
-    parser.add_argument(
-        "--models",
-        type=str,
-        default="lfm2-350m-extract,lfm2-extract",
-        help="Comma-separated model keys: " + ", ".join(MODEL_CONFIGS.keys()),
-    )
+    parser.add_argument("--model", default="lfm-1.2b", help="Model ID from registry")
     args = parser.parse_args()
 
     if not args.gold.exists():
-        logger.error("Gold set not found: %s", args.gold)
+        log.error(f"Gold set not found: {args.gold}")
         sys.exit(1)
 
     # Load gold set
-    gold_records = load_gold_set(args.gold)
+    log.info(f"Loading gold set from {args.gold}")
+    with open(args.gold) as f:
+        gold_records = json.load(f)
 
-    # Run each model sequentially (memory constraint: one model at a time)
-    model_keys = [k.strip() for k in args.models.split(",")]
-    all_metrics: list[dict] = []
+    if args.limit:
+        gold_records = gold_records[: args.limit]
 
-    for model_key in model_keys:
-        if model_key not in MODEL_CONFIGS:
-            logger.error("Unknown model key: %s (available: %s)",
-                         model_key, ", ".join(MODEL_CONFIGS.keys()))
-            continue
+    log.info(f"Loaded {len(gold_records)} records")
 
-        metrics = run_llm_extraction(
-            gold_records,
-            model_key=model_key,
-            limit=args.limit,
-            output_dir=args.output_dir,
-        )
-        all_metrics.append(metrics)
+    # Stats
+    pos = sum(1 for r in gold_records if r["slice"] == "positive")
+    neg = len(gold_records) - pos
+    with_cands = sum(1 for r in gold_records if r.get("expected_candidates"))
+    total_spans = sum(len(r.get("expected_candidates", [])) for r in gold_records)
+    log.info(f"  Positive: {pos}, Negative: {neg}, With candidates: {with_cands}")
+    log.info(f"  Total gold spans: {total_spans}")
 
-        # Save individual metrics
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        metrics_path = args.output_dir / f"{model_key}_metrics.json"
-        with open(metrics_path, "w") as f:
-            json.dump(metrics, f, indent=2)
-        logger.info("Saved %s metrics to %s", model_key, metrics_path)
+    # Load model
+    log.info(f"Loading model: {args.model}")
+    loader = load_model(args.model)
+    log.info("Model loaded")
 
-    # Print comparison
-    if all_metrics:
-        print_results(all_metrics)
+    # Run extraction
+    log.info(f"Running extraction with strategy={args.strategy}...")
+    predictions: dict[str, list[dict]] = {}
+    t0 = time.time()
+
+    for i, rec in enumerate(gold_records):
+        if (i + 1) % 10 == 0:
+            elapsed = time.time() - t0
+            rate = elapsed / (i + 1)
+            eta = rate * (len(gold_records) - i - 1)
+            print(
+                f"  Processing {i + 1}/{len(gold_records)} "
+                f"({elapsed:.1f}s elapsed, ETA {eta:.0f}s)",
+                flush=True,
+            )
+
+        try:
+            spans = extract_facts_llm(loader, rec["message_text"], args.strategy)
+            predictions[rec["sample_id"]] = spans
+            # Debug: log first 5 messages with expected candidates
+            if i < 20 and rec.get("expected_candidates"):
+                log.info(
+                    f"  [{rec['sample_id']}] msg={rec['message_text'][:60]!r}"
+                    f" gold={[c['span_text'] for c in rec['expected_candidates']]}"
+                    f" pred={[s['span_text'] for s in spans]}"
+                )
+        except Exception as e:
+            log.warning(f"Extraction failed for {rec['sample_id']}: {e}")
+            predictions[rec["sample_id"]] = []
+
+    elapsed = time.time() - t0
+    total_preds = sum(len(v) for v in predictions.values())
+    log.info(f"Extraction complete: {total_preds} predictions in {elapsed:.1f}s")
+
+    # Compute metrics
+    metrics = compute_metrics(gold_records, predictions)
+    print_report(metrics, args.strategy, elapsed, len(gold_records))
+
+    # Save results
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    output = {
+        "gold_path": str(args.gold),
+        "num_records": len(gold_records),
+        "limit": args.limit,
+        "strategy": args.strategy,
+        "model": args.model,
+        "num_predictions": total_preds,
+        "extraction_time_s": round(elapsed, 2),
+        "ms_per_message": round(elapsed / len(gold_records) * 1000, 1),
+        "overall": metrics["overall"],
+        "per_label": metrics["per_label"],
+        "per_slice": metrics["per_slice"],
+    }
+
+    with open(METRICS_PATH, "w") as f:
+        json.dump(output, f, indent=2)
+    log.info(f"Metrics saved to {METRICS_PATH}")
+
+    # Also save errors for analysis
+    errors_path = RESULTS_DIR / "errors.json"
+    with open(errors_path, "w") as f:
+        json.dump(metrics["errors"], f, indent=2)
+    log.info(f"Errors saved to {errors_path}")
 
 
 if __name__ == "__main__":

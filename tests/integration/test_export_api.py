@@ -100,9 +100,9 @@ def mock_reader(mock_messages, mock_conversations):
     reader = MagicMock()
     reader.check_access.return_value = True
     reader.get_conversations.return_value = mock_conversations
-    # get_conversation returns the matching conversation by chat_id
-    conv_map = {c.chat_id: c for c in mock_conversations}
-    reader.get_conversation.side_effect = lambda cid: conv_map.get(cid)
+    # Direct lookup by chat_id (used by export endpoint)
+    conv_by_id = {c.chat_id: c for c in mock_conversations}
+    reader.get_conversation.side_effect = lambda chat_id: conv_by_id.get(chat_id)
     reader.get_messages.return_value = mock_messages
     reader.search.return_value = mock_messages
     return reader

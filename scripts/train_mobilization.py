@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Train Logistic Regression for mobilization classification on Gemini labels.
+"""Train mobilization classifier (LightGBM or Logistic Regression) on Gemini labels.
 
 Usage:
-    uv run python scripts/train_mobilization_logistic.py
+    uv run python scripts/train_mobilization.py --model-type lightgbm
+    uv run python scripts/train_mobilization.py --model-type logistic
 """
 
 from __future__ import annotations
@@ -12,17 +13,27 @@ import logging
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
+from sklearn.metrics import classification_report, confusion_matrix
+
 from jarvis.utils.logging import setup_script_logging
 
 logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "mobilization_gemini"
+RULE_BASED_BASELINE_F1 = 0.342
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--model-type",
+        choices=["lightgbm", "logistic"],
+        default="lightgbm",
+        help="Model type to train (default: lightgbm).",
+    )
     parser.add_argument(
         "--data-dir",
         type=Path,
@@ -34,8 +45,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def load_data(data_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Load training data."""
-    import numpy as np
-
     try:
         train_data = np.load(data_dir / "train.npz", allow_pickle=True)
         test_data = np.load(data_dir / "test.npz", allow_pickle=True)
@@ -50,45 +59,64 @@ def load_data(data_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.nd
     return X_train, y_train, X_test, y_test
 
 
-def train_logistic_regression(
-    X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y_test: np.ndarray
+def _build_model(model_type: str) -> tuple:
+    """Build model and optional scaler based on model type.
+
+    Returns:
+        (model, scaler_or_None)
+    """
+    if model_type == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        model = LGBMClassifier(
+            objective="multiclass",
+            num_leaves=31,
+            learning_rate=0.05,
+            n_estimators=100,
+            random_state=42,
+            verbose=1,
+        )
+        return model, None
+    else:
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.preprocessing import StandardScaler
+
+        model = LogisticRegression(max_iter=1000, random_state=42, verbose=1)
+        return model, StandardScaler()
+
+
+def train_and_evaluate(
+    model_type: str,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
 ) -> dict:
-    """Train logistic regression model."""
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import classification_report, confusion_matrix
-    from sklearn.preprocessing import StandardScaler
+    """Train model and evaluate on test set."""
+    model, scaler = _build_model(model_type)
+    model_name = "LightGBM" if model_type == "lightgbm" else "Logistic Regression"
 
     logger.info("\n" + "=" * 70)
-    logger.info("TRAINING LOGISTIC REGRESSION")
+    logger.info("TRAINING %s", model_name.upper())
     logger.info("=" * 70)
 
-    # Scale features (important for logistic regression)
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    # Train model
-    model = LogisticRegression(
-        max_iter=1000,
-        random_state=42,
-        verbose=1,
-    )
+    if scaler:
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
 
     logger.info("Training model...")
-    model.fit(X_train_scaled, y_train)
+    model.fit(X_train, y_train)
 
-    # Evaluate
     logger.info("\n" + "=" * 70)
     logger.info("TEST SET EVALUATION")
     logger.info("=" * 70)
 
-    y_pred = model.predict(X_test_scaled)
+    y_pred = model.predict(X_test)
 
     print("\nClassification Report:", flush=True)
     report = classification_report(y_test, y_pred, output_dict=True)
     print(classification_report(y_test, y_pred), flush=True)
 
-    # Confusion matrix
     labels = sorted(set(y_test))
     cm = confusion_matrix(y_test, y_pred, labels=labels)
 
@@ -99,7 +127,6 @@ def train_logistic_regression(
         row = f"{label:>10}" + "  ".join(f"{cm[i][j]:>10}" for j in range(len(labels)))
         logger.info(row)
 
-    # Results
     macro_f1 = report["macro avg"]["f1-score"]
     accuracy = report["accuracy"]
 
@@ -115,7 +142,7 @@ def train_logistic_regression(
         logger.info(f"  {label:10s}: {f1:.4f}")
 
     return {
-        "model_type": "logistic_regression",
+        "model_type": model_type,
         "macro_f1": float(macro_f1),
         "accuracy": float(accuracy),
         "per_class_f1": {label: float(report[label]["f1-score"]) for label in labels},
@@ -124,23 +151,24 @@ def train_logistic_regression(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
-    setup_script_logging("train_mobilization_logistic")
+    setup_script_logging(f"train_mobilization_{args.model_type}")
     X_train, y_train, X_test, y_test = load_data(args.data_dir)
-    results = train_logistic_regression(X_train, y_train, X_test, y_test)
+    results = train_and_evaluate(args.model_type, X_train, y_train, X_test, y_test)
 
+    model_name = "LightGBM" if args.model_type == "lightgbm" else "Logistic Regression"
     logger.info("\n" + "=" * 70)
-    logger.info("COMPARISON: Current Rule-Based vs Logistic Regression")
+    logger.info("COMPARISON: Current Rule-Based vs %s", model_name)
     logger.info("=" * 70)
-    logger.info("Rule-based (current):      F1 = 0.3420 (baseline)")
-    logger.info(f"Logistic Regression:       F1 = {results['macro_f1']:.4f}")
+    logger.info("Rule-based (current):  F1 = %.4f (baseline)", RULE_BASED_BASELINE_F1)
+    logger.info(f"{model_name + ':':23s}F1 = {results['macro_f1']:.4f}")
 
-    improvement = ((results["macro_f1"] - 0.342) / 0.342) * 100
+    improvement = ((results["macro_f1"] - RULE_BASED_BASELINE_F1) / RULE_BASED_BASELINE_F1) * 100
     logger.info(f"Improvement: {improvement:+.1f}%")
 
-    if results["macro_f1"] > 0.342:
-        logger.info("\n✓ Logistic Regression is BETTER than rule-based!")
+    if results["macro_f1"] > RULE_BASED_BASELINE_F1:
+        logger.info("\n%s is BETTER than rule-based!", model_name)
     else:
-        logger.info("\n✗ Logistic Regression is worse - check what's wrong")
+        logger.info("\n%s is worse - check what's wrong", model_name)
 
 
 if __name__ == "__main__":

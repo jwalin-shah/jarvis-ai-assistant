@@ -1,17 +1,23 @@
-"""Centralized MLX memory configuration for 8GB Apple Silicon systems.
+"""Centralized MLX memory configuration for Apple Silicon systems.
 
 All MLX memory limits should be set through this module to avoid
 inconsistent settings across different model loaders.
+
+Limits scale adaptively based on available system RAM.
 """
 
+import psutil
+
+_total_ram = psutil.virtual_memory().total
+
 # Memory limits for different model types (in bytes)
-# LLM models are larger and need more headroom
-LLM_MEMORY_LIMIT = 2 * 1024 * 1024 * 1024  # 2 GB
-LLM_CACHE_LIMIT = 1 * 1024 * 1024 * 1024  # 1 GB
+# Scale with available RAM, capped at reasonable maximums
+LLM_MEMORY_LIMIT = min(2 * 1024 * 1024 * 1024, int(_total_ram * 0.25))
+LLM_CACHE_LIMIT = min(1 * 1024 * 1024 * 1024, int(_total_ram * 0.125))
 
 # Embedders, cross-encoders, and utility models are smaller
-EMBEDDER_MEMORY_LIMIT = 1 * 1024 * 1024 * 1024  # 1 GB
-EMBEDDER_CACHE_LIMIT = 512 * 1024 * 1024  # 512 MB
+EMBEDDER_MEMORY_LIMIT = min(1 * 1024 * 1024 * 1024, int(_total_ram * 0.125))
+EMBEDDER_CACHE_LIMIT = min(512 * 1024 * 1024, int(_total_ram * 0.0625))
 
 
 def apply_llm_limits() -> None:

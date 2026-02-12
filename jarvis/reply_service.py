@@ -765,7 +765,7 @@ class ReplyService:
         embedder: CachedEmbedder,
         rerank_scores: list[float] | None = None,
     ) -> list[tuple[str, str]]:
-        """Deduplicate examples using semantic similarity with topic diversity.
+        """Deduplicate examples using greedy semantic similarity filtering.
 
         Args:
             examples: List of (context, output) tuples.
@@ -778,54 +778,32 @@ class ReplyService:
         if len(examples) <= 1:
             return examples
 
-        # Compute embeddings for all examples
         texts = [f"{ctx} {out}" for ctx, out in examples]
         embeddings = embedder.encode(texts, normalize=True)
 
-        # Score for tiebreaking: prefer rerank_score, fallback to context length
+        # Score for ordering: prefer rerank_score, fallback to context length
         scores = rerank_scores or [0.0] * len(examples)
 
-        # Compute full similarity matrix once (replaces ~n^2 individual dot products)
-        emb_array = np.array(embeddings)
-        sim_matrix = np.dot(emb_array, emb_array.T)
+        # Sort by score descending (best first) for greedy selection
+        indexed = sorted(
+            range(len(examples)),
+            key=lambda i: (scores[i], len(examples[i][0])),
+            reverse=True,
+        )
 
-        # Find near-duplicates (cosine sim > 0.85)
-        keep = [True] * len(examples)
-        for i in range(len(examples)):
-            if not keep[i]:
-                continue
-            for j in range(i + 1, len(examples)):
-                if not keep[j]:
-                    continue
-                if sim_matrix[i, j] > 0.85:
-                    # Keep the one with higher rerank score, break ties by context length
-                    i_score = (scores[i], len(examples[i][0]))
-                    j_score = (scores[j], len(examples[j][0]))
-                    if i_score >= j_score:
-                        keep[j] = False
-                    else:
-                        keep[i] = False
-                        break
+        # Greedy dedup: keep candidate if not too similar to any already-kept item
+        kept_indices: list[int] = []
+        kept_embs: list[Any] = []
+        for i in indexed:
+            emb = embeddings[i]
+            too_similar = any(float(np.dot(emb, k)) > 0.85 for k in kept_embs)
+            if not too_similar:
+                kept_indices.append(i)
+                kept_embs.append(emb)
 
-        kept = [ex for ex, k in zip(examples, keep) if k]
-        kept_indices = [i for i, k in enumerate(keep) if k]
-
-        # Topic diversity: if all remaining examples are too similar to each other
-        # (avg pairwise sim > 0.75), drop the least unique one to make room
-        if len(kept) > 2:
-            n = len(kept)
-            # Extract sub-matrix for kept items
-            kept_sim = sim_matrix[np.ix_(kept_indices, kept_indices)]
-            # Average pairwise sim (exclude diagonal)
-            mask = ~np.eye(n, dtype=bool)
-            avg_sim = float(kept_sim[mask].mean()) if n > 1 else 0.0
-            if avg_sim > 0.75:
-                # Drop the example most similar to all others
-                avg_per_ex = (kept_sim.sum(axis=1) - 1.0) / (n - 1)  # exclude self-sim
-                drop_idx = int(np.argmax(avg_per_ex))
-                kept.pop(drop_idx)
-
-        return kept
+        # Return in original order
+        kept_indices.sort()
+        return [examples[i] for i in kept_indices]
 
     def _generate_llm_reply(
         self,
@@ -967,61 +945,6 @@ class ReplyService:
         elif mobilization.pressure == ResponsePressure.LOW:
             return "Keep the response brief and casual."
         return "A brief acknowledgment is fine."
-
-    # Imported from jarvis.prompts - single source of truth for all prompts
-    from jarvis.prompts import CHAT_SYSTEM_PROMPT as _CHAT_SYSTEM_PROMPT
-
-    def _build_chat_prompt(
-        self,
-        incoming: str,
-        instruction: str | None = None,
-        exchanges: list[tuple[str, str]] | None = None,
-    ) -> str:
-        """Build a chat-template prompt with multi-turn few-shot examples.
-
-        Uses the tokenizer's chat template for proper instruct formatting,
-        which produces dramatically better results than raw XML prompts
-        on small instruct models.
-        """
-        if not hasattr(self, "_tokenizer_cache"):
-            loader = getattr(self.generator, "_loader", None)
-            self._tokenizer_cache = getattr(loader, "_tokenizer", None) if loader else None
-        tokenizer = self._tokenizer_cache
-        if tokenizer is None or not hasattr(tokenizer, "apply_chat_template"):
-            # Fallback to raw prompt if no chat template
-            from jarvis.prompts import build_rag_reply_prompt
-
-            return build_rag_reply_prompt(
-                context="",
-                last_message=incoming,
-                contact_name="them",
-                instruction=instruction,
-            )
-
-        system_msg = self._CHAT_SYSTEM_PROMPT
-        if instruction:
-            system_msg = f"{system_msg} {instruction}"
-
-        messages: list[dict[str, str]] = [{"role": "system", "content": system_msg}]
-
-        # Add few-shot examples as multi-turn conversation
-        if exchanges:
-            for trigger, response in exchanges[:4]:
-                # Strip context prefixes, just use the core message
-                trigger_clean = trigger.strip()
-                if len(trigger_clean) > 150:
-                    trigger_clean = trigger_clean[-150:]
-                messages.append({"role": "user", "content": trigger_clean})
-                messages.append({"role": "assistant", "content": response.strip()})
-
-        # Add the actual message to reply to
-        messages.append({"role": "user", "content": incoming})
-
-        return tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
 
     def _record_metrics(
         self,
