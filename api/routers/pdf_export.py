@@ -123,15 +123,13 @@ def export_conversation_pdf(
 
         # Get messages with optional date filtering
         before = request.date_range.end if request.date_range else None
+        after = request.date_range.start if request.date_range else None
         messages = reader.get_messages(
             chat_id=chat_id,
             limit=request.limit,
             before=before,
+            after=after,
         )
-
-        # Apply after filter if specified
-        if request.date_range and request.date_range.start:
-            messages = [m for m in messages if m.date >= request.date_range.start]
 
         if not messages:
             raise HTTPException(
@@ -208,15 +206,13 @@ def download_conversation_pdf(
 
         # Get messages with optional date filtering
         before = request.date_range.end if request.date_range else None
+        after = request.date_range.start if request.date_range else None
         messages = reader.get_messages(
             chat_id=chat_id,
             limit=request.limit,
             before=before,
+            after=after,
         )
-
-        # Apply after filter if specified
-        if request.date_range and request.date_range.start:
-            messages = [m for m in messages if m.date >= request.date_range.start]
 
         if not messages:
             raise HTTPException(

@@ -78,18 +78,16 @@ async def export_conversation(
                     detail=f"Conversation not found: {chat_id}",
                 )
 
-            # Get messages with optional date filtering
+            # Get messages with date filtering pushed to DB
             before = export_request.date_range.end if export_request.date_range else None
+            after = export_request.date_range.start if export_request.date_range else None
             messages = await run_in_threadpool(
                 reader.get_messages,
                 chat_id=chat_id,
                 limit=export_request.limit,
                 before=before,
+                after=after,
             )
-
-            # Apply after filter if specified
-            if export_request.date_range and export_request.date_range.start:
-                messages = [m for m in messages if m.date >= export_request.date_range.start]
 
             if not messages:
                 raise HTTPException(
@@ -271,6 +269,7 @@ async def export_full_backup(
 
             for conv in conversations:
                 before = backup_request.date_range.end if backup_request.date_range else None
+                after = backup_request.date_range.start if backup_request.date_range else None
                 try:
                     async with asyncio.timeout(10.0):
                         messages = await run_in_threadpool(
@@ -278,6 +277,7 @@ async def export_full_backup(
                             chat_id=conv.chat_id,
                             limit=backup_request.messages_per_conversation,
                             before=before,
+                            after=after,
                         )
                 except TimeoutError:
                     logger.warning(
@@ -285,10 +285,6 @@ async def export_full_backup(
                         conv.chat_id,
                     )
                     continue
-
-                # Apply after filter if specified
-                if backup_request.date_range and backup_request.date_range.start:
-                    messages = [m for m in messages if m.date >= backup_request.date_range.start]
 
                 if messages:
                     conversation_data.append((conv, messages))
