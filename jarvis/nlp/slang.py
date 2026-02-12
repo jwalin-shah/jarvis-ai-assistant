@@ -12,6 +12,7 @@ Usage:
 """
 
 import re
+from functools import lru_cache
 
 # Slang/abbreviation expansion map
 # Keys are lowercase, values are the expanded form
@@ -189,6 +190,7 @@ _WORD_BOUNDARY_PATTERN = re.compile(
 )
 
 
+@lru_cache(maxsize=2048)
 def expand_slang(text: str) -> str:
     """Expand common slang/abbreviations for better embedding alignment.
 
