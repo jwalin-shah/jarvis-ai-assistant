@@ -282,7 +282,7 @@ class TestSemanticFactRetrieval:
     def test_food_query_returns_food_facts_not_work_facts(self):
         """'want to grab food?' should return food-related facts."""
         results = search_relevant_facts("want to grab food for dinner?", CONTACT_ID, limit=3)
-        predicates = {f.predicate for f in results}
+        {f.predicate for f in results}
         subjects = {f.subject.lower() for f in results}
 
         # Must include food facts

@@ -114,7 +114,7 @@ def main():
     print(f"Spans before: {total_before}", flush=True)
     print(f"Spans after: {total_after}", flush=True)
     print(f"Removed: {total_removed}", flush=True)
-    print(f"\nChanges:", flush=True)
+    print("\nChanges:", flush=True)
     for c in changes:
         print(c, flush=True)
 

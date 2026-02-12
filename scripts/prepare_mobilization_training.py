@@ -21,6 +21,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parent.parent
 EVAL_PATH = ROOT / "evals" / "data" / "pipeline_eval_labeled.jsonl"
 
@@ -97,8 +99,6 @@ def load_gemini_examples(eval_path: Path, logger: logging.Logger) -> list[dict]:
 
 def extract_simple_features(text: str) -> np.ndarray:
     """Extract simple hand-crafted features (no embeddings)."""
-    import numpy as np
-
     features = []
 
     # Basic structure
@@ -162,7 +162,6 @@ def extract_all_features(
     examples: list[dict], logger: logging.Logger
 ) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """Extract features for all examples."""
-    import numpy as np
     from tqdm import tqdm
 
     logger.info(f"Extracting features for {len(examples)} examples...")
@@ -180,7 +179,7 @@ def extract_all_features(
         if (i + 1) % 500 == 0:
             logger.info(f"  {i + 1}/{len(examples)} features extracted")
 
-    X = np.array(features_list)
+    X = np.array(features_list)  # noqa: N806
     y = np.array(labels)
 
     logger.info(f"\nExtracted {X.shape[0]} examples with {X.shape[1]} features")
@@ -198,7 +197,7 @@ def extract_all_features(
 
 
 def create_splits(
-    X: np.ndarray,
+    X: np.ndarray,  # noqa: N803
     y: np.ndarray,
     ids: list[str],
     test_size: float = 0.2,
@@ -208,7 +207,7 @@ def create_splits(
     """Create stratified train/test split."""
     from sklearn.model_selection import train_test_split
 
-    X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
+    X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(  # noqa: N806
         X, y, ids, test_size=test_size, stratify=y, random_state=seed
     )
 
@@ -232,14 +231,13 @@ def create_splits(
 
 def save_training_data(
     output_dir: Path,
-    X_train: np.ndarray,
-    X_test: np.ndarray,
+    X_train: np.ndarray,  # noqa: N803
+    X_test: np.ndarray,  # noqa: N803
     y_train: np.ndarray,
     y_test: np.ndarray,
     logger: logging.Logger,
 ) -> None:
     """Save training data."""
-    import numpy as np
 
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -296,8 +294,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger = setup_logging()
     args = parse_args(argv)
     examples = load_gemini_examples(args.eval_path, logger)
-    X, y, ids = extract_all_features(examples, logger)
-    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(
+    X, y, ids = extract_all_features(examples, logger)  # noqa: N806
+    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(  # noqa: N806
         X,
         y,
         ids,

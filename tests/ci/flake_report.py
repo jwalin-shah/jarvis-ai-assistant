@@ -251,9 +251,9 @@ def generate_html_report(
 
         <h2>📋 Legend</h2>
         <ul>
-            <li><span class="badge badge-quarantine">QUARANTINE</span> - Pass rate below 50%, should be quarantined</li>
-            <li><span class="badge badge-investigate">INVESTIGATE</span> - Flakiness above threshold, needs investigation</li>
-            <li><span class="badge badge-monitor">MONITOR</span> - Acceptable flakiness, continue monitoring</li>
+            <li><span class="badge badge-quarantine">QUARANTINE</span> - Pass rate below 50%</li>
+            <li><span class="badge badge-investigate">INVESTIGATE</span> - Needs investigation</li>
+            <li><span class="badge badge-monitor">MONITOR</span> - Acceptable flakiness</li>
         </ul>
 """
 

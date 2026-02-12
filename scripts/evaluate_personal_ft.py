@@ -8,7 +8,8 @@ Output: evals/results/personal-ft-comparison.json
 Usage:
     uv run python scripts/evaluate_personal_ft.py
     uv run python scripts/evaluate_personal_ft.py --report-only
-    uv run python scripts/evaluate_personal_ft.py --config ft_configs/personal_1.2b_lora_cataware.yaml
+    uv run python scripts/evaluate_personal_ft.py \
+        --config ft_configs/personal_1.2b_lora_cataware.yaml
 """
 
 from __future__ import annotations

@@ -5,7 +5,9 @@ Uses the MLX model loader to run structured extraction prompts on iMessage
 text and evaluates against the goldset using span-level P/R/F1.
 
 Usage:
-    uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset/candidate_gold_merged_r4.json --limit 100
+    uv run python scripts/eval_llm_extraction.py \
+        --gold training_data/gliner_goldset/candidate_gold_merged_r4.json \
+        --limit 100
 """
 
 from __future__ import annotations
@@ -13,7 +15,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import re
 import sys
 import time
@@ -71,17 +72,24 @@ EXTRACTION_SCHEMA = """{
   ]
 }"""
 
-EXTRACT_SYSTEM_PROMPT = """Extract LASTING personal facts from a chat message as JSON.
-Only extract facts that reveal ongoing traits: hobbies, family relationships, jobs, employers, schools, health conditions, places lived, food likes/dislikes.
-DO NOT extract: temporary actions, plans, one-time events, casual mentions of family in passing.
-"text" = exact 1-3 words copied verbatim from the message. Never invent words.
-Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
+EXTRACT_SYSTEM_PROMPT = """\
+Extract LASTING personal facts from a chat message as JSON.
+Only extract facts that reveal ongoing traits: hobbies, family \
+relationships, jobs, employers, schools, health conditions, \
+places lived, food likes/dislikes.
+DO NOT extract: temporary actions, plans, one-time events, \
+casual mentions of family in passing.
+"text" = exact 1-3 words copied verbatim from the message. \
+Never invent words.
+Labels: family_member, activity, health_condition, job_role, \
+org, food_item, place, friend_name, person_name
 Return {"facts": []} if no lasting personal facts."""
 
 # Few-shot examples: positive + hard negatives
 FEW_SHOT_TURNS = [
     ("my brother bakes and I just eat whatever he makes",
-     '{"facts": [{"text": "brother", "label": "family_member"}, {"text": "bakes", "label": "activity"}]}'),
+     '{"facts": [{"text": "brother", "label": "family_member"}, '
+     '{"text": "bakes", "label": "activity"}]}'),
     ("I work at Google as an engineer",
      '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}'),
     ("allergic to peanuts and it sucks",
@@ -128,8 +136,14 @@ LLM_LABEL_ALIASES: dict[str, set[str]] = {
     "past_location": {"past_location", "hometown", "origin"},
     "friend_name": {"friend_name", "friend"},
     "person_name": {"person_name", "name", "person"},
-    "org": {"org", "organization", "company", "employer", "school", "university", "personal.school"},
-    "place": {"place", "location", "venue", "landmark", "current_location", "future_location", "past_location"},
+    "org": {
+        "org", "organization", "company", "employer", "school",
+        "university", "personal.school",
+    },
+    "place": {
+        "place", "location", "venue", "landmark",
+        "current_location", "future_location", "past_location",
+    },
     "health_condition": {"health_condition", "health", "allergy", "condition", "medical"},
 }
 
@@ -721,7 +735,11 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
             _add(actual, "health_condition", "health.condition")
 
     # 4. "I work at <X>" pattern - extract the org
-    work_match = re.search(r'\b(?:work|working) at ([A-Z][a-zA-Z\s]{1,20}?)(?:\s*[.!?,]|\s+(?:as|and|but|so|for)|\s*$)', message_text)
+    work_match = re.search(
+        r'\b(?:work|working) at ([A-Z][a-zA-Z\s]{1,20}?)'
+        r'(?:\s*[.!?,]|\s+(?:as|and|but|so|for)|\s*$)',
+        message_text,
+    )
     if work_match:
         org_text = work_match.group(1).strip()
         if org_text and (org_text.lower(), "org") not in existing:
@@ -756,9 +774,20 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
 
     # 7. Location patterns: "live in X", "move to X", "from X", "back to X"
     _location_patterns = [
-        (r'\b(?:live|living|moved?|moving|relocat\w*)\s+(?:in|to)\s+([A-Z][a-zA-Z]+)', "future_location", "location.future"),
-        (r'\bback\s+(?:to|from)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
-        (r'\b(?:from|grew up in|born in|still in|was in)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
+        (
+            r'\b(?:live|living|moved?|moving|relocat\w*)\s+(?:in|to)\s+'
+            r'([A-Z][a-zA-Z]+)',
+            "future_location", "location.future",
+        ),
+        (
+            r'\bback\s+(?:to|from)\s+([A-Z][a-zA-Z]+)',
+            "past_location", "location.past",
+        ),
+        (
+            r'\b(?:from|grew up in|born in|still in|was in)\s+'
+            r'([A-Z][a-zA-Z]+)',
+            "past_location", "location.past",
+        ),
     ]
     for pat, label, fact_type in _location_patterns:
         match = re.search(pat, message_text)
@@ -915,7 +944,9 @@ def _strategy_simple(loader, message_text: str) -> list[dict]:
     prompt = f"""Extract personal facts from this text as JSON.
 Text: "{message_text}"
 Return: {{"facts": [{{"text": "...", "label": "..."}}]}}
-Labels: family_member, activity, health_condition, job_role, org, place, food_item, current_location, future_location, past_location, friend_name, person_name
+Labels: family_member, activity, health_condition, job_role, org, place, \
+food_item, current_location, future_location, past_location, \
+friend_name, person_name
 If no facts, return {{"facts": []}}"""
 
     result = loader.generate_sync(
@@ -931,9 +962,12 @@ If no facts, return {{"facts": []}}"""
 
 
 # Pipe-delimited system prompt and examples
-PIPE_SYSTEM = """Extract personal fact entities from chat messages.
+PIPE_SYSTEM = """\
+Extract personal fact entities from chat messages.
 Output: entity|label (one per line). Output NONE if no facts.
-Labels: family_member, activity, health_condition, job_role, org, food_item, current_location, future_location, past_location, place, friend_name, person_name"""
+Labels: family_member, activity, health_condition, job_role, org, \
+food_item, current_location, future_location, past_location, place, \
+friend_name, person_name"""
 
 PIPE_EXAMPLES = [
     ("my brother bakes and I just eat whatever he makes",
@@ -1019,7 +1053,6 @@ def compute_metrics(
     predictions: dict[str, list[dict]],
 ) -> dict:
     """Compute span-level precision/recall/F1."""
-    from eval_shared import spans_match
 
     tp = fp = fn = 0
     per_label: dict[str, dict[str, int]] = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})

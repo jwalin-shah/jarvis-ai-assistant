@@ -466,7 +466,7 @@ class VecSearcher:
                     # Delete from vec_binary by chunk_rowid
                     try:
                         placeholders = ",".join("?" * len(rowids))
-                        # SECURITY: Validate placeholders only contain "?" and "," before SQL interpolation
+                        # SECURITY: Validate placeholders before SQL interpolation
                         _validate_placeholders(placeholders)
                         conn.execute(
                             f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",
@@ -832,7 +832,7 @@ class VecSearcher:
             }
 
 
-from jarvis.utils.singleton import thread_safe_singleton
+from jarvis.utils.singleton import thread_safe_singleton  # noqa: E402
 
 
 @thread_safe_singleton

@@ -22,8 +22,7 @@ from itertools import combinations
 
 # Import span matching from eval_shared (same directory)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-from eval_shared import DEFAULT_LABEL_ALIASES, jaccard_tokens, spans_match
-
+from eval_shared import DEFAULT_LABEL_ALIASES, spans_match
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -538,9 +537,13 @@ def print_summary(merged: list[dict], kappas: list[tuple[str, str, float]], fk: 
         if c.get("confidence") == "low"
     )
 
-    print(f"\nMerged Dataset:", flush=True)
+    print("\nMerged Dataset:", flush=True)
     print(f"  Total samples: {total}", flush=True)
-    print(f"  Needs review:  {n_review} ({100 * n_review / total:.1f}%)" if total else "", flush=True)
+    if total:
+        pct = 100 * n_review / total
+        print(f"  Needs review:  {n_review} ({pct:.1f}%)", flush=True)
+    else:
+        print("", flush=True)
     print(f"  Total spans:   {total_spans}", flush=True)
     print(f"    High (3/3):  {high}", flush=True)
     print(f"    Medium (2/3): {medium}", flush=True)
@@ -548,7 +551,7 @@ def print_summary(merged: list[dict], kappas: list[tuple[str, str, float]], fk: 
 
     # Slice distribution
     slice_counts: Counter[str] = Counter(s.get("slice", "unknown") for s in merged)
-    print(f"\n  Slice distribution:", flush=True)
+    print("\n  Slice distribution:", flush=True)
     for sl, cnt in sorted(slice_counts.items()):
         print(f"    {sl}: {cnt}", flush=True)
 

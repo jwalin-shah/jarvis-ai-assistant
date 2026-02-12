@@ -418,7 +418,7 @@ def sweep_entailment_thresholds(
     """
     print("\n=== Entailment Threshold Sweep ===", flush=True)
 
-    from jarvis.contacts.candidate_extractor import CandidateExtractor as CE
+    from jarvis.contacts.candidate_extractor import CandidateExtractor as CE  # noqa: N817
 
     # Build a dummy extractor to access hypothesis templates
     dummy = CE(use_entailment=False)

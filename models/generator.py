@@ -548,12 +548,12 @@ class ThreadAwareGenerator:
 
         # Build generation request
         # Include thread-specific examples as few-shot
-        examples = self._get_thread_examples(thread_context.topic)
+        self._get_thread_examples(thread_context.topic)
 
         request = GenerationRequest(
             prompt=prompt,
             context_documents=[],  # Context is already in the prompt
-            few_shot_examples=[],  # Examples already embedded in prompt by build_threaded_reply_prompt
+            few_shot_examples=[],  # Examples already in prompt
             max_tokens=max_tokens,
             temperature=temperature,
         )

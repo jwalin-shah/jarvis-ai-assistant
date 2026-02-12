@@ -398,9 +398,8 @@ class RoutingMetricsStore:
                 if since is not None:
                     query_parts.append("WHERE timestamp >= ?")
                     params.append(since)
-                    where = "WHERE timestamp >= ?"
                 else:
-                    where = ""
+                    pass
                 query_parts.append("ORDER BY timestamp DESC")
                 query_parts.append("LIMIT ?")
                 params.append(limit)

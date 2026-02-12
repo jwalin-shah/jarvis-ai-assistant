@@ -11,7 +11,7 @@ All public names are re-exported here for backward compatibility.
 
 # --- constants.py ---
 # --- builders.py ---
-from jarvis.prompts.builders import (
+from jarvis.prompts.builders import (  # noqa: F401
     _format_examples,
     _format_relationship_context,
     _format_search_examples,

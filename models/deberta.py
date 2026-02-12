@@ -75,7 +75,7 @@ class DisentangledAttention(nn.Module):
         attention_mask: mx.array | None,
         rel_embeddings: mx.array,
     ) -> mx.array:
-        B, S, _ = hidden_states.shape
+        B, S, _ = hidden_states.shape  # noqa: N806
 
         q = self._heads(self.query_proj(hidden_states), B, S)
         k = self._heads(self.key_proj(hidden_states), B, S)
@@ -109,7 +109,7 @@ class DisentangledAttention(nn.Module):
         out = (attn @ v).transpose(0, 2, 1, 3).reshape(B, S, -1)
         return out
 
-    def _heads(self, x: mx.array, B: int, S: int) -> mx.array:
+    def _heads(self, x: mx.array, B: int, S: int) -> mx.array:  # noqa: N803
         """Reshape (B, S, H) -> (B, num_heads, S, head_dim)."""
         return x.reshape(B, S, self.num_heads, self.head_dim).transpose(0, 2, 1, 3)
 

@@ -31,8 +31,8 @@ from sklearn.svm import LinearSVC
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from jarvis.utils.logging import setup_script_logging
-from jarvis.utils.memory import MemoryMonitor, get_swap_info, get_top_memory_processes
+from jarvis.utils.logging import setup_script_logging  # noqa: E402
+from jarvis.utils.memory import MemoryMonitor, get_swap_info, get_top_memory_processes  # noqa: E402
 
 logger = setup_script_logging("train_category_svm")
 
@@ -190,7 +190,7 @@ def train(
         # Stop monitoring
         stop_monitoring.set()
         checker_thread.join(timeout=2.0)
-        final_info = monitor.stop()
+        monitor.stop()
 
         elapsed = time.time() - train_start
         print(

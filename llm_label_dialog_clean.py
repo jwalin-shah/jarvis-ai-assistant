@@ -21,15 +21,26 @@ client = Groq(api_key=api_key)
 
 BATCH_SIZE = 10  # Write results every N items
 
-CATEGORY_SYSTEM_PROMPT = """You are a category classifier for text messages. Classify each message into exactly ONE of these 6 categories:
+CATEGORY_SYSTEM_PROMPT = """\
+You are a category classifier for text messages. \
+Classify each message into exactly ONE of these 6 categories:
 
 **Categories:**
-1. **closing**: Conversation enders (bye, talk later, goodnight, see you, take care)
-2. **acknowledge**: Simple acknowledgments with NO new info (ok, got it, thanks, sounds good, cool, yeah, sure, makes sense, np, understood, will do, right, yep, agreed, noted, perfect)
-3. **question**: Requests for information (uses ?, asks for details, seeks clarification)
-4. **request**: Action requests or commands (imperative verbs, "can you", "please", direct asks for someone to DO something)
-5. **emotion**: Emotional reactions or greetings (hi, hey, congrats, haha, lol, love it, sorry, wow, omg, excited)
-6. **statement**: Informational statements, updates, or observations (declarative sentences providing info, reporting status)
+1. **closing**: Conversation enders \
+(bye, talk later, goodnight, see you, take care)
+2. **acknowledge**: Simple acknowledgments with NO new info \
+(ok, got it, thanks, sounds good, cool, yeah, sure, makes sense, \
+np, understood, will do, right, yep, agreed, noted, perfect)
+3. **question**: Requests for information \
+(uses ?, asks for details, seeks clarification)
+4. **request**: Action requests or commands \
+(imperative verbs, "can you", "please", \
+direct asks for someone to DO something)
+5. **emotion**: Emotional reactions or greetings \
+(hi, hey, congrats, haha, lol, love it, sorry, wow, omg, excited)
+6. **statement**: Informational statements, updates, \
+or observations \
+(declarative sentences providing info, reporting status)
 
 **Rules:**
 - If message has both question mark AND action request → **request** (e.g., "Can you send that?")

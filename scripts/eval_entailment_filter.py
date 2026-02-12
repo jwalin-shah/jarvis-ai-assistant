@@ -3,7 +3,8 @@
 
 Two-stage eval pipeline:
   Stage 1 (compat venv): scripts/run_gliner_eval_compat.sh --dump-candidates candidates.json
-  Stage 2 (main venv):   uv run python scripts/eval_entailment_filter.py --candidates candidates.json
+  Stage 2 (main venv):   uv run python scripts/eval_entailment_filter.py \
+                         --candidates candidates.json
 
 This loads the intermediate candidates from stage 1, runs NLI entailment filtering
 using the MLX cross-encoder, and recomputes precision/recall/F1.
@@ -206,7 +207,10 @@ def apply_entailment_filter(
     nli = get_nli_cross_encoder()
     full_scores = nli.predict_batch(all_pairs)
     elapsed = time.time() - t0
-    logger.info(f"NLI scoring complete in {elapsed:.1f}s ({elapsed / len(all_pairs) * 1000:.1f}ms/pair)")
+    logger.info(
+        "NLI scoring complete in %.1fs (%.1fms/pair)",
+        elapsed, elapsed / len(all_pairs) * 1000,
+    )
 
     # Categories that skip NLI (too destructive)
     NLI_SKIP_CATEGORIES = {
@@ -251,8 +255,10 @@ def apply_entailment_filter(
             filtered[sid].append(pred_copy)
             kept += 1
 
-    logger.info(f"Entailment: {skipped} skipped, {kept} kept, {rejected} hard-rejected "
-                f"({skipped + kept + rejected} total)")
+    logger.info(
+        "Entailment: %d skipped, %d kept, %d hard-rejected (%d total)",
+        skipped, kept, rejected, skipped + kept + rejected,
+    )
     return filtered
 
 
@@ -283,10 +289,20 @@ def print_report(
         print(f"{k:<12} {b[k]:>10} {a[k]:>10}", flush=True)
 
     # Per-label comparison
-    print(f"\n{'Label':<25} {'P_before':>8} {'P_after':>8} {'R_before':>8} {'R_after':>8} {'F1_after':>8} {'Sup':>5}", flush=True)
+    print(
+        f"\n{'Label':<25} {'P_before':>8} {'P_after':>8} "
+        f"{'R_before':>8} {'R_after':>8} {'F1_after':>8} {'Sup':>5}",
+        flush=True,
+    )
     print("-" * 72, flush=True)
     all_labels = set(before_metrics.get("per_label", {})) | set(after_metrics.get("per_label", {}))
-    for label in sorted(all_labels, key=lambda l: after_metrics.get("per_label", {}).get(l, {}).get("support", 0), reverse=True):
+    for label in sorted(
+        all_labels,
+        key=lambda l: after_metrics.get("per_label", {}).get(
+            l, {}
+        ).get("support", 0),
+        reverse=True,
+    ):
         bl = before_metrics.get("per_label", {}).get(label, {})
         al = after_metrics.get("per_label", {}).get(label, {})
         print(
@@ -326,7 +342,10 @@ def main():
 
     if not args.candidates.exists():
         logger.error(f"Candidates file not found: {args.candidates}")
-        logger.error("Run stage 1 first: bash scripts/run_gliner_eval_compat.sh --dump-candidates results/gliner_candidates_dump.json")
+        logger.error(
+            "Run stage 1 first: bash scripts/run_gliner_eval_compat.sh"
+            " --dump-candidates results/gliner_candidates_dump.json"
+        )
         sys.exit(1)
 
     logger.info(f"Loading candidates from {args.candidates}")

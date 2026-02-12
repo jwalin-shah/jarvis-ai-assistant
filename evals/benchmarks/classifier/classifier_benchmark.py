@@ -645,7 +645,7 @@ def main() -> int:
         final_results = compare_classifiers(messages, args.batch_size)
     else:
         print(f"\nRunning {args.benchmark} benchmark...")
-        bench_result = benchmark_v2_classifier(messages, args.batch_size)
+        bench_result = benchmark_v1_classifier(messages, args.batch_size)
         final_results = bench_result.to_dict()
 
     # Save results if requested

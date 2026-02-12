@@ -17,12 +17,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.contacts.contact_profile_context import ContactProfileContext
-
-# Pre-compiled patterns for tone/style analysis functions
-_WORD_RE = re.compile(r"\b\w+\b")
-_REPEATED_CHAR_RE = re.compile(r"(.)\1{3,}")
-_NON_ALPHA_RE = re.compile(r"[^a-zA-Z]")
-
 from jarvis.prompts.constants import (
     CASUAL_INDICATORS,
     EMOJI_PATTERN,
@@ -35,6 +29,7 @@ from jarvis.prompts.constants import (
     SUMMARY_PROMPT,
     TEXT_ABBREVIATIONS,
     THREADED_REPLY_PROMPT,
+    CategoryConfig,
     UserStyleAnalysis,
 )
 from jarvis.prompts.examples import (
@@ -46,6 +41,11 @@ from jarvis.prompts.examples import (
     THREAD_EXAMPLES,
     FewShotExample,
 )
+
+# Pre-compiled patterns for tone/style analysis functions
+_WORD_RE = re.compile(r"\b\w+\b")
+_REPEATED_CHAR_RE = re.compile(r"(.)\1{3,}")
+_NON_ALPHA_RE = re.compile(r"[^a-zA-Z]")
 
 if TYPE_CHECKING:
     from contracts.imessage import Message

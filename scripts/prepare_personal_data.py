@@ -164,7 +164,11 @@ def build_training_example(
     context_str = format_context(pair["context"])
     last_msg = pair["context"][-1] if pair["context"] else {"sender": "Unknown", "text": ""}
 
-    user_content = f"<conversation>\n{context_str}\n</conversation>\n<last_message>{last_msg['sender']}: {last_msg['text']}</last_message>"
+    user_content = (
+        f"<conversation>\n{context_str}\n</conversation>\n"
+        f"<last_message>{last_msg['sender']}: {last_msg['text']}"
+        f"</last_message>"
+    )
 
     return {
         "messages": [

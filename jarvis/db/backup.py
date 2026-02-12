@@ -288,14 +288,13 @@ class BackupManager:
                 # Build dump command
                 if tables:
                     # Export specific tables
-                    table_list = " ".join(tables)
-                    dump_cmd = f".dump {table_list}"
+                    " ".join(tables)
                 else:
                     # Export all
-                    dump_cmd = ".dump"
+                    pass
 
                 # Execute dump
-                result = conn.execute("SELECT sql FROM sqlite_master WHERE type='table'")
+                conn.execute("SELECT sql FROM sqlite_master WHERE type='table'")
 
                 with open(export_path, "w") as f:
                     f.write("-- JARVIS Database Export\n")

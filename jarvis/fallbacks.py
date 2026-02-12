@@ -133,7 +133,7 @@ def get_fallback_draft(context: str | None = None) -> str:
 
 
 # Backward-compatible error classes (now properly inherit from JarvisError)
-from jarvis.errors import ModelLoadError as _BaseModelLoadError
+from jarvis.errors import ModelLoadError as _BaseModelLoadError  # noqa: E402
 
 
 class ModelLoadError(_BaseModelLoadError):

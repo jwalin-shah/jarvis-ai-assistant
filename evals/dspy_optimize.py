@@ -338,7 +338,7 @@ def main() -> int:
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[logging.FileHandler(log_path), logging.StreamHandler(sys.stdout)],
     )
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     print("=" * 70, flush=True)
     print("JARVIS DSPy Optimization Pipeline", flush=True)

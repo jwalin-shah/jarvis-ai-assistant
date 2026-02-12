@@ -21,9 +21,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import psutil
+import psutil  # noqa: E402
 
-from models.loader import MLXModelLoader, ModelConfig
+from models.loader import MLXModelLoader, ModelConfig  # noqa: E402
 
 
 def mem_mb() -> str:
@@ -45,7 +45,8 @@ TEST_CASES = [
     {"ctx": "[20:15] Mike: what's the wifi password", "label": "info_request"},
     # Emotional / support
     {
-        "ctx": "[20:00] Mike: Work was brutal today\n[20:01] Mike: Boss dumped a project on me last minute",
+        "ctx": "[20:00] Mike: Work was brutal today\n"
+        "[20:01] Mike: Boss dumped a project on me last minute",
         "label": "venting",
     },
     {
@@ -67,11 +68,13 @@ TEST_CASES = [
     {"ctx": "[08:00] Mom: Good morning sweetheart! Have a great day!", "label": "good_morning"},
     # Multi-turn
     {
-        "ctx": "[18:00] Jake: yo\n[18:00] Jake: you free tonight?\n[18:01] Jake: thinking about hitting up that new bar",
+        "ctx": "[18:00] Jake: yo\n[18:00] Jake: you free tonight?\n"
+        "[18:01] Jake: thinking about hitting up that new bar",
         "label": "multi_invite",
     },
     {
-        "ctx": "[14:00] Sarah: hey did you hear about the party?\n[14:01] You: no what party\n[14:01] Sarah: at Jake's this Saturday",
+        "ctx": "[14:00] Sarah: hey did you hear about the party?\n"
+        "[14:01] You: no what party\n[14:01] Sarah: at Jake's this Saturday",
         "label": "multi_followup",
     },
     # Requests / favors
@@ -216,17 +219,26 @@ def _(ctx):
 
 @prompt("inst_no_ai")
 def _(ctx):
-    return f"You're a real person texting. NOT an AI. Reply naturally, one line max.\n\n{ctx}\n\nReply:"
+    return (
+        "You're a real person texting. NOT an AI. "
+        f"Reply naturally, one line max.\n\n{ctx}\n\nReply:"
+    )
 
 
 @prompt("inst_complete")
 def _(ctx):
-    return f"Complete the next message in this text conversation. Output ONLY the reply.\n\n{ctx}\n\nReply:"
+    return (
+        "Complete the next message in this text conversation. "
+        f"Output ONLY the reply.\n\n{ctx}\n\nReply:"
+    )
 
 
 @prompt("inst_mimic")
 def _(ctx):
-    return f"Read this text thread and write what you'd text back. Keep it real. Max 1 sentence.\n\n{ctx}\n\nYour reply:"
+    return (
+        "Read this text thread and write what you'd text back. "
+        f"Keep it real. Max 1 sentence.\n\n{ctx}\n\nYour reply:"
+    )
 
 
 @prompt("inst_terse")
@@ -397,7 +409,9 @@ def run(
 
     n_calls = len(models) * len(prompt_names) * len(tests) * len(sampling_configs)
     print(
-        f"\n{len(models)} models x {len(prompt_names)} prompts x {len(tests)} tests x {len(sampling_configs)} sampling configs = {n_calls} generations",
+        f"\n{len(models)} models x {len(prompt_names)} prompts x "
+        f"{len(tests)} tests x {len(sampling_configs)} sampling configs "
+        f"= {n_calls} generations",
         flush=True,
     )
 

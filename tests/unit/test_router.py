@@ -410,7 +410,7 @@ class TestEdgeCases:
         mock_generator: MagicMock,
         sample_contact: Contact,
     ) -> None:
-        """Test routing with chat_id falls back to chat_id lookup and uses contact for generation."""
+        """Test chat_id routing falls back to chat_id lookup for generation."""
         mock_db.get_contact.return_value = None
         mock_db.get_contact_by_chat_id.return_value = sample_contact
 

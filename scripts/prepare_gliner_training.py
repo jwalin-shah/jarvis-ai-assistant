@@ -425,7 +425,7 @@ def apply_heuristic_labels(
 
     for ex in tqdm(examples, desc="Applying heuristics", unit="ex"):
         candidate_lower = ex.candidate.lower()
-        text_lower = ex.text.lower()
+        ex.text.lower()
 
         # Mark as likely false positive
         vague_words = {"it", "that", "this", "them", "there", "thing", "stuff"}

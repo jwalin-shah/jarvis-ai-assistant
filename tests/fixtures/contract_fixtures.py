@@ -24,7 +24,7 @@ from typing import Any
 # field) which shadows the builtin.
 _builtin_object = builtins.object
 
-from jarvis.contracts.pipeline import (
+from jarvis.contracts.pipeline import (  # noqa: E402
     CategoryType,
     ClassificationResult,
     Entity,

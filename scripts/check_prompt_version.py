@@ -48,7 +48,10 @@ def extract_templates(content: str) -> dict[str, str]:
     templates = {}
 
     # Match PromptTemplate definitions
-    pattern = r'(\w+)\s*=\s*PromptTemplate\(\s*name\s*=\s*["\']([^"\']+)["\'].*?template\s*=\s*"""(.*?)"""'
+    pattern = (
+        r'(\w+)\s*=\s*PromptTemplate\(\s*name\s*=\s*["\']([^"\']+)'
+        r'["\'].*?template\s*=\s*"""(.*?)"""'
+    )
     for match in re.finditer(pattern, content, re.DOTALL):
         var_name = match.group(1)
         template_name = match.group(2)

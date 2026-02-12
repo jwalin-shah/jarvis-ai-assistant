@@ -458,7 +458,7 @@ class TestEndToEndScenarios:
             raise RuntimeError("Service down")
 
         # Multiple failures to open circuit
-        result1 = controller.execute("cascade_feature", failing_primary)
+        controller.execute("cascade_feature", failing_primary)
         result2 = controller.execute("cascade_feature", failing_primary)
 
         # Circuit should be open, getting fallback
@@ -514,7 +514,7 @@ class TestRecoveryProceduresIntegration:
 
         # Create valid queue
         queue = TaskQueue(persistence_path=queue_path, auto_persist=True)
-        task = queue.enqueue(TaskType.BATCH_EXPORT, {"test": "data"})
+        queue.enqueue(TaskType.BATCH_EXPORT, {"test": "data"})
 
         # Corrupt the file
         content = queue_path.read_text()
@@ -559,7 +559,6 @@ class TestRecoveryProceduresIntegration:
 # Export all test classes
 __all__ = [
     "TestCircuitBreakerIntegration",
-    "TestRetryIntegration",
     "TestGracefulDegradationIntegration",
     "TestQueueSafetyIntegration",
     "TestMemoryPressureIntegration",

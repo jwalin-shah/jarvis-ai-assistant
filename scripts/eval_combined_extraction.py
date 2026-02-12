@@ -296,7 +296,10 @@ def merge_spans(
 
 _LLM_LOADER = None
 
-FILTER_SYSTEM_PROMPT = """You are a personal fact validator. Given a chat message and a list of candidate entities extracted from it, decide which ones represent LASTING personal facts about the people in the conversation.
+FILTER_SYSTEM_PROMPT = """\
+You are a personal fact validator. Given a chat message and a list of \
+candidate entities extracted from it, decide which ones represent \
+LASTING personal facts about the people in the conversation.
 
 KEEP entities that reveal:
 - Ongoing relationships (family members, close friends by name)

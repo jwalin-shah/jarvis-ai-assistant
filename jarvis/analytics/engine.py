@@ -10,7 +10,7 @@ import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from jarvis.cache import TTLCache
 from jarvis.observability.insights import (

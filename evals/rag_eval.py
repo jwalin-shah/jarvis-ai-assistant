@@ -348,7 +348,7 @@ def main() -> int:
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[logging.FileHandler(log_path), logging.StreamHandler(sys.stdout)],
     )
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     run_all = not (args.relevance_only or args.ablation_only or args.audit_only)
 

@@ -26,6 +26,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parent.parent
 ORIGINAL_DIR = ROOT / "data" / "category_training"
 GEMINI_DIR = ROOT / "data" / "gemini_features"
@@ -86,8 +88,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def load_original_data(original_dir: Path, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
     """Load original DailyDialog/SAMSum training data."""
-    import numpy as np
-
     train_file = original_dir / "train.npz"
     if not train_file.exists():
         logger.error(f"Original training data not found: {train_file}")
@@ -98,7 +98,7 @@ def load_original_data(original_dir: Path, logger: logging.Logger) -> tuple[np.n
     except OSError as exc:
         logger.error("Failed to load original training data %s: %s", train_file, exc)
         raise SystemExit(1) from exc
-    X = data["X"]
+    X = data["X"]  # noqa: N806
     y = data["y"]
 
     logger.info(f"Loaded original training data: {X.shape}")
@@ -108,8 +108,6 @@ def load_original_data(original_dir: Path, logger: logging.Logger) -> tuple[np.n
 
 def load_gemini_data(gemini_dir: Path, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
     """Load Gemini-labeled iMessage data."""
-    import numpy as np
-
     train_file = gemini_dir / "train.npz"
     if not train_file.exists():
         logger.error(f"Gemini training data not found: {train_file}")
@@ -121,7 +119,7 @@ def load_gemini_data(gemini_dir: Path, logger: logging.Logger) -> tuple[np.ndarr
     except OSError as exc:
         logger.error("Failed to load Gemini training data %s: %s", train_file, exc)
         raise SystemExit(1) from exc
-    X = data["X"]
+    X = data["X"]  # noqa: N806
     y = data["y"]
 
     logger.info(f"Loaded Gemini training data: {X.shape}")
@@ -142,16 +140,14 @@ def map_old_to_new(old_label: str) -> str:
 
 
 def merge_datasets(
-    X_orig: np.ndarray,
+    X_orig: np.ndarray,  # noqa: N803
     y_orig: np.ndarray,
-    X_gemini: np.ndarray,
+    X_gemini: np.ndarray,  # noqa: N803
     y_gemini: np.ndarray,
     logger: logging.Logger,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Merge original and Gemini datasets."""
     from collections import Counter
-
-    import numpy as np
 
     logger.info("\n" + "=" * 70)
     logger.info("MERGING DATASETS")
@@ -172,7 +168,7 @@ def merge_datasets(
         logger.info(f"  {cat:15s}: {count:5d}")
 
     # Concatenate
-    X_combined = np.vstack([X_orig, X_gemini])
+    X_combined = np.vstack([X_orig, X_gemini])  # noqa: N806
     y_combined = np.concatenate([y_orig_mapped, y_gemini])
 
     logger.info(f"\nCombined dataset: {X_combined.shape}")
@@ -187,7 +183,7 @@ def merge_datasets(
 
 
 def create_splits(
-    X: np.ndarray,
+    X: np.ndarray,  # noqa: N803
     y: np.ndarray,
     test_size: float = 0.2,
     seed: int = 42,
@@ -198,7 +194,7 @@ def create_splits(
 
     from sklearn.model_selection import train_test_split
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    X_train, X_test, y_train, y_test = train_test_split(  # noqa: N806
         X, y, test_size=test_size, stratify=y, random_state=seed
     )
 
@@ -223,15 +219,14 @@ def create_splits(
 
 
 def save_combined_data(
-    X_train: np.ndarray,
-    X_test: np.ndarray,
+    X_train: np.ndarray,  # noqa: N803
+    X_test: np.ndarray,  # noqa: N803
     y_train: np.ndarray,
     y_test: np.ndarray,
     output_dir: Path,
     logger: logging.Logger,
 ) -> None:
     """Save combined training data."""
-    import numpy as np
 
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -276,14 +271,16 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger = setup_logging()
     args = parse_args(argv)
     # Load both datasets
-    X_orig, y_orig = load_original_data(args.original_dir, logger)
-    X_gemini, y_gemini = load_gemini_data(args.gemini_dir, logger)
+    X_orig, y_orig = load_original_data(args.original_dir, logger)  # noqa: N806
+    X_gemini, y_gemini = load_gemini_data(args.gemini_dir, logger)  # noqa: N806
 
     # Merge
-    X_combined, y_combined = merge_datasets(X_orig, y_orig, X_gemini, y_gemini, logger)
+    X_combined, y_combined = merge_datasets(  # noqa: N806
+        X_orig, y_orig, X_gemini, y_gemini, logger
+    )
 
     # Split
-    X_train, X_test, y_train, y_test = create_splits(
+    X_train, X_test, y_train, y_test = create_splits(  # noqa: N806
         X_combined,
         y_combined,
         test_size=args.test_size,
@@ -292,7 +289,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     # Save
-    save_combined_data(X_train, X_test, y_train, y_test, output_dir=args.output_dir, logger=logger)
+    save_combined_data(
+        X_train, X_test, y_train, y_test,
+        output_dir=args.output_dir, logger=logger,
+    )
 
     logger.info("\n" + "=" * 70)
     logger.info("READY TO RETRAIN")

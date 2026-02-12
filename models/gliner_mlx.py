@@ -134,7 +134,7 @@ class SpanMarkerV0(nn.Module):
         Returns:
             (B, num_words, max_width, D) span representations
         """
-        B, L, D = x.shape
+        B, L, D = x.shape  # noqa: N806
 
         start_rep = self.project_start(x)  # (B, L, D)
         end_rep = self.project_end(x)  # (B, L, D)
@@ -227,8 +227,8 @@ class GLiNERModel(nn.Module):
         Returns:
             (B, num_words, max_width, num_labels) logits
         """
-        B = input_ids.shape[0]
-        D = token_embeds_dim = DEBERTA_CONFIG["hidden_size"]
+        B = input_ids.shape[0]  # noqa: N806
+        D = DEBERTA_CONFIG["hidden_size"]  # noqa: N806
 
         # 1. DeBERTa encode
         token_embeds = self.deberta(input_ids, attention_mask)  # (B, seq_len, 768)

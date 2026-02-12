@@ -299,7 +299,8 @@ if __name__ == "__main__":
     for msg in test_messages:
         result = classify_message(msg)
         print(
-            f"{msg:25} → {result.category.value:12} | {result.urgency.value:4} | {result.confidence:.2f} | {result.method}"
+            f"{msg:25} → {result.category.value:12} | "
+            f"{result.urgency.value:4} | {result.confidence:.2f} | {result.method}"
         )
 
     # Output:

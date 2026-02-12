@@ -222,7 +222,7 @@ def test_get_contact_profile_caching():
         assert mock_load.call_count == 1
 
         invalidate_profile_cache()
-        res3 = get_contact_profile("cached_contact")
+        get_contact_profile("cached_contact")
         assert mock_load.call_count == 2
 
 

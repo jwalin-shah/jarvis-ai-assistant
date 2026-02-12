@@ -26,8 +26,8 @@ GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold_merged_r4.json")
 METRICS_PATH = Path("training_data/gliner_goldset/gliner_metrics.json")
 LOG_PATH = Path("eval_gliner_candidates.log")
 
-from eval_shared import DEFAULT_LABEL_ALIASES, spans_match
-from gliner_shared import enforce_runtime_stack, parse_context_messages
+from eval_shared import DEFAULT_LABEL_ALIASES, spans_match  # noqa: E402
+from gliner_shared import enforce_runtime_stack, parse_context_messages  # noqa: E402
 
 log = logging.getLogger(__name__)
 

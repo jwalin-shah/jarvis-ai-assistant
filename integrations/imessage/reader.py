@@ -1258,7 +1258,7 @@ class ChatDBReader:
             return {}
 
         result: dict[str, list[Message]] = {cid: [] for cid in chat_ids}
-        CHUNK_SIZE = 900  # SQLite max variable limit is 999
+        chunk_size = 900  # SQLite max variable limit is 999
 
         with self._connection_context() as conn:
             cursor = conn.cursor()
@@ -1303,8 +1303,8 @@ class ChatDBReader:
                 ORDER BY chat_id, date DESC
             """
 
-            for i in range(0, len(chat_ids), CHUNK_SIZE):
-                chunk = chat_ids[i : i + CHUNK_SIZE]
+            for i in range(0, len(chat_ids), chunk_size):
+                chunk = chat_ids[i : i + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 query = base_query.format(placeholders=placeholders)
                 params: list[Any] = list(chunk) + [limit_per_chat]
@@ -1618,9 +1618,9 @@ class ChatDBReader:
             result: dict[int, list[Attachment]] = {}
 
             # Process in chunks of 500 to avoid SQLite limits (max ~999 parameters)
-            CHUNK_SIZE = 500
-            for i in range(0, len(message_ids), CHUNK_SIZE):
-                chunk = message_ids[i : i + CHUNK_SIZE]
+            chunk_size = 500
+            for i in range(0, len(message_ids), chunk_size):
+                chunk = message_ids[i : i + chunk_size]
                 try:
                     placeholders = ",".join("?" * len(chunk))
                     query = get_query("attachments_batch", version).format(
@@ -1671,7 +1671,7 @@ class ChatDBReader:
             result: dict[int, list[Reaction]] = {}
 
             # Process in chunks of 500 to avoid SQLite limits (max ~999 parameters)
-            CHUNK_SIZE = 500
+            chunk_size = 500
 
             # Step 1: Build GUID maps (skip DB query if already provided)
             id_to_guid: dict[int, str] = {}
@@ -1683,8 +1683,8 @@ class ChatDBReader:
                 guid_to_id = {v: k for k, v in id_to_guid.items()}
             else:
                 # Fallback: batch-fetch GUIDs from DB
-                for i in range(0, len(message_ids), CHUNK_SIZE):
-                    chunk = message_ids[i : i + CHUNK_SIZE]
+                for i in range(0, len(message_ids), chunk_size):
+                    chunk = message_ids[i : i + chunk_size]
                     try:
                         placeholders = ",".join("?" * len(chunk))
                         guid_query = get_query("message_guids_batch", version).format(
@@ -1707,8 +1707,8 @@ class ChatDBReader:
 
             # Step 2: Batch-fetch reactions for all GUIDs in chunks
             all_guids = list(guid_to_id.keys())
-            for i in range(0, len(all_guids), CHUNK_SIZE):
-                chunk_guids = all_guids[i : i + CHUNK_SIZE]
+            for i in range(0, len(all_guids), chunk_size):
+                chunk_guids = all_guids[i : i + chunk_size]
                 try:
                     placeholders = ",".join("?" * len(chunk_guids))
                     rx_query = get_query("reactions_batch", version).format(

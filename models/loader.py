@@ -38,8 +38,6 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 import mlx.core as mx
 import psutil
 from mlx_lm import generate, load, stream_generate
-
-from models.memory_config import apply_llm_limits
 from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
 
 from jarvis.errors import (
@@ -50,6 +48,7 @@ from jarvis.errors import (
     model_not_found,
     model_out_of_memory,
 )
+from models.memory_config import apply_llm_limits
 from models.registry import DEFAULT_MODEL_ID, MODEL_REGISTRY, ModelSpec, get_model_spec
 
 logger = logging.getLogger(__name__)
@@ -810,7 +809,9 @@ class MLXModelLoader:
                         ):
                             # Check cancellation flag each token to exit early on timeout
                             if cancel_event.is_set():
-                                logger.info("Generation cancelled via timeout after %d tokens", total)
+                                logger.info(
+                                    "Generation cancelled via timeout after %d tokens", total
+                                )
                                 break
                             text = resp.text
                             total += 1

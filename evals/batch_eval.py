@@ -39,7 +39,7 @@ if _env_path.exists():
 # ---------------------------------------------------------------------------
 
 from evals.judge_config import JUDGE_MODEL  # noqa: E402
-from evals.judge_config import get_judge_client as _get_judge_client
+from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",
@@ -693,7 +693,7 @@ def main() -> int:
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[logging.FileHandler(log_path), logging.StreamHandler(sys.stdout)],
     )
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     strategy = "dspy_optimized" if args.optimized else "xml_drafter"
     print("=" * 70, flush=True)
