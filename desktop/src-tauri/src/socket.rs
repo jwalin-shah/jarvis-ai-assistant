@@ -305,10 +305,12 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
         }
     }
 
-    // Clear pending requests
+    // Fail all pending requests so callers get an error instead of a silent channel close
     {
         let mut pending = pending_arc.write().await;
-        pending.clear();
+        for (_id, req) in pending.drain() {
+            let _ = req.response_tx.send(Err("Disconnected by client".to_string())).await;
+        }
     }
 
     // Mark as disconnected and reset writer_dead flag
