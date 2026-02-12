@@ -251,16 +251,16 @@ class GLiNERModel(nn.Module):
         label_embeds = self.projection(label_embeds)
         label_embeds = self.prompt_rep(label_embeds)  # (B, num_labels, 512)
 
-        # 3. Extract word embeddings (first subtoken per word) — vectorized scatter-add
+        # 3. Extract word embeddings (scatter-add subtokens by word ID)
         # word_mask: (B, seq_len) with 1-indexed word positions (0=skip)
-        # Build indicator matrix: (B, num_words, seq_len) where [b,w,t]=1 iff word_mask[b,t]==w+1
-        seq_len = word_mask.shape[1]
-        word_indices = mx.arange(1, num_words + 1).reshape(1, num_words, 1)  # (1, num_words, 1)
-        mask_expanded = word_mask.reshape(B, 1, seq_len)  # (B, 1, seq_len)
-        indicator = (mask_expanded == word_indices).astype(token_embeds.dtype)  # (B, num_words, seq_len)
-        # Matrix multiply: sum token embeddings per word
-        word_embeds = indicator @ token_embeds  # (B, num_words, D)
-
+        # Vectorized via identity-matrix indexing: eye[word_mask] produces one-hot,
+        # then matmul accumulates token embeddings per word.
+        wm_clamped = mx.clip(word_mask, 0, num_words)  # (B, seq_len)
+        eye = mx.eye(num_words + 1)  # (num_words+1, num_words+1) identity
+        one_hot = eye[wm_clamped]  # (B, seq_len, num_words+1) - fancy indexing
+        assignment = one_hot[:, :, 1:]  # (B, seq_len, num_words) - drop 0/skip column
+        # (B, num_words, seq_len) @ (B, seq_len, D) = (B, num_words, D)
+        word_embeds = mx.transpose(assignment, axes=(0, 2, 1)) @ token_embeds
         # Project words: 768 -> 512
         word_embeds = self.projection(word_embeds)
 
@@ -681,6 +681,8 @@ class MLXGLiNER:
 
             pt_weights = mx.load(str(weights_path))
             converted = convert_gliner_weights(pt_weights)
+            del pt_weights  # Free ~744MB before loading converted weights
+            gc.collect()
 
             # Optional fp16 conversion (saves ~372MB but ~2x slower on Metal)
             if self._dtype == mx.float16:
@@ -767,8 +769,7 @@ class MLXGLiNER:
             self.tokenizer = None
             self._loaded = False
             gc.collect()
-            if hasattr(mx, "metal") and hasattr(mx.metal, "clear_cache"):
-                mx.metal.clear_cache()
+            mx.clear_cache()
             logger.info("Unloaded MLX GLiNER model")
 
     def predict_entities(
@@ -832,14 +833,13 @@ class MLXGLiNER:
                 word_lists.append(words)
                 char_maps.append(offsets)
 
-            # Tokenize
-            with self._encode_lock:
-                batch_data = self.tokenizer.tokenize_batch(word_lists, labels)
-
             num_words_list = [len(wl) for wl in word_lists]
 
-            # Forward pass under GPU lock
+            # Tokenize + forward pass under single GPU lock to prevent race
+            # conditions on shared tokenizer state and Metal GPU.
             with self._get_gpu_lock():
+                batch_data = self.tokenizer.tokenize_batch(word_lists, labels)
+
                 logits = self.model(
                     batch_data["input_ids"],
                     batch_data["attention_mask"],

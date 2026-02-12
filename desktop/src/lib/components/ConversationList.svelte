@@ -24,8 +24,6 @@
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
-  // @ts-expect-error - used in bind:this
-  let _listRef = $state<HTMLElement | null>(null);
   let itemRefs = $state<HTMLButtonElement[]>([]);
 
   // Sync focusedIndex with store
@@ -42,14 +40,30 @@
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; chatId: string } | null>(null);
 
+  // Search filter state
+  let searchQuery = $state('');
+
   // Show archived section
   let showArchived = $state(false);
 
+  // Filter helper: matches conversation against search query
+  function matchesSearch(conv: Conversation, query: string): boolean {
+    const q = query.toLowerCase();
+    const name = getDisplayName(conv).toLowerCase();
+    if (name.includes(q)) return true;
+    const preview = (conv.last_message_text || '').toLowerCase();
+    if (preview.includes(q)) return true;
+    return conv.participants.some(p => p.toLowerCase().includes(q));
+  }
+
   // Sort conversations: pinned first, then by last_message_date, archived filtered
   let sortedConversations = $derived.by(() => {
-    const convs = conversationsStore.conversations.filter(
+    let convs = conversationsStore.conversations.filter(
       c => !conversationsStore.archivedChats.has(c.chat_id)
     );
+    if (searchQuery.trim()) {
+      convs = convs.filter(c => matchesSearch(c, searchQuery.trim()));
+    }
     return convs.sort((a, b) => {
       const aPinned = conversationsStore.pinnedChats.has(a.chat_id);
       const bPinned = conversationsStore.pinnedChats.has(b.chat_id);
@@ -235,6 +249,10 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const blob = await response.blob();
+      const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png']);
+      if (!ALLOWED_AVATAR_TYPES.has(blob.type)) {
+        throw new Error(`Disallowed avatar MIME type: ${blob.type}`);
+      }
       const url = URL.createObjectURL(blob);
 
       // LRU cache handles eviction + blob URL revocation via onEvict callback
@@ -300,7 +318,7 @@
     if ($activeZone !== 'conversations' && $activeZone !== null) return;
     if (isTypingInInput(event)) return;
 
-    const conversations = conversationsStore.conversations;
+    const conversations = sortedConversations;
     if (conversations.length === 0) return;
 
     const maxIndex = conversations.length - 1;
@@ -436,7 +454,7 @@
   </div>
 
   <div class="search">
-    <input type="text" placeholder="Search conversations..." />
+    <input type="text" placeholder="Search conversations..." bind:value={searchQuery} />
   </div>
 
   {#if conversationsStore.loading}
@@ -446,7 +464,7 @@
   {:else if conversationsStore.conversations.length === 0}
     <div class="empty">No conversations found</div>
   {:else}
-    <div class="list" bind:this={_listRef} role="listbox" aria-label="Conversations">
+    <div class="list" role="listbox" aria-label="Conversations">
       {#each sortedConversations as conv, index (conv.chat_id)}
         {@const identifier = getPrimaryIdentifier(conv)}
         {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}

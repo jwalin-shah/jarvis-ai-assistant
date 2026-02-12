@@ -4,6 +4,7 @@ Provides endpoints for exporting conversations, search results, and backups.
 """
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
@@ -27,6 +28,8 @@ from jarvis.export import (
     export_search_results,
     get_export_filename,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -66,13 +69,8 @@ async def export_conversation(
     """
     try:
         async with asyncio.timeout(get_timeout_read()):
-            # Get conversation metadata
-            conversations = await run_in_threadpool(reader.get_conversations, limit=500)
-            conversation = None
-            for conv in conversations:
-                if conv.chat_id == chat_id:
-                    conversation = conv
-                    break
+            # Get conversation metadata - direct lookup by chat_id
+            conversation = await run_in_threadpool(reader.get_conversation, chat_id)
 
             if conversation is None:
                 raise HTTPException(
@@ -252,10 +250,14 @@ async def export_full_backup(
     """
     try:
         async with asyncio.timeout(TIMEOUT_BACKUP):
-            # Get conversations
+            # Fetch enough conversations to satisfy offset + limit
+            fetch_limit = backup_request.offset + backup_request.conversation_limit
             conversations = await run_in_threadpool(
-                reader.get_conversations, limit=backup_request.conversation_limit
+                reader.get_conversations, limit=fetch_limit
             )
+
+            # Apply offset pagination
+            conversations = conversations[backup_request.offset:]
 
             if not conversations:
                 raise HTTPException(
@@ -263,18 +265,26 @@ async def export_full_backup(
                     detail="No conversations found to backup",
                 )
 
-            # Collect messages for each conversation
+            # Collect messages for each conversation with per-conversation timeout
             conversation_data: list[tuple[Conversation, list[Message]]] = []
             total_messages = 0
 
             for conv in conversations:
                 before = backup_request.date_range.end if backup_request.date_range else None
-                messages = await run_in_threadpool(
-                    reader.get_messages,
-                    chat_id=conv.chat_id,
-                    limit=backup_request.messages_per_conversation,
-                    before=before,
-                )
+                try:
+                    async with asyncio.timeout(10.0):
+                        messages = await run_in_threadpool(
+                            reader.get_messages,
+                            chat_id=conv.chat_id,
+                            limit=backup_request.messages_per_conversation,
+                            before=before,
+                        )
+                except TimeoutError:
+                    logger.warning(
+                        "Backup: skipping conversation %s (message fetch timed out)",
+                        conv.chat_id,
+                    )
+                    continue
 
                 # Apply after filter if specified
                 if backup_request.date_range and backup_request.date_range.start:

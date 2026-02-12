@@ -3,10 +3,15 @@
  *
  * TypeScript client for communication with the Python socket server.
  * Uses Tauri commands to bridge to Unix socket (in app) or WebSocket (in browser).
+ *
+ * Delegates streaming logic to StreamManager and batching to BatchManager (REF-14).
  */
 
 import { getSocketRpcWebSocketUrl } from "../config/runtime";
 import type { InvokeArgs, InvokeOptions } from "@tauri-apps/api/core";
+import { StreamManager } from "./stream-manager";
+import { BatchQueue, WS_BATCH_CONFIG, TAURI_BATCH_CONFIG } from "./batch-manager";
+import type { BatchedRequest } from "./batch-manager";
 
 // Check if running in Tauri context
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -19,10 +24,6 @@ const REQUEST_TIMEOUT = 30000; // 30s for normal requests
 const STREAMING_TIMEOUT = 120000; // 120s for streaming requests
 const STALE_REQUEST_CLEANUP_INTERVAL = 60000; // Clean up stale requests every 60s
 const STREAM_IDLE_TIMEOUT = 60000; // Auto-clean streaming requests after 60s of no activity
-
-// Request batching configuration
-const BATCH_WINDOW_MS = 15; // Collect requests for 15ms before sending batch
-const MAX_BATCH_SIZE = 10; // Maximum requests per batch
 
 /**
  * Wrap a promise with a timeout.
@@ -47,6 +48,20 @@ let listen: ((event: string, handler: (event: any) => void) => Promise<() => voi
 
 /** Connection state */
 export type ConnectionState = "disconnected" | "connecting" | "connected";
+
+/**
+ * Connection transport — tracks which transport is active (UX-01).
+ * "unix_socket" = Tauri IPC, "websocket" = browser or fallback, null = not connected.
+ */
+export type ConnectionTransport = "unix_socket" | "websocket" | null;
+
+/** Connection info exposed to UI components (UX-01) */
+export interface ConnectionInfo {
+  state: ConnectionState;
+  transport: ConnectionTransport;
+  /** True when Tauri mode fell back from Unix socket to WebSocket */
+  isFallback: boolean;
+}
 
 /** Event handler type */
 type EventHandler<T = unknown> = (data: T) => void;
@@ -134,9 +149,12 @@ export interface SummarizeResult {
  * Provides methods for communicating with the Python daemon.
  * Uses Unix socket (via Tauri) in app, WebSocket in browser.
  * Supports both request/response and real streaming patterns.
+ *
+ * Delegates streaming to StreamManager and batching to BatchQueue (REF-14).
  */
 class JarvisSocket {
   private state: ConnectionState = "disconnected";
+  private transport: ConnectionTransport = null;
   private eventHandlers: Map<string, Set<EventHandler>> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
@@ -155,42 +173,33 @@ class JarvisSocket {
       resolve: (value: unknown) => void;
       reject: (error: Error) => void;
       onToken?: (token: string, index: number) => void;
-      createdAt: number; // Timestamp for cleanup
-      isStreaming: boolean; // Track streaming vs normal requests
+      createdAt: number;
+      isStreaming: boolean;
     }
   > = new Map();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
-  // Active streaming requests
-  private streamingRequests: Map<
-    number,
-    {
-      tokens: string[];
-      onToken?: (token: string, index: number) => void;
-      onComplete: () => void;
-      timeoutId: ReturnType<typeof setTimeout>; // Idle timeout to prevent leaks
-    }
-  > = new Map();
+  // Streaming manager (REF-14)
+  private streamManager = new StreamManager();
 
-  // Request batching state (WebSocket mode only)
-  private batchQueue: Array<{
-    method: string;
-    params: object;
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }> = [];
-  private batchTimer: ReturnType<typeof setTimeout> | null = null;
+  // Batch queues (REF-14)
+  private wsBatchQueue: BatchQueue;
+  private tauriBatchQueue: BatchQueue;
 
-  // Request batching state for Tauri mode
-  private tauriBatchQueue: Array<{
-    method: string;
-    params: object;
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }> = [];
-  private tauriBatchTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly TAURI_BATCH_WINDOW_MS = 10; // 10ms batching window
-  private readonly TAURI_MAX_BATCH_SIZE = 5;
+  constructor() {
+    // Wire up stream manager's emit to our emit
+    this.streamManager.onEmit = (event, data) => this.emit(event, data);
+
+    // WebSocket batch queue - flushes via callWebSocket
+    this.wsBatchQueue = new BatchQueue(WS_BATCH_CONFIG, (batch) => {
+      this.flushWsBatch(batch);
+    });
+
+    // Tauri batch queue - flushes via invoke
+    this.tauriBatchQueue = new BatchQueue(TAURI_BATCH_CONFIG, (batch) => {
+      this.flushTauriBatch(batch);
+    });
+  }
 
   /**
    * Get current connection state
@@ -200,7 +209,19 @@ class JarvisSocket {
   }
 
   /**
-   * Initialize Tauri APIs
+   * Get full connection info including transport and fallback status (UX-01).
+   * Components can subscribe to connection_info_changed events.
+   */
+  getConnectionInfo(): ConnectionInfo {
+    return {
+      state: this.state,
+      transport: this.transport,
+      isFallback: isTauri && this.transport === "websocket",
+    };
+  }
+
+  /**
+   * Initialize Tauri APIs (FE-01: explicit null guards after dynamic imports)
    */
   private async initTauriApis(): Promise<boolean> {
     if (!isTauri) return false;
@@ -208,10 +229,18 @@ class JarvisSocket {
     try {
       if (!invoke) {
         const coreModule = await import("@tauri-apps/api/core");
+        if (!coreModule || typeof coreModule.invoke !== "function") {
+          console.warn("[JarvisSocket] Tauri core module missing invoke function");
+          return false;
+        }
         invoke = coreModule.invoke;
       }
       if (!listen) {
         const eventModule = await import("@tauri-apps/api/event");
+        if (!eventModule || typeof eventModule.listen !== "function") {
+          console.warn("[JarvisSocket] Tauri event module missing listen function");
+          return false;
+        }
         listen = eventModule.listen;
       }
       return true;
@@ -232,7 +261,7 @@ class JarvisSocket {
 
     // Listen for stream tokens
     const unlistenToken = await listen("jarvis:stream_token", (event: { payload: StreamTokenEvent }) => {
-      this.handleStreamToken(event.payload);
+      this.streamManager.handleStreamToken(event.payload);
     });
     this.unlistenFns.push(unlistenToken);
 
@@ -302,40 +331,6 @@ class JarvisSocket {
   }
 
   /**
-   * Handle incoming stream token
-   */
-  private handleStreamToken(event: StreamTokenEvent): void {
-    const request = this.streamingRequests.get(event.request_id);
-    if (!request) return;
-
-    // Reset idle timeout on each token received
-    clearTimeout(request.timeoutId);
-    if (!event.final_token) {
-      request.timeoutId = setTimeout(() => {
-        console.warn(`[JarvisSocket] Streaming request ${event.request_id} timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`);
-        request.onComplete();
-        this.streamingRequests.delete(event.request_id);
-      }, STREAM_IDLE_TIMEOUT);
-    }
-
-    // Accumulate token
-    request.tokens.push(event.token);
-
-    // Call token callback if provided
-    if (request.onToken) {
-      request.onToken(event.token, event.index);
-    }
-
-    // Emit token event for subscribers
-    this.emit("stream_token", event);
-
-    // Check if this is the final token
-    if (event.final_token) {
-      request.onComplete();
-    }
-  }
-
-  /**
    * Connect to the socket server
    */
   async connect(): Promise<boolean> {
@@ -367,8 +362,10 @@ class JarvisSocket {
 
       if (connected) {
         this.state = "connected";
+        this.transport = "unix_socket";
         this.reconnectAttempts = 0;
         this.emit("connected", {});
+        this.emitConnectionInfoChanged();
         return true;
       } else {
         this.state = "disconnected";
@@ -385,7 +382,7 @@ class JarvisSocket {
   }
 
   /**
-   * Connect via WebSocket (browser mode)
+   * Connect via WebSocket (browser mode or Tauri fallback)
    */
   private connectWebSocket(): Promise<boolean> {
     return new Promise((resolve) => {
@@ -395,30 +392,29 @@ class JarvisSocket {
         this.ws.onopen = () => {
           console.log("[JarvisSocket] WebSocket connected");
           this.state = "connected";
+          this.transport = "websocket";
           this.reconnectAttempts = 0;
           this.startStaleRequestCleanup();
           this.emit("connected", {});
+          this.emitConnectionInfoChanged();
           resolve(true);
         };
 
         this.ws.onclose = () => {
           console.log("[JarvisSocket] WebSocket disconnected");
           this.state = "disconnected";
+          this.transport = null;
           this.ws = null;
           this.stopStaleRequestCleanup();
-          // Clear batch timer and reject pending batch requests
-          if (this.batchTimer) {
-            clearTimeout(this.batchTimer);
-            this.batchTimer = null;
-          }
-          this.batchQueue.forEach((req) => req.reject(new Error("WebSocket disconnected")));
-          this.batchQueue = [];
+          // Reject pending batch requests
+          this.wsBatchQueue.rejectAll(new Error("WebSocket disconnected"));
           // Reject all pending requests on disconnect
           for (const [_requestId, pending] of this.wsPendingRequests) {
             pending.reject(new Error("WebSocket disconnected"));
           }
           this.wsPendingRequests.clear();
           this.emit("disconnected", {});
+          this.emitConnectionInfoChanged();
           this.scheduleReconnect();
         };
 
@@ -450,7 +446,7 @@ class JarvisSocket {
   }
 
   /**
-   * Handle incoming WebSocket message
+   * Handle incoming WebSocket message (FE-03: validate params before use)
    */
   private handleWebSocketMessage(data: string): void {
     try {
@@ -458,16 +454,27 @@ class JarvisSocket {
 
       // Check if it's a notification (no id)
       if (!("id" in message) && message.method) {
-        // Handle streaming tokens
+        // Handle streaming tokens (FE-03: validate params structure)
         if (message.method === "stream.token") {
-          const { token, index, final: _final } = message.params;
-          const streamRequestId = (message.params as { request_id?: number }).request_id;
-          if (streamRequestId !== undefined) {
-            // Dispatch token to the specific request that owns this stream
-            const pending = this.wsPendingRequests.get(streamRequestId);
-            if (pending && pending.onToken) {
-              pending.onToken(token, index);
+          const params = message.params;
+          if (
+            params &&
+            typeof params === "object" &&
+            typeof params.token === "string" &&
+            typeof params.index === "number"
+          ) {
+            const { token, index } = params;
+            const streamRequestId = typeof params.request_id === "number"
+              ? params.request_id
+              : undefined;
+            if (streamRequestId !== undefined) {
+              const pending = this.wsPendingRequests.get(streamRequestId);
+              if (pending && pending.onToken) {
+                pending.onToken(token, index);
+              }
             }
+          } else {
+            console.warn("[JarvisSocket] Malformed stream.token params:", params);
           }
           return;
         }
@@ -508,21 +515,9 @@ class JarvisSocket {
     await this.cleanupEventListeners();
     this.stopStaleRequestCleanup();
 
-    // Clear batch timer and reject pending batched requests (WebSocket)
-    if (this.batchTimer) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
-    }
-    this.batchQueue.forEach((req) => req.reject(new Error("Disconnected")));
-    this.batchQueue = [];
-
-    // Clear Tauri batch timer and reject pending requests
-    if (this.tauriBatchTimer) {
-      clearTimeout(this.tauriBatchTimer);
-      this.tauriBatchTimer = null;
-    }
-    this.tauriBatchQueue.forEach((req) => req.reject(new Error("Disconnected")));
-    this.tauriBatchQueue = [];
+    // Reject pending batch requests
+    this.wsBatchQueue.rejectAll(new Error("Disconnected"));
+    this.tauriBatchQueue.rejectAll(new Error("Disconnected"));
 
     // Close WebSocket if open
     if (this.ws) {
@@ -533,11 +528,8 @@ class JarvisSocket {
     // Clear any pending requests
     this.wsPendingRequests.clear();
 
-    // Clear streaming request idle timeouts
-    for (const [, request] of this.streamingRequests) {
-      clearTimeout(request.timeoutId);
-    }
-    this.streamingRequests.clear();
+    // Clear streaming requests
+    this.streamManager.clear();
 
     if (isTauri && invoke) {
       try {
@@ -548,7 +540,9 @@ class JarvisSocket {
     }
 
     this.state = "disconnected";
+    this.transport = null;
     this.emit("disconnected", {});
+    this.emitConnectionInfoChanged();
   }
 
   /**
@@ -644,22 +638,20 @@ class JarvisSocket {
   }
 
   /**
-   * Call a method with automatic batching
+   * Call a method with automatic batching.
    * Collects rapid sequential calls and sends them as a single batch request.
-   * This reduces round-trip overhead when making multiple calls in quick succession.
-   *
-   * @example
-   * // These 3 calls made within 10ms will be batched into 1 request
-   * const [result1, result2, result3] = await Promise.all([
-   *   client.callBatched("ping", {}),
-   *   client.callBatched("classify_intent", { text: "hello" }),
-   *   client.callBatched("ping", {}),
-   * ]);
    */
   async callBatched<T>(method: string, params: object = {}): Promise<T> {
     // In Tauri mode, use Tauri-specific batching
     if (isTauri) {
-      return this.callTauriBatched<T>(method, params);
+      return new Promise<T>((resolve, reject) => {
+        this.tauriBatchQueue.enqueue({
+          method,
+          params,
+          resolve: resolve as (value: unknown) => void,
+          reject,
+        });
+      });
     }
 
     // Ensure connected
@@ -671,76 +663,19 @@ class JarvisSocket {
     }
 
     return new Promise<T>((resolve, reject) => {
-      // Add to batch queue
-      this.batchQueue.push({
+      this.wsBatchQueue.enqueue({
         method,
         params,
         resolve: resolve as (value: unknown) => void,
         reject,
       });
-
-      // If batch is full, send immediately
-      if (this.batchQueue.length >= MAX_BATCH_SIZE) {
-        this.flushBatch();
-        return;
-      }
-
-      // Start batch timer if not already running
-      if (!this.batchTimer) {
-        this.batchTimer = setTimeout(() => {
-          this.flushBatch();
-        }, BATCH_WINDOW_MS);
-      }
     });
   }
 
   /**
-   * Call a method with Tauri-specific batching
-   * Uses IPC batching to reduce round trips
+   * Flush Tauri batch queue
    */
-  private callTauriBatched<T>(method: string, params: object = {}): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      // Add to Tauri batch queue
-      this.tauriBatchQueue.push({
-        method,
-        params,
-        resolve: resolve as (value: unknown) => void,
-        reject,
-      });
-
-      // If batch is full, send immediately
-      if (this.tauriBatchQueue.length >= this.TAURI_MAX_BATCH_SIZE) {
-        this.flushTauriBatch();
-        return;
-      }
-
-      // Start batch timer if not already running
-      if (!this.tauriBatchTimer) {
-        this.tauriBatchTimer = setTimeout(() => {
-          this.flushTauriBatch();
-        }, this.TAURI_BATCH_WINDOW_MS);
-      }
-    });
-  }
-
-  /**
-   * Flush the Tauri batch queue
-   */
-  private async flushTauriBatch(): Promise<void> {
-    // Clear timer
-    if (this.tauriBatchTimer) {
-      clearTimeout(this.tauriBatchTimer);
-      this.tauriBatchTimer = null;
-    }
-
-    // Nothing to flush
-    if (this.tauriBatchQueue.length === 0) {
-      return;
-    }
-
-    // Take all queued requests
-    const batch = this.tauriBatchQueue.splice(0);
-
+  private async flushTauriBatch(batch: BatchedRequest[]): Promise<void> {
     // If only one request, send it directly
     if (batch.length === 1) {
       const req = batch[0];
@@ -776,31 +711,15 @@ class JarvisSocket {
   }
 
   /**
-   * Flush the current batch queue, sending all queued requests
+   * Flush WebSocket batch queue
    */
-  private flushBatch(): void {
-    // Clear timer
-    if (this.batchTimer) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
-    }
-
-    // Nothing to flush
-    if (this.batchQueue.length === 0) {
-      return;
-    }
-
+  private flushWsBatch(batch: BatchedRequest[]): void {
     // Check if WebSocket is still connected before sending
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn("[JarvisSocket] Cannot flush batch: WebSocket not connected");
-      // Reject all pending batch requests
-      this.batchQueue.forEach((req) => req.reject(new Error("WebSocket not connected")));
-      this.batchQueue = [];
+      batch.forEach((req) => req.reject(new Error("WebSocket not connected")));
       return;
     }
-
-    // Take all queued requests
-    const batch = this.batchQueue.splice(0);
 
     // If only one request, send it directly (no batching overhead)
     if (batch.length === 1) {
@@ -818,7 +737,7 @@ class JarvisSocket {
     const requests = batch.map((req, index) => ({
       method: req.method,
       params: req.params,
-      _batch_index: index, // Track position for response mapping
+      _batch_index: index,
     }));
 
     console.log(`[JarvisSocket] Sending batch of ${batch.length} requests`);
@@ -829,7 +748,6 @@ class JarvisSocket {
       { requests }
     )
       .then((response) => {
-        // Map results back to individual promises
         const results = response.results || [];
         batch.forEach((req, index) => {
           const result = results[index];
@@ -841,7 +759,6 @@ class JarvisSocket {
         });
       })
       .catch((error) => {
-        // Reject all requests on batch failure
         batch.forEach((req) => req.reject(error));
       });
   }
@@ -887,26 +804,24 @@ class JarvisSocket {
 
     // Create idle timeout that auto-cleans if server drops mid-stream
     const createIdleTimeout = (): ReturnType<typeof setTimeout> => {
-      return setTimeout(() => {
-        console.warn(`[JarvisSocket] Streaming request ${requestId} timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`);
+      return this.streamManager.createIdleTimeout(requestId, () => {
         timedOut = true;
         completed = true;
-        this.streamingRequests.delete(requestId);
         if (resolveNextToken) {
           resolveNextToken(null);
           resolveNextToken = null;
         }
-      }, STREAM_IDLE_TIMEOUT);
+      });
     };
 
     // Register streaming request handler with idle timeout
     const initialTimeoutId = createIdleTimeout();
-    this.streamingRequests.set(requestId, {
+    this.streamManager.register(requestId, {
       tokens: [],
       timeoutId: initialTimeoutId,
       onToken: (token, index) => {
         // Reset idle timeout on each token received
-        const entry = this.streamingRequests.get(requestId);
+        const entry = this.streamManager.get(requestId);
         if (entry) {
           clearTimeout(entry.timeoutId);
           entry.timeoutId = createIdleTimeout();
@@ -923,7 +838,7 @@ class JarvisSocket {
       },
       onComplete: () => {
         // Clear idle timeout on normal completion
-        const entry = this.streamingRequests.get(requestId);
+        const entry = this.streamManager.get(requestId);
         if (entry) {
           clearTimeout(entry.timeoutId);
         }
@@ -969,11 +884,11 @@ class JarvisSocket {
         throw new Error(`Streaming request timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`);
       }
     } finally {
-      const entry = this.streamingRequests.get(requestId);
+      const entry = this.streamManager.get(requestId);
       if (entry) {
         clearTimeout(entry.timeoutId);
       }
-      this.streamingRequests.delete(requestId);
+      this.streamManager.delete(requestId);
     }
   }
 
@@ -1031,7 +946,7 @@ class JarvisSocket {
         }
       },
       createdAt: Date.now(),
-      isStreaming: true, // Streaming requests get longer timeout
+      isStreaming: true,
     });
 
     // Send request
@@ -1108,18 +1023,31 @@ class JarvisSocket {
   }
 
   /**
+   * Emit connection info changed event (UX-01).
+   * UI components can subscribe to this to show connection indicators.
+   */
+  private emitConnectionInfoChanged(): void {
+    this.emit("connection_info_changed", this.getConnectionInfo());
+  }
+
+  /**
    * Schedule a reconnection attempt.
-   * In Tauri mode, falls back to WebSocket after max Unix socket retries.
+   * In Tauri mode, falls back to WebSocket after max Unix socket retries (UX-01).
    */
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       if (isTauri) {
-        // Unix socket exhausted - fall back to WebSocket
+        // Unix socket exhausted - fall back to WebSocket (UX-01: emit fallback event)
         console.warn(
           "[JarvisSocket] Unix socket reconnect failed after %d attempts, falling back to WebSocket",
           this.maxReconnectAttempts
         );
+        this.emit("transport_fallback", {
+          from: "unix_socket",
+          to: "websocket",
+          reason: `Unix socket failed after ${this.maxReconnectAttempts} attempts`,
+        });
         this.reconnectAttempts = 0;
         this.reconnectTimer = setTimeout(async () => {
           this.reconnectTimer = null;

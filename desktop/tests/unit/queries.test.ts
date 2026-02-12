@@ -359,20 +359,20 @@ describe("getConversationsQuery", () => {
     expect(sql).toContain("ORDER BY");
     expect(sql).toContain("DESC");
     expect(sql).toContain("LIMIT ?");
-    expect(sql).not.toContain("mr.date > ?");
-    expect(sql).not.toContain("mr.date < ?");
+    expect(sql).not.toContain("tc.last_date > ?");
+    expect(sql).not.toContain("tc.last_date < ?");
   });
 
   it("includes since filter when withSinceFilter is true", () => {
     const sql = getConversationsQuery({ withSinceFilter: true });
-    expect(sql).toContain("mr.date > ?");
-    expect(sql).not.toContain("mr.date < ?");
+    expect(sql).toContain("tc.last_date > ?");
+    expect(sql).not.toContain("tc.last_date < ?");
   });
 
   it("includes before filter when withBeforeFilter is true", () => {
     const sql = getConversationsQuery({ withBeforeFilter: true });
-    expect(sql).not.toContain("mr.date > ?");
-    expect(sql).toContain("mr.date < ?");
+    expect(sql).not.toContain("tc.last_date > ?");
+    expect(sql).toContain("tc.last_date < ?");
   });
 
   it("includes both filters when both options are true", () => {
@@ -380,8 +380,8 @@ describe("getConversationsQuery", () => {
       withSinceFilter: true,
       withBeforeFilter: true,
     });
-    expect(sql).toContain("mr.date > ?");
-    expect(sql).toContain("mr.date < ?");
+    expect(sql).toContain("tc.last_date > ?");
+    expect(sql).toContain("tc.last_date < ?");
   });
 
   it("omits filters when options are explicitly false", () => {
@@ -389,8 +389,8 @@ describe("getConversationsQuery", () => {
       withSinceFilter: false,
       withBeforeFilter: false,
     });
-    expect(sql).not.toContain("mr.date > ?");
-    expect(sql).not.toContain("mr.date < ?");
+    expect(sql).not.toContain("tc.last_date > ?");
+    expect(sql).not.toContain("tc.last_date < ?");
   });
 
   it("selects expected columns", () => {

@@ -43,16 +43,11 @@ def get_imessage_reader() -> Iterator[ChatDBReader]:
         reader.close()
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "Permission denied",
-                "message": "Full Disk Access is required to read iMessages.",
-                "instructions": [
-                    "Open System Settings",
-                    "Go to Privacy & Security > Full Disk Access",
-                    "Add and enable your terminal application",
-                    "Restart the JARVIS API server",
-                ],
-            },
+            detail=(
+                "Full Disk Access is required to read iMessages. "
+                "Open System Settings > Privacy & Security > Full Disk Access, "
+                "add and enable your terminal application, then restart the JARVIS API server."
+            ),
         )
 
     try:

@@ -46,21 +46,12 @@ def _validate_websocket_auth(websocket: WebSocket) -> bool:
     2. Sec-WebSocket-Protocol: <token> (browser-compatible fallback)
     3. Query parameter: ?token=<token> (DEPRECATED - logs exposure risk)
 
-    For localhost connections, authentication can be bypassed if JARVIS_WS_REQUIRE_AUTH=false.
-
     Args:
         websocket: The WebSocket connection to validate
 
     Returns:
         True if authenticated, False otherwise
     """
-    # Allow bypass for localhost if explicitly disabled
-    require_auth = os.getenv("JARVIS_WS_REQUIRE_AUTH", "true").lower() != "false"
-    if not require_auth:
-        client_host = websocket.client.host if websocket.client else None
-        if client_host in ("127.0.0.1", "localhost", "::1"):
-            return True
-
     # Check X-WS-Token header (RECOMMENDED)
     token_header = websocket.headers.get("x-ws-token")
     if token_header and secrets.compare_digest(token_header, _WS_AUTH_TOKEN):
@@ -763,7 +754,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
           2. Sec-WebSocket-Protocol header (browser-compatible)
           3. Query parameter ?token=<token> (DEPRECATED - security risk)
         - Token is set via JARVIS_WS_TOKEN environment variable or auto-generated
-        - Localhost can bypass auth if JARVIS_WS_REQUIRE_AUTH=false
 
     Message format (JSON):
         {

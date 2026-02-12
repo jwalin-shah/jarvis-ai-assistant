@@ -468,23 +468,17 @@ def get_priority_inbox(
     # Batch fetch to avoid N+1 queries
     all_messages = []
     chat_ids = [conv.chat_id for conv in conversations[:15]]  # Limit conversations to analyze
+    limit_per_chat = max(1, limit // 5)
     try:
-        # Use get_messages_batch if available, otherwise fallback to loop
-        if hasattr(reader, "get_messages_batch"):
-            all_messages = reader.get_messages_batch(chat_ids, limit_per_chat=limit // 5)  # type: ignore[attr-defined]
-        else:
-            # Fallback: collect all queries in a list first, then execute in single transaction
-            for chat_id in chat_ids:
-                try:
-                    messages = reader.get_messages(chat_id, limit=limit // 5)
-                    all_messages.extend(messages)
-                except Exception:
-                    continue
+        # Single batch query instead of per-chat loop
+        batch_result = reader.get_messages_batch(chat_ids, limit_per_chat=limit_per_chat)
+        for msgs in batch_result.values():
+            all_messages.extend(msgs)
     except Exception:
-        # If batch fails, fall back to individual queries
+        # Fallback: individual queries if batch fails
         for chat_id in chat_ids:
             try:
-                messages = reader.get_messages(chat_id, limit=limit // 5)
+                messages = reader.get_messages(chat_id, limit=limit_per_chat)
                 all_messages.extend(messages)
             except Exception:
                 continue

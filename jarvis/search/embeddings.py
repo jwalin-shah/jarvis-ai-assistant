@@ -607,8 +607,10 @@ class EmbeddingStore:
             # NOTE: Ideally similarity filtering would happen in SQL (e.g. via sqlite-vec),
             # but without vector search extensions we must fetch candidates and filter in
             # Python. The LIMIT caps memory usage; with chat_id filtering most queries
-            # hit far fewer rows. Don't raise this above 1000 without profiling.
-            sql += " LIMIT 1000"
+            # hit far fewer rows. Scale candidate pool to requested limit (10x provides
+            # good recall while avoiding loading 1000 rows when only 10 are needed).
+            candidate_limit = min(max(limit * 10, 50), 1000)
+            sql += f" LIMIT {candidate_limit}"
 
             rows = conn.execute(sql, params).fetchall()
 

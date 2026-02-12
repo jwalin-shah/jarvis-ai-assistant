@@ -56,6 +56,14 @@ def _validate_placeholders(placeholders: str) -> None:
     allowed_chars = set("?,")
     if not set(placeholders).issubset(allowed_chars):
         raise ValueError(f"Invalid characters in SQL placeholders: {placeholders}")
+    # SQLite has a hard limit of 999 bound parameters per query (SQLITE_MAX_VARIABLE_NUMBER).
+    # Enforce a safe ceiling to prevent runtime errors deep in the query engine.
+    param_count = placeholders.count("?")
+    if param_count > 900:
+        raise ValueError(
+            f"Too many SQL parameters ({param_count}). "
+            f"SQLite supports at most 999; limit to 900 for safety."
+        )
 
 
 @dataclass
@@ -407,57 +415,25 @@ class VecSearcher:
 
         try:
             with self.db.connection() as conn:
-                # Batch insert into vec_chunks
-                cursor = conn.executemany(
-                    """
+                # Insert chunks individually to get reliable rowids.
+                # executemany + lastrowid is unreliable for virtual tables (sqlite-vec).
+                insert_sql = """
                     INSERT INTO vec_chunks(
-                        embedding,
-                        contact_id,
-                        chat_id,
-                        response_da_type,
-                        source_timestamp,
-                        quality_score,
-                        topic_label,
-                        trigger_text,
-                        response_text,
-                        formatted_text,
-                        keywords_json,
-                        message_count,
-                        source_type,
-                        source_id
+                        embedding, contact_id, chat_id, response_da_type,
+                        source_timestamp, quality_score, topic_label,
+                        trigger_text, response_text, formatted_text,
+                        keywords_json, message_count, source_type, source_id
                     ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    [
-                        (
-                            row[0],
-                            row[1],
-                            row[2],
-                            row[3],
-                            row[4],
-                            row[5],
-                            row[6],
-                            row[7],
-                            row[8],
-                            row[9],
-                            row[10],
-                            row[11],
-                            row[12],
-                            row[13],
-                        )
-                        for row in vec_chunks_batch
-                    ],
-                )
-
-                # Get rowids of inserted chunks (lastrowid + count)
-                # We'll use the last insert rowid and count backwards
-                last_rowid = cursor.lastrowid
-                count = cursor.rowcount
-                chunk_rowids = list(range(last_rowid - count + 1, last_rowid + 1))
+                """
+                chunk_rowids = []
+                for row in vec_chunks_batch:
+                    cursor = conn.execute(insert_sql, row[:14])
+                    chunk_rowids.append(cursor.lastrowid)
 
                 # Batch insert into vec_binary
                 try:
                     binary_batch = [
-                        (row[14], chunk_rowid, row[0])  # (binary_blob, chunk_rowid, int8_blob)
+                        (row[14], chunk_rowid, row[0])
                         for row, chunk_rowid in zip(vec_chunks_batch, chunk_rowids)
                     ]
                     conn.executemany(
@@ -470,7 +446,7 @@ class VecSearcher:
                 except Exception as e:
                     logger.debug("vec_binary batch insert skipped: %s", e)
 
-                return count
+                return len(vec_chunks_batch)
 
         except Exception as e:
             logger.error("Failed to batch index segments: %s", e)

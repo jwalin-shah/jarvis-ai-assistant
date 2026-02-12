@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.contacts.contact_profile_context import ContactProfileContext
@@ -335,6 +336,87 @@ def _truncate_context(context: str, max_chars: int = MAX_CONTEXT_CHARS) -> str:
 # =============================================================================
 
 
+def _determine_effective_tone(
+    tone: Literal["casual", "professional", "mixed"],
+    relationship_profile: RelationshipProfile | None,
+) -> Literal["casual", "professional", "mixed"]:
+    """Determine effective tone from base tone and optional relationship profile.
+
+    Args:
+        tone: Base tone preference.
+        relationship_profile: Optional profile with formality score.
+
+    Returns:
+        Resolved tone literal.
+    """
+    from jarvis.relationships import MIN_MESSAGES_FOR_PROFILE
+
+    if relationship_profile and relationship_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
+        formality = relationship_profile.tone_profile.formality_score
+        if formality >= 0.7:
+            return "professional"
+        elif formality < 0.4:
+            return "casual"
+        else:
+            return "mixed"
+    return tone
+
+
+def _select_examples_for_tone(
+    effective_tone: Literal["casual", "professional", "mixed"],
+    relationship_profile: RelationshipProfile | None,
+) -> list[FewShotExample]:
+    """Select few-shot examples matching the effective tone.
+
+    Args:
+        effective_tone: Resolved tone.
+        relationship_profile: Optional profile for profile-based selection.
+
+    Returns:
+        List of FewShotExample instances.
+    """
+    from jarvis.relationships import MIN_MESSAGES_FOR_PROFILE, select_matching_examples
+
+    if relationship_profile and relationship_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
+        casual_tuples = [(ex.context, ex.output) for ex in CASUAL_REPLY_EXAMPLES]
+        professional_tuples = [(ex.context, ex.output) for ex in PROFESSIONAL_REPLY_EXAMPLES]
+        examples_list = select_matching_examples(
+            relationship_profile, casual_tuples, professional_tuples,
+        )
+        return [FewShotExample(context=ctx, output=out) for ctx, out in examples_list]
+    elif effective_tone == "professional":
+        return PROFESSIONAL_REPLY_EXAMPLES[:3]
+    else:
+        return CASUAL_REPLY_EXAMPLES[:3]
+
+
+def _build_custom_instructions(
+    instruction: str | None,
+    relationship_profile: RelationshipProfile | None,
+) -> str:
+    """Build custom instruction string, incorporating relationship style guidance.
+
+    Args:
+        instruction: Optional explicit instruction.
+        relationship_profile: Optional profile for style guide generation.
+
+    Returns:
+        Combined custom instruction string.
+    """
+    from jarvis.relationships import MIN_MESSAGES_FOR_PROFILE, generate_style_guide
+
+    custom_instruction = instruction or ""
+
+    if relationship_profile and relationship_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
+        style_guide = generate_style_guide(relationship_profile)
+        if custom_instruction:
+            custom_instruction += f"\n- Communication style: {style_guide}"
+        else:
+            custom_instruction = f"- Communication style: {style_guide}"
+
+    return custom_instruction
+
+
 def build_reply_prompt(
     context: str,
     last_message: str,
@@ -342,6 +424,7 @@ def build_reply_prompt(
     tone: Literal["casual", "professional", "mixed"] = "casual",
     relationship_profile: RelationshipProfile | None = None,
     user_messages: list[str] | None = None,
+    user_style: UserStyleAnalysis | None = None,
 ) -> str:
     """Build a prompt for generating iMessage replies.
 
@@ -356,74 +439,25 @@ def build_reply_prompt(
         user_messages: Optional list of user's own messages for style analysis.
             If provided, the prompt will include explicit instructions to match
             the user's texting style (length, formality, abbreviations, etc.).
+        user_style: Optional pre-computed UserStyleAnalysis to avoid recomputation.
+            If not provided and user_messages is given, it will be computed.
 
     Returns:
         Formatted prompt string ready for model input
     """
-    # Import here to avoid circular imports
-    from jarvis.relationships import (
-        MIN_MESSAGES_FOR_PROFILE,
-        generate_style_guide,
-        select_matching_examples,
-    )
+    effective_tone = _determine_effective_tone(tone, relationship_profile)
+    examples = _select_examples_for_tone(effective_tone, relationship_profile)
 
-    # Determine effective tone from profile if available
-    effective_tone = tone
-    if relationship_profile and relationship_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
-        formality = relationship_profile.tone_profile.formality_score
-        if formality >= 0.7:
-            effective_tone = "professional"
-        elif formality < 0.4:
-            effective_tone = "casual"
-        else:
-            effective_tone = "mixed"
+    tone_str = "professional/formal" if effective_tone == "professional" else "casual/friendly"
 
-    # Select appropriate examples based on tone (and profile if available)
-    if relationship_profile and relationship_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
-        # Use profile to select matching examples
-        # Convert FewShotExample to tuple format for the selector function
-        casual_tuples = [(ex.context, ex.output) for ex in CASUAL_REPLY_EXAMPLES]
-        professional_tuples = [(ex.context, ex.output) for ex in PROFESSIONAL_REPLY_EXAMPLES]
-        examples_list = select_matching_examples(
-            relationship_profile,
-            casual_tuples,
-            professional_tuples,
-        )
-        examples = [FewShotExample(context=ctx, output=out) for ctx, out in examples_list]
-    elif effective_tone == "professional":
-        examples = PROFESSIONAL_REPLY_EXAMPLES[:3]
-    else:
-        examples = CASUAL_REPLY_EXAMPLES[:3]
-
-    # Determine tone string
-    if effective_tone == "professional":
-        tone_str = "professional/formal"
-    else:
-        tone_str = "casual/friendly"
-
-    # Build style instructions from user's actual messages
     style_instructions = ""
     if user_messages:
-        style_analysis = analyze_user_style(user_messages)
+        style_analysis = user_style or analyze_user_style(user_messages)
         style_instructions = build_style_instructions(style_analysis)
 
-    # Format custom instruction
-    custom_instruction = ""
-    if instruction:
-        custom_instruction = instruction
-
-    # Add relationship-based style guidance if profile is available
-    if relationship_profile and relationship_profile.message_count >= MIN_MESSAGES_FOR_PROFILE:
-        style_guide = generate_style_guide(relationship_profile)
-        if custom_instruction:
-            custom_instruction += f"\n- Communication style: {style_guide}"
-        else:
-            custom_instruction = f"- Communication style: {style_guide}"
-
-    # Truncate context if needed
+    custom_instruction = _build_custom_instructions(instruction, relationship_profile)
     truncated_context = _truncate_context(context)
 
-    # Build the prompt
     prompt = REPLY_PROMPT.template.format(
         context=truncated_context,
         tone=tone_str,
@@ -624,6 +658,72 @@ def _get_additional_instructions(
     return "\n".join(instructions) if instructions else ""
 
 
+@dataclass
+class ThreadedPromptComponents:
+    """Holds the resolved pieces needed to build a threaded reply prompt."""
+
+    topic_name: str
+    state_name: str
+    user_role: str
+    context: str
+    last_message: str
+    participants_info: str
+    examples: list[FewShotExample]
+    length_guidance: str
+    additional_instructions: str
+    custom_instruction: str
+
+
+def _build_threaded_components(
+    thread_context: ThreadContext,
+    config: ThreadedReplyConfig,
+    instruction: str | None = None,
+) -> ThreadedPromptComponents:
+    """Extract and resolve all components for a threaded reply prompt.
+
+    Args:
+        thread_context: Analyzed thread context from ThreadAnalyzer.
+        config: Response configuration based on thread type.
+        instruction: Optional custom instruction.
+
+    Returns:
+        ThreadedPromptComponents with all resolved fields.
+    """
+    topic_name = thread_context.topic.value
+    state_name = thread_context.state.value
+    user_role = thread_context.user_role.value
+
+    examples = _get_thread_examples(topic_name)[:2]
+
+    relevant_msgs = thread_context.relevant_messages or thread_context.messages[-5:]
+    context = _format_thread_context(relevant_msgs)
+
+    last_message = ""
+    if thread_context.messages:
+        last_msg = thread_context.messages[-1]
+        if hasattr(last_msg, "text"):
+            last_message = last_msg.text or ""
+        elif isinstance(last_msg, str):
+            last_message = last_msg
+
+    participants_info = ""
+    if thread_context.participants_count > 1:
+        participants_info = f"Group chat with {thread_context.participants_count} participants"
+
+    return ThreadedPromptComponents(
+        topic_name=topic_name,
+        state_name=state_name,
+        user_role=user_role,
+        context=_truncate_context(context, max_chars=2000),
+        last_message=last_message,
+        participants_info=participants_info,
+        examples=examples,
+        length_guidance=_get_length_guidance(config.response_style, config.max_response_length),
+        additional_instructions=_get_additional_instructions(topic_name, state_name, config),
+        custom_instruction=instruction or "",
+    )
+
+
 def build_threaded_reply_prompt(
     thread_context: ThreadContext,
     config: ThreadedReplyConfig,
@@ -644,59 +744,20 @@ def build_threaded_reply_prompt(
     Returns:
         Formatted prompt string ready for model input
     """
-    # Get topic and state names
-    topic_name = thread_context.topic.value
-    state_name = thread_context.state.value
-    user_role = thread_context.user_role.value
+    c = _build_threaded_components(thread_context, config, instruction)
 
-    # Get appropriate examples for this thread type
-    examples = _get_thread_examples(topic_name)[:2]
-
-    # Format the relevant messages (not all messages)
-    relevant_msgs = thread_context.relevant_messages or thread_context.messages[-5:]
-    context = _format_thread_context(relevant_msgs)
-
-    # Get the last message to reply to
-    last_message = ""
-    if thread_context.messages:
-        last_msg = thread_context.messages[-1]
-        if hasattr(last_msg, "text"):
-            last_message = last_msg.text or ""
-        elif isinstance(last_msg, str):
-            last_message = last_msg
-
-    # Build participants info for group chats
-    participants_info = ""
-    if thread_context.participants_count > 1:
-        participants_info = f"Group chat with {thread_context.participants_count} participants"
-
-    # Get length guidance
-    length_guidance = _get_length_guidance(config.response_style, config.max_response_length)
-
-    # Get additional instructions
-    additional_instructions = _get_additional_instructions(topic_name, state_name, config)
-
-    # Format custom instruction
-    custom_instruction = ""
-    if instruction:
-        custom_instruction = instruction
-
-    # Truncate context if needed
-    truncated_context = _truncate_context(context, max_chars=2000)
-
-    # Build the prompt
     prompt = THREADED_REPLY_PROMPT.template.format(
-        thread_topic=topic_name.replace("_", " ").title(),
-        thread_state=state_name.replace("_", " ").title(),
-        user_role=user_role.replace("_", " ").title(),
-        participants_info=participants_info,
-        context=truncated_context,
+        thread_topic=c.topic_name.replace("_", " ").title(),
+        thread_state=c.state_name.replace("_", " ").title(),
+        user_role=c.user_role.replace("_", " ").title(),
+        participants_info=c.participants_info,
+        context=c.context,
         response_style=config.response_style,
-        length_guidance=length_guidance,
-        additional_instructions=additional_instructions,
-        custom_instruction=custom_instruction,
-        examples=_format_examples(examples),
-        last_message=last_message,
+        length_guidance=c.length_guidance,
+        additional_instructions=c.additional_instructions,
+        custom_instruction=c.custom_instruction,
+        examples=_format_examples(c.examples),
+        last_message=c.last_message,
     )
 
     return prompt
@@ -792,6 +853,7 @@ def _format_relationship_context(
     avg_length: float,
     response_patterns: dict[str, float | int] | None = None,
     user_messages: list[str] | None = None,
+    user_style: UserStyleAnalysis | None = None,
 ) -> str:
     """Format relationship context for RAG prompt.
 
@@ -804,6 +866,8 @@ def _format_relationship_context(
         avg_length: Average message length.
         response_patterns: Optional response pattern statistics.
         user_messages: Optional list of user's messages for style analysis.
+        user_style: Optional pre-computed UserStyleAnalysis to avoid recomputation.
+            If not provided and user_messages is given, it will be computed.
 
     Returns:
         Compact relationship context string.
@@ -812,7 +876,7 @@ def _format_relationship_context(
 
     # If we have user messages, analyze their style directly
     if user_messages:
-        style = analyze_user_style(user_messages)
+        style = user_style or analyze_user_style(user_messages)
 
         # Tone
         formality_labels = {
@@ -883,6 +947,7 @@ def build_rag_reply_prompt(
     user_messages: list[str] | None = None,
     contact_facts: str = "",
     relationship_graph: str = "",
+    user_style: UserStyleAnalysis | None = None,
 ) -> str:
     """Build a RAG-enhanced prompt for generating personalized iMessage replies.
 
@@ -935,8 +1000,10 @@ def build_rag_reply_prompt(
 
     # If user_messages provided, use style analysis for avg_length
     if user_messages:
-        style = analyze_user_style(user_messages)
-        avg_length = style.avg_length
+        resolved_style = user_style or analyze_user_style(user_messages)
+        avg_length = resolved_style.avg_length
+    else:
+        resolved_style = user_style
 
     # Format relationship context with user messages for style analysis
     relationship_context = _format_relationship_context(
@@ -945,6 +1012,7 @@ def build_rag_reply_prompt(
         avg_length=avg_length,
         response_patterns=response_patterns if isinstance(response_patterns, dict) else None,
         user_messages=user_messages,
+        user_style=resolved_style,
     )
 
     # Format similar exchanges

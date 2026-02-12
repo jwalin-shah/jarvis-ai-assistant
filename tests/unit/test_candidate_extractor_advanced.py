@@ -334,26 +334,24 @@ class TestCandidateToHypothesis:
         self.ext = CandidateExtractor(backend="pytorch", use_entailment=True)
         self.ext._model = MagicMock()
 
-    def test_location_hypothesis_from_contact(self):
+    def test_location_hypothesis_impersonal(self):
         c = _make_candidate(
             span_text="Austin",
             fact_type="location.current",
             is_from_me=False,
         )
         h = self.ext._candidate_to_hypothesis(c)
-        assert "the contact" in h
-        assert "Austin" in h
-        assert "lives in" in h
+        assert h == "Someone lives in Austin"
 
-    def test_location_hypothesis_from_user(self):
+    def test_location_hypothesis_same_for_user(self):
         c = _make_candidate(
             span_text="Austin",
             fact_type="location.current",
             is_from_me=True,
         )
         h = self.ext._candidate_to_hypothesis(c)
-        assert "the user" in h
-        assert "Austin" in h
+        # MNLI-style: same regardless of speaker
+        assert h == "Someone lives in Austin"
 
     def test_work_employer_hypothesis(self):
         c = _make_candidate(
@@ -362,8 +360,7 @@ class TestCandidateToHypothesis:
             is_from_me=False,
         )
         h = self.ext._candidate_to_hypothesis(c)
-        assert "Google" in h
-        assert "employer" in h
+        assert h == "Someone is employed at Google"
 
     def test_activity_hypothesis_generic_subject(self):
         c = _make_candidate(
@@ -372,9 +369,9 @@ class TestCandidateToHypothesis:
             is_from_me=True,
         )
         h = self.ext._candidate_to_hypothesis(c)
-        # Activity template uses "Someone" not subject
         assert "rock climbing" in h
-        assert "activity" in h.lower() or "hobby" in h.lower()
+        # Template: "Someone does {span}" -> "Someone does rock climbing"
+        assert h == "Someone does rock climbing"
 
     def test_unknown_type_uses_fallback(self):
         c = _make_candidate(
@@ -416,69 +413,98 @@ class TestVerifyEntailment:
         result = mock_verify(candidates)
         assert result == candidates
 
-    def test_per_type_thresholds_exist(self):
-        """Verify expected per-type thresholds are defined."""
+    def test_per_type_thresholds_tuned(self):
+        """Per-type thresholds are tuned for precision after manual review."""
         thresholds = CandidateExtractor._ENTAILMENT_THRESHOLDS
-        assert thresholds["preference.activity"] == 0.03
-        assert thresholds["relationship.friend"] == 0.25
-        assert thresholds["location.current"] == 0.12
+        assert thresholds["work.employer"] == 0.45
+        assert thresholds["location.current"] == 0.30
+        assert thresholds["preference.food_like"] == 0.35
+        assert thresholds["preference.activity"] == 0.30
+        assert thresholds["health.condition"] == 0.45
+        assert thresholds["personal.school"] == 0.55
 
-    def test_score_capping_logic(self):
-        """gliner_score should be capped by NLI score (min of both)."""
+    def test_soft_scoring_multiplier(self):
+        """gliner_score should be scaled by E-C soft multiplier."""
         candidate = _make_candidate(gliner_score=0.9, fact_type="location.current")
 
-        with patch("jarvis.nlp.entailment.verify_entailment_batch") as mock_nli:
-            # NLI score 0.5 > threshold 0.12, passes
-            mock_nli.return_value = [("hypothesis", 0.5)]
+        mock_nli = MagicMock()
+        # E-C score: 0.3 - 0.1 = 0.2; multiplier = max(0.4, min(1.0, 0.7 + 0.6*0.2)) = 0.82
+        mock_nli.predict_batch.return_value = [
+            {"entailment": 0.3, "contradiction": 0.1, "neutral": 0.6},
+        ]
+        with patch("models.nli_cross_encoder.get_nli_cross_encoder", return_value=mock_nli):
             result = self.ext._verify_entailment([candidate])
             assert len(result) == 1
-            # Score should be capped: min(0.9, 0.5) = 0.5
-            assert result[0].gliner_score == 0.5
+            # Soft multiplier: 0.7 + 0.6 * 0.2 = 0.82; score = 0.9 * 0.82 = 0.738
+            assert abs(result[0].gliner_score - 0.738) < 0.001
 
-    def test_below_threshold_rejected(self):
-        """Candidate with NLI score below type threshold is rejected."""
-        candidate = _make_candidate(fact_type="relationship.friend")  # threshold 0.25
+    def test_hard_reject_below_negative_05(self):
+        """Candidate with E-C score < -0.5 is hard-rejected (contradiction dominates)."""
+        candidate = _make_candidate(fact_type="relationship.friend")
 
-        with patch("jarvis.nlp.entailment.verify_entailment_batch") as mock_nli:
-            mock_nli.return_value = [("hypothesis", 0.1)]  # below 0.25
+        mock_nli = MagicMock()
+        # E-C score: 0.01 - 0.6 = -0.59 < -0.5 -> hard reject
+        mock_nli.predict_batch.return_value = [
+            {"entailment": 0.01, "contradiction": 0.6, "neutral": 0.39},
+        ]
+        with patch("models.nli_cross_encoder.get_nli_cross_encoder", return_value=mock_nli):
             result = self.ext._verify_entailment([candidate])
             assert len(result) == 0
 
-    def test_above_threshold_accepted(self):
-        """Candidate with NLI score above type threshold is accepted."""
-        candidate = _make_candidate(fact_type="preference.activity")  # threshold 0.03
+    def test_low_score_penalized_not_rejected(self):
+        """Candidate with low E-C score is penalized but not rejected."""
+        candidate = _make_candidate(gliner_score=0.8, fact_type="location.current")
 
-        with patch("jarvis.nlp.entailment.verify_entailment_batch") as mock_nli:
-            mock_nli.return_value = [("hypothesis", 0.05)]  # above 0.03
+        mock_nli = MagicMock()
+        # E-C score: 0.15 - 0.4 = -0.25 (above -0.5, kept but penalized)
+        # multiplier = max(0.4, min(1.0, 0.7 + 0.6*(-0.25))) = max(0.4, 0.55) = 0.55
+        mock_nli.predict_batch.return_value = [
+            {"entailment": 0.15, "contradiction": 0.4, "neutral": 0.45},
+        ]
+        with patch("models.nli_cross_encoder.get_nli_cross_encoder", return_value=mock_nli):
             result = self.ext._verify_entailment([candidate])
             assert len(result) == 1
+            # score = 0.8 * 0.55 = 0.44
+            assert result[0].gliner_score < 0.8  # penalized
 
-    def test_fallback_threshold_for_unknown_type(self):
-        """Types not in _ENTAILMENT_THRESHOLDS use self._entailment_threshold."""
-        candidate = _make_candidate(fact_type="personal.pet")
-        # personal.pet not in _ENTAILMENT_THRESHOLDS, fallback to 0.12
+    def test_high_score_minimal_penalty(self):
+        """Candidate with high E-C score gets minimal penalty."""
+        candidate = _make_candidate(gliner_score=0.9, fact_type="location.current")
 
-        with patch("jarvis.nlp.entailment.verify_entailment_batch") as mock_nli:
-            mock_nli.return_value = [("hypothesis", 0.15)]  # above 0.12
+        mock_nli = MagicMock()
+        # E-C score: 0.85 - 0.05 = 0.80; multiplier = min(1.0, 0.7 + 0.6*0.8) = min(1.0, 1.18) = 1.0
+        mock_nli.predict_batch.return_value = [
+            {"entailment": 0.85, "contradiction": 0.05, "neutral": 0.10},
+        ]
+        with patch("models.nli_cross_encoder.get_nli_cross_encoder", return_value=mock_nli):
             result = self.ext._verify_entailment([candidate])
             assert len(result) == 1
+            # multiplier capped at 1.0; score = 0.9 * 1.0 = 0.9
+            assert result[0].gliner_score > 0.85
 
-    def test_batch_processing(self):
-        """Multiple candidates processed in single batch call."""
+    def test_batch_soft_scoring(self):
+        """Multiple candidates: NLI-skip types pass through, others scored by E-C.
+
+        preference.food_like is in _NLI_SKIP_CATEGORIES and bypasses NLI entirely.
+        location.current and work.employer go through NLI; Google is hard-rejected.
+        """
         candidates = [
-            _make_candidate(fact_type="location.current", span_text="Austin"),
-            _make_candidate(fact_type="work.employer", span_text="Google"),
-            _make_candidate(fact_type="preference.food_like", span_text="sushi"),
+            _make_candidate(fact_type="location.current", span_text="Austin", gliner_score=0.8),
+            _make_candidate(fact_type="work.employer", span_text="Google", gliner_score=0.8),
+            _make_candidate(fact_type="preference.food_like", span_text="sushi", gliner_score=0.8),
         ]
 
-        with patch("jarvis.nlp.entailment.verify_entailment_batch") as mock_nli:
-            mock_nli.return_value = [
-                ("h1", 0.5),  # location: above 0.12
-                ("h2", 0.05),  # work: below 0.12
-                ("h3", 0.15),  # food: above 0.08
-            ]
+        mock_nli = MagicMock()
+        # Only location.current and work.employer go through NLI (2 pairs)
+        # preference.food_like is in _NLI_SKIP_CATEGORIES -> skips NLI
+        mock_nli.predict_batch.return_value = [
+            {"entailment": 0.5, "contradiction": 0.1, "neutral": 0.4},   # Austin: EC=0.4, pass
+            {"entailment": 0.01, "contradiction": 0.6, "neutral": 0.39},  # Google: EC=-0.59, reject
+        ]
+        with patch("models.nli_cross_encoder.get_nli_cross_encoder", return_value=mock_nli):
             result = self.ext._verify_entailment(candidates)
-            assert len(result) == 2  # Austin + sushi pass, Google rejected
+            # sushi (skip NLI) + Austin (pass) = 2; Google hard-rejected
+            assert len(result) == 2
 
     def test_empty_candidates_returns_empty(self):
         result = self.ext._verify_entailment([])

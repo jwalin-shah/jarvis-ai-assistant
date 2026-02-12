@@ -39,7 +39,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -461,12 +461,16 @@ class TopicSegmenter:
         self,
         messages: list[Message],
         contact_id: str | None = None,
+        pre_fetched_embeddings: dict[int, NDArray[np.float32]] | None = None,
     ) -> list[TopicSegment]:
         """Segment a conversation into topic-coherent chunks.
 
         Args:
             messages: List of messages, sorted by date ascending.
             contact_id: Optional contact ID for context.
+            pre_fetched_embeddings: Optional dict of message_id -> embedding,
+                pre-fetched across all contacts to avoid per-contact DB lookups.
+                When provided, skips the per-contact vec_messages cache query.
 
         Returns:
             List of TopicSegment objects.
@@ -484,7 +488,7 @@ class TopicSegmenter:
             return []
 
         # 2. Compute embeddings
-        self._compute_embeddings(segment_messages)
+        self._compute_embeddings(segment_messages, pre_fetched_embeddings)
 
         # 3. Compute boundary scores
         boundaries = self._compute_boundary_scores(segment_messages)
@@ -565,29 +569,39 @@ class TopicSegmenter:
 
         return segment_messages
 
-    def _compute_embeddings(self, messages: list[SegmentMessage]) -> None:
+    def _compute_embeddings(
+        self,
+        messages: list[SegmentMessage],
+        pre_fetched_embeddings: dict[int, NDArray[np.float32]] | None = None,
+    ) -> None:
         """Compute embeddings for all messages.
 
-        Checks vec_messages cache first to avoid redundant BERT encoding.
+        Checks pre-fetched embeddings first, then vec_messages cache,
+        then encodes remaining uncached messages via BERT.
 
         Args:
             messages: List of SegmentMessage (modified in place).
+            pre_fetched_embeddings: Optional dict of message_id -> embedding,
+                pre-fetched across all contacts to avoid per-contact DB lookups.
         """
         if not messages:
             return
 
-        # Try to reuse cached embeddings from vec_messages
+        # Try pre-fetched embeddings first (cross-contact batch), then vec_messages cache
         cached: dict[int, Any] = {}
-        try:
-            from jarvis.search.vec_search import get_vec_searcher
+        if pre_fetched_embeddings is not None:
+            cached = pre_fetched_embeddings
+        else:
+            try:
+                from jarvis.search.vec_search import get_vec_searcher
 
-            vec = get_vec_searcher()
-            if vec is not None:
-                msg_ids = [m.message_id for m in messages if m.message_id is not None]
-                if msg_ids:
-                    cached = vec.get_embeddings_by_ids(msg_ids)
-        except Exception:
-            pass  # Fall through to full encoding
+                vec = get_vec_searcher()
+                if vec is not None:
+                    msg_ids = [m.message_id for m in messages if m.message_id is not None]
+                    if msg_ids:
+                        cached = vec.get_embeddings_by_ids(msg_ids)
+            except Exception:
+                pass  # Fall through to full encoding
 
         # Split into cached vs uncached
         uncached_indices = []
@@ -726,11 +740,8 @@ class TopicSegmenter:
     ) -> float:
         """Apply negative signal reductions to boundary score.
 
-        Reduces score for patterns that shouldn't create boundaries:
-        - Reactions (tapbacks) - "Loved X"
-        - Q&A pairs - questions and answers
-        - Media bursts - multiple attachments
-        - Forward continuity - if following messages continue old topic
+        Reduces score for patterns that shouldn't create boundaries.
+        Each signal is checked via a dedicated method for testability.
 
         Args:
             messages: List of messages.
@@ -741,34 +752,110 @@ class TopicSegmenter:
         Returns:
             Reduced boundary score.
         """
-        # Reactions (tapbacks) shouldn't split from the message
+        score = self._check_reaction_signal(messages, position, score)
+        score = self._check_qa_pair_signal(messages, position, score)
+        score = self._check_media_burst_signal(messages, position, score)
+        score = self._check_forward_continuity_signal(messages, position, score, window_centroids)
+        return score
+
+    def _check_reaction_signal(
+        self,
+        messages: list[SegmentMessage],
+        position: int,
+        score: float,
+    ) -> float:
+        """Reduce score if current message is a reaction (tapback).
+
+        Reactions like "Loved X" shouldn't split from the message they react to.
+
+        Args:
+            messages: List of messages.
+            position: Index in message list.
+            score: Current boundary score.
+
+        Returns:
+            Adjusted score.
+        """
         raw_text = messages[position].raw_text or messages[position].text or ""
         if is_reaction(raw_text):
             score = max(0.0, score - 0.5)
             logger.debug("Boundary %d: reaction detected, score reduced to %.2f", position, score)
+        return score
 
-        # Q&A pairs - questions and their answers should stay together
+    def _check_qa_pair_signal(
+        self,
+        messages: list[SegmentMessage],
+        position: int,
+        score: float,
+    ) -> float:
+        """Reduce score if previous message is a question and current is an answer.
+
+        Q&A pairs should stay together even if semantically different.
+
+        Args:
+            messages: List of messages.
+            position: Index in message list.
+            score: Current boundary score.
+
+        Returns:
+            Adjusted score.
+        """
         if self._is_qa_pair(messages[position - 1], messages[position]):
             score = max(0.0, score - 0.4)
             logger.debug("Boundary %d: Q&A pair detected, score reduced to %.2f", position, score)
+        return score
 
-        # Media bursts - multiple attachments in quick succession
+    def _check_media_burst_signal(
+        self,
+        messages: list[SegmentMessage],
+        position: int,
+        score: float,
+    ) -> float:
+        """Reduce score if position is within a media burst.
+
+        Multiple attachments sent in quick succession should stay together.
+
+        Args:
+            messages: List of messages.
+            position: Index in message list.
+            score: Current boundary score.
+
+        Returns:
+            Adjusted score.
+        """
         if self._is_media_burst(messages, position):
             score = max(0.0, score - 0.4)
             logger.debug(
                 "Boundary %d: media burst detected, score reduced to %.2f", position, score
             )
+        return score
 
-        # Bidirectional check: if forward messages continue old topic, reduce score
-        # This prevents false boundaries when someone briefly mentions something
-        # but then continues the original conversation
+    def _check_forward_continuity_signal(
+        self,
+        messages: list[SegmentMessage],
+        position: int,
+        score: float,
+        window_centroids: NDArray[np.float32] | None,
+    ) -> float:
+        """Reduce score if forward messages continue the old topic.
+
+        Prevents false boundaries when someone briefly mentions something
+        but then continues the original conversation.
+
+        Args:
+            messages: List of messages.
+            position: Index in message list.
+            score: Current boundary score.
+            window_centroids: Pre-computed window centroids for continuity check.
+
+        Returns:
+            Adjusted score.
+        """
         if score >= self.boundary_threshold:
             forward_continuity = self._check_forward_continuity(
                 messages, position, window_centroids
             )
             if forward_continuity > 0:
-                # Forward messages continue old topic - reduce score
-                # Higher continuity = more reduction
                 reduction = 0.3 * forward_continuity
                 score = max(0.0, score - reduction)
                 logger.debug(
@@ -777,7 +864,6 @@ class TopicSegmenter:
                     forward_continuity,
                     score,
                 )
-
         return score
 
     def _compute_window_centroids(
@@ -1154,6 +1240,7 @@ def reset_segmenter() -> None:
 def segment_conversation(
     messages: list[Message],
     contact_id: str | None = None,
+    pre_fetched_embeddings: dict[int, NDArray[np.float32]] | None = None,
 ) -> list[TopicSegment]:
     """Segment a conversation into topic-coherent chunks.
 
@@ -1162,12 +1249,14 @@ def segment_conversation(
     Args:
         messages: List of messages, sorted by date ascending.
         contact_id: Optional contact ID for context.
+        pre_fetched_embeddings: Optional dict of message_id -> embedding,
+            pre-fetched across all contacts to avoid per-contact DB lookups.
 
     Returns:
         List of TopicSegment objects.
     """
     segmenter = get_segmenter()
-    return segmenter.segment(messages, contact_id)
+    return segmenter.segment(messages, contact_id, pre_fetched_embeddings)
 
 
 def segment_for_extraction(

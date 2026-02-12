@@ -21,7 +21,7 @@ import sqlite3
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -83,7 +83,7 @@ class AccessPattern:
     """Tracks access patterns for a specific key/type."""
 
     key: str
-    access_times: list[float] = field(default_factory=list)
+    access_times: deque[float] = field(default_factory=lambda: deque(maxlen=100))
     access_count: int = 0
     last_access: float = 0.0
 
@@ -93,9 +93,6 @@ class AccessPattern:
         self.access_times.append(now)
         self.access_count += 1
         self.last_access = now
-        # Keep only last 100 access times
-        if len(self.access_times) > 100:
-            self.access_times = self.access_times[-100:]
 
     @property
     def frequency(self) -> float:
@@ -399,12 +396,13 @@ class ConversationContinuationStrategy(PredictionStrategy):
         self,
         active_window_minutes: int = 30,
         response_probability_threshold: float = 0.3,
-        max_tracked_chats: int = 1000,
+        max_tracked_chats: int = 200,
     ) -> None:
         self._active_window = active_window_minutes * 60  # Convert to seconds
         self._threshold = response_probability_threshold
         self._max_tracked_chats = max_tracked_chats  # Prevent unbounded memory growth
-        self._recent_messages: dict[str, list[float]] = defaultdict(list)  # chat_id -> timestamps
+        # OrderedDict for LRU eviction: most recently accessed chat moves to end
+        self._recent_messages: OrderedDict[str, list[float]] = OrderedDict()
 
     def record_message(self, chat_id: str, is_from_me: bool) -> None:
         """Record an incoming or outgoing message.
@@ -414,38 +412,31 @@ class ConversationContinuationStrategy(PredictionStrategy):
             is_from_me: Whether the message was sent by user.
         """
         now = time.time()
+        if chat_id not in self._recent_messages:
+            self._recent_messages[chat_id] = []
         self._recent_messages[chat_id].append(now)
         # Keep only recent messages
         cutoff = now - self._active_window
         self._recent_messages[chat_id] = [
             ts for ts in self._recent_messages[chat_id] if ts > cutoff
         ]
+        # LRU: move to end (most recently accessed)
+        self._recent_messages.move_to_end(chat_id)
+        # Evict oldest entries if over limit
+        while len(self._recent_messages) > self._max_tracked_chats:
+            self._recent_messages.popitem(last=False)
 
     def predict(self, context: PredictionContext) -> list[Prediction]:
         predictions: list[Prediction] = []
         now = time.time()
 
-        # Cleanup stale chat entries to prevent unbounded growth
+        # Cleanup stale chat entries
         cutoff = now - self._active_window
         stale_keys = [
             cid for cid, ts in self._recent_messages.items() if not ts or max(ts) < cutoff
         ]
         for cid in stale_keys:
             del self._recent_messages[cid]
-
-        # Enforce max tracked chats limit - remove oldest inactive chats
-        if len(self._recent_messages) > self._max_tracked_chats:
-            # Sort by most recent message timestamp, keep most active chats
-            sorted_chats = sorted(
-                self._recent_messages.items(),
-                key=lambda x: max(x[1]) if x[1] else 0,
-                reverse=True,
-            )
-            # Keep only the most recent max_tracked_chats
-            chats_to_keep = {cid for cid, _ in sorted_chats[: self._max_tracked_chats]}
-            chats_to_remove = [cid for cid in self._recent_messages if cid not in chats_to_keep]
-            for cid in chats_to_remove:
-                del self._recent_messages[cid]
 
         for chat_id, timestamps in self._recent_messages.items():
             if not timestamps:
@@ -506,8 +497,10 @@ class RecentContextStrategy(PredictionStrategy):
     def name(self) -> str:
         return "recent_context"
 
-    def __init__(self) -> None:
-        self._recent_contexts: dict[str, list[str]] = {}  # chat_id -> recent texts
+    def __init__(self, max_tracked_chats: int = 200) -> None:
+        self._max_tracked_chats = max_tracked_chats
+        # OrderedDict for LRU eviction: most recently accessed chat moves to end
+        self._recent_contexts: OrderedDict[str, list[str]] = OrderedDict()
 
     def record_context(self, chat_id: str, text: str) -> None:
         """Record message text for context analysis.
@@ -521,6 +514,11 @@ class RecentContextStrategy(PredictionStrategy):
         self._recent_contexts[chat_id].append(text)
         # Keep only last 10 messages
         self._recent_contexts[chat_id] = self._recent_contexts[chat_id][-10:]
+        # LRU: move to end (most recently accessed)
+        self._recent_contexts.move_to_end(chat_id)
+        # Evict oldest entries if over limit
+        while len(self._recent_contexts) > self._max_tracked_chats:
+            self._recent_contexts.popitem(last=False)
 
     def predict(self, context: PredictionContext) -> list[Prediction]:
         predictions: list[Prediction] = []
@@ -583,10 +581,12 @@ class UIFocusStrategy(PredictionStrategy):
     def name(self) -> str:
         return "ui_focus"
 
-    def __init__(self, focus_threshold_ms: int = 500) -> None:
+    def __init__(self, focus_threshold_ms: int = 500, max_tracked_chats: int = 200) -> None:
         self._focus_threshold = focus_threshold_ms / 1000
-        self._focus_times: dict[str, float] = {}  # chat_id -> focus start time
-        self._hover_times: dict[str, float] = {}  # chat_id -> hover start time
+        self._max_tracked_chats = max_tracked_chats
+        # OrderedDict for LRU eviction
+        self._focus_times: OrderedDict[str, float] = OrderedDict()
+        self._hover_times: OrderedDict[str, float] = OrderedDict()
 
     def record_focus(self, chat_id: str) -> None:
         """Record focus on a chat.
@@ -595,6 +595,9 @@ class UIFocusStrategy(PredictionStrategy):
             chat_id: Chat identifier.
         """
         self._focus_times[chat_id] = time.time()
+        self._focus_times.move_to_end(chat_id)
+        while len(self._focus_times) > self._max_tracked_chats:
+            self._focus_times.popitem(last=False)
 
     def record_hover(self, chat_id: str) -> None:
         """Record hover over a chat.
@@ -603,6 +606,9 @@ class UIFocusStrategy(PredictionStrategy):
             chat_id: Chat identifier.
         """
         self._hover_times[chat_id] = time.time()
+        self._hover_times.move_to_end(chat_id)
+        while len(self._hover_times) > self._max_tracked_chats:
+            self._hover_times.popitem(last=False)
 
     def predict(self, context: PredictionContext) -> list[Prediction]:
         predictions: list[Prediction] = []

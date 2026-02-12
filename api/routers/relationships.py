@@ -220,7 +220,7 @@ async def get_relationship_profile(
             detail={
                 "error": "MessageFetchError",
                 "message": f"Could not fetch messages for contact: {contact_id}",
-                "cause": str(e),
+                "cause": "Internal error during message fetch",
             },
         )
 
@@ -499,7 +499,7 @@ async def refresh_relationship_profile(
             profile=None,
             messages_analyzed=0,
             previous_message_count=previous_count,
-            error=f"Could not fetch messages: {e}",
+            error="Could not fetch messages: internal error",
         )
 
     if not messages:

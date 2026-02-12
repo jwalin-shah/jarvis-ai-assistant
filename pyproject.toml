@@ -93,6 +93,7 @@ experiments = [
 evals = [
     "dspy>=3.1",
     "openai>=1.0.0",
+    "outlines[mlxlm]>=0.1.0",
 ]
 coref = [
     "fastcoref>=0.2.0",

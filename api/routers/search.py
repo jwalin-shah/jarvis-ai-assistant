@@ -32,7 +32,8 @@ def _get_searcher(reader: ChatDBReader, threshold: float) -> SemanticSearcher:
     """Get or create singleton SemanticSearcher instance.
 
     Reuses searcher across requests to avoid repeated model loading.
-    Creates a dedicated reader for the singleton to avoid holding a DI reader.
+    Creates a dedicated reader with a limited connection pool (max 2 connections)
+    to avoid unbounded pool growth from the singleton's long lifetime.
     Threshold is applied per-request, not baked into the singleton.
 
     Args:
@@ -51,8 +52,9 @@ def _get_searcher(reader: ChatDBReader, threshold: float) -> SemanticSearcher:
 
     with _searcher_lock:
         if _searcher_instance is None:
-            # Create a dedicated reader for the singleton so it isn't closed by DI
-            dedicated_reader = ChatDBReader()
+            # Use a dedicated connection (not the shared pool) to avoid
+            # holding pool slots for the singleton's entire lifetime
+            dedicated_reader = ChatDBReader(use_pool=False)
             _searcher_instance = SemanticSearcher(
                 reader=dedicated_reader,
                 similarity_threshold=threshold,

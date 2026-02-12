@@ -26,7 +26,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from jarvis.classifiers.cascade import classify_with_cascade
@@ -404,6 +404,7 @@ class ReplyRouter:
         """Check prefetch cache for a cached draft reply.
 
         Only checks if a prefetch manager already exists (does not create one).
+        Validates structure and types of cached data before returning.
         Returns cached result dict or None if no cache hit.
         """
         if not chat_id:
@@ -415,20 +416,35 @@ class ReplyRouter:
             if manager is None:
                 return None
             cached_draft = manager.get_draft(chat_id)
-            if cached_draft and "suggestions" in cached_draft:
-                suggestions = cached_draft["suggestions"]
-                if suggestions and isinstance(suggestions, list) and suggestions[0].get("text"):
-                    return {
-                        "type": "generated",
-                        "response": suggestions[0]["text"],
-                        "confidence": "high"
-                        if suggestions[0].get("confidence", 0) >= 0.8
-                        else "medium",
-                        "similarity_score": 0.0,
-                        "similar_triggers": None,
-                        "reason": "",
-                        "from_cache": True,
-                    }
+            if not isinstance(cached_draft, dict):
+                return None
+
+            # Validate required structure
+            suggestions = cached_draft.get("suggestions")
+            if not isinstance(suggestions, list) or not suggestions:
+                return None
+
+            first = suggestions[0]
+            if not isinstance(first, dict):
+                return None
+
+            text = first.get("text")
+            if not isinstance(text, str) or not text:
+                return None
+
+            confidence_val = first.get("confidence", 0)
+            if not isinstance(confidence_val, (int, float)):
+                confidence_val = 0
+
+            return {
+                "type": "generated",
+                "response": text,
+                "confidence": "high" if confidence_val >= 0.8 else "medium",
+                "similarity_score": 0.0,
+                "similar_triggers": None,
+                "reason": "",
+                "from_cache": True,
+            }
         except Exception as e:
             logger.debug("Prefetch cache check failed: %s", e)
         return None
@@ -454,6 +470,61 @@ class ReplyRouter:
                 prefix = "Me" if is_from_me else sender
                 thread.append(f"{prefix}: {msg_text}")
         return thread[-10:] if thread else None
+
+    @staticmethod
+    def _build_message_context(
+        incoming: str,
+        chat_id: str | None,
+        contact_id: int | None,
+        thread: list[str] | None,
+    ) -> MessageContext:
+        """Build a MessageContext for routing.
+
+        Args:
+            incoming: Normalized incoming message text.
+            chat_id: Chat ID for context.
+            contact_id: Contact ID for personalization.
+            thread: Conversation thread for context.
+
+        Returns:
+            MessageContext ready for route_message().
+        """
+        return MessageContext(
+            chat_id=chat_id or "",
+            message_text=incoming,
+            is_from_me=False,
+            timestamp=datetime.now(UTC),
+            metadata={
+                "thread": thread or [],
+                "contact_id": contact_id,
+            },
+        )
+
+    @staticmethod
+    def _map_legacy_route(response: GenerationResponse) -> tuple[dict[str, Any], str, float, int]:
+        """Convert GenerationResponse to legacy dict and extract routing metadata.
+
+        Args:
+            response: The generation response from route_message().
+
+        Returns:
+            Tuple of (result_dict, decision, similarity, vec_candidates).
+        """
+        result = ReplyRouter._to_legacy_response(response)
+        similarity = float(response.metadata.get("similarity_score", 0.0))
+        response_type = str(response.metadata.get("type", result.get("type", "generated")))
+        decision = (
+            "clarify"
+            if response_type in {"clarify", "uncertain", "skip", "fallback"}
+            else "generate"
+        )
+        vec_candidates_raw = response.metadata.get("vec_candidates", 0)
+        try:
+            vec_candidates = int(vec_candidates_raw)
+        except (TypeError, ValueError):
+            vec_candidates = 0
+
+        return result, decision, similarity, vec_candidates
 
     def route(
         self,
@@ -511,51 +582,11 @@ class ReplyRouter:
         logger.info("=" * 60)
         logger.info("ROUTE START | input: %s", incoming[:80] if incoming else "(empty)")
 
-        def record_and_return(
-            result: dict[str, Any],
-            similarity_score: float,
-            vec_candidates: int = 0,
-            model_loaded: bool = False,
-            decision: str | None = None,
-        ) -> dict[str, Any]:
-            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-            routing_decision = decision or (
-                "generate" if result.get("type") == "generated" else "clarify"
-            )
-            self._record_routing_metrics(
-                incoming=incoming,
-                decision=routing_decision,
-                similarity_score=similarity_score,
-                latency_ms=latency_ms,
-                cached_embedder=cached_embedder,
-                vec_candidates=vec_candidates,
-                model_loaded=model_loaded,
-            )
-            logger.info(
-                "ROUTE END | decision=%s sim=%.3f latency=%s",
-                routing_decision,
-                similarity_score,
-                {k: f"{v:.1f}ms" for k, v in latency_ms.items()},
-            )
-            logger.info("ROUTE OUTPUT | %s", result.get("response", "")[:100])
-            logger.info("=" * 60)
-            return result
-
         # Build thread from pre-fetched messages if provided
         if thread is None and conversation_messages is not None:
             thread = self._build_thread_context(conversation_messages)
 
-        # Empty message check (incoming already normalized/stripped above)
-        message_context = MessageContext(
-            chat_id=chat_id or "",
-            message_text=incoming,
-            is_from_me=False,
-            timestamp=datetime.utcnow(),
-            metadata={
-                "thread": thread or [],
-                "contact_id": contact_id,
-            },
-        )
+        message_context = self._build_message_context(incoming, chat_id, contact_id, thread)
 
         model_loaded = self.generator.is_loaded()
         generate_start = time.perf_counter()
@@ -565,27 +596,28 @@ class ReplyRouter:
         )
         latency_ms["generate"] = (time.perf_counter() - generate_start) * 1000
 
-        result = self._to_legacy_response(response)
-        similarity = float(response.metadata.get("similarity_score", 0.0))
-        response_type = str(response.metadata.get("type", result.get("type", "generated")))
-        decision = (
-            "clarify"
-            if response_type in {"clarify", "uncertain", "skip", "fallback"}
-            else "generate"
-        )
-        vec_candidates_raw = response.metadata.get("vec_candidates", 0)
-        try:
-            vec_candidates = int(vec_candidates_raw)
-        except (TypeError, ValueError):
-            vec_candidates = 0
+        result, decision, similarity, vec_candidates = self._map_legacy_route(response)
 
-        return record_and_return(
-            result,
+        # Record metrics and log
+        latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+        self._record_routing_metrics(
+            incoming=incoming,
+            decision=decision,
             similarity_score=similarity,
+            latency_ms=latency_ms,
+            cached_embedder=cached_embedder,
             vec_candidates=vec_candidates,
             model_loaded=model_loaded,
-            decision=decision,
         )
+        logger.info(
+            "ROUTE END | decision=%s sim=%.3f latency=%s",
+            decision,
+            similarity,
+            {k: f"{v:.1f}ms" for k, v in latency_ms.items()},
+        )
+        logger.info("ROUTE OUTPUT | %s", result.get("response", "")[:100])
+        logger.info("=" * 60)
+        return result
 
     def get_routing_stats(self) -> StatsResponse:
         """Get statistics about the router's index and database.

@@ -29,10 +29,9 @@ import numpy as np
 from tokenizers import Tokenizer
 
 from models.deberta import DebertaForSequenceClassification, convert_hf_weights
+from models.utils import find_model_snapshot, hf_model_dir
 
 logger = logging.getLogger(__name__)
-
-HF_CACHE = Path.home() / ".cache/huggingface/hub"
 
 # Label order from DeBERTa NLI config.json
 NLI_LABELS = ["contradiction", "entailment", "neutral"]
@@ -77,8 +76,7 @@ class NLICrossEncoder:
             if self._loaded:
                 return
 
-            hf_repo = self._model_name.replace("/", "--")
-            model_dir = HF_CACHE / f"models--{hf_repo}"
+            model_dir = hf_model_dir(self._model_name)
 
             if not model_dir.exists():
                 self._download_model()
@@ -88,7 +86,7 @@ class NLICrossEncoder:
                         f"Download with: huggingface-cli download {self._model_name}"
                     )
 
-            snapshot = self._find_snapshot(model_dir)
+            snapshot = find_model_snapshot(model_dir)
 
             # Load config
             with open(snapshot / "config.json") as f:
@@ -130,16 +128,6 @@ class NLICrossEncoder:
             self._loaded = True
             logger.info("NLI model loaded in %.2fs", time.time() - start)
 
-    def _find_snapshot(self, model_dir: Path) -> Path:
-        """Find the snapshot directory in HF cache."""
-        snapshots_dir = model_dir / "snapshots"
-        if not snapshots_dir.exists():
-            raise FileNotFoundError(f"No snapshots in {model_dir}")
-        snapshots = list(snapshots_dir.iterdir())
-        if not snapshots:
-            raise FileNotFoundError(f"Empty snapshots dir: {snapshots_dir}")
-        return snapshots[0]
-
     def _download_model(self) -> None:
         """Download model from HuggingFace Hub."""
         try:
@@ -170,8 +158,7 @@ class NLICrossEncoder:
             self.config = None
             self._loaded = False
             gc.collect()
-            if hasattr(mx, "metal") and hasattr(mx.metal, "clear_cache"):
-                mx.metal.clear_cache()
+            mx.clear_cache()
             logger.info("Unloaded NLI model")
 
     def predict_entailment(
@@ -207,41 +194,56 @@ class NLICrossEncoder:
         if not pairs:
             return []
 
-        all_results: list[dict[str, float]] = []
+        # Tokenize + forward pass under single GPU lock to prevent race
+        # conditions on shared tokenizer state and Metal GPU.
+        with self._get_gpu_lock():
+            self.tokenizer.no_padding()
+            encodings = self.tokenizer.encode_batch(
+                [(premise, hypothesis) for premise, hypothesis in pairs]
+            )
 
-        for batch_start in range(0, len(pairs), batch_size):
-            batch = pairs[batch_start : batch_start + batch_size]
+            # Sort by descending length for cache-friendly batching
+            sorted_indices = np.argsort([-len(e.ids) for e in encodings])
 
-            # Tokenize
-            with self._encode_lock:
-                self.tokenizer.no_padding()
-                encodings = self.tokenizer.encode_batch(
-                    [(premise, hypothesis) for premise, hypothesis in batch]
+            all_probs: list[np.ndarray] = []
+
+            for batch_start in range(0, len(pairs), batch_size):
+                batch_end = min(batch_start + batch_size, len(pairs))
+                batch_indices = sorted_indices[batch_start:batch_end]
+                batch_encodings = [encodings[i] for i in batch_indices]
+                max_len = max(len(e.ids) for e in batch_encodings)
+
+                input_ids = np.array(
+                    [e.ids + [0] * (max_len - len(e.ids)) for e in batch_encodings],
+                    dtype=np.int32,
+                )
+                attention_mask = np.array(
+                    [
+                        e.attention_mask + [0] * (max_len - len(e.attention_mask))
+                        for e in batch_encodings
+                    ],
+                    dtype=np.int32,
                 )
 
-            # Pad to uniform length
-            max_len = max(len(e.ids) for e in encodings)
-            input_ids = np.array(
-                [e.ids + [0] * (max_len - len(e.ids)) for e in encodings],
-                dtype=np.int32,
-            )
-            attention_mask = np.array(
-                [e.attention_mask + [0] * (max_len - len(e.attention_mask)) for e in encodings],
-                dtype=np.int32,
-            )
+                input_ids_mx = mx.array(input_ids)
+                attention_mask_mx = mx.array(attention_mask)
 
-            input_ids_mx = mx.array(input_ids)
-            attention_mask_mx = mx.array(attention_mask)
-
-            # Forward pass under GPU lock
-            with self._get_gpu_lock():
                 logits = self.model(input_ids_mx, attention_mask_mx)
                 probs = mx.softmax(logits, axis=-1)
                 mx.eval(probs)
 
-            probs_np = np.array(probs)
-            for row in probs_np:
-                all_results.append({label: float(row[i]) for i, label in enumerate(NLI_LABELS)})
+                all_probs.append(np.array(probs))
+
+        # Concatenate and unsort to restore original order
+        all_probs_arr = np.concatenate(all_probs)
+        reverse_indices = np.argsort(sorted_indices)
+        all_probs_arr = all_probs_arr[reverse_indices]
+
+        all_results: list[dict[str, float]] = []
+        for row in all_probs_arr:
+            all_results.append(
+                {label: float(row[i]) for i, label in enumerate(NLI_LABELS)}
+            )
 
         return all_results
 

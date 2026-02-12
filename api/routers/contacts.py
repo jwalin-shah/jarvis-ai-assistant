@@ -5,10 +5,12 @@ Includes caching and default avatar generation for contacts without photos.
 """
 
 import hashlib
+from xml.sax.saxutils import escape as xml_escape
 import io
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -240,7 +242,7 @@ def generate_svg_avatar(
         f'<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" '
         f"font-family=\"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif\" "
         f'font-size="{font_size}" font-weight="600" fill="white">'
-        f"{initials}"
+        f"{xml_escape(initials)}"
         f"</text></svg>"
     )
 
@@ -315,6 +317,128 @@ def generate_png_avatar(
 # =============================================================================
 
 
+def _normalize_identifier(identifier: str) -> str:
+    """Normalize a phone number or email identifier.
+
+    Args:
+        identifier: Raw phone number or email
+
+    Returns:
+        Normalized identifier string
+
+    Raises:
+        HTTPException 400: If phone number format is invalid
+    """
+    if "@" in identifier:
+        return identifier.lower().strip()
+    normalized_phone = normalize_phone_number(identifier)
+    if normalized_phone is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid phone number format",
+        )
+    return normalized_phone
+
+
+def _fetch_contact_avatar(normalized: str) -> ContactAvatarData | None:
+    """Fetch avatar data from the macOS Contacts database with timeout.
+
+    Args:
+        normalized: Normalized phone number or email
+
+    Returns:
+        ContactAvatarData or None if fetch failed/timed out
+    """
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(get_contact_avatar, normalized)
+            return future.result(timeout=5.0)
+    except TimeoutError:
+        logger.warning(f"Avatar fetch timed out after 5s for {normalized}")
+    except Exception as e:
+        logger.warning(f"Error fetching contact avatar for {normalized}: {e}")
+    return None
+
+
+def _process_contact_image(image_bytes: bytes, size: int) -> tuple[bytes, str]:
+    """Detect image format and resize if needed.
+
+    Args:
+        image_bytes: Raw image data from contacts
+        size: Target size in pixels
+
+    Returns:
+        Tuple of (processed_bytes, content_type)
+    """
+    if image_bytes[:4] == b"\x89PNG":
+        return image_bytes, "image/png"
+    if image_bytes[:2] == b"\xff\xd8":
+        return image_bytes, "image/jpeg"
+    # Unknown format - try to process with PIL
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.size[0] != size or img.size[1] != size:
+            img = img.resize((size, size), Image.Resampling.LANCZOS)  # type: ignore[assignment]
+        output = io.BytesIO()
+        img.save(output, format="PNG")
+        return output.getvalue(), "image/png"
+    except ImportError:
+        return image_bytes, "image/jpeg"
+
+
+def _generate_default_avatar(
+    normalized: str,
+    avatar_data: ContactAvatarData | None,
+    size: int,
+    format: str,
+) -> tuple[bytes, str]:
+    """Generate a default avatar with initials.
+
+    Args:
+        normalized: Normalized identifier for color selection
+        avatar_data: Optional contact data for initials
+        size: Avatar size in pixels
+        format: Desired format ("png" or "svg")
+
+    Returns:
+        Tuple of (image_bytes, content_type)
+    """
+    initials = avatar_data.initials if avatar_data else _generate_initials(normalized, None)
+    background_color = _get_color_for_identifier(normalized)
+
+    if format == "svg":
+        return generate_svg_avatar(initials, background_color, size), "image/svg+xml"
+
+    image_bytes = generate_png_avatar(initials, background_color, size)
+    # Check if we got SVG back (PIL not available)
+    if image_bytes.startswith(b"<svg"):
+        return image_bytes, "image/svg+xml"
+    return image_bytes, "image/png"
+
+
+def _avatar_response(image_bytes: bytes, content_type: str, source: str) -> Response:
+    """Build an avatar HTTP response with caching headers.
+
+    Args:
+        image_bytes: Image data
+        content_type: MIME type
+        source: Avatar source label for X-Avatar-Source header
+
+    Returns:
+        FastAPI Response
+    """
+    return Response(
+        content=image_bytes,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-Avatar-Source": source,
+        },
+    )
+
+
 @router.get(
     "/{identifier}/avatar",
     response_class=Response,
@@ -372,21 +496,7 @@ def get_avatar(
     Returns:
         Avatar image (PNG or SVG depending on format parameter)
     """
-    # Normalize the identifier
-    is_email = "@" in identifier
-    normalized: str
-    if is_email:
-        normalized = identifier.lower().strip()
-    else:
-        normalized_phone = normalize_phone_number(identifier)
-        if normalized_phone is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid phone number format",
-            )
-        normalized = normalized_phone
-
-    # Build cache key
+    normalized = _normalize_identifier(identifier)
     cache_key = f"{normalized}:{size}:{format}"
     cache = get_avatar_cache()
 
@@ -394,97 +504,25 @@ def get_avatar(
     found, cached_data = cache.get(cache_key)
     if found and isinstance(cached_data, bytes):
         content_type = "image/svg+xml" if format == "svg" else "image/png"
-        return Response(
-            content=cached_data,
-            media_type=content_type,
-            headers={
-                "Cache-Control": "public, max-age=3600",
-                "X-Avatar-Source": "cache",
-            },
-        )
+        return _avatar_response(cached_data, content_type, "cache")
 
     # Try to get contact avatar from AddressBook
-    avatar_data: ContactAvatarData | None = None
-    try:
-        avatar_data = get_contact_avatar(normalized)
-    except Exception as e:
-        logger.warning(f"Error fetching contact avatar for {normalized}: {e}")
+    avatar_data = _fetch_contact_avatar(normalized)
 
     # If we have actual image data from contacts, use it
     if avatar_data and avatar_data.image_data:
         try:
-            image_bytes = avatar_data.image_data
-            # The thumbnail is typically JPEG or PNG - detect and serve as-is
-            # or convert if necessary
-
-            # Check if it's a valid image
-            if image_bytes[:4] == b"\x89PNG":
-                content_type = "image/png"
-            elif image_bytes[:2] == b"\xff\xd8":
-                content_type = "image/jpeg"
-            else:
-                # Try to process with PIL if available
-                try:
-                    from PIL import Image
-
-                    img = Image.open(io.BytesIO(image_bytes))
-                    # Resize if needed
-                    if img.size[0] != size or img.size[1] != size:
-                        img = img.resize((size, size), Image.Resampling.LANCZOS)  # type: ignore[assignment]
-                    output = io.BytesIO()
-                    img.save(output, format="PNG")
-                    image_bytes = output.getvalue()
-                    content_type = "image/png"
-                except ImportError:
-                    # Can't process, serve original
-                    content_type = "image/jpeg"
-
-            # Cache the result
+            image_bytes, content_type = _process_contact_image(avatar_data.image_data, size)
             cache.set(cache_key, image_bytes)
-
-            return Response(
-                content=image_bytes,
-                media_type=content_type,
-                headers={
-                    "Cache-Control": "public, max-age=3600",
-                    "X-Avatar-Source": "contacts",
-                },
-            )
+            return _avatar_response(image_bytes, content_type, "contacts")
         except Exception as e:
             logger.warning(f"Error processing contact image: {e}")
             # Fall through to generate default
 
     # Generate default avatar with initials
-    initials = "?"
-    if avatar_data:
-        initials = avatar_data.initials
-    else:
-        initials = _generate_initials(normalized, None)
-
-    background_color = _get_color_for_identifier(normalized)
-
-    if format == "svg":
-        image_bytes = generate_svg_avatar(initials, background_color, size)
-        content_type = "image/svg+xml"
-    else:
-        image_bytes = generate_png_avatar(initials, background_color, size)
-        # Check if we got SVG back (PIL not available)
-        if image_bytes.startswith(b"<svg"):
-            content_type = "image/svg+xml"
-        else:
-            content_type = "image/png"
-
-    # Cache the generated avatar
+    image_bytes, content_type = _generate_default_avatar(normalized, avatar_data, size, format)
     cache.set(cache_key, image_bytes)
-
-    return Response(
-        content=image_bytes,
-        media_type=content_type,
-        headers={
-            "Cache-Control": "public, max-age=3600",
-            "X-Avatar-Source": "generated",
-        },
-    )
+    return _avatar_response(image_bytes, content_type, "generated")
 
 
 @router.get(

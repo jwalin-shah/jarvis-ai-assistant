@@ -77,13 +77,18 @@ class ExportBackupRequest(BaseModel):
         default=50,
         ge=1,
         le=500,
-        description="Maximum conversations to include",
+        description="Maximum conversations to include per page",
     )
     messages_per_conversation: int = Field(
         default=500,
         ge=1,
         le=5000,
         description="Maximum messages per conversation",
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Number of conversations to skip (for paginated backup)",
     )
     date_range: ExportDateRange | None = Field(
         default=None,

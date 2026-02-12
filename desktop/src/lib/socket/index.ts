@@ -6,6 +6,8 @@ export {
   jarvis,
   JarvisSocket,
   type ConnectionState,
+  type ConnectionTransport,
+  type ConnectionInfo,
   type StreamTokenEvent,
   type GenerateDraftParams,
   type SmartReplyParams,

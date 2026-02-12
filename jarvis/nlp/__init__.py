@@ -2,6 +2,7 @@
 
 Submodules:
     coref_resolver: Coreference resolution via FastCoref
+    patterns: Shared regex patterns and word sets
     slang: Slang/abbreviation expansion
     ner_client: Named entity recognition via Unix socket
     validity_gate: Three-layer validation for candidate exchanges

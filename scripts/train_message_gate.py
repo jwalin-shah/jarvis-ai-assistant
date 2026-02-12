@@ -311,45 +311,16 @@ def fit_model(
     )
 
 
-def compute_metrics(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    y_score: np.ndarray,
-) -> dict[str, float]:
-    """Compute binary classification metrics."""
-    from sklearn.metrics import (
-        accuracy_score,
-        f1_score,
-        precision_score,
-        recall_score,
-        roc_auc_score,
-    )
-
-    metrics = {
-        "accuracy": float(accuracy_score(y_true, y_pred)),
-        "precision": float(precision_score(y_true, y_pred, zero_division=0)),
-        "recall": float(recall_score(y_true, y_pred, zero_division=0)),
-        "f1": float(f1_score(y_true, y_pred, zero_division=0)),
-    }
-
-    # ROC AUC requires both classes present.
-    if len(np.unique(y_true)) == 2:
-        metrics["roc_auc"] = float(roc_auc_score(y_true, y_score))
-
-    return metrics
-
-
 def evaluate(model: MessageGateModel, data: Dataset, split_name: str) -> dict[str, float]:
     """Evaluate trained model on a dataset split."""
+    from scripts.training_utils import compute_binary_metrics, log_metrics
+
     y_true = np.asarray(data.labels, dtype=np.int32)
     y_score = model.predict_scores(data)
     y_pred = model.predict(data)
 
-    metrics = compute_metrics(y_true, y_pred, y_score)
-
-    logger.info("%s metrics:", split_name)
-    for key, value in metrics.items():
-        logger.info("  %s: %.4f", key, value)
+    metrics = compute_binary_metrics(y_true, y_pred, y_score=y_score)
+    log_metrics(metrics, split_name, logger)
 
     pos = int(np.sum(y_true == 1))
     neg = int(np.sum(y_true == 0))

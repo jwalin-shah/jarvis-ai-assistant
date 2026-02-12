@@ -164,7 +164,31 @@
       {:else if optimisticStatus === 'failed'}
         <span class="optimistic-status failed">Failed to send</span>
       {:else}
-        <span class="time" title={formatFullTimestamp(message.date)}>{formatRelativeTime(message.date)}</span>
+        <span class="time" title={formatFullTimestamp(message.date)}>
+          {formatRelativeTime(message.date)}
+          {#if message.is_from_me && !optimistic}
+            {#if message.date_read}
+              <span class="delivery-status read" title="Read">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+                  <polyline points="2 12 7 17 12 12"></polyline>
+                  <polyline points="10 12 15 17 22 8"></polyline>
+                </svg>
+              </span>
+            {:else if message.date_delivered}
+              <span class="delivery-status delivered" title="Delivered">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+                  <polyline points="4 12 10 18 20 6"></polyline>
+                </svg>
+              </span>
+            {:else}
+              <span class="delivery-status sent" title="Sent">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+                  <polyline points="4 12 10 18 20 6"></polyline>
+                </svg>
+              </span>
+            {/if}
+          {/if}
+        </span>
       {/if}
     </div>
     {#if optimisticStatus === 'failed' && optimisticId}
@@ -303,6 +327,30 @@
 
   .from-me .bubble .time {
     color: rgba(255, 255, 255, 0.7);
+  }
+
+  .delivery-status {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 2px;
+    vertical-align: middle;
+  }
+
+  .delivery-status.sent {
+    opacity: 0.5;
+  }
+
+  .delivery-status.delivered {
+    opacity: 0.8;
+  }
+
+  .delivery-status.read {
+    color: #34c759;
+    opacity: 1;
+  }
+
+  .from-me .delivery-status.read {
+    color: #34c759;
   }
 
   .attachments {

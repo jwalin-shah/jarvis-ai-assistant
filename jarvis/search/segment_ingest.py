@@ -114,14 +114,32 @@ def extract_segments(
                         orig_chat_id = identifier_map[contact.chat_id]
                         contact_by_chat_id[orig_chat_id] = contact
 
-    # Batch-fetch messages for all conversations in chunks of 900
-    # (SQLite variable limit) to avoid N+1 per-conversation queries
-    _CHUNK_SIZE = 900
-    messages_by_chat: dict[str, list] = {}
-    for i in range(0, len(chat_ids), _CHUNK_SIZE):
-        chunk = chat_ids[i : i + _CHUNK_SIZE]
-        batch = chat_db_reader.get_messages_batch(chunk, limit_per_chat=10000)
-        messages_by_chat.update(batch)
+    # Batch-load messages for all conversations (single query per chunk of 900)
+    conv_messages: dict[str, list] = {}
+    if chat_ids:
+        conv_messages = chat_db_reader.get_messages_batch(chat_ids, limit_per_chat=10000)
+        for messages in conv_messages.values():
+            stats.total_messages_scanned += len(messages)
+
+    # Batch-fetch all cached embeddings once across all contacts (PERF-08)
+    all_msg_ids: list[int] = []
+    for messages in conv_messages.values():
+        for m in messages:
+            msg_id = getattr(m, "id", None)
+            if msg_id is not None:
+                all_msg_ids.append(msg_id)
+
+    pre_fetched_embeddings: dict[int, Any] = {}
+    if all_msg_ids:
+        try:
+            pre_fetched_embeddings = vec_searcher.get_embeddings_by_ids(all_msg_ids)
+            logger.info(
+                "Pre-fetched %d/%d embeddings from vec_messages cache",
+                len(pre_fetched_embeddings),
+                len(all_msg_ids),
+            )
+        except Exception:
+            pass  # Fall through to per-contact encoding
 
     for idx, conv in enumerate(conversations):
         if progress_callback:
@@ -132,16 +150,17 @@ def extract_segments(
             contact = contact_by_chat_id.get(conv.chat_id)
             contact_id = contact.id if contact else None
 
-            # Get messages from batch-fetched dict
-            messages = messages_by_chat.get(conv.chat_id, [])
-            stats.total_messages_scanned += len(messages)
+            # Get messages (already batch-loaded above)
+            messages = conv_messages.get(conv.chat_id, [])
 
             if len(messages) < 2:
                 continue
 
-            # Segment the conversation
+            # Segment the conversation with pre-fetched embeddings
             segments = segment_conversation(
-                messages, contact_id=str(contact_id) if contact_id else None
+                messages,
+                contact_id=str(contact_id) if contact_id else None,
+                pre_fetched_embeddings=pre_fetched_embeddings,
             )
             stats.segments_created += len(segments)
 

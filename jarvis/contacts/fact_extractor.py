@@ -12,13 +12,19 @@ import logging
 import re
 import sqlite3
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from jarvis.contacts.attribution import AttributionResolver
 from jarvis.contacts.contact_profile import Fact
-from jarvis.contacts.junk_filters import is_bot_message, is_professional_message
+from jarvis.contacts.junk_filters import (
+    is_bot_message,
+    is_code_message,
+    is_professional_message,
+    is_tapback_reaction,
+)
 from jarvis.contracts.pipeline import Fact as ContractFact
 
 if TYPE_CHECKING:
@@ -46,27 +52,24 @@ FUTURE_MARKERS = {"will", "going to", "planning to", "moving to", "starting at",
 # Present: "live in Austin", "based in SF"
 # Future: "moving to LA", "heading to Paris"
 LOCATION_PAST_PATTERN = re.compile(
-    r"\b(?:moved?\s+from|grew\s+up\s+in|was\s+based\s+in|lived\s+in|from)\s+"
+    r"\b(?:[Mm]oved?\s+from|[Gg]rew\s+up\s+in|[Ww]as\s+based\s+in|[Ll]ived\s+in)\s+"
     r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
-    re.IGNORECASE,
 )
 
 LOCATION_PRESENT_PATTERN = re.compile(
-    r"\b(?:live[sd]?\s+in|living\s+in|based\s+in|currently\s+in)\s+"
+    r"\b(?:[Ll]ive[sd]?\s+in|[Ll]iving\s+in|[Bb]ased\s+in|[Cc]urrently\s+in)\s+"
     r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
-    re.IGNORECASE,
 )
 
 LOCATION_FUTURE_PATTERN = re.compile(
-    r"\b(?:moving\s+to|relocating\s+to|heading\s+to|going\s+to|travel(?:ing|ed)?\s+to|"
-    r"visiting)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
-    re.IGNORECASE,
+    r"\b(?:[Mm]oving\s+to|[Rr]elocating\s+to)\s+"
+    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
 )
 
 # Legacy pattern (keep for compatibility)
 LOCATION_PATTERN = re.compile(
-    r"\b(?:moved?\s+to|live[sd]?\s+in|living\s+in|from|based\s+in|"
-    r"heading\s+to|going\s+to|visiting|relocated\s+to|travel(?:ing|ed)?\s+to)\s+"
+    r"\b(?:[Mm]oved?\s+to|[Ll]ive[sd]?\s+in|[Ll]iving\s+in|[Bb]ased\s+in|"
+    r"[Rr]elocated\s+to)\s+"
     r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
 )
 
@@ -83,7 +86,7 @@ WORK_PATTERN = re.compile(
 PREFERENCE_PATTERN = re.compile(
     r"\b(?:hate[sd]?|love[sd]?|can't\s+stand|allergic\s+to|"
     r"obsessed\s+with|addicted\s+to|favorite\s+(?:food|thing|person|place|movie|band)\s+is|"
-    r"dislike[sd]?|enjoy[s]?|prefer|like[sd]?)\s+"
+    r"dislike[sd]?|enjoy[s]?|prefer)\s+"
     r"([A-Za-z\s]+?)(?:\s+(?:and|but|or|because|when|if|since)\b|\.|\,|!|\?|$)",
     re.IGNORECASE,
 )
@@ -217,6 +220,49 @@ def _get_shared_nlp() -> Any:
     return _spacy_nlp if _spacy_nlp is not False else None
 
 
+# Module-level contacts cache with TTL (shared across all FactExtractor instances).
+# Avoids repeated DB queries when multiple extractors are instantiated.
+_contacts_cache_data: list[tuple[str, str, set[str]]] | None = None
+_contacts_cache_time: float = 0.0
+_contacts_cache_lock = threading.Lock()
+_CONTACTS_CACHE_TTL = 300.0  # 5 minutes
+
+
+def _get_cached_contacts() -> list[tuple[str, str, set[str]]]:
+    """Return cached contacts list, refreshing from DB if TTL expired (thread-safe)."""
+    global _contacts_cache_data, _contacts_cache_time
+    now = time.monotonic()
+    if _contacts_cache_data is not None and (now - _contacts_cache_time) < _CONTACTS_CACHE_TTL:
+        return _contacts_cache_data
+
+    with _contacts_cache_lock:
+        # Double-check after acquiring lock
+        now = time.monotonic()
+        if (
+            _contacts_cache_data is not None
+            and (now - _contacts_cache_time) < _CONTACTS_CACHE_TTL
+        ):
+            return _contacts_cache_data
+
+        try:
+            from jarvis.db import get_db
+
+            db = get_db()
+            with db.connection() as conn:
+                cursor = conn.execute("SELECT id, display_name FROM contacts")
+                rows = cursor.fetchall()
+
+            _contacts_cache_data = [
+                (str(cid), name, set(name.lower().split())) for cid, name in rows if name
+            ]
+        except (OSError, sqlite3.Error, ImportError) as e:
+            logger.debug("Contact resolution DB query failed: %s", e)
+            _contacts_cache_data = []
+
+        _contacts_cache_time = now
+        return _contacts_cache_data
+
+
 class FactExtractor:
     """Extracts structured facts from messages.
 
@@ -230,7 +276,6 @@ class FactExtractor:
         confidence_threshold: float = 0.5,
     ) -> None:
         self.confidence_threshold = confidence_threshold
-        self._contacts_cache: dict[str, Any] | None = None
         self._attribution_resolver = AttributionResolver()
 
     def _get_nlp(self) -> Any:
@@ -256,6 +301,15 @@ class FactExtractor:
             )
             msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
             if not text or len(text) < 5:
+                continue
+
+            # Skip tapback reactions
+            if is_tapback_reaction(text):
+                continue
+
+            # Skip code snippets sent via iMessage
+            if is_code_message(text):
+                logger.debug("Skipping code message: %s", text[:50])
                 continue
 
             # Skip bot messages before extraction
@@ -349,53 +403,39 @@ class FactExtractor:
         """Delegate to shared junk filter. See jarvis.contacts.junk_filters."""
         return is_professional_message(text)
 
-    def _is_coherent_subject(self, subject: str) -> bool:
-        """Reject subjects that are vague pronouns or incomplete fragments.
-
-        Checks:
-        - Single pronouns: "it", "that", "this", "them", "there"
-        - Pronoun phrases: "it in", "that in", "it there"
-        - Incomplete infinitives: "to call this", "to have you"
-        - Bare prepositions: "in august", "at night"
-        - Too many abbreviations: "sm rn" (slang overload)
-        - Malformed: missing spaces, consecutive capitals
-        """
-        subject_lower = subject.lower().strip()
-
-        # Single pronouns or vague words
+    def _is_vague_pronoun(self, subject_lower: str) -> bool:
+        """Check if subject is a vague pronoun or pronoun+preposition fragment."""
         vague_words = {
-            "it",
-            "that",
-            "this",
-            "them",
-            "there",
-            "those",
-            "these",
-            "what",
-            "when",
-            "where",
-            "why",
-            "how",
+            "it", "that", "this", "them", "there",
+            "those", "these", "what", "when", "where", "why", "how",
         }
         if subject_lower in vague_words:
-            return False
+            return True
 
-        # Pronoun + preposition (fragment pattern) - but NOT full NP with content
+        # Pronoun + preposition (fragment pattern)
         # "it in August" is bad, "cilantro in my food" is good
         if re.match(r"^(it|that|this|them|there)\s+(in|at|on|for|to)", subject_lower):
-            return False
+            return True
 
+        return False
+
+    def _is_incomplete_phrase(self, subject_lower: str) -> bool:
+        """Check if subject is an incomplete infinitive or bare prepositional phrase."""
         # Incomplete infinitive phrase (to + verb + object cutoff)
         if re.match(r"^to\s+\w+\s+(this|that|these|those|me|you|him|her|it)$", subject_lower):
-            return False
+            return True
 
         # Bare time/location prepositions (nothing before the preposition)
         if re.match(
             r"^(in|at|on)\s+(august|spring|summer|winter|night|day|morning|afternoon)$",
             subject_lower,
         ):
-            return False
+            return True
 
+        return False
+
+    def _is_malformed(self, subject: str) -> bool:
+        """Check if subject has too many abbreviations, bad spacing, or is too short."""
         # Too many abbreviations (>50% of words are 1-2 chars)
         words = subject.split()
         if len(words) > 1:
@@ -405,15 +445,33 @@ class FactExtractor:
                 if len(w) <= 2 and w.lower() not in {"i", "a", "to", "of", "in", "at", "on"}
             )
             if len(words) >= 2 and short_words / len(words) > 0.5:
-                return False
+                return True
 
         # Malformed: word spacing issues (e.g., "ofmetal" instead of "of metal")
-        # Check for lowercase after uppercase in non-standard way
         if re.search(r"[a-z]{2,}[A-Z][a-z]+", subject):
-            return False
+            return True
 
         # Must have at least 2 characters and contain a letter
         if len(subject) < 2 or not any(c.isalpha() for c in subject):
+            return True
+
+        return False
+
+    def _is_coherent_subject(self, subject: str) -> bool:
+        """Reject subjects that are vague pronouns or incomplete fragments.
+
+        Delegates to:
+        - _is_vague_pronoun(): single pronouns, pronoun+preposition fragments
+        - _is_incomplete_phrase(): incomplete infinitives, bare prepositions
+        - _is_malformed(): abbreviation overload, bad spacing, too short
+        """
+        subject_lower = subject.lower().strip()
+
+        if self._is_vague_pronoun(subject_lower):
+            return False
+        if self._is_incomplete_phrase(subject_lower):
+            return False
+        if self._is_malformed(subject):
             return False
 
         return True
@@ -597,17 +655,11 @@ class FactExtractor:
         # Remove trailing whitespace again
         return subject.strip()
 
-    def _extract_rule_based(self, text: str, contact_id: str, timestamp: str) -> list[Fact]:
-        """Extract facts using regex patterns.
-
-        Uses three extraction phases:
-        1. Relationship patterns (custom predicate logic based on rel_type)
-        2. Registry-driven patterns (location temporal, location legacy, work)
-        3. Preference patterns (custom filler-word filter + sentiment detection)
-        """
+    def _extract_relationships(
+        self, text: str, contact_id: str, timestamp: str,
+    ) -> list[Fact]:
+        """Extract relationship facts from possessive patterns (e.g. 'my sister Sarah')."""
         facts: list[Fact] = []
-
-        # --- Phase 1: Relationship patterns (custom predicate logic) ---
         for match in RELATIONSHIP_PATTERN.finditer(text):
             rel_type = match.group(1).lower()
             person = match.group(2).strip()
@@ -629,8 +681,17 @@ class FactExtractor:
                     extracted_at=timestamp,
                 )
             )
+        return facts
 
-        # --- Phase 2: Registry-driven patterns (locations + work) ---
+    def _extract_locations_and_work(
+        self,
+        text: str,
+        contact_id: str,
+        timestamp: str,
+        existing_facts: list[Fact],
+    ) -> list[Fact]:
+        """Extract location and work facts using registry-driven patterns."""
+        facts: list[Fact] = []
         # Build dedup set lazily: patterns with dedup=False run first, then the
         # dedup set is built once before dedup=True patterns execute.
         _extracted: set[tuple[str, str]] | None = None
@@ -638,7 +699,7 @@ class FactExtractor:
         for rule in _RULE_PATTERNS:
             # Build dedup set on first dedup-aware pattern
             if rule.dedup and _extracted is None:
-                _extracted = {(f.category, f.subject.lower()) for f in facts}
+                _extracted = {(f.category, f.subject.lower()) for f in existing_facts + facts}
 
             for match in rule.pattern.finditer(text):
                 subject = self._clean_subject(match.group(rule.subject_group))
@@ -670,9 +731,18 @@ class FactExtractor:
                 if rule.dedup:
                     _extracted.add(key)
 
-        # --- Phase 3: Preference patterns (filler-word filter + sentiment) ---
-        if _extracted is None:
-            _extracted = {(f.category, f.subject.lower()) for f in facts}
+        return facts
+
+    def _extract_preferences(
+        self,
+        text: str,
+        contact_id: str,
+        timestamp: str,
+        existing_facts: list[Fact],
+    ) -> list[Fact]:
+        """Extract preference facts with filler-word filtering and sentiment detection."""
+        facts: list[Fact] = []
+        _extracted = {(f.category, f.subject.lower()) for f in existing_facts}
 
         for match in PREFERENCE_PATTERN.finditer(text):
             # Skip if "like" is a filler word, not preference verb
@@ -717,6 +787,19 @@ class FactExtractor:
                 )
                 _extracted.add(key)
 
+        return facts
+
+    def _extract_rule_based(self, text: str, contact_id: str, timestamp: str) -> list[Fact]:
+        """Extract facts using regex patterns.
+
+        Delegates to three extraction phases:
+        1. _extract_relationships(): possessive patterns (e.g. 'my sister Sarah')
+        2. _extract_locations_and_work(): registry-driven location/work patterns
+        3. _extract_preferences(): preference patterns with filler-word filtering
+        """
+        facts = self._extract_relationships(text, contact_id, timestamp)
+        facts.extend(self._extract_locations_and_work(text, contact_id, timestamp, facts))
+        facts.extend(self._extract_preferences(text, contact_id, timestamp, facts))
         return facts
 
     def _deduplicate(self, facts: list[Fact]) -> list[Fact]:
@@ -847,27 +930,11 @@ class FactExtractor:
         return facts
 
     def _get_contacts_for_resolution(self) -> list[tuple[str, str, set[str]]]:
-        """Load and cache contacts with pre-tokenized names for fuzzy matching."""
-        if self._contacts_cache is not None:
-            return self._contacts_cache
+        """Load and cache contacts with pre-tokenized names for fuzzy matching.
 
-        try:
-            from jarvis.db import get_db
-
-            db = get_db()
-            with db.connection() as conn:
-                cursor = conn.execute("SELECT id, display_name FROM contacts")
-                rows = cursor.fetchall()
-
-            # Pre-tokenize contact names for O(1) reuse across calls
-            self._contacts_cache = [
-                (str(cid), name, set(name.lower().split())) for cid, name in rows if name
-            ]
-        except (OSError, sqlite3.Error, ImportError) as e:
-            logger.debug("Contact resolution DB query failed: %s", e)
-            self._contacts_cache = []
-
-        return self._contacts_cache
+        Uses module-level cache with 5-minute TTL (shared across instances).
+        """
+        return _get_cached_contacts()
 
     def _resolve_person_to_contact(self, person_name: str) -> str | None:
         """Fuzzy match person name to contact in database.

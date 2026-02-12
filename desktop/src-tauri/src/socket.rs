@@ -226,14 +226,34 @@ async fn handle_message(
                 }
             }
             _ => {
-                // Validate method name before emitting
-                if method.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+                // Whitelist of allowed notification method names for event emission.
+                // Only methods explicitly listed here are forwarded to the frontend.
+                const ALLOWED_METHODS: &[&str] = &[
+                    "connection.status",
+                    "contact.updated",
+                    "conversation.updated",
+                    "fact.extracted",
+                    "message.classified",
+                    "message.updated",
+                    "prefetch.complete",
+                    "reply.ready",
+                    "search.result",
+                    "status.update",
+                    "stream.complete",
+                    "stream.error",
+                    "watcher.event",
+                ];
+
+                if ALLOWED_METHODS.contains(&method.as_str()) {
                     let event_name = format!("jarvis:{}", method);
                     if let Err(e) = app.emit(&event_name, msg.params) {
                         eprintln!("[Socket] Failed to emit event '{}': {}", event_name, e);
                     }
                 } else {
-                    eprintln!("[Socket] Warning: invalid method name for event emission: {}", method);
+                    eprintln!(
+                        "[Socket] Warning: method '{}' not in allowed whitelist, ignoring",
+                        method
+                    );
                 }
             }
         }
@@ -320,8 +340,16 @@ pub async fn send_message(
         .map_err(|e| {
             let pending_arc = pending_arc.clone();
             tokio::spawn(async move {
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
+                match pending_arc.try_write() {
+                    Ok(mut pending) => { pending.remove(&id); }
+                    Err(_) => {
+                        eprintln!(
+                            "[Socket] Warning: could not acquire pending lock to clean up \
+                             request {} during serialization error",
+                            id
+                        );
+                    }
+                }
             });
             format!("Failed to serialize request: {}", e)
         })?;
@@ -616,8 +644,9 @@ async fn connect_socket_internal(
     let connected_flag = connected_arc.clone();
     let app_handle = app.clone();
 
-    // Create a bounded channel for backpressure (max 100 messages queued)
-    let (msg_tx, mut msg_rx) = mpsc::channel::<JsonRpcMessage>(100);
+    // Create a bounded channel for backpressure (max 500 messages queued)
+    const MSG_CHANNEL_CAPACITY: usize = 500;
+    let (msg_tx, mut msg_rx) = mpsc::channel::<JsonRpcMessage>(MSG_CHANNEL_CAPACITY);
 
     // Spawn reader task
     let pending_for_reader = pending_arc.clone();
@@ -635,6 +664,18 @@ async fn connect_socket_internal(
                 Ok(_) => {
                     // Parse message
                     if let Ok(msg) = serde_json::from_str::<JsonRpcMessage>(&line) {
+                        // Monitor channel backpressure
+                        let queued = MSG_CHANNEL_CAPACITY - msg_tx.capacity();
+                        let threshold = MSG_CHANNEL_CAPACITY * 80 / 100;
+                        if queued > threshold {
+                            eprintln!(
+                                "[Socket] Warning: message channel {:.0}% full ({}/{})",
+                                (queued as f64 / MSG_CHANNEL_CAPACITY as f64) * 100.0,
+                                queued,
+                                MSG_CHANNEL_CAPACITY
+                            );
+                        }
+
                         // Send to processing channel with backpressure
                         if msg_tx.send(msg).await.is_err() {
                             eprintln!("[Socket] Message processing channel closed");

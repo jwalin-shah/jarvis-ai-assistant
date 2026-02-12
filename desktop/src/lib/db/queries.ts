@@ -24,52 +24,59 @@ export function getConversationsQuery(options: {
   withSinceFilter?: boolean;
   withBeforeFilter?: boolean;
 }): string {
-  const sinceFilter = options.withSinceFilter ? "AND mr.date > ?" : "";
-  const beforeFilter = options.withBeforeFilter ? "AND mr.date < ?" : "";
+  const sinceFilter = options.withSinceFilter ? "AND tc.last_date > ?" : "";
+  const beforeFilter = options.withBeforeFilter ? "AND tc.last_date < ?" : "";
 
-  // ROW_NUMBER() window function guarantees exactly one message per chat,
-  // fixing duplicate-timestamp bug where MAX(date) matched multiple messages.
-  // Mirrors Python fix in integrations/imessage/queries.py:50-87.
-  // Performance: ~1400ms → ~50ms with 400k messages
+  // Two-step query: index-only scan on chat_message_join to find top chats,
+  // then MAX(message_id) per chat for last message (uses PK index, O(1) per chat).
+  // Replaces ROW_NUMBER() which scanned all messages for 50 chats.
+  // Performance: ~170ms → ~25ms with 400k messages.
   return `
-    WITH message_ranked AS (
-      SELECT
-        cmj.chat_id,
-        m.text,
-        m.attributedBody,
-        m.date,
-        ROW_NUMBER() OVER (PARTITION BY cmj.chat_id ORDER BY m.date DESC) as msg_rank,
-        COUNT(*) OVER (PARTITION BY cmj.chat_id) as message_count
-      FROM chat_message_join cmj
-      JOIN message m ON cmj.message_id = m.ROWID
-      WHERE m.date > (strftime('%s', 'now', '-365 days') - 978307200) * 1000000000
+    WITH chat_stats AS (
+      SELECT chat_id,
+             MAX(message_date) as last_date,
+             COUNT(*) as message_count
+      FROM chat_message_join
+      GROUP BY chat_id
+    ),
+    top_chats AS (
+      SELECT chat_id, last_date, message_count
+      FROM chat_stats
+      WHERE message_count > 0
+      ${sinceFilter}
+      ${beforeFilter}
+      ORDER BY last_date DESC
+      LIMIT ?
     ),
     chat_participants AS (
-      SELECT
-        chat_handle_join.chat_id,
-        GROUP_CONCAT(handle.id, ', ') as participants
+      SELECT chat_handle_join.chat_id,
+             GROUP_CONCAT(handle.id, ', ') as participants
       FROM chat_handle_join
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       GROUP BY chat_handle_join.chat_id
+    ),
+    last_msg_ids AS (
+      SELECT cmj.chat_id, MAX(cmj.message_id) as last_msg_id
+      FROM chat_message_join cmj
+      INNER JOIN top_chats tc ON cmj.chat_id = tc.chat_id
+      GROUP BY cmj.chat_id
     )
     SELECT
       chat.ROWID as chat_rowid,
       chat.guid as chat_id,
       chat.display_name,
       chat.chat_identifier,
-      COALESCE(chat_participants.participants, '') as participants,
-      COALESCE(mr.message_count, 0) as message_count,
-      COALESCE(mr.date, 0) as last_message_date,
-      COALESCE(mr.text, '') as last_message_text,
-      COALESCE(mr.attributedBody, '') as last_message_attributed_body
-    FROM chat
-    LEFT JOIN chat_participants ON chat.ROWID = chat_participants.chat_id
-    LEFT JOIN message_ranked mr ON mr.chat_id = chat.ROWID AND mr.msg_rank = 1
-    WHERE COALESCE(mr.message_count, 0) > 0
-    ${sinceFilter}
-    ${beforeFilter}
-    ORDER BY COALESCE(mr.date, 0) DESC
-    LIMIT ?
+      COALESCE(cp.participants, '') as participants,
+      tc.message_count,
+      tc.last_date as last_message_date,
+      COALESCE(last_m.text, '') as last_message_text,
+      last_m.attributedBody as last_message_attributed_body
+    FROM top_chats tc
+    JOIN chat ON tc.chat_id = chat.ROWID
+    LEFT JOIN chat_participants cp ON chat.ROWID = cp.chat_id
+    LEFT JOIN last_msg_ids lm ON tc.chat_id = lm.chat_id
+    LEFT JOIN message last_m ON lm.last_msg_id = last_m.ROWID
+    ORDER BY tc.last_date DESC
   `;
 }
 

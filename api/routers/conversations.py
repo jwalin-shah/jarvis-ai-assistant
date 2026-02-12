@@ -156,9 +156,10 @@ async def list_conversations(
         HTTPException 408: Request timed out
         HTTPException 429: Rate limit exceeded
     """
-    # Build cache key from parameters
-    since_str = since.isoformat() if since else "none"
-    before_str = before.isoformat() if before else "none"
+    # Build cache key from parameters (truncate timestamps to minute granularity
+    # so that microsecond differences don't defeat caching)
+    since_str = since.replace(second=0, microsecond=0).isoformat() if since else "none"
+    before_str = before.replace(second=0, microsecond=0).isoformat() if before else "none"
     cache_key = f"conversations:{limit}:{since_str}:{before_str}"
 
     # Check cache
@@ -169,11 +170,17 @@ async def list_conversations(
 
     try:
         async with asyncio.timeout(get_timeout_read()):
+            # Fetch limit+1 to detect if more results exist
             conversations = await run_in_threadpool(
-                reader.get_conversations, limit=limit, since=since, before=before
+                reader.get_conversations, limit=limit + 1, since=since, before=before
             )
+            has_more = len(conversations) > limit
+            if has_more:
+                conversations = conversations[:limit]
             items = [ConversationResponse.model_validate(c) for c in conversations]
-            result = ConversationsListResponse(conversations=items, total=len(items))
+            result = ConversationsListResponse(
+                conversations=items, total=len(items), has_more=has_more
+            )
     except TimeoutError:
         raise HTTPException(
             status_code=408,
@@ -362,7 +369,8 @@ async def search_messages(
     q: str = Query(
         ...,
         min_length=1,
-        description="Search query - matches against message text",
+        max_length=1000,
+        description="Search query - matches against message text (max 1000 characters)",
         examples=["dinner", "meeting tomorrow"],
     ),
     limit: int = Query(

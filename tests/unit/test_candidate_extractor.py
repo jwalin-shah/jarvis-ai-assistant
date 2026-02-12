@@ -121,11 +121,12 @@ class TestExtractCandidates:
 
 class TestThresholdFiltering:
     def test_per_label_threshold_rejects_low_score(self):
-        # org requires 0.60, give it 0.40
+        # org requires 0.45, give it 0.40
+        # Use text that won't match regex patterns to isolate GLiNER behavior
         ents = [_make_entity("Acme", "org", 0.40)]
         ext = _mock_extractor(ents)
 
-        candidates = ext.extract_candidates("works at Acme", message_id=1, use_gate=False)
+        candidates = ext.extract_candidates("Acme is interesting", message_id=1, use_gate=False)
         assert len(candidates) == 0
 
     def test_per_label_threshold_accepts_high_score(self):
@@ -183,11 +184,13 @@ class TestVagueWordRejection:
         assert len(candidates) == 0
 
     def test_non_vague_word_accepted(self):
+        # Use text that won't match regex patterns to isolate GLiNER behavior
         ents = [_make_entity("Sarah", "person_name", 0.8)]
         ext = _mock_extractor(ents)
 
-        candidates = ext.extract_candidates("my friend Sarah", message_id=1, use_gate=False)
-        assert len(candidates) == 1
+        candidates = ext.extract_candidates("Sarah said hello", message_id=1, use_gate=False)
+        assert len(candidates) >= 1
+        assert any(c.span_text == "Sarah" for c in candidates)
 
 
 # ---------------------------------------------------------------------------

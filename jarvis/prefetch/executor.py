@@ -264,7 +264,8 @@ class PrefetchExecutor:
         self._shutdown_event = threading.Event()
         self._lock = threading.RLock()
 
-        # Active tasks tracking (guarded by self._lock, an RLock for re-entrant use)
+        # Active tasks tracking (guarded by self._lock to avoid deadlock from
+        # inconsistent lock ordering between _lock and a separate _active_lock)
         self._active_tasks: set[str] = set()
         self._active_drafts: dict[str, str] = {}  # chat_id → active_key for O(1) lookup
 
@@ -325,6 +326,15 @@ class PrefetchExecutor:
                 max_workers=self._max_workers,
                 thread_name_prefix="prefetch-",
             )
+
+            # Initialize shared ChatDBReader eagerly (avoids lazy-init latency
+            # on first prefetch task and ensures import errors surface early).
+            try:
+                from integrations.imessage import ChatDBReader
+
+                self._reader = ChatDBReader()
+            except Exception as e:
+                logger.warning(f"Failed to initialize ChatDBReader at start: {e}")
 
             # Start worker thread
             self._worker_thread = threading.Thread(
@@ -422,7 +432,7 @@ class PrefetchExecutor:
                 self._stats.cache_hits += 1
                 return False
 
-            # Check if already being processed
+            # Check if already being processed (uses self._lock, already held)
             if prediction.key in self._active_tasks:
                 return False
             # Block duplicate drafts for the same chat (O(1) lookup)
@@ -468,7 +478,7 @@ class PrefetchExecutor:
                     self._stats.cache_hits += 1
                     continue
 
-                # Check if already being processed
+                # Check if already being processed (uses self._lock, already held)
                 if prediction.key in self._active_tasks:
                     continue
                 if prediction.type == PredictionType.DRAFT_REPLY:
@@ -559,9 +569,11 @@ class PrefetchExecutor:
                 # Reset error counter on success
                 consecutive_errors = 0
 
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception as e:
                 consecutive_errors += 1
-                logger.warning(f"Worker loop error (consecutive: {consecutive_errors}): {e}")
+                logger.exception(f"Worker loop error (consecutive: {consecutive_errors}): {e}")
 
                 # Add backoff delay if consecutive errors exceed threshold
                 if consecutive_errors >= 5:
@@ -601,8 +613,10 @@ class PrefetchExecutor:
             # Execute handler
             try:
                 result = handler(prediction)
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception as e:
-                logger.debug(f"Handler failed for {prediction.key}: {e}")
+                logger.exception(f"Handler failed for {prediction.key}: {e}")
                 # Retry if possible
                 if task.retries < task.max_retries:
                     task.retries += 1
@@ -729,6 +743,8 @@ class PrefetchExecutor:
                 "prefetch_time": time.time(),
             }
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.debug(f"Draft reply prefetch failed for {chat_id}: {e}")
             return None
@@ -762,6 +778,8 @@ class PrefetchExecutor:
                 "prefetch_time": time.time(),
             }
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.debug(f"Embedding prefetch failed: {e}")
             return None
@@ -798,6 +816,8 @@ class PrefetchExecutor:
                 }
             return None
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.debug(f"Contact profile prefetch failed for {chat_id}: {e}")
             return None
@@ -838,6 +858,8 @@ class PrefetchExecutor:
 
             return None
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.debug(f"Model warming failed for {model_type}: {e}")
             return None
@@ -874,6 +896,8 @@ class PrefetchExecutor:
                 "prefetch_time": time.time(),
             }
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.debug(f"Search prefetch failed for '{query}': {e}")
             return None
@@ -901,6 +925,8 @@ class PrefetchExecutor:
 
             return None
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.debug(f"Vec index prefetch failed: {e}")
             return None

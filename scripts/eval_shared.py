@@ -12,7 +12,11 @@ DEFAULT_LABEL_ALIASES: dict[str, set[str]] = {
     "place": {"current_location", "future_location", "past_location", "place", "hometown"},
     "org": {"employer", "org", "school"},
     "person_name": {"friend_name", "partner_name", "person_name", "family_member"},
+    "family_member": {"family_member", "person_name"},
     "health_condition": {"allergy", "health_condition", "dietary"},
+    "activity": {"activity", "hobby"},
+    "job_role": {"job_role", "job_title"},
+    "food_item": {"food_item", "food_like", "food_dislike"},
     "email": {"email"},
     "phone_number": {"phone_number", "phone"},
 }

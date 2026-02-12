@@ -910,9 +910,15 @@ export function populateContactsCache(contacts: Record<string, string | null>): 
   for (const [identifier, name] of Object.entries(contacts)) {
     if (name) {
       contactsCache.set(identifier, name);
+      // Also store under normalized form for consistent lookup
+      const normalized = normalizePhoneNumber(identifier);
+      if (normalized && normalized !== identifier) {
+        contactsCache.set(normalized, name);
+      }
     }
   }
   contactsCacheLoaded = true;
+  console.log(`[DirectDB] Contacts cache populated: ${contactsCache.size} entries`);
 }
 
 /**

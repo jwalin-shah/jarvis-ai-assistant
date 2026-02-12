@@ -53,9 +53,8 @@ class TestResolvePersonToContact:
     ) -> FactExtractor:
         """Create extractor with pre-populated contacts cache."""
         ext = FactExtractor()
-        ext._contacts_cache = [
-            (cid, name, set(name.lower().split())) for cid, name in contacts
-        ]
+        cache = [(cid, name, set(name.lower().split())) for cid, name in contacts]
+        ext._get_contacts_for_resolution = lambda: cache
         return ext
 
     def test_exact_match_returns_contact_id(self):
@@ -100,7 +99,7 @@ class TestResolvePersonToContact:
 
     def test_empty_contacts_returns_none(self):
         ext = FactExtractor()
-        ext._contacts_cache = []
+        ext._get_contacts_for_resolution = lambda: []
         assert ext._resolve_person_to_contact("Anyone") is None
 
     def test_case_insensitive_matching(self):
@@ -110,11 +109,15 @@ class TestResolvePersonToContact:
         assert ext._resolve_person_to_contact("SARAH") == "c1"
 
     def test_contacts_cache_is_lazy(self):
-        """_get_contacts_for_resolution is called only when cache is None."""
+        """_get_contacts_for_resolution uses module-level cache."""
+        from unittest.mock import patch
+
+        cache = [("c1", "Test", {"test"})]
         ext = FactExtractor()
-        ext._contacts_cache = [("c1", "Test", {"test"})]
-        # Should use cache, not hit DB
-        result = ext._get_contacts_for_resolution()
+        with patch(
+            "jarvis.contacts.fact_extractor._get_cached_contacts", return_value=cache
+        ):
+            result = ext._get_contacts_for_resolution()
         assert result == [("c1", "Test", {"test"})]
 
 
@@ -171,11 +174,18 @@ class TestPreferenceFillerDetection:
     def setup_method(self):
         self.ext = FactExtractor()
 
-    def test_genuine_preference_accepted(self):
+    def test_like_no_longer_triggers_preference(self):
+        """'like' was removed from PREFERENCE_PATTERN (too many false positives)."""
         text = "I like sushi"
         match = PREFERENCE_PATTERN.search(text)
+        assert match is None  # "like" is no longer a preference trigger
+
+    def test_love_triggers_preference(self):
+        """'love' remains a valid preference trigger."""
+        text = "I love sushi"
+        match = PREFERENCE_PATTERN.search(text)
         assert match is not None
-        assert not self.ext._is_like_filler_word(text, match.start(), match.end())
+        assert match.group(1).strip() == "sushi"
 
     def test_filler_its_like(self):
         text = "it's like a dream"

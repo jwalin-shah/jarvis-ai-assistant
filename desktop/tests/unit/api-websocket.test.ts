@@ -657,14 +657,14 @@ describe("JarvisWebSocket", () => {
   // ========================================================================
 
   describe("ping interval", () => {
-    it("starts 30s ping interval after connection opens", () => {
+    it("starts 60s ping interval after connection opens", () => {
       const { client, ws } = createConnectedClient();
 
       // Clear send calls from the connected message handling
       ws.send.mockClear();
 
-      // Advance 30 seconds
-      vi.advanceTimersByTime(30000);
+      // Advance 60 seconds
+      vi.advanceTimersByTime(60000);
 
       // Should have sent a ping
       expect(ws.send).toHaveBeenCalledWith(
@@ -689,8 +689,8 @@ describe("JarvisWebSocket", () => {
       const { ws } = createConnectedClient();
       ws.send.mockClear();
 
-      // Trigger 3 pings
-      vi.advanceTimersByTime(90000);
+      // Trigger 3 pings (60s interval)
+      vi.advanceTimersByTime(180000);
 
       const pingCalls = ws.send.mock.calls.filter(
         (call: unknown[]) => call[0] === JSON.stringify({ type: "ping", data: {} })

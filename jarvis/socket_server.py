@@ -17,6 +17,8 @@ Features speculative prefetching for near-instant responses:
 - Background prefetch execution with resource awareness
 """
 
+from __future__ import annotations
+
 import asyncio
 import hmac
 import json
@@ -27,7 +29,7 @@ import signal
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 import websockets
@@ -35,6 +37,10 @@ from websockets.server import ServerConnection
 
 from jarvis.observability.logging import log_event, timed_operation
 from jarvis.utils.latency_tracker import track_latency
+
+if TYPE_CHECKING:
+    from jarvis.prefetch import PrefetchManager
+    from jarvis.watcher import ChatDBWatcher
 
 logger = logging.getLogger(__name__)
 
@@ -191,14 +197,14 @@ class JarvisSocketServer:
         self._wait_for_preload = wait_for_preload
         self._preload_timeout = preload_timeout
         self._enable_prefetch = enable_prefetch
-        self._watcher: Any = None  # ChatDBWatcher instance
+        self._watcher: ChatDBWatcher | None = None
         self._watcher_task: asyncio.Task[None] | None = None
         self._preload_task: asyncio.Task[None] | None = None
         self._models_ready = False
         self._models_ready_event = asyncio.Event()
 
         # Prefetch manager for speculative caching
-        self._prefetch_manager: Any = None
+        self._prefetch_manager: PrefetchManager | None = None
 
         # Rate limiter: 100 req/s per client
         self._rate_limiter = RateLimiter(max_requests=100, window_seconds=1.0)
@@ -224,6 +230,7 @@ class JarvisSocketServer:
 
         # Contact resolution
         self.register("resolve_contacts", self._resolve_contacts)
+        self.register("get_contacts", self._get_contacts)
 
         # Conversation methods
         self.register("list_conversations", self._list_conversations)
@@ -1576,6 +1583,59 @@ Summary:"""
             return await asyncio.to_thread(_resolve_sync)
         except Exception as e:
             logger.warning(f"Contact resolution failed: {e}")
+            return {}
+
+    async def _get_contacts(self) -> dict[str, str | None]:
+        """Get all contacts mapped by handle identifier.
+
+        Uses jarvis.db contacts (with handles_json) first, then falls back to
+        AddressBook resolution for any remaining handles. Returns the union.
+
+        Returns:
+            Dict mapping identifier (phone/email) -> display_name (or None)
+        """
+        try:
+            from integrations.imessage import ChatDBReader
+
+            def _resolve_all_sync() -> dict[str, str | None]:
+                result: dict[str, str | None] = {}
+
+                # 1. Get contacts from jarvis.db (already has display names)
+                try:
+                    from jarvis.db import get_db
+
+                    db = get_db()
+                    contacts = db.list_contacts(limit=10000)
+                    for contact in contacts:
+                        # Map chat_id identifier (strip iMessage prefix)
+                        if contact.chat_id:
+                            # chat_id is like "iMessage;-;+15551234567"
+                            parts = contact.chat_id.split(";-;")
+                            identifier = parts[-1] if len(parts) > 1 else contact.chat_id
+                            result[identifier] = contact.display_name
+                        # Map all handles
+                        if contact.handles:
+                            for handle in contact.handles:
+                                result[handle] = contact.display_name
+                except Exception as e:
+                    logger.debug(f"jarvis.db contacts lookup failed: {e}")
+
+                # 2. Fill gaps from AddressBook for handles not in jarvis.db
+                with ChatDBReader() as reader:
+                    with reader._connection_context() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT id FROM handle")
+                        all_handles = [row[0] for row in cursor.fetchall()]
+
+                    for identifier in all_handles:
+                        if identifier not in result:
+                            result[identifier] = reader._resolve_contact_name(identifier)
+
+                return result
+
+            return await asyncio.to_thread(_resolve_all_sync)
+        except Exception as e:
+            logger.warning(f"get_contacts failed: {e}")
             return {}
 
     async def _list_conversations(

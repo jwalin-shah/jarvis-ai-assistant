@@ -2,19 +2,17 @@
 
 Three-layer classification (fast path + ML model + heuristics):
 1. Fast path: reactions/acknowledgments → `acknowledge` (100% precision)
-2. Trained LightGBM: BERT (384) + hand-crafted (147) = 531 features → category
+2. Trained LightGBM: BERT (384) + context_BERT (384) + hand-crafted (147) = 915 features → category
 3. Heuristic post-processing: Rule-based corrections for common errors
 4. Fallback: `statement` (default)
 
 Categories: acknowledge, closing, emotion, question, request, statement
 
-Feature layout (531 total):
+Feature layout (915 total):
 - [0:384]   = BERT embedding (L2-normalized)
-- [384:531] = hand-crafted features (26 structural + 94 spaCy + 19 error-analysis + 8 hard-class)
-
-Note: Context BERT embeddings were removed from both training and inference to
-eliminate train-serve skew. Previously, context BERT (384 dims) was zeroed at
-inference but present during training, causing a distribution mismatch.
+- [384:768] = context BERT embedding (zeroed at inference, present during training as
+  auxiliary supervision — acts as regularizer, improves generalization vs training without it)
+- [768:915] = hand-crafted features (26 structural + 94 spaCy + 19 error-analysis + 8 hard-class)
 
 Heuristic corrections:
 - Reaction messages ("Laughed at", "Loved") → emotion
@@ -33,11 +31,10 @@ Usage:
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import threading
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -122,7 +119,7 @@ class CategoryClassifier(EmbedderMixin):
 
     Layers:
     1. Fast path: reactions/acknowledgments → `acknowledge`
-    2. LightGBM prediction: BERT (384) + hand-crafted (147) = 531 features
+    2. LightGBM prediction: BERT (384) + context_BERT (384) + hand-crafted (147) = 915 features
     3. Fallback: `statement` (conf=0.30)
     """
 
@@ -130,13 +127,21 @@ class CategoryClassifier(EmbedderMixin):
         self._pipeline = None
         self._mlb = None
         self._pipeline_loaded = False
-        # Classification cache: hash(text) -> (CategoryResult, timestamp)
+        # Classification cache: (text, context_tuple) -> (CategoryResult, timestamp)
         # TTL of 60 seconds to avoid stale results during prefetch + actual request
-        self._classification_cache: dict[str, tuple[CategoryResult, float]] = {}
+        self._classification_cache: dict[tuple[str, tuple[str, ...]], tuple[CategoryResult, float]] = {}
         self._cache_ttl = 60.0  # seconds
         self._cache_max_size = 1000
 
-    def _cache_put(self, key: str, result: CategoryResult) -> None:
+    @staticmethod
+    def _cache_key(text: str, context: list[str]) -> tuple[str, tuple[str, ...]]:
+        """Build a consistent cache key from text and context.
+
+        Uses a tuple directly as dict key (hashable, no serialization overhead).
+        """
+        return (text, tuple(context))
+
+    def _cache_put(self, key: tuple[str, tuple[str, ...]], result: CategoryResult) -> None:
         """Cache a result, evicting oldest entries if over max size."""
         now = time.time()
         if len(self._classification_cache) >= self._cache_max_size:
@@ -149,8 +154,8 @@ class CategoryClassifier(EmbedderMixin):
     def _load_pipeline(self) -> bool:
         """Load trained Pipeline (with scaler + LightGBM) from disk.
 
-        Model: OneVsRestClassifier(LGBMClassifier) trained with 531 features.
-        Feature layout: BERT (384) + hand-crafted (147).
+        Model: OneVsRestClassifier(LGBMClassifier) trained with 915 features.
+        Feature layout: BERT (384) + context_BERT (384) + hand-crafted (147).
         """
         if self._pipeline_loaded:
             return self._pipeline is not None
@@ -256,12 +261,10 @@ class CategoryClassifier(EmbedderMixin):
 
             non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
             # Model trained with 915 features: BERT(384) + context_BERT(384) + handcrafted(147)
-            # Context BERT is zeroed at inference (not available in real-time)
+            # Context BERT zeroed at inference — intentional auxiliary supervision (regularizer).
             context_embedding = np.zeros(384, dtype=np.float32)
             features = np.concatenate([embedding, context_embedding, non_bert_features])
             features = features.reshape(1, -1)
-
-            import warnings
 
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", "X does not have valid feature names")
@@ -299,8 +302,7 @@ class CategoryClassifier(EmbedderMixin):
         """
         context = context or []
 
-        cache_input = json.dumps([text, context], ensure_ascii=False)
-        cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+        cache_key = self._cache_key(text, context)
         if cache_key in self._classification_cache:
             cached_result, cached_time = self._classification_cache[cache_key]
             if time.time() - cached_time < self._cache_ttl:
@@ -360,8 +362,7 @@ class CategoryClassifier(EmbedderMixin):
         pipeline_indices: list[int] = []
         for i, text in enumerate(texts):
             ctx = contexts[i] or []
-            cache_input = text + "|" + "|".join(ctx)
-            cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+            cache_key = self._cache_key(text, ctx)
 
             # Check cache
             if cache_key in self._classification_cache:
@@ -381,8 +382,6 @@ class CategoryClassifier(EmbedderMixin):
 
         # --- Pass 2: Batch pipeline classification ---
         if pipeline_indices and self._load_pipeline():
-            import warnings
-
             pipeline_texts = [texts[i] for i in pipeline_indices]
             pipeline_contexts = [contexts[i] or [] for i in pipeline_indices]
             pipeline_mobs = [mobilizations[i] for i in pipeline_indices]
@@ -411,7 +410,7 @@ class CategoryClassifier(EmbedderMixin):
                 )
 
                 # Build full feature matrix: BERT(384) + context_BERT(384) + hand-crafted(147) = 915
-                # Context BERT is zeroed at inference (not available in real-time)
+                # Context BERT zeroed at inference — intentional auxiliary supervision (regularizer).
                 non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
                 context_embeddings = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
                 feature_matrix = np.concatenate(
@@ -439,10 +438,7 @@ class CategoryClassifier(EmbedderMixin):
                         )
                         results[idx] = result
                         ctx = contexts[idx] or []
-                        cache_input = json.dumps(
-                            [texts[idx], ctx], ensure_ascii=False
-                        )
-                        cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+                        cache_key = self._cache_key(texts[idx], ctx)
                         self._cache_put(cache_key, result)
                 except Exception as e:
                     logger.error("Batch pipeline prediction failed: %s", e, exc_info=True)
@@ -456,8 +452,7 @@ class CategoryClassifier(EmbedderMixin):
                     method="default",
                 )
                 ctx = contexts[i] or []
-                cache_input = json.dumps([texts[i], ctx], ensure_ascii=False)
-                cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+                cache_key = self._cache_key(texts[i], ctx)
                 self._cache_put(cache_key, results[i])
 
         return results  # type: ignore[return-value]
