@@ -9,10 +9,7 @@ Tests:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
-
 
 # =============================================================================
 # SQL Injection Tests
@@ -94,12 +91,12 @@ class TestPathTraversal:
 
     def test_batch_export_output_dir_traversal_rejected(self):
         """output_dir must be within user home directory."""
+        # Normal path should work
+        import os
+
         from pydantic import ValidationError
 
         from api.routers.batch import BatchExportRequest
-
-        # Normal path should work
-        import os
 
         home = os.path.expanduser("~")
         req = BatchExportRequest(

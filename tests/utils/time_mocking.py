@@ -201,21 +201,10 @@ def freeze_time(
     """
     clock = FrozenClock(start_time)
 
-    if advance_on_use:
-        original_now = clock.now
-
-        def advancing_now() -> datetime:
-            result = original_now()
-            clock.advance(seconds=default_advance.total_seconds())
-            return result
-
-        with clock.freeze():
-            # Patch to use advancing version
-            pass  # Implementation would require more complex patching
-            yield clock
-    else:
-        with clock.freeze():
-            yield clock
+    # Note: advance_on_use is accepted for API compatibility but not implemented.
+    # Use clock.advance() explicitly in tests for deterministic behavior.
+    with clock.freeze():
+        yield clock
 
 
 # Predefined time fixtures for common scenarios

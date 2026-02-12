@@ -30,7 +30,8 @@ def hardware_required(
         reasons.append(f"requires {min_ram_gb}GB RAM (have {total_ram_gb:.1f}GB)")
         skip = True
 
-    if not MLX_AVAILABLE:
+    # MLX_AVAILABLE is defined later in this module at module level
+    if not _is_mlx_available():
         reasons.append("requires MLX")
         skip = True
 
@@ -82,6 +83,15 @@ try:
     MLX_AVAILABLE = True
 except (ImportError, OSError):
     MLX_AVAILABLE = False
+
+
+def _is_mlx_available() -> bool:
+    """Check MLX availability (safe to call before MLX_AVAILABLE is defined)."""
+    try:
+        return MLX_AVAILABLE
+    except NameError:
+        return False
+
 
 # Mock MLX modules if not usable - MUST happen before any imports
 if not MLX_AVAILABLE:

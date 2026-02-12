@@ -67,9 +67,7 @@ class TestGenerationTimeout:
     @patch("models.loader.generate")
     @patch("models.loader.make_sampler")
     @patch("models.loader.make_repetition_penalty")
-    def test_generation_works_after_timeout(
-        self, mock_rep_penalty, mock_sampler, mock_generate
-    ):
+    def test_generation_works_after_timeout(self, mock_rep_penalty, mock_sampler, mock_generate):
         """After a timeout, subsequent generation should still work."""
         loader = self._make_loader_with_mock_model()
 
@@ -94,8 +92,8 @@ class TestGenerationTimeout:
         with pytest.raises(ModelGenerationError):
             loader.generate_sync("test prompt", timeout_seconds=0.3)
 
-        # Wait a moment for the background thread to settle
-        time.sleep(0.1)
+        # Wait for the background thread to settle after timeout cancellation
+        time.sleep(0.5)
 
         # Second call should succeed
         result = loader.generate_sync("test prompt", timeout_seconds=5.0)

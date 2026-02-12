@@ -401,9 +401,7 @@ class TestSocketServerMalformedRequests:
             enable_watcher=False, preload_models=False, enable_prefetch=False
         )
 
-        result = asyncio.run(
-            server._process_message("this is not json")
-        )
+        result = asyncio.run(server._process_message("this is not json"))
 
         parsed = json.loads(result)
         assert "error" in parsed

@@ -230,12 +230,8 @@ class TestRotateWsToken:
             server._token_created_at = time.monotonic() - 100
             server._previous_ws_auth_token = None
             server._previous_token_expired_at = 0.0
-            server._rotate_ws_token = (
-                JarvisSocketServer._rotate_ws_token.__get__(server)
-            )
-            server._verify_ws_token = (
-                JarvisSocketServer._verify_ws_token.__get__(server)
-            )
+            server._rotate_ws_token = JarvisSocketServer._rotate_ws_token.__get__(server)
+            server._verify_ws_token = JarvisSocketServer._verify_ws_token.__get__(server)
             return server
 
     def _patch_token_write(self):
@@ -281,9 +277,7 @@ class TestVerifyWsToken:
         server._ws_auth_token = "current-token"
         server._previous_ws_auth_token = "old-token"
         server._previous_token_expired_at = time.monotonic() + 60.0
-        server._verify_ws_token = (
-            JarvisSocketServer._verify_ws_token.__get__(server)
-        )
+        server._verify_ws_token = JarvisSocketServer._verify_ws_token.__get__(server)
         return server
 
     def test_accepts_current_token(self):

@@ -159,6 +159,11 @@ class TestWebSocketGeneration:
             data = websocket.receive_json()
             assert data["type"] == "generation_error"
             assert "error" in data["data"]
+            error_msg = data["data"]["error"].lower()
+            assert "prompt" in error_msg, (
+                f"Error message should explain that 'prompt' is missing, "
+                f"but got: {data['data']['error']}"
+            )
 
     def test_generate_with_prompt_sends_start_message(self, client):
         """Generate with prompt sends generation_start message."""

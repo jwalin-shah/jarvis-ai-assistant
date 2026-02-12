@@ -6,10 +6,7 @@ the vec_facts entries are also cleaned up and don't return stale results.
 
 from __future__ import annotations
 
-import sqlite3
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from jarvis.contacts.contact_profile import Fact
 

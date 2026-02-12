@@ -242,11 +242,15 @@ async def paused_event_loop():
 
 
 def run_sync(coro: Coroutine[Any, Any, T]) -> T:
-    """Run coroutine synchronously with fresh event loop.
+    """Run coroutine synchronously with a new event loop.
 
     Useful for testing async code from sync test contexts.
 
     Example:
         result = run_sync(async_function())
     """
-    return asyncio.get_event_loop().run_until_complete(coro)
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()

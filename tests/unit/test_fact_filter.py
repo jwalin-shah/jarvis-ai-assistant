@@ -7,7 +7,6 @@ threshold filtering, bucket encoding, and the module-level singleton.
 from __future__ import annotations
 
 import pickle
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +19,6 @@ from jarvis.contacts.fact_filter import (
     get_message_gate,
     is_fact_likely,
 )
-
 
 # ---------------------------------------------------------------------------
 # MessageGateFeatures tests

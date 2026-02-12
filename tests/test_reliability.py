@@ -67,8 +67,9 @@ class TestCircuitBreaker:
         # Wait for recovery timeout
         time.sleep(0.15)
 
+        # Use can_execute() to trigger the state transition check
+        assert cb.can_execute()  # Triggers OPEN -> HALF_OPEN transition
         assert cb.state == CircuitState.HALF_OPEN
-        assert cb.can_execute()  # One call allowed
 
     def test_closes_on_successful_half_open(self):
         """Circuit closes when HALF_OPEN call succeeds."""
@@ -544,7 +545,7 @@ class TestTaskQueue:
 
         result = queue.retry(task.id)
 
-        assert result == False  # noqa: E712
+        assert result is False
 
     def test_delete_terminal_task(self):
         """Delete removes terminal tasks."""
