@@ -648,6 +648,15 @@ async fn connect_socket_internal(
         *w = None;
     }
 
+    // Fail any stale pending requests from the previous connection.
+    // The aborted reader task may not have run its cleanup code.
+    {
+        let mut pending = pending_arc.write().await;
+        for (_id, req) in pending.drain() {
+            let _ = req.response_tx.send(Err("Connection reset during reconnect".to_string())).await;
+        }
+    }
+
     // Reset connected flag and writer dead flag
     {
         let mut connected = connected_arc.write().await;
