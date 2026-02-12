@@ -268,6 +268,7 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
     let writer_arc = state.writer.clone();
     let pending_arc = state.pending.clone();
     let connected_arc = state.connected.clone();
+    let writer_dead_arc = state.writer_dead.clone();
 
     // Cancel reader task
     {
@@ -286,7 +287,7 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
                 w.shutdown()
             ).await;
 
-            if let Err(_) = shutdown_result {
+            if shutdown_result.is_err() {
                 eprintln!("[Socket] Warning: writer shutdown timed out after 5 seconds");
             }
         }
@@ -298,10 +299,14 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
         pending.clear();
     }
 
-    // Mark as disconnected
+    // Mark as disconnected and reset writer_dead flag
     {
         let mut connected = connected_arc.write().await;
         *connected = false;
+    }
+    {
+        let mut writer_dead = writer_dead_arc.write().await;
+        *writer_dead = false;
     }
 
     Ok(())
