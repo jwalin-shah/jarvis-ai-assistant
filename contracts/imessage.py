@@ -197,6 +197,10 @@ class iMessageReader(Protocol):  # noqa: N801 - iMessage is a proper noun
         """Check if we have permission to read chat.db."""
         ...
 
+    def get_conversation(self, chat_id: str) -> Conversation | None:
+        """Get a single conversation by chat_id."""
+        ...
+
     def get_conversations(
         self, limit: int = 50, since: datetime | None = None
     ) -> list[Conversation]:

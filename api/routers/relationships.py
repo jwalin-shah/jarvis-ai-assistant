@@ -72,11 +72,8 @@ def _profile_to_response(profile: RelationshipProfile) -> RelationshipProfileRes
 def _get_contact_name(reader: ChatDBReader, chat_id: str) -> str | None:
     """Get display name for a contact from conversation metadata."""
     try:
-        conversations = reader.get_conversations(limit=100)
-        for conv in conversations:
-            if conv.chat_id == chat_id:
-                return conv.display_name
-        return None
+        conv = reader.get_conversation(chat_id)
+        return conv.display_name if conv else None
     except Exception:
         return None
 
