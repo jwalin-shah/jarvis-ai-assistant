@@ -4,16 +4,16 @@
   "limit": 100,
   "strategy": "constrained_categories",
   "model": "lfm-1.2b",
-  "num_predictions": 59,
-  "extraction_time_s": 456.81,
-  "ms_per_message": 4568.1,
+  "num_predictions": 60,
+  "extraction_time_s": 509.22,
+  "ms_per_message": 5092.2,
   "overall": {
     "precision": 1.0,
-    "recall": 0.8676,
-    "f1": 0.9291,
-    "tp": 59,
+    "recall": 0.8824,
+    "f1": 0.9375,
+    "tp": 60,
     "fp": 0,
-    "fn": 9
+    "fn": 8
   },
   "per_label": {
     "activity": {
@@ -74,11 +74,11 @@
     },
     "health_condition": {
       "precision": 1.0,
-      "recall": 0.75,
-      "f1": 0.8571,
-      "tp": 6,
+      "recall": 0.875,
+      "f1": 0.9333,
+      "tp": 7,
       "fp": 0,
-      "fn": 2
+      "fn": 1
     },
     "job_role": {
       "precision": 1.0,
@@ -124,11 +124,11 @@
   "per_slice": {
     "positive": {
       "precision": 1.0,
-      "recall": 0.8676,
-      "f1": 0.9291,
-      "tp": 59,
+      "recall": 0.8824,
+      "f1": 0.9375,
+      "tp": 60,
       "fp": 0,
-      "fn": 9
+      "fn": 8
     }
   }
 }

@@ -17,14 +17,6 @@
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0307",
-    "slice": "positive",
-    "message_text": "Yeah that's completely true that's just the hardest thing to do. What happened already happened now ",
-    "gold_span": "sleeps horrible",
-    "gold_label": "health_condition"
-  },
-  {
-    "type": "fn",
     "sample_id": "r2_fact_gs_0329",
     "slice": "positive",
     "message_text": "Bc I also don\u2019t know what the situation would be where I would have sex w a guy",
