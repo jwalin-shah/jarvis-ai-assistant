@@ -48,6 +48,7 @@ from jarvis.errors import (
     model_not_found,
     model_out_of_memory,
 )
+from models.memory_config import apply_llm_limits
 from models.registry import DEFAULT_MODEL_ID, MODEL_REGISTRY, ModelSpec, get_model_spec
 
 logger = logging.getLogger(__name__)
@@ -362,8 +363,6 @@ class MLXModelLoader:
                 start_time = time.perf_counter()
 
                 # Set MLX memory limits before loading (critical on 8GB systems)
-                from models.memory_config import apply_llm_limits
-
                 apply_llm_limits()
 
                 # mlx_lm.load returns (model, tokenizer) tuple

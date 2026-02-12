@@ -214,11 +214,9 @@ class MLXGenerator:
                 pre_formatted=True,
             )
 
-            # Trim cache back to prefix for next call (under GPU lock to prevent
-            # race with concurrent generation accessing the same cache)
+            # Trim cache back to prefix for next call (CPU-only operation)
             if prompt_cache is not None:
-                with MLXModelLoader._mlx_load_lock:
-                    self._loader.trim_prompt_cache()
+                self._loader.trim_prompt_cache()
 
             total_time = (time.perf_counter() - start_time) * 1000
 
@@ -436,11 +434,9 @@ class MLXGenerator:
 
             gen_thread.join(timeout=5.0)
 
-            # Trim cache back to prefix for next call (under GPU lock to prevent
-            # race with concurrent generation accessing the same cache)
+            # Trim cache back to prefix for next call (CPU-only operation)
             if stream_prompt_cache is not None:
-                with MLXModelLoader._mlx_load_lock:
-                    self._loader.trim_prompt_cache()
+                self._loader.trim_prompt_cache()
 
             if generation_error:
                 raise generation_error[0]

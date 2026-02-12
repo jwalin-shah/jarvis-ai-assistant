@@ -987,7 +987,7 @@ class TestActiveTaskTracking:
         handler_done.wait(timeout=3.0)
         time.sleep(0.2)
 
-        with executor._active_lock:
+        with executor._lock:
             assert "track:test" not in executor._active_tasks
         executor.stop()
 
@@ -1012,7 +1012,7 @@ class TestActiveTaskTracking:
         handler_done.wait(timeout=3.0)
         time.sleep(0.2)
 
-        with executor._active_lock:
+        with executor._lock:
             assert "chatABC" not in executor._active_drafts
         executor.stop()
 
@@ -1031,6 +1031,6 @@ class TestActiveTaskTracking:
 
         time.sleep(2.0)
 
-        with executor._active_lock:
+        with executor._lock:
             assert "err:track" not in executor._active_tasks
         executor.stop()

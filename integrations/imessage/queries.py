@@ -58,6 +58,7 @@ _BASE_QUERIES = {
                 COUNT(*) OVER (PARTITION BY cmj.chat_id) as message_count
             FROM chat_message_join cmj
             JOIN message m ON cmj.message_id = m.ROWID
+            WHERE m.date > (strftime('%s', 'now', '-365 days') - 978307200) * 1000000000
         ),
         chat_participants AS (
             SELECT
@@ -89,6 +90,7 @@ _BASE_QUERIES = {
     "messages": """
         SELECT
             message.ROWID as id,
+            message.guid,
             chat.guid as chat_id,
             COALESCE(handle.id, 'me') as sender,
             CASE
@@ -118,6 +120,7 @@ _BASE_QUERIES = {
     "search": """
         SELECT
             message.ROWID as id,
+            message.guid,
             chat.guid as chat_id,
             COALESCE(handle.id, 'me') as sender,
             message.text,
@@ -141,6 +144,7 @@ _BASE_QUERIES = {
     "context": """
         SELECT
             message.ROWID as id,
+            message.guid,
             chat.guid as chat_id,
             COALESCE(handle.id, 'me') as sender,
             message.text,

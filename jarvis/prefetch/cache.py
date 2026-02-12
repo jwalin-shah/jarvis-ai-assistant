@@ -310,11 +310,20 @@ class L2Cache:
                 tags_json TEXT DEFAULT '[]'
             );
 
+            CREATE TABLE IF NOT EXISTS cache_tags (
+                tag TEXT NOT NULL,
+                cache_key TEXT NOT NULL REFERENCES cache_entries(key) ON DELETE CASCADE,
+                PRIMARY KEY (tag, cache_key)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_cache_created_at ON cache_entries(created_at);
             CREATE INDEX IF NOT EXISTS idx_cache_accessed_at ON cache_entries(accessed_at);
             CREATE INDEX IF NOT EXISTS idx_cache_ttl ON cache_entries(created_at, ttl_seconds);
+            CREATE INDEX IF NOT EXISTS idx_cache_tags_tag ON cache_tags(tag);
             """
         )
+        # Enable foreign key cascade for ON DELETE CASCADE
+        conn.execute("PRAGMA foreign_keys = ON")
         conn.commit()
 
     def get(self, key: str) -> CacheEntry | None:
@@ -394,6 +403,9 @@ class L2Cache:
         value_blob, value_type = self._serialize(entry.value)
         tags_json = json.dumps(entry.tags) if entry.tags else "[]"
 
+        # Remove old tag entries (INSERT OR REPLACE deletes then re-inserts)
+        conn.execute("DELETE FROM cache_tags WHERE cache_key = ?", (key,))
+
         conn.execute(
             """
             INSERT OR REPLACE INTO cache_entries
@@ -413,6 +425,14 @@ class L2Cache:
                 tags_json,
             ),
         )
+
+        # Insert tag index entries
+        if entry.tags:
+            conn.executemany(
+                "INSERT OR IGNORE INTO cache_tags (tag, cache_key) VALUES (?, ?)",
+                [(tag, key) for tag in entry.tags],
+            )
+
         conn.commit()
 
     def remove(self, key: str) -> bool:
@@ -425,16 +445,13 @@ class L2Cache:
             True if removed, False if not found.
         """
         conn = self._get_connection()
+        conn.execute("DELETE FROM cache_tags WHERE cache_key = ?", (key,))
         cursor = conn.execute("DELETE FROM cache_entries WHERE key = ?", (key,))
         conn.commit()
         return cursor.rowcount > 0
 
     def remove_by_tag(self, tag: str) -> int:
-        """Remove all entries with a specific tag.
-
-        Note: Uses LIKE scan on tags_json (O(n)). Acceptable for prefetch cache
-        sizes (<10k rows). A separate cache_tags index table would be needed if
-        the table grows beyond that.
+        """Remove all entries with a specific tag using indexed junction table.
 
         Args:
             tag: Tag to match.
@@ -443,14 +460,16 @@ class L2Cache:
             Number of entries removed.
         """
         conn = self._get_connection()
-        # LIKE on JSON array - matches `"tag"` to avoid partial matches
+        # Use indexed cache_tags table for O(k) lookup instead of O(n) LIKE scan
         cursor = conn.execute(
             """
             DELETE FROM cache_entries
-            WHERE tags_json LIKE ?
+            WHERE key IN (SELECT cache_key FROM cache_tags WHERE tag = ?)
             """,
-            (f'%"{tag}"%',),
+            (tag,),
         )
+        # Clean up orphaned tag entries
+        conn.execute("DELETE FROM cache_tags WHERE tag = ?", (tag,))
         conn.commit()
         return cursor.rowcount
 
@@ -461,12 +480,23 @@ class L2Cache:
             Number of entries removed.
         """
         conn = self._get_connection()
+        now = time.time()
+        # Clean up tags for expired entries first
+        conn.execute(
+            """
+            DELETE FROM cache_tags
+            WHERE cache_key IN (
+                SELECT key FROM cache_entries WHERE (? - created_at) > ttl_seconds
+            )
+            """,
+            (now,),
+        )
         cursor = conn.execute(
             """
             DELETE FROM cache_entries
             WHERE (? - created_at) > ttl_seconds
             """,
-            (time.time(),),
+            (now,),
         )
         conn.commit()
         return cursor.rowcount
@@ -474,6 +504,7 @@ class L2Cache:
     def clear(self) -> None:
         """Clear all entries."""
         conn = self._get_connection()
+        conn.execute("DELETE FROM cache_tags")
         conn.execute("DELETE FROM cache_entries")
         conn.commit()
 
@@ -549,6 +580,8 @@ class L3Cache:
         self._metadata: dict[str, dict] = self._load_metadata()
         # Running total avoids O(n) sum on every set/eviction
         self._total_bytes = sum(m.get("size_bytes", 0) for m in self._metadata.values())
+        # Tag -> keys index for O(k) tag invalidation (rebuilt from metadata)
+        self._tag_index: dict[str, set[str]] = self._build_tag_index()
         # Dirty flag for batched metadata writes
         self._metadata_dirty = False
         self._last_flush: float = time.time()
@@ -561,6 +594,16 @@ class L3Cache:
             except (json.JSONDecodeError, OSError):
                 return {}
         return {}
+
+    def _build_tag_index(self) -> dict[str, set[str]]:
+        """Build tag index from metadata."""
+        index: dict[str, set[str]] = {}
+        for key, meta in self._metadata.items():
+            for tag in meta.get("tags", []):
+                if tag not in index:
+                    index[tag] = set()
+                index[tag].add(key)
+        return index
 
     def _mark_dirty(self) -> None:
         """Mark metadata as needing a flush."""
@@ -680,11 +723,22 @@ class L3Cache:
                 logger.warning(f"Failed to write L3 cache entry {key}: {e}")
                 return
 
-            # Update running total
+            # Update running total and clean old tag index
             data_size = len(data)
             if key in self._metadata:
                 self._total_bytes -= self._metadata[key].get("size_bytes", 0)
+                for old_tag in self._metadata[key].get("tags", []):
+                    if old_tag in self._tag_index:
+                        self._tag_index[old_tag].discard(key)
+                        if not self._tag_index[old_tag]:
+                            del self._tag_index[old_tag]
             self._total_bytes += data_size
+
+            # Update tag index for new tags
+            for tag in entry.tags:
+                if tag not in self._tag_index:
+                    self._tag_index[tag] = set()
+                self._tag_index[tag].add(key)
 
             # Update metadata
             self._metadata[key] = {
@@ -712,8 +766,14 @@ class L3Cache:
             if key not in self._metadata:
                 return False
 
-            # Update running total before deleting
-            self._total_bytes -= self._metadata[key].get("size_bytes", 0)
+            # Update running total and tag index before deleting
+            meta = self._metadata[key]
+            self._total_bytes -= meta.get("size_bytes", 0)
+            for tag in meta.get("tags", []):
+                if tag in self._tag_index:
+                    self._tag_index[tag].discard(key)
+                    if not self._tag_index[tag]:
+                        del self._tag_index[tag]
 
             file_path = self._key_to_path(key)
             try:
@@ -726,27 +786,19 @@ class L3Cache:
             return True
 
     def remove_by_tag(self, tag: str) -> int:
-        """Remove all entries with a specific tag.
-
-        Args:
-            tag: Tag to match.
-
-        Returns:
-            Number of entries removed.
-        """
+        """Remove all entries with a specific tag using tag index (O(k) not O(n))."""
         with self._lock:
-            keys_to_remove = [
-                k for k, meta in self._metadata.items() if tag in meta.get("tags", [])
-            ]
-            for key in keys_to_remove:
+            keys = list(self._tag_index.get(tag, set()))
+            for key in keys:
                 self.remove(key)
-            return len(keys_to_remove)
+            return len(keys)
 
     def clear(self) -> None:
         """Clear all entries."""
         with self._lock:
             for key in list(self._metadata.keys()):
                 self.remove(key)
+            self._tag_index.clear()
 
     def keys(self) -> list[str]:
         """Get all cache keys."""

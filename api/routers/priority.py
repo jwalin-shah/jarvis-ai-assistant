@@ -337,12 +337,12 @@ def _get_conversation_name(
         return conversations_cache[chat_id]
 
     try:
-        conversations = reader.get_conversations(limit=100)  # type: ignore[attr-defined]
-        for conv in conversations:
-            conversations_cache[conv.chat_id] = conv.display_name or ", ".join(
-                conv.participants[:3]
-            )
-        return conversations_cache.get(chat_id)
+        conv = reader.get_conversation(chat_id)  # type: ignore[attr-defined]
+        if conv:
+            name = conv.display_name or ", ".join(conv.participants[:3])
+            conversations_cache[chat_id] = name
+            return name
+        return None
     except Exception:
         return None
 
