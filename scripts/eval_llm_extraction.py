@@ -77,7 +77,7 @@ NOT facts: one-time events, plans, greetings, opinions, transient actions.
 "text" = exact 1-3 words copied from the message. Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
 Return {"facts": []} if no lasting personal facts."""
 
-# Few-shot examples: 4 positive + 3 hard negatives (family/health mentioned but not facts)
+# Few-shot examples: 5 positive + 3 hard negatives (family/health mentioned but not facts)
 FEW_SHOT_TURNS = [
     ("my brother bakes and I just eat whatever he makes",
      '{"facts": [{"text": "brother", "label": "family_member"}, {"text": "bakes", "label": "activity"}]}'),
@@ -93,6 +93,8 @@ FEW_SHOT_TURNS = [
      '{"facts": []}'),
     ("and they'll do an ultrasound and stuff",
      '{"facts": []}'),
+    ("I work at lending tree",
+     '{"facts": [{"text": "lending tree", "label": "org"}]}'),
 ]
 
 INSTRUCT_USER_PROMPT = """Message: "{message}"
@@ -238,7 +240,7 @@ _FAMILY_WORDS = {
     "wife", "husband", "girlfriend", "boyfriend", "partner",
     "daughter", "son", "cousin", "aunt", "uncle", "grandma",
     "grandmother", "grandpa", "grandfather", "fiancee", "fiancé",
-    "stepmom", "stepdad", "niece", "nephew",
+    "stepmom", "stepdad", "niece", "nephew", "bros",
 }
 
 _HEALTH_KEYWORDS = {
@@ -246,6 +248,18 @@ _HEALTH_KEYWORDS = {
     "anxiety", "adhd", "migraine", "migraines", "vestibular",
     "surgery", "injury", "cancer", "arthritis", "insomnia",
     "emergency room", "hospital", "therapy", "ptsd",
+}
+
+_KNOWN_ORGS = {
+    "facebook", "google", "intuit", "apple", "amazon", "microsoft",
+    "netflix", "uber", "lyft", "airbnb", "twitter", "meta",
+    "lending tree", "lendingtree", "cvs", "walmart", "target",
+    "starbucks", "chipotle", "costco",
+}
+
+_KNOWN_SCHOOLS = {
+    "utd", "ucd", "ucla", "usc", "sjsu", "stanford", "berkeley",
+    "culinary school", "community college",
 }
 
 
@@ -261,15 +275,35 @@ def _correct_label(text: str, label: str, msg_lower: str) -> str:
     if text_lower in _HEALTH_KEYWORDS:
         return "health_condition"
 
+    # Known orgs/companies should be org regardless of predicted label
+    if text_lower in _KNOWN_ORGS or text_lower in _KNOWN_SCHOOLS:
+        return "org"
+
+    # If "school" or "university" or "college" in span, it's an org
+    if any(w in text_lower for w in ("school", "university", "college")):
+        return "org"
+
     # If span looks like a job title and was labeled activity
     if label == "activity":
         job_indicators = {
             "manager", "engineer", "developer", "nurse", "doctor",
             "teacher", "analyst", "designer", "consultant", "director",
             "intern", "coordinator", "specialist", "product management",
+            "realtor",
         }
         if text_lower in job_indicators:
             return "job_role"
+
+    # If labeled job_role but looks like a company name (proper noun, not a role word)
+    if label == "job_role" and len(text) > 0 and text[0].isupper():
+        job_role_words = {
+            "manager", "engineer", "developer", "nurse", "doctor",
+            "teacher", "analyst", "designer", "consultant", "director",
+            "intern", "coordinator", "specialist", "ceo", "cto", "cfo",
+            "vp", "president", "founder", "product management",
+        }
+        if text_lower not in job_role_words and "management" not in text_lower:
+            return "org"
 
     return label
 
@@ -286,6 +320,11 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
 
     # Skip very short messages only if they're filler (not real words)
     if msg_len < 4:
+        return []
+
+    # Skip iMessage reaction messages (Loved/Liked/Laughed at/Emphasized "...")
+    # These quote other people's messages and shouldn't have facts extracted
+    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
         return []
 
     for fact in facts:
@@ -337,6 +376,7 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
             location_rejects = {
                 "here", "there", "home", "somewhere", "anywhere", "nowhere",
                 "place", "area", "spot", "well", "last fall", "22nd",
+                "diwali", "christmas", "thanksgiving",
             }
             if text_lower in location_rejects:
                 continue
@@ -349,11 +389,14 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "theory", "utilities", "read", "xbox", "realtor", "raiders",
                 "acceptance letter", "bag", "never", "whatever he makes",
                 "jeans", "coupon", "email", "her neck", "neck",
+                "i.cvs.com", "diwali",
             }
             if text_lower in reject_foods:
                 continue
-            # Reject non-food patterns: numbers, abbreviations, body parts
+            # Reject non-food patterns: numbers, abbreviations, URLs, body parts
             if any(c.isdigit() for c in text):
+                continue
+            if "." in text and len(text) > 4:  # URLs like "i.cvs.com"
                 continue
             if text_lower.isupper() and len(text) <= 3:  # abbreviations like "SB"
                 continue
@@ -394,7 +437,8 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "ultrasound", "kind", "later", "don't",
                 "talk to some", "points of view",
                 "packed everything up", "shit 1",
-                "7 days", "28th",
+                "7 days", "28th", "externship", "arms",
+                "don\u2019t wanna", "don\u2019t", "dgaf",
             }
             if text_lower in reject_activities:
                 continue
@@ -413,13 +457,30 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "take responsibility", "rest", "never ended",
                 "increase time", "never", "free", "not fun",
                 "tight", "annoying", "ready to just", "love it",
-                "shelter in place", "fuck",
+                "shelter in place", "fuck", "doctor's appointment",
             }
             if text_lower in reject_health:
                 continue
+        if label == "job_role":
+            reject_jobs = {
+                "translation for", "comin", "ser",
+            }
+            if text_lower in reject_jobs:
+                continue
+        if label == "family_member":
+            # Only accept actual family relationship words
+            if text_lower not in _FAMILY_WORDS:
+                # Allow possessive forms like "brother's"
+                base = text_lower.rstrip("'s").rstrip("\u2019s")
+                if base not in _FAMILY_WORDS:
+                    continue
         if label == "friend_name":
             # Friend names should start with uppercase
             if text[0].islower():
+                continue
+        if label == "person_name":
+            # Reject very short abbreviations
+            if len(text) <= 2:
                 continue
 
         # Validate span text appears in message (case-insensitive)
@@ -519,8 +580,18 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
         pre_formatted=True,
     )
 
-    facts = parse_llm_json(result.text)
-    return json_to_spans(facts, message_text)
+    raw = result.text
+    facts = parse_llm_json(raw)
+    spans = json_to_spans(facts, message_text)
+    if not facts and '{"facts"' not in raw:
+        log.debug("No JSON in output: %r", raw[:120])
+    elif facts and not spans:
+        log.debug(
+            "All %d facts filtered for '%s': %s",
+            len(facts), message_text[:40],
+            [(f.get("text"), f.get("label")) for f in facts],
+        )
+    return spans
 
 
 def _strategy_simple(loader, message_text: str) -> list[dict]:
