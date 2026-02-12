@@ -38,6 +38,8 @@ pub struct SocketState {
     connected: Arc<RwLock<bool>>,
     /// Reader task handle
     reader_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Message processor task handle
+    processor_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// Whether the writer is dead (marked after write failure)
     writer_dead: Arc<RwLock<bool>>,
 }
@@ -49,6 +51,7 @@ impl Default for SocketState {
             pending: Arc::new(RwLock::new(HashMap::new())),
             connected: Arc::new(RwLock::new(false)),
             reader_task: Arc::new(Mutex::new(None)),
+            processor_task: Arc::new(Mutex::new(None)),
             writer_dead: Arc::new(RwLock::new(false)),
         }
     }
@@ -265,13 +268,23 @@ async fn handle_message(
 pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), String> {
     // Clone Arc references
     let reader_task_arc = state.reader_task.clone();
+    let processor_task_arc = state.processor_task.clone();
     let writer_arc = state.writer.clone();
     let pending_arc = state.pending.clone();
     let connected_arc = state.connected.clone();
+    let writer_dead_arc = state.writer_dead.clone();
 
     // Cancel reader task
     {
         let mut task = reader_task_arc.lock().await;
+        if let Some(handle) = task.take() {
+            handle.abort();
+        }
+    }
+
+    // Cancel message processor task
+    {
+        let mut task = processor_task_arc.lock().await;
         if let Some(handle) = task.take() {
             handle.abort();
         }
@@ -286,22 +299,28 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
                 w.shutdown()
             ).await;
 
-            if let Err(_) = shutdown_result {
+            if shutdown_result.is_err() {
                 eprintln!("[Socket] Warning: writer shutdown timed out after 5 seconds");
             }
         }
     }
 
-    // Clear pending requests
+    // Fail all pending requests so callers get an error instead of a silent channel close
     {
         let mut pending = pending_arc.write().await;
-        pending.clear();
+        for (_id, req) in pending.drain() {
+            let _ = req.response_tx.send(Err("Disconnected by client".to_string())).await;
+        }
     }
 
-    // Mark as disconnected
+    // Mark as disconnected and reset writer_dead flag
     {
         let mut connected = connected_arc.write().await;
         *connected = false;
+    }
+    {
+        let mut writer_dead = writer_dead_arc.write().await;
+        *writer_dead = false;
     }
 
     Ok(())
@@ -407,18 +426,12 @@ pub async fn send_batch(
 
     check_connection(&connected_arc, &writer_dead_arc).await?;
 
-    // Phase 1: Write all requests and collect response receivers
+    // Phase 1a: Serialize all requests and register pending receivers (no lock needed)
+    let mut prepared = Vec::with_capacity(requests.len());
     let mut receivers = Vec::with_capacity(requests.len());
 
     for req in &requests {
         let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
-        let (tx, rx) = mpsc::channel(1);
-
-        // Register pending request
-        {
-            let mut pending = pending_arc.write().await;
-            pending.insert(id, PendingRequest { response_tx: tx });
-        }
 
         let request = JsonRpcRequest {
             jsonrpc: "2.0",
@@ -427,58 +440,74 @@ pub async fn send_batch(
             id,
         };
 
-        let request_json = match serde_json::to_string(&request) {
-            Ok(json) => json,
-            Err(_e) => {
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
-                receivers.push(None);
-                continue;
-            }
-        };
-
-        {
-            let mut writer_guard = writer_arc.lock().await;
-            if let Some(writer) = writer_guard.as_mut() {
-                let result = async {
-                    writer.write_all(request_json.as_bytes()).await?;
-                    writer.write_all(b"\n").await?;
-                    Ok::<(), std::io::Error>(())
-                }.await;
-
-                if let Err(_e) = result {
-                    let mut writer_dead = writer_dead_arc.write().await;
-                    *writer_dead = true;
+        match serde_json::to_string(&request) {
+            Ok(json) => {
+                let (tx, rx) = mpsc::channel(1);
+                {
                     let mut pending = pending_arc.write().await;
-                    pending.remove(&id);
-                    receivers.push(None);
-                    for _ in (receivers.len())..requests.len() {
-                        receivers.push(None);
-                    }
-                    break;
+                    pending.insert(id, PendingRequest { response_tx: tx });
                 }
-            } else {
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
+                prepared.push(Some((id, json)));
+                receivers.push(Some((id, rx)));
+            }
+            Err(e) => {
+                eprintln!("[Socket] Failed to serialize batch request '{}': {}", req.method, e);
+                prepared.push(None);
                 receivers.push(None);
-                continue;
             }
         }
-
-        receivers.push(Some((id, rx)));
     }
 
-    // Flush all written requests in a single syscall
+    // Phase 1b: Hold writer lock once for all writes + flush (prevents interleaving)
     {
-        let is_dead = *writer_dead_arc.read().await;
-        if !is_dead {
-            let mut writer_guard = writer_arc.lock().await;
-            if let Some(writer) = writer_guard.as_mut() {
-                if let Err(_e) = writer.flush().await {
+        let mut writer_guard = writer_arc.lock().await;
+        if let Some(writer) = writer_guard.as_mut() {
+            for (i, item) in prepared.iter().enumerate() {
+                if let Some((_id, json)) = item {
+                    let result = async {
+                        writer.write_all(json.as_bytes()).await?;
+                        writer.write_all(b"\n").await?;
+                        Ok::<(), std::io::Error>(())
+                    }.await;
+
+                    if let Err(e) = result {
+                        eprintln!("[Socket] Batch write failed: {} (writer marked dead)", e);
+                        let mut writer_dead = writer_dead_arc.write().await;
+                        *writer_dead = true;
+                        // Clean up pending for this and all remaining requests
+                        let mut pending = pending_arc.write().await;
+                        for item in prepared.iter().skip(i) {
+                            if let Some((id, _)) = item {
+                                pending.remove(id);
+                            }
+                        }
+                        // Mark remaining receivers as failed
+                        for receiver in receivers.iter_mut().skip(i) {
+                            *receiver = None;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Flush all written requests
+            let is_dead = *writer_dead_arc.read().await;
+            if !is_dead {
+                if let Err(e) = writer.flush().await {
+                    eprintln!("[Socket] Batch flush failed: {} (writer marked dead)", e);
                     let mut writer_dead = writer_dead_arc.write().await;
                     *writer_dead = true;
                 }
             }
+        } else {
+            // Writer not available - fail all pending requests
+            let mut pending = pending_arc.write().await;
+            for item in &prepared {
+                if let Some((id, _)) = item {
+                    pending.remove(id);
+                }
+            }
+            receivers.iter_mut().for_each(|r| *r = None);
         }
     }
 
@@ -591,11 +620,20 @@ async fn connect_socket_internal(
     let connected_arc = state.connected.clone();
     let pending_arc = state.pending.clone();
     let reader_task_arc = state.reader_task.clone();
+    let processor_task_arc = state.processor_task.clone();
     let writer_dead_arc = state.writer_dead.clone();
 
     // Abort any existing reader task to prevent stale readers
     {
         let mut task = reader_task_arc.lock().await;
+        if let Some(handle) = task.take() {
+            handle.abort();
+        }
+    }
+
+    // Abort any existing processor task
+    {
+        let mut task = processor_task_arc.lock().await;
         if let Some(handle) = task.take() {
             handle.abort();
         }
@@ -608,6 +646,15 @@ async fn connect_socket_internal(
             let _ = writer.shutdown().await;
         }
         *w = None;
+    }
+
+    // Fail any stale pending requests from the previous connection.
+    // The aborted reader task may not have run its cleanup code.
+    {
+        let mut pending = pending_arc.write().await;
+        for (_id, req) in pending.drain() {
+            let _ = req.response_tx.send(Err("Connection reset during reconnect".to_string())).await;
+        }
     }
 
     // Reset connected flag and writer dead flag
@@ -714,7 +761,7 @@ async fn connect_socket_internal(
     // Spawn message processor task
     let pending_for_processor = pending_arc.clone();
     let app_for_processor = app.clone();
-    tokio::spawn(async move {
+    let processor_handle = tokio::spawn(async move {
         while let Some(msg) = msg_rx.recv().await {
             handle_message(msg, &pending_for_processor, &app_for_processor).await;
         }
@@ -724,6 +771,12 @@ async fn connect_socket_internal(
     {
         let mut task = reader_task_arc.lock().await;
         *task = Some(reader_handle);
+    }
+
+    // Store processor task handle
+    {
+        let mut task = processor_task_arc.lock().await;
+        *task = Some(processor_handle);
     }
 
     // Emit connected event
