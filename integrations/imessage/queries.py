@@ -90,6 +90,7 @@ _BASE_QUERIES = {
     "messages": """
         SELECT
             message.ROWID as id,
+            message.guid,
             chat.guid as chat_id,
             COALESCE(handle.id, 'me') as sender,
             CASE
@@ -119,6 +120,7 @@ _BASE_QUERIES = {
     "search": """
         SELECT
             message.ROWID as id,
+            message.guid,
             chat.guid as chat_id,
             COALESCE(handle.id, 'me') as sender,
             message.text,
@@ -142,6 +144,7 @@ _BASE_QUERIES = {
     "context": """
         SELECT
             message.ROWID as id,
+            message.guid,
             chat.guid as chat_id,
             COALESCE(handle.id, 'me') as sender,
             message.text,

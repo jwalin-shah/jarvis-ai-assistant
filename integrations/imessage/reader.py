@@ -1341,17 +1341,22 @@ class ChatDBReader:
                 logger.warning(f"Query error in search: {e}")
                 return []
 
-            # Collect message IDs for batch prefetch
+            # Collect message IDs and GUIDs for batch prefetch
             message_ids = []
+            id_guid_map: dict[int, str] = {}
             for row in rows:
                 try:
-                    message_ids.append(row["id"])
+                    mid = row["id"]
+                    message_ids.append(mid)
+                    guid = row["guid"] if "guid" in row.keys() else None
+                    if guid:
+                        id_guid_map[mid] = guid
                 except (IndexError, KeyError):
                     continue
 
             # Batch-fetch attachments and reactions (2 queries instead of 2*N)
             attachments_map = self._prefetch_attachments(message_ids)
-            reactions_map = self._prefetch_reactions(message_ids)
+            reactions_map = self._prefetch_reactions(message_ids, id_guid_map=id_guid_map)
 
             messages = []
             for row in rows:
@@ -1516,14 +1521,17 @@ class ChatDBReader:
     def _prefetch_reactions(
         self,
         message_ids: list[int],
+        id_guid_map: dict[int, str] | None = None,
     ) -> dict[int, list[Reaction]]:
         """Batch-fetch reactions for multiple messages in one query.
 
-        First looks up GUIDs for all message IDs, then fetches reactions
-        for all GUIDs at once. Processes in chunks to avoid SQLite limits.
+        If id_guid_map is provided (from rows that already include message.guid),
+        skips the extra GUID lookup query. Otherwise falls back to batch-fetching
+        GUIDs first.
 
         Args:
             message_ids: List of message ROWIDs
+            id_guid_map: Optional pre-built mapping of message_id -> guid
 
         Returns:
             Dict mapping message_id -> list of Reaction objects
@@ -1540,28 +1548,34 @@ class ChatDBReader:
             # Process in chunks of 500 to avoid SQLite limits (max ~999 parameters)
             CHUNK_SIZE = 500
 
-            # Step 1: Batch-fetch GUIDs for all message IDs in chunks
+            # Step 1: Build GUID maps (skip DB query if already provided)
             id_to_guid: dict[int, str] = {}
             guid_to_id: dict[str, int] = {}
 
-            for i in range(0, len(message_ids), CHUNK_SIZE):
-                chunk = message_ids[i : i + CHUNK_SIZE]
-                try:
-                    placeholders = ",".join("?" * len(chunk))
-                    guid_query = get_query("message_guids_batch", version).format(
-                        placeholders=placeholders,
-                    )
-                    cursor.execute(guid_query, chunk)
-                    guid_rows = cursor.fetchall()
+            if id_guid_map and len(id_guid_map) == len(message_ids):
+                # All GUIDs provided from query results - skip extra DB query
+                id_to_guid = id_guid_map
+                guid_to_id = {v: k for k, v in id_guid_map.items()}
+            else:
+                # Fallback: batch-fetch GUIDs from DB
+                for i in range(0, len(message_ids), CHUNK_SIZE):
+                    chunk = message_ids[i : i + CHUNK_SIZE]
+                    try:
+                        placeholders = ",".join("?" * len(chunk))
+                        guid_query = get_query("message_guids_batch", version).format(
+                            placeholders=placeholders,
+                        )
+                        cursor.execute(guid_query, chunk)
+                        guid_rows = cursor.fetchall()
 
-                    for row in guid_rows:
-                        mid = row["id"]
-                        guid = row["guid"]
-                        if guid:
-                            id_to_guid[mid] = guid
-                            guid_to_id[guid] = mid
-                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                    logger.debug(f"Error batch-fetching GUIDs (chunk {i}): {e}")
+                        for row in guid_rows:
+                            mid = row["id"]
+                            guid = row["guid"]
+                            if guid:
+                                id_to_guid[mid] = guid
+                                guid_to_id[guid] = mid
+                    except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                        logger.debug(f"Error batch-fetching GUIDs (chunk {i}): {e}")
 
             if not guid_to_id:
                 return result
@@ -1610,17 +1624,23 @@ class ChatDBReader:
         Returns:
             List of Message objects
         """
-        # Collect message IDs for batch prefetch
+        # Collect message IDs and GUIDs for batch prefetch
         message_ids = []
+        id_guid_map: dict[int, str] = {}
         for row in rows:
             try:
-                message_ids.append(row["id"])
+                mid = row["id"]
+                message_ids.append(mid)
+                # Extract GUID if available (avoids extra batch query in _prefetch_reactions)
+                guid = row["guid"] if "guid" in row.keys() else None
+                if guid:
+                    id_guid_map[mid] = guid
             except (IndexError, KeyError):
                 continue
 
         # Batch-fetch attachments and reactions (2 queries instead of 2*N)
         attachments_map = self._prefetch_attachments(message_ids)
-        reactions_map = self._prefetch_reactions(message_ids)
+        reactions_map = self._prefetch_reactions(message_ids, id_guid_map=id_guid_map)
 
         messages = []
         for row in rows:
