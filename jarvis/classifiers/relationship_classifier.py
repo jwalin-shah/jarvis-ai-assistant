@@ -44,6 +44,9 @@ _CLASSIFICATION_CACHE_MAX_SIZE = 500
 
 logger = logging.getLogger(__name__)
 
+# Pre-compiled pattern for display name tokenization
+_NAME_SPLIT_RE = re.compile(r"[\s\-_]+")
+
 
 # =============================================================================
 # Helper Functions
@@ -804,7 +807,7 @@ class RelationshipClassifier:
             return bonuses
 
         name_lower = display_name.lower()
-        name_tokens = set(re.split(r"[\s\-_]+", name_lower))
+        name_tokens = set(_NAME_SPLIT_RE.split(name_lower))
 
         for category, keywords in self._DISPLAY_NAME_SIGNALS.items():
             for kw in keywords:
