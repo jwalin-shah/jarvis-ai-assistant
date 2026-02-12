@@ -433,6 +433,9 @@ _COMPILED_TELLING = [re.compile(p) for p in TELLING_PATTERNS]
 _COMPILED_INFO_QUESTION = [re.compile(p) for p in INFO_QUESTION_PATTERNS]
 _COMPILED_SLANG_QUESTION = [re.compile(p) for p in SLANG_QUESTION_PATTERNS]
 _COMPILED_GREETING = [re.compile(p) for p in GREETING_PATTERNS]
+_RECIPIENT_ORIENTED_RE = re.compile(
+    r"^(are|is) (you|u|ya) (coming|going|in|down|free|busy|available)\b"
+)
 
 # =============================================================================
 # Classification Functions
@@ -603,7 +606,7 @@ def _classify_recipient_oriented(
     cfg: MobilizationConfig = MOBILIZATION_CONFIG,
 ) -> MobilizationResult:
     """Handle recipient-oriented questions."""
-    if re.match(r"^(are|is) (you|u|ya) (coming|going|in|down|free|busy|available)\b", text_lower):
+    if _RECIPIENT_ORIENTED_RE.match(text_lower):
         return _make_result(
             ResponsePressure.HIGH, ResponseType.COMMITMENT,
             cfg.recipient_commitment_conf, features,
