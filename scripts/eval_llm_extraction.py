@@ -326,25 +326,27 @@ def _correct_label(text: str, label: str, msg_lower: str) -> str:
     return label
 
 
-def _is_transient_family_mention(msg_lower: str, other_labels: set[str]) -> bool:
+def _is_transient_family_mention(msg_lower: str) -> bool:
     """Check if a message mentions family only in a transient/logistics context.
 
-    Returns True only when the message has STRONG transient signals AND the LLM
-    didn't find any non-family facts (which would indicate real fact content).
+    Returns True if the message matches strong transient patterns where the
+    family mention is NOT about a lasting relationship fact.
     """
-    # If the LLM found other fact types besides family_member, the message
-    # likely has real fact content - don't filter family mentions
-    if other_labels - {"family_member"}:
-        return False
-
     _transient_indicators = [
         # Logistics/scheduling
         r'\bnever\s+ended\s+up\b',
         r'\bworking\s+from\s+home\b',
-        r'\bshelter\s+in\s+place\b',
         r'\b(?:call|calling|called)\s+my\b',
-        r'\bmy\s+\w+\s+(?:gets?|comes?|leaves?|picks?)\s+(?:home|up|back)\b',
+        # "my mom gets/comes/leaves home/up" but NOT "comes back from X" (location fact)
+        r'\bmy\s+\w+\s+(?:gets?|leaves?|picks?)\s+(?:home|up|back)\b',
+        r'\bmy\s+\w+\s+comes?\s+(?:home|up)\b',
         r'\b(?:leave|leaving|left)\s+(?:as\s+soon\s+as|when|after)\s+my\b',
+        r'\b(?:ask|asking|asked)\s+my\s+(?:dad|mom)\b',
+        r'\bjust\s+(?:call|come)\b.*\bmy\s+(?:dad|mom)\b',
+        r'\bmy\s+(?:phone|car|house|room)\s+is\b',
+        r'\blike\s+my\s+(?:mom|dad)s\b',
+        r'\bexcept\s+(?:for\s+)?(?:me\s+and\s+)?my\b',
+        r'\bthey\s+know\s+my\b',
         # Passing references (not about the relationship)
         r'\bthe\s+one\s+who\s+sends?\b',
         r'\btried\s+doin\b',
@@ -557,14 +559,7 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                         continue
             # Gate family_member on whether the message has a lasting fact context
             # Skip transient mentions: logistics, scheduling, passing references
-            # Collect all labels the LLM predicted for this message
-            all_predicted_labels = set()
-            for f in facts:
-                if isinstance(f, dict):
-                    lbl = normalize_label(f.get("label", ""))
-                    if lbl:
-                        all_predicted_labels.add(lbl)
-            if _is_transient_family_mention(msg_lower, all_predicted_labels):
+            if _is_transient_family_mention(msg_lower):
                 continue
         if label == "friend_name":
             # Friend names should start with uppercase
@@ -680,25 +675,17 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
     def _add(text: str, label: str, fact_type: str):
         key = (text.lower(), label)
         if key not in existing:
+            # Also skip if a superset/subset span with same label already exists
+            tl = text.lower()
+            for ex_text, ex_label in existing:
+                if ex_label == label and (tl in ex_text or ex_text in tl):
+                    return
             existing.add(key)
             spans.append({"span_text": text, "span_label": label, "fact_type": fact_type})
 
     # 1. Family member pattern: "my <family_word>" in message
     # Skip transient patterns that mention family in logistics/scheduling context
-    _transient_patterns = (
-        r'\b(?:call|calling|called)\b.*\bmy\s+(?:dad|mom|brother|sister)',
-        r'\bmy\s+(?:dad|mom)\s+(?:gets?|comes?|leaves?|picks?)\s+(?:home|up|back)',
-        r'\b(?:leave|leaving|left)\s+(?:as\s+soon\s+as|when|after)\s+my\b',
-        r'\b(?:ask|asking|asked)\s+my\s+(?:dad|mom)\b',
-        r'\bexcept\s+(?:for\s+)?(?:me\s+and\s+)?my\b',
-        r'\bthey\s+know\s+my\b',
-        r'\bjust\s+(?:call|come)\b.*\bmy\s+(?:dad|mom)\b',
-        r'\bnever\s+ended\s+up\b',
-        r'\bworking\s+from\s+home\b',
-        r'\bmy\s+(?:phone|car|house|room)\s+is\b',
-        r'\blike\s+my\s+(?:mom|dad)s\b',  # "like my moms" = "like my mom's [thing]"
-    )
-    _skip_family = any(re.search(p, msg_lower) for p in _transient_patterns)
+    _skip_family = _is_transient_family_mention(msg_lower)
     if not _skip_family:
         for fw in _FAMILY_WORDS:
             pattern = f"my {fw}"
@@ -738,20 +725,19 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
         if org_text and (org_text.lower(), "org") not in existing:
             _add(org_text, "org", "work.employer")
 
-    # 5. Known activity keywords (word-boundary, skip reactions)
-    if not _skip_family:  # reuse the reaction check
-        _known_activities = {
-            "meditate", "meditation", "yoga", "chess", "climbing",
-            "biking", "hiking", "swimming", "cooking",
-            "baking", "gaming", "coding", "exercises",
-            "diwali", "xbox", "reading", "sanskrit",
-        }
-        for act in _known_activities:
-            match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
-            if match and (act, "activity") not in existing:
-                idx = match.start()
-                actual = message_text[idx : idx + len(act)]
-                _add(actual, "activity", "preference.activity")
+    # 5. Known activity keywords (word-boundary)
+    _known_activities = {
+        "meditate", "yoga", "chess", "climbing",
+        "biking", "hiking", "swimming", "cooking",
+        "baking", "gaming", "coding", "exercises",
+        "diwali", "xbox", "reading", "sanskrit",
+    }
+    for act in _known_activities:
+        match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
+        if match and (act, "activity") not in existing:
+            idx = match.start()
+            actual = message_text[idx : idx + len(act)]
+            _add(actual, "activity", "preference.activity")
 
     # 6. Known food items (word-boundary match)
     _known_foods = {
@@ -766,7 +752,41 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
             actual = message_text[idx : idx + len(food)]
             _add(actual, "food_item", "preference.food")
 
-    # 7. Friend/roommate patterns
+    # 7. Location patterns: "live in X", "move to X", "from X", "back to X"
+    _location_patterns = [
+        (r'\b(?:live|living|moved?|moving|relocat\w*)\s+(?:in|to)\s+([A-Z][a-zA-Z]+)', "future_location", "location.future"),
+        (r'\bback\s+(?:to|from)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
+        (r'\b(?:from|grew up in|born in)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
+    ]
+    for pat, label, fact_type in _location_patterns:
+        match = re.search(pat, message_text)
+        if match:
+            loc = match.group(1).strip()
+            if loc.lower() not in {"the", "a", "an", "my", "your", "here", "there", "home"}:
+                _add(loc, label, fact_type)
+
+    # Also check for known location names (case-insensitive)
+    _known_locations = {
+        "cali": "future_location",
+        "india": "place",
+        "sf": "place",
+    }
+    for loc, label in _known_locations.items():
+        match = re.search(rf'\b{re.escape(loc)}\b', msg_lower)
+        if match and (loc, label) not in existing:
+            # Only boost if context suggests a location fact (not just mentioning it)
+            # e.g. "live in cali", "from india", "go to sf"
+            loc_context = [
+                r'\b(?:live|living|move|moving|go|going|from|in|to|back)\b.*\b' + re.escape(loc),
+                re.escape(loc) + r'.*\b(?:is|born|grew|raised|live|living)\b',
+            ]
+            if any(re.search(p, msg_lower) for p in loc_context):
+                idx = match.start()
+                actual = message_text[idx : idx + len(loc)]
+                fact_type = "location.future" if label == "future_location" else "location.general"
+                _add(actual, label, fact_type)
+
+    # 8. Friend/roommate patterns
     roommate_match = re.search(r'\b(roommate|roomie)\b', msg_lower)
     if roommate_match and ("roommate", "friend_name") not in existing:
         idx = roommate_match.start()

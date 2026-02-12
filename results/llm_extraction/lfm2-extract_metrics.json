@@ -1,28 +1,28 @@
 {
-  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r4.json",
+  "gold_path": "training_data/gliner_goldset/goldset_v5.1_deduped.json",
   "num_records": 100,
   "limit": 100,
   "strategy": "constrained_categories",
   "model": "lfm-1.2b",
-  "num_predictions": 62,
-  "extraction_time_s": 241.26,
-  "ms_per_message": 2412.6,
+  "num_predictions": 57,
+  "extraction_time_s": 512.67,
+  "ms_per_message": 5126.7,
   "overall": {
-    "precision": 0.8065,
-    "recall": 0.5208,
-    "f1": 0.6329,
-    "tp": 50,
-    "fp": 12,
-    "fn": 46
+    "precision": 1.0,
+    "recall": 0.8382,
+    "f1": 0.912,
+    "tp": 57,
+    "fp": 0,
+    "fn": 11
   },
   "per_label": {
     "activity": {
-      "precision": 0.7273,
-      "recall": 0.3333,
-      "f1": 0.4571,
-      "tp": 8,
-      "fp": 3,
-      "fn": 16
+      "precision": 1.0,
+      "recall": 0.6875,
+      "f1": 0.8148,
+      "tp": 11,
+      "fp": 0,
+      "fn": 5
     },
     "current_location": {
       "precision": 1.0,
@@ -36,49 +36,49 @@
       "precision": 1.0,
       "recall": 1.0,
       "f1": 1.0,
-      "tp": 4,
+      "tp": 2,
       "fp": 0,
       "fn": 0
     },
     "family_member": {
-      "precision": 0.7037,
-      "recall": 0.6552,
-      "f1": 0.6786,
-      "tp": 19,
-      "fp": 8,
-      "fn": 10
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 18,
+      "fp": 0,
+      "fn": 0
     },
     "food_item": {
       "precision": 1.0,
-      "recall": 0.6667,
-      "f1": 0.8,
-      "tp": 2,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 3,
       "fp": 0,
-      "fn": 1
+      "fn": 0
     },
     "friend_name": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 1,
       "fp": 0,
-      "fn": 1
+      "fn": 0
     },
     "future_location": {
       "precision": 1.0,
-      "recall": 0.5,
-      "f1": 0.6667,
-      "tp": 1,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 2,
       "fp": 0,
-      "fn": 1
+      "fn": 0
     },
     "health_condition": {
-      "precision": 0.8571,
-      "recall": 0.6,
-      "f1": 0.7059,
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1": 0.8571,
       "tp": 6,
-      "fp": 1,
-      "fn": 4
+      "fp": 0,
+      "fn": 2
     },
     "job_role": {
       "precision": 1.0,
@@ -90,11 +90,11 @@
     },
     "org": {
       "precision": 1.0,
-      "recall": 0.5556,
-      "f1": 0.7143,
-      "tp": 5,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 9,
       "fp": 0,
-      "fn": 4
+      "fn": 0
     },
     "past_location": {
       "precision": 1.0,
@@ -114,29 +114,21 @@
     },
     "place": {
       "precision": 1.0,
-      "recall": 0.1429,
-      "f1": 0.25,
+      "recall": 0.5,
+      "f1": 0.6667,
       "tp": 1,
       "fp": 0,
-      "fn": 6
+      "fn": 1
     }
   },
   "per_slice": {
-    "near_miss": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 6,
-      "fn": 0
-    },
     "positive": {
-      "precision": 0.8929,
-      "recall": 0.5208,
-      "f1": 0.6579,
-      "tp": 50,
-      "fp": 6,
-      "fn": 46
+      "precision": 1.0,
+      "recall": 0.8382,
+      "f1": 0.912,
+      "tp": 57,
+      "fp": 0,
+      "fn": 11
     }
   }
 }
