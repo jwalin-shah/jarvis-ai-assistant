@@ -129,7 +129,7 @@ class TestBackupManager:
 
         assert result.checksum == expected_checksum
 
-    @pytest.mark.xfail(reason="Backup restore implementation needs safety_path mkdir fix")
+    @pytest.mark.xfail(reason="Backup restore fails: backup missing schema_version table")
     def test_restore_from_backup_success(
         self, backup_manager: BackupManager, tmp_path: Path
     ) -> None:
@@ -159,7 +159,7 @@ class TestBackupManager:
             cursor = conn.execute("SELECT COUNT(*) FROM contacts")
             assert cursor.fetchone()[0] == 10
 
-    @pytest.mark.xfail(reason="Backup restore implementation needs safety_path mkdir fix")
+    @pytest.mark.xfail(reason="Backup restore fails: backup missing schema_version table")
     def test_restore_creates_safety_copy(self, backup_manager: BackupManager) -> None:
         """Test that restore creates safety copy."""
         backup_result = backup_manager.create_hot_backup()
@@ -572,7 +572,7 @@ class TestQuickFunctions:
 class TestIntegration:
     """Integration tests combining multiple components."""
 
-    @pytest.mark.xfail(reason="Backup restore implementation needs safety_path mkdir fix")
+    @pytest.mark.xfail(reason="Backup restore fails: backup missing schema_version table")
     def test_backup_restore_cycle(self, tmp_path: Path) -> None:
         """Test complete backup and restore cycle."""
         # Setup

@@ -1,0 +1,1685 @@
+[
+  {
+    "sample_id": "v6_0093",
+    "message_id": 668362,
+    "message_text": "I am making the corn paneer sandwich ",
+    "is_from_me": true,
+    "context_prev": "668360|me|I meant like actual food || 668361|me|So ur back at 8 ish right",
+    "context_next": "668370|them|i am all good || 668382|them|i am going alone he gave me his list already",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0136",
+    "message_id": 61503,
+    "message_text": "My mom was badgering me ab it tbh but I felt like I should try going anyway",
+    "is_from_me": false,
+    "context_prev": "61555|me|same || 61333|me|iz been yearssss",
+    "context_next": "61579|them|Just to see || 61363|me|idk im just kinda like i feel like its more politics etc even more now",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "mom",
+        "span_label": "family_member",
+        "agreement": 1,
+        "confidence": "low"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0081",
+    "message_id": 341233,
+    "message_text": "yeah i love ramen so much ",
+    "is_from_me": false,
+    "context_prev": "341214|me|On the other side || 341367|me|Ahhhhhh",
+    "context_next": "341278|them|i got tangerine chicken and rice || 341262|me|Basic haha",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "ramen",
+        "span_label": "food_item",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0102",
+    "message_id": 55298,
+    "message_text": "Hey yall, I’m planning to propose to Danu either on April 18th or 19th. Need the place to be in Houston or else she will sus that something is up. I really like the aesthetic of Japanese Garden in Houston. Leaning towards that place at the moment",
+    "is_from_me": false,
+    "context_prev": "55335|them|Let’s find a resort at Horseshoe Bay like the ones in this video || 55302|them|It’s maximum aesthetic and it won’t be too hot in April",
+    "context_next": "55338|them|Our engagement is set on April 26, and everyone is invited || 55306|them|https://g.co/kgs/xcR4p5x",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Danu",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      },
+      {
+        "span_text": "Houston",
+        "span_label": "place",
+        "agreement": 3,
+        "confidence": "high"
+      },
+      {
+        "span_text": "Japanese Garden",
+        "span_label": "place",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0086",
+    "message_id": 658892,
+    "message_text": "I dabble in hiking I didn’t doo that much tho cuz I was driving and then park then driving to the next place ",
+    "is_from_me": true,
+    "context_prev": "658890|me|I have ppl I haven’t replied to since like beginning of march 💀 || 658891|me|Prolly like 50 😅",
+    "context_next": "658893|me|I was exhausted || 658894|me|I want to be a thrill seeker but I think the universe is telling me to stop",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "hiking",
+        "span_label": "activity",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0063",
+    "message_id": 370044,
+    "message_text": "oh cool my best friend went to berkeley ",
+    "is_from_me": false,
+    "context_prev": "369879|them|i’ve never even been to texas before || 369919|me|Home is the Bay Area btw",
+    "context_next": "369848|me|Dang idk why but I thought ohio was closer to texas || 369963|me|I just checked how far ohio state is from me",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "berkeley",
+        "span_label": "org",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0122",
+    "message_id": 42097,
+    "message_text": "I basically got out beat against kishan, I thought Grayson Allen wud do something but he played so bad ",
+    "is_from_me": false,
+    "context_prev": "42111|them|Yea hart does everything except score much with the knicks || 42158|them|His scoring will go up with injuries",
+    "context_next": "41744|me|anyone want tix to mavs pacers 7:30pm || 41394|them|Coby fucking white goddamn",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "kishan",
+        "span_label": "person_name",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0149",
+    "message_id": 93432,
+    "message_text": "im frustrated",
+    "is_from_me": false,
+    "context_prev": "93570|them|Emphasized “Ig i shud stay on my toes like griffin told u” || 93473|me|u okay bro",
+    "context_next": "93452|me|w woof || 93395|me|or just everything",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0043",
+    "message_id": 206232,
+    "message_text": "$50 bottle of sparkling wine, some cheap necklaces, and a voucher for that jewelry store",
+    "is_from_me": false,
+    "context_prev": "206285|them|Bloody bastard || 206265|them|what’chu get",
+    "context_next": "206260|them|Shrey you didn’t go to austin? || 206216|them|Nah I didn’t end up going",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0039",
+    "message_id": 319181,
+    "message_text": "Hey come to Montgomery station",
+    "is_from_me": false,
+    "context_prev": "319185|them|Liked “9?” || 319165|them|Liked “9?”",
+    "context_next": "319186|them|I’ll aim to be there around 9:30 || 319022|them|Why",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0126",
+    "message_id": 33728,
+    "message_text": "lol i like how soham was already on the same page ",
+    "is_from_me": true,
+    "context_prev": "33596|them|Liked “oh kitkats or chapsticks ” || 33713|them|chopsticks*",
+    "context_next": "33611|them|Yeah if you have a design you like send it, there are stores with like hundreds of different chopsticks || 33881|me|i was def thinkin chapstick",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "soham",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0024",
+    "message_id": 71624,
+    "message_text": "I finally asked my parents what part of Toronto I used to live in",
+    "is_from_me": false,
+    "context_prev": "71703|me|I just had no idea it existed || 71677|them|Guys",
+    "context_next": "71583|them|I quite literally used to live in BRAMPTON LOOL || 71566|them|Same as like Tesher Jusreign etc",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "Toronto",
+        "span_label": "place",
+        "agreement": 3,
+        "confidence": "high"
+      },
+      {
+        "span_text": "parents",
+        "span_label": "family_member",
+        "agreement": 1,
+        "confidence": "low"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0023",
+    "message_id": 178999,
+    "message_text": "So sad to see my hawks are the worst fucking team in central 😭 ",
+    "is_from_me": false,
+    "context_prev": "179238|them|Emphasized “I’m tryna go to a Dallas parade lol” || 179157|them|Loved “Can definitely happen ”",
+    "context_next": "179180|them|They got the number 1 pick though in the draft || 178996|them|There’s this big prospect",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0013",
+    "message_id": 658848,
+    "message_text": "long term here is a nightmare to me. Far away from bay/socal so no proximity to fam or friends ",
+    "is_from_me": false,
+    "context_prev": "658846|them|I know you but I don’t remember you || 658847|them|YOOO IM TRYNA LEAVE",
+    "context_next": "658849|them|I have a social life, but not as poppin as I’d like || 658850|them|I am a huge social butterfly so there are days I get super lonely",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "bay",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "socal",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0170",
+    "message_id": 83514,
+    "message_text": "ik ppl dont rlly understand how much it is",
+    "is_from_me": true,
+    "context_prev": "83519|me|yea u a grinder || 83534|me|thanks for everything you do dude",
+    "context_next": "83688|me|fuck its lets just all quit || 83515|me|gg",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0040",
+    "message_id": 479059,
+    "message_text": "Nevada has been blue for the past 12 years",
+    "is_from_me": false,
+    "context_prev": "478945|them|We will just get sad cause we’ll be like so close || 479073|them|I’ve thought trump was going to win for months, this is the first time I’m getting my hopes up for biden",
+    "context_next": "478980|them|the other two that switched overnight surprise me || 479083|them|good shit though",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0049",
+    "message_id": 356958,
+    "message_text": "you love bagels so much hahaha",
+    "is_from_me": false,
+    "context_prev": "356962|them|Loved “Imma eat a bagel then do laundry then do calc hw and then write my essay ” || 356831|them|Loved “Very good bagel”",
+    "context_next": "356937|them|is what i am learning || 356899|them|Questioned “Cause I start beef for no reason ”",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "bagels",
+        "span_label": "food_item",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0110",
+    "message_id": 656561,
+    "message_text": "Big Fremont guy ",
+    "is_from_me": true,
+    "context_prev": "656559|me|Reminder || 656560|me|Do yk Angela at scale?",
+    "context_next": "656562|me|When u goin back to sf || 656563|them|Angela yang?",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Fremont",
+        "span_label": "place",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0010",
+    "message_id": 672208,
+    "message_text": "Das all I got lol fruit ",
+    "is_from_me": true,
+    "context_prev": "672206|them|Do you perchance have any snacks I could steal? || 672207|me|Uhh I have fairlife and some random bags of chips",
+    "context_next": "672209|them|I will take ur fair life and fruit if that’s alr || 672210|me|Yes",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0115",
+    "message_id": 54113,
+    "message_text": "wyd ur birthday wknd ",
+    "is_from_me": true,
+    "context_prev": "54402|me|sum doesnt actually help me that much cuz good fg kinda useless for me || 54100|me|kum*",
+    "context_next": "54202|me|u comin to dallas? || 53879|them|I’ll see",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0050",
+    "message_id": 662092,
+    "message_text": "Or Fremont",
+    "is_from_me": true,
+    "context_prev": "662090|me|So when get home? || 662091|them|well a couple min still",
+    "context_next": "662093|me|Like 50 min? || 662094|them|uh 8ish",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0172",
+    "message_id": 439501,
+    "message_text": "Is Mihir going to make something? I’ll help him with that if he is",
+    "is_from_me": true,
+    "context_prev": "439680|me|No || 439780|me|Did dad wake up?",
+    "context_next": "439636|me|Are we doing anything? || 439698|them|Yes",
+    "slice": "random",
+    "expected_candidates": [
+      {
+        "span_text": "Mihir",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0101",
+    "message_id": 664609,
+    "message_text": "Did Jomari and Faith also get dropped??",
+    "is_from_me": false,
+    "context_prev": "664605|them|Are you alright || 664608|them|Damn",
+    "context_next": "664613|them|Yea wtf || 664615|them|Damn I’m mad",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Jomari",
+        "span_label": "person_name",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "Faith",
+        "span_label": "person_name",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0045",
+    "message_id": 255380,
+    "message_text": "I’ll be in Tahoe",
+    "is_from_me": false,
+    "context_prev": "255437|them|Or Tahoe || 255393|them|Loved “Hawaii 🌸”",
+    "context_next": "255434|me|tf shanay ur goin twice || 255355|them|This weekend is with my parents it’s not the same",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0120",
+    "message_id": 12138,
+    "message_text": "bruh shiv g doesnt know her own parents anniversary ",
+    "is_from_me": true,
+    "context_prev": "12146|them|that’s for next week so depends on schedule || 12203|them|a cake was made though for a birthday on monday",
+    "context_next": "12026|them|i do, i just didn’t process what week it was rn lol || 12116|me|mhm sure",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "shiv g",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0128",
+    "message_id": 67082,
+    "message_text": "Great Mall and hub",
+    "is_from_me": false,
+    "context_prev": "67222|me|monke* || 66962|them|Gonna go on a errand run to return a bunch of stuff if anyone wants to come",
+    "context_next": "67026|them|I’m at the hub rn 😉 || 66946|them|Guys he meant cornhub 🤦‍♂️",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0148",
+    "message_id": 108881,
+    "message_text": "But these resale prices are already crazy",
+    "is_from_me": false,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0077",
+    "message_id": 351071,
+    "message_text": "it’s a spicy chicken quesadilla ",
+    "is_from_me": false,
+    "context_prev": "351183|me|Wow I’m bad at this || 351022|them|hahaha yeah it just sounds casual like that hahahaha",
+    "context_next": "351136|me|Where’d u get it || 351060|me|Damn spicy",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0192",
+    "message_id": 150961,
+    "message_text": "go find ur laptop charger silly",
+    "is_from_me": true,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0067",
+    "message_id": 222987,
+    "message_text": "Are you close to San Francisco",
+    "is_from_me": false,
+    "context_prev": "222930|them|Oh || 222871|me|fremont CA",
+    "context_next": "222889|me|yea || 222844|them|Ok ive heard of the",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0168",
+    "message_id": 4376,
+    "message_text": "im staying ",
+    "is_from_me": true,
+    "context_prev": "4504|them|Yeah down for cake || 4393|them|Are you also planning on driving back or you staying",
+    "context_next": "4462|me|cuz i got one more semester || 4590|them|Don't your school start a bit later tho",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0155",
+    "message_id": 56513,
+    "message_text": "and there shud be sum risk",
+    "is_from_me": true,
+    "context_prev": "56285|me|gud trades give both ppl upside || 56517|me|and neither is entirely happy w it",
+    "context_next": "56196|me|fr tho what he offer ik KUMbucket in there || 56327|me|🔒",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0147",
+    "message_id": 603201,
+    "message_text": "You’re ugly",
+    "is_from_me": false,
+    "context_prev": "603235|them|Thanks || 603127|me|I fucking hate you",
+    "context_next": "603112|me|I never wanna FaceTime you || 603219|me|Ihy",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0190",
+    "message_id": 62950,
+    "message_text": "There’s still hope 🙃",
+    "is_from_me": false,
+    "context_prev": "63095|them|Hoping packers have a collapse or something in second half || 63042|them|Defense nor offense have been good for cowboys",
+    "context_next": "62837|me|mike lookin pressed on the sideline bros boutta get fired || 62938|them|Laughed at “mike lookin pressed on the sideline bros boutta ge…”",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0041",
+    "message_id": 384567,
+    "message_text": "Bruh my dads bald and I have hard ",
+    "is_from_me": false,
+    "context_prev": "384346|them|My dad went to judge this week to contest and they dropped the case || 384439|them|Because there wasn’t enough evidence to know who was driving?????",
+    "context_next": "384335|them|* hair || 384464|them|Also I’m not going to Thailand 😢",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "dads",
+        "span_label": "family_member",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0144",
+    "message_id": 49955,
+    "message_text": "i needed rebounds today but i forgot game started early 🥲",
+    "is_from_me": true,
+    "context_prev": "50130|me|📠 || 49947|me|bro is mad inconsistent",
+    "context_next": "49988|them|Mpj has been able to off in last few days with Murray out but with joker and Murray healthy there he is gonna be limited || 50034|them|happy birthday Ram 🐼",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0095",
+    "message_id": 658372,
+    "message_text": "Jwalin.shah ",
+    "is_from_me": true,
+    "context_prev": "658370|me|O awk || 658371|me|Uhhh good question",
+    "context_next": "658373|me|So original ik || 658374|them|LMFAO",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0092",
+    "message_id": 667729,
+    "message_text": "idk dominos?",
+    "is_from_me": false,
+    "context_prev": "667725|them|vagarla idli || 667726|them|what is but going eat",
+    "context_next": "667730|me|I can get for u I might just eat khichdi || 667733|them|i eat food i have then",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0131",
+    "message_id": 19709,
+    "message_text": "Hey guys soooo…I am officially graduating this Tuesday May 14th @9am 🙌🏼 I passed my class lol Whoever is in Dallas and is able to join after the ceremony (cause of limited tickets), I’d love for yall to come celebrate with me afterwards at utd (around 12/1pm for some pics) or later in the evening somewhere for an activity/dinner",
+    "is_from_me": false,
+    "context_prev": "20535|me|thanks buddy || 20522|me|just cuz ur amazing ill buy it and trade w u",
+    "context_next": "19746|them|Loved “Hey guys soooo…I am officially graduating this Tue…” || 19817|them|Jwalin Sid if either of you are able to come to utd with Kishan and Kirti, I’d love that (but ik it’s literally a working day, so no pressure) I’m still figuring out my details since I just found out today, but they’ll most likely have to watch from outside/wait until the ceremony is over 🫠",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Dallas",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "utd",
+        "span_label": "org",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0130",
+    "message_id": 57468,
+    "message_text": "I really like Hyundai Elantra ",
+    "is_from_me": false,
+    "context_prev": "57386|me|kia forte gt line or hyundai elantra sel || 57406|me|most likely",
+    "context_next": "57467|me|just retested the kia || 57459|me|gonna go look at elantra again",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0074",
+    "message_id": 477053,
+    "message_text": "Yee I have your love and tangerine, both good",
+    "is_from_me": false,
+    "context_prev": "477057|them|your love and tangerine ye || 476941|them|tokyo drfiting is good but not like their usual",
+    "context_next": "477022|them|Downvoting || 476979|them|Glass animals",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0089",
+    "message_id": 362743,
+    "message_text": "lauren lives in nyc and i’ve known her basically my whole life ",
+    "is_from_me": false,
+    "context_prev": "362868|them|ik her from tufts || 362692|them|rachel i also know from tufts but she lives in boston",
+    "context_next": "362862|me|Ok well I think I would prefer you didn’t if I’m being honest || 362693|me|But I get why you would",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "lauren",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      },
+      {
+        "span_text": "nyc",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0188",
+    "message_id": 152497,
+    "message_text": "okay then go to sleep lol",
+    "is_from_me": false,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0038",
+    "message_id": 61944,
+    "message_text": "I thought soccer was met life in NY",
+    "is_from_me": false,
+    "context_prev": "61895|them|Ny is cricket || 61907|them|jerry slid em a check",
+    "context_next": "62022|them|Emphasized “jerry slid em a check” || 62118|them|Damn that’s crazy",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0030",
+    "message_id": 303475,
+    "message_text": "Most of what we got felt like samosas, parantha, dal fry and some palak sabji",
+    "is_from_me": false,
+    "context_prev": "303563|them|This wasn’t the place for vegetarian ppl, there’s one Ethiopian place I went to in Berk that was p solid || 303493|them|I might try it one more time but I’m not a big fan of Ethiopian",
+    "context_next": "303548|them|very indian lmao || 303391|them|Oh did you not do the thing where they place a bunch of stuff in a circle on top of a thick ass dosa type? Felt like a thali",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0059",
+    "message_id": 25383,
+    "message_text": "We headed to Houston rn",
+    "is_from_me": false,
+    "context_prev": "25309|them|so cute || 25206|them|We’re stuck in traffic",
+    "context_next": "25426|me|we skipped that shit || 25441|them|We took the exit and went around",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "Houston",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0200",
+    "message_id": 113973,
+    "message_text": "u got picked for a reason",
+    "is_from_me": true,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0163",
+    "message_id": 355459,
+    "message_text": "Marshall just sent me a playlist and this played ",
+    "is_from_me": true,
+    "context_prev": "355508|me|I’m not sleepy anymore tho || 355632|me|https://open.spotify.com/track/24UjTh2wPv6g78XeRNbyCQ?si=h6T9m1kbRXyflmh3Wv6Grg",
+    "context_next": "355577|them|oh wait || 355645|them|https://open.spotify.com/track/15D865qTYugczXskC5uv6u?si=1XTtBepzQBaHpo_2Rzmzdg",
+    "slice": "random",
+    "expected_candidates": [
+      {
+        "span_text": "Marshall",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0177",
+    "message_id": 35201,
+    "message_text": "jokes it was prolly ur dad",
+    "is_from_me": true,
+    "context_prev": "35252|me|wait ur actually goated || 35262|me|u fixed it already",
+    "context_next": "35154|me|but what exactly did u change? || 35158|me|was the issue where i thought it was",
+    "slice": "random",
+    "expected_candidates": [
+      {
+        "span_text": "dad",
+        "span_label": "family_member",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0169",
+    "message_id": 657008,
+    "message_text": "How do they know where to put stuff then ",
+    "is_from_me": true,
+    "context_prev": "656995|them|Liked “Yea ik where it is right next to the pole ” || 657007|me|That seems a lil dumb lol",
+    "context_next": "657009|them|They have stickers on the inside 😂 || 657010|them|Yeah it’s dumb",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0176",
+    "message_id": 599342,
+    "message_text": "Sent emails",
+    "is_from_me": true,
+    "context_prev": "599307|me|Also I think I took your sweatpants on accident because now I have 2 dark gray pairs || 599400|them|Ok",
+    "context_next": "598947|them|￼ || 599068|me|What's in it?",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0167",
+    "message_id": 371005,
+    "message_text": "Nooo I was kidding",
+    "is_from_me": false,
+    "context_prev": "371107|me|130* || 371271|me|Sadly this is true",
+    "context_next": "371137|me|Laughed at “Nooo I was kidding” || 371125|me|It do be true tho",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0134",
+    "message_id": 65851,
+    "message_text": "Please share pic of Black Forest cake & tiramisu ",
+    "is_from_me": false,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0196",
+    "message_id": 399519,
+    "message_text": "That’s good",
+    "is_from_me": false,
+    "context_prev": "399384|me|But I’m def managing it way better || 399453|me|I think physically too",
+    "context_next": "399314|me|And I haven’t done any cardio || 399436|me|I’m hella long",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0080",
+    "message_id": 311540,
+    "message_text": "New York lol",
+    "is_from_me": false,
+    "context_prev": "311726|them|very much could be down || 311591|me|Where tf are you",
+    "context_next": "311615|them|Just fly back || 311553|them|Unless Ny has a better lineup 👀",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0152",
+    "message_id": 167945,
+    "message_text": "he know best",
+    "is_from_me": true,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0132",
+    "message_id": 32719,
+    "message_text": "mane happy birthday brudda 🤞🏽have good one ",
+    "is_from_me": false,
+    "context_prev": "33525|them|yessir || 33568|them|lol i was finna say i thought thst shit was another day",
+    "context_next": "31698|them|games at 7:30 so what time should i scoop || 31841|me|so dart is apparently ass after 11",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0066",
+    "message_id": 54747,
+    "message_text": "Tikataco/bombay chop",
+    "is_from_me": false,
+    "context_prev": "54843|them|Bombay chowpatty || 54806|them|ok",
+    "context_next": "54491|them|Laughed at “hol up yall left me” || 54855|them|hey what vball plans",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0068",
+    "message_id": 259455,
+    "message_text": "My sisters stopped working and there’s no appointments at Apple Store available ",
+    "is_from_me": false,
+    "context_prev": "259519|them|Wheres yours || 259387|them|I have mine",
+    "context_next": "259491|them|She just needs for a week or so || 259312|them|Right so why doesnt she just use your old one",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "sisters",
+        "span_label": "family_member",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0055",
+    "message_id": 476892,
+    "message_text": "Newark and union city actually",
+    "is_from_me": false,
+    "context_prev": "476765|them|I saw it once || 476828|them|Idk where",
+    "context_next": "476738|them|￼ || 476881|them|oh that’s dope",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "Newark",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "union city",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0021",
+    "message_id": 213579,
+    "message_text": "Yooo that’s way cheaper than KPMG garage",
+    "is_from_me": false,
+    "context_prev": "213610|them|Emphasized “we can park at EY garage, which is a 5 minute walk…” || 213530|them|Laughed at “Bring out them rain coats ”",
+    "context_next": "213673|them|I mean they may or may not increase the price during the days of mavs games, I’m not sure || 213506|them|But it’s def not $20-$30 like the other garages by the arena",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0006",
+    "message_id": 476452,
+    "message_text": "Basically the house has been talking about this trip to big bear, some ski place in SoCal since freshmen year but it hasn’t happened yet, so he was talking about that",
+    "is_from_me": false,
+    "context_prev": "476294|them|https://www.youtube.com/watch?v=c_Pl2ArlB24 || 476479|them|The performance iw as talking about earlier today ^^ fire if yall wanna watch",
+    "context_next": "476322|them|Loved “The performance iw as talking about earlier today ^^ fire if yall wanna watch” || 476429|them|￼",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "big bear",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "SoCal",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0104",
+    "message_id": 660049,
+    "message_text": "Mihir Jwalin want idli vada?",
+    "is_from_me": false,
+    "context_prev": "660038|them|ETA 8 || 660039|them|Liked “ETA 8”",
+    "context_next": "660050|them|From idli express || 660051|them|yes",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Mihir",
+        "span_label": "person_name",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "Jwalin",
+        "span_label": "person_name",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "idli vada",
+        "span_label": "food_item",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0012",
+    "message_id": 213633,
+    "message_text": "we can park at EY garage, which is a 5 minute walk to stadium ",
+    "is_from_me": false,
+    "context_prev": "213545|them|Gotta find a good place to park if we driving || 213651|them|imma drive",
+    "context_next": "213541|them|How much does EY garage cost || 213595|them|Bring out them rain coats",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0198",
+    "message_id": 587629,
+    "message_text": "Head hurts when I use laptop",
+    "is_from_me": true,
+    "context_prev": "587675|them|Why? || 587580|them|What happened? Having pain?",
+    "context_next": "587607|me|But it's better now || 587566|me|Just trying little by little",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0125",
+    "message_id": 68450,
+    "message_text": "Holy Keegan 12/13 from three is fucking nuts 😵‍💫",
+    "is_from_me": false,
+    "context_prev": "68623|them|For another few weeks lmao || 68799|them|Bro is the new AD",
+    "context_next": "68587|them|￼This is some crazy stuff lol || 68441|them|Pistons fans down bad",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0018",
+    "message_id": 53847,
+    "message_text": "Everyone knows the developer developer developer meme right?",
+    "is_from_me": false,
+    "context_prev": "53954|them|https://youtu.be/BV9Xy6L_rlM?si=PNC3mlj7y-564X4s || 53878|them|Watch this for context",
+    "context_next": "53853|them|Yeah || 53712|them|https://www.instagram.com/reel/C2kB5ANryZV/?igsh=MzRlODBiNWFlZA==",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0070",
+    "message_id": 657148,
+    "message_text": "Maple leaf is so expensive now",
+    "is_from_me": false,
+    "context_prev": "656617|them|Loved “yo gurt ” || 657147|them|I’m so sad",
+    "context_next": "657149|them|The lady really packed my bag last time I got donut holes tho || 657150|them|Sometimes they come through",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0166",
+    "message_id": 90832,
+    "message_text": "A bad one but",
+    "is_from_me": false,
+    "context_prev": "90839|them|Took live action gameplay too real || 91022|them|Wasn’t it a prank",
+    "context_next": "90962|them|where did it say it was a prank || 90864|them|No it wasn’t",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0164",
+    "message_id": 195820,
+    "message_text": "i was lighter then too by like 40 pounds",
+    "is_from_me": true,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0008",
+    "message_id": 395192,
+    "message_text": "yah its a hella good pizza place in berk",
+    "is_from_me": false,
+    "context_prev": "395206|them|and sliver is coming to central fremont soon || 395257|me|Sliver?",
+    "context_next": "395361|me|Jk i have capped || 395364|me|It’s like a smaller version they don’t have the full menu",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0114",
+    "message_id": 644880,
+    "message_text": "The fucking black people in Oak Cliff made him leave",
+    "is_from_me": false,
+    "context_prev": "645028|them|KISHAN BUT THOSE LAKERS RICKETS || 645000|them|RESELL FOR 5 GRAND",
+    "context_next": "644851|them|Bro im boutta cop em rn no diddy || 644822|them|Laughed at “The fucking black people in Oak Cliff made him lea…”",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Oak Cliff",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0154",
+    "message_id": 392091,
+    "message_text": "hell nah my dude ",
+    "is_from_me": false,
+    "context_prev": "392250|them|in no world is arod better than brady || 392104|them|rishi said arod is trash",
+    "context_next": "392239|them|that’s crap || 392078|them|*cap",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0146",
+    "message_id": 606687,
+    "message_text": "cause like its hard to sum up",
+    "is_from_me": false,
+    "context_prev": "606603|me|Okay || 606781|them|im just gonna send you pic",
+    "context_next": "606594|them|￼ || 606730|them|so we boolin",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0078",
+    "message_id": 308870,
+    "message_text": "Original Bart map : I see a lack of Pleasanton 🤔🤔🤔",
+    "is_from_me": false,
+    "context_prev": "308692|them|Nah busy tn g sorry || 308851|them|￼",
+    "context_next": "308747|them|No we’ve been in agreement on this || 308792|them|I’m in agreement until I find evidence that Benefits me",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0052",
+    "message_id": 288818,
+    "message_text": "Y’all ever heard of the Colma BART station lmao",
+    "is_from_me": false,
+    "context_prev": "289952|them|Laughed at an image || 289892|them|Laughed at an image",
+    "context_next": "288968|them|Ro and I passed by it earlier this evening but weve never even heard of it || 288752|them|It’s apparently super ghetto",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0002",
+    "message_id": 495717,
+    "message_text": "He goes hard enough that he needs to drink protein shakes after",
+    "is_from_me": false,
+    "context_prev": "495548|them|It’s all a mind game || 495680|them|wii tennis still more legit than whatever hes playing",
+    "context_next": "495521|them|LOL || 495637|them|ok boys leggo now?",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0029",
+    "message_id": 148870,
+    "message_text": "Vishakh you in Richardson? ",
+    "is_from_me": false,
+    "context_prev": "149104|them|lmaoo apple cash honestly more convenient || 149227|them|What world u living in",
+    "context_next": "148891|them|Yuh || 148848|them|Why",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "Vishakh",
+        "span_label": "person_name",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "Richardson",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0178",
+    "message_id": 476979,
+    "message_text": "Glass animals ",
+    "is_from_me": false,
+    "context_prev": "477053|them|Yee I have your love and tangerine, both good || 477022|them|Downvoting",
+    "context_next": "476996|them|Disliked “Downvoting ” || 477041|them|Is animal cruelty",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0082",
+    "message_id": 382964,
+    "message_text": "Latin America has tons of veg food too but yeah",
+    "is_from_me": false,
+    "context_prev": "382906|me|I do like veg food || 382782|them|That’s kind of the same everywhere but Europe and India tbh",
+    "context_next": "382783|them|Sfo || 382791|them|why you at sfo",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0124",
+    "message_id": 671204,
+    "message_text": "Join Dr. Lea Papinto's crypto academy. Learn quantitative trading, systems & strategy education. Click: https://ose.668ddf.cc/",
+    "is_from_me": false,
+    "context_prev": "",
+    "context_next": "671203|them|https://ose.668ddf.cc/",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0142",
+    "message_id": 265166,
+    "message_text": "bro the warriors choke yesterday",
+    "is_from_me": true,
+    "context_prev": "264951|me|they could have run the table || 265070|me|how is it?",
+    "context_next": "264902|them|Idk what they were doing, even one TD would be good || 265013|them|Super fun, went to San Cristobal which was a gorgeous historical town",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0184",
+    "message_id": 608856,
+    "message_text": "Okay cool!",
+    "is_from_me": false,
+    "context_prev": "608962|me|I'm gonna do laundry || 608985|me|Thanks",
+    "context_next": "608861|me|Can you actually pick me up from the library? || 608894|them|Yes, rn?",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0137",
+    "message_id": 671715,
+    "message_text": "Hello Jwalin, please call me to discuss your case, thanks.",
+    "is_from_me": false,
+    "context_prev": "671655|them|Contingency fee. We charge a percentage of your settlement only once we get it which is exactly one third, or 33.3%. || 671676|them|Would you like to set a day and time with me to discuss your case?",
+    "context_next": "671719|them|Hello please call me to discuss your case thanks. || 671721|me|Before reviewing or signing an engagement agreement, I want to confirm alignment on a few key terms:     1.    Withdrawal: Under what circumstances would your firm withdraw from representation? If withdrawal occurs, what protections are in place for the client, including assistance with transition to new counsel and confirmation that no fees are owed beyond reimbursable costs already advanced?     2.    Costs & Expenses: How are litigation costs handled? Does the firm advance costs, and if there is no recovery, is the client still responsible for those costs? Are there caps or client approval requirements for significant expenses such as expert witnesses or depositions?     3.    Contingency Fee Triggers: How does your contingency percentage change, if at all, after filing? Are any increases tied to substantive litigation milestones (e.g., depositions, expert retention, trial preparation) rather than the passage of time?     4.    Early Resolution: If the matter resolves early or requires minimal litigation, is there a reduced or stepped contingency fee?     5.    Fee Calculation: Are contingency fees calculated on gross recovery or net recovery after costs?",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0087",
+    "message_id": 188497,
+    "message_text": "vivek’s place will be closer, but uncles might be running the courts",
+    "is_from_me": false,
+    "context_prev": "188521|them|can run that again too || 188607|them|Worst case we can still hoop at either location no?",
+    "context_next": "188551|them|till at least 9 || 188564|them|let’s go to cottonwood",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "vivek",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0129",
+    "message_id": 29119,
+    "message_text": "Just Allen bc it closer for all 3 location",
+    "is_from_me": false,
+    "context_prev": "29105|them|anyone opposed to doing the colony one || 29059|them|Thats also fine",
+    "context_next": "29124|them|If we doing colony can i get scooped by the utd car then? || 29090|them|Unless het already booked",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0139",
+    "message_id": 65371,
+    "message_text": "Buy from Best Buy",
+    "is_from_me": false,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0158",
+    "message_id": 174154,
+    "message_text": "mahi naked ",
+    "is_from_me": true,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [
+      {
+        "span_text": "mahi",
+        "span_label": "person_name",
+        "agreement": 1,
+        "confidence": "low"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0162",
+    "message_id": 527839,
+    "message_text": "Wow look at you out here baking ",
+    "is_from_me": true,
+    "context_prev": "528051|them|￼ || 527827|me|Loved an image",
+    "context_next": "527761|me|Also how is that a snickerdoodle || 527846|me|That has chocolate chips",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0085",
+    "message_id": 181134,
+    "message_text": "Dame gets no love",
+    "is_from_me": false,
+    "context_prev": "181155|them|Once her signs the super max || 181003|them|I’d say next to Dame",
+    "context_next": "180991|them|As soon as he signs the papers he can have it || 181060|me|nah he gets it hes just been mia the last 2 years w injuries",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0145",
+    "message_id": 563406,
+    "message_text": "Basketball",
+    "is_from_me": false,
+    "context_prev": "563468|me|Chess || 563566|them|Chess",
+    "context_next": "563206|me|Chess || 563372|me|�￼",
+    "slice": "random",
+    "expected_candidates": [
+      {
+        "span_text": "Basketball",
+        "span_label": "activity",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0048",
+    "message_id": 204609,
+    "message_text": "My cousin was already coming ",
+    "is_from_me": false,
+    "context_prev": "204623|them|Laughed at “nah we bought this shit before he appeared ” || 204501|them|Bro spawned",
+    "context_next": "204589|them|He’s part of my 5 || 204495|them|I didn’t ask any extra outside my original five I bought tix for",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "cousin",
+        "span_label": "family_member",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0108",
+    "message_id": 672047,
+    "message_text": "My friend took it and said it was actually a joke",
+    "is_from_me": false,
+    "context_prev": "672044|them|Loved “Human computer interaction was a breeze ” || 672045|them|Ok dropping paradigms rn",
+    "context_next": "672048|them|Salazar hws are pretty gay for paradigms || 672049|them|He makes u document every little thing too",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0094",
+    "message_id": 228033,
+    "message_text": "also for chicago/spring break, dfw to chicago is $69, chicago to miami jus $63, and miami to dfw is $48 if y’all down👀",
+    "is_from_me": false,
+    "context_prev": "228157|them|i was checking booking, but i’ll check exp || 228104|them|They both solid",
+    "context_next": "228093|them|Do the timings work out tho || 228154|them|Or is it dookie",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0117",
+    "message_id": 67058,
+    "message_text": "🎄🎄MERRY CHRISTMAS BITCHES🎄🎄!! Now that it’s finally DICKmas 👅💦Santa’s about to slide 🎅🏾😉 down your hot 🔥 hot 🔥chimney tonight. So lick 💦💋those juicy candy canes and drink up that creamy eggnog🍼, it’s about to get wet down at Santa’s workshop🍆🍆! Don’t forgot to slide down that XXXtra 🎅🏾🎅🏾 big North Pole, and make sure your 🍪 cookie 🍪is yummy enough for Santa to eat👄! 👀 But are you bad enough to handle Santa’s giant juicy 8=candy👊🏼COCK=D💦?? Send this to 🔟 of your baddest bitch elves💁🏼💁🏾 If you get 5️⃣ back, youre on the naughty list this year🍆💦! If you get 🔟 back you better be ready for Santa’s hot ♨️CUMlate☕️💦😭 If you get 2️⃣0️⃣ back you’ve got the most bitchin 🍬peppermint 🍬pussy in the North Pole! ❄️⛄ Hope you get to blow 🌬 lots of XXXmas 🎄dick, and that you get lots of XXXmas 🎄CUMMIES 💝💝 HAVE A SLUTTY 💦🍆👅DICKMAS YOU HOE HOE HOE!!! 🎅🏾🎅🏿🎅🏽🎅🏼",
+    "is_from_me": false,
+    "context_prev": "67167|me|Emphasized “I’m also down if everyone use” || 67186|them|Same tired",
+    "context_next": "67085|them|Same tired || 67121|them|Loved “🎄🎄MERRY CHRISTMAS BITCHES🎄🎄!! Now that it’s fi…”",
+    "slice": "near_miss",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0037",
+    "message_id": 473327,
+    "message_text": "Who wants to get Denny’s while I’m back",
+    "is_from_me": false,
+    "context_prev": "473669|them|hate when that happens || 473668|them|Rip then",
+    "context_next": "473445|them|You know I’m down || 473416|them|Loved “You know I’m down”",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0001",
+    "message_id": 65489,
+    "message_text": "Apparently Dua Lipa just toured Rajasthan for vacation",
+    "is_from_me": false,
+    "context_prev": "65530|them|i knew you had a foot fetish || 65500|them|My name is not soumi",
+    "context_next": "65513|them|State is Officially no longer thirsty 🫡 || 65576|them|She’s Arab dawg",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0119",
+    "message_id": 667331,
+    "message_text": "Can I go to bears game with Krusha on dec 28",
+    "is_from_me": true,
+    "context_prev": "667260|them|Maybe Everest || 667262|them|Ask Soham / Krusha",
+    "context_next": "667332|me|$250 || 667335|them|Are there any tickets in $100 range?",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Krusha",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0097",
+    "message_id": 491511,
+    "message_text": "yeah im pretty sure ham is nearly the center of those fires east of sj",
+    "is_from_me": false,
+    "context_prev": "491379|me|Lmao that would have been funny if any of us knew that || 491443|me|And also don’t be a pussy who cares if there’s a fire let’s go",
+    "context_next": "491386|them|Loved “And also don’t be a pussy who cares if there’s a fire let’s go” || 491464|them|Aye if I can, should I get a 27 or 34 inch monitor",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0032",
+    "message_id": 225924,
+    "message_text": "Has rishi been to nyc before?",
+    "is_from_me": false,
+    "context_prev": "225969|them|Rishi was telling us TJ’s area is damn nice too || 226047|them|Emphasized “Rishi was telling us TJ’s area is damn nice too”",
+    "context_next": "226070|them|Oh a ton || 225975|them|He also lived there for training all last summer",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "rishi",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      },
+      {
+        "span_text": "nyc",
+        "span_label": "place",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0071",
+    "message_id": 230947,
+    "message_text": "Haystack Burgers and Barley\n(972) 863-9646",
+    "is_from_me": false,
+    "context_prev": "230951|me|im prolly just gonna stay here || 230979|them|https://maps.app.goo.gl/rV5sJ4gBX9L23yT58?g_st=i",
+    "context_next": "230925|them|6:30^ || 230920|them|or if y’all wanna head out earlier you can, just let us know we’ll leave too",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0031",
+    "message_id": 184206,
+    "message_text": "3100 northside blvd",
+    "is_from_me": false,
+    "context_prev": "184216|them|Pls tell me it’s under 25 minute drive || 184149|them|utd",
+    "context_next": "184142|them|23 minutes with tolls 😎😎😎 || 184313|them|When should I slide",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0073",
+    "message_id": 339652,
+    "message_text": "Turns out her sister and kohler were best friends in high school lol",
+    "is_from_me": false,
+    "context_prev": "339931|me|Loved a movie || 339778|them|I’m at Nikita’s sisters wedding and kohler is a bridesmaid",
+    "context_next": "339731|them|So cute, Nickita Caitlyn and I were grabbing boba a few years ago and ran into them hanging out || 339477|them|Emphasized “Turns out her sister and kohler were best friends in high school lol”",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "sister",
+        "span_label": "family_member",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "kohler",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0157",
+    "message_id": 153126,
+    "message_text": "i just love u too much",
+    "is_from_me": true,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0033",
+    "message_id": 234385,
+    "message_text": "We alr hittin up Nola in feb for mardi gras I thought",
+    "is_from_me": false,
+    "context_prev": "234486|them|february || 234302|them|if we drive lol flights be crazy expensive",
+    "context_next": "234482|them|It’s bout $200 round trip rn || 234313|them|I just checked last night",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0060",
+    "message_id": 658440,
+    "message_text": "went to vons 1000 spirits this trip and it had good sourdough pasta/pizza",
+    "is_from_me": false,
+    "context_prev": "658339|me|Also any food recs || 658439|them|not too familiar with city stuff tbh, obv pike place haha",
+    "context_next": "658441|them|ramen danbo is a classic || 658442|them|idk what else for vegetarians",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0174",
+    "message_id": 197024,
+    "message_text": "What’s our numbers? ",
+    "is_from_me": false,
+    "context_prev": "197066|them|Probably like 12/12:30 I’ll try and be home by || 197168|them|The hard part about Christie’s us is usually packed on Saturdays so it’s hard to get a table for a big group",
+    "context_next": "196992|them|uhh || 197009|them|Jwalin Vivek Shrey",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0069",
+    "message_id": 669933,
+    "message_text": "Cake was so yummy",
+    "is_from_me": false,
+    "context_prev": "669931|them|Oo nice nice || 669932|them|Voice to text would work",
+    "context_next": "669934|them|I’ll save some for you || 669978|them|Yuh yuh cake good we eat good",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0151",
+    "message_id": 356818,
+    "message_text": "And then I’m like ",
+    "is_from_me": true,
+    "context_prev": "356613|me|I still say anything || 356704|me|I just say it",
+    "context_next": "356599|me|Shud I have || 356745|them|hahahaahaa",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0156",
+    "message_id": 234310,
+    "message_text": "chicago just does a big st pattys celebration pretty sure",
+    "is_from_me": false,
+    "context_prev": "234460|them|it’s green lol || 234407|them|Emphasized “it’s green lol”",
+    "context_next": "234429|them|and yea it’s just green lol || 234450|them|Emphasized “chicago just does a big st pattys celebration pret…”",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0187",
+    "message_id": 164351,
+    "message_text": "sleepyhead",
+    "is_from_me": true,
+    "context_prev": "",
+    "context_next": "",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0026",
+    "message_id": 73400,
+    "message_text": "Nah lmao I just pulled up to rishi’s if y’all wanna come thru",
+    "is_from_me": false,
+    "context_prev": "73471|them|Lmaoooo || 73354|me|Iz ok im fine",
+    "context_next": "73445|them|Jwals get yo ass over here || 73369|me|Im tired",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "rishi",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0011",
+    "message_id": 308888,
+    "message_text": "Anyone down for dinner in South Bay",
+    "is_from_me": false,
+    "context_prev": "308919|them|This what I got when searching for Fremont lol || 308942|them|Laughed at “This what I got when searching for Fremont lol”",
+    "context_next": "308848|them|No || 308692|them|Nah busy tn g sorry",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0015",
+    "message_id": 409757,
+    "message_text": "We can go to bass lake which is like a mile away",
+    "is_from_me": false,
+    "context_prev": "409711|them|But think of what y’all wanna do || 409649|them|Liked “We can do Friday and leave Sunday afternoon”",
+    "context_next": "409628|them|There’s boat rentals and all that stuff || 409768|them|ya im very down for this",
+    "slice": "positive",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0014",
+    "message_id": 57928,
+    "message_text": "Let’s do Tuesday night for meetup at bar for shanay ",
+    "is_from_me": false,
+    "context_prev": "57913|them|Rachit just said he wants to break a black dogs arm || 57949|them|Blatant animal cruelty",
+    "context_next": "58149|them|Let’s confirm soon lol? || 58048|them|Loved “Let’s do Tuesday night for meetup at bar for shana…”",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "shanay",
+        "span_label": "person_name",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0185",
+    "message_id": 17136,
+    "message_text": "Derrick white had special help from St Jude’s\nJaylen Brown is a certified cunt\nTatum not even the third best player on that roster\nJrue Holiday needs to go on fucking holiday\nKristaps looks like a nazi come out of retirement\nPritchard the only likable one ",
+    "is_from_me": false,
+    "context_prev": "17093|them|i jus don’t like tatum || 17257|them|everyone else a dawg",
+    "context_next": "17023|them|🤬 || 16977|them|lol I can never respect your basketball option",
+    "slice": "random",
+    "expected_candidates": [],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0017",
+    "message_id": 317679,
+    "message_text": "Cousins are staying at mine for next few days so mom wants me to stay",
+    "is_from_me": false,
+    "context_prev": "317622|them|lol what happened || 317752|them|^^^",
+    "context_next": "317748|them|We should be able to do anytime next week || 317590|me|Bool",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "Cousins",
+        "span_label": "family_member",
+        "agreement": 2,
+        "confidence": "medium"
+      },
+      {
+        "span_text": "mom",
+        "span_label": "family_member",
+        "agreement": 2,
+        "confidence": "medium"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0004",
+    "message_id": 376380,
+    "message_text": "Yea Ro remember how surprised you were with Ryan air flight prices",
+    "is_from_me": false,
+    "context_prev": "376435|them|Hmm yeah I think 3-3.5 k will work || 376459|them|The earlier we plan the cheaper too",
+    "context_next": "376396|them|1k for inter seems excessive || 376349|them|Im overestimating cuz Ros worried LOL",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "Ro",
+        "span_label": "person_name",
+        "agreement": 1,
+        "confidence": "low"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0133",
+    "message_id": 55341,
+    "message_text": "Being there for the engagement is more important than the proposal if you had to pick between the two. But Danu would be so excited if y’all are also there for the proposal ",
+    "is_from_me": false,
+    "context_prev": "55306|them|https://g.co/kgs/xcR4p5x || 55354|them|Japanese Garden (713) 524-5876",
+    "context_next": "55314|me|i shud be able to be there for proposal too || 55342|them|Loved “i shud be able to be there for proposal too”",
+    "slice": "near_miss",
+    "expected_candidates": [
+      {
+        "span_text": "Danu",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  },
+  {
+    "sample_id": "v6_0056",
+    "message_id": 663657,
+    "message_text": "before you come check with shivam he still wants dinner otherwise i can jsut bart back ",
+    "is_from_me": false,
+    "context_prev": "663620|them|bambo italiano || 663621|them|do we have kindle for me to use",
+    "context_next": "663681|them|6:30 is when i get off || 663734|them|idk im walk to cart",
+    "slice": "positive",
+    "expected_candidates": [
+      {
+        "span_text": "shivam",
+        "span_label": "person_name",
+        "agreement": 3,
+        "confidence": "high"
+      }
+    ],
+    "review_needed": false
+  }
+]

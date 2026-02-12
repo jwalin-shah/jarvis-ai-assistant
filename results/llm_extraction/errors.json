@@ -1,74 +1,1330 @@
 [
   {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0357",
+    "type": "fp",
+    "sample_id": "v6_0001",
     "slice": "positive",
-    "message_text": "My mom actually texted me this morning saying my acceptance letter went to the house",
-    "gold_span": "acceptance letter",
-    "gold_label": "activity"
+    "message_text": "Apparently Dua Lipa just toured Rajasthan for vacation",
+    "pred_span": "Dua Lipa",
+    "pred_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0002",
+    "slice": "positive",
+    "message_text": "He goes hard enough that he needs to drink protein shakes after",
+    "pred_span": "protein shakes",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0003",
+    "slice": "positive",
+    "message_text": "Glazed \nApple fritter \nOld fashioned glazed\nMaple",
+    "pred_span": "glazed",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0003",
+    "slice": "positive",
+    "message_text": "Glazed \nApple fritter \nOld fashioned glazed\nMaple",
+    "pred_span": "Old fashioned",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0003",
+    "slice": "positive",
+    "message_text": "Glazed \nApple fritter \nOld fashioned glazed\nMaple",
+    "pred_span": "Apple",
+    "pred_label": "org"
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0357",
+    "sample_id": "v6_0004",
     "slice": "positive",
-    "message_text": "My mom actually texted me this morning saying my acceptance letter went to the house",
-    "gold_span": "house",
+    "message_text": "Yea Ro remember how surprised you were with Ryan air flight prices",
+    "gold_span": "Ro",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0005",
+    "slice": "positive",
+    "message_text": "But I never bought bagels and made myself I bought them at a bagel shop and was not a fan ",
+    "pred_span": "bagels",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0006",
+    "slice": "positive",
+    "message_text": "Basically the house has been talking about this trip to big bear, some ski place in SoCal since fres",
+    "pred_span": "he was talking",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0007",
+    "slice": "positive",
+    "message_text": "did we go to portage bay cafe in seattle",
+    "pred_span": "portage bay cafe",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0007",
+    "slice": "positive",
+    "message_text": "did we go to portage bay cafe in seattle",
+    "pred_span": "seattle",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0009",
+    "slice": "positive",
+    "message_text": "Angel is great Indian food in Jackson heights",
+    "pred_span": "Jackson heights",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0012",
+    "slice": "positive",
+    "message_text": "we can park at EY garage, which is a 5 minute walk to stadium ",
+    "pred_span": "EY garage",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0012",
+    "slice": "positive",
+    "message_text": "we can park at EY garage, which is a 5 minute walk to stadium ",
+    "pred_span": "stadium",
+    "pred_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0013",
+    "slice": "positive",
+    "message_text": "long term here is a nightmare to me. Far away from bay/socal so no proximity to fam or friends ",
+    "gold_span": "bay",
     "gold_label": "place"
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0329",
+    "sample_id": "v6_0013",
     "slice": "positive",
-    "message_text": "Bc I also don\u2019t know what the situation would be where I would have sex w a guy",
-    "gold_span": "sex",
-    "gold_label": "activity"
+    "message_text": "long term here is a nightmare to me. Far away from bay/socal so no proximity to fam or friends ",
+    "gold_span": "socal",
+    "gold_label": "place"
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0102",
+    "sample_id": "v6_0014",
     "slice": "positive",
-    "message_text": "Kk! And ur down to leave anytime? I was just gonna take the Bart cause I hate driving in sf",
-    "gold_span": "BART",
-    "gold_label": "activity"
+    "message_text": "Let\u2019s do Tuesday night for meetup at bar for shanay ",
+    "gold_span": "shanay",
+    "gold_label": "person_name"
   },
   {
     "type": "fp",
-    "sample_id": "r2_fact_gs_0144",
+    "sample_id": "v6_0014",
     "slice": "positive",
-    "message_text": "Haha yea man, I used to work at a job where I could wake up later, but now definitely no longer the ",
-    "pred_span": "meditation",
+    "message_text": "Let\u2019s do Tuesday night for meetup at bar for shanay ",
+    "pred_span": "Tuesday night",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0014",
+    "slice": "positive",
+    "message_text": "Let\u2019s do Tuesday night for meetup at bar for shanay ",
+    "pred_span": "bar",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0014",
+    "slice": "positive",
+    "message_text": "Let\u2019s do Tuesday night for meetup at bar for shanay ",
+    "pred_span": "meetup",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0015",
+    "slice": "positive",
+    "message_text": "We can go to bass lake which is like a mile away",
+    "pred_span": "bass lake",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0016",
+    "slice": "positive",
+    "message_text": "Badminton or ping pong or something today?",
+    "pred_span": "badminton",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0016",
+    "slice": "positive",
+    "message_text": "Badminton or ping pong or something today?",
+    "pred_span": "ping pong",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0017",
+    "slice": "positive",
+    "message_text": "Cousins are staying at mine for next few days so mom wants me to stay",
+    "gold_span": "mom",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0017",
+    "slice": "positive",
+    "message_text": "Cousins are staying at mine for next few days so mom wants me to stay",
+    "pred_span": "stay",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0019",
+    "slice": "positive",
+    "message_text": "cuz i\u2019m lowkey hungry, was gonna wait to eat din around 6-6:30, but if we grabbing food before movie",
+    "pred_span": "lowkey hungry",
+    "pred_label": "health_condition"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0019",
+    "slice": "positive",
+    "message_text": "cuz i\u2019m lowkey hungry, was gonna wait to eat din around 6-6:30, but if we grabbing food before movie",
+    "pred_span": "wait to eat",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0019",
+    "slice": "positive",
+    "message_text": "cuz i\u2019m lowkey hungry, was gonna wait to eat din around 6-6:30, but if we grabbing food before movie",
+    "pred_span": "grabbing food before",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0019",
+    "slice": "positive",
+    "message_text": "cuz i\u2019m lowkey hungry, was gonna wait to eat din around 6-6:30, but if we grabbing food before movie",
+    "pred_span": "snack",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0020",
+    "slice": "positive",
+    "message_text": "so i\u2019m like english is his first language hahah he\u2019s from georgia ",
+    "pred_span": "english",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0024",
+    "slice": "positive",
+    "message_text": "I finally asked my parents what part of Toronto I used to live in",
+    "gold_span": "Toronto",
+    "gold_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0024",
+    "slice": "positive",
+    "message_text": "I finally asked my parents what part of Toronto I used to live in",
+    "gold_span": "parents",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0026",
+    "slice": "positive",
+    "message_text": "Nah lmao I just pulled up to rishi\u2019s if y\u2019all wanna come thru",
+    "gold_span": "rishi",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0027",
+    "slice": "positive",
+    "message_text": "You talkin bout the cop after Samiksha\u2019s wedding?",
+    "gold_span": "Samiksha",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0028",
+    "slice": "positive",
+    "message_text": "Ye sis has it off ",
+    "gold_span": "sis",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0029",
+    "slice": "positive",
+    "message_text": "Vishakh you in Richardson? ",
+    "gold_span": "Vishakh",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0029",
+    "slice": "positive",
+    "message_text": "Vishakh you in Richardson? ",
+    "gold_span": "Richardson",
+    "gold_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0030",
+    "slice": "positive",
+    "message_text": "Most of what we got felt like samosas, parantha, dal fry and some palak sabji",
+    "pred_span": "samosas",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0030",
+    "slice": "positive",
+    "message_text": "Most of what we got felt like samosas, parantha, dal fry and some palak sabji",
+    "pred_span": "parantha",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0030",
+    "slice": "positive",
+    "message_text": "Most of what we got felt like samosas, parantha, dal fry and some palak sabji",
+    "pred_span": "dal fry",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0030",
+    "slice": "positive",
+    "message_text": "Most of what we got felt like samosas, parantha, dal fry and some palak sabji",
+    "pred_span": "palak sabji",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0032",
+    "slice": "positive",
+    "message_text": "Has rishi been to nyc before?",
+    "gold_span": "rishi",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0032",
+    "slice": "positive",
+    "message_text": "Has rishi been to nyc before?",
+    "gold_span": "nyc",
+    "gold_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0035",
+    "slice": "positive",
+    "message_text": "London -> Paris -> Lisbon -> Madrid and Barcelona -> Italy",
+    "pred_span": "London",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0035",
+    "slice": "positive",
+    "message_text": "London -> Paris -> Lisbon -> Madrid and Barcelona -> Italy",
+    "pred_span": "Paris",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0035",
+    "slice": "positive",
+    "message_text": "London -> Paris -> Lisbon -> Madrid and Barcelona -> Italy",
+    "pred_span": "Lisbon",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0035",
+    "slice": "positive",
+    "message_text": "London -> Paris -> Lisbon -> Madrid and Barcelona -> Italy",
+    "pred_span": "Madrid",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0035",
+    "slice": "positive",
+    "message_text": "London -> Paris -> Lisbon -> Madrid and Barcelona -> Italy",
+    "pred_span": "Barcelona",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0035",
+    "slice": "positive",
+    "message_text": "London -> Paris -> Lisbon -> Madrid and Barcelona -> Italy",
+    "pred_span": "Italy",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0035",
+    "slice": "positive",
+    "message_text": "London -> Paris -> Lisbon -> Madrid and Barcelona -> Italy",
+    "pred_span": "sb",
+    "pred_label": "org"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0036",
+    "slice": "positive",
+    "message_text": "yeah she just lived with a family for 3 months and didn\u2019t have to pay rent and did some housework / ",
+    "pred_span": "didn't pay rent",
+    "pred_label": "job_role"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0036",
+    "slice": "positive",
+    "message_text": "yeah she just lived with a family for 3 months and didn\u2019t have to pay rent and did some housework / ",
+    "pred_span": "did some housework",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0036",
+    "slice": "positive",
+    "message_text": "yeah she just lived with a family for 3 months and didn\u2019t have to pay rent and did some housework / ",
+    "pred_span": "took care of",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0038",
+    "slice": "positive",
+    "message_text": "I thought soccer was met life in NY",
+    "pred_span": "soccer",
     "pred_label": "activity"
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0306",
+    "sample_id": "v6_0042",
     "slice": "positive",
-    "message_text": "I like studyung 30-40 moves of theory",
-    "gold_span": "theory",
+    "message_text": "Can we do 3 I\u2019m going to Costco with my parents rn ",
+    "gold_span": "parents",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0042",
+    "slice": "positive",
+    "message_text": "Can we do 3 I\u2019m going to Costco with my parents rn ",
+    "pred_span": "Costco",
+    "pred_label": "org"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0044",
+    "slice": "positive",
+    "message_text": "wait why is she moving to dallas ",
+    "gold_span": "dallas",
+    "gold_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0044",
+    "slice": "positive",
+    "message_text": "wait why is she moving to dallas ",
+    "pred_span": "dallas",
+    "pred_label": "past_location"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0045",
+    "slice": "positive",
+    "message_text": "I\u2019ll be in Tahoe",
+    "pred_span": "Tahoe",
+    "pred_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0046",
+    "slice": "positive",
+    "message_text": "I love hawaii\u2764\ufe0f",
+    "gold_span": "hawaii",
+    "gold_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0047",
+    "slice": "positive",
+    "message_text": "Soham won\u2019t give me time to create so ima take advantage of it",
+    "gold_span": "Soham",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0049",
+    "slice": "positive",
+    "message_text": "you love bagels so much hahaha",
+    "gold_span": "bagels",
+    "gold_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0051",
+    "slice": "positive",
+    "message_text": "Here\u2019s the plan:\n\u2043variety pack of white claw\n\u2043a pack of mango claw (this is just my preference lol)\n",
+    "pred_span": "variety pack",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0051",
+    "slice": "positive",
+    "message_text": "Here\u2019s the plan:\n\u2043variety pack of white claw\n\u2043a pack of mango claw (this is just my preference lol)\n",
+    "pred_span": "peach vodka",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0051",
+    "slice": "positive",
+    "message_text": "Here\u2019s the plan:\n\u2043variety pack of white claw\n\u2043a pack of mango claw (this is just my preference lol)\n",
+    "pred_span": "fourlokos",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0053",
+    "slice": "positive",
+    "message_text": "we\u2019ll there\u2019s a rangers yankees game tn at 6:05, so they might be playing that audio. last time we w",
+    "pred_span": "rangers yankees game",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0053",
+    "slice": "positive",
+    "message_text": "we\u2019ll there\u2019s a rangers yankees game tn at 6:05, so they might be playing that audio. last time we w",
+    "pred_span": "audio",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0053",
+    "slice": "positive",
+    "message_text": "we\u2019ll there\u2019s a rangers yankees game tn at 6:05, so they might be playing that audio. last time we w",
+    "pred_span": "bottle rockets",
+    "pred_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0054",
+    "slice": "positive",
+    "message_text": "Parents are out this weekend if we wanna do smth at mine",
+    "gold_span": "Parents",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0054",
+    "slice": "positive",
+    "message_text": "Parents are out this weekend if we wanna do smth at mine",
+    "pred_span": "this weekend",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0054",
+    "slice": "positive",
+    "message_text": "Parents are out this weekend if we wanna do smth at mine",
+    "pred_span": "mine",
+    "pred_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0055",
+    "slice": "positive",
+    "message_text": "Newark and union city actually",
+    "gold_span": "Newark",
+    "gold_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0055",
+    "slice": "positive",
+    "message_text": "Newark and union city actually",
+    "gold_span": "union city",
+    "gold_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0056",
+    "slice": "positive",
+    "message_text": "before you come check with shivam he still wants dinner otherwise i can jsut bart back ",
+    "gold_span": "shivam",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0056",
+    "slice": "positive",
+    "message_text": "before you come check with shivam he still wants dinner otherwise i can jsut bart back ",
+    "pred_span": "check with him",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0057",
+    "slice": "positive",
+    "message_text": "i had buffalo chicken in a toro tips ",
+    "pred_span": "buffalo chicken",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0057",
+    "slice": "positive",
+    "message_text": "i had buffalo chicken in a toro tips ",
+    "pred_span": "toro tips",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0058",
+    "slice": "positive",
+    "message_text": "i really like indian food though ",
+    "gold_span": "indian food",
+    "gold_label": "food_item"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0059",
+    "slice": "positive",
+    "message_text": "We headed to Houston rn",
+    "gold_span": "Houston",
+    "gold_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0060",
+    "slice": "positive",
+    "message_text": "went to vons 1000 spirits this trip and it had good sourdough pasta/pizza",
+    "pred_span": "sourdough pasta",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0060",
+    "slice": "positive",
+    "message_text": "went to vons 1000 spirits this trip and it had good sourdough pasta/pizza",
+    "pred_span": "pizza",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0062",
+    "slice": "positive",
+    "message_text": "My brother said we should go to screen door in Portland ",
+    "pred_span": "Portland",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0064",
+    "slice": "positive",
+    "message_text": "So it\u2019s only hindhi and khakara, chai and poha",
+    "pred_span": "hindhi",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0064",
+    "slice": "positive",
+    "message_text": "So it\u2019s only hindhi and khakara, chai and poha",
+    "pred_span": "khakara",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0064",
+    "slice": "positive",
+    "message_text": "So it\u2019s only hindhi and khakara, chai and poha",
+    "pred_span": "chai",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0064",
+    "slice": "positive",
+    "message_text": "So it\u2019s only hindhi and khakara, chai and poha",
+    "pred_span": "poha",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0065",
+    "slice": "positive",
+    "message_text": "fellas meet was ordering pizza at blaze and told the lady he wanted \u201cwhite cream\u201d on that hoe",
+    "pred_span": "white cream",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0068",
+    "slice": "positive",
+    "message_text": "My sisters stopped working and there\u2019s no appointments at Apple Store available ",
+    "pred_span": "stopped working",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0068",
+    "slice": "positive",
+    "message_text": "My sisters stopped working and there\u2019s no appointments at Apple Store available ",
+    "pred_span": "no appointments",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0068",
+    "slice": "positive",
+    "message_text": "My sisters stopped working and there\u2019s no appointments at Apple Store available ",
+    "pred_span": "Apple",
+    "pred_label": "org"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0073",
+    "slice": "positive",
+    "message_text": "Turns out her sister and kohler were best friends in high school lol",
+    "gold_span": "sister",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0073",
+    "slice": "positive",
+    "message_text": "Turns out her sister and kohler were best friends in high school lol",
+    "gold_span": "kohler",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0075",
+    "slice": "positive",
+    "message_text": "Green river, deep dish pizza, drinking all day and all night \ud83d\ude0e",
+    "pred_span": "Green river",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0075",
+    "slice": "positive",
+    "message_text": "Green river, deep dish pizza, drinking all day and all night \ud83d\ude0e",
+    "pred_span": "deep dish pizza",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0075",
+    "slice": "positive",
+    "message_text": "Green river, deep dish pizza, drinking all day and all night \ud83d\ude0e",
+    "pred_span": "all day and",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0086",
+    "slice": "positive",
+    "message_text": "I dabble in hiking I didn\u2019t doo that much tho cuz I was driving and then park then driving to the ne",
+    "pred_span": "next place",
+    "pred_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0087",
+    "slice": "positive",
+    "message_text": "vivek\u2019s place will be closer, but uncles might be running the courts",
+    "gold_span": "vivek",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0088",
+    "slice": "positive",
+    "message_text": "Btw they opened the Ikes in Fremont",
+    "gold_span": "Ikes",
+    "gold_label": "org"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0089",
+    "slice": "positive",
+    "message_text": "lauren lives in nyc and i\u2019ve known her basically my whole life ",
+    "gold_span": "lauren",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0089",
+    "slice": "positive",
+    "message_text": "lauren lives in nyc and i\u2019ve known her basically my whole life ",
+    "pred_span": "life",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0090",
+    "slice": "positive",
+    "message_text": "Mom made shaak w mushrooms?",
+    "gold_span": "Mom",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0090",
+    "slice": "positive",
+    "message_text": "Mom made shaak w mushrooms?",
+    "pred_span": "mushrooms",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0091",
+    "slice": "positive",
+    "message_text": "gonna book tn, can book portland too if yall confirm",
+    "pred_span": "book tn",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0091",
+    "slice": "positive",
+    "message_text": "gonna book tn, can book portland too if yall confirm",
+    "pred_span": "portland",
+    "pred_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0093",
+    "slice": "positive",
+    "message_text": "I am making the corn paneer sandwich ",
+    "pred_span": "corn paneer",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0098",
+    "slice": "positive",
+    "message_text": "Someone who works at Google",
+    "pred_span": "Google",
+    "pred_label": "org"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0099",
+    "slice": "positive",
+    "message_text": "lets start with haxball and then catan",
+    "gold_span": "haxball",
     "gold_label": "activity"
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0242",
+    "sample_id": "v6_0099",
     "slice": "positive",
-    "message_text": "Yea if some controlled medication helps with the depression and that is what is being suggested to y",
-    "gold_span": "Engineering",
-    "gold_label": "job_role"
+    "message_text": "lets start with haxball and then catan",
+    "gold_span": "catan",
+    "gold_label": "activity"
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0085",
-    "slice": "positive",
-    "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip ",
-    "gold_span": "SER",
-    "gold_label": "health_condition"
-  },
-  {
-    "type": "fn",
-    "sample_id": "v1_fact_gs_0064",
-    "slice": "positive",
-    "message_text": "Bruh I like her",
-    "gold_span": "her",
+    "sample_id": "v6_0101",
+    "slice": "near_miss",
+    "message_text": "Did Jomari and Faith also get dropped??",
+    "gold_span": "Jomari",
     "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0101",
+    "slice": "near_miss",
+    "message_text": "Did Jomari and Faith also get dropped??",
+    "gold_span": "Faith",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0102",
+    "slice": "near_miss",
+    "message_text": "Hey yall, I\u2019m planning to propose to Danu either on April 18th or 19th. Need the place to be in Hous",
+    "gold_span": "Danu",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0102",
+    "slice": "near_miss",
+    "message_text": "Hey yall, I\u2019m planning to propose to Danu either on April 18th or 19th. Need the place to be in Hous",
+    "gold_span": "Japanese Garden",
+    "gold_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0102",
+    "slice": "near_miss",
+    "message_text": "Hey yall, I\u2019m planning to propose to Danu either on April 18th or 19th. Need the place to be in Hous",
+    "pred_span": "propose Danu",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0103",
+    "slice": "near_miss",
+    "message_text": "which me and my roommate looked everywhere ",
+    "pred_span": "roommate",
+    "pred_label": "friend_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0104",
+    "slice": "near_miss",
+    "message_text": "Mihir Jwalin want idli vada?",
+    "gold_span": "Mihir",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0104",
+    "slice": "near_miss",
+    "message_text": "Mihir Jwalin want idli vada?",
+    "gold_span": "Jwalin",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0104",
+    "slice": "near_miss",
+    "message_text": "Mihir Jwalin want idli vada?",
+    "gold_span": "idli vada",
+    "gold_label": "food_item"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0105",
+    "slice": "near_miss",
+    "message_text": "also like my dads parents dont rlly like my mom",
+    "gold_span": "dad",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0105",
+    "slice": "near_miss",
+    "message_text": "also like my dads parents dont rlly like my mom",
+    "gold_span": "mom",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0106",
+    "slice": "near_miss",
+    "message_text": "Yeahhh Amazon had it \ud83e\udd2a",
+    "pred_span": "Amazon",
+    "pred_label": "org"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0107",
+    "slice": "near_miss",
+    "message_text": "Rachit Jwalin Tejas ",
+    "gold_span": "Rachit",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0107",
+    "slice": "near_miss",
+    "message_text": "Rachit Jwalin Tejas ",
+    "gold_span": "Tejas",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0107",
+    "slice": "near_miss",
+    "message_text": "Rachit Jwalin Tejas ",
+    "gold_span": "Jwalin",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0110",
+    "slice": "near_miss",
+    "message_text": "Big Fremont guy ",
+    "gold_span": "Fremont",
+    "gold_label": "place"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0112",
+    "slice": "near_miss",
+    "message_text": "\ufffcHe told my mom he was impressed with me \ud83e\udd72",
+    "pred_span": "impressed",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0114",
+    "slice": "near_miss",
+    "message_text": "The fucking black people in Oak Cliff made him leave",
+    "gold_span": "Oak Cliff",
+    "gold_label": "place"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0116",
+    "slice": "near_miss",
+    "message_text": "With Nalinkaka ",
+    "gold_span": "Nalinkaka",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0119",
+    "slice": "near_miss",
+    "message_text": "Can I go to bears game with Krusha on dec 28",
+    "gold_span": "Krusha",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0120",
+    "slice": "near_miss",
+    "message_text": "bruh shiv g doesnt know her own parents anniversary ",
+    "gold_span": "shiv g",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0122",
+    "slice": "near_miss",
+    "message_text": "I basically got out beat against kishan, I thought Grayson Allen wud do something but he played so b",
+    "gold_span": "kishan",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0122",
+    "slice": "near_miss",
+    "message_text": "I basically got out beat against kishan, I thought Grayson Allen wud do something but he played so b",
+    "pred_span": "beat",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0122",
+    "slice": "near_miss",
+    "message_text": "I basically got out beat against kishan, I thought Grayson Allen wud do something but he played so b",
+    "pred_span": "played",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0123",
+    "slice": "near_miss",
+    "message_text": "Vishakh Darsh Shrey ",
+    "gold_span": "Vishakh",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0123",
+    "slice": "near_miss",
+    "message_text": "Vishakh Darsh Shrey ",
+    "gold_span": "Darsh",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0123",
+    "slice": "near_miss",
+    "message_text": "Vishakh Darsh Shrey ",
+    "gold_span": "Shrey",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0125",
+    "slice": "near_miss",
+    "message_text": "Holy Keegan 12/13 from three is fucking nuts \ud83d\ude35\u200d\ud83d\udcab",
+    "pred_span": "Keegan",
+    "pred_label": "friend_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0125",
+    "slice": "near_miss",
+    "message_text": "Holy Keegan 12/13 from three is fucking nuts \ud83d\ude35\u200d\ud83d\udcab",
+    "pred_span": "three",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0125",
+    "slice": "near_miss",
+    "message_text": "Holy Keegan 12/13 from three is fucking nuts \ud83d\ude35\u200d\ud83d\udcab",
+    "pred_span": "fucking nuts",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0126",
+    "slice": "near_miss",
+    "message_text": "lol i like how soham was already on the same page ",
+    "gold_span": "soham",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0129",
+    "slice": "near_miss",
+    "message_text": "Just Allen bc it closer for all 3 location",
+    "pred_span": "Allen",
+    "pred_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0131",
+    "slice": "near_miss",
+    "message_text": "Hey guys soooo\u2026I am officially graduating this Tuesday May 14th @9am \ud83d\ude4c\ud83c\udffc I passed my class lol Whoeve",
+    "pred_span": "graduating",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0131",
+    "slice": "near_miss",
+    "message_text": "Hey guys soooo\u2026I am officially graduating this Tuesday May 14th @9am \ud83d\ude4c\ud83c\udffc I passed my class lol Whoeve",
+    "pred_span": "Dallas",
+    "pred_label": "past_location"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0133",
+    "slice": "near_miss",
+    "message_text": "Being there for the engagement is more important than the proposal if you had to pick between the tw",
+    "pred_span": "engagement",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0133",
+    "slice": "near_miss",
+    "message_text": "Being there for the engagement is more important than the proposal if you had to pick between the tw",
+    "pred_span": "proposal",
+    "pred_label": "food_item"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0136",
+    "slice": "near_miss",
+    "message_text": "My mom was badgering me ab it tbh but I felt like I should try going anyway",
+    "pred_span": "badgering",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0139",
+    "slice": "near_miss",
+    "message_text": "Buy from Best Buy",
+    "pred_span": "Best",
+    "pred_label": "past_location"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0140",
+    "slice": "near_miss",
+    "message_text": "\ud83d\udce3 The host of Chaat & Charity sent a Text Blast:\n\nThanks to everyone that came out today! It was sup",
+    "gold_span": "Rachit",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0140",
+    "slice": "near_miss",
+    "message_text": "\ud83d\udce3 The host of Chaat & Charity sent a Text Blast:\n\nThanks to everyone that came out today! It was sup",
+    "gold_span": "Akshaya Patra",
+    "gold_label": "org"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0142",
+    "slice": "random",
+    "message_text": "bro the warriors choke yesterday",
+    "pred_span": "warriors",
+    "pred_label": "org"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0143",
+    "slice": "random",
+    "message_text": "Craig replied",
+    "gold_span": "Craig",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0144",
+    "slice": "random",
+    "message_text": "i needed rebounds today but i forgot game started early \ud83e\udd72",
+    "pred_span": "rebounds",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0145",
+    "slice": "random",
+    "message_text": "Basketball",
+    "gold_span": "Basketball",
+    "gold_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0158",
+    "slice": "random",
+    "message_text": "mahi naked ",
+    "gold_span": "mahi",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0162",
+    "slice": "random",
+    "message_text": "Wow look at you out here baking ",
+    "pred_span": "baking",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0163",
+    "slice": "random",
+    "message_text": "Marshall just sent me a playlist and this played ",
+    "gold_span": "Marshall",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0172",
+    "slice": "random",
+    "message_text": "Is Mihir going to make something? I\u2019ll help him with that if he is",
+    "gold_span": "Mihir",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0172",
+    "slice": "random",
+    "message_text": "Is Mihir going to make something? I\u2019ll help him with that if he is",
+    "pred_span": "help",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0173",
+    "slice": "random",
+    "message_text": "I don't have my car today my brother had to use it",
+    "pred_span": "my car",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0175",
+    "slice": "random",
+    "message_text": "how many jwallys to pick up a mahi",
+    "gold_span": "mahi",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0177",
+    "slice": "random",
+    "message_text": "jokes it was prolly ur dad",
+    "gold_span": "dad",
+    "gold_label": "family_member"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0179",
+    "slice": "random",
+    "message_text": "W yash and rachit ",
+    "gold_span": "yash",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v6_0179",
+    "slice": "random",
+    "message_text": "W yash and rachit ",
+    "gold_span": "rachit",
+    "gold_label": "person_name"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0185",
+    "slice": "random",
+    "message_text": "Derrick white had special help from St Jude\u2019s\nJaylen Brown is a certified cunt\nTatum not even the th",
+    "pred_span": "St",
+    "pred_label": "past_location"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0186",
+    "slice": "random",
+    "message_text": "and game length we were doin 90 minutes i believe both days ",
+    "pred_span": "game length",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0197",
+    "slice": "random",
+    "message_text": "yeah imma def get there around 4 but please start without me",
+    "pred_span": "imma",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0197",
+    "slice": "random",
+    "message_text": "yeah imma def get there around 4 but please start without me",
+    "pred_span": "start without me",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v6_0198",
+    "slice": "random",
+    "message_text": "Head hurts when I use laptop",
+    "pred_span": "laptop",
+    "pred_label": "activity"
   }
 ]

@@ -1114,40 +1114,6 @@ class EmbeddingError(JarvisError):
 # Convenience functions for common error scenarios
 
 
-def task_not_found(task_id: str) -> TaskNotFoundError:
-    """Create a TaskNotFoundError for a missing task.
-
-    Args:
-        task_id: The task ID that was not found.
-
-    Returns:
-        TaskNotFoundError with appropriate details.
-    """
-    return TaskNotFoundError(
-        f"Task not found: {task_id}",
-        task_id=task_id,
-    )
-
-
-def task_invalid_status(task_id: str, current_status: str, required_status: str) -> TaskError:
-    """Create a TaskError for invalid task status.
-
-    Args:
-        task_id: The task ID.
-        current_status: Current status of the task.
-        required_status: Required status for the operation.
-
-    Returns:
-        TaskError with status details.
-    """
-    return TaskError(
-        f"Task {task_id} has status '{current_status}', but requires '{required_status}'",
-        task_id=task_id,
-        code=ErrorCode.TSK_INVALID_STATUS,
-        details={"current_status": current_status, "required_status": required_status},
-    )
-
-
 def model_not_found(model_path: str) -> ModelLoadError:
     """Create a ModelLoadError for a missing model.
 
@@ -1281,18 +1247,6 @@ def model_generation_timeout(
     )
 
 
-def calendar_permission_denied() -> CalendarAccessError:
-    """Create a CalendarAccessError for Calendar permission requirement.
-
-    Returns:
-        CalendarAccessError with permission instructions.
-    """
-    return CalendarAccessError(
-        "Calendar access is required to manage events",
-        requires_permission=True,
-    )
-
-
 # Export all public symbols
 __all__ = [
     # Error codes
@@ -1348,7 +1302,4 @@ __all__ = [
     "imessage_db_not_found",
     "validation_required",
     "validation_type_error",
-    "task_not_found",
-    "task_invalid_status",
-    "calendar_permission_denied",
 ]

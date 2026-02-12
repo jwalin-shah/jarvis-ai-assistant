@@ -102,14 +102,14 @@ class TestCanUseLLM:
 
         assert can_use is True
 
-    def test_returns_true_on_exception(self):
-        """Returns True when memory check fails (err on side of trying)."""
+    def test_returns_false_on_exception(self):
+        """Returns False when memory check fails (fail-safe: don't risk OOM)."""
         with patch("jarvis.generation.get_memory_controller") as mock_controller:
             mock_controller.side_effect = RuntimeError("Failed to get controller")
             can_use, reason = can_use_llm()
 
-        assert can_use is True
-        assert reason == ""
+        assert can_use is False
+        assert "failed" in reason.lower()
 
 
 class TestGetGenerationStatus:
