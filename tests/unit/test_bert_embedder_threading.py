@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -47,8 +47,7 @@ class TestBertEmbedderThreadSafety:
 
         return embedder
 
-    @patch("models.loader.MLXModelLoader._mlx_load_lock", new_callable=lambda: threading.Lock)
-    def test_concurrent_encode_serialized_by_lock(self, mock_lock):
+    def test_concurrent_encode_serialized_by_lock(self):
         """10 concurrent encode() calls should be serialized by the GPU lock."""
         embedder = self._make_embedder_with_mock_model()
 
@@ -57,26 +56,10 @@ class TestBertEmbedderThreadSafety:
         exit_times: list[float] = []
         lock_for_tracking = threading.Lock()
 
-        original_encode = embedder.encode
-
-        # We patch _get_gpu_lock to return our tracking lock
+        # Use a real lock to prove serialization
         real_lock = threading.Lock()
 
-        def tracking_encode(texts, normalize=True, batch_size=64):
-            """Wrapper that tracks timing around the lock."""
-            with lock_for_tracking:
-                entry_times.append(time.monotonic())
-            # Small sleep to simulate GPU work
-            time.sleep(0.01)
-            result = np.random.randn(len(texts), 384).astype(np.float32)
-            with lock_for_tracking:
-                exit_times.append(time.monotonic())
-            return result
-
-        # Replace _get_gpu_lock with our real lock
-        embedder._get_gpu_lock = lambda: real_lock
-
-        # Patch encode to use our tracking version but still acquire the lock
+        # Patch encode to acquire the lock and track timing
         def locked_encode(texts, normalize=True, batch_size=64):
             with real_lock:
                 with lock_for_tracking:
