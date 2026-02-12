@@ -478,7 +478,7 @@
     <input type="text" placeholder="Search conversations..." bind:value={searchQuery} />
   </div>
 
-  {#if conversationsStore.loading}
+  {#if conversationsStore.loading && conversationsStore.isInitialLoad}
     <ConversationSkeleton />
   {:else if conversationsStore.error}
     <div class="error">{conversationsStore.error}</div>
