@@ -285,9 +285,13 @@ class JarvisSocketServer:
         # Generate WebSocket auth token and write to file
         self._ws_auth_token = secrets.token_urlsafe(32)
         self._token_created_at = time.monotonic()
-        fd = os.open(WS_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write(self._ws_auth_token)
+        try:
+            fd = os.open(WS_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(self._ws_auth_token)
+        except OSError as e:
+            logger.error("Failed to write WebSocket auth token to %s: %s", WS_TOKEN_PATH, e)
+            raise
 
         # Start WebSocket server for browser clients
         self._ws_server = await websockets.serve(
@@ -560,9 +564,12 @@ class JarvisSocketServer:
         # Generate and persist the new token
         self._ws_auth_token = secrets.token_urlsafe(32)
         self._token_created_at = time.monotonic()
-        fd = os.open(WS_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write(self._ws_auth_token)
+        try:
+            fd = os.open(WS_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(self._ws_auth_token)
+        except OSError as e:
+            logger.warning("Failed to write rotated token to %s: %s", WS_TOKEN_PATH, e)
 
         log_event(logger, "websocket.token_rotated")
 

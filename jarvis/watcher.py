@@ -763,13 +763,12 @@ class ChatDBWatcher:
             return row[0] if row and row[0] else None
         except Exception as e:
             logger.debug("Error getting last ROWID: %s", e)
-            # Connection may be stale, reset it and force health check on next call
+            # Connection may be stale, reset it (forces reconnect on next call)
             try:
                 self._poll_conn.close()
             except Exception:
                 pass
             self._poll_conn = None
-            self._poll_conn_last_health_check = 0.0
             return None
 
     async def _get_new_messages(self) -> list[dict[str, Any]]:
