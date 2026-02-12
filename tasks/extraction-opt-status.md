@@ -1,9 +1,9 @@
 ## STATUS: IN_PROGRESS
 
 ## Current Best
-- **F1**: 0.343 (limit=100)
-- **P**: 0.292, **R**: 0.417
-- **Strategy**: constrained_categories (multi-turn few-shot JSON + label correction + post-processing)
+- **F1**: 0.340 (limit=100)
+- **P**: 0.327, **R**: 0.354
+- **Strategy**: constrained_categories (minimal few-shot + post-processing filters)
 - **Model**: lfm-1.2b (LFM2.5-1.2B-Instruct-MLX-4bit)
 - **Commit**: pending
 
@@ -80,11 +80,40 @@
   - "CrossFit" for Delaware summer message
 - These are impossible to extract and cap maximum recall at ~95%
 
+### Iteration 4 - Minimal Few-Shot + Improved Post-Processing
+- **F1**: 0.340 (P=0.327, R=0.354)
+- **Limit**: 100
+- **Changes**:
+  - Reduced few-shot to 7 examples (5 positive + 2 negative) for less model confusion
+  - Simplified labels: removed current/future/past_location from prompt, using "place" instead
+  - Reduced max_tokens from 200 to 120 to prevent verbose output
+  - Added stronger health_condition filter: multi-word spans need medical keyword
+  - Added food_item filter for "whatever", "everything" etc
+  - Added activity filter for "contact", "rest"
+- **Result**: Slight regression from 0.343 but P/R balance better
+- **TP=34, FP=70, FN=62**
+- **Key**: Precision on positive slice improved to 0.500 (was 0.292)
+- **Key**: family_member F1=0.476, place F1=0.615
+
+## Error Analysis (Iteration 4)
+
+### False Positive Patterns (70 FP)
+1. **Near-miss family** (29 FP): "mom" from transient event mentions
+2. **Activity over-extraction** (23 FP): random things labeled as activities
+3. **Food hallucination** (13 FP): non-food words as food_item
+4. **Job role confusion** (6 FP): non-job words as job_role
+
+### False Negative Patterns (62 FN)
+1. **Org zero** (9 FN): model never uses org label in new prompt
+2. **Activity missed** (17 FN): model can't distinguish hobbies from actions
+3. **Family member missed** (14 FN): "my dad", "My brother" forms missed
+4. **Goldset phantoms** (~5 FN): text not in message
+
 ## Next Steps (Priority Order)
-1. **Aggressive activity/food FP filtering** - these are the top 2 FP sources (34+19=53 FP)
-2. **Two-pass approach**: first check if message has facts, only extract if yes
-3. **Temperature tuning**: try 0.1-0.3 for more diverse/accurate outputs
-4. **Clean goldset**: remove phantom spans, fix label inconsistencies
+1. **Two-pass approach**: first classify if message has facts, skip negatives entirely
+2. **Activity/food FP filtering**: these are the top FP sources
+3. **Temperature tuning**: try 0.1-0.3
+4. **Clean goldset**: remove phantom spans
 5. **Ensemble with GLiNER**: combine for better coverage
 6. **Context injection**: prev/next messages for disambiguation
 
