@@ -317,7 +317,7 @@ class TestPrefetchPipelineFlow:
             max_wait_active = 2.0
             start = time.time()
             while time.time() - start < max_wait_active:
-                with executor._active_lock:
+                with executor._lock:
                     if "chat789" in executor._active_drafts:
                         break
                 time.sleep(0.05)
