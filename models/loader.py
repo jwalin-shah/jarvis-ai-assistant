@@ -772,6 +772,9 @@ class MLXModelLoader:
             draft_accepted = 0
             using_speculative = self._draft_model is not None
 
+            # Cancellation flag: set on timeout so streaming generation exits early
+            cancel_event = threading.Event()
+
             def _do_generate() -> tuple[str, int]:
                 """Inner function for generation to run in executor.
 
@@ -806,13 +809,18 @@ class MLXModelLoader:
                             num_draft_tokens=num_draft_tokens or 3,
                             **kwargs,
                         ):
+                            # Check cancellation flag each token to exit early on timeout
+                            if cancel_event.is_set():
+                                logger.info("Generation cancelled via timeout after %d tokens", total)
+                                break
                             text = resp.text
                             total += 1
                             if getattr(resp, "from_draft", False):
                                 draft_tokens_verified += 1
                         return text, draft_tokens_verified
                     else:
-                        # Standard generation
+                        # Standard generation (mlx_lm.generate is a single blocking
+                        # call with no per-token hook, so cancellation is not possible)
                         result = generate(
                             model=self._model,
                             tokenizer=self._tokenizer,
@@ -832,15 +840,12 @@ class MLXModelLoader:
                     try:
                         response, draft_accepted = future.result(timeout=effective_timeout)
                     except FuturesTimeoutError:
-                        # Cancel the future (best effort, may not stop MLX generation)
-                        # TODO: future.cancel() cannot stop a running MLX computation.
-                        # The generation thread may continue running in the background
-                        # until the model completes or hits max_tokens. This is a
-                        # limitation of MLX's synchronous generation API.
+                        # Signal the generation thread to stop (works for streaming path)
+                        cancel_event.set()
                         future.cancel()
                         logger.warning(
                             "Generation timed out after %.1f seconds for model %s. "
-                            "Note: The generation thread may still be running.",
+                            "Cancellation signal sent to generation thread.",
                             effective_timeout,
                             self.config.display_name,
                         )
