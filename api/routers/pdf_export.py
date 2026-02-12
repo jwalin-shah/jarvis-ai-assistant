@@ -107,13 +107,8 @@ def export_conversation_pdf(
     import base64
 
     try:
-        # Get conversation metadata
-        conversations = reader.get_conversations(limit=500)
-        conversation = None
-        for conv in conversations:
-            if conv.chat_id == chat_id:
-                conversation = conv
-                break
+        # Get conversation metadata via direct lookup (avoids N+1)
+        conversation = reader.get_conversation(chat_id)
 
         if conversation is None:
             raise HTTPException(
@@ -190,13 +185,8 @@ def download_conversation_pdf(
         PDF file response for direct download.
     """
     try:
-        # Get conversation metadata
-        conversations = reader.get_conversations(limit=500)
-        conversation = None
-        for conv in conversations:
-            if conv.chat_id == chat_id:
-                conversation = conv
-                break
+        # Get conversation metadata via direct lookup (avoids N+1)
+        conversation = reader.get_conversation(chat_id)
 
         if conversation is None:
             raise HTTPException(

@@ -63,6 +63,7 @@ def _get_cached_config_value(key: str, getter: Callable[[], Any], default: Any) 
         _config_cache[key] = (value, now)
         return value
     except Exception:
+        logger.debug("Config lookup failed for %s, using default", key)
         return default
 
 

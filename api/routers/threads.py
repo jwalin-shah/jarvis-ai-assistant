@@ -10,7 +10,7 @@ All endpoints require Full Disk Access permission to read the iMessage database.
 from datetime import datetime
 from typing import cast
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_imessage_reader
 from api.schemas import (

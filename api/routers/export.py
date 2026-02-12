@@ -250,12 +250,10 @@ async def export_full_backup(
         async with asyncio.timeout(TIMEOUT_BACKUP):
             # Fetch enough conversations to satisfy offset + limit
             fetch_limit = backup_request.offset + backup_request.conversation_limit
-            conversations = await run_in_threadpool(
-                reader.get_conversations, limit=fetch_limit
-            )
+            conversations = await run_in_threadpool(reader.get_conversations, limit=fetch_limit)
 
             # Apply offset pagination
-            conversations = conversations[backup_request.offset:]
+            conversations = conversations[backup_request.offset :]
 
             if not conversations:
                 raise HTTPException(

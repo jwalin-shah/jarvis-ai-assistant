@@ -2,8 +2,8 @@
 //!
 //! Provides the Tauri application setup and tray functionality.
 
-mod socket;
 mod logging;
+mod socket;
 mod tray;
 
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,9 @@ struct WindowState {
 
 fn window_state_path() -> std::path::PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
-    std::path::PathBuf::from(home).join(".jarvis").join("window-state.json")
+    std::path::PathBuf::from(home)
+        .join(".jarvis")
+        .join("window-state.json")
 }
 
 fn load_window_state() -> Option<WindowState> {
@@ -80,8 +82,10 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 // Restore saved window position and size
                 if let Some(state) = load_window_state() {
-                    let pos: tauri::Position = tauri::PhysicalPosition::new(state.x, state.y).into();
-                    let size: tauri::Size = tauri::PhysicalSize::new(state.width, state.height).into();
+                    let pos: tauri::Position =
+                        tauri::PhysicalPosition::new(state.x, state.y).into();
+                    let size: tauri::Size =
+                        tauri::PhysicalSize::new(state.width, state.height).into();
                     let _ = window.set_position(pos);
                     let _ = window.set_size(size);
                 }
@@ -101,7 +105,9 @@ pub fn run() {
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         // Save window position and size before hiding
-                        if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.outer_size()) {
+                        if let (Ok(pos), Ok(size)) =
+                            (window_clone.outer_position(), window_clone.outer_size())
+                        {
                             save_window_state(&WindowState {
                                 x: pos.x,
                                 y: pos.y,
@@ -121,5 +127,9 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("Failed to run JARVIS Tauri application - check that all dependencies are available and the configuration is valid");
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "Failed to run JARVIS Tauri application - check dependencies/configuration: {e}"
+            );
+        });
 }

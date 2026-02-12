@@ -624,7 +624,6 @@ class L3Cache:
                 if not tag_keys:
                     del self._tag_index[tag]
 
-
     def _mark_dirty(self) -> None:
         """Mark metadata as needing a flush."""
         self._metadata_dirty = True
@@ -1121,10 +1120,7 @@ class MultiTierCache:
             return len(value.encode())
         elif isinstance(value, dict):
             # Approximate: key + value sizes without full JSON serialization
-            return sum(
-                self._estimate_size(k) + self._estimate_size(v)
-                for k, v in value.items()
-            )
+            return sum(self._estimate_size(k) + self._estimate_size(v) for k, v in value.items())
         elif isinstance(value, list):
             return sum(self._estimate_size(item) for item in value)
         else:

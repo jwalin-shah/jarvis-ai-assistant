@@ -14,9 +14,16 @@ logger = logging.getLogger(__name__)
 # Safety limits for deserialization
 _MAX_DESERIALIZE_BYTES = 10 * 1024 * 1024  # 10MB
 _MAX_JSON_NESTING_DEPTH = 20
-_ALLOWED_NUMPY_DTYPES = frozenset({
-    "float32", "float64", "int32", "int64", "uint8", "bool",
-})
+_ALLOWED_NUMPY_DTYPES = frozenset(
+    {
+        "float32",
+        "float64",
+        "int32",
+        "int64",
+        "uint8",
+        "bool",
+    }
+)
 
 
 def serialize_value(value: Any) -> tuple[bytes, str]:
@@ -81,9 +88,7 @@ def deserialize_value(data: bytes, value_type: str) -> Any:
             depth exceeds the limit, or value_type is pickle/unknown.
     """
     if len(data) > _MAX_DESERIALIZE_BYTES:
-        msg = (
-            f"Refusing to deserialize {len(data)} bytes (limit {_MAX_DESERIALIZE_BYTES})."
-        )
+        msg = f"Refusing to deserialize {len(data)} bytes (limit {_MAX_DESERIALIZE_BYTES})."
         logger.warning(msg)
         raise ValueError(msg)
 
@@ -116,10 +121,7 @@ def deserialize_value(data: bytes, value_type: str) -> Any:
     elif value_type == "json":
         raw = data.decode()
         if not _check_json_nesting_depth(raw):
-            msg = (
-                f"Refusing to deserialize JSON with nesting depth > "
-                f"{_MAX_JSON_NESTING_DEPTH}."
-            )
+            msg = f"Refusing to deserialize JSON with nesting depth > {_MAX_JSON_NESTING_DEPTH}."
             logger.warning(msg)
             raise ValueError(msg)
         return json.loads(raw)

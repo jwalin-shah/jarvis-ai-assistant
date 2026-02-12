@@ -214,7 +214,7 @@ async def get_relationship_profile(
         messages = await run_in_threadpool(
             reader.get_messages, chat_id=contact_id, limit=message_limit
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=400,
             detail={
@@ -493,7 +493,7 @@ async def refresh_relationship_profile(
         messages = await run_in_threadpool(
             reader.get_messages, chat_id=contact_id, limit=request.message_limit
         )
-    except Exception as e:
+    except Exception:
         return RefreshProfileResponse(
             success=False,
             profile=None,
@@ -512,7 +512,7 @@ async def refresh_relationship_profile(
         )
 
     # Get contact name
-    contact_name = _get_contact_name(reader, contact_id)
+    contact_name = await run_in_threadpool(_get_contact_name, reader, contact_id)
 
     # Build new profile
     profile = build_relationship_profile(

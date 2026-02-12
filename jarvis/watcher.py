@@ -518,9 +518,7 @@ class ChatDBWatcher:
             if not extractable:
                 return
 
-            extractor = CandidateExtractor(
-                label_profile="balanced", use_entailment=True
-            )
+            extractor = CandidateExtractor(label_profile="balanced", use_entailment=True)
 
             # Group by chat_id (proxy for contact)
             by_chat: dict[str, list[dict[str, Any]]] = {}
@@ -553,9 +551,7 @@ class ChatDBWatcher:
                                 "chat_id": chat_id,
                             }
                         )
-                    candidates = await asyncio.to_thread(
-                        extractor.extract_batch, batch_msgs
-                    )
+                    candidates = await asyncio.to_thread(extractor.extract_batch, batch_msgs)
                     if candidates:
                         inserted = await asyncio.to_thread(
                             save_candidate_facts, candidates, chat_id
@@ -579,8 +575,7 @@ class ChatDBWatcher:
 
                     await asyncio.to_thread(invalidate_profile_cache)
                     logger.info(
-                        "Invalidated contact profile cache after extracting facts "
-                        "for %d chats",
+                        "Invalidated contact profile cache after extracting facts for %d chats",
                         len(chats_to_invalidate),
                     )
                 except Exception as e:
