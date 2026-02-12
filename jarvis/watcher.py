@@ -471,7 +471,7 @@ class ChatDBWatcher:
         """Extract and persist facts from new messages (background task)."""
         try:
             from jarvis.contacts.fact_extractor import FactExtractor
-            from jarvis.contacts.fact_storage import save_facts
+            from jarvis.contacts.fact_storage import save_and_index_facts
 
             # Process all messages with text (both incoming and outgoing)
             extractable = [m for m in messages if m.get("text")]
@@ -494,7 +494,7 @@ class ChatDBWatcher:
                 try:
                     facts = await asyncio.to_thread(extractor.extract_facts, chat_msgs, chat_id)
                     if facts:
-                        inserted = await asyncio.to_thread(save_facts, facts, chat_id)
+                        inserted = await asyncio.to_thread(save_and_index_facts, facts, chat_id)
                         if inserted:
                             logger.info(
                                 "Extracted %d facts (%d new) for %s",
@@ -654,10 +654,7 @@ class ChatDBWatcher:
 
             # Replace old chunks for this chat
             deleted = searcher.delete_chunks_for_chat(chat_id)
-            indexed = 0
-            for seg in segments:
-                if searcher.index_segment(seg, chat_id=chat_id):
-                    indexed += 1
+            indexed = searcher.index_segments(segments, chat_id=chat_id)
 
             logger.info(
                 "Re-segmented %s: deleted=%d, indexed=%d segments",

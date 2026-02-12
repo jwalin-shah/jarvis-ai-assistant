@@ -136,7 +136,8 @@ def extract_segments(
             )
             stats.segments_created += len(segments)
 
-            # Index each segment
+            # Filter segments before batch indexing
+            eligible_segments = []
             for segment in segments:
                 # Skip segments without any response (me) messages
                 has_response = any(m.is_from_me for m in segment.messages)
@@ -148,8 +149,13 @@ def extract_segments(
                     stats.segments_skipped_too_short += 1
                     continue
 
-                if vec_searcher.index_segment(segment, contact_id, conv.chat_id):
-                    stats.segments_indexed += 1
+                eligible_segments.append(segment)
+
+            # Batch index all eligible segments (single connection + executemany)
+            if eligible_segments:
+                stats.segments_indexed += vec_searcher.index_segments(
+                    eligible_segments, contact_id, conv.chat_id
+                )
 
             stats.conversations_processed += 1
 

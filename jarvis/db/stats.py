@@ -31,28 +31,28 @@ class StatsMixin:
         with self.connection() as conn:
             stats: dict[str, Any] = {}
 
-            # Contact count
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM contacts")
-            stats["contacts"] = cursor.fetchone()["cnt"]
+            # Single query for all scalar counts (was 5 separate queries)
+            row = conn.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM contacts) as contacts,
+                    (SELECT COUNT(*) FROM pairs) as pairs,
+                    (SELECT COUNT(*) FROM pairs WHERE quality_score >= 0.5) as pairs_quality,
+                    (SELECT COUNT(*) FROM clusters) as clusters,
+                    (SELECT COUNT(*) FROM pair_embeddings) as embeddings
+                """
+            ).fetchone()
+            stats["contacts"] = row["contacts"]
+            stats["pairs"] = row["pairs"]
+            stats["pairs_quality_gte_50"] = row["pairs_quality"]
+            stats["clusters"] = row["clusters"]
+            stats["embeddings"] = row["embeddings"]
 
-            # Pair count (with quality breakdown)
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM pairs")
-            stats["pairs"] = cursor.fetchone()["cnt"]
-
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM pairs WHERE quality_score >= 0.5")
-            stats["pairs_quality_gte_50"] = cursor.fetchone()["cnt"]
-
-            # Cluster count
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM clusters")
-            stats["clusters"] = cursor.fetchone()["cnt"]
-
-            # Embedding count
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM pair_embeddings")
-            stats["embeddings"] = cursor.fetchone()["cnt"]
-
-            # Active index
-            active_index = self.get_active_index()
-            stats["active_index"] = active_index.version_id if active_index else None
+            # Active index (inlined to reuse same connection instead of opening a new one)
+            idx_row = conn.execute(
+                "SELECT version_id FROM index_versions WHERE is_active = TRUE LIMIT 1"
+            ).fetchone()
+            stats["active_index"] = idx_row["version_id"] if idx_row else None
 
             # Pairs per contact
             cursor = conn.execute(
@@ -73,29 +73,47 @@ class StatsMixin:
             return stats
 
     def get_gate_stats(self: JarvisDBBase) -> dict[str, Any]:
-        """Get statistics about validity gate results."""
+        """Get statistics about validity gate results.
+
+        Uses 3 queries instead of 7+: one for all pair-level counts (via GROUP BY
+        and conditional aggregation), one for gate_a_reasons, one for gate_c_verdicts.
+        """
         with self.connection() as conn:
             stats: dict[str, Any] = {}
 
-            # Total pairs with gate data
-            cursor = conn.execute(
-                "SELECT COUNT(*) as cnt FROM pairs WHERE validity_status IS NOT NULL"
-            )
-            stats["total_gated"] = cursor.fetchone()["cnt"]
+            # Single query for all pair-level scalar stats + grouped counts
+            # Replaces 5 separate queries (total_gated, 3x status loop, gate_a_rejected)
+            # plus gate_b_bands (conditional aggregation)
+            row = conn.execute(
+                """
+                SELECT
+                    SUM(CASE WHEN validity_status IS NOT NULL THEN 1 ELSE 0 END) as total_gated,
+                    SUM(CASE WHEN validity_status = 'valid' THEN 1 ELSE 0 END) as status_valid,
+                    SUM(CASE WHEN validity_status = 'invalid' THEN 1 ELSE 0 END) as status_invalid,
+                    SUM(CASE WHEN validity_status = 'uncertain' THEN 1 ELSE 0 END)
+                        as status_uncertain,
+                    SUM(CASE WHEN gate_a_passed = FALSE THEN 1 ELSE 0 END) as gate_a_rejected,
+                    SUM(CASE WHEN gate_b_score >= 0.62 THEN 1 ELSE 0 END) as gate_b_accept,
+                    SUM(CASE WHEN gate_b_score >= 0.48 AND gate_b_score < 0.62 THEN 1 ELSE 0 END)
+                        as gate_b_borderline,
+                    SUM(CASE WHEN gate_b_score < 0.48 AND gate_b_score IS NOT NULL THEN 1 ELSE 0
+                        END) as gate_b_reject
+                FROM pairs
+                """
+            ).fetchone()
 
-            # By validity status
-            for status in ["valid", "invalid", "uncertain"]:
-                cursor = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM pairs WHERE validity_status = ?",
-                    (status,),
-                )
-                stats[f"status_{status}"] = cursor.fetchone()["cnt"]
+            stats["total_gated"] = row["total_gated"] or 0
+            stats["status_valid"] = row["status_valid"] or 0
+            stats["status_invalid"] = row["status_invalid"] or 0
+            stats["status_uncertain"] = row["status_uncertain"] or 0
+            stats["gate_a_rejected"] = row["gate_a_rejected"] or 0
+            stats["gate_b_bands"] = {
+                "accept": row["gate_b_accept"] or 0,
+                "borderline": row["gate_b_borderline"] or 0,
+                "reject": row["gate_b_reject"] or 0,
+            }
 
-            # Gate A rejections
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM pairs WHERE gate_a_passed = FALSE")
-            stats["gate_a_rejected"] = cursor.fetchone()["cnt"]
-
-            # Gate A rejection reasons (from artifacts)
+            # Gate A rejection reasons (already uses GROUP BY - kept as-is)
             cursor = conn.execute(
                 """
                 SELECT gate_a_reason, COUNT(*) as cnt
@@ -107,24 +125,7 @@ class StatsMixin:
             )
             stats["gate_a_reasons"] = {row["gate_a_reason"]: row["cnt"] for row in cursor}
 
-            # Gate B score distribution
-            cursor = conn.execute(
-                """
-                SELECT
-                    CASE
-                        WHEN gate_b_score >= 0.62 THEN 'accept'
-                        WHEN gate_b_score >= 0.48 THEN 'borderline'
-                        ELSE 'reject'
-                    END as band,
-                    COUNT(*) as cnt
-                FROM pairs
-                WHERE gate_b_score IS NOT NULL
-                GROUP BY band
-                """
-            )
-            stats["gate_b_bands"] = {row["band"]: row["cnt"] for row in cursor}
-
-            # Gate C verdicts
+            # Gate C verdicts (already uses GROUP BY - kept as-is)
             cursor = conn.execute(
                 """
                 SELECT gate_c_verdict, COUNT(*) as cnt

@@ -967,16 +967,16 @@ class TestDatabaseIndexes:
 
 
 class TestFactIndexingOnSave:
-    """Test that save_facts calls index_facts for newly inserted facts."""
+    """Test that save_and_index_facts calls index_facts for newly inserted facts."""
 
     def test_index_facts_called_on_new_inserts(self, patched_get_db) -> None:
         """When facts are inserted, index_facts is called."""
-        from jarvis.contacts.fact_storage import save_facts
+        from jarvis.contacts.fact_storage import save_and_index_facts
 
         fact = _make_fact(category="location", subject="Austin", predicate="lives_in")
 
         with patch("jarvis.contacts.fact_index.index_facts") as mock_index:
-            save_facts([fact], "contact-001")
+            save_and_index_facts([fact], "contact-001")
             mock_index.assert_called_once()
             call_args = mock_index.call_args
             assert call_args[0][1] == "contact-001"
@@ -984,18 +984,18 @@ class TestFactIndexingOnSave:
 
     def test_index_facts_not_called_on_zero_inserts(self, patched_get_db) -> None:
         """When all facts are duplicates, index_facts is NOT called."""
-        from jarvis.contacts.fact_storage import save_facts
+        from jarvis.contacts.fact_storage import save_and_index_facts, save_facts
 
         fact = _make_fact(category="location", subject="Austin", predicate="lives_in")
-        save_facts([fact], "contact-001")  # First insert
+        save_facts([fact], "contact-001")  # First insert (no indexing needed)
 
         with patch("jarvis.contacts.fact_index.index_facts") as mock_index:
-            save_facts([fact], "contact-001")  # Duplicate
+            save_and_index_facts([fact], "contact-001")  # Duplicate
             mock_index.assert_not_called()
 
     def test_index_facts_failure_does_not_crash_save(self, patched_get_db) -> None:
-        """If index_facts raises, save_facts still succeeds."""
-        from jarvis.contacts.fact_storage import count_facts_for_contact, save_facts
+        """If index_facts raises, save_and_index_facts still succeeds."""
+        from jarvis.contacts.fact_storage import count_facts_for_contact, save_and_index_facts
 
         fact = _make_fact(category="location", subject="Austin", predicate="lives_in")
 
@@ -1003,7 +1003,7 @@ class TestFactIndexingOnSave:
             "jarvis.contacts.fact_index.index_facts",
             side_effect=RuntimeError("embedder unavailable"),
         ):
-            inserted = save_facts([fact], "contact-001")
+            inserted = save_and_index_facts([fact], "contact-001")
 
         assert inserted == 1
         assert count_facts_for_contact("contact-001") == 1
