@@ -62,14 +62,6 @@
   const optimisticStatus = $derived(getOptimisticStatus(message));
   const optimisticId = $derived(getOptimisticId(message));
 
-  // Format time consistently
-  function formatTime(dateStr: string): string {
-    return new Date(dateStr).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
   // Detect URLs in message text
   function extractUrls(text: string): string[] {
     if (!text) return [];

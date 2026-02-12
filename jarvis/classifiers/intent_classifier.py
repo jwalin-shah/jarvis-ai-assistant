@@ -414,7 +414,10 @@ class MLXDistilBertIntentClassifier:
                 for key in f.keys():
                     loaded[key] = mx.array(f.get_tensor(key))
         self._model.load_weights(list(loaded.items()))
-        mx.eval(self._model.parameters())
+        from models.loader import MLXModelLoader
+
+        with MLXModelLoader._mlx_load_lock:
+            mx.eval(self._model.parameters())
 
     def _encode(self, text: str) -> tuple[mx.array, mx.array]:
         if self._use_hf_tokenizer:
@@ -442,9 +445,12 @@ class MLXDistilBertIntentClassifier:
 
     def classify(self, text: str, intent_options: list[str]) -> IntentResult:
         input_ids, attention_mask = self._encode(text)
-        logits = self._model(input_ids, attention_mask)
-        probs = mx.softmax(logits, axis=-1)
-        probs_np = np.array(probs)[0].tolist()
+        from models.loader import MLXModelLoader
+
+        with MLXModelLoader._mlx_load_lock:
+            logits = self._model(input_ids, attention_mask)
+            probs = mx.softmax(logits, axis=-1)
+            probs_np = np.array(probs)[0].tolist()
 
         scores: dict[str, float] = {opt: 0.0 for opt in intent_options}
         for idx, prob in enumerate(probs_np):

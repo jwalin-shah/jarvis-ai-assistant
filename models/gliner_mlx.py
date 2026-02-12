@@ -665,10 +665,9 @@ class MLXGLiNER:
             )
 
             # Set MLX memory limits for 8GB system
-            if hasattr(mx, "set_memory_limit"):
-                mx.set_memory_limit(1 * 1024**3)
-            if hasattr(mx, "set_cache_limit"):
-                mx.set_cache_limit(512 * 1024**2)
+            from models.memory_config import apply_embedder_limits
+
+            apply_embedder_limits()
 
             self.model = GLiNERModel(
                 DEBERTA_CONFIG,

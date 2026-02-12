@@ -298,8 +298,9 @@ class InProcessEmbedder:
             # batch encoding, triggering swap even though RSS stays low.
             # Must be set immediately after acquiring GPU lock, before
             # model creation or weight loading.
-            mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
-            mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB cache
+            from models.memory_config import apply_embedder_limits
+
+            apply_embedder_limits()
 
             # Double-check after acquiring lock
             if self.model_name == model_name:

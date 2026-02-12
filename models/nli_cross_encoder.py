@@ -70,8 +70,9 @@ class NLICrossEncoder:
 
         with self._get_gpu_lock():
             # Set MLX memory limits to prevent memory spikes on 8GB systems
-            mx.set_memory_limit(1 * 1024 * 1024 * 1024)  # 1 GB
-            mx.set_cache_limit(512 * 1024 * 1024)  # 512 MB
+            from models.memory_config import apply_embedder_limits
+
+            apply_embedder_limits()
 
             if self._loaded:
                 return

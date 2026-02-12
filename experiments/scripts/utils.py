@@ -184,7 +184,7 @@ def cross_validate(
     C: float = 1.0,  # noqa: N803
     gamma: str = "scale",
     n_folds: int = 5,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> CVResult:
     """Run k-fold cross-validation with parallel fold execution.
 
@@ -197,7 +197,7 @@ def cross_validate(
         C: SVM C parameter
         gamma: SVM gamma parameter
         n_folds: Number of folds
-        n_jobs: Number of parallel jobs (-1 = all cores)
+        n_jobs: Number of parallel jobs (1 = single core, safe for 8GB RAM)
 
     Returns:
         CVResult with mean/std F1 and per-class metrics
@@ -252,7 +252,7 @@ def grid_search_cv(
     c_values: list[float],
     gamma_values: list[str],
     n_folds: int = 5,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> dict[str, Any]:
     """Run grid search with cross-validation using sklearn's GridSearchCV.
 
@@ -267,7 +267,7 @@ def grid_search_cv(
         c_values: List of C values to try
         gamma_values: List of gamma values to try
         n_folds: Number of CV folds
-        n_jobs: Number of parallel jobs (-1 = all cores)
+        n_jobs: Number of parallel jobs (1 = single core, safe for 8GB RAM)
 
     Returns:
         Dict with 'best_params', 'best_score', 'cv_results'

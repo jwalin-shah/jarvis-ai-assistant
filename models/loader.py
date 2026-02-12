@@ -362,8 +362,9 @@ class MLXModelLoader:
                 start_time = time.perf_counter()
 
                 # Set MLX memory limits before loading (critical on 8GB systems)
-                mx.set_memory_limit(2 * 1024 * 1024 * 1024)  # 2 GB
-                mx.set_cache_limit(1 * 1024 * 1024 * 1024)  # 1 GB
+                from models.memory_config import apply_llm_limits
+
+                apply_llm_limits()
 
                 # mlx_lm.load returns (model, tokenizer) tuple
                 result = load(self.config.model_path)
@@ -432,8 +433,15 @@ class MLXModelLoader:
 
         # Clear Metal GPU memory (using current API, not deprecated mx.metal.clear_cache)
         # This is critical for 8GB RAM systems to avoid GPU memory accumulation
+        # Use non-blocking acquire to avoid deadlock when called from load() error paths
+        # (which already hold _mlx_load_lock)
         try:
-            mx.clear_cache()
+            acquired = MLXModelLoader._mlx_load_lock.acquire(blocking=False)
+            try:
+                mx.clear_cache()
+            finally:
+                if acquired:
+                    MLXModelLoader._mlx_load_lock.release()
         except Exception:
             logger.debug("Cache clear not available")
 

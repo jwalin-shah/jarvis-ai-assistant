@@ -67,7 +67,9 @@ class BatchExportRequest(BaseModel):
 
         resolved = Path(v).resolve()
         home = Path.home()
-        if not str(resolved).startswith(str(home)):
+        try:
+            resolved.relative_to(home)
+        except ValueError:
             raise ValueError(f"output_dir must be within user home directory ({home})")
         return str(resolved)
 

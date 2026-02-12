@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import sqlite3
 from collections import Counter
@@ -525,65 +526,87 @@ def write_outputs(
         if p.exists() and not overwrite:
             raise FileExistsError(f"Refusing to overwrite existing file: {p}")
 
-    with json_path.open("w", encoding="utf-8") as f:
-        json.dump(records, f, indent=2, ensure_ascii=False)
+    # Write all files to temp paths first, then rename atomically
+    # This prevents corrupt output if the process crashes mid-write
+    tmp_files: list[tuple[Path, Path]] = []  # (tmp_path, final_path)
 
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        cols = [
-            "sample_id",
-            "slice",
-            "message_id",
-            "chat_rowid",
-            "chat_id",
-            "chat_display_name",
-            "is_from_me",
-            "sender_handle",
-            "message_date",
-            "message_text",
-            "context_prev",
-            "context_next",
-            "suggested_candidates_json",
-            "expected_candidates_json",
-            "gold_notes",
-        ]
-        writer = csv.DictWriter(f, fieldnames=cols)
-        writer.writeheader()
-        for r in records:
-            writer.writerow(
-                {
-                    "sample_id": r["sample_id"],
-                    "slice": r["slice"],
-                    "message_id": r["message_id"],
-                    "chat_rowid": r["chat_rowid"],
-                    "chat_id": r["chat_id"],
-                    "chat_display_name": r["chat_display_name"],
-                    "is_from_me": r["is_from_me"],
-                    "sender_handle": r["sender_handle"],
-                    "message_date": r["message_date"],
-                    "message_text": normalize_text(str(r["message_text"])),
-                    "context_prev": r["context_prev"],
-                    "context_next": r["context_next"],
-                    "suggested_candidates_json": json.dumps(
-                        r["suggested_candidates"], ensure_ascii=False
-                    ),
-                    "expected_candidates_json": json.dumps(
-                        r["expected_candidates"], ensure_ascii=False
-                    ),
-                    "gold_notes": r.get("gold_notes", ""),
-                }
-            )
+    try:
+        tmp_json = json_path.with_suffix(".json.tmp")
+        with tmp_json.open("w", encoding="utf-8") as f:
+            json.dump(records, f, indent=2, ensure_ascii=False)
+        tmp_files.append((tmp_json, json_path))
 
-    # Batch files for manual annotation
-    for i in range(0, len(records), batch_size_out):
-        batch_idx = i // batch_size_out
-        batch_path = output_dir / f"batch_{batch_idx}.json"
-        if batch_path.exists() and not overwrite:
-            raise FileExistsError(f"Refusing to overwrite existing file: {batch_path}")
-        with batch_path.open("w", encoding="utf-8") as f:
-            json.dump(records[i : i + batch_size_out], f, indent=2, ensure_ascii=False)
+        tmp_csv = csv_path.with_suffix(".csv.tmp")
+        with tmp_csv.open("w", newline="", encoding="utf-8") as f:
+            cols = [
+                "sample_id",
+                "slice",
+                "message_id",
+                "chat_rowid",
+                "chat_id",
+                "chat_display_name",
+                "is_from_me",
+                "sender_handle",
+                "message_date",
+                "message_text",
+                "context_prev",
+                "context_next",
+                "suggested_candidates_json",
+                "expected_candidates_json",
+                "gold_notes",
+            ]
+            writer = csv.DictWriter(f, fieldnames=cols)
+            writer.writeheader()
+            for r in records:
+                writer.writerow(
+                    {
+                        "sample_id": r["sample_id"],
+                        "slice": r["slice"],
+                        "message_id": r["message_id"],
+                        "chat_rowid": r["chat_rowid"],
+                        "chat_id": r["chat_id"],
+                        "chat_display_name": r["chat_display_name"],
+                        "is_from_me": r["is_from_me"],
+                        "sender_handle": r["sender_handle"],
+                        "message_date": r["message_date"],
+                        "message_text": normalize_text(str(r["message_text"])),
+                        "context_prev": r["context_prev"],
+                        "context_next": r["context_next"],
+                        "suggested_candidates_json": json.dumps(
+                            r["suggested_candidates"], ensure_ascii=False
+                        ),
+                        "expected_candidates_json": json.dumps(
+                            r["expected_candidates"], ensure_ascii=False
+                        ),
+                        "gold_notes": r.get("gold_notes", ""),
+                    }
+                )
+        tmp_files.append((tmp_csv, csv_path))
 
-    with manifest_path.open("w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2, ensure_ascii=True)
+        # Batch files for manual annotation
+        for i in range(0, len(records), batch_size_out):
+            batch_idx = i // batch_size_out
+            batch_path = output_dir / f"batch_{batch_idx}.json"
+            if batch_path.exists() and not overwrite:
+                raise FileExistsError(f"Refusing to overwrite existing file: {batch_path}")
+            tmp_batch = batch_path.with_suffix(".json.tmp")
+            with tmp_batch.open("w", encoding="utf-8") as f:
+                json.dump(records[i : i + batch_size_out], f, indent=2, ensure_ascii=False)
+            tmp_files.append((tmp_batch, batch_path))
+
+        tmp_manifest = manifest_path.with_suffix(".json.tmp")
+        with tmp_manifest.open("w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=True)
+        tmp_files.append((tmp_manifest, manifest_path))
+
+        # All writes succeeded - atomically rename all temp files
+        for tmp_path, final_path in tmp_files:
+            os.replace(tmp_path, final_path)
+    except BaseException:
+        # Clean up any temp files on failure
+        for tmp_path, _ in tmp_files:
+            tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def main() -> int:

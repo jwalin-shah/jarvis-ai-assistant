@@ -6,6 +6,8 @@ retrieving events, and creating calendar entries.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -90,7 +92,7 @@ def get_calendar_writer_dep() -> CalendarWriterImpl:
         403: {"description": "Calendar access denied", "model": ErrorResponse},
     },
 )
-def list_calendars(
+async def list_calendars(
     reader: CalendarReaderImpl = Depends(get_calendar_reader_dep),
 ) -> list[CalendarResponse]:
     """List all available calendars from macOS Calendar.
@@ -98,7 +100,9 @@ def list_calendars(
     Returns calendars that the user has access to, including both
     local calendars and synced calendars (iCloud, Google, etc.).
     """
-    calendars = reader.get_calendars()
+    # Run blocking calendar read in executor to avoid blocking the event loop
+    loop = asyncio.get_running_loop()
+    calendars = await loop.run_in_executor(None, reader.get_calendars)
     return [CalendarResponse.model_validate(cal) for cal in calendars]
 
 

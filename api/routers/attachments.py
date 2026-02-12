@@ -9,6 +9,8 @@ Features:
 - Calculate storage usage per conversation
 """
 
+import asyncio
+import functools
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -88,7 +90,7 @@ def format_bytes(size_bytes: int) -> str:
         },
     },
 )
-def list_attachments(
+async def list_attachments(
     chat_id: str | None = Query(
         default=None,
         description="Filter by conversation ID",
@@ -134,12 +136,18 @@ def list_attachments(
     # Convert attachment type to filter value
     type_filter = None if attachment_type == AttachmentTypeEnum.ALL else attachment_type.value
 
-    attachments = reader.get_attachments(
-        chat_id=chat_id,
-        attachment_type=type_filter,
-        after=after,
-        before=before,
-        limit=limit,
+    # Run blocking DB query in executor to avoid blocking the event loop
+    loop = asyncio.get_running_loop()
+    attachments = await loop.run_in_executor(
+        None,
+        functools.partial(
+            reader.get_attachments,
+            chat_id=chat_id,
+            attachment_type=type_filter,
+            after=after,
+            before=before,
+            limit=limit,
+        ),
     )
 
     results = []

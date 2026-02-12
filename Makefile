@@ -427,16 +427,9 @@ benchmark-spec:
 # CATEGORY CLASSIFIER TRAINING
 # ============================================================================
 
-# Label SOC-2508 conversations with categories
-label-categories:
-	uv run python scripts/label_soc_categories.py
-
 # Train LinearSVC on labeled data
 train-category-svm:
 	uv run python scripts/train_category_svm.py
-
-# Full pipeline: label + train
-train-classifiers: label-categories train-category-svm
 
 # ============================================================================
 # FINE-TUNING PIPELINE
@@ -488,9 +481,6 @@ fuse-orpo:
 		--adapter-path adapters/lfm-1.2b-orpo \
 		--save-path models/lfm-1.2b-final
 
-# Step 8: Fine-tune BGE-small embedder
-finetune-embedder:
-	uv run python scripts/finetune_embedder.py
 
 # ============================================================================
 # PERSONAL FINE-TUNING PIPELINE
@@ -713,18 +703,6 @@ verify-fast: format-incremental lint-incremental typecheck-incremental test-ff
 	@echo ""
 	@echo "✅ Fast verification complete!"
 
-# --- Code Ownership ---
-
-owner:
-	@if [ -z "$(FILE)" ]; then \
-		echo "Usage: make owner FILE=jarvis/contacts/fact_extractor.py"; \
-		exit 1; \
-	fi
-	@uv run python scripts/code_owner.py $(FILE)
-
-reviewers:
-	@echo "Suggested reviewers for current changes:"
-	@uv run python scripts/code_owner.py
 
 code-review-checklist:
 	@echo "========================================"

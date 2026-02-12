@@ -238,26 +238,36 @@ class TestRotateWsToken:
             )
             return server
 
+    def _patch_token_write(self):
+        """Patch os.open/os.fdopen used for atomic token file writes."""
+        mock_fd = MagicMock()
+        mock_file = MagicMock()
+        mock_file.__enter__ = MagicMock(return_value=mock_file)
+        mock_file.__exit__ = MagicMock(return_value=False)
+        return patch("jarvis.socket_server.os.open", return_value=42), patch(
+            "jarvis.socket_server.os.fdopen", return_value=mock_file
+        )
+
     def test_generates_new_token(self):
         server = self._make_server()
-        with patch("jarvis.socket_server.WS_TOKEN_PATH"):
-            with patch("jarvis.socket_server.os.chmod"):
-                server._rotate_ws_token()
+        p1, p2 = self._patch_token_write()
+        with p1, p2:
+            server._rotate_ws_token()
         assert server._ws_auth_token != "old-token"
         assert len(server._ws_auth_token) > 0
 
     def test_saves_previous_token(self):
         server = self._make_server()
-        with patch("jarvis.socket_server.WS_TOKEN_PATH"):
-            with patch("jarvis.socket_server.os.chmod"):
-                server._rotate_ws_token()
+        p1, p2 = self._patch_token_write()
+        with p1, p2:
+            server._rotate_ws_token()
         assert server._previous_ws_auth_token == "old-token"
 
     def test_sets_grace_period(self):
         server = self._make_server()
-        with patch("jarvis.socket_server.WS_TOKEN_PATH"):
-            with patch("jarvis.socket_server.os.chmod"):
-                server._rotate_ws_token()
+        p1, p2 = self._patch_token_write()
+        with p1, p2:
+            server._rotate_ws_token()
         # Grace period should be ~60s from now
         remaining = server._previous_token_expired_at - time.monotonic()
         assert 55 < remaining < 65

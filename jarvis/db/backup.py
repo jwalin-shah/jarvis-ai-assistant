@@ -306,6 +306,10 @@ class BackupManager:
                     # Get tables to export
                     tables_to_export = tables or self._get_all_tables(conn)
 
+                    # Validate all table names against sqlite_master allowlist
+                    # to prevent SQL injection via dynamic table name interpolation
+                    tables_to_export = self._validate_table_names(conn, tables_to_export)
+
                     for table in tables_to_export:
                         # Export table schema
                         cursor = conn.execute(
@@ -316,8 +320,8 @@ class BackupManager:
                         if row and row[0]:
                             f.write(f"{row[0]};\n\n")
 
-                        # Export data
-                        cursor = conn.execute(f"SELECT * FROM {table}")
+                        # Export data (table name validated against sqlite_master above)
+                        cursor = conn.execute(f"SELECT * FROM [{table}]")
                         columns = [desc[0] for desc in cursor.description]
 
                         for row in cursor:
@@ -332,7 +336,7 @@ class BackupManager:
                                     values.append(f"'{escaped}'")
 
                             f.write(
-                                f"INSERT INTO {table} ({','.join(columns)}) "
+                                f"INSERT INTO [{table}] ({','.join(columns)}) "
                                 f"VALUES ({','.join(values)});\n"
                             )
 
@@ -599,17 +603,50 @@ class BackupManager:
             size /= 1024
         return f"{size:.1f} TB"
 
+    def _validate_table_names(
+        self, conn: sqlite3.Connection, table_names: list[str]
+    ) -> list[str]:
+        """Validate table names against sqlite_master allowlist.
+
+        Prevents SQL injection by ensuring only real table names from the
+        database schema are used in dynamically constructed queries.
+
+        Args:
+            conn: Active database connection.
+            table_names: Table names to validate.
+
+        Returns:
+            The validated list of table names (unchanged if all valid).
+
+        Raises:
+            ValueError: If any table name is not found in sqlite_master.
+        """
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+        valid_tables = {row[0] for row in cursor}
+
+        invalid = [t for t in table_names if t not in valid_tables]
+        if invalid:
+            raise ValueError(
+                f"Invalid table names (not in sqlite_master): {invalid}"
+            )
+
+        return table_names
+
     def _get_table_counts(self, db_path: Path) -> dict[str, int]:
         """Get row counts for all tables in a database."""
         counts: dict[str, int] = {}
         try:
             with sqlite3.connect(str(db_path)) as conn:
+                # Table names come from sqlite_master, so they are safe,
+                # but we still use bracket-quoting for defense in depth.
                 cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
                 tables = [row[0] for row in cursor]
 
                 for table in tables:
                     try:
-                        cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
+                        cursor = conn.execute(f"SELECT COUNT(*) FROM [{table}]")
                         counts[table] = cursor.fetchone()[0]
                     except sqlite3.Error:
                         counts[table] = -1

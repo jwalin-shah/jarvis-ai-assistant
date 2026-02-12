@@ -214,9 +214,11 @@ class MLXGenerator:
                 pre_formatted=True,
             )
 
-            # Trim cache back to prefix for next call
+            # Trim cache back to prefix for next call (under GPU lock to prevent
+            # race with concurrent generation accessing the same cache)
             if prompt_cache is not None:
-                self._loader.trim_prompt_cache()
+                with MLXModelLoader._mlx_load_lock:
+                    self._loader.trim_prompt_cache()
 
             total_time = (time.perf_counter() - start_time) * 1000
 
@@ -265,7 +267,8 @@ class MLXGenerator:
         if not self._loader.is_loaded():
             return
         try:
-            self._loader.prefill_prompt_cache(_get_system_prefix())
+            with MLXModelLoader._mlx_load_lock:
+                self._loader.prefill_prompt_cache(_get_system_prefix())
         except Exception:
             logger.debug("Prompt cache prefill failed, will generate without cache")
 
@@ -433,9 +436,11 @@ class MLXGenerator:
 
             gen_thread.join(timeout=5.0)
 
-            # Trim cache back to prefix for next call
+            # Trim cache back to prefix for next call (under GPU lock to prevent
+            # race with concurrent generation accessing the same cache)
             if stream_prompt_cache is not None:
-                self._loader.trim_prompt_cache()
+                with MLXModelLoader._mlx_load_lock:
+                    self._loader.trim_prompt_cache()
 
             if generation_error:
                 raise generation_error[0]

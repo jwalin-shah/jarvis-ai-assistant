@@ -278,8 +278,9 @@ class JarvisSocketServer:
         # Generate WebSocket auth token and write to file
         self._ws_auth_token = secrets.token_urlsafe(32)
         self._token_created_at = time.monotonic()
-        WS_TOKEN_PATH.write_text(self._ws_auth_token)
-        os.chmod(WS_TOKEN_PATH, 0o600)
+        fd = os.open(WS_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(self._ws_auth_token)
 
         # Start WebSocket server for browser clients
         self._ws_server = await websockets.serve(
@@ -552,8 +553,9 @@ class JarvisSocketServer:
         # Generate and persist the new token
         self._ws_auth_token = secrets.token_urlsafe(32)
         self._token_created_at = time.monotonic()
-        WS_TOKEN_PATH.write_text(self._ws_auth_token)
-        os.chmod(WS_TOKEN_PATH, 0o600)
+        fd = os.open(WS_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(self._ws_auth_token)
 
         log_event(logger, "websocket.token_rotated")
 

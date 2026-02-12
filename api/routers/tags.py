@@ -12,13 +12,16 @@ All endpoints are under /tags prefix.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import logging
 import threading
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_imessage_reader
+from integrations.imessage import ChatDBReader
 from api.schemas.tags import (
     BulkTagRequest,
     BulkTagResponse,
@@ -106,7 +109,7 @@ def get_rules_engine() -> RulesEngine:
     summary="List tags",
     description="Get all tags, optionally filtered by parent.",
 )
-def list_tags(
+async def list_tags(
     parent_id: int | None = Query(
         default=None,
         description="Filter by parent tag ID. Use -1 to get all tags including nested.",
@@ -119,10 +122,17 @@ def list_tags(
     """List all tags with optional filtering."""
     manager = get_tag_manager()
 
+    # Run blocking DB queries in executor to avoid blocking the event loop
+    loop = asyncio.get_running_loop()
     if parent_id == -1:
-        tags = manager.get_all_tags()
+        tags = await loop.run_in_executor(None, manager.get_all_tags)
     else:
-        tags = manager.list_tags(parent_id=parent_id, include_system=include_system)
+        tags = await loop.run_in_executor(
+            None,
+            functools.partial(
+                manager.list_tags, parent_id=parent_id, include_system=include_system
+            ),
+        )
 
     return TagListResponse(
         tags=[_tag_to_response(t) for t in tags],
@@ -517,6 +527,7 @@ def get_folder_conversations(
     folder_id: int,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> dict[str, Any]:
     """Get conversations matching a smart folder."""
     manager = get_tag_manager()
@@ -526,7 +537,6 @@ def get_folder_conversations(
         raise HTTPException(status_code=404, detail="Smart folder not found")
 
     # Get all conversations from iMessage
-    reader = get_imessage_reader()
     conversations = reader.get_conversations(limit=1000)  # Get all for filtering
 
     # Convert to dicts for the rules engine
@@ -557,6 +567,7 @@ def get_folder_conversations(
 )
 def preview_smart_folder_rules(
     request: SmartFolderPreviewRequest,
+    reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> SmartFolderPreviewResponse:
     """Preview smart folder rules."""
     rules = _schema_to_rules(request.rules)
@@ -566,9 +577,6 @@ def preview_smart_folder_rules(
     errors = engine.validate_rules(rules)
     if errors:
         raise HTTPException(status_code=400, detail={"errors": errors})
-
-    # Get conversations
-    reader = get_imessage_reader()
     conversations = reader.get_conversations(limit=500)
     conv_dicts = [_conversation_to_dict(c) for c in conversations]
 
@@ -716,10 +724,12 @@ def delete_tag_rule(rule_id: int) -> dict[str, str]:
     summary="Get tag suggestions",
     description="Get AI-powered tag suggestions for a conversation.",
 )
-def get_tag_suggestions(request: TagSuggestionsRequest) -> TagSuggestionsResponse:
+def get_tag_suggestions(
+    request: TagSuggestionsRequest,
+    reader: ChatDBReader = Depends(get_imessage_reader),
+) -> TagSuggestionsResponse:
     """Get tag suggestions for a conversation."""
     # Get messages for the conversation
-    reader = get_imessage_reader()
     messages = reader.get_messages(request.chat_id, limit=50)
 
     # Convert to dicts

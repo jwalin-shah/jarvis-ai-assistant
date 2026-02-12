@@ -149,7 +149,7 @@ def run_grid_search(X: np.ndarray, y: list[str], n_folds: int = 5) -> list[dict]
             )
 
             cv = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
-            scores = cross_val_score(svm, X, y, cv=cv, scoring="f1_macro", n_jobs=2)
+            scores = cross_val_score(svm, X, y, cv=cv, scoring="f1_macro", n_jobs=1)
 
             results.append(
                 {

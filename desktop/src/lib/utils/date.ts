@@ -2,24 +2,8 @@
  * Date formatting utilities
  */
 
-const timeFormatCache = new Map<string, string>();
 const dateFormatCache = new Map<string, string>();
 const dateStringCache = new Map<number, string>();
-
-/**
- * Format a date string to time (HH:MM)
- */
-export function formatTime(dateStr: string): string {
-  let cached = timeFormatCache.get(dateStr);
-  if (cached) return cached;
-
-  const formatted = new Date(dateStr).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  timeFormatCache.set(dateStr, formatted);
-  return formatted;
-}
 
 /**
  * Format a date string to a relative date (Today, Yesterday, or full date)
@@ -122,7 +106,6 @@ export function formatFullTimestamp(dateStr: string): string {
  * Clear all date format caches
  */
 export function clearDateCaches(): void {
-  timeFormatCache.clear();
   dateFormatCache.clear();
   dateStringCache.clear();
 }

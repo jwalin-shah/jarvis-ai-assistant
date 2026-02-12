@@ -33,18 +33,20 @@ def _get_searcher(reader: ChatDBReader, threshold: float) -> SemanticSearcher:
 
     Reuses searcher across requests to avoid repeated model loading.
     Creates a dedicated reader for the singleton to avoid holding a DI reader.
+    Threshold is applied per-request, not baked into the singleton.
 
     Args:
         reader: iMessage database reader (used only for first creation)
-        threshold: Similarity threshold
+        threshold: Similarity threshold (applied per-request)
 
     Returns:
-        SemanticSearcher instance
+        SemanticSearcher instance with updated threshold
     """
     global _searcher_instance
 
     # Fast path: skip lock if already initialized (double-check locking)
     if _searcher_instance is not None:
+        _searcher_instance.similarity_threshold = threshold
         return _searcher_instance
 
     with _searcher_lock:

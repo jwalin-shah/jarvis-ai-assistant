@@ -50,11 +50,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     setup_script_logging("train_personal")
     import mlx.core as mx
 
-    # Set memory limits BEFORE any model loading
+    # Set memory limits BEFORE any model loading (CLI args override centralized defaults)
     memory_limit_bytes = int(args.memory_limit_gb * 1024 * 1024 * 1024)
     cache_limit_bytes = int(args.cache_limit_mb * 1024 * 1024)
     mx.set_memory_limit(memory_limit_bytes)
-    # 512MB cache limit - prevents stale tensors from hogging GPU memory
     mx.set_cache_limit(cache_limit_bytes)
 
     print(

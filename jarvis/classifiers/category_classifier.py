@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import threading
 import time
@@ -250,11 +251,14 @@ class CategoryClassifier(EmbedderMixin):
             try:
                 embedding = self.embedder.encode([text], normalize=True)[0]
             except Exception as embed_err:
-                logger.warning("BERT encode failed, using zero embedding: %s", embed_err)
-                embedding = np.zeros(384, dtype=np.float32)
+                logger.warning("BERT encode failed, falling back to default: %s", embed_err)
+                return None
 
             non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
-            features = np.concatenate([embedding, non_bert_features])
+            # Model trained with 915 features: BERT(384) + context_BERT(384) + handcrafted(147)
+            # Context BERT is zeroed at inference (not available in real-time)
+            context_embedding = np.zeros(384, dtype=np.float32)
+            features = np.concatenate([embedding, context_embedding, non_bert_features])
             features = features.reshape(1, -1)
 
             import warnings
@@ -295,7 +299,7 @@ class CategoryClassifier(EmbedderMixin):
         """
         context = context or []
 
-        cache_input = text + "|" + "|".join(context)
+        cache_input = json.dumps([text, context], ensure_ascii=False)
         cache_key = hashlib.md5(cache_input.encode()).hexdigest()
         if cache_key in self._classification_cache:
             cached_result, cached_time = self._classification_cache[cache_key]
@@ -387,52 +391,61 @@ class CategoryClassifier(EmbedderMixin):
             try:
                 embeddings = self.embedder.encode(pipeline_texts, normalize=True)
             except Exception as embed_err:
-                logger.warning("Batch BERT encode failed, using zero embeddings: %s", embed_err)
-                embeddings = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
+                logger.warning(
+                    "Batch BERT encode failed, %d items will use default: %s",
+                    len(pipeline_texts),
+                    embed_err,
+                )
+                embeddings = None
 
-            # Batch non-BERT feature extraction
-            mob_pressures = [m.pressure if m else "none" for m in pipeline_mobs]
-            mob_types = [m.response_type if m else "answer" for m in pipeline_mobs]
-            extractor = _get_feature_extractor()
-            non_bert_batch = extractor.extract_all_batch(
-                pipeline_texts,
-                pipeline_contexts,
-                mob_pressures,
-                mob_types,
-            )
+            if embeddings is not None:
+                # Batch non-BERT feature extraction
+                mob_pressures = [m.pressure if m else "none" for m in pipeline_mobs]
+                mob_types = [m.response_type if m else "answer" for m in pipeline_mobs]
+                extractor = _get_feature_extractor()
+                non_bert_batch = extractor.extract_all_batch(
+                    pipeline_texts,
+                    pipeline_contexts,
+                    mob_pressures,
+                    mob_types,
+                )
 
-            # Build full feature matrix: BERT (384) + hand-crafted (147) = 531
-            non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
-            feature_matrix = np.concatenate(
-                [embeddings, non_bert_matrix],
-                axis=1,
-            )
+                # Build full feature matrix: BERT(384) + context_BERT(384) + hand-crafted(147) = 915
+                # Context BERT is zeroed at inference (not available in real-time)
+                non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
+                context_embeddings = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
+                feature_matrix = np.concatenate(
+                    [embeddings, context_embeddings, non_bert_matrix],
+                    axis=1,
+                )
 
-            # Single prediction call
-            try:
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", "X does not have valid feature names")
-                    proba_matrix = self._pipeline.predict_proba(feature_matrix)
+                # Single prediction call
+                try:
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", "X does not have valid feature names")
+                        proba_matrix = self._pipeline.predict_proba(feature_matrix)
 
-                classes = self._mlb.classes_ if self._mlb is not None else CATEGORIES
+                    classes = self._mlb.classes_ if self._mlb is not None else CATEGORIES
 
-                for j, idx in enumerate(pipeline_indices):
-                    proba = proba_matrix[j]
-                    category_idx = int(np.argmax(proba))
-                    category = classes[category_idx]
-                    confidence = float(proba[category_idx])
-                    result = CategoryResult(
-                        category=category,
-                        confidence=confidence,
-                        method="lightgbm",
-                    )
-                    results[idx] = result
-                    ctx = contexts[idx] or []
-                    cache_input = texts[idx] + "|" + "|".join(ctx)
-                    cache_key = hashlib.md5(cache_input.encode()).hexdigest()
-                    self._cache_put(cache_key, result)
-            except Exception as e:
-                logger.error("Batch pipeline prediction failed: %s", e, exc_info=True)
+                    for j, idx in enumerate(pipeline_indices):
+                        proba = proba_matrix[j]
+                        category_idx = int(np.argmax(proba))
+                        category = classes[category_idx]
+                        confidence = float(proba[category_idx])
+                        result = CategoryResult(
+                            category=category,
+                            confidence=confidence,
+                            method="lightgbm",
+                        )
+                        results[idx] = result
+                        ctx = contexts[idx] or []
+                        cache_input = json.dumps(
+                            [texts[idx], ctx], ensure_ascii=False
+                        )
+                        cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+                        self._cache_put(cache_key, result)
+                except Exception as e:
+                    logger.error("Batch pipeline prediction failed: %s", e, exc_info=True)
 
         # --- Pass 3: Fill any remaining with fallback ---
         for i in range(n):
@@ -443,7 +456,7 @@ class CategoryClassifier(EmbedderMixin):
                     method="default",
                 )
                 ctx = contexts[i] or []
-                cache_input = texts[i] + "|" + "|".join(ctx)
+                cache_input = json.dumps([texts[i], ctx], ensure_ascii=False)
                 cache_key = hashlib.md5(cache_input.encode()).hexdigest()
                 self._cache_put(cache_key, results[i])
 

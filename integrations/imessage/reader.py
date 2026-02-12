@@ -1341,9 +1341,26 @@ class ChatDBReader:
                 logger.warning(f"Query error in search: {e}")
                 return []
 
+            # Collect message IDs for batch prefetch
+            message_ids = []
+            for row in rows:
+                try:
+                    message_ids.append(row["id"])
+                except (IndexError, KeyError):
+                    continue
+
+            # Batch-fetch attachments and reactions (2 queries instead of 2*N)
+            attachments_map = self._prefetch_attachments(message_ids)
+            reactions_map = self._prefetch_reactions(message_ids)
+
             messages = []
             for row in rows:
-                msg = self._row_to_message(row, row["chat_id"])
+                msg = self._row_to_message(
+                    row,
+                    row["chat_id"],
+                    prefetched_attachments=attachments_map,
+                    prefetched_reactions=reactions_map,
+                )
                 if msg:
                     messages.append(msg)
 

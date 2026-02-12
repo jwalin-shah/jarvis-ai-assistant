@@ -200,6 +200,11 @@ STRATEGIES = {
 
 def load_model():
     """Load the JARVIS MLX model."""
+    # Set MLX memory limits before loading to prevent swap thrashing on 8GB systems
+    from models.memory_config import apply_embedder_limits
+
+    apply_embedder_limits()
+
     from models.loader import get_model
 
     loader = get_model()

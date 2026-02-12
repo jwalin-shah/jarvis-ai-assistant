@@ -113,7 +113,7 @@ class RoutingMetricsStore:
         self._closed = False
 
         # Background queue for non-blocking record() calls
-        self._queue: queue.Queue[RoutingMetrics | None] = queue.Queue()
+        self._queue: queue.Queue[RoutingMetrics | None] = queue.Queue(maxsize=10000)
 
         # Background flush thread
         self._flush_thread: threading.Thread | None = None

@@ -241,14 +241,19 @@ class ContactMixin:
             return [self._row_to_contact(row) for row in cursor]
 
     def delete_contact(self: JarvisDBBase, contact_id: int) -> bool:
-        """Delete a contact and their associated pairs."""
+        """Delete a contact and all associated data (pairs, artifacts, style, timing, drafts, facts)."""
         with self.connection() as conn:
             # Get chat_id before deletion for cache invalidation
             cursor = conn.execute("SELECT chat_id FROM contacts WHERE id = ?", (contact_id,))
             row = cursor.fetchone()
             chat_id = row["chat_id"] if row else None
 
-            # Delete embeddings for this contact's pairs
+            # Delete dependent tables that reference pairs
+            conn.execute(
+                """DELETE FROM pair_artifacts WHERE pair_id IN
+                   (SELECT id FROM pairs WHERE contact_id = ?)""",
+                (contact_id,),
+            )
             conn.execute(
                 """DELETE FROM pair_embeddings WHERE pair_id IN
                    (SELECT id FROM pairs WHERE contact_id = ?)""",
@@ -256,6 +261,16 @@ class ContactMixin:
             )
             # Delete pairs
             conn.execute("DELETE FROM pairs WHERE contact_id = ?", (contact_id,))
+            # Delete dependent tables that reference contacts directly
+            conn.execute(
+                "DELETE FROM contact_style_targets WHERE contact_id = ?", (contact_id,)
+            )
+            conn.execute(
+                "DELETE FROM contact_timing_prefs WHERE contact_id = ?", (contact_id,)
+            )
+            conn.execute("DELETE FROM scheduled_drafts WHERE contact_id = ?", (contact_id,))
+            conn.execute("DELETE FROM contact_facts WHERE contact_id = ?", (str(contact_id),))
+            # Finally delete the contact
             cursor = conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
             deleted = cursor.rowcount > 0
 

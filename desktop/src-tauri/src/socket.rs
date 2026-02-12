@@ -553,43 +553,6 @@ pub async fn is_socket_connected(state: State<'_, SocketState>) -> Result<bool, 
     Ok(*connected)
 }
 
-/// Attempt to reconnect with exponential backoff
-/// Returns true if connected, false if all retries exhausted
-pub async fn reconnect_with_backoff(
-    app: &AppHandle,
-    state: &SocketState,
-    max_attempts: u32,
-) -> bool {
-    let mut delay_secs = 1;
-    const MAX_DELAY: u64 = 30;
-
-    for attempt in 1..=max_attempts {
-        println!("[Socket] Reconnection attempt {}/{}", attempt, max_attempts);
-
-        // Try to connect
-        match connect_socket_internal(app, state).await {
-            Ok(_) => {
-                println!("[Socket] Reconnection successful on attempt {}", attempt);
-                return true;
-            }
-            Err(e) => {
-                eprintln!("[Socket] Reconnection attempt {} failed: {}", attempt, e);
-
-                if attempt < max_attempts {
-                    println!("[Socket] Waiting {} seconds before next attempt...", delay_secs);
-                    tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
-
-                    // Exponential backoff with max cap
-                    delay_secs = std::cmp::min(delay_secs * 2, MAX_DELAY);
-                }
-            }
-        }
-    }
-
-    eprintln!("[Socket] All reconnection attempts exhausted");
-    false
-}
-
 /// Internal connect logic that can be called by reconnect
 async fn connect_socket_internal(
     app: &AppHandle,

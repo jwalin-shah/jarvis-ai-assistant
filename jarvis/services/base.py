@@ -301,8 +301,8 @@ class Service(abc.ABC):
         popen_kwargs: dict[str, Any] = {
             "cwd": self.config.working_dir,
             "env": env,
-            "stdout": subprocess.PIPE,
-            "stderr": subprocess.PIPE,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
         }
         if hasattr(os, "setsid"):  # Unix/Linux/macOS
             popen_kwargs["process_group"] = 0
