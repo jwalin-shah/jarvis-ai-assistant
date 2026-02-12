@@ -15,8 +15,9 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 
 /// Get socket path for JARVIS daemon (~/.jarvis/jarvis.sock)
 fn get_socket_path() -> Result<String, String> {
-    let home = std::env::var("HOME")
-        .map_err(|_| "HOME environment variable not set - cannot determine socket path".to_string())?;
+    let home = std::env::var("HOME").map_err(|_| {
+        "HOME environment variable not set - cannot determine socket path".to_string()
+    })?;
     Ok(format!("{home}/.jarvis/jarvis.sock"))
 }
 
@@ -149,12 +150,16 @@ async fn write_to_socket(
             writer.write_all(b"\n").await?;
             writer.flush().await?;
             Ok::<(), std::io::Error>(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = result {
             let mut wd = writer_dead_arc.write().await;
             *wd = true;
-            return Err(format!("Failed to write to socket: {} (writer marked dead)", e));
+            return Err(format!(
+                "Failed to write to socket: {} (writer marked dead)",
+                e
+            ));
         }
         Ok(())
     } else {
@@ -164,10 +169,7 @@ async fn write_to_socket(
 
 /// Connect to the JARVIS socket server with persistent connection
 #[tauri::command]
-pub async fn connect_socket(
-    app: AppHandle,
-    state: State<'_, SocketState>,
-) -> Result<bool, String> {
+pub async fn connect_socket(app: AppHandle, state: State<'_, SocketState>) -> Result<bool, String> {
     let socket_path = get_socket_path()?;
     println!("[Socket] Connecting to JARVIS socket at: {}", socket_path);
     connect_socket_internal(&app, &state).await
@@ -200,10 +202,20 @@ async fn handle_message(
             "stream.token" => {
                 if let Some(params) = msg.params {
                     let event = StreamTokenEvent {
-                        token: params.get("token").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        token: params
+                            .get("token")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         index: params.get("index").and_then(|v| v.as_u64()).unwrap_or(0),
-                        final_token: params.get("final").and_then(|v| v.as_bool()).unwrap_or(false),
-                        request_id: params.get("request_id").and_then(|v| v.as_u64()).unwrap_or(0),
+                        final_token: params
+                            .get("final")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
+                        request_id: params
+                            .get("request_id")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0),
                     };
                     if let Err(e) = app.emit("jarvis:stream_token", event) {
                         eprintln!("[Socket] Failed to emit stream_token event: {}", e);
@@ -215,11 +227,27 @@ async fn handle_message(
             "new_message" => {
                 if let Some(params) = msg.params {
                     let event = NewMessageEvent {
-                        message_id: params.get("message_id").and_then(|v| v.as_i64()).unwrap_or(0),
-                        chat_id: params.get("chat_id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        sender: params.get("sender").and_then(|v| v.as_str()).map(String::from),
-                        text_preview: params.get("text").and_then(|v| v.as_str()).map(String::from),
-                        is_from_me: params.get("is_from_me").and_then(|v| v.as_bool()).unwrap_or(false),
+                        message_id: params
+                            .get("message_id")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0),
+                        chat_id: params
+                            .get("chat_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        sender: params
+                            .get("sender")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                        text_preview: params
+                            .get("text")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                        is_from_me: params
+                            .get("is_from_me")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
                     };
                     if let Err(e) = app.emit("jarvis:new_message", event) {
                         eprintln!("[Socket] Failed to emit new_message event: {}", e);
@@ -294,10 +322,8 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
     {
         let mut writer = writer_arc.lock().await;
         if let Some(mut w) = writer.take() {
-            let shutdown_result = tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                w.shutdown()
-            ).await;
+            let shutdown_result =
+                tokio::time::timeout(std::time::Duration::from_secs(5), w.shutdown()).await;
 
             if shutdown_result.is_err() {
                 eprintln!("[Socket] Warning: writer shutdown timed out after 5 seconds");
@@ -309,7 +335,10 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
     {
         let mut pending = pending_arc.write().await;
         for (_id, req) in pending.drain() {
-            let _ = req.response_tx.send(Err("Disconnected by client".to_string())).await;
+            let _ = req
+                .response_tx
+                .send(Err("Disconnected by client".to_string()))
+                .await;
         }
     }
 
@@ -355,23 +384,24 @@ pub async fn send_message(
         id,
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| {
-            let pending_arc = pending_arc.clone();
-            tokio::spawn(async move {
-                match pending_arc.try_write() {
-                    Ok(mut pending) => { pending.remove(&id); }
-                    Err(_) => {
-                        eprintln!(
-                            "[Socket] Warning: could not acquire pending lock to clean up \
-                             request {} during serialization error",
-                            id
-                        );
-                    }
+    let request_json = serde_json::to_string(&request).map_err(|e| {
+        let pending_arc = pending_arc.clone();
+        tokio::spawn(async move {
+            match pending_arc.try_write() {
+                Ok(mut pending) => {
+                    pending.remove(&id);
                 }
-            });
-            format!("Failed to serialize request: {}", e)
-        })?;
+                Err(_) => {
+                    eprintln!(
+                        "[Socket] Warning: could not acquire pending lock to clean up \
+                             request {} during serialization error",
+                        id
+                    );
+                }
+            }
+        });
+        format!("Failed to serialize request: {}", e)
+    })?;
 
     if let Err(e) = write_to_socket(&writer_arc, &writer_dead_arc, &request_json).await {
         let mut pending = pending_arc.write().await;
@@ -387,7 +417,7 @@ pub async fn send_message(
             let mut pending = pending_arc.write().await;
             pending.remove(&id);
             Err("Response channel closed".to_string())
-        },
+        }
         Err(_) => {
             // Remove pending request on timeout
             let mut pending = pending_arc.write().await;
@@ -451,7 +481,10 @@ pub async fn send_batch(
                 receivers.push(Some((id, rx)));
             }
             Err(e) => {
-                eprintln!("[Socket] Failed to serialize batch request '{}': {}", req.method, e);
+                eprintln!(
+                    "[Socket] Failed to serialize batch request '{}': {}",
+                    req.method, e
+                );
                 prepared.push(None);
                 receivers.push(None);
             }
@@ -468,7 +501,8 @@ pub async fn send_batch(
                         writer.write_all(json.as_bytes()).await?;
                         writer.write_all(b"\n").await?;
                         Ok::<(), std::io::Error>(())
-                    }.await;
+                    }
+                    .await;
 
                     if let Err(e) = result {
                         eprintln!("[Socket] Batch write failed: {} (writer marked dead)", e);
@@ -519,18 +553,17 @@ pub async fn send_batch(
             async move {
                 match receiver {
                     Some((id, mut rx)) => {
-                        match tokio::time::timeout(
-                            std::time::Duration::from_secs(30),
-                            rx.recv(),
-                        )
-                        .await
+                        match tokio::time::timeout(std::time::Duration::from_secs(30), rx.recv())
+                            .await
                         {
-                            Ok(Some(Ok(value))) => {
-                                BatchResponseItem { result: Some(value), error: None }
-                            }
-                            Ok(Some(Err(e))) => {
-                                BatchResponseItem { result: None, error: Some(e) }
-                            }
+                            Ok(Some(Ok(value))) => BatchResponseItem {
+                                result: Some(value),
+                                error: None,
+                            },
+                            Ok(Some(Err(e))) => BatchResponseItem {
+                                result: None,
+                                error: Some(e),
+                            },
                             Ok(None) => {
                                 let mut pending = pending_arc.write().await;
                                 pending.remove(&id);
@@ -611,10 +644,7 @@ pub async fn is_socket_connected(state: State<'_, SocketState>) -> Result<bool, 
 }
 
 /// Internal connect logic that can be called by reconnect
-async fn connect_socket_internal(
-    app: &AppHandle,
-    state: &SocketState,
-) -> Result<bool, String> {
+async fn connect_socket_internal(app: &AppHandle, state: &SocketState) -> Result<bool, String> {
     // Clone Arc references out of state to avoid lifetime issues
     let writer_arc = state.writer.clone();
     let connected_arc = state.connected.clone();
@@ -653,7 +683,10 @@ async fn connect_socket_internal(
     {
         let mut pending = pending_arc.write().await;
         for (_id, req) in pending.drain() {
-            let _ = req.response_tx.send(Err("Connection reset during reconnect".to_string())).await;
+            let _ = req
+                .response_tx
+                .send(Err("Connection reset during reconnect".to_string()))
+                .await;
         }
     }
 
@@ -747,7 +780,10 @@ async fn connect_socket_internal(
         {
             let mut pending = pending_for_reader.write().await;
             for (id, req) in pending.drain() {
-                let _ = req.response_tx.send(Err(format!("Connection lost (request ID: {})", id))).await;
+                let _ = req
+                    .response_tx
+                    .send(Err(format!("Connection lost (request ID: {})", id)))
+                    .await;
             }
         }
 

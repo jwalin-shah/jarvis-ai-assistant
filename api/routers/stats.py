@@ -11,9 +11,6 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-
-_URL_RE = re.compile(r"https?://\S+")
-_WORD_RE = re.compile(r"\b[a-zA-Z]{3,}\b")
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -29,6 +26,9 @@ from api.schemas import (
 )
 from integrations.imessage import ChatDBReader
 from jarvis.cache import TTLCache
+
+_URL_RE = re.compile(r"https?://\S+")
+_WORD_RE = re.compile(r"\b[a-zA-Z]{3,}\b")
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 

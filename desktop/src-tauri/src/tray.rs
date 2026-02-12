@@ -15,7 +15,8 @@ use tauri::{
 pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     // Create menu items
     let show_item = MenuItem::with_id(app, "show", "Show JARVIS", true, None::<&str>)?;
-    let status_item = MenuItem::with_id(app, "status", "Status: Disconnected", false, None::<&str>)?;
+    let status_item =
+        MenuItem::with_id(app, "status", "Status: Disconnected", false, None::<&str>)?;
     let health_item = MenuItem::with_id(app, "health", "System Health", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -26,17 +27,20 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let nav_separator = PredefinedMenuItem::separator(app)?;
 
     // Build the tray menu
-    let menu = Menu::with_items(app, &[
-        &show_item,
-        &nav_separator,
-        &dashboard_item,
-        &messages_item,
-        &health_item,
-        &settings_item,
-        &separator,
-        &status_item,
-        &quit_item,
-    ])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &show_item,
+            &nav_separator,
+            &dashboard_item,
+            &messages_item,
+            &health_item,
+            &settings_item,
+            &separator,
+            &status_item,
+            &quit_item,
+        ],
+    )?;
 
     // Create the tray icon
     let _tray = TrayIconBuilder::with_id("main")
