@@ -357,16 +357,30 @@ TOPIC_PATTERNS: dict[ThreadTopic, list[str]] = {
 
 # Patterns indicating questions or expectation of response
 QUESTION_PATTERNS = [
-    r"\?$",  # Ends with question mark
-    r"^(what|where|when|who|why|how|which|can|could|would|will|do|does|did|is|are|was|were)\b",
-    r"\b(let me know|lmk|thoughts\??|wdyt|wyt)\b",
+    re.compile(r"\?$", re.I),
+    re.compile(
+        r"^(what|where|when|who|why|how|which|can|could|would|will|do|does|did|is|are|was|were)\b",
+        re.I,
+    ),
+    re.compile(r"\b(let me know|lmk|thoughts\??|wdyt|wyt)\b", re.I),
 ]
 
 # Patterns indicating thread conclusion
 CONCLUSION_PATTERNS = [
-    r"\b(sounds good|perfect|great|thanks|bye|later|ttyl|see you|talk soon|cya)\b",
-    r"\b(got it|understood|will do|on it)\b",
-    r"^(ok|okay|k|kk)$",
+    re.compile(
+        r"\b(sounds good|perfect|great|thanks|bye|later|ttyl|see you|talk soon|cya)\b", re.I,
+    ),
+    re.compile(r"\b(got it|understood|will do|on it)\b", re.I),
+    re.compile(r"^(ok|okay|k|kk)$", re.I),
+]
+
+# Patterns for extracting action items from messages
+_ACTION_ITEM_PATTERNS = [
+    re.compile(r"(?:I'll|i'll|I will|i will)\s+(.+?)(?:\.|$)", re.I),
+    re.compile(r"(?:can you|could you)\s+(.+?)(?:\?|$)", re.I),
+    re.compile(r"(?:don't forget to|remember to)\s+(.+?)(?:\.|$)", re.I),
+    re.compile(r"(?:please|pls)\s+(.+?)(?:\.|$)", re.I),
+    re.compile(r"(?:need to|have to)\s+(.+?)(?:\.|$)", re.I),
 ]
 
 # Response configuration based on thread topic
@@ -770,9 +784,9 @@ class ThreadAnalyzer:
             return ThreadState.CONCLUDED
         last = messages[-1]
         text = (last.text or "").lower()
-        if any(re.search(p, text, re.I) for p in QUESTION_PATTERNS):
+        if any(p.search(text) for p in QUESTION_PATTERNS):
             return ThreadState.AWAITING_RESPONSE if last.is_from_me else ThreadState.OPEN_QUESTION
-        if any(re.search(p, text, re.I) for p in CONCLUSION_PATTERNS):
+        if any(p.search(text) for p in CONCLUSION_PATTERNS):
             return ThreadState.CONCLUDED
         return ThreadState.IN_DISCUSSION
 
@@ -805,19 +819,12 @@ class ThreadAnalyzer:
         return messages[-5:]
 
     def _extract_action_items(self, messages: list[Message]) -> list[str]:
-        pats = [
-            r"(?:I'll|i'll|I will|i will)\s+(.+?)(?:\.|$)",
-            r"(?:can you|could you)\s+(.+?)(?:\?|$)",
-            r"(?:don't forget to|remember to)\s+(.+?)(?:\.|$)",
-            r"(?:please|pls)\s+(.+?)(?:\.|$)",
-            r"(?:need to|have to)\s+(.+?)(?:\.|$)",
-        ]
         items = []
         for m in messages[-10:]:
             if not m.text:
                 continue
-            for p in pats:
-                for match in re.findall(p, m.text, re.I):
+            for p in _ACTION_ITEM_PATTERNS:
+                for match in p.findall(m.text):
                     s = match.strip()
                     if 5 < len(s) < 100:
                         items.append(s)

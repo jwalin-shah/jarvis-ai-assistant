@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Pre-compiled emoji detection regex (Supplementary Multilingual Plane)
 _EMOJI_RE = re.compile(r"[\U0001F000-\U0001FFFF]")
+_REPEATED_CHAR_RE = re.compile(r"(.)\1{2,}")
 
 # spaCy entity label → (default fact_type, default span_label for FactCandidate)
 SPACY_LABEL_MAP: dict[str, tuple[str, str]] = {
@@ -198,7 +199,7 @@ def _filter_noisy_spacy(candidates: list[FactCandidate]) -> list[FactCandidate]:
             continue
 
         # Repeated characters (3+) → slang not entity (e.g. "CASHHHH", "Whyyyy")
-        if re.search(r"(.)\1{2,}", span):
+        if _REPEATED_CHAR_RE.search(span):
             continue
 
         # All-lowercase single-word PERSON → almost always a common word

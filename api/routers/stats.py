@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+
+_URL_RE = re.compile(r"https?://\S+")
+_WORD_RE = re.compile(r"\b[a-zA-Z]{3,}\b")
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -302,9 +305,9 @@ def _extract_words(text: str) -> list[str]:
     if not text:
         return []
     # Remove URLs
-    text = re.sub(r"https?://\S+", "", text)
+    text = _URL_RE.sub("", text)
     # Remove special characters, keep letters and numbers
-    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+    words = _WORD_RE.findall(text.lower())
     return [w for w in words if w not in STOP_WORDS]
 
 

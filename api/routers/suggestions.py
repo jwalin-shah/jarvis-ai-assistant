@@ -14,6 +14,8 @@ import logging
 import re
 
 from fastapi import APIRouter, Request
+
+_WORD_BOUNDARY_RE = re.compile(r"\b\w+\b")
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.ratelimit import RATE_LIMIT_READ, limiter
@@ -250,9 +252,9 @@ def _compute_match_score(message: str, keywords: list[str], base_score: float) -
             return base_score
 
     # Check for word-level matches
-    message_words = set(re.findall(r"\b\w+\b", message_lower))
+    message_words = set(_WORD_BOUNDARY_RE.findall(message_lower))
     for keyword in keywords:
-        keyword_words = set(re.findall(r"\b\w+\b", keyword.lower()))
+        keyword_words = set(_WORD_BOUNDARY_RE.findall(keyword.lower()))
         if keyword_words & message_words:
             return base_score * 0.7  # Partial match
 
