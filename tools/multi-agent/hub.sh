@@ -50,6 +50,7 @@ Usage: hub.sh <command> [args]
 Commands:
   setup                           Create worktrees, state directory, per-lane CLAUDE.md
   dispatch <task-file>            Parse task file and spawn agents into worktrees
+  loop <task-file> [opts]         Multi-pass dispatch until all files reviewed
   run <agent> [-m model] <prompt> Run a standalone agent task (tracked in status)
   status                          Show all lanes + standalone tasks
   watch [interval]                Auto-refresh status (default: 5s), stops when all done
@@ -68,6 +69,7 @@ Options:
 Examples:
   hub.sh setup
   hub.sh dispatch tasks/my-task.md
+  hub.sh loop tasks/my-task.md --max-passes=3 --pause=30
   hub.sh run codex "Audit all SQL queries and write a report"
   hub.sh run codex -m o3 "Deep code review of jarvis/"
   hub.sh run kimi "Generate test fixtures for contracts"
@@ -225,7 +227,14 @@ IMPORTANT:
 - Only modify files you own (see CLAUDE.md in this directory for ownership rules)
 - When done, commit your changes and run: touch .agent-done
 - Your work will be cross-reviewed by other lane agents before merge
-- Read .hub-task.md for the full task description"
+- Read .hub-task.md for the full task description
+
+PROGRESS TRACKING (MANDATORY):
+After reviewing each file, update .hub-progress.json with your progress.
+Format: {\"pass\": N, \"files_reviewed\": [...], \"files_with_fixes\": [...],
+  \"fixes\": [{\"file\": \"...\", \"description\": \"...\"}], \"last_file\": \"...\",
+  \"status\": \"partial\"|\"complete\"}
+When you finish ALL files in your task, set status to \"complete\"."
 
         # Build agent command
         local log_file="$LOGS_DIR/lane_${lane}_$(date +%Y%m%d_%H%M%S).log"
@@ -1203,6 +1212,271 @@ cmd_teardown() {
     hub_success "Teardown complete"
 }
 
+# ── Helper: wait_for_lanes ────────────────────────────────────────────────────
+
+wait_for_lanes() {
+    local poll_interval=${1:-30}
+    while true; do
+        local all_done=true
+        for lane in $ALL_LANES; do
+            local status
+            status=$(get_lane_status "$lane")
+            if [[ "$status" == "working" ]]; then
+                # Double-check PID is still alive
+                local raw_pid
+                raw_pid=$(python3 -c "
+import json
+with open('$STATE_FILE') as f:
+    s = json.load(f)
+print(s['lanes']['$lane'].get('pid') or '')
+" 2>/dev/null)
+                if [[ -n "$raw_pid" ]] && kill -0 "$raw_pid" 2>/dev/null; then
+                    all_done=false
+                    break
+                fi
+                # PID dead but status still working - trigger exit handler
+            fi
+        done
+        if $all_done; then break; fi
+        sleep "$poll_interval"
+    done
+}
+
+# ── Command: loop ─────────────────────────────────────────────────────────────
+
+cmd_loop() {
+    local task_file="${1:-}"
+    shift || true
+
+    if [[ -z "$task_file" ]]; then
+        hub_error "Usage: hub.sh loop <task-file> [--max-passes=N] [--pause=SECS]"
+        exit 1
+    fi
+
+    if [[ ! -f "$task_file" ]]; then
+        hub_error "Task file not found: $task_file"
+        exit 1
+    fi
+
+    # Use absolute path
+    task_file="$(cd "$(dirname "$task_file")" && pwd)/$(basename "$task_file")"
+
+    # Parse options
+    local max_passes=5
+    local pause_secs=10
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --max-passes=*) max_passes="${1#*=}" ;;
+            --pause=*)      pause_secs="${1#*=}" ;;
+            *)              hub_warn "Unknown option: $1" ;;
+        esac
+        shift
+    done
+
+    hub_log "Starting loop: max_passes=$max_passes, pause=${pause_secs}s"
+    hub_log "Task file: $task_file"
+
+    local pass=1
+    while [[ $pass -le $max_passes ]]; do
+        hub_log "━━━ Pass $pass/$max_passes ━━━"
+
+        local dispatched=0
+        local all_complete=true
+
+        for lane in $ALL_LANES; do
+            local wt_path
+            wt_path=$(get_worktree_path "$lane")
+
+            if ! worktree_exists "$lane"; then
+                continue
+            fi
+
+            # Check if lane already complete from progress
+            local progress_status
+            progress_status=$(python3 -c "
+import json, sys
+from pathlib import Path
+p = Path('$wt_path/.hub-progress.json')
+if not p.exists():
+    print('none')
+    sys.exit()
+try:
+    d = json.loads(p.read_text())
+    print(d.get('status', 'none'))
+except:
+    print('none')
+" 2>/dev/null)
+
+            if [[ "$progress_status" == "complete" ]]; then
+                hub_log "Lane ${lane^^}: already complete, skipping"
+                continue
+            fi
+
+            # Run progress filter to get remaining task
+            local filtered_task
+            filtered_task=$(python3 "$SCRIPT_DIR/progress_filter.py" "$task_file" "$lane" "$wt_path" 2>/dev/null)
+            local filter_rc=$?
+
+            if [[ $filter_rc -ne 0 ]]; then
+                hub_log "Lane ${lane^^}: no files remaining, skipping"
+                continue
+            fi
+
+            all_complete=false
+
+            # Check lane isn't already working
+            local status
+            status=$(get_lane_status "$lane")
+            if [[ "$status" == "working" ]]; then
+                hub_warn "Lane ${lane^^} still working, skipping"
+                all_complete=false
+                dispatched=$((dispatched + 1))
+                continue
+            fi
+
+            local agent
+            agent=$(get_lane_agent "$lane")
+            local label="${LANE_LABELS[$lane]}"
+
+            # Write filtered task
+            echo "$filtered_task" > "$wt_path/.hub-task.md"
+            rm -f "$wt_path/.agent-done"
+
+            # Build prompt with pass context
+            local prompt="You are working on Lane ${lane^^} ($label) of a multi-agent project.
+This is pass $pass of a multi-pass review. Pick up where the previous pass left off.
+
+Your task:
+$filtered_task
+
+IMPORTANT:
+- Only modify files you own (see CLAUDE.md in this directory for ownership rules)
+- When done, commit your changes and run: touch .agent-done
+- Read .hub-task.md for the full task description
+
+PROGRESS TRACKING (MANDATORY):
+After reviewing each file, update .hub-progress.json with your progress.
+Format: {\"pass\": $pass, \"files_reviewed\": [...], \"files_with_fixes\": [...],
+  \"fixes\": [{\"file\": \"...\", \"description\": \"...\"}], \"last_file\": \"...\",
+  \"status\": \"partial\"|\"complete\"}
+CRITICAL: Read the existing .hub-progress.json first and APPEND to the lists (don't overwrite prior progress).
+When you finish ALL files in your task, set status to \"complete\"."
+
+            local log_file="$LOGS_DIR/lane_${lane}_pass${pass}_$(date +%Y%m%d_%H%M%S).log"
+
+            lane_log "$lane" "Dispatching pass $pass to $agent..."
+
+            # Suppress auto-review between passes (only on final pass)
+            (
+                cd "$wt_path"
+                HUB_AUTO_REVIEW=0 run_agent_work "$agent" "$prompt" "$log_file" "$DISPATCH_TIMEOUT"
+                on_lane_exit "$lane"
+            ) &
+            local pid=$!
+            HUB_CHILD_PIDS+=("$pid")
+
+            set_lane_status "$lane" "working"
+            set_lane_pid "$lane" "$pid"
+
+            # Record start time
+            python3 -c "
+import json, time
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+state['lanes']['$lane']['started_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+state['lanes']['$lane']['finished_at'] = None
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=4)
+" 2>/dev/null
+
+            lane_log "$lane" "PID: $pid, log: $log_file"
+            dispatched=$((dispatched + 1))
+        done
+
+        if $all_complete; then
+            hub_success "All lanes complete after $((pass - 1)) passes"
+            break
+        fi
+
+        if [[ $dispatched -eq 0 ]]; then
+            hub_success "No lanes needed dispatch in pass $pass"
+            break
+        fi
+
+        # Wait for all lanes to finish this pass
+        hub_log "Waiting for pass $pass to complete (polling every 30s)..."
+        wait_for_lanes 30
+
+        hub_log "Pass $pass complete"
+
+        # Check for lanes with no new commits this pass (stalled = mark complete)
+        for lane in $ALL_LANES; do
+            local wt_path
+            wt_path=$(get_worktree_path "$lane")
+            if ! worktree_exists "$lane"; then continue; fi
+
+            local status
+            status=$(get_lane_status "$lane")
+            # Reset done -> idle for next pass
+            if [[ "$status" == "done" || "$status" == "reviewing" || "$status" == "approved" || "$status" == "needs_revision" ]]; then
+                set_lane_status "$lane" "idle"
+            fi
+        done
+
+        pass=$((pass + 1))
+
+        if [[ $pass -le $max_passes ]]; then
+            hub_log "Pausing ${pause_secs}s before next pass..."
+            sleep "$pause_secs"
+        fi
+    done
+
+    # Final summary
+    echo ""
+    hub_log "━━━ Loop Complete ━━━"
+    for lane in $ALL_LANES; do
+        local wt_path
+        wt_path=$(get_worktree_path "$lane")
+        if ! worktree_exists "$lane"; then continue; fi
+
+        local progress_info
+        progress_info=$(python3 -c "
+import json
+from pathlib import Path
+p = Path('$wt_path/.hub-progress.json')
+if not p.exists():
+    print('No progress file')
+else:
+    d = json.loads(p.read_text())
+    reviewed = len(d.get('files_reviewed', []))
+    fixes = len(d.get('fixes', []))
+    status = d.get('status', 'unknown')
+    passes = d.get('pass', 0)
+    print(f'{reviewed} files reviewed, {fixes} fixes, {passes} passes, status: {status}')
+" 2>/dev/null)
+        hub_log "Lane ${lane^^}: $progress_info"
+    done
+
+    # Trigger auto-review on final results
+    hub_log "Triggering final review..."
+    export HUB_AUTO_REVIEW=1
+    for lane in $ALL_LANES; do
+        local status
+        status=$(get_lane_status "$lane")
+        if [[ "$status" == "idle" ]]; then
+            # Check if there are actual commits
+            local wt_path
+            wt_path=$(get_worktree_path "$lane")
+            local commits
+            commits=$(git -C "$wt_path" log main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+            if [[ "$commits" -gt 0 ]]; then
+                set_lane_status "$lane" "done"
+            fi
+        fi
+    done
+    cmd_review
+}
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 if [[ $# -eq 0 ]]; then
@@ -1218,6 +1492,9 @@ case "$COMMAND" in
         ;;
     dispatch)
         cmd_dispatch "$@"
+        ;;
+    loop)
+        cmd_loop "$@"
         ;;
     run)
         cmd_run "$@"
