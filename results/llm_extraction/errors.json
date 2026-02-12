@@ -25,14 +25,6 @@
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0307",
-    "slice": "positive",
-    "message_text": "Yeah that's completely true that's just the hardest thing to do. What happened already happened now ",
-    "gold_span": "Dallas",
-    "gold_label": "past_location"
-  },
-  {
-    "type": "fn",
     "sample_id": "r2_fact_gs_0329",
     "slice": "positive",
     "message_text": "Bc I also don\u2019t know what the situation would be where I would have sex w a guy",
@@ -53,14 +45,6 @@
     "slice": "positive",
     "message_text": "I like studyung 30-40 moves of theory",
     "gold_span": "theory",
-    "gold_label": "activity"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0258",
-    "slice": "positive",
-    "message_text": "I'm like an ok now. My dad made me pack up my Xbox and put it away until this shelter in place thing",
-    "gold_span": "5k",
     "gold_label": "activity"
   },
   {

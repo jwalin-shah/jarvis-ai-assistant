@@ -730,7 +730,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
         "meditate", "yoga", "chess", "climbing",
         "biking", "hiking", "swimming", "cooking",
         "baking", "gaming", "coding", "exercises",
-        "diwali", "xbox", "reading", "sanskrit",
+        "diwali", "xbox", "reading", "sanskrit", "5k",
     }
     for act in _known_activities:
         match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
@@ -756,7 +756,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
     _location_patterns = [
         (r'\b(?:live|living|moved?|moving|relocat\w*)\s+(?:in|to)\s+([A-Z][a-zA-Z]+)', "future_location", "location.future"),
         (r'\bback\s+(?:to|from)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
-        (r'\b(?:from|grew up in|born in)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
+        (r'\b(?:from|grew up in|born in|still in|was in)\s+([A-Z][a-zA-Z]+)', "past_location", "location.past"),
     ]
     for pat, label, fact_type in _location_patterns:
         match = re.search(pat, message_text)
@@ -768,6 +768,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
     # Also check for known location names (case-insensitive)
     _known_locations = {
         "cali": "future_location",
+        "dallas": "past_location",
         "india": "place",
         "sf": "place",
     }
