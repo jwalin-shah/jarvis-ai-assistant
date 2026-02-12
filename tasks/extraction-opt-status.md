@@ -1,9 +1,9 @@
 ## STATUS: IN_PROGRESS
 
 ## Current Best
-- **F1**: 0.457 (limit=100)
-- **P**: 0.506, **R**: 0.417
-- **Strategy**: constrained_categories (structural filters + label correction + reaction filter)
+- **F1**: 0.418 (limit=100)
+- **P**: 0.532, **R**: 0.344
+- **Strategy**: constrained_categories (org correction + family filter + reaction skip)
 - **Model**: lfm-1.2b (LFM2.5-1.2B-Instruct-MLX-4bit)
 - **Commit**: pending
 
@@ -37,8 +37,8 @@
 - **Changes**: 7 examples, simplified labels, max_tokens=120
 - **Result**: Slight regression, better P/R balance
 
-### Iteration 5 - Structural Filters + Label Correction Overhaul
-- **F1**: 0.457 (P=0.506, R=0.417)
+### Iteration 5 - Org Label Correction + Family Filter + Reaction Skip
+- **F1**: 0.418 (P=0.532, R=0.344)
 - **Limit**: 100
 - **Changes**:
   - **Reaction message filter**: Skip "Loved/Liked/Laughed at/Emphasized" messages entirely (these quote others' messages and hallucinate badly)
@@ -52,8 +52,8 @@
   - **Expanded reject lists**: health ("never", "free", "tight", "annoying"), food ("jeans", "coupon", "email"), activity ("made", "stories", "ultrasound")
   - **System prompt**: "LASTING personal facts" framing with hard negative few-shot examples
   - Few-shot: added "lending tree" → org example
-- **Result**: IMPROVED (0.340 → 0.457, +34%)
-- **TP=40, FP=39, FN=56**
+- **Result**: IMPROVED (0.340 → 0.418, +23%)
+- **TP=33, FP=29, FN=63**
 - **Key Label Improvements**:
   - food_item: F1=0.857 (P=0.75, R=1.0!) - was 0.273
   - employer: F1=0.857 (3/4 caught) - was 0.000
@@ -69,28 +69,27 @@
 
 ## Error Analysis (Iteration 5)
 
-### FP Sources (39 total)
-- near_miss: 16 FPs (family members in transient context - structurally hard)
-- positive: 17 FPs (wrong labels, hallucinations within fact-bearing messages)
-- random_negative: 4 FPs
-- hard_negative: 2 FPs
+### FP Sources (29 total, down from 70)
+- near_miss: 12 FPs (family members in transient context)
+- positive: 17 FPs (wrong labels, hallucinations)
+- Reaction messages: 0 FPs (previously ~6, now filtered)
 
 ### Key FP Patterns
-1. "mom"/"dad" in near_miss messages (6 FPs) - model sees family word, goldset says not a fact
-2. Label confusion: "Diwali" as health_condition, "atm" as job_role
-3. "doctor's appointment" as place (transient event)
+1. "mom"/"dad" in near_miss messages (6 FPs) - model sees family word, goldset says not lasting fact
+2. Hallucinated health: "barring anything insanely", "hella bad"
+3. Wrong labels: "ready to get" as job_role, "slow process" as place
 
-### Key FN Patterns (56 remaining)
-1. **Phantom spans (12/96)**: gold text not in message - IMPOSSIBLE to fix
-2. **"my dad"/"my brother"**: model outputs "dad"/"brother", gold wants "my dad" - substring match handles this
-3. **Activity recall**: still only 25%, many hobby/skill mentions missed
-4. **Org recall**: 11%, model rarely outputs org label
+### Key FN Patterns (63 remaining)
+1. **Phantom spans (~12/96)**: gold text not in message - IMPOSSIBLE to fix
+2. **Activity recall low**: only 6/24 (25%), many hobby/skill mentions missed
+3. **Org recall low**: 1/9 (11%), model rarely outputs org despite few-shot example
+4. **Place recall low**: 1/7 (14%), model misses many location mentions
 5. **"Vestibular"**: single-word message, model outputs empty JSON
 
 ### Goldset Quality Issues
-- 12/96 gold spans in first 100 are phantom (21% of FNs)
-- Maximum achievable recall ~87.5% (84/96 non-phantom spans)
+- ~12/96 gold spans in first 100 are phantom (impossible to extract)
 - employer vs org inconsistency (same entity "lending tree" has both labels)
+- Maximum achievable recall ~87.5% given phantom spans
 
 ## Next Steps (Priority Order)
 1. **Goldset cleanup**: Remove phantom spans to get accurate ceiling measurement
@@ -99,3 +98,12 @@
 4. **Context injection**: prev/next messages for ambiguous cases
 5. **Two-pass approach**: binary fact classifier first, then detailed extraction
 6. **Self-consistency**: Generate N times, majority vote
+
+### Review (iteration 1) - REJECT
+Reviewer: gemini
+> (node:17619) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+> (Use `node --trace-deprecation ...` to show where the warning was created)
+> (node:17636) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+> (Use `node --trace-deprecation ...` to show where the warning was created)
+> Loaded cached credentials.
+
