@@ -62,15 +62,8 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
         ]
 
         with db.connection() as conn:
-            # Get initial count to calculate how many were actually inserted
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
-                (contact_id,),
-            )
-            count_before = cursor.fetchone()[0]
-
             # Batch insert all facts at once
-            conn.executemany(
+            cursor = conn.executemany(
                 """
                 INSERT OR IGNORE INTO contact_facts
                 (contact_id, category, subject, predicate, value, confidence,
@@ -80,14 +73,7 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 """,
                 fact_data,
             )
-
-            # Get final count to see how many were inserted (executemany rowcount is unreliable)
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
-                (contact_id,),
-            )
-            count_after = cursor.fetchone()[0]
-            inserted = count_after - count_before
+            inserted = cursor.rowcount
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         if inserted:
