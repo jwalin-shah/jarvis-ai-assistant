@@ -590,13 +590,22 @@ def _classify_question_mark(
     if features["has_wh_word"] or features["has_aux_inversion"]:
         if features["is_rhetorical"]:
             return _make_result(
-                ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.rhetorical_conf, features,
+                ResponsePressure.LOW,
+                ResponseType.OPTIONAL,
+                cfg.rhetorical_conf,
+                features,
             )
         return _make_result(
-            ResponsePressure.HIGH, ResponseType.ANSWER, cfg.question_mark_wh_conf, features,
+            ResponsePressure.HIGH,
+            ResponseType.ANSWER,
+            cfg.question_mark_wh_conf,
+            features,
         )
     return _make_result(
-        ResponsePressure.HIGH, ResponseType.CONFIRMATION, cfg.question_mark_bare_conf, features,
+        ResponsePressure.HIGH,
+        ResponseType.CONFIRMATION,
+        cfg.question_mark_bare_conf,
+        features,
     )
 
 
@@ -608,12 +617,16 @@ def _classify_recipient_oriented(
     """Handle recipient-oriented questions."""
     if _RECIPIENT_ORIENTED_RE.match(text_lower):
         return _make_result(
-            ResponsePressure.HIGH, ResponseType.COMMITMENT,
-            cfg.recipient_commitment_conf, features,
+            ResponsePressure.HIGH,
+            ResponseType.COMMITMENT,
+            cfg.recipient_commitment_conf,
+            features,
         )
     return _make_result(
-        ResponsePressure.HIGH, ResponseType.ANSWER,
-        cfg.recipient_commitment_conf, features,
+        ResponsePressure.HIGH,
+        ResponseType.ANSWER,
+        cfg.recipient_commitment_conf,
+        features,
     )
 
 
@@ -646,22 +659,34 @@ def classify_response_pressure(
 
     if features["is_negated_request"] or features["is_backchannel"]:
         return _make_result(
-            ResponsePressure.NONE, ResponseType.CLOSING, cfg.backchannel_conf, features,
+            ResponsePressure.NONE,
+            ResponseType.CLOSING,
+            cfg.backchannel_conf,
+            features,
         )
 
     if features["is_greeting"]:
         return _make_result(
-            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.greeting_conf, features,
+            ResponsePressure.LOW,
+            ResponseType.OPTIONAL,
+            cfg.greeting_conf,
+            features,
         )
 
     if features["is_request"] or features["is_imperative"]:
         return _make_result(
-            ResponsePressure.HIGH, ResponseType.COMMITMENT, cfg.request_conf, features,
+            ResponsePressure.HIGH,
+            ResponseType.COMMITMENT,
+            cfg.request_conf,
+            features,
         )
 
     if features["is_slang_question"]:
         return _make_result(
-            ResponsePressure.HIGH, ResponseType.ANSWER, cfg.slang_question_conf, features,
+            ResponsePressure.HIGH,
+            ResponseType.ANSWER,
+            cfg.slang_question_conf,
+            features,
         )
 
     if features["is_recipient_oriented"]:
@@ -672,46 +697,67 @@ def classify_response_pressure(
 
     if features["is_speaker_oriented"]:
         return _make_result(
-            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.greeting_conf, features,
+            ResponsePressure.LOW,
+            ResponseType.OPTIONAL,
+            cfg.greeting_conf,
+            features,
         )
 
     if features["is_rhetorical"]:
         return _make_result(
-            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.reactive_conf, features,
+            ResponsePressure.LOW,
+            ResponseType.OPTIONAL,
+            cfg.reactive_conf,
+            features,
         )
 
     if features["is_reactive"] or features["has_multiple_exclamation"]:
         return _make_result(
-            ResponsePressure.MEDIUM, ResponseType.EMOTIONAL, cfg.reactive_conf, features,
+            ResponsePressure.MEDIUM,
+            ResponseType.EMOTIONAL,
+            cfg.reactive_conf,
+            features,
         )
 
     if features["is_opinion"]:
         return _make_result(
-            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.low_pressure_conf, features,
+            ResponsePressure.LOW,
+            ResponseType.OPTIONAL,
+            cfg.low_pressure_conf,
+            features,
         )
 
     if features["is_telling"]:
         return _make_result(
-            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.low_pressure_conf, features,
+            ResponsePressure.LOW,
+            ResponseType.OPTIONAL,
+            cfg.low_pressure_conf,
+            features,
         )
 
     # WH-word without ? - depends on pattern
     if features["has_wh_word"] and not features["has_question_mark"]:
         if _matches_info_question(text_lower):
             return _make_result(
-                ResponsePressure.HIGH, ResponseType.ANSWER,
-                cfg.wh_no_qmark_info_conf, features,
+                ResponsePressure.HIGH,
+                ResponseType.ANSWER,
+                cfg.wh_no_qmark_info_conf,
+                features,
             )
         return _make_result(
-            ResponsePressure.LOW, ResponseType.OPTIONAL,
-            cfg.wh_no_qmark_other_conf, features,
+            ResponsePressure.LOW,
+            ResponseType.OPTIONAL,
+            cfg.wh_no_qmark_other_conf,
+            features,
         )
 
     # Short-form direct questions without WH-word
     if _matches_info_question(text_lower):
         return _make_result(
-            ResponsePressure.HIGH, ResponseType.ANSWER,
-            cfg.wh_no_qmark_info_conf, features,
+            ResponsePressure.HIGH,
+            ResponseType.ANSWER,
+            cfg.wh_no_qmark_info_conf,
+            features,
         )
 
     return _make_result(

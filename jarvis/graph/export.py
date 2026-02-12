@@ -46,7 +46,7 @@ def export_to_json(
     if path:
         path = Path(path)
         path.write_text(json_str, encoding="utf-8")
-        logger.info(f"Exported graph to {path}")
+        logger.info("Exported graph to %s", path)
 
     return json_str
 
@@ -151,7 +151,7 @@ def export_to_graphml(
     if path:
         path = Path(path)
         path.write_text(xml_str, encoding="utf-8")
-        logger.info(f"Exported graph to {path}")
+        logger.info("Exported graph to %s", path)
 
     return xml_str
 
@@ -252,7 +252,7 @@ def export_to_svg(
     if path:
         path = Path(path)
         path.write_text(svg_str, encoding="utf-8")
-        logger.info(f"Exported graph to {path}")
+        logger.info("Exported graph to %s", path)
 
     return svg_str
 
@@ -546,6 +546,6 @@ def export_to_html(
     if path:
         path = Path(path)
         path.write_text(html_template, encoding="utf-8")
-        logger.info(f"Exported graph to {path}")
+        logger.info("Exported graph to %s", path)
 
     return html_template

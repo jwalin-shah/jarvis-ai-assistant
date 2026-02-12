@@ -129,7 +129,9 @@ class CategoryClassifier(EmbedderMixin):
         self._pipeline_loaded = False
         # Classification cache: (text, context_tuple) -> (CategoryResult, timestamp)
         # TTL of 60 seconds to avoid stale results during prefetch + actual request
-        self._classification_cache: dict[tuple[str, tuple[str, ...]], tuple[CategoryResult, float]] = {}
+        self._classification_cache: dict[
+            tuple[str, tuple[str, ...]], tuple[CategoryResult, float]
+        ] = {}
         self._cache_ttl = 60.0  # seconds
         self._cache_max_size = 1000
 

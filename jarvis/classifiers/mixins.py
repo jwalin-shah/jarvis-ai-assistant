@@ -27,8 +27,6 @@ class EmbedderMixin:
                 return self.embedder.encode([text], normalize=True)[0]
     """
 
-    _embedder: CachedEmbedder | None = None
-
     @property
     def embedder(self) -> CachedEmbedder:
         """Get the embedder, loading it lazily on first access.
@@ -36,11 +34,16 @@ class EmbedderMixin:
         Returns:
             The shared CachedEmbedder instance.
         """
-        if self._embedder is None:
+        # Use instance __dict__ directly to avoid class-variable sharing across instances.
+        # A class-level _embedder would be shared by all subclasses and instances,
+        # which is incorrect if different instances need independent lifecycle.
+        embedder = self.__dict__.get("_embedder")
+        if embedder is None:
             from jarvis.embedding_adapter import get_embedder
 
-            self._embedder = get_embedder()
-        return self._embedder
+            embedder = get_embedder()
+            self.__dict__["_embedder"] = embedder
+        return embedder
 
 
 __all__ = [
