@@ -5,55 +5,55 @@
   "strategy": "constrained_categories",
   "model": "lfm-1.2b",
   "num_predictions": 104,
-  "extraction_time_s": 128.27,
-  "ms_per_message": 1282.7,
+  "extraction_time_s": 194.72,
+  "ms_per_message": 1947.2,
   "overall": {
-    "precision": 0.3269,
-    "recall": 0.3542,
-    "f1": 0.34,
-    "tp": 34,
-    "fp": 70,
-    "fn": 62
+    "precision": 0.3462,
+    "recall": 0.375,
+    "f1": 0.36,
+    "tp": 36,
+    "fp": 68,
+    "fn": 60
   },
   "per_label": {
     "activity": {
-      "precision": 0.2333,
-      "recall": 0.2917,
-      "f1": 0.2593,
-      "tp": 7,
-      "fp": 23,
-      "fn": 17
+      "precision": 0.2609,
+      "recall": 0.25,
+      "f1": 0.2553,
+      "tp": 6,
+      "fp": 17,
+      "fn": 18
     },
     "current_location": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "employer": {
       "precision": 0.0,
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
       "fp": 0,
-      "fn": 2
-    },
-    "employer": {
-      "precision": 1.0,
-      "recall": 0.25,
-      "f1": 0.4,
-      "tp": 1,
-      "fp": 0,
-      "fn": 3
+      "fn": 4
     },
     "family_member": {
-      "precision": 0.4412,
+      "precision": 0.4286,
       "recall": 0.5172,
-      "f1": 0.4762,
+      "f1": 0.4688,
       "tp": 15,
-      "fp": 19,
+      "fp": 20,
       "fn": 14
     },
     "food_item": {
-      "precision": 0.1875,
+      "precision": 0.3,
       "recall": 1.0,
-      "f1": 0.3158,
+      "f1": 0.4615,
       "tp": 3,
-      "fp": 13,
+      "fp": 7,
       "fn": 0
     },
     "friend_name": {
@@ -61,24 +61,24 @@
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 2,
+      "fp": 1,
       "fn": 1
     },
     "future_location": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 2,
       "fp": 0,
-      "fn": 2
+      "fn": 0
     },
     "health_condition": {
-      "precision": 0.4286,
-      "recall": 0.3,
-      "f1": 0.3529,
-      "tp": 3,
-      "fp": 4,
-      "fn": 7
+      "precision": 0.2857,
+      "recall": 0.4,
+      "f1": 0.3333,
+      "tp": 4,
+      "fp": 10,
+      "fn": 6
     },
     "job_role": {
       "precision": 0.1429,
@@ -93,32 +93,32 @@
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 0,
+      "fp": 1,
       "fn": 9
     },
     "past_location": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.6667,
+      "tp": 1,
       "fp": 0,
-      "fn": 2
+      "fn": 1
     },
     "person_name": {
       "precision": 0.0,
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 1,
+      "fp": 2,
       "fn": 1
     },
     "place": {
-      "precision": 0.6667,
-      "recall": 0.5714,
-      "f1": 0.6154,
-      "tp": 4,
-      "fp": 2,
-      "fn": 3
+      "precision": 0.3333,
+      "recall": 0.2857,
+      "f1": 0.3077,
+      "tp": 2,
+      "fp": 4,
+      "fn": 5
     }
   },
   "per_slice": {
@@ -127,23 +127,23 @@
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 29,
+      "fp": 28,
       "fn": 0
     },
     "positive": {
-      "precision": 0.5,
-      "recall": 0.3542,
-      "f1": 0.4146,
-      "tp": 34,
-      "fp": 34,
-      "fn": 62
+      "precision": 0.5373,
+      "recall": 0.375,
+      "f1": 0.4417,
+      "tp": 36,
+      "fp": 31,
+      "fn": 60
     },
     "random_negative": {
       "precision": 0.0,
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 7,
+      "fp": 9,
       "fn": 0
     }
   }
