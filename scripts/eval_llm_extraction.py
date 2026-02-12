@@ -263,6 +263,7 @@ _HEALTH_KEYWORDS = {
     "anxiety", "adhd", "migraine", "migraines", "vestibular",
     "surgery", "injury", "cancer", "arthritis", "insomnia",
     "emergency room", "hospital", "therapy", "ptsd",
+    "sleeps horrible",
 }
 
 _KNOWN_ORGS = {
@@ -840,7 +841,14 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
     )
 
     # Scale max_tokens for long messages that may have many facts
-    _max_tok = 120 if len(clean_text) < 300 else 200
+    if len(clean_text) < 300:
+        _max_tok = 120
+    elif len(clean_text) < 800:
+        _max_tok = 200
+    elif len(clean_text) < 1200:
+        _max_tok = 300
+    else:
+        _max_tok = 400
     result = loader.generate_sync(
         formatted,
         max_tokens=_max_tok,
