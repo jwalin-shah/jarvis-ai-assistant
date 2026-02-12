@@ -1236,6 +1236,123 @@ class ChatDBReader:
 
             return self._rows_to_messages(rows, chat_id)
 
+    def get_messages_batch(
+        self,
+        chat_ids: list[str],
+        limit_per_chat: int = 100,
+    ) -> dict[str, list[Message]]:
+        """Get messages for multiple conversations in a single SQL query.
+
+        Uses ROW_NUMBER() OVER (PARTITION BY chat.guid) to limit per chat,
+        avoiding N+1 queries when processing many conversations.
+
+        Args:
+            chat_ids: List of conversation IDs (chat.guid values).
+            limit_per_chat: Maximum messages per conversation.
+
+        Returns:
+            Dict mapping chat_id to list of Message objects (newest first).
+        """
+        if not chat_ids:
+            return {}
+
+        messages_by_chat: dict[str, list[Message]] = {}
+
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
+            placeholders = ",".join("?" * len(chat_ids))
+            params: list[Any] = list(chat_ids) + [limit_per_chat]
+
+            query = f"""
+                WITH ranked_msgs AS (
+                    SELECT
+                        message.ROWID as id,
+                        message.guid,
+                        chat.guid as chat_id,
+                        COALESCE(handle.id, 'me') as sender,
+                        CASE
+                            WHEN message.text IS NOT NULL AND message.text != ''
+                            THEN message.text
+                            ELSE NULL
+                        END as text,
+                        message.attributedBody,
+                        message.date as date,
+                        message.is_from_me,
+                        message.thread_originator_guid as reply_to_guid,
+                        message.date_delivered,
+                        message.date_read,
+                        message.group_action_type,
+                        affected_handle.id as affected_handle_id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY chat.guid ORDER BY message.date DESC
+                        ) as rn
+                    FROM message
+                    JOIN chat_message_join
+                        ON message.ROWID = chat_message_join.message_id
+                    JOIN chat ON chat_message_join.chat_id = chat.ROWID
+                    LEFT JOIN handle ON message.handle_id = handle.ROWID
+                    LEFT JOIN handle AS affected_handle
+                        ON message.other_handle = affected_handle.ROWID
+                    WHERE chat.guid IN ({placeholders})
+                )
+                SELECT id, guid, chat_id, sender, text, attributedBody,
+                       date, is_from_me, reply_to_guid, date_delivered,
+                       date_read, group_action_type, affected_handle_id
+                FROM ranked_msgs
+                WHERE rn <= ?
+                ORDER BY chat_id, date DESC
+            """
+
+            try:
+                rows = self._execute_with_fallback(cursor, query, params)
+            except Exception as e:
+                logger.warning("Batch message fetch failed: %s", e)
+                return {}
+
+        # Group rows by chat_id, then convert each group
+        grouped: dict[str, list] = {}
+        for row in rows:
+            row_chat_id = row["chat_id"]
+            if row_chat_id not in grouped:
+                grouped[row_chat_id] = []
+            grouped[row_chat_id].append(row)
+
+        # Batch-prefetch attachments and reactions across ALL messages
+        all_message_ids = []
+        all_id_guid_map: dict[int, str | None] = {}
+        for row in rows:
+            try:
+                mid = row["id"]
+                all_message_ids.append(mid)
+                all_id_guid_map[mid] = row["guid"] if "guid" in row.keys() else None
+            except (IndexError, KeyError):
+                continue
+
+        attachments_map = self._prefetch_attachments(all_message_ids)
+        reactions_map = self._prefetch_reactions(
+            all_message_ids, id_guid_map=all_id_guid_map
+        )
+
+        # Convert rows to Message objects per chat
+        for chat_id_key, chat_rows in grouped.items():
+            messages = []
+            for row in chat_rows:
+                try:
+                    msg = self._row_to_message(
+                        row,
+                        chat_id_key,
+                        prefetched_attachments=attachments_map,
+                        prefetched_reactions=reactions_map,
+                    )
+                    if msg:
+                        messages.append(msg)
+                except (IndexError, KeyError, TypeError) as e:
+                    logger.debug(f"Skipping malformed row in batch: {e}")
+                    continue
+            messages_by_chat[chat_id_key] = messages
+
+        return messages_by_chat
+
     def get_messages_after(
         self,
         message_id: int,
