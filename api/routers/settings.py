@@ -585,10 +585,14 @@ async def download_model(model_id: str, request: Request) -> DownloadStatus:
         )
 
     try:
-        # Use huggingface_hub to download
+        # Use huggingface_hub to download (run in executor to avoid blocking event loop)
+        import asyncio
+        import functools
+
         from huggingface_hub import snapshot_download
 
-        snapshot_download(spec.path)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, functools.partial(snapshot_download, spec.path))
 
         return DownloadStatus(
             model_id=spec.id,

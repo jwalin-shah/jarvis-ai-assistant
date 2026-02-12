@@ -432,7 +432,7 @@ class ReplyService:
             from jarvis.contacts.fact_index import search_relevant_facts
             from jarvis.prompts import format_facts_for_prompt
 
-            incoming_text = context.text or ""
+            incoming_text = context.message_text or ""
             facts = search_relevant_facts(incoming_text, chat_id, limit=5)
             context.metadata["contact_facts"] = format_facts_for_prompt(facts)
         except Exception as e:

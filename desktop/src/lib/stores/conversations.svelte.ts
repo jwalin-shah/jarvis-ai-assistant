@@ -348,7 +348,7 @@ export async function selectConversation(chatId: string) {
 
   // Background prefetch
   jarvis.call<{ status: string; prefetched?: boolean; draft?: { suggestions: DraftSuggestion[] }; error?: string }>("prefetch_focus", { chat_id: chatId }).then((result) => {
-    if (result?.prefetched && result?.draft?.suggestions?.length) {
+    if (result?.prefetched && result?.draft?.suggestions?.length && conversationsStore.selectedChatId === chatId) {
       conversationsStore.prefetchedDraft = { chatId, suggestions: result.draft.suggestions };
     }
   }).catch((e) => { console.debug('prefetch_focus failed:', e); });

@@ -717,24 +717,30 @@ class GraphBuilder:
                     params.append(datetime_to_apple_timestamp(before))
                     date_clauses += " AND message.date < ?"
 
+                params.append(limit_per_chat)
                 query = f"""
-                    SELECT
-                        chat.guid as chat_id,
-                        message.ROWID as msg_id,
-                        message.text,
-                        message.is_from_me,
-                        message.date,
-                        handle.id as sender,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY chat.guid ORDER BY message.date DESC
-                        ) as rn
-                    FROM chat
-                    JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
-                    JOIN message ON chat_message_join.message_id = message.ROWID
-                    LEFT JOIN handle ON message.handle_id = handle.ROWID
-                    WHERE chat.guid IN ({placeholders})
-                    {date_clauses}
-                    ORDER BY chat.guid, message.date DESC
+                    WITH ranked_msgs AS (
+                        SELECT
+                            chat.guid as chat_id,
+                            message.ROWID as msg_id,
+                            message.text,
+                            message.is_from_me,
+                            message.date,
+                            handle.id as sender,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY chat.guid ORDER BY message.date DESC
+                            ) as rn
+                        FROM chat
+                        JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                        JOIN message ON chat_message_join.message_id = message.ROWID
+                        LEFT JOIN handle ON message.handle_id = handle.ROWID
+                        WHERE chat.guid IN ({placeholders})
+                        {date_clauses}
+                    )
+                    SELECT chat_id, msg_id, text, is_from_me, date, sender
+                    FROM ranked_msgs
+                    WHERE rn <= ?
+                    ORDER BY chat_id, date DESC
                 """
 
                 cursor = conn.cursor()
@@ -743,9 +749,6 @@ class GraphBuilder:
 
                 for row in rows:
                     row_chat_id = row[0]
-                    rn = row[6]
-                    if rn > limit_per_chat:
-                        continue
 
                     msg_date = parse_apple_timestamp(row[4]) if row[4] else None
 

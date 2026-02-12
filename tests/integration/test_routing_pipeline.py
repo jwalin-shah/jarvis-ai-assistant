@@ -158,8 +158,19 @@ class TestFullPipelineEndToEnd:
     def test_closing_returns_template_without_llm(
         self, in_memory_db, mock_generator, mock_embedder
     ):
+        from jarvis.classifiers.category_classifier import CategoryResult
+
         router = _make_router(in_memory_db, mock_generator, mock_embedder)
-        with patch("jarvis.embedding_adapter.get_embedder", return_value=mock_embedder):
+        # Mock classifier to return "closing" - this test validates routing behavior,
+        # not classifier accuracy (which depends on real BERT embeddings)
+        closing_result = CategoryResult(category="closing", confidence=0.9, method="lightgbm")
+        with (
+            patch("jarvis.embedding_adapter.get_embedder", return_value=mock_embedder),
+            patch(
+                "jarvis.classifiers.classification_result.classify_category",
+                return_value=closing_result,
+            ),
+        ):
             result = router.route("goodbye")
         assert result["type"] in ("closing", "acknowledge")
         assert result["response"] in CLOSING_TEMPLATES + ACKNOWLEDGE_TEMPLATES

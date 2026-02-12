@@ -523,7 +523,7 @@ class ChatDBWatcher:
 
             # Shadow GLiNER extraction (if enabled via env var)
             if os.environ.get("JARVIS_SHADOW_EXTRACT") == "1":
-                await self._shadow_extract_gliner(incoming, by_chat)
+                await self._shadow_extract_gliner(extractable, by_chat)
 
         except Exception as e:
             logger.debug("Fact extraction pipeline error: %s", e)

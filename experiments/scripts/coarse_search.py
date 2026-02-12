@@ -196,7 +196,7 @@ def run_coarse_search(
     c_values: list[float],
     gamma_values: list[str],
     n_folds: int = 5,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> list[SearchResult]:
     """Run coarse hyperparameter search with parallel grid search.
 

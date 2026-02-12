@@ -18,6 +18,7 @@ const WEBSOCKET_URL = getSocketRpcWebSocketUrl();
 const REQUEST_TIMEOUT = 30000; // 30s for normal requests
 const STREAMING_TIMEOUT = 120000; // 120s for streaming requests
 const STALE_REQUEST_CLEANUP_INTERVAL = 60000; // Clean up stale requests every 60s
+const STREAM_IDLE_TIMEOUT = 60000; // Auto-clean streaming requests after 60s of no activity
 
 // Request batching configuration
 const BATCH_WINDOW_MS = 15; // Collect requests for 15ms before sending batch
@@ -167,6 +168,7 @@ class JarvisSocket {
       tokens: string[];
       onToken?: (token: string, index: number) => void;
       onComplete: () => void;
+      timeoutId: ReturnType<typeof setTimeout>; // Idle timeout to prevent leaks
     }
   > = new Map();
 
@@ -305,6 +307,16 @@ class JarvisSocket {
   private handleStreamToken(event: StreamTokenEvent): void {
     const request = this.streamingRequests.get(event.request_id);
     if (!request) return;
+
+    // Reset idle timeout on each token received
+    clearTimeout(request.timeoutId);
+    if (!event.final_token) {
+      request.timeoutId = setTimeout(() => {
+        console.warn(`[JarvisSocket] Streaming request ${event.request_id} timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`);
+        request.onComplete();
+        this.streamingRequests.delete(event.request_id);
+      }, STREAM_IDLE_TIMEOUT);
+    }
 
     // Accumulate token
     request.tokens.push(event.token);
@@ -520,6 +532,12 @@ class JarvisSocket {
 
     // Clear any pending requests
     this.wsPendingRequests.clear();
+
+    // Clear streaming request idle timeouts
+    for (const [, request] of this.streamingRequests) {
+      clearTimeout(request.timeoutId);
+    }
+    this.streamingRequests.clear();
 
     if (isTauri && invoke) {
       try {
@@ -865,11 +883,35 @@ class JarvisSocket {
     const tokenBuffer: string[] = [];
     let resolveNextToken: ((value: string | null) => void) | null = null;
     let completed = false;
+    let timedOut = false;
 
-    // Register streaming request handler
+    // Create idle timeout that auto-cleans if server drops mid-stream
+    const createIdleTimeout = (): ReturnType<typeof setTimeout> => {
+      return setTimeout(() => {
+        console.warn(`[JarvisSocket] Streaming request ${requestId} timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`);
+        timedOut = true;
+        completed = true;
+        this.streamingRequests.delete(requestId);
+        if (resolveNextToken) {
+          resolveNextToken(null);
+          resolveNextToken = null;
+        }
+      }, STREAM_IDLE_TIMEOUT);
+    };
+
+    // Register streaming request handler with idle timeout
+    const initialTimeoutId = createIdleTimeout();
     this.streamingRequests.set(requestId, {
       tokens: [],
+      timeoutId: initialTimeoutId,
       onToken: (token, index) => {
+        // Reset idle timeout on each token received
+        const entry = this.streamingRequests.get(requestId);
+        if (entry) {
+          clearTimeout(entry.timeoutId);
+          entry.timeoutId = createIdleTimeout();
+        }
+
         if (onToken) onToken(token, index);
 
         if (resolveNextToken) {
@@ -880,6 +922,11 @@ class JarvisSocket {
         }
       },
       onComplete: () => {
+        // Clear idle timeout on normal completion
+        const entry = this.streamingRequests.get(requestId);
+        if (entry) {
+          clearTimeout(entry.timeoutId);
+        }
         completed = true;
         if (resolveNextToken) {
           resolveNextToken(null);
@@ -917,7 +964,15 @@ class JarvisSocket {
 
         yield nextToken;
       }
+
+      if (timedOut) {
+        throw new Error(`Streaming request timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`);
+      }
     } finally {
+      const entry = this.streamingRequests.get(requestId);
+      if (entry) {
+        clearTimeout(entry.timeoutId);
+      }
       this.streamingRequests.delete(requestId);
     }
   }

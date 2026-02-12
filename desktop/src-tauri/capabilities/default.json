@@ -14,7 +14,6 @@
     "core:window:allow-set-focus",
     "core:app:default",
     "core:path:default",
-    "shell:default",
     "sql:default",
     "sql:allow-load",
     "sql:allow-execute",

@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.utils import get_openapi
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from api.errors import register_exception_handlers
 from api.ratelimit import limiter, rate_limit_exceeded_handler
@@ -279,6 +280,9 @@ def _configure_middleware(app_instance: FastAPI) -> None:
 
     # Enable GZip compression for responses (50-75% bandwidth savings for large JSON responses)
     app_instance.add_middleware(GZipMiddleware, minimum_size=500)
+
+    # Rate limiting middleware (applies default_limits to all routes)
+    app_instance.add_middleware(SlowAPIMiddleware)
 
     # Request timing middleware
     @app_instance.middleware("http")

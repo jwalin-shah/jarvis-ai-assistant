@@ -720,6 +720,13 @@ def main() -> int:
     dspy_program = None
     loader = None
 
+    # Set MLX memory limits early to prevent swap thrashing on 8GB systems.
+    # loader.load() also sets these, but we set them before any MLX import
+    # to guard against accidental early allocation.
+    from models.memory_config import apply_embedder_limits
+
+    apply_embedder_limits()
+
     if args.optimized:
         optimized_dir = PROJECT_ROOT / "evals" / "optimized_reply"
         if not optimized_dir.exists():
@@ -764,7 +771,39 @@ def main() -> int:
     results: list[EvalResult] = []
     total_start = time.perf_counter()
 
+    # Resume support: load partial results from checkpoint file
+    checkpoint_path = PROJECT_ROOT / "results" / "batch_eval_checkpoint.jsonl"
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    completed_names: set[str] = set()
+    if checkpoint_path.exists():
+        for line in checkpoint_path.read_text().splitlines():
+            if line.strip():
+                rec = json.loads(line)
+                completed_names.add(rec["name"])
+                results.append(
+                    EvalResult(
+                        name=rec["name"],
+                        category=rec["category"],
+                        output=rec["output"],
+                        latency_ms=rec["latency_ms"],
+                        checks_passed=rec.get("checks_passed", []),
+                        checks_failed=rec.get("checks_failed", []),
+                        passed=rec["local_passed"],
+                        judge_score=rec.get("judge_score"),
+                        judge_reasoning=rec.get("judge_reasoning", ""),
+                    )
+                )
+        if completed_names:
+            print(
+                f"Resuming: {len(completed_names)}/{len(TEST_CASES)} already completed",
+                flush=True,
+            )
+
+    checkpoint_f = checkpoint_path.open("a", encoding="utf-8")
+
     for i, tc in enumerate(tqdm(TEST_CASES, desc="Evaluating"), 1):
+        if tc["name"] in completed_names:
+            continue
         # Generate via DSPy compiled program or raw model
         gen_start = time.perf_counter()
         try:
@@ -814,6 +853,25 @@ def main() -> int:
             judge_reasoning=judge_reasoning,
         )
         results.append(er)
+
+        # Write checkpoint incrementally (survives crash)
+        checkpoint_f.write(
+            json.dumps(
+                {
+                    "name": er.name,
+                    "category": er.category,
+                    "output": er.output,
+                    "latency_ms": round(er.latency_ms, 1),
+                    "local_passed": er.passed,
+                    "checks_passed": er.checks_passed,
+                    "checks_failed": er.checks_failed,
+                    "judge_score": er.judge_score,
+                    "judge_reasoning": er.judge_reasoning,
+                }
+            )
+            + "\n"
+        )
+        checkpoint_f.flush()
 
         # Print per-case
         status = "PASS" if all_passed else "FAIL"
@@ -942,6 +1000,9 @@ def main() -> int:
         ],
     }
     output_path.write_text(json.dumps(output_data, indent=2))
+    # Clean up checkpoint file after successful completion
+    checkpoint_f.close()
+    checkpoint_path.unlink(missing_ok=True)
     print(f"\nResults saved to: {output_path}", flush=True)
     print("=" * 70, flush=True)
 

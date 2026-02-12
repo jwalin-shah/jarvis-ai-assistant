@@ -201,6 +201,8 @@ class TestModelLoadFailures:
 
     def test_generator_returns_fallback_on_load_failure(self):
         """MLXGenerator should return fallback response when model load fails."""
+        from unittest.mock import patch
+
         from contracts.models import GenerationRequest as ModelGenRequest
         from models.generator import MLXGenerator
 
@@ -211,7 +213,9 @@ class TestModelLoadFailures:
         generator = MLXGenerator(loader=mock_loader, skip_templates=True)
 
         request = ModelGenRequest(prompt="Hello, how are you?")
-        response = generator.generate(request)
+        # Bypass memory pressure check to test the load-failure path specifically
+        with patch("models.generator.should_skip_model_load", return_value=False):
+            response = generator.generate(request)
 
         # Should return a fallback, not crash
         assert response is not None

@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import sqlite3
 from collections import Counter
@@ -460,60 +461,79 @@ def write_outputs(
     ensure_writable(csv_path, overwrite)
     ensure_writable(manifest_path, overwrite)
 
-    with jsonl_path.open("w", encoding="utf-8") as f:
-        for rec in records:
-            f.write(json.dumps(rec, ensure_ascii=True) + "\n")
+    # Write all files to temp paths first, then rename atomically
+    # This prevents corrupt output if the process crashes mid-write
+    tmp_files: list[tuple[Path, Path]] = []
 
-    csv_columns = [
-        "sample_id",
-        "bucket",
-        "message_id",
-        "chat_rowid",
-        "chat_id",
-        "chat_display_name",
-        "is_from_me",
-        "sender_handle",
-        "message_date",
-        "message_text",
-        "context_prev",
-        "context_next",
-        "gold_keep",
-        "gold_fact_type",
-        "gold_subject",
-        "gold_subject_resolution",
-        "gold_anchor_message_id",
-        "gold_notes",
-    ]
+    try:
+        tmp_jsonl = jsonl_path.with_suffix(".jsonl.tmp")
+        with tmp_jsonl.open("w", encoding="utf-8") as f:
+            for rec in records:
+                f.write(json.dumps(rec, ensure_ascii=True) + "\n")
+        tmp_files.append((tmp_jsonl, jsonl_path))
 
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=csv_columns)
-        writer.writeheader()
-        for rec in records:
-            writer.writerow(
-                {
-                    "sample_id": rec["sample_id"],
-                    "bucket": rec["bucket"],
-                    "message_id": rec["message_id"],
-                    "chat_rowid": rec["chat_rowid"],
-                    "chat_id": rec["chat_id"],
-                    "chat_display_name": rec["chat_display_name"],
-                    "is_from_me": rec["is_from_me"],
-                    "sender_handle": rec["sender_handle"],
-                    "message_date": rec["message_date"],
-                    "message_text": normalize_text(str(rec["message_text"])),
-                    "context_prev": context_to_string(rec["context_prev"]),
-                    "context_next": context_to_string(rec["context_next"]),
-                    "gold_keep": "",
-                    "gold_fact_type": "",
-                    "gold_subject": "",
-                    "gold_subject_resolution": "",
-                    "gold_anchor_message_id": "",
-                    "gold_notes": "",
-                }
-            )
+        csv_columns = [
+            "sample_id",
+            "bucket",
+            "message_id",
+            "chat_rowid",
+            "chat_id",
+            "chat_display_name",
+            "is_from_me",
+            "sender_handle",
+            "message_date",
+            "message_text",
+            "context_prev",
+            "context_next",
+            "gold_keep",
+            "gold_fact_type",
+            "gold_subject",
+            "gold_subject_resolution",
+            "gold_anchor_message_id",
+            "gold_notes",
+        ]
 
-    with manifest_path.open("w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2, ensure_ascii=True)
+        tmp_csv = csv_path.with_suffix(".csv.tmp")
+        with tmp_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=csv_columns)
+            writer.writeheader()
+            for rec in records:
+                writer.writerow(
+                    {
+                        "sample_id": rec["sample_id"],
+                        "bucket": rec["bucket"],
+                        "message_id": rec["message_id"],
+                        "chat_rowid": rec["chat_rowid"],
+                        "chat_id": rec["chat_id"],
+                        "chat_display_name": rec["chat_display_name"],
+                        "is_from_me": rec["is_from_me"],
+                        "sender_handle": rec["sender_handle"],
+                        "message_date": rec["message_date"],
+                        "message_text": normalize_text(str(rec["message_text"])),
+                        "context_prev": context_to_string(rec["context_prev"]),
+                        "context_next": context_to_string(rec["context_next"]),
+                        "gold_keep": "",
+                        "gold_fact_type": "",
+                        "gold_subject": "",
+                        "gold_subject_resolution": "",
+                        "gold_anchor_message_id": "",
+                        "gold_notes": "",
+                    }
+                )
+        tmp_files.append((tmp_csv, csv_path))
+
+        tmp_manifest = manifest_path.with_suffix(".json.tmp")
+        with tmp_manifest.open("w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=True)
+        tmp_files.append((tmp_manifest, manifest_path))
+
+        # All writes succeeded - atomically rename all temp files
+        for tmp_path, final_path in tmp_files:
+            os.replace(tmp_path, final_path)
+    except BaseException:
+        for tmp_path, _ in tmp_files:
+            tmp_path.unlink(missing_ok=True)
+        raise
 
     return jsonl_path, csv_path, manifest_path
 
