@@ -911,16 +911,7 @@ class RelationshipClassifier:
             List of ClassificationResult objects.
         """
         chats = self._get_non_group_chats()[:limit]
-        results = []
-
-        for chat_id, display_name in chats:
-            result = self.classify_contact(chat_id, display_name)
-            if result.confidence >= min_confidence:
-                results.append(result)
-
-        # Sort by confidence
-        results.sort(key=lambda r: r.confidence, reverse=True)
-        return results
+        return self.classify_contacts_batch(chats, min_confidence=min_confidence)
 
     def classify_contacts_batch(
         self,
