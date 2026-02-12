@@ -943,9 +943,11 @@ class TestBuildThreadContext:
         result = ReplyRouter._build_thread_context([])
         assert result is None
 
-    def test_none_input_returns_none(self) -> None:
-        result = ReplyRouter._build_thread_context([])
-        assert result is None
+    def test_single_message_returns_context(self) -> None:
+        msgs = [{"sender": "John", "text": "Hey!"}]
+        result = ReplyRouter._build_thread_context(msgs)
+        assert result is not None
+        assert len(result) == 1
 
     def test_skips_empty_text(self) -> None:
         msgs = [

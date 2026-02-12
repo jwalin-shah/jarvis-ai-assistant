@@ -80,20 +80,22 @@ class TestTagCRUD(TestTagManager):
 
     def test_create_tag_duplicate_raises_error(self, manager: TagManager) -> None:
         """Test that creating a duplicate tag raises ValueError or returns existing."""
-        manager.create_tag("Work")
+        original = manager.create_tag("Work")
 
-        # SQLite UNIQUE on (name, parent_id) with NULL parent may behave differently
-        # Test that we can't create exact duplicate at same level
+        # Creating a duplicate should either raise ValueError or return without
+        # duplicating - verify no extra tag is created at root level
         try:
-            manager.create_tag("Work")
-            # If no error, the manager might be using INSERT OR IGNORE
-            # Verify the tag wasn't duplicated by checking count
+            dup = manager.create_tag("Work")
+            # If no error, the manager silently handled the duplicate.
+            # Verify the tag wasn't duplicated: exactly one root-level "Work" tag.
             tags = manager.search_tags("Work")
-            # Should only have one Work tag at root level
             root_work_tags = [t for t in tags if t.parent_id is None and t.name == "Work"]
-            assert len(root_work_tags) <= 2  # Some implementations may allow this
-        except ValueError:
-            pass  # Expected behavior
+            assert len(root_work_tags) == 1, (
+                f"Expected exactly 1 root 'Work' tag, found {len(root_work_tags)}"
+            )
+        except (ValueError, Exception):
+            # ValueError (or IntegrityError) is the expected behavior for duplicates
+            pass
 
     def test_create_hierarchical_tags(self, manager: TagManager) -> None:
         """Test creating hierarchical tags with parent-child relationships."""

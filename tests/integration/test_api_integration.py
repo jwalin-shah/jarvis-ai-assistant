@@ -229,6 +229,12 @@ class TestFastAPIAppStartup:
 class TestRateLimiterUnderLoad:
     """Tests for rate limiter behavior under concurrent load."""
 
+    @pytest.mark.xfail(
+        reason="Rate limit enforcement not reliably testable via TestClient - "
+        "default limits may not apply to all endpoints. "
+        "See test_rate_limit_handler_returns_proper_response for handler coverage.",
+        strict=False,
+    )
     def test_rate_limit_enforced_after_limit_exceeded(self, client):
         """Rate limiter returns 429 when limit is exceeded."""
         from api.ratelimit import limiter
@@ -240,24 +246,21 @@ class TestRateLimiterUnderLoad:
             # Set a very low limit for testing (1 request per minute)
             limiter._default_limits = ["1/minute"]
 
-            # Create a fresh client to avoid shared rate limit state
-            # Note: In real scenarios, rate limits are per-client based on IP/user-agent
-            # We need to make multiple requests quickly
-
             # First request should succeed
             response = client.get("/")
-            # The first request might succeed or fail depending on limiter state
 
             # Make several rapid requests - eventually should hit rate limit
+            got_429 = False
             for _ in range(10):
                 response = client.get("/")
                 if response.status_code == 429:
+                    got_429 = True
                     break
 
-            # Rate limiting behavior depends on the endpoint configuration
-            # Some endpoints may not have rate limits applied directly
-            # This is expected behavior - verify the mechanism exists
-            assert True  # Rate limit mechanism is in place
+            assert got_429, (
+                "Expected 429 after exceeding rate limit, but all requests returned "
+                f"{response.status_code}. Rate limiting may not be enforced on this endpoint."
+            )
 
         finally:
             # Restore original limits

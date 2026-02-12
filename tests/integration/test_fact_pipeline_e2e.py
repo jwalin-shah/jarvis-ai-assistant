@@ -310,9 +310,14 @@ class TestEndToEndPipeline:
         index_facts(stored, CONTACT_A)
 
         results = search_relevant_facts("where do you work at your job?", CONTACT_A, limit=3)
+        assert len(results) > 0, (
+            "Expected at least some results for work query, got none. "
+            "Check that facts were indexed correctly."
+        )
         work_results = [f for f in results if f.category == "work"]
-        assert len(work_results) > 0 or len(results) > 0, (
-            "Expected at least some results for work query"
+        assert len(work_results) > 0, (
+            "Expected at least one work-category result for work query, "
+            f"but got results in other categories only: {[(f.category, f.subject) for f in results]}"
         )
 
     def test_empty_messages_produce_no_facts(self):

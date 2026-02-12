@@ -12,9 +12,7 @@ import pytest
 
 from jarvis.contacts.candidate_extractor import (
     CONTEXT_SEPARATOR,
-    DIRECT_LABEL_MAP,
     ENTITY_ALIASES,
-    FACT_TYPE_RULES,
     CandidateExtractor,
     FactCandidate,
 )
@@ -85,9 +83,7 @@ class TestBuildContextText:
         assert end == 11
 
     def test_with_prev_context(self):
-        merged, start, end = self.ext._build_context_text(
-            "current msg", prev_messages=["prev msg"]
-        )
+        merged, start, end = self.ext._build_context_text("current msg", prev_messages=["prev msg"])
         expected_prefix = f"prev msg{CONTEXT_SEPARATOR}"
         assert merged.startswith("prev msg")
         assert start == len(expected_prefix)
@@ -95,9 +91,7 @@ class TestBuildContextText:
         assert end == start + len("current msg")
 
     def test_with_next_context(self):
-        merged, start, end = self.ext._build_context_text(
-            "current msg", next_messages=["next msg"]
-        )
+        merged, start, end = self.ext._build_context_text("current msg", next_messages=["next msg"])
         assert start == 0
         assert end == len("current msg")
         assert "next msg" in merged
@@ -113,9 +107,7 @@ class TestBuildContextText:
         assert "next" in merged
 
     def test_multi_prev_messages(self):
-        merged, start, end = self.ext._build_context_text(
-            "current", prev_messages=["msg1", "msg2"]
-        )
+        merged, start, end = self.ext._build_context_text("current", prev_messages=["msg1", "msg2"])
         assert "msg1\nmsg2" in merged
         assert merged[start:end] == "current"
 
@@ -234,9 +226,7 @@ class TestResolveFactType:
         assert result == "location.future"
 
     def test_pattern_plus_label_match_relationship(self):
-        result = self.ext._resolve_fact_type(
-            "my sister is visiting", "Sarah", "family_member"
-        )
+        result = self.ext._resolve_fact_type("my sister is visiting", "Sarah", "family_member")
         assert result == "relationship.family"
 
     def test_direct_label_map_fallback(self):
@@ -498,7 +488,7 @@ class TestVerifyEntailment:
         # Only location.current and work.employer go through NLI (2 pairs)
         # preference.food_like is in _NLI_SKIP_CATEGORIES -> skips NLI
         mock_nli.predict_batch.return_value = [
-            {"entailment": 0.5, "contradiction": 0.1, "neutral": 0.4},   # Austin: EC=0.4, pass
+            {"entailment": 0.5, "contradiction": 0.1, "neutral": 0.4},  # Austin: EC=0.4, pass
             {"entailment": 0.01, "contradiction": 0.6, "neutral": 0.39},  # Google: EC=-0.59, reject
         ]
         with patch("models.nli_cross_encoder.get_nli_cross_encoder", return_value=mock_nli):

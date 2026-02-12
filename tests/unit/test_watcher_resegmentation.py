@@ -7,8 +7,7 @@ for the same chat_id, avoiding interleaved delete+index corruption.
 from __future__ import annotations
 
 import asyncio
-from collections import OrderedDict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -78,6 +77,7 @@ class TestResegmentationLocking:
             execution_log.append(("enter", chat_id))
             # Simulate work
             import time
+
             time.sleep(0.05)
             execution_log.append(("exit", chat_id))
 

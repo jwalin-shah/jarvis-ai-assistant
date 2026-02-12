@@ -231,8 +231,8 @@ class TestCacheStorageAfterExecution:
         pred = _make_prediction("search:q1", PredictionPriority.HIGH)
         executor.schedule(pred)
 
-        handler_done.wait(timeout=3.0)
-        time.sleep(0.15)
+        handler_done.wait(timeout=5.0)
+        time.sleep(0.5)
 
         result = cache.get("search:q1")
         assert result is not None

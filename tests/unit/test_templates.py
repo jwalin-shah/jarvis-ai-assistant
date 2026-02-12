@@ -1,8 +1,6 @@
 """Tests for models/templates.py - Template matching and custom templates."""
 
-import json
 import threading
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -16,7 +14,6 @@ from models.templates import (
     TemplateMatch,
     TemplateMatcher,
 )
-
 
 # =============================================================================
 # EmbeddingCache Tests
@@ -252,6 +249,7 @@ class TestTemplateMatcher:
     def mock_embedder_fn(self):
         """Mock _get_sentence_model to return a fake embedder."""
         mock = MagicMock()
+
         # Default: return random normalized embeddings
         def fake_encode(texts, normalize=True):
             if isinstance(texts, str):
@@ -276,7 +274,11 @@ class TestTemplateMatcher:
             matcher._pattern_to_template = [("hello", templates[0])]
 
             # Query embedding perpendicular to pattern
-            with patch.object(matcher, "_get_query_embedding", return_value=np.array([0, 1, 0] + [0] * 381, dtype=np.float32)):
+            with patch.object(
+                matcher,
+                "_get_query_embedding",
+                return_value=np.array([0, 1, 0] + [0] * 381, dtype=np.float32),
+            ):
                 result = matcher.match("something unrelated", track_analytics=False)
                 assert result is None
 
@@ -313,14 +315,18 @@ class TestTemplateMatcher:
             matcher = TemplateMatcher(templates=templates)
 
             # Pattern 1: [1, 0, ...], Pattern 2: [0, 1, ...]
-            p1 = np.zeros(384, dtype=np.float32); p1[0] = 1.0
-            p2 = np.zeros(384, dtype=np.float32); p2[1] = 1.0
+            p1 = np.zeros(384, dtype=np.float32)
+            p1[0] = 1.0
+            p2 = np.zeros(384, dtype=np.float32)
+            p2[1] = 1.0
             matcher._pattern_embeddings = np.vstack([p1, p2])
             matcher._pattern_norms = np.array([1.0, 1.0])
             matcher._pattern_to_template = [("hello", templates[0]), ("goodbye", templates[1])]
 
             # Query closer to pattern 2
-            q = np.zeros(384, dtype=np.float32); q[1] = 0.9; q[0] = 0.1
+            q = np.zeros(384, dtype=np.float32)
+            q[1] = 0.9
+            q[0] = 0.1
             q = q / np.linalg.norm(q)
 
             with patch.object(matcher, "_get_query_embedding", return_value=q):

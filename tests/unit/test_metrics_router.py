@@ -235,8 +235,8 @@ class TestBackgroundFlush:
             store.record(make_metric())
             assert store.pending_count() == 1
 
-            # Wait for background flush
-            time.sleep(0.3)
+            # Wait for background flush (generous margin for CI)
+            time.sleep(1.0)
 
             assert store.pending_count() == 0
             with sqlite3.connect(temp_db) as conn:
@@ -397,8 +397,8 @@ class TestBackgroundQueue:
             for _ in range(5):
                 store.record(make_metric())
 
-            # Wait for background processing
-            time.sleep(0.3)
+            # Wait for background processing (generous margin for CI)
+            time.sleep(1.0)
 
             # All should be flushed
             assert store.pending_count() == 0

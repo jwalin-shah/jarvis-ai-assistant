@@ -122,8 +122,8 @@ class TestModelWarmer:
             warmer.touch()
             assert warmer.is_idle() is False  # Just touched
 
-            # Wait for timeout
-            time.sleep(0.15)
+            # Wait for timeout (generous margin for CI)
+            time.sleep(0.5)
             assert warmer.is_idle() is True  # Should be idle now
 
     def test_is_idle_disabled_when_timeout_zero(self, mock_generator):

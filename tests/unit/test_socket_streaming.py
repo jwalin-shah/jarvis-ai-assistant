@@ -8,9 +8,8 @@ Verifies:
 
 from __future__ import annotations
 
-import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -106,7 +105,7 @@ class TestStreamingErrorHandling:
     @pytest.mark.asyncio
     async def test_process_message_returns_error_for_invalid_json(self):
         """Invalid JSON returns parse error."""
-        from jarvis.socket_server import JarvisSocketServer, PARSE_ERROR
+        from jarvis.socket_server import PARSE_ERROR, JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -122,7 +121,7 @@ class TestStreamingErrorHandling:
     @pytest.mark.asyncio
     async def test_process_message_returns_error_for_unknown_method(self):
         """Unknown method returns method_not_found error."""
-        from jarvis.socket_server import JarvisSocketServer, METHOD_NOT_FOUND
+        from jarvis.socket_server import METHOD_NOT_FOUND, JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -130,12 +129,14 @@ class TestStreamingErrorHandling:
             enable_prefetch=False,
         )
 
-        msg = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "nonexistent_method",
-            "params": {},
-            "id": 1,
-        })
+        msg = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "nonexistent_method",
+                "params": {},
+                "id": 1,
+            }
+        )
         result = await server._process_message(msg)
         assert result is not None
         parsed = json.loads(result)
@@ -144,7 +145,7 @@ class TestStreamingErrorHandling:
     @pytest.mark.asyncio
     async def test_process_message_missing_method(self):
         """Missing method field returns invalid request error."""
-        from jarvis.socket_server import JarvisSocketServer, INVALID_REQUEST
+        from jarvis.socket_server import INVALID_REQUEST, JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,

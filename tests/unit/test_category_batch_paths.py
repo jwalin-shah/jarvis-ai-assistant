@@ -7,13 +7,11 @@ that hit the cache, fast-path, and full pipeline paths simultaneously.
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from jarvis.classifiers.category_classifier import (
     CategoryClassifier,
-    CategoryResult,
     classify_category,
     reset_category_classifier,
 )
@@ -84,13 +82,13 @@ class TestCacheBatch:
     def test_cache_expires_after_ttl(self):
         """Cached results expire after TTL."""
         classifier = CategoryClassifier()
-        classifier._cache_ttl = 0.01  # 10ms TTL for testing
+        classifier._cache_ttl = 0.05  # 50ms TTL for testing
 
         texts = ["ok"]
         results1 = classifier.classify_batch(texts)
 
         # Wait for cache to expire
-        time.sleep(0.02)
+        time.sleep(0.2)
 
         # Should recompute (still fast-path, but not from cache)
         results2 = classifier.classify_batch(texts)
@@ -117,10 +115,10 @@ class TestMixedBatchPaths:
         classifier = CategoryClassifier()
 
         texts = [
-            "ok",                               # fast-path: acknowledge
-            'Loved "Nice"',                     # fast-path: emotion
-            "Want to grab lunch tomorrow?",     # pipeline/default
-            "sounds good",                      # fast-path: acknowledge
+            "ok",  # fast-path: acknowledge
+            'Loved "Nice"',  # fast-path: emotion
+            "Want to grab lunch tomorrow?",  # pipeline/default
+            "sounds good",  # fast-path: acknowledge
         ]
 
         results = classifier.classify_batch(texts)
@@ -138,7 +136,12 @@ class TestMixedBatchPaths:
 
         # Pipeline/default result (depends on whether model is loaded)
         assert results[2].category in (
-            "question", "request", "statement", "emotion", "closing", "acknowledge"
+            "question",
+            "request",
+            "statement",
+            "emotion",
+            "closing",
+            "acknowledge",
         )
 
     def test_mixed_cached_and_fresh(self):
@@ -184,7 +187,12 @@ class TestMixedBatchPaths:
         """Non-fast-path messages get classified (via pipeline or default)."""
         result = classify_category(text)
         assert result.category in (
-            "acknowledge", "closing", "emotion", "question", "request", "statement"
+            "acknowledge",
+            "closing",
+            "emotion",
+            "question",
+            "request",
+            "statement",
         )
         assert result.confidence > 0.0
 
@@ -212,5 +220,10 @@ class TestMixedBatchPaths:
         results = classifier.classify_batch(["hello"])
         assert len(results) == 1
         assert results[0].category in (
-            "acknowledge", "closing", "emotion", "question", "request", "statement"
+            "acknowledge",
+            "closing",
+            "emotion",
+            "question",
+            "request",
+            "statement",
         )

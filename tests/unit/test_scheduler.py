@@ -296,6 +296,11 @@ class TestSchedulerQueue:
         urgent_items = temp_queue.get_all(priority=Priority.URGENT)
         assert len(urgent_items) == 1
 
+    def test_get_pending_empty_queue(self, temp_queue: SchedulerQueue) -> None:
+        """Test that get_pending on an empty queue returns an empty list."""
+        pending = temp_queue.get_pending()
+        assert pending == []
+
     def test_get_pending(self, temp_queue: SchedulerQueue) -> None:
         """Test getting pending items in order."""
         now = datetime.now(UTC)

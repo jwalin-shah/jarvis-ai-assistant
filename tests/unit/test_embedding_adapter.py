@@ -1,7 +1,7 @@
 """Tests for jarvis/embedding_adapter.py - Unified embedding interface."""
 
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -49,7 +49,9 @@ class TestMLXEmbedder:
         return embedder
 
     def test_encode_single_string(self, mock_embedder):
-        mock_embedder._mlx_embedder.encode.return_value = np.ones((1, EMBEDDING_DIM), dtype=np.float32)
+        mock_embedder._mlx_embedder.encode.return_value = np.ones(
+            (1, EMBEDDING_DIM), dtype=np.float32
+        )
         result = mock_embedder.encode("hello")
         assert result.shape == (1, EMBEDDING_DIM)
         # Single string gets wrapped in list
@@ -57,7 +59,9 @@ class TestMLXEmbedder:
 
     def test_encode_list_of_strings(self, mock_embedder):
         texts = ["hello", "world"]
-        mock_embedder._mlx_embedder.encode.return_value = np.ones((2, EMBEDDING_DIM), dtype=np.float32)
+        mock_embedder._mlx_embedder.encode.return_value = np.ones(
+            (2, EMBEDDING_DIM), dtype=np.float32
+        )
         result = mock_embedder.encode(texts)
         assert result.shape == (2, EMBEDDING_DIM)
 
@@ -77,7 +81,9 @@ class TestMLXEmbedder:
 
     def test_normalize_embeddings_alias(self, mock_embedder):
         """normalize_embeddings param should override normalize."""
-        mock_embedder._mlx_embedder.encode.return_value = np.ones((1, EMBEDDING_DIM), dtype=np.float32)
+        mock_embedder._mlx_embedder.encode.return_value = np.ones(
+            (1, EMBEDDING_DIM), dtype=np.float32
+        )
         mock_embedder.encode("test", normalize_embeddings=False)
         call_kwargs = mock_embedder._mlx_embedder.encode.call_args[1]
         assert call_kwargs["normalize"] is False

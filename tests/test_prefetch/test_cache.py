@@ -89,7 +89,7 @@ class TestL1Cache:
         assert cache.get("test") is not None
 
         # Should expire after TTL
-        time.sleep(0.02)
+        time.sleep(0.1)
         assert cache.get("test") is None
 
     def test_lru_eviction(self) -> None:

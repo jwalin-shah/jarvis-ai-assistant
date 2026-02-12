@@ -270,7 +270,7 @@ class TestBatchOperations:
 
         async def slow_handler():
             execution_order.append("start")
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.05)
             execution_order.append("end")
             return {"ok": True}
 
@@ -612,6 +612,6 @@ class TestServerLifecycle:
         server._models_ready = False
         # Event is not set, so it will timeout
 
-        result = await server.wait_for_models(timeout=0.01)
+        result = await server.wait_for_models(timeout=0.1)
 
         assert result is False
