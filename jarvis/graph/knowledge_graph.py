@@ -299,15 +299,19 @@ class KnowledgeGraph:
         facts = []
         connections = []
         for _, tgt, attrs in self.graph.edges(contact_id, data=True):
+            target_node = self.graph.nodes.get(tgt)
+            if target_node is None:
+                logger.warning("Target node %s not found in graph", tgt)
+                continue
             edge_data = {
                 "target": tgt,
-                "target_label": self.graph.nodes[tgt].get("label", tgt),
+                "target_label": target_node.get("label", tgt),
                 "edge_type": attrs.get("edge_type", ""),
                 "label": attrs.get("label", ""),
                 "category": attrs.get("category", ""),
                 "weight": attrs.get("weight", 1.0),
             }
-            target_type = self.graph.nodes[tgt].get("node_type", "")
+            target_type = target_node.get("node_type", "")
             if target_type == "entity":
                 facts.append(edge_data)
             else:
