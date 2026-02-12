@@ -264,10 +264,9 @@ class PrefetchExecutor:
         self._shutdown_event = threading.Event()
         self._lock = threading.RLock()
 
-        # Active tasks tracking
+        # Active tasks tracking (guarded by self._lock, an RLock for re-entrant use)
         self._active_tasks: set[str] = set()
         self._active_drafts: dict[str, str] = {}  # chat_id → active_key for O(1) lookup
-        self._active_lock = threading.Lock()
 
         # Shared ChatDBReader for handlers (thread-safe via connection pool).
         # Lazily initialized on first use, closed on stop().
@@ -424,14 +423,13 @@ class PrefetchExecutor:
                 return False
 
             # Check if already being processed
-            with self._active_lock:
-                if prediction.key in self._active_tasks:
+            if prediction.key in self._active_tasks:
+                return False
+            # Block duplicate drafts for the same chat (O(1) lookup)
+            if prediction.type == PredictionType.DRAFT_REPLY:
+                draft_cid = prediction.params.get("chat_id", "")
+                if draft_cid and draft_cid in self._active_drafts:
                     return False
-                # Block duplicate drafts for the same chat (O(1) lookup)
-                if prediction.type == PredictionType.DRAFT_REPLY:
-                    draft_cid = prediction.params.get("chat_id", "")
-                    if draft_cid and draft_cid in self._active_drafts:
-                        return False
 
         # Create task with inverted priority (lower = higher priority)
         task = PrefetchTask(
@@ -471,13 +469,12 @@ class PrefetchExecutor:
                     continue
 
                 # Check if already being processed
-                with self._active_lock:
-                    if prediction.key in self._active_tasks:
+                if prediction.key in self._active_tasks:
+                    continue
+                if prediction.type == PredictionType.DRAFT_REPLY:
+                    draft_cid = prediction.params.get("chat_id", "")
+                    if draft_cid and draft_cid in self._active_drafts:
                         continue
-                    if prediction.type == PredictionType.DRAFT_REPLY:
-                        draft_cid = prediction.params.get("chat_id", "")
-                        if draft_cid and draft_cid in self._active_drafts:
-                            continue
 
                 tasks_to_enqueue.append(
                     PrefetchTask(
@@ -583,7 +580,7 @@ class PrefetchExecutor:
         start_time = time.time()
 
         # Mark as active
-        with self._active_lock:
+        with self._lock:
             if prediction.key in self._active_tasks:
                 return  # Already being processed
             self._active_tasks.add(prediction.key)
@@ -643,7 +640,7 @@ class PrefetchExecutor:
 
         finally:
             # Mark as inactive
-            with self._active_lock:
+            with self._lock:
                 self._active_tasks.discard(prediction.key)
                 # Remove from active drafts tracking
                 if prediction.type == PredictionType.DRAFT_REPLY:

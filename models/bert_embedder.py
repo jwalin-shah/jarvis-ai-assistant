@@ -416,8 +416,9 @@ class InProcessEmbedder:
             lengths = [len(e.ids) for e in encodings]
 
             # Sort by length (longest first) to minimize padding waste
-            sorted_indices = np.argsort([-length for length in lengths])
-            reverse_indices = np.argsort(sorted_indices)
+            sorted_indices = np.argsort(-np.array(lengths))
+            reverse_indices = np.empty_like(sorted_indices)
+            reverse_indices[sorted_indices] = np.arange(len(sorted_indices))
 
             output_embeddings = []
 
