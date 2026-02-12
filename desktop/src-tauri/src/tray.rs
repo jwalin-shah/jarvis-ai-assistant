@@ -69,9 +69,15 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
             }
             "dashboard" | "messages" | "settings" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                    let _ = window.emit("navigate", event.id.as_ref());
+                    if let Err(e) = window.show() {
+                        eprintln!("[Tray] Failed to show window: {}", e);
+                    }
+                    if let Err(e) = window.set_focus() {
+                        eprintln!("[Tray] Failed to set focus: {}", e);
+                    }
+                    if let Err(e) = window.emit("navigate", event.id.as_ref()) {
+                        eprintln!("[Tray] Failed to emit navigate event: {}", e);
+                    }
                 }
             }
             "quit" => {
