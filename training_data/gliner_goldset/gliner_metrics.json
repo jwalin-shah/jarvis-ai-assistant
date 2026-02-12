@@ -1,7 +1,7 @@
 {
-  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r4.json",
-  "num_records": 796,
-  "num_predictions": 192,
+  "gold_path": "training_data/goldset_v6/goldset_v6_merged.json",
+  "num_records": 200,
+  "num_predictions": 107,
   "mode": "pipeline",
   "raw_threshold": 0.01,
   "disable_label_min": false,
@@ -17,117 +17,72 @@
     "health_condition",
     "activity"
   ],
-  "num_raw_predictions": 2212,
-  "extraction_time_s": 97.93,
-  "ms_per_message": 123.0,
+  "num_raw_predictions": 509,
+  "extraction_time_s": 14.14,
+  "ms_per_message": 70.7,
   "overall": {
-    "precision": 0.3165,
-    "recall": 0.2404,
-    "f1": 0.2732,
-    "tp": 75,
-    "fp": 162,
-    "fn": 237,
-    "support": 312
+    "precision": 0.2991,
+    "recall": 0.3516,
+    "f1": 0.3232,
+    "tp": 32,
+    "fp": 75,
+    "fn": 59,
+    "support": 91
   },
   "per_label": {
     "activity": {
-      "precision": 0.0667,
-      "recall": 0.0192,
-      "f1": 0.0299,
+      "precision": 0.5,
+      "recall": 0.25,
+      "f1": 0.3333,
       "tp": 1,
-      "fp": 14,
-      "fn": 51,
-      "support": 52
-    },
-    "current_location": {
-      "precision": 1.0,
-      "recall": 0.75,
-      "f1": 0.8571,
-      "tp": 3,
-      "fp": 0,
-      "fn": 1,
-      "support": 4
-    },
-    "employer": {
-      "precision": 1.0,
-      "recall": 0.5,
-      "f1": 0.6667,
-      "tp": 2,
-      "fp": 0,
-      "fn": 2,
+      "fp": 1,
+      "fn": 3,
       "support": 4
     },
     "family_member": {
-      "precision": 0.4923,
-      "recall": 0.3902,
-      "f1": 0.4354,
-      "tp": 32,
-      "fp": 33,
-      "fn": 50,
-      "support": 82
+      "precision": 0.64,
+      "recall": 0.8,
+      "f1": 0.7111,
+      "tp": 16,
+      "fp": 9,
+      "fn": 4,
+      "support": 20
     },
     "food_item": {
-      "precision": 0.3846,
-      "recall": 0.2941,
-      "f1": 0.3333,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "f1": 0.25,
       "tp": 5,
-      "fp": 8,
-      "fn": 12,
-      "support": 17
-    },
-    "friend_name": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 3,
-      "support": 3
-    },
-    "future_location": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 3,
-      "support": 3
+      "fp": 30,
+      "fn": 0,
+      "support": 5
     },
     "health_condition": {
-      "precision": 0.2727,
-      "recall": 0.1846,
-      "f1": 0.2202,
-      "tp": 12,
-      "fp": 32,
-      "fn": 53,
-      "support": 65
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
+      "fn": 0,
+      "support": 0
     },
     "job_role": {
-      "precision": 0.125,
-      "recall": 0.1667,
-      "f1": 0.1429,
-      "tp": 2,
-      "fp": 14,
-      "fn": 10,
-      "support": 12
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
+      "fn": 0,
+      "support": 0
     },
     "org": {
-      "precision": 0.2581,
-      "recall": 0.2581,
-      "f1": 0.2581,
-      "tp": 8,
-      "fp": 23,
-      "fn": 23,
-      "support": 31
-    },
-    "past_location": {
-      "precision": 1.0,
-      "recall": 0.3333,
-      "f1": 0.5,
-      "tp": 2,
-      "fp": 0,
-      "fn": 4,
-      "support": 6
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 3,
+      "fn": 5,
+      "support": 5
     },
     "person_name": {
       "precision": 0.0,
@@ -135,377 +90,287 @@
       "f1": 0.0,
       "tp": 0,
       "fp": 0,
-      "fn": 2,
-      "support": 2
+      "fn": 36,
+      "support": 36
     },
     "place": {
-      "precision": 0.1739,
-      "recall": 0.2581,
-      "f1": 0.2078,
-      "tp": 8,
-      "fp": 38,
-      "fn": 23,
-      "support": 31
+      "precision": 0.25,
+      "recall": 0.4762,
+      "f1": 0.3279,
+      "tp": 10,
+      "fp": 30,
+      "fn": 11,
+      "support": 21
     }
   },
   "per_type": {
-    "health.allergy": {
+    "health.condition": {
       "precision": 0.0,
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 0,
-      "fn": 1,
-      "support": 1
-    },
-    "health.condition": {
-      "precision": 0.2727,
-      "recall": 0.1791,
-      "f1": 0.2162,
-      "tp": 12,
-      "fp": 32,
-      "fn": 55,
-      "support": 67
+      "fp": 1,
+      "fn": 0,
+      "support": 0
     },
     "location.current": {
-      "precision": 0.1364,
-      "recall": 0.4286,
-      "f1": 0.2069,
-      "tp": 6,
-      "fp": 38,
-      "fn": 8,
-      "support": 14
-    },
-    "location.future": {
       "precision": 0.0,
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 0,
-      "fn": 5,
-      "support": 5
-    },
-    "location.past": {
-      "precision": 1.0,
-      "recall": 0.3125,
-      "f1": 0.4762,
-      "tp": 5,
-      "fp": 0,
-      "fn": 11,
-      "support": 16
-    },
-    "other_personal_fact": {
-      "precision": 1.0,
-      "recall": 0.1765,
-      "f1": 0.3,
-      "tp": 3,
-      "fp": 0,
-      "fn": 14,
-      "support": 17
-    },
-    "personal.school": {
-      "precision": 1.0,
-      "recall": 0.2353,
-      "f1": 0.381,
-      "tp": 4,
-      "fp": 0,
-      "fn": 13,
-      "support": 17
-    },
-    "preference": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 1,
-      "support": 1
+      "fp": 30,
+      "fn": 0,
+      "support": 0
     },
     "preference.activity": {
-      "precision": 0.125,
-      "recall": 0.0435,
-      "f1": 0.0645,
-      "tp": 2,
-      "fp": 14,
-      "fn": 44,
-      "support": 46
-    },
-    "preference.food_dislike": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
-      "tp": 1,
-      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
       "fn": 0,
-      "support": 1
+      "support": 0
     },
     "preference.food_like": {
-      "precision": 0.2727,
-      "recall": 0.2308,
-      "f1": 0.25,
-      "tp": 3,
-      "fp": 8,
-      "fn": 10,
-      "support": 13
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 30,
+      "fn": 0,
+      "support": 0
     },
     "relationship.family": {
-      "precision": 0.4923,
-      "recall": 0.3902,
-      "f1": 0.4354,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 9,
+      "fn": 0,
+      "support": 0
+    },
+    "unknown": {
+      "precision": 1.0,
+      "recall": 0.3516,
+      "f1": 0.5203,
       "tp": 32,
-      "fp": 33,
-      "fn": 50,
-      "support": 82
-    },
-    "relationship.friend": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
       "fp": 0,
-      "fn": 3,
-      "support": 3
-    },
-    "relationship.partner": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 1,
-      "support": 1
+      "fn": 59,
+      "support": 91
     },
     "work.employer": {
-      "precision": 0.1786,
-      "recall": 0.2941,
-      "f1": 0.2222,
-      "tp": 5,
-      "fp": 23,
-      "fn": 12,
-      "support": 17
-    },
-    "work.former_employer": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
-      "tp": 1,
-      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 3,
       "fn": 0,
-      "support": 1
+      "support": 0
     },
     "work.job_title": {
-      "precision": 0.0667,
-      "recall": 0.1,
-      "f1": 0.08,
-      "tp": 1,
-      "fp": 14,
-      "fn": 9,
-      "support": 10
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
+      "fn": 0,
+      "support": 0
     }
   },
   "per_slice": {
-    "hard_negative": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 2,
-      "fn": 0,
-      "support": 0
-    },
     "near_miss": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 4,
-      "fn": 0,
-      "support": 0
+      "precision": 0.5714,
+      "recall": 0.2581,
+      "f1": 0.3556,
+      "tp": 8,
+      "fp": 6,
+      "fn": 23,
+      "support": 31
     },
     "positive": {
-      "precision": 0.5474,
-      "recall": 0.2404,
-      "f1": 0.3341,
-      "tp": 75,
-      "fp": 62,
-      "fn": 237,
-      "support": 312
+      "precision": 0.2472,
+      "recall": 0.44,
+      "f1": 0.3165,
+      "tp": 22,
+      "fp": 67,
+      "fn": 28,
+      "support": 50
     },
-    "random_negative": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 94,
-      "fn": 0,
-      "support": 0
+    "random": {
+      "precision": 0.5,
+      "recall": 0.2,
+      "f1": 0.2857,
+      "tp": 2,
+      "fp": 2,
+      "fn": 8,
+      "support": 10
     }
   },
   "threshold_sweep": [
     {
       "threshold": 0.3,
-      "precision": 0.2041,
-      "recall": 0.3814,
-      "f1": 0.2659,
-      "tp": 119,
-      "fp": 464,
-      "fn": 193,
-      "support": 312
+      "precision": 0.2716,
+      "recall": 0.4835,
+      "f1": 0.3478,
+      "tp": 44,
+      "fp": 118,
+      "fn": 47,
+      "support": 91
     },
     {
       "threshold": 0.35,
-      "precision": 0.2222,
-      "recall": 0.359,
-      "f1": 0.2745,
-      "tp": 112,
-      "fp": 392,
-      "fn": 200,
-      "support": 312
+      "precision": 0.277,
+      "recall": 0.4505,
+      "f1": 0.3431,
+      "tp": 41,
+      "fp": 107,
+      "fn": 50,
+      "support": 91
     },
     {
       "threshold": 0.4,
-      "precision": 0.2273,
-      "recall": 0.3205,
-      "f1": 0.266,
-      "tp": 100,
-      "fp": 340,
-      "fn": 212,
-      "support": 312
+      "precision": 0.2889,
+      "recall": 0.4286,
+      "f1": 0.3451,
+      "tp": 39,
+      "fp": 96,
+      "fn": 52,
+      "support": 91
     },
     {
       "threshold": 0.45,
-      "precision": 0.2248,
-      "recall": 0.2788,
-      "f1": 0.2489,
-      "tp": 87,
-      "fp": 300,
-      "fn": 225,
-      "support": 312
+      "precision": 0.296,
+      "recall": 0.4066,
+      "f1": 0.3426,
+      "tp": 37,
+      "fp": 88,
+      "fn": 54,
+      "support": 91
     },
     {
       "threshold": 0.5,
-      "precision": 0.2267,
-      "recall": 0.25,
-      "f1": 0.2378,
-      "tp": 78,
-      "fp": 266,
-      "fn": 234,
-      "support": 312
+      "precision": 0.3009,
+      "recall": 0.3736,
+      "f1": 0.3333,
+      "tp": 34,
+      "fp": 79,
+      "fn": 57,
+      "support": 91
     },
     {
       "threshold": 0.55,
-      "precision": 0.2222,
-      "recall": 0.2244,
-      "f1": 0.2233,
-      "tp": 70,
-      "fp": 245,
-      "fn": 242,
-      "support": 312
+      "precision": 0.3298,
+      "recall": 0.3407,
+      "f1": 0.3351,
+      "tp": 31,
+      "fp": 63,
+      "fn": 60,
+      "support": 91
     },
     {
       "threshold": 0.6,
-      "precision": 0.2148,
-      "recall": 0.1859,
-      "f1": 0.1993,
-      "tp": 58,
-      "fp": 212,
-      "fn": 254,
-      "support": 312
+      "precision": 0.3293,
+      "recall": 0.2967,
+      "f1": 0.3121,
+      "tp": 27,
+      "fp": 55,
+      "fn": 64,
+      "support": 91
     },
     {
       "threshold": 0.65,
-      "precision": 0.2232,
-      "recall": 0.1667,
-      "f1": 0.1908,
-      "tp": 52,
-      "fp": 181,
-      "fn": 260,
-      "support": 312
+      "precision": 0.3521,
+      "recall": 0.2747,
+      "f1": 0.3086,
+      "tp": 25,
+      "fp": 46,
+      "fn": 66,
+      "support": 91
     },
     {
       "threshold": 0.7,
-      "precision": 0.2169,
-      "recall": 0.1314,
-      "f1": 0.1637,
-      "tp": 41,
-      "fp": 148,
-      "fn": 271,
-      "support": 312
+      "precision": 0.3333,
+      "recall": 0.2198,
+      "f1": 0.2649,
+      "tp": 20,
+      "fp": 40,
+      "fn": 71,
+      "support": 91
     },
     {
       "threshold": 0.75,
-      "precision": 0.2071,
-      "recall": 0.0929,
-      "f1": 0.1283,
-      "tp": 29,
-      "fp": 111,
-      "fn": 283,
-      "support": 312
+      "precision": 0.3864,
+      "recall": 0.1868,
+      "f1": 0.2519,
+      "tp": 17,
+      "fp": 27,
+      "fn": 74,
+      "support": 91
     },
     {
       "threshold": 0.8,
-      "precision": 0.2121,
-      "recall": 0.0673,
-      "f1": 0.1022,
-      "tp": 21,
-      "fp": 78,
-      "fn": 291,
-      "support": 312
+      "precision": 0.375,
+      "recall": 0.1319,
+      "f1": 0.1951,
+      "tp": 12,
+      "fp": 20,
+      "fn": 79,
+      "support": 91
     }
   ],
   "error_slices": {
-    "short_message_errors": 28,
-    "fp_on_negatives": 96,
+    "short_message_errors": 12,
+    "fp_on_negatives": 0,
     "message_length_distribution": {
-      "<20": 173,
-      "20-50": 275,
-      "50-100": 207,
-      ">100": 141
+      "<20": 40,
+      "20-50": 89,
+      "50-100": 51,
+      ">100": 20
     },
-    "total_errors": 399
+    "total_errors": 134
   },
   "raw_stats": {
-    "raw_total_predictions": 2212,
-    "raw_messages_with_predictions": 629,
-    "raw_messages_total": 648,
-    "raw_predictions_per_message": 3.4136,
+    "raw_total_predictions": 509,
+    "raw_messages_with_predictions": 193,
+    "raw_messages_total": 200,
+    "raw_predictions_per_message": 2.545,
     "raw_score_summary": {
       "min": 0.01,
-      "p25": 0.0259,
-      "p50": 0.0683,
-      "p75": 0.2493,
-      "p90": 0.5838,
-      "p95": 0.7487,
-      "max": 0.9342
+      "p25": 0.0269,
+      "p50": 0.0973,
+      "p75": 0.4453,
+      "p90": 0.7234,
+      "p95": 0.8198,
+      "max": 0.9661
     },
     "raw_top_labels": [
       {
         "label": "family_member",
-        "count": 1209
-      },
-      {
-        "label": "health_condition",
-        "count": 237
-      },
-      {
-        "label": "activity",
-        "count": 213
+        "count": 257
       },
       {
         "label": "place",
-        "count": 207
-      },
-      {
-        "label": "org",
-        "count": 177
-      },
-      {
-        "label": "job_role",
-        "count": 108
+        "count": 91
       },
       {
         "label": "food_item",
-        "count": 61
+        "count": 82
+      },
+      {
+        "label": "activity",
+        "count": 36
+      },
+      {
+        "label": "org",
+        "count": 25
+      },
+      {
+        "label": "job_role",
+        "count": 12
+      },
+      {
+        "label": "health_condition",
+        "count": 6
       }
     ]
   }

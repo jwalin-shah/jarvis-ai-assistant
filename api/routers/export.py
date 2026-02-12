@@ -69,7 +69,7 @@ async def export_conversation(
     """
     try:
         async with asyncio.timeout(get_timeout_read()):
-            # Get conversation metadata - direct lookup by chat_id
+            # Get conversation metadata by direct lookup
             conversation = await run_in_threadpool(reader.get_conversation, chat_id)
 
             if conversation is None:

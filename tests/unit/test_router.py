@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from jarvis.contracts.pipeline import IntentType
 from jarvis.db import Contact
 from jarvis.router import (
     ReplyRouter,
@@ -710,53 +711,23 @@ class TestAnalyzeComplexity:
 class TestToIntentType:
     """Tests for to_intent_type (extracted to classification_result module)."""
 
-    def test_question(self) -> None:
+    @pytest.mark.parametrize(
+        "input_str,expected",
+        [
+            ("question", IntentType.QUESTION),
+            ("request", IntentType.REQUEST),
+            ("statement", IntentType.STATEMENT),
+            ("emotion", IntentType.STATEMENT),
+            ("closing", IntentType.STATEMENT),
+            ("acknowledge", IntentType.STATEMENT),
+            ("gibberish", IntentType.UNKNOWN),
+            ("", IntentType.UNKNOWN),
+        ],
+    )
+    def test_to_intent_type(self, input_str: str, expected: IntentType) -> None:
         from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
 
-        assert to_intent_type("question") == IntentType.QUESTION
-
-    def test_request(self) -> None:
-        from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
-
-        assert to_intent_type("request") == IntentType.REQUEST
-
-    def test_statement(self) -> None:
-        from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
-
-        assert to_intent_type("statement") == IntentType.STATEMENT
-
-    def test_emotion(self) -> None:
-        from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
-
-        assert to_intent_type("emotion") == IntentType.STATEMENT
-
-    def test_closing(self) -> None:
-        from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
-
-        assert to_intent_type("closing") == IntentType.STATEMENT
-
-    def test_acknowledge(self) -> None:
-        from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
-
-        assert to_intent_type("acknowledge") == IntentType.STATEMENT
-
-    def test_unknown_category(self) -> None:
-        from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
-
-        assert to_intent_type("gibberish") == IntentType.UNKNOWN
-
-    def test_empty_string(self) -> None:
-        from jarvis.classifiers.classification_result import to_intent_type
-        from jarvis.contracts.pipeline import IntentType
-
-        assert to_intent_type("") == IntentType.UNKNOWN
+        assert to_intent_type(input_str) == expected
 
 
 # =============================================================================
@@ -767,29 +738,21 @@ class TestToIntentType:
 class TestToConfidenceLabel:
     """Tests for ReplyRouter._to_confidence_label static method."""
 
-    def test_high_confidence(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.9) == "high"
-
-    def test_boundary_0_7(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.7) == "high"
-
-    def test_medium_confidence(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.55) == "medium"
-
-    def test_boundary_0_45(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.45) == "medium"
-
-    def test_low_confidence(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.3) == "low"
-
-    def test_zero(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.0) == "low"
-
-    def test_just_below_0_7(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.699) == "medium"
-
-    def test_just_below_0_45(self) -> None:
-        assert ReplyRouter._to_confidence_label(0.449) == "low"
+    @pytest.mark.parametrize(
+        "score,expected",
+        [
+            (0.9, "high"),
+            (0.7, "high"),
+            (0.55, "medium"),
+            (0.45, "medium"),
+            (0.3, "low"),
+            (0.0, "low"),
+            (0.699, "medium"),
+            (0.449, "low"),
+        ],
+    )
+    def test_confidence_label(self, score: float, expected: str) -> None:
+        assert ReplyRouter._to_confidence_label(score) == expected
 
 
 # =============================================================================

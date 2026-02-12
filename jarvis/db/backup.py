@@ -412,6 +412,7 @@ class BackupManager:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 safety_name = f"jarvis_pre_restore_{timestamp}.db"
                 safety_path = self.backup_dir / safety_name
+                self.backup_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(self.db_path, safety_path)
                 logger.info("Created safety copy at %s", safety_path)
 

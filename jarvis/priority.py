@@ -356,7 +356,7 @@ class MessagePriorityScorer:
         except (RuntimeError, OSError) as e:
             logger.debug("Text embedding failed (runtime/I/O): %s", e)
         except Exception:
-            logger.debug("Text embedding unavailable", exc_info=True)
+            logger.warning("Text embedding unavailable", exc_info=True)
         return None
 
     def _detect_question(
@@ -508,10 +508,7 @@ class MessagePriorityScorer:
             # Continue with pattern matching only, logging is done in _ensure_embeddings_computed.
             pass
         except Exception:
-            # Last resort catch-all for truly unexpected errors during embedding computation.
-            # This is intentionally broad to ensure score_message never fails, allowing
-            # pattern matching to still work. Logging is done in _ensure_embeddings_computed.
-            pass
+            logger.warning("Unexpected error initializing embeddings, using pattern matching only")
 
         reasons: list[PriorityReason] = []
         component_scores: dict[str, float] = {}

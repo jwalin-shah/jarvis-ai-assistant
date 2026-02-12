@@ -9,6 +9,7 @@ notifications via the socket server.
 import asyncio
 import logging
 import sqlite3
+import threading
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -108,6 +109,7 @@ class ChatDBWatcher:
         self._resegment_locks_mutex = asyncio.Lock()  # Protect OrderedDict mutations
         # Persistent read-only connection for rowid polling (avoids 10-50ms connect overhead)
         self._poll_conn: sqlite3.Connection | None = None
+        self._poll_conn_lock = threading.Lock()  # Protects _poll_conn from stop()/query race
         # Health check removed: SQLite read-only connections don't go stale.
         # Error handlers in _query_last_rowid/_query_new_messages reset on failure.
 
@@ -160,13 +162,14 @@ class ChatDBWatcher:
         """Stop watching."""
         self._running = False
 
-        # Close persistent polling connection
-        if self._poll_conn:
-            try:
-                self._poll_conn.close()
-            except Exception:
-                pass
-            self._poll_conn = None
+        # Close persistent polling connection (lock protects against query thread race)
+        with self._poll_conn_lock:
+            if self._poll_conn:
+                try:
+                    self._poll_conn.close()
+                except Exception:
+                    pass
+                self._poll_conn = None
 
         if self._monitor_task:
             self._monitor_task.cancel()
@@ -733,23 +736,24 @@ class ChatDBWatcher:
         Error handlers in _query_last_rowid/_query_new_messages reset the
         connection on failure, which forces reconnection on next call.
         """
-        if self._poll_conn is not None:
-            return self._poll_conn
+        with self._poll_conn_lock:
+            if self._poll_conn is not None:
+                return self._poll_conn
 
-        # Create new connection
-        if not CHAT_DB_PATH.exists():
-            return None
-        try:
-            self._poll_conn = sqlite3.connect(
-                f"file:{CHAT_DB_PATH}?mode=ro",
-                uri=True,
-                timeout=5.0,
-                check_same_thread=False,
-            )
-            return self._poll_conn
-        except Exception as e:
-            logger.debug("Error creating poll connection: %s", e)
-            return None
+            # Create new connection
+            if not CHAT_DB_PATH.exists():
+                return None
+            try:
+                self._poll_conn = sqlite3.connect(
+                    f"file:{CHAT_DB_PATH}?mode=ro",
+                    uri=True,
+                    timeout=5.0,
+                    check_same_thread=False,
+                )
+                return self._poll_conn
+            except Exception as e:
+                logger.debug("Error creating poll connection: %s", e)
+                return None
 
     def _query_last_rowid(self) -> int | None:
         """Query the last message ROWID (sync)."""
@@ -763,12 +767,14 @@ class ChatDBWatcher:
             return row[0] if row and row[0] else None
         except Exception as e:
             logger.debug("Error getting last ROWID: %s", e)
-            # Connection may be stale, reset it (forces reconnect on next call)
-            try:
-                self._poll_conn.close()
-            except Exception:
-                pass
-            self._poll_conn = None
+            # Connection may be stale, reset it and force reconnect on next call
+            with self._poll_conn_lock:
+                try:
+                    if self._poll_conn:
+                        self._poll_conn.close()
+                except Exception:
+                    pass
+                self._poll_conn = None
             return None
 
     async def _get_new_messages(self) -> list[dict[str, Any]]:
@@ -857,7 +863,8 @@ class ChatDBWatcher:
         except Exception as e:
             logger.warning("Error querying new messages: %s", e)
             # Connection may be stale, reset it
-            self._poll_conn = None
+            with self._poll_conn_lock:
+                self._poll_conn = None
             return []
 
 
