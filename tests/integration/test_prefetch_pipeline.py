@@ -638,7 +638,7 @@ class TestPrefetchResourceManagement:
                 # Wait a bit - should NOT execute
                 time.sleep(0.3)
                 stats = executor.stats()
-                initial_executed = stats["executed"]
+                stats["executed"]
 
                 # Resume
                 executor.resume()

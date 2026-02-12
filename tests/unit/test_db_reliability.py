@@ -294,13 +294,13 @@ class TestWalArchive:
             archive_path.touch()
 
         # Set mtime to old date
-        old_time = (datetime.now() - timedelta(days=7)).timestamp()
+        (datetime.now() - timedelta(days=7)).timestamp()
         for archive_path in archive_dir.glob("*.wal"):
             archive_path.touch()
             # Note: Can't easily set mtime in cross-platform way in test
 
         # Just verify the method exists and runs
-        count = archiver.cleanup_old_archives(max_age_hours=1)
+        archiver.cleanup_old_archives(max_age_hours=1)
         # Result depends on actual file mtimes
 
 

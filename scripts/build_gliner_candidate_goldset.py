@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from gliner_shared import enforce_runtime_stack
+
 from jarvis.utils.logging import setup_script_logging
 
 APPLE_EPOCH_UNIX = 978307200  # 2001-01-01 00:00:00 UTC
@@ -180,9 +182,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size-out", type=int, default=50, help="Rows per batch_*.json file")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite output files")
     return parser.parse_args()
-
-
-from gliner_shared import enforce_runtime_stack
 
 
 def parse_apple_timestamp(timestamp: int | float | None) -> datetime:

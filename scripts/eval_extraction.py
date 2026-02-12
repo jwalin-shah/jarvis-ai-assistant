@@ -5,9 +5,12 @@ Reports per-label P/R/F1 and macro F1. Only evaluates on dev set (never test).
 
 Usage:
     uv run python scripts/eval_extraction.py --goldset training_data/goldset_v6/dev.json
-    uv run python scripts/eval_extraction.py --goldset training_data/goldset_v6/dev.json --extractor spacy
-    uv run python scripts/eval_extraction.py --goldset training_data/goldset_v6/dev.json --extractor llm
-    uv run python scripts/eval_extraction.py --goldset training_data/goldset_v6/dev.json --extractor hybrid
+    uv run python scripts/eval_extraction.py \
+        --goldset training_data/goldset_v6/dev.json --extractor spacy
+    uv run python scripts/eval_extraction.py \
+        --goldset training_data/goldset_v6/dev.json --extractor llm
+    uv run python scripts/eval_extraction.py \
+        --goldset training_data/goldset_v6/dev.json --extractor hybrid
 """
 
 from __future__ import annotations
@@ -104,7 +107,7 @@ def trim_span(text: str) -> str:
 
 # These patterns indicate TRANSIENT mentions of family, not lasting facts.
 # e.g., "my mom called" = transient event, "my mom is a nurse" = lasting fact
-import re
+import re  # noqa: E402
 
 _TRANSIENT_FAMILY_RE = re.compile(
     r"\b(?:my\s+(?:mom|dad|sister|brother|mother|father|aunt|uncle|cousin|"
@@ -130,7 +133,7 @@ def is_transient_family_mention(text: str) -> bool:
 def extract_spacy(text: str, message_id: int) -> list[dict[str, str]]:
     """Extract candidates using spaCy NER only."""
     try:
-        import spacy
+        import spacy  # noqa: F401
     except ImportError:
         logger.error("spaCy not installed. Run: uv pip install spacy")
         return []
@@ -211,7 +214,9 @@ def extract_llm(
 
 def _build_llm_system_prompt(few_shot_examples: list[dict]) -> str:
     """Build LLM system prompt for extraction."""
-    prompt = """You are a personal fact extractor. Given an iMessage, extract lasting personal facts as structured spans.
+    prompt = """\
+You are a personal fact extractor. Given an iMessage, \
+extract lasting personal facts as structured spans.
 
 Labels: family_member, person_name, place, org, job_role, food_item, activity, health_condition
 
@@ -498,7 +503,11 @@ def print_results(results: dict[str, Any]) -> None:
     print(f"Messages:  {results['num_messages']}", flush=True)
     print(f"{'=' * 70}", flush=True)
 
-    print(f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} {'TP':>5} {'FP':>5} {'FN':>5} {'Sup':>5}", flush=True)
+    print(
+        f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} "
+        f"{'TP':>5} {'FP':>5} {'FN':>5} {'Sup':>5}",
+        flush=True,
+    )
     print("-" * 70, flush=True)
 
     for label, metrics in sorted(results["per_label"].items()):

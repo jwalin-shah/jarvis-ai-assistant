@@ -28,7 +28,7 @@ from eval_shared import spans_match
 
 # ─── Constants ──────────────────────────────────────────────────────────────
 
-GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold_merged_r4.json")
+GOLD_PATH = Path("training_data/goldset_v6/train.json")
 OUTPUT_PATH = Path("results/dspy_optimized_prompt.json")
 
 # Same aliases as bakeoff_v2
@@ -235,7 +235,7 @@ def run_optimizer(
     # Connect to local mlx_lm server
     print(f"\nConnecting to local server on port {port}...", flush=True)
     lm = dspy.LM(
-        model=f"openai/local-model",
+        model="openai/local-model",
         api_base=f"http://localhost:{port}/v1",
         api_key="not-needed",
         temperature=0.0,
@@ -317,7 +317,8 @@ def run_optimizer(
     prompt_data = {
         "system_prompt": (
             "Extract personal facts from text messages. "
-            "Categories: location, person, relationship, preference, job, school, health, activity. "
+            "Categories: location, person, relationship, preference, "
+            "job, school, health, activity. "
             "Only extract facts explicitly stated. "
             "Output format: category: value (semicolon-separated). Output 'none' if no facts."
         ),
@@ -361,8 +362,12 @@ def run_optimizer(
     print(f"  Optimized F1: {opt_avg:.3f}", flush=True)
     print(f"  Demos found:  {len(demos)}", flush=True)
     print(f"  Output:       {output_path}", flush=True)
-    print(f"\nTo use in bakeoff:", flush=True)
-    print(f"  uv run python scripts/extraction_bakeoff_v2.py --dspy-prompt {output_path}", flush=True)
+    print("\nTo use in bakeoff:", flush=True)
+    print(
+        f"  uv run python scripts/extraction_bakeoff_v2.py"
+        f" --dspy-prompt {output_path}",
+        flush=True,
+    )
 
     return prompt_data
 

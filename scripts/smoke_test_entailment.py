@@ -79,7 +79,6 @@ def main() -> None:
 
     correct = 0
     total = len(TESTS)
-    results = []
 
     for i, test in enumerate(TESTS):
         text = test["text"]

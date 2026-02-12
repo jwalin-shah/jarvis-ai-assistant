@@ -133,7 +133,6 @@ def deterministic_gather():
             # Tasks will complete in creation order, not completion order
             results = await asyncio.gather(task1, task2, task3)
     """
-    original_gather = asyncio.gather
 
     async def ordered_gather(
         *coros_or_futures: asyncio.Future[T] | Coroutine[Any, Any, T],
@@ -231,7 +230,7 @@ async def paused_event_loop():
     loop = asyncio.get_event_loop()
 
     # Save current tasks
-    current_tasks = asyncio.all_tasks(loop)
+    asyncio.all_tasks(loop)
 
     try:
         # Prevent new task creation

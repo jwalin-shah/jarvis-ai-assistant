@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 IS_MACOS = platform.system() == "Darwin"
 
 
-class SwapThresholdExceeded(Exception):
+class SwapThresholdExceededError(Exception):
     """Raised when swap usage exceeds configured threshold.
 
     Note: Does not inherit from JarvisError to avoid circular import
@@ -231,8 +231,7 @@ def track_memory(
     logger.info(f"{prefix}Memory tracking started: {start_info}")
 
     # Background monitoring if interval > 0
-    monitor_active = interval_sec > 0
-    last_check = time.time()
+    time.time()
 
     try:
         yield snapshots

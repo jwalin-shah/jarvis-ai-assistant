@@ -15,7 +15,9 @@ from models.loader import MLXModelLoader, ModelConfig
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Chat with local LLM")
-    parser.add_argument("--model", type=str, default=None, help="Model path (default: LFM2.5-Instruct)")
+    parser.add_argument(
+        "--model", type=str, default=None, help="Model path (default: LFM2.5-Instruct)"
+    )
     parser.add_argument("--max-tokens", type=int, default=200)
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--system", type=str, default=None, help="System prompt")
@@ -26,7 +28,7 @@ def main() -> None:
 
     print(f"Loading {config.model_path}...", flush=True)
     loader.load()
-    print(f"Ready! Type your prompt (Ctrl+C to quit)\n", flush=True)
+    print("Ready! Type your prompt (Ctrl+C to quit)\n", flush=True)
 
     while True:
         try:

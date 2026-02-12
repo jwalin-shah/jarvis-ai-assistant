@@ -39,9 +39,11 @@ from jarvis.nlp.patterns import (
     EMOJI_RE,
     EMOTIONAL_MARKERS,
     GREETING_PATTERN_RE,
-    IMPERATIVE_VERBS_CORE as IMPERATIVE_VERBS,
     PROFESSIONAL_KEYWORDS_RE,
     QUESTION_STARTERS,
+)
+from jarvis.nlp.patterns import (
+    IMPERATIVE_VERBS_CORE as IMPERATIVE_VERBS,
 )
 
 if TYPE_CHECKING:
@@ -189,7 +191,8 @@ NEED_WANT_YOU_RE = re.compile(
     r"\b(i need you to|i want you to|i'd like you to|need you to|want you to)\b", re.IGNORECASE
 )
 
-# Additional feature patterns (context overlap, question types, thanks/apology, urgency, emoji sentiment)
+# Additional feature patterns (context overlap, question types,
+# thanks/apology, urgency, emoji sentiment)
 THANKS_MARKERS = {"thanks", "thank you", "thx", "ty", "tysm", "appreciate", "appreciated"}
 APOLOGY_MARKERS = {"sorry", "my bad", "apologize", "apologies", "oops", "whoops", "my fault"}
 URGENCY_MARKERS = {
@@ -413,9 +416,12 @@ class CategoryFeatureExtractor:
         text_lower: str,
         doc: spacy.tokens.Doc,
     ) -> tuple[list[float], float, float, int, int]:
-        """Extract original 14 features. Returns (features, you_modal, modal_count, first_person, second_person)."""
+        """Extract original 14 features.
+
+        Returns (features, you_modal, modal_count, first_person, second_person).
+        """
         features: list[float] = []
-        total_tokens = len(doc)
+        len(doc)
 
         has_imperative = (
             1.0 if len(doc) > 0 and doc[0].pos_ == "VERB" and doc[0].tag_ == "VB" else 0.0

@@ -21,12 +21,12 @@ def temp_training_data(tmp_path: Path) -> Path:
     n_test = 10
 
     # Training data
-    X_train = np.random.randn(n_train, n_features).astype(np.float32)
+    X_train = np.random.randn(n_train, n_features).astype(np.float32)  # noqa: N806
     y_train = np.array(["inform"] * 10 + ["question"] * 10)
     np.savez(data_dir / "train.npz", X=X_train, y=y_train)
 
     # Test data
-    X_test = np.random.randn(n_test, n_features).astype(np.float32)
+    X_test = np.random.randn(n_test, n_features).astype(np.float32)  # noqa: N806
     y_test = np.array(["inform"] * 5 + ["question"] * 5)
     np.savez(data_dir / "test.npz", X=X_test, y=y_test)
 
@@ -49,7 +49,7 @@ def invalid_training_data(tmp_path: Path) -> Path:
     data_dir.mkdir()
 
     # Only create train.npz, missing test.npz and metadata
-    X = np.random.randn(10, 100)
+    X = np.random.randn(10, 100)  # noqa: N806
     y = np.array(["inform"] * 10)
     np.savez(data_dir / "train.npz", X=X, y=y)
 

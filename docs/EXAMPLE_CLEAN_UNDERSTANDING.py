@@ -556,7 +556,8 @@ if __name__ == "__main__":
         print(f"  Entities: {len(knowledge.entities)}")
         for fact in knowledge.facts:
             print(
-                f"  Fact: {fact.subject} --{fact.predicate}--> {fact.object or fact.value} (conf={fact.confidence})"
+                f"  Fact: {fact.subject} --{fact.predicate}--> "
+                f"{fact.object or fact.value} (conf={fact.confidence})"
             )
 
     # Output:

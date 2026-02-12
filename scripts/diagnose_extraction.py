@@ -78,7 +78,8 @@ class FunnelStats:
 
         w("\n--- Entities ---\n")
         w(f"  Raw GLiNER entities:     {self.raw_entities}\n")
-        pct = lambda n, d: f"({n}/{d} dropped - {n * 100 / d:.0f}%)" if d else ""
+        def pct(n, d):
+            return f"({n}/{d} dropped - {n * 100 / d:.0f}%)" if d else ""
         thresh_drop = self.raw_entities - self.after_threshold
         w(
             f"  After threshold filter:  {self.after_threshold}  "

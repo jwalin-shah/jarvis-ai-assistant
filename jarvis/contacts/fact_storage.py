@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from jarvis.contacts.contact_profile import Fact
+
+if TYPE_CHECKING:
+    from jarvis.contacts.candidate_extractor import FactCandidate
 from jarvis.utils.latency_tracker import track_latency
 
 logger = logging.getLogger(__name__)

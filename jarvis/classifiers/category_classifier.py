@@ -412,7 +412,7 @@ class CategoryClassifier(EmbedderMixin):
                 )
 
                 # Build full feature matrix: BERT(384) + context_BERT(384) + hand-crafted(147) = 915
-                # Context BERT zeroed at inference — intentional auxiliary supervision (regularizer).
+                # Context BERT zeroed at inference (intentional auxiliary supervision).
                 non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
                 context_embeddings = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
                 feature_matrix = np.concatenate(

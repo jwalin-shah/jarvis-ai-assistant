@@ -85,7 +85,7 @@ def test_generation_latency_budget():
 
         # Measure
         start = time.perf_counter()
-        result = loader.generate_sync(prompt=request.prompt, max_tokens=request.max_tokens)
+        loader.generate_sync(prompt=request.prompt, max_tokens=request.max_tokens)
         latency = (time.perf_counter() - start) * 1000
 
         print(f"\nGeneration latency: {latency:.2f}ms")

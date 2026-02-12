@@ -236,7 +236,7 @@ class TestRotateWsToken:
 
     def _patch_token_write(self):
         """Patch os.open/os.fdopen used for atomic token file writes."""
-        mock_fd = MagicMock()
+        MagicMock()
         mock_file = MagicMock()
         mock_file.__enter__ = MagicMock(return_value=mock_file)
         mock_file.__exit__ = MagicMock(return_value=False)

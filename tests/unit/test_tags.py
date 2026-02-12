@@ -80,12 +80,12 @@ class TestTagCRUD(TestTagManager):
 
     def test_create_tag_duplicate_raises_error(self, manager: TagManager) -> None:
         """Test that creating a duplicate tag raises ValueError or returns existing."""
-        original = manager.create_tag("Work")
+        manager.create_tag("Work")
 
         # Creating a duplicate should either raise ValueError or return without
         # duplicating - verify no extra tag is created at root level
         try:
-            dup = manager.create_tag("Work")
+            manager.create_tag("Work")
             # If no error, the manager silently handled the duplicate.
             # Verify the tag wasn't duplicated: exactly one root-level "Work" tag.
             tags = manager.search_tags("Work")

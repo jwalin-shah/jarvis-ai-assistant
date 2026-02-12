@@ -37,7 +37,7 @@ from jarvis.contacts.candidate_extractor import CandidateExtractor
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold_merged_r4.json")
+DEFAULT_GOLD_PATH = Path("training_data/goldset_v6/dev.json")
 OUTPUT_DIR = Path("results/extractor_bakeoff")
 
 # Named extractor configs: map short names to model_name + backend overrides.
@@ -471,12 +471,10 @@ def run_extractor(
 
         # Unload GLiNER models to free memory for LLM
         logger.info("Unloading GLiNER models for LLM verification pass...")
-        from jarvis.contacts.candidate_extractor import (
-            _gliner_mlx_model,
-            _gliner_model_lock,
-            _gliner_pytorch_model,
-        )
         import jarvis.contacts.candidate_extractor as _ce_mod
+        from jarvis.contacts.candidate_extractor import (
+            _gliner_model_lock,
+        )
 
         with _gliner_model_lock:
             _ce_mod._gliner_mlx_model = None

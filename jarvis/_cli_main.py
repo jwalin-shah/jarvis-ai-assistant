@@ -271,7 +271,8 @@ def cmd_db(args: argparse.Namespace) -> int:
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
         console.print(
-            "Available: init, sync-contacts, add-contact, list-contacts, extract, stats, build-profiles"
+            "Available: init, sync-contacts, add-contact, "
+            "list-contacts, extract, stats, build-profiles"
         )
         return 1
 

@@ -13,10 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
-import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -267,10 +264,10 @@ def main() -> None:
 
     print(f"\n{'='*60}", flush=True)
     print("All annotators complete!", flush=True)
-    print(f"Output files:", flush=True)
+    print("Output files:", flush=True)
     for agent in agents:
         print(f"  training_data/goldset_v6/annotator_{agent}.json", flush=True)
-    print(f"\nNext: run compute_goldset_iaa.py to merge", flush=True)
+    print("\nNext: run compute_goldset_iaa.py to merge", flush=True)
 
 
 if __name__ == "__main__":

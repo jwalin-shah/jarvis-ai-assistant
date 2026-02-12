@@ -44,7 +44,7 @@ from evals.judge_config import (  # noqa: E402
     JUDGE_BASE_URL,
     get_judge_api_key,
 )
-from evals.judge_config import (
+from evals.judge_config import (  # noqa: E402
     JUDGE_MODEL as GEMINI_MODEL,
 )
 

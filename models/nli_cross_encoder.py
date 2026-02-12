@@ -22,7 +22,6 @@ import json
 import logging
 import threading
 import time
-from pathlib import Path
 
 import mlx.core as mx
 import numpy as np

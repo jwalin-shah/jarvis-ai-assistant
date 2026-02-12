@@ -21,6 +21,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parent.parent
 LABELED_DATA = ROOT / "data" / "gemini_training" / "labeled_examples.jsonl"
 
@@ -75,7 +77,6 @@ def extract_full_features(
     examples: list[dict], logger: logging.Logger
 ) -> tuple[np.ndarray, list[str], list[str]]:
     """Extract 531 features: BERT (384) + hand-crafted (147)."""
-    import numpy as np
     from tqdm import tqdm
 
     from jarvis.classifiers.mixins import EmbedderMixin
@@ -128,7 +129,7 @@ def extract_full_features(
             logger.warning(f"Failed to extract features for {ex['id']}: {e}")
             continue
 
-    X = np.array(features_list)
+    X = np.array(features_list)  # noqa: N806
     y = np.array(categories)
 
     logger.info(f"\nExtracted {X.shape[0]} examples with {X.shape[1]} features")
@@ -150,8 +151,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     logger = setup_logging()
     args = parse_args(argv)
     examples = load_labeled_examples(args.labeled_data, logger)
-    X, y, ids = extract_full_features(examples, logger)
-    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(
+    X, y, ids = extract_full_features(examples, logger)  # noqa: N806
+    X_train, X_test, y_train, y_test, ids_train, ids_test = create_splits(  # noqa: N806
         X,
         y,
         ids,

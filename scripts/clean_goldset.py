@@ -13,10 +13,10 @@ Usage:
 """
 
 import json
-from pathlib import Path
 from collections import defaultdict
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Tuple
+from pathlib import Path
+from typing import Any
 
 
 def similarity_ratio(a: str, b: str) -> float:
@@ -25,9 +25,9 @@ def similarity_ratio(a: str, b: str) -> float:
 
 
 def deduplicate_candidates(
-    candidates: List[Dict[str, Any]],
+    candidates: list[dict[str, Any]],
     message_text: str,
-) -> Tuple[List[Dict[str, Any]], List[str]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     """
     Deduplicate entities, keeping the more specific version.
     Returns: (cleaned_candidates, dedup_notes)
@@ -38,7 +38,7 @@ def deduplicate_candidates(
     dedup_notes = []
 
     # Group by (entity type, label) to find duplicates
-    groups: Dict[Tuple[str, str], List[int]] = defaultdict(list)
+    groups: dict[tuple[str, str], list[int]] = defaultdict(list)
 
     for idx, candidate in enumerate(candidates):
         span_text = candidate["span_text"].lower().strip()
@@ -82,7 +82,7 @@ def deduplicate_candidates(
     return cleaned, dedup_notes
 
 
-def clean_record(record: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def clean_record(record: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Clean a single record.
     Returns: (cleaned_record, changes_dict)
@@ -133,7 +133,9 @@ def clean_record(record: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]
                 changes["context_reason"] = "Single-word isolated message requires context"
             elif any(kw in gold_notes for kw in context_keywords):
                 changes["needs_context"] = True
-                changes["context_reason"] = f"Gold notes suggest context-dependence: {gold_notes[:100]}"
+                changes["context_reason"] = (
+                    f"Gold notes suggest context-dependence: {gold_notes[:100]}"
+                )
 
     # Create cleaned record
     cleaned_record = record.copy()
@@ -209,9 +211,11 @@ def main():
 ## Summary
 
 - **Total records**: {total_records}
-- **Records with removed candidates**: {records_with_removals} ({100*records_with_removals/total_records:.1f}%)
+- **Records with removed candidates**: {records_with_removals} \
+({100 * records_with_removals / total_records:.1f}%)
 - **Total candidates removed**: {total_removed}
-- **Records with deduplications**: {records_with_dedup} ({100*records_with_dedup/total_records:.1f}%)
+- **Records with deduplications**: {records_with_dedup} \
+({100 * records_with_dedup / total_records:.1f}%)
 - **Total duplicates removed**: {total_dedup}
 - **Records flagged "needs_context"**: {records_flagged} ({100*records_flagged/total_records:.1f}%)
 
@@ -341,10 +345,10 @@ Cleaning logic applied to all {total_records} records:
     with open(report_path, "w") as f:
         f.write(report)
 
-    print(f"\n✓ Cleaning complete!")
+    print("\n✓ Cleaning complete!")
     print(f"  - Cleaned goldset: {output_path}")
     print(f"  - Report: {report_path}")
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  - Records: {total_records}")
     print(f"  - Candidates removed: {total_removed} (from {records_with_removals} records)")
     print(f"  - Duplicates removed: {total_dedup} (from {records_with_dedup} records)")

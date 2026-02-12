@@ -283,7 +283,7 @@ def run_sweep(quick: bool = False) -> list[dict]:
 
         # Add dataset info
         result["train_size"] = len(X_train_balanced)
-        result["test_size"] = len(X_test)
+        result["test_size"] = len(X_test_features)
         result["train_distribution"] = dict(Counter(y_train_balanced))
 
         results.append(result)

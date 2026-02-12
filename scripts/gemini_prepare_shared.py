@@ -44,7 +44,7 @@ def load_labeled_examples(labeled_data: Path, logger: logging.Logger) -> list[di
 
 
 def create_splits(
-    X: np.ndarray,
+    X: np.ndarray,  # noqa: N803
     y: np.ndarray,
     ids: list[str],
     test_size: float = 0.2,
@@ -66,7 +66,7 @@ def create_splits(
     """
     from sklearn.model_selection import train_test_split
 
-    X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
+    X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(  # noqa: N806
         X,
         y,
         ids,
@@ -95,8 +95,8 @@ def create_splits(
 
 def save_training_data(
     output_dir: Path,
-    X_train: np.ndarray,
-    X_test: np.ndarray,
+    X_train: np.ndarray,  # noqa: N803
+    X_test: np.ndarray,  # noqa: N803
     y_train: np.ndarray,
     y_test: np.ndarray,
     logger: logging.Logger,

@@ -15,7 +15,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 sys.path.insert(0, ".")
@@ -363,7 +363,8 @@ def strategy_fill_template(text: str) -> tuple[str | None, str]:
     system = None
     user = f"""<|input|>
 ### Template:
-{{"location": "", "person": "", "job": "", "school": "", "relationship": "", "preference": "", "health": ""}}
+{{"location": "", "person": "", "job": "", "school": "", \
+"relationship": "", "preference": "", "health": ""}}
 
 ### Text:
 {text}
@@ -380,7 +381,8 @@ def strategy_extractive_only(text: str) -> tuple[str | None, str]:
     )
     user = f"""Input text: "{text}"
 
-Copy out any personal facts (names, places, jobs, preferences) using ONLY words from the text above:"""
+Copy out any personal facts (names, places, jobs, preferences) \
+using ONLY words from the text above:"""
     return system, user
 
 
@@ -390,7 +392,9 @@ def strategy_json_schema_strict(text: str) -> tuple[str | None, str]:
     user = f"""Extract facts from: "{text}"
 
 Schema:
-{{"has_facts": true/false, "facts": [{{"category": "location|person|job|school|preference|health|relationship", "value": "exact text from message", "confidence": 0.0-1.0}}]}}"""
+{{"has_facts": true/false, "facts": [{{"category": \
+"location|person|job|school|preference|health|relationship", \
+"value": "exact text from message", "confidence": 0.0-1.0}}]}}"""
     return system, user
 
 
@@ -458,6 +462,7 @@ def load_model(model_path: str):
 def unload_model(model, tokenizer):
     """Unload model and free memory."""
     import gc
+
     import mlx.core as mx
 
     del model
@@ -537,7 +542,7 @@ def run_bakeoff(
 
     total_combos = len(model_names) * len(strategy_names) * len(messages)
     print(f"\n{'='*70}", flush=True)
-    print(f"EXTRACTION BAKEOFF", flush=True)
+    print("EXTRACTION BAKEOFF", flush=True)
     print(f"  Models: {len(model_names)}", flush=True)
     print(f"  Strategies: {len(strategy_names)}", flush=True)
     print(f"  Messages: {len(messages)}", flush=True)

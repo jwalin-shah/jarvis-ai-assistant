@@ -128,7 +128,7 @@ class TestDBConnectionFailures:
         mock_db.get_contact_by_chat_id.side_effect = sqlite3.OperationalError("database is locked")
 
         # Mock at service level to verify router handles None contact gracefully.
-        with patch("jarvis.services.context_service.ContextService") as MockCS:
+        with patch("jarvis.services.context_service.ContextService") as MockCS:  # noqa: N806
             mock_cs = MockCS.return_value
             mock_cs.get_contact.return_value = None
             mock_cs.search_examples.return_value = []

@@ -268,9 +268,12 @@ def get_syntactic_features(text: str) -> list[float]:
     """Extract syntactic features for dialogue act classification.
 
     Returns 14 features:
-    - Directive indicators (5): imperative, you+modal, request verbs, starts_modal, directive_question
-    - Commissive indicators (4): i_will, promise_verb, first_person_count, agreement
-    - General syntactic (5): modal_count, verb_count, second_person_count, has_negation, is_interrogative
+    - Directive indicators (5): imperative, you+modal, request verbs,
+      starts_modal, directive_question
+    - Commissive indicators (4): i_will, promise_verb,
+      first_person_count, agreement
+    - General syntactic (5): modal_count, verb_count,
+      second_person_count, has_negation, is_interrogative
 
     Args:
         text: Text to extract features from.

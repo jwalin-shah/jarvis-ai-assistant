@@ -1064,9 +1064,9 @@ class CandidateExtractor:
         """
         use_mlx = self._use_mlx()
         if use_mlx:
-            model = self._load_mlx_model()
+            self._load_mlx_model()
         else:
-            model = self._load_model()
+            self._load_model()
 
         # Pre-filter junk messages (pass chat_id for short-code detection)
         valid_msgs = [
@@ -1434,7 +1434,6 @@ class CandidateExtractor:
         Handles entity types that spaCy struggles with: family_member, activity,
         health_condition, food_item, job_role.
         """
-        import json as _json
 
         system_prompt = self._build_llm_extraction_prompt(few_shot_examples or [])
         user_prompt = self._build_llm_user_prompt(text, context_prev, context_next)

@@ -331,7 +331,7 @@ class TestGracefulDegradation:
         assert health["health_test"] == FeatureState.HEALTHY
 
         # Force failures to open circuit
-        stats = controller.get_feature_stats("health_test")
+        controller.get_feature_stats("health_test")
         for _ in range(3):
             controller._features["health_test"].circuit_breaker.record_failure()
 
@@ -777,7 +777,6 @@ class TestRecoveryProcedures:
 # Export all test classes
 __all__ = [
     "TestCircuitBreaker",
-    "TestRetryLogic",
     "TestGracefulDegradation",
     "TestFallbackResponses",
     "TestTaskQueue",

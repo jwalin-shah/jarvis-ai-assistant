@@ -227,7 +227,8 @@ class ContactMixin:
                 # Try partial match - escape wildcards for LIKE
                 escaped_name = name.replace("%", "\\%").replace("_", "\\_")
                 cursor = conn.execute(
-                    f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'",
+                    f"SELECT {_CONTACT_COLUMNS} FROM contacts "
+                    "WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'",
                     (f"%{escaped_name}%",),
                 )
                 row = cursor.fetchone()
@@ -246,7 +247,10 @@ class ContactMixin:
             return [self._row_to_contact(row) for row in cursor]
 
     def delete_contact(self: JarvisDBBase, contact_id: int) -> bool:
-        """Delete a contact and all associated data (pairs, artifacts, style, timing, drafts, facts)."""
+        """Delete a contact and all associated data.
+
+        Removes pairs, artifacts, style, timing, drafts, and facts.
+        """
         with self.connection() as conn:
             # Get chat_id before deletion for cache invalidation
             cursor = conn.execute("SELECT chat_id FROM contacts WHERE id = ?", (contact_id,))

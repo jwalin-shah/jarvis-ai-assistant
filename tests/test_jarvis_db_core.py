@@ -150,7 +150,7 @@ def test_ensure_vec_tables(db):
         db._ensure_vec_tables(conn)
         # Check if vec tables exist (if sqlite-vec is available)
         try:
-            res = conn.execute(
+            conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='vec_chunks'"
             ).fetchone()
             # If we are in an environment without sqlite-vec, this might be None or

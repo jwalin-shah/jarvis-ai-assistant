@@ -226,7 +226,7 @@ CONTACT_B_FACTS = [
 
 
 class TestEndToEndPipeline:
-    """Full pipeline test: rule-based extraction -> quality filters -> storage -> semantic search."""
+    """Full pipeline: rule extraction -> quality filters -> storage -> search."""
 
     @pytest.fixture(autouse=True)
     def setup_db(self, tmp_path):
@@ -293,7 +293,8 @@ class TestEndToEndPipeline:
             "allergic_to",
         }
         assert food_related, (
-            f"Expected food facts in results, got: {[(f.predicate, f.subject) for f in results]}"
+            "Expected food facts in results, got: "
+            f"{[(f.predicate, f.subject) for f in results]}"
         )
 
     def test_extract_store_index_retrieve_work(self):
@@ -317,7 +318,8 @@ class TestEndToEndPipeline:
         work_results = [f for f in results if f.category == "work"]
         assert len(work_results) > 0, (
             "Expected at least one work-category result for work query, "
-            f"but got results in other categories only: {[(f.category, f.subject) for f in results]}"
+            "but got results in other categories only: "
+            f"{[(f.category, f.subject) for f in results]}"
         )
 
     def test_empty_messages_produce_no_facts(self):
@@ -776,7 +778,7 @@ class TestFactPipelinePerformance:
 
         # Search
         start = time.perf_counter()
-        results = search_relevant_facts("food dinner restaurant", CONTACT_A, limit=5)
+        search_relevant_facts("food dinner restaurant", CONTACT_A, limit=5)
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         assert elapsed_ms < 100, f"Semantic search took {elapsed_ms:.1f}ms (>100ms)"

@@ -25,7 +25,6 @@ from contracts import (
 )
 from contracts.health import DegradationPolicy, FeatureState
 from contracts.imessage import Attachment, AttachmentSummary, Conversation, Message, Reaction
-from contracts.memory import MemoryProfile
 from jarvis.contracts.pipeline import (
     CategoryType,
     ClassificationResult,

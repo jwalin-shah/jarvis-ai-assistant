@@ -5,8 +5,10 @@ Compares evaluation results against a baseline and reports regressions.
 Can be used in CI to block PRs that introduce unacceptable degradation.
 
 Usage:
-    python scripts/check_regression.py --baseline results/baseline.json --current results/current.json
-    python scripts/check_regression.py --baseline results/baseline.json --current results/current.json --ci
+    python scripts/check_regression.py --baseline results/baseline.json \
+        --current results/current.json
+    python scripts/check_regression.py --baseline results/baseline.json \
+        --current results/current.json --ci
 """
 
 from __future__ import annotations

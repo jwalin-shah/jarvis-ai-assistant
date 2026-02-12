@@ -932,7 +932,7 @@ class PrefetchExecutor:
             return None
 
 
-from jarvis.utils.singleton import thread_safe_singleton
+from jarvis.utils.singleton import thread_safe_singleton  # noqa: E402
 
 
 @thread_safe_singleton

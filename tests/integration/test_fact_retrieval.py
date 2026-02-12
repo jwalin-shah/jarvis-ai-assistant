@@ -151,7 +151,7 @@ class TestRealSemanticSearch:
             )
 
         predicates = {f.predicate for f in results}
-        subjects = {f.subject.lower() for f in results}
+        {f.subject.lower() for f in results}
         print(f"  Food query results: {[(f.predicate, f.subject) for f in results]}")
 
         # At least one food fact must be in top 3

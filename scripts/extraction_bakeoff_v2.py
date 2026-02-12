@@ -28,12 +28,11 @@ Usage:
 import argparse
 import gc
 import json
-import os
 import re
 import sys
 import time
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, ".")
@@ -104,7 +103,8 @@ BASE_INCOMPATIBLE_STRATEGIES = {
 def strategy_schema_system(text: str) -> tuple[str | None, str, str]:
     """LiquidAI's recommended pattern for Extract models."""
     system = (
-        'Return JSON with schema: {"has_facts": bool, "facts": [{"category": "...", "value": "..."}]}\n'
+        'Return JSON with schema: {"has_facts": bool, '
+        '"facts": [{"category": "...", "value": "..."}]}\n'
         "Categories: location, person, relationship, preference, job, school, health, activity.\n"
         "Only extract facts explicitly stated. Empty array if none."
     )
@@ -688,9 +688,10 @@ def generate_constrained(
 ) -> tuple[str, float]:
     """Generate with Outlines constrained decoding. Returns (text, time_ms)."""
     try:
-        from pydantic import BaseModel as PydanticBaseModel
         from typing import Literal
+
         import outlines
+        from pydantic import BaseModel as PydanticBaseModel
 
         class ExtractedFact(PydanticBaseModel):
             category: Literal[
@@ -798,13 +799,14 @@ def score_predictions(
     gold_matched = [False] * len(gold_candidates)
     pred_matched = [False] * len(parsed_facts)
 
-    for gi, gc in enumerate(gold_candidates):
+    for gi, gold_cand in enumerate(gold_candidates):
         for pi, (pred_cat, pred_val) in enumerate(parsed_facts):
             if pred_matched[pi]:
                 continue
             if spans_match(
                 pred_val, pred_cat,
-                gc.get("span_text", ""), gc.get("span_label", ""),
+                gold_cand.get("span_text", ""),
+                gold_cand.get("span_label", ""),
                 label_aliases=LLM_LABEL_ALIASES,
             ):
                 gold_matched[gi] = True
@@ -893,7 +895,11 @@ def run_bakeoff(
     print("EXTRACTION BAKEOFF V2", flush=True)
     print(f"  Models: {len(model_names)} ({', '.join(model_names)})", flush=True)
     print(f"  Strategies: {len(strategy_names)}", flush=True)
-    print(f"  Modes: {'constrained + unconstrained' if len(modes) == 2 else ('constrained' if modes[0] else 'unconstrained')}", flush=True)
+    mode_str = (
+        'constrained + unconstrained' if len(modes) == 2
+        else ('constrained' if modes[0] else 'unconstrained')
+    )
+    print(f"  Modes: {mode_str}", flush=True)
     print(f"  Messages: {len(records)}", flush=True)
     print(f"  Total combos: {len(combos)}", flush=True)
     print(f"  Total runs: {total_runs}", flush=True)
@@ -1133,11 +1139,23 @@ def _write_review(
             best_p = max(valid, key=lambda x: x[1].precision)
             best_r = max(valid, key=lambda x: x[1].recall)
             k, m = best_f1
-            f.write(f"- **Best F1**: {k[0]}/{k[1]}/{'constrained' if k[2] else 'unconstrained'} = {m.f1:.3f}\n")
+            c_str = 'constrained' if k[2] else 'unconstrained'
+            f.write(
+                f"- **Best F1**: {k[0]}/{k[1]}/{c_str}"
+                f" = {m.f1:.3f}\n"
+            )
             k, m = best_p
-            f.write(f"- **Best Precision**: {k[0]}/{k[1]}/{'constrained' if k[2] else 'unconstrained'} = {m.precision:.3f}\n")
+            c_str = 'constrained' if k[2] else 'unconstrained'
+            f.write(
+                f"- **Best Precision**: {k[0]}/{k[1]}/{c_str}"
+                f" = {m.precision:.3f}\n"
+            )
             k, m = best_r
-            f.write(f"- **Best Recall**: {k[0]}/{k[1]}/{'constrained' if k[2] else 'unconstrained'} = {m.recall:.3f}\n")
+            c_str = 'constrained' if k[2] else 'unconstrained'
+            f.write(
+                f"- **Best Recall**: {k[0]}/{k[1]}/{c_str}"
+                f" = {m.recall:.3f}\n"
+            )
 
         # Detailed per-combo results (sample)
         f.write("\n## Sample Outputs (first 5 per combo)\n\n")
@@ -1150,7 +1168,7 @@ def _write_review(
             mode_str = "constrained" if constrained else "unconstrained"
             f.write(f"\n### {model} / {strat} / {mode_str}\n\n")
             for r in group[:5]:
-                has_gold = "+" if any(
+                "+" if any(
                     rec.get("expected_candidates")
                     for rec in [{}]  # placeholder
                 ) else ""
@@ -1168,7 +1186,8 @@ def _write_review(
     print("BAKEOFF V2 RESULTS", flush=True)
     print(f"{'=' * 90}", flush=True)
     print(
-        f"{'Model':<20} {'Strategy':<20} {'Constr':>7} {'P':>7} {'R':>7} {'F1':>7} {'ms':>7} {'Err':>5}",
+        f"{'Model':<20} {'Strategy':<20} {'Constr':>7} "
+        f"{'P':>7} {'R':>7} {'F1':>7} {'ms':>7} {'Err':>5}",
         flush=True,
     )
     print("-" * 90, flush=True)
@@ -1278,7 +1297,7 @@ def main():
             dspy_prompt = json.load(f)
         print(f"Loaded DSPy prompt from {dspy_path}", flush=True)
 
-    results = run_bakeoff(
+    run_bakeoff(
         model_names=model_names,
         strategy_names=strategy_names,
         records=records,

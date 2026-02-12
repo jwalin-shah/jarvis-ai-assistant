@@ -70,7 +70,7 @@ def test_real_model_loading_and_generation():
     Run with: pytest -v -m real_model
     """
     try:
-        import mlx.core as mx
+        import mlx.core as mx  # noqa: F401
     except ImportError:
         pytest.skip("MLX not installed")
 

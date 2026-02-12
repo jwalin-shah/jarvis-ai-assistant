@@ -920,7 +920,7 @@ class FactExtractor:
                     person_name = ent.text.strip()
 
                     # Try to resolve to contact
-                    linked_contact_id = self._resolve_person_to_contact(person_name)
+                    self._resolve_person_to_contact(person_name)
 
                     facts.append(
                         Fact(
