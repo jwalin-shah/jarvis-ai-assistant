@@ -13,6 +13,7 @@ Usage:
 import logging
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
@@ -751,6 +752,7 @@ def starts_new_topic(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=2048)
 def is_question(text: str) -> bool:
     """Check if text is a question.
 
