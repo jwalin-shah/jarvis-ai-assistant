@@ -17,6 +17,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.contacts.contact_profile_context import ContactProfileContext
+
+# Pre-compiled patterns for tone/style analysis functions
+_WORD_RE = re.compile(r"\b\w+\b")
+_REPEATED_CHAR_RE = re.compile(r"(.)\1{3,}")
+_NON_ALPHA_RE = re.compile(r"[^a-zA-Z]")
+
 from jarvis.prompts.constants import (
     CASUAL_INDICATORS,
     EMOJI_PATTERN,
@@ -74,7 +80,7 @@ def detect_tone(messages: list[str]) -> Literal["casual", "professional", "mixed
 
     # Combine all messages for analysis
     combined = " ".join(messages).lower()
-    words = set(re.findall(r"\b\w+\b", combined))
+    words = set(_WORD_RE.findall(combined))
 
     # Count indicators
     casual_count = len(words & CASUAL_INDICATORS)
@@ -90,7 +96,7 @@ def detect_tone(messages: list[str]) -> Literal["casual", "professional", "mixed
         casual_count += 1
 
     # Check for multi-character expressions like "hahahaha" or "looool"
-    if re.search(r"(.)\1{3,}", combined):  # 4+ repeated chars
+    if _REPEATED_CHAR_RE.search(combined):  # 4+ repeated chars
         casual_count += 2
 
     # Determine tone based on counts
@@ -147,7 +153,7 @@ def analyze_user_style(messages: list[str]) -> UserStyleAnalysis:
     lowercase_count = 0
     for msg in messages:
         # Remove emojis and punctuation for case analysis
-        letters_only = re.sub(r"[^a-zA-Z]", "", msg)
+        letters_only = _NON_ALPHA_RE.sub("", msg)
         if letters_only:
             lowercase_ratio = sum(1 for c in letters_only if c.islower()) / len(letters_only)
             if lowercase_ratio > 0.9:  # 90%+ lowercase
@@ -156,7 +162,7 @@ def analyze_user_style(messages: list[str]) -> UserStyleAnalysis:
 
     # Detect abbreviation usage
     combined_lower = " ".join(messages).lower()
-    words = set(re.findall(r"\b\w+\b", combined_lower))
+    words = set(_WORD_RE.findall(combined_lower))
     found_abbreviations = list(words & TEXT_ABBREVIATIONS)
     uses_abbreviations = len(found_abbreviations) >= 2  # At least 2 different abbreviations
 

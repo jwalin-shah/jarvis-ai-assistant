@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -139,6 +140,9 @@ _STOPWORDS = frozenset(
         "said",
     }
 )
+
+# Pre-compiled pattern for word tokenization (called per text in loops)
+_LOWERCASE_ALPHA_RE = re.compile(r"[a-z]+")
 
 
 @dataclass
@@ -328,7 +332,5 @@ def _compute_doc_frequencies(texts: list[str]) -> dict[str, int]:
 
 def _tokenize(text: str) -> list[str]:
     """Simple word tokenizer: lowercase, alpha-only, skip stopwords."""
-    import re
-
-    words = re.findall(r"[a-z]+", text.lower())
+    words = _LOWERCASE_ALPHA_RE.findall(text.lower())
     return [w for w in words if len(w) >= 3 and w not in _STOPWORDS]

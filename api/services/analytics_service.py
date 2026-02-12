@@ -32,9 +32,9 @@ def iter_filtered_messages(
     """Iterate over conversations and their filtered messages."""
     conversations = reader.get_conversations(limit=200)
     for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=per_conversation_limit)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
+        messages = reader.get_messages(
+            conv.chat_id, limit=per_conversation_limit, after=time_range_start
+        )
         if messages:
             yield conv, messages
 
@@ -116,10 +116,7 @@ def fetch_overview_data(
     def message_stream() -> Iterator[Any]:
         conversations = reader.get_conversations(limit=200)
         for conv in conversations:
-            messages = reader.get_messages(conv.chat_id, limit=500)
-            if time_range_start:
-                messages = [m for m in messages if m.date >= time_range_start]
-            yield from messages
+            yield from reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
 
     all_messages = list(message_stream())
 
@@ -259,9 +256,7 @@ def fetch_contact_stats(
 
     Returns None if no messages found.
     """
-    messages = reader.get_messages(chat_id, limit=1000)
-    if time_range_start:
-        messages = [m for m in messages if m.date >= time_range_start]
+    messages = reader.get_messages(chat_id, limit=1000, after=time_range_start)
 
     if not messages:
         return None
@@ -316,9 +311,7 @@ def fetch_leaderboard_data(
     engine = get_analytics_engine()
 
     for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500)
-        if time_range_start:
-            messages = [m for m in messages if m.date >= time_range_start]
+        messages = reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
         if not messages:
             continue
 
@@ -514,10 +507,7 @@ def fetch_export_data(
         def message_stream() -> Iterator[Any]:
             conversations = reader.get_conversations(limit=200)
             for conv in conversations:
-                messages = reader.get_messages(conv.chat_id, limit=500)
-                if time_range_start:
-                    messages = [m for m in messages if m.date >= time_range_start]
-                yield from messages
+                yield from reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
 
         all_messages = list(message_stream())
         csv_exports = report_gen.export_to_csv(all_messages)
@@ -530,9 +520,7 @@ def fetch_export_data(
         contact_msgs: dict[str, list[Any]] = defaultdict(list)
 
         for conv in conversations:
-            messages = reader.get_messages(conv.chat_id, limit=500)
-            if time_range_start:
-                messages = [m for m in messages if m.date >= time_range_start]
+            messages = reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
             all_msgs.extend(messages)
             contact_msgs[conv.chat_id].extend(messages)
 

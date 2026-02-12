@@ -44,6 +44,9 @@ _CLASSIFICATION_CACHE_MAX_SIZE = 500
 
 logger = logging.getLogger(__name__)
 
+# Pre-compiled pattern for display name tokenization
+_NAME_SPLIT_RE = re.compile(r"[\s\-_]+")
+
 
 # =============================================================================
 # Helper Functions
@@ -534,16 +537,25 @@ class RelationshipClassifier:
 
                 # Get 1:1 chats: phone numbers/emails that aren't group chats
                 # Group chats have identifiers starting with "chat" and multiple handles
+                # Uses CTEs instead of correlated subqueries to avoid per-row scans
                 query = """
+                    WITH handle_counts AS (
+                        SELECT chat_id, COUNT(*) as cnt
+                        FROM chat_handle_join
+                        GROUP BY chat_id
+                    ),
+                    msg_counts AS (
+                        SELECT chat_id, COUNT(*) as cnt
+                        FROM chat_message_join
+                        GROUP BY chat_id
+                    )
                     SELECT
                         c.chat_identifier,
                         c.display_name,
-                        (SELECT COUNT(*) FROM chat_handle_join WHERE chat_id = c.ROWID)
-                            as handle_count,
-                        (SELECT COUNT(*) FROM chat_message_join WHERE chat_id = c.ROWID)
-                            as msg_count
+                        COALESCE(mc.cnt, 0) as msg_count
                     FROM chat c
-                    WHERE handle_count = 1
+                    JOIN handle_counts hc ON hc.chat_id = c.ROWID AND hc.cnt = 1
+                    LEFT JOIN msg_counts mc ON mc.chat_id = c.ROWID
                     ORDER BY msg_count DESC
                 """
 
@@ -795,7 +807,7 @@ class RelationshipClassifier:
             return bonuses
 
         name_lower = display_name.lower()
-        name_tokens = set(re.split(r"[\s\-_]+", name_lower))
+        name_tokens = set(_NAME_SPLIT_RE.split(name_lower))
 
         for category, keywords in self._DISPLAY_NAME_SIGNALS.items():
             for kw in keywords:
@@ -911,16 +923,7 @@ class RelationshipClassifier:
             List of ClassificationResult objects.
         """
         chats = self._get_non_group_chats()[:limit]
-        results = []
-
-        for chat_id, display_name in chats:
-            result = self.classify_contact(chat_id, display_name)
-            if result.confidence >= min_confidence:
-                results.append(result)
-
-        # Sort by confidence
-        results.sort(key=lambda r: r.confidence, reverse=True)
-        return results
+        return self.classify_contacts_batch(chats, min_confidence=min_confidence)
 
     def classify_contacts_batch(
         self,

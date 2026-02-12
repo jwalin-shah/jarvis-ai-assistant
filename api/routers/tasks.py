@@ -352,14 +352,20 @@ def list_tasks(
     status_filter = TaskStatus(status.value) if status else None
     type_filter = TaskType(task_type.value) if task_type else None
 
-    tasks = queue.get_all(status=status_filter, task_type=type_filter, limit=limit)
-
-    # Get counts
+    # Single fetch for both counts and filtered results
     all_tasks = queue.get_all()
     pending = sum(1 for t in all_tasks if t.status == TaskStatus.PENDING)
     running = sum(1 for t in all_tasks if t.status == TaskStatus.RUNNING)
     completed = sum(1 for t in all_tasks if t.status == TaskStatus.COMPLETED)
     failed = sum(1 for t in all_tasks if t.status == TaskStatus.FAILED)
+
+    tasks = all_tasks
+    if status_filter is not None:
+        tasks = [t for t in tasks if t.status == status_filter]
+    if type_filter is not None:
+        tasks = [t for t in tasks if t.task_type == type_filter]
+    if limit is not None:
+        tasks = tasks[:limit]
 
     return TaskListResponse(
         tasks=[_task_to_response(t) for t in tasks],

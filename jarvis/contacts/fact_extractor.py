@@ -91,6 +91,22 @@ PREFERENCE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Quality filter patterns (pre-compiled for hot-path usage)
+_VAGUE_PRONOUN_RE = re.compile(r"^(it|that|this|them|there)\s+(in|at|on|for|to)")
+_INCOMPLETE_INFINITIVE_RE = re.compile(
+    r"^to\s+\w+\s+(this|that|these|those|me|you|him|her|it)$",
+)
+_BARE_PREPOSITION_RE = re.compile(
+    r"^(in|at|on)\s+(august|spring|summer|winter|night|day|morning|afternoon)$",
+)
+_CAMELCASE_RE = re.compile(r"[a-z]{2,}[A-Z][a-z]+")
+_TRAILING_WORD_PATTERNS = [
+    re.compile(
+        r"\s+(and|but|or|because|when|if|since|unless|while|though|although)$", re.IGNORECASE,
+    ),
+    re.compile(r"\s+(is|are|was|were|be|been)$", re.IGNORECASE),
+]
+
 # Sentiment words for preference extraction
 POSITIVE_PREF = {"love", "loves", "loved", "obsessed", "addicted", "favorite"}
 NEGATIVE_PREF = {"hate", "hates", "hated", "can't stand", "allergic"}
@@ -414,7 +430,7 @@ class FactExtractor:
 
         # Pronoun + preposition (fragment pattern)
         # "it in August" is bad, "cilantro in my food" is good
-        if re.match(r"^(it|that|this|them|there)\s+(in|at|on|for|to)", subject_lower):
+        if _VAGUE_PRONOUN_RE.match(subject_lower):
             return True
 
         return False
@@ -422,14 +438,11 @@ class FactExtractor:
     def _is_incomplete_phrase(self, subject_lower: str) -> bool:
         """Check if subject is an incomplete infinitive or bare prepositional phrase."""
         # Incomplete infinitive phrase (to + verb + object cutoff)
-        if re.match(r"^to\s+\w+\s+(this|that|these|those|me|you|him|her|it)$", subject_lower):
+        if _INCOMPLETE_INFINITIVE_RE.match(subject_lower):
             return True
 
         # Bare time/location prepositions (nothing before the preposition)
-        if re.match(
-            r"^(in|at|on)\s+(august|spring|summer|winter|night|day|morning|afternoon)$",
-            subject_lower,
-        ):
+        if _BARE_PREPOSITION_RE.match(subject_lower):
             return True
 
         return False
@@ -448,7 +461,7 @@ class FactExtractor:
                 return True
 
         # Malformed: word spacing issues (e.g., "ofmetal" instead of "of metal")
-        if re.search(r"[a-z]{2,}[A-Z][a-z]+", subject):
+        if _CAMELCASE_RE.search(subject):
             return True
 
         # Must have at least 2 characters and contain a letter
@@ -645,12 +658,8 @@ class FactExtractor:
         subject = subject.strip()
 
         # Remove trailing prepositions and conjunctions
-        trailing_words = [
-            r"\s+(and|but|or|because|when|if|since|unless|while|though|although)$",
-            r"\s+(is|are|was|were|be|been)$",
-        ]
-        for pattern in trailing_words:
-            subject = re.sub(pattern, "", subject, flags=re.IGNORECASE)
+        for pattern in _TRAILING_WORD_PATTERNS:
+            subject = pattern.sub("", subject)
 
         # Remove trailing whitespace again
         return subject.strip()
