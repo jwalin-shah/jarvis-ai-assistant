@@ -616,11 +616,15 @@ def extract_facts_llm(
         raise ValueError(f"Unknown strategy: {strategy}")
 
 
-def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
+def _rule_based_boost(spans: list[dict], message_text: str, *, llm_found_facts: bool = True) -> list[dict]:
     """Add entities the LLM commonly misses using pattern matching.
 
     Only adds spans not already present in the LLM output.
     Focuses on high-precision patterns to avoid adding FPs.
+
+    Args:
+        llm_found_facts: If False, skip family boost (the LLM thought
+            this message had no facts, so "my dad" is likely transient).
     """
     msg_lower = message_text.lower()
     existing = {(s["span_text"].lower(), s["span_label"]) for s in spans}
@@ -631,10 +635,10 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
             spans.append({"span_text": text, "span_label": label, "fact_type": fact_type})
 
     # 1. Family member pattern: "my <family_word>" in message
-    # Always extract family members from "my <word>" pattern - these indicate
-    # the speaker HAS that family member. Skip only if the message is a
-    # known-transient pattern (reaction, very short logistics).
-    _skip_family = False
+    # Only boost family if the LLM also found at least one fact in this message.
+    # If the LLM found nothing, "my dad" is likely a transient mention (logistics,
+    # one-time events) and boosting creates false positives on near_miss messages.
+    _skip_family = not llm_found_facts
     # Skip iMessage reactions (already filtered in json_to_spans)
     if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
         _skip_family = True
@@ -744,7 +748,10 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
         )
 
     # Rule-based recall boost: catch entities the LLM commonly misses
-    spans = _rule_based_boost(spans, message_text)
+    # Gate family boost on whether the LLM found any facts - if not,
+    # "my dad/mom" is likely a transient mention (near_miss).
+    llm_found = len(spans) > 0
+    spans = _rule_based_boost(spans, message_text, llm_found_facts=llm_found)
     return spans
 
 
