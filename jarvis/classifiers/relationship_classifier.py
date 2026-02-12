@@ -534,16 +534,25 @@ class RelationshipClassifier:
 
                 # Get 1:1 chats: phone numbers/emails that aren't group chats
                 # Group chats have identifiers starting with "chat" and multiple handles
+                # Uses CTEs instead of correlated subqueries to avoid per-row scans
                 query = """
+                    WITH handle_counts AS (
+                        SELECT chat_id, COUNT(*) as cnt
+                        FROM chat_handle_join
+                        GROUP BY chat_id
+                    ),
+                    msg_counts AS (
+                        SELECT chat_id, COUNT(*) as cnt
+                        FROM chat_message_join
+                        GROUP BY chat_id
+                    )
                     SELECT
                         c.chat_identifier,
                         c.display_name,
-                        (SELECT COUNT(*) FROM chat_handle_join WHERE chat_id = c.ROWID)
-                            as handle_count,
-                        (SELECT COUNT(*) FROM chat_message_join WHERE chat_id = c.ROWID)
-                            as msg_count
+                        COALESCE(mc.cnt, 0) as msg_count
                     FROM chat c
-                    WHERE handle_count = 1
+                    JOIN handle_counts hc ON hc.chat_id = c.ROWID AND hc.cnt = 1
+                    LEFT JOIN msg_counts mc ON mc.chat_id = c.ROWID
                     ORDER BY msg_count DESC
                 """
 
