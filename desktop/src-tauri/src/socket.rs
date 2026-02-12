@@ -38,6 +38,8 @@ pub struct SocketState {
     connected: Arc<RwLock<bool>>,
     /// Reader task handle
     reader_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Message processor task handle
+    processor_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// Whether the writer is dead (marked after write failure)
     writer_dead: Arc<RwLock<bool>>,
 }
@@ -49,6 +51,7 @@ impl Default for SocketState {
             pending: Arc::new(RwLock::new(HashMap::new())),
             connected: Arc::new(RwLock::new(false)),
             reader_task: Arc::new(Mutex::new(None)),
+            processor_task: Arc::new(Mutex::new(None)),
             writer_dead: Arc::new(RwLock::new(false)),
         }
     }
@@ -265,6 +268,7 @@ async fn handle_message(
 pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), String> {
     // Clone Arc references
     let reader_task_arc = state.reader_task.clone();
+    let processor_task_arc = state.processor_task.clone();
     let writer_arc = state.writer.clone();
     let pending_arc = state.pending.clone();
     let connected_arc = state.connected.clone();
@@ -273,6 +277,14 @@ pub async fn disconnect_socket(state: State<'_, SocketState>) -> Result<(), Stri
     // Cancel reader task
     {
         let mut task = reader_task_arc.lock().await;
+        if let Some(handle) = task.take() {
+            handle.abort();
+        }
+    }
+
+    // Cancel message processor task
+    {
+        let mut task = processor_task_arc.lock().await;
         if let Some(handle) = task.take() {
             handle.abort();
         }
@@ -596,11 +608,20 @@ async fn connect_socket_internal(
     let connected_arc = state.connected.clone();
     let pending_arc = state.pending.clone();
     let reader_task_arc = state.reader_task.clone();
+    let processor_task_arc = state.processor_task.clone();
     let writer_dead_arc = state.writer_dead.clone();
 
     // Abort any existing reader task to prevent stale readers
     {
         let mut task = reader_task_arc.lock().await;
+        if let Some(handle) = task.take() {
+            handle.abort();
+        }
+    }
+
+    // Abort any existing processor task
+    {
+        let mut task = processor_task_arc.lock().await;
         if let Some(handle) = task.take() {
             handle.abort();
         }
@@ -719,7 +740,7 @@ async fn connect_socket_internal(
     // Spawn message processor task
     let pending_for_processor = pending_arc.clone();
     let app_for_processor = app.clone();
-    tokio::spawn(async move {
+    let processor_handle = tokio::spawn(async move {
         while let Some(msg) = msg_rx.recv().await {
             handle_message(msg, &pending_for_processor, &app_for_processor).await;
         }
@@ -729,6 +750,12 @@ async fn connect_socket_internal(
     {
         let mut task = reader_task_arc.lock().await;
         *task = Some(reader_handle);
+    }
+
+    // Store processor task handle
+    {
+        let mut task = processor_task_arc.lock().await;
+        *task = Some(processor_handle);
     }
 
     // Emit connected event
