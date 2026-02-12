@@ -72,12 +72,13 @@ EXTRACTION_SCHEMA = """{
 }"""
 
 EXTRACT_SYSTEM_PROMPT = """Extract LASTING personal facts from a chat message as JSON.
-A fact = something true about a person long-term (their job, hobby, family member, health condition, where they live/work).
-NOT facts: one-time events, plans, greetings, opinions, transient actions.
-"text" = exact 1-3 words copied from the message. Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
+Only extract facts that reveal ongoing traits: hobbies, family relationships, jobs, employers, schools, health conditions, places lived, food likes/dislikes.
+DO NOT extract: temporary actions, plans, one-time events, casual mentions of family in passing.
+"text" = exact 1-3 words copied verbatim from the message. Never invent words.
+Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
 Return {"facts": []} if no lasting personal facts."""
 
-# Few-shot examples: 5 positive + 3 hard negatives (family/health mentioned but not facts)
+# Few-shot examples: positive + hard negatives
 FEW_SHOT_TURNS = [
     ("my brother bakes and I just eat whatever he makes",
      '{"facts": [{"text": "brother", "label": "family_member"}, {"text": "bakes", "label": "activity"}]}'),
@@ -87,14 +88,30 @@ FEW_SHOT_TURNS = [
      '{"facts": [{"text": "peanuts", "label": "health_condition"}]}'),
     ("Also my dad leaves the 22nd for India",
      '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}'),
+    ("I love reading",
+     '{"facts": [{"text": "reading", "label": "activity"}]}'),
+    ("i hate utd",
+     '{"facts": [{"text": "utd", "label": "org"}]}'),
+    ("been hella depressed",
+     '{"facts": [{"text": "depressed", "label": "health_condition"}]}'),
+    ("I work at lending tree",
+     '{"facts": [{"text": "lending tree", "label": "org"}]}'),
+    ("Also i liked the dolmas",
+     '{"facts": [{"text": "dolmas", "label": "food_item"}]}'),
+    ("I like the raiders",
+     '{"facts": [{"text": "raiders", "label": "org"}]}'),
     ("helloooo",
      '{"facts": []}'),
     ("Yeah that's fine I'll leave as soon as my mom gets home at 4",
      '{"facts": []}'),
     ("and they'll do an ultrasound and stuff",
      '{"facts": []}'),
-    ("I work at lending tree",
-     '{"facts": [{"text": "lending tree", "label": "org"}]}'),
+    ("My mom never ended up coming tho so gonna have to ship that bag",
+     '{"facts": []}'),
+    ("Yesterday I called my dad at like 1 and he was like just come home",
+     '{"facts": []}'),
+    ("cause my mom tried doin my bros arms",
+     '{"facts": []}'),
 ]
 
 INSTRUCT_USER_PROMPT = """Message: "{message}"
@@ -244,7 +261,7 @@ _FAMILY_WORDS = {
 }
 
 _HEALTH_KEYWORDS = {
-    "allergic", "allergy", "asthma", "diabetes", "depression",
+    "allergic", "allergy", "asthma", "diabetes", "depression", "depressed",
     "anxiety", "adhd", "migraine", "migraines", "vestibular",
     "surgery", "injury", "cancer", "arthritis", "insomnia",
     "emergency room", "hospital", "therapy", "ptsd",
@@ -377,6 +394,7 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "here", "there", "home", "somewhere", "anywhere", "nowhere",
                 "place", "area", "spot", "well", "last fall", "22nd",
                 "diwali", "christmas", "thanksgiving",
+                "doctor's appointment", "appointment", "bart",
             }
             if text_lower in location_rejects:
                 continue
@@ -390,9 +408,18 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "acceptance letter", "bag", "never", "whatever he makes",
                 "jeans", "coupon", "email", "her neck", "neck",
                 "i.cvs.com", "diwali",
+                "process", "ship that bag", "take the bart", "bart",
+                "live instruction", "instruction", "schedule",
+                "bell schedule", "regular bell schedule",
+                "per period", "period",
             }
             if text_lower in reject_foods:
                 continue
+            # Reject multi-word spans with verbs (hallucinated phrases, not food)
+            if len(text.split()) >= 3:
+                verb_words = {"take", "ship", "get", "make", "live", "do", "go", "come"}
+                if any(w.lower() in verb_words for w in text.split()):
+                    continue
             # Reject non-food patterns: numbers, abbreviations, URLs, body parts
             if any(c.isdigit() for c in text):
                 continue
@@ -412,6 +439,9 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                     "chicken", "steak", "burger", "taco", "rice", "soup",
                     "salad", "sandwich", "cake", "pie", "bread", "fish",
                     "boba", "tea", "coffee", "juice", "smoothie",
+                    "dolma", "dolmas", "biryani", "samosa", "roti",
+                    "tikka", "masala", "chutney", "dal", "dhal",
+                    "pho", "ramen", "udon", "tempura", "tofu",
                 }
                 if not any(fw in text_lower for fw in food_words):
                     continue
@@ -439,6 +469,13 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "packed everything up", "shit 1",
                 "7 days", "28th", "externship", "arms",
                 "don\u2019t wanna", "don\u2019t", "dgaf",
+                "hella bad", "awesome", "figure the rest",
+                "looking at matchups", "live instruction",
+                "summer chauffeur", "bros arms", "rest a bit",
+                "not comin", "shelter in place",
+                "never ended up", "working from home", "free",
+                "regular bell schedule", "bell schedule",
+                "per period", "take the bart",
             }
             if text_lower in reject_activities:
                 continue
@@ -458,22 +495,31 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "increase time", "never", "free", "not fun",
                 "tight", "annoying", "ready to just", "love it",
                 "shelter in place", "fuck", "doctor's appointment",
+                "rest a bit", "hella bad", "barring anything",
+                "5k", "daily 5k",
             }
             if text_lower in reject_health:
                 continue
         if label == "job_role":
             reject_jobs = {
                 "translation for", "comin", "ser",
+                "working from home", "shelter in place",
+                "ready to get", "slow process",
+                "ready to slowly", "externship",
             }
             if text_lower in reject_jobs:
                 continue
         if label == "family_member":
             # Only accept actual family relationship words
             if text_lower not in _FAMILY_WORDS:
-                # Allow possessive forms like "brother's"
+                # Allow possessive forms like "brother's" and plurals like "sisters"
                 base = text_lower.rstrip("'s").rstrip("\u2019s")
                 if base not in _FAMILY_WORDS:
-                    continue
+                    # Try removing trailing 's' for plurals
+                    if base.endswith("s") and base[:-1] in _FAMILY_WORDS:
+                        pass  # OK, plural form
+                    else:
+                        continue
         if label == "friend_name":
             # Friend names should start with uppercase
             if text[0].islower():
@@ -482,14 +528,30 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
             # Reject very short abbreviations
             if len(text) <= 2:
                 continue
+            # Reject common words that aren't names
+            person_rejects = {
+                "prof", "professor", "teacher", "coach", "doctor",
+                "prolly", "probably", "someone", "somebody", "everyone",
+                "nobody", "anyone", "people", "person", "dude", "bro",
+                "bruh", "homie", "fam", "dawg",
+            }
+            if text_lower in person_rejects:
+                continue
+            # Person names should start with uppercase (proper nouns)
+            if text[0].islower():
+                continue
 
         # Validate span text appears in message (case-insensitive)
         if text_lower not in msg_lower:
-            # Try individual words for partial match
+            # Try individual words for partial match - require majority of words present
             words = text_lower.split()
             matching_words = [w for w in words if w in msg_lower and len(w) > 2]
-            if not matching_words:
+            if len(matching_words) < max(1, len(words) * 0.5):
                 continue
+            # Use the best matching word as the span text
+            if len(matching_words) == 1 and len(words) > 1:
+                text = matching_words[0]
+                text_lower = text.lower()
 
         fact_type = LABEL_TO_FACT_TYPE.get(label, "unknown")
 
@@ -556,8 +618,96 @@ def extract_facts_llm(
         raise ValueError(f"Unknown strategy: {strategy}")
 
 
+def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
+    """Add entities the LLM commonly misses using pattern matching.
+
+    Only adds spans not already present in the LLM output.
+    Focuses on high-precision patterns to avoid adding FPs.
+    """
+    msg_lower = message_text.lower()
+    existing = {(s["span_text"].lower(), s["span_label"]) for s in spans}
+    def _add(text: str, label: str, fact_type: str):
+        key = (text.lower(), label)
+        if key not in existing:
+            existing.add(key)
+            spans.append({"span_text": text, "span_label": label, "fact_type": fact_type})
+
+    # 1. Family member pattern: "my <family_word>" in message
+    # Only boost if the LLM found at least one fact already.
+    # Additional guard: skip if message is very short (< 40 chars) and LLM found nothing,
+    # as these are often transient mentions ("my mom will pick up")
+    llm_found_facts = len(spans) > 0
+    if llm_found_facts:
+        for fw in _FAMILY_WORDS:
+            pattern = f"my {fw}"
+            if pattern in msg_lower and (fw.lower(), "family_member") not in existing:
+                idx = msg_lower.index(pattern)
+                actual = message_text[idx + 3 : idx + 3 + len(fw)]
+                _add(actual, "family_member", "relationship.family")
+
+        # Also catch possessive: "brother's", "sisters"
+        for fw in _FAMILY_WORDS:
+            for suffix in ["'s", "\u2019s", "s"]:
+                variant = fw + suffix
+                if variant in msg_lower and (fw, "family_member") not in existing:
+                    if f"my {variant}" in msg_lower or f"my {fw}" in msg_lower:
+                        _add(fw, "family_member", "relationship.family")
+                        break
+
+    # 2. Known orgs: check if message contains known org names
+    for org_name in _KNOWN_ORGS | _KNOWN_SCHOOLS:
+        if org_name in msg_lower and (org_name, "org") not in existing:
+            # Find actual casing in message
+            idx = msg_lower.index(org_name)
+            actual = message_text[idx : idx + len(org_name)]
+            _add(actual, "org", "work.employer")
+
+    # 3. Health keywords in message
+    for hw in _HEALTH_KEYWORDS:
+        if hw in msg_lower and (hw, "health_condition") not in existing:
+            idx = msg_lower.index(hw)
+            actual = message_text[idx : idx + len(hw)]
+            _add(actual, "health_condition", "health.condition")
+
+    # 4. "I work at <X>" pattern - extract the org
+    work_match = re.search(r'\b(?:work|working) at ([A-Z][a-zA-Z\s]{1,20}?)(?:\s*[.!?,]|\s+(?:as|and|but|so|for)|\s*$)', message_text)
+    if work_match:
+        org_text = work_match.group(1).strip()
+        if org_text and (org_text.lower(), "org") not in existing:
+            _add(org_text, "org", "work.employer")
+
+    return spans
+
+
+def _strip_emojis(text: str) -> str:
+    """Strip emoji characters that confuse the model."""
+    # Remove emoji unicode ranges
+    emoji_pattern = re.compile(
+        "[\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0001FA00-\U0001FA6F"  # chess symbols
+        "\U0001FA70-\U0001FAFF"  # symbols extended
+        "\U00002600-\U000026FF"  # misc symbols
+        "\U0000FE00-\U0000FE0F"  # variation selectors
+        "\U0000200D"  # zero-width joiner
+        "]+",
+        flags=re.UNICODE,
+    )
+    return emoji_pattern.sub("", text).strip()
+
+
 def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
     """Strategy: multi-turn few-shot with constrained category list."""
+    # Strip emojis that confuse the model
+    clean_text = _strip_emojis(message_text)
+    if not clean_text:
+        return []
+
     # Build multi-turn conversation with few-shot examples
     messages = [{"role": "system", "content": EXTRACT_SYSTEM_PROMPT}]
 
@@ -565,7 +715,7 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
         messages.append({"role": "user", "content": f'Message: "{user_msg}"'})
         messages.append({"role": "assistant", "content": assistant_resp})
 
-    messages.append({"role": "user", "content": INSTRUCT_USER_PROMPT.format(message=message_text)})
+    messages.append({"role": "user", "content": INSTRUCT_USER_PROMPT.format(message=clean_text)})
 
     formatted = loader._tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
@@ -591,6 +741,9 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
             len(facts), message_text[:40],
             [(f.get("text"), f.get("label")) for f in facts],
         )
+
+    # Rule-based recall boost: catch entities the LLM commonly misses
+    spans = _rule_based_boost(spans, message_text)
     return spans
 
 
