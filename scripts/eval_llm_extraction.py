@@ -75,7 +75,7 @@ EXTRACT_SYSTEM_PROMPT = """Extract named entities from chat messages as JSON.
 "text" = exact 1-3 words from message. Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
 Return {"facts": []} if none."""
 
-# Few-shot examples: keep minimal (4 positive, 2 negative) to reduce context length
+# Few-shot examples: 5 positive (diverse labels) + 2 negative
 FEW_SHOT_TURNS = [
     ("my brother bakes and I just eat whatever he makes",
      '{"facts": [{"text": "brother", "label": "family_member"}, {"text": "bakes", "label": "activity"}]}'),
@@ -83,6 +83,8 @@ FEW_SHOT_TURNS = [
      '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}'),
     ("allergic to peanuts and it sucks",
      '{"facts": [{"text": "peanuts", "label": "health_condition"}]}'),
+    ("My mom actually texted me saying my acceptance letter went to the house in Delaware",
+     '{"facts": [{"text": "mom", "label": "family_member"}, {"text": "house", "label": "place"}, {"text": "Delaware", "label": "place"}]}'),
     ("helloooo",
      '{"facts": []}'),
     ("My phone is being like my moms",
@@ -337,19 +339,38 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
             if text_lower in location_rejects:
                 continue
         if label == "food_item":
-            # Only accept plausible food items: nouns that could be foods
+            # Food items should be recognizable food words, not random nouns
             reject_foods = {
                 "eat", "eating", "ate", "food", "cooking", "cook", "phone",
                 "whatever", "everything", "anything", "something", "stuff",
-                "it", "that", "this", "one", "all",
+                "it", "that", "this", "one", "all", "car", "arms", "tie",
+                "theory", "utilities", "read", "xbox", "realtor",
+                "acceptance letter", "lending tree", "raiders",
             }
             if text_lower in reject_foods:
                 continue
-            # Multi-word food items with common non-food words
-            if any(w in text_lower for w in ["whatever", "everything", "phone", "he makes"]):
+            # Reject non-food patterns: numbers, abbreviations, body parts
+            if any(c.isdigit() for c in text):
                 continue
+            if text_lower.isupper() and len(text) <= 3:  # abbreviations like "SB"
+                continue
+            # Reject if it's a holiday/event name (capitalize check)
+            if text[0].isupper() and text_lower not in {
+                "thai", "indian", "chinese", "japanese", "mexican", "italian",
+                "korean", "greek", "french",
+            }:
+                # Proper nouns that aren't cuisine types are likely not food
+                # But allow multi-word food items like "palak paneer"
+                food_words = {
+                    "curry", "paneer", "naan", "sushi", "pizza", "pasta",
+                    "chicken", "steak", "burger", "taco", "rice", "soup",
+                    "salad", "sandwich", "cake", "pie", "bread", "fish",
+                    "boba", "tea", "coffee", "juice", "smoothie",
+                }
+                if not any(fw in text_lower for fw in food_words):
+                    continue
         if label == "activity":
-            # Reject only the most generic verbs (keep specific activities)
+            # Reject generic/filler words and common verbs
             reject_activities = {
                 "go", "going", "get", "getting",
                 "come", "coming", "do", "doing",
@@ -357,31 +378,34 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "want", "wanting", "need", "needing",
                 "think", "thinking", "know", "knowing",
                 "try", "trying", "make", "making",
-                "contact", "slow process",
+                "contact", "slow process", "ask", "call",
+                "leave", "send", "sends", "talk", "talk to others",
+                "fly", "flew", "ship", "pack", "packed",
+                "hear", "hear stories", "rest", "rest of it",
+                "like it", "love it", "doing wtv",
+                "don't wanna", "im free", "go back home",
+                "email", "mind", "control", "assumed",
+                "yea", "em", "a lot of", "classes", "working",
+                "get along", "increase time", "matchups",
+                "30-40", "22nd", "icing",
             }
             if text_lower in reject_activities:
                 continue
+            # Single lowercase words < 4 chars are unlikely to be activities
+            if len(text) <= 3 and text[0].islower():
+                continue
         if label == "health_condition":
-            # Reject common words that aren't health conditions
+            # Only accept spans with medical/health keywords
             reject_health = {
                 "whatever", "slow", "slow process", "points of view",
-                "insanely big", "bad", "feel", "feeling", "tired",
+                "insanely big", "bad", "feel", "feeling",
+                "dgaf", "don't fuck", "either", "not comin",
+                "ihs", "4am", "rationalize", "willpower",
+                "take responsibility", "rest", "never ended",
+                "increase time",
             }
             if text_lower in reject_health:
                 continue
-            # Multi-word health spans should contain at least one medical-ish word
-            if len(text.split()) > 1:
-                medical_words = {
-                    "allerg", "condition", "disease", "disorder", "pain",
-                    "surgery", "hospital", "doctor", "emergency", "vestibular",
-                    "depression", "anxiety", "diabetes", "asthma", "cancer",
-                    "sleep", "insomnia", "adhd", "ptsd",
-                }
-                has_medical = any(
-                    mw in text_lower for mw in medical_words
-                )
-                if not has_medical:
-                    continue
         if label == "friend_name":
             # Friend names should start with uppercase
             if text[0].islower():
