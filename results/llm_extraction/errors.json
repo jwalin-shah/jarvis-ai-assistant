@@ -25,30 +25,6 @@
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0070",
-    "slice": "positive",
-    "message_text": "I like product management atm so I\u2019m trying to get more PM experiences in as of now",
-    "gold_span": "python",
-    "gold_label": "activity"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0070",
-    "slice": "positive",
-    "message_text": "I like product management atm so I\u2019m trying to get more PM experiences in as of now",
-    "gold_span": "SQL",
-    "gold_label": "activity"
-  },
-  {
-    "type": "fn",
-    "sample_id": "v1_fact_gs_0125",
-    "slice": "positive",
-    "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
-    "gold_span": "1 min walking 1 min run",
-    "gold_label": "activity"
-  },
-  {
-    "type": "fn",
     "sample_id": "v1_fact_gs_0125",
     "slice": "positive",
     "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
@@ -180,14 +156,6 @@
     "sample_id": "r2_fact_gs_0307",
     "slice": "positive",
     "message_text": "Yeah that's completely true that's just the hardest thing to do. What happened already happened now ",
-    "gold_span": "cardio and exercises",
-    "gold_label": "activity"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0307",
-    "slice": "positive",
-    "message_text": "Yeah that's completely true that's just the hardest thing to do. What happened already happened now ",
     "gold_span": "Dallas",
     "gold_label": "past_location"
   },
@@ -230,14 +198,6 @@
     "message_text": "That\u2019s difficult, there\u2019s not really anything I can say that can help because this is just a battle ",
     "gold_span": "Swadhyay",
     "gold_label": "activity"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0080",
-    "slice": "positive",
-    "message_text": "That\u2019s difficult, there\u2019s not really anything I can say that can help because this is just a battle ",
-    "gold_span": "swadhyay",
-    "gold_label": "org"
   },
   {
     "type": "fn",
@@ -304,6 +264,14 @@
     "gold_label": "org"
   },
   {
+    "type": "fp",
+    "sample_id": "r2_fact_gs_0144",
+    "slice": "positive",
+    "message_text": "Haha yea man, I used to work at a job where I could wake up later, but now definitely no longer the ",
+    "pred_span": "meditation",
+    "pred_label": "activity"
+  },
+  {
     "type": "fn",
     "sample_id": "v1_fact_gs_0171",
     "slice": "positive",
@@ -344,19 +312,11 @@
     "pred_label": "family_member"
   },
   {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0281",
-    "slice": "positive",
-    "message_text": "I'm doing aight just doing wtv I can but gonna try to rest a bit more. Def having more symptoms and ",
-    "gold_span": "depression",
-    "gold_label": "health_condition"
-  },
-  {
     "type": "fp",
     "sample_id": "r2_fact_gs_0157",
     "slice": "near_miss",
     "message_text": "cause my mom tried doin my bros arms",
-    "pred_span": "mom",
+    "pred_span": "bros",
     "pred_label": "family_member"
   },
   {
@@ -364,7 +324,7 @@
     "sample_id": "r2_fact_gs_0157",
     "slice": "near_miss",
     "message_text": "cause my mom tried doin my bros arms",
-    "pred_span": "bros",
+    "pred_span": "mom",
     "pred_label": "family_member"
   },
   {
@@ -396,6 +356,14 @@
     "sample_id": "r2_fact_gs_0258",
     "slice": "positive",
     "message_text": "I'm like an ok now. My dad made me pack up my Xbox and put it away until this shelter in place thing",
+    "pred_span": "daily 5k",
+    "pred_label": "health_condition"
+  },
+  {
+    "type": "fp",
+    "sample_id": "r2_fact_gs_0258",
+    "slice": "positive",
+    "message_text": "I'm like an ok now. My dad made me pack up my Xbox and put it away until this shelter in place thing",
     "pred_span": "dad",
     "pred_label": "family_member"
   },
@@ -414,14 +382,6 @@
     "message_text": "And my dad and cousin who literally work at Facebook and Intuit",
     "gold_span": "my dad",
     "gold_label": "family_member"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0372",
-    "slice": "positive",
-    "message_text": "im in delaware most of th summer chauffeur for my brother on his externship for culinary school",
-    "gold_span": "CrossFit",
-    "gold_label": "activity"
   },
   {
     "type": "fn",
@@ -449,22 +409,6 @@
   },
   {
     "type": "fn",
-    "sample_id": "r2_fact_gs_0242",
-    "slice": "positive",
-    "message_text": "Yea if some controlled medication helps with the depression and that is what is being suggested to y",
-    "gold_span": "meditate",
-    "gold_label": "activity"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0242",
-    "slice": "positive",
-    "message_text": "Yea if some controlled medication helps with the depression and that is what is being suggested to y",
-    "gold_span": "Karya",
-    "gold_label": "org"
-  },
-  {
-    "type": "fn",
     "sample_id": "r2_fact_gs_0015",
     "slice": "positive",
     "message_text": "But my mom comes back from india like the 28th",
@@ -478,14 +422,6 @@
     "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip ",
     "gold_span": "SER",
     "gold_label": "health_condition"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0085",
-    "slice": "positive",
-    "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip ",
-    "pred_span": "CVS",
-    "pred_label": "org"
   },
   {
     "type": "fp",
@@ -526,14 +462,6 @@
     "message_text": "Oh nice! SB would be awesome too, I like it there",
     "gold_span": "SB",
     "gold_label": "place"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0152",
-    "slice": "positive",
-    "message_text": "Oh nice! SB would be awesome too, I like it there",
-    "gold_span": "SB",
-    "gold_label": "org"
   },
   {
     "type": "fp",

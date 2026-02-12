@@ -268,13 +268,14 @@ _HEALTH_KEYWORDS = {
 _KNOWN_ORGS = {
     "facebook", "google", "intuit", "apple", "amazon", "microsoft",
     "netflix", "uber", "lyft", "airbnb", "twitter", "meta",
-    "lending tree", "lendingtree", "cvs", "walmart", "target",
+    "lending tree", "lendingtree", "walmart", "target",
     "starbucks", "chipotle", "costco",
+    "ihs", "karya", "swadhyay",
 }
 
 _KNOWN_SCHOOLS = {
     "utd", "ucd", "ucla", "usc", "sjsu", "stanford", "berkeley",
-    "culinary school", "community college",
+    "culinary school", "community college", "sb",
 }
 
 
@@ -478,7 +479,9 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
             if text_lower in reject_activities:
                 continue
             # Reject spans with numbers (dates, times, not activities)
-            if any(c.isdigit() for c in text):
+            # Allow known activity patterns like "5k" (running distance)
+            _activity_with_digits = {"5k", "10k", "half marathon"}
+            if any(c.isdigit() for c in text) and text_lower not in _activity_with_digits:
                 continue
             # Single lowercase words < 4 chars are unlikely to be activities
             if len(text) <= 3 and text[0].islower():
@@ -494,7 +497,6 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "tight", "annoying", "ready to just", "love it",
                 "shelter in place", "fuck", "doctor's appointment",
                 "rest a bit", "hella bad", "barring anything",
-                "5k", "daily 5k",
             }
             if text_lower in reject_health:
                 continue
@@ -616,17 +618,18 @@ def extract_facts_llm(
         raise ValueError(f"Unknown strategy: {strategy}")
 
 
-def _rule_based_boost(spans: list[dict], message_text: str, *, llm_found_facts: bool = True) -> list[dict]:
+def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
     """Add entities the LLM commonly misses using pattern matching.
 
     Only adds spans not already present in the LLM output.
     Focuses on high-precision patterns to avoid adding FPs.
-
-    Args:
-        llm_found_facts: If False, skip family boost (the LLM thought
-            this message had no facts, so "my dad" is likely transient).
     """
     msg_lower = message_text.lower()
+
+    # Skip ALL boosts for iMessage reactions (Loved/Liked/Laughed at/etc.)
+    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
+        return spans
+
     existing = {(s["span_text"].lower(), s["span_label"]) for s in spans}
     def _add(text: str, label: str, fact_type: str):
         key = (text.lower(), label)
@@ -635,13 +638,10 @@ def _rule_based_boost(spans: list[dict], message_text: str, *, llm_found_facts: 
             spans.append({"span_text": text, "span_label": label, "fact_type": fact_type})
 
     # 1. Family member pattern: "my <family_word>" in message
-    # Only boost family if the LLM also found at least one fact in this message.
-    # If the LLM found nothing, "my dad" is likely a transient mention (logistics,
-    # one-time events) and boosting creates false positives on near_miss messages.
-    _skip_family = not llm_found_facts
-    # Skip iMessage reactions (already filtered in json_to_spans)
-    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
-        _skip_family = True
+    # Only boost when other (non-family) spans already exist, indicating the
+    # message has real facts. Otherwise "my dad" is likely a transient mention.
+    _has_nonfamily = any(s["span_label"] != "family_member" for s in spans)
+    _skip_family = not _has_nonfamily
     if not _skip_family:
         for fw in _FAMILY_WORDS:
             pattern = f"my {fw}"
@@ -680,6 +680,20 @@ def _rule_based_boost(spans: list[dict], message_text: str, *, llm_found_facts: 
         org_text = work_match.group(1).strip()
         if org_text and (org_text.lower(), "org") not in existing:
             _add(org_text, "org", "work.employer")
+
+    # 5. Known activity keywords (word-boundary, skip reactions)
+    if not _skip_family:  # reuse the reaction check
+        _known_activities = {
+            "meditate", "meditation", "yoga", "chess", "climbing",
+            "biking", "hiking", "swimming", "cooking",
+            "baking", "gaming", "coding", "exercises",
+        }
+        for act in _known_activities:
+            match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
+            if match and (act, "activity") not in existing:
+                idx = match.start()
+                actual = message_text[idx : idx + len(act)]
+                _add(actual, "activity", "preference.activity")
 
     return spans
 
@@ -726,9 +740,11 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
         messages, tokenize=False, add_generation_prompt=True
     )
 
+    # Scale max_tokens for long messages that may have many facts
+    _max_tok = 120 if len(clean_text) < 300 else 200
     result = loader.generate_sync(
         formatted,
-        max_tokens=120,
+        max_tokens=_max_tok,
         temperature=0.0,
         top_p=0.1,
         repetition_penalty=1.0,
@@ -748,10 +764,7 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
         )
 
     # Rule-based recall boost: catch entities the LLM commonly misses
-    # Gate family boost on whether the LLM found any facts - if not,
-    # "my dad/mom" is likely a transient mention (near_miss).
-    llm_found = len(spans) > 0
-    spans = _rule_based_boost(spans, message_text, llm_found_facts=llm_found)
+    spans = _rule_based_boost(spans, message_text)
     return spans
 
 
