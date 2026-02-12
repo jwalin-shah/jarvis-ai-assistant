@@ -1,10 +1,9 @@
 ## STATUS: IN_PROGRESS
 
 ## Current Best
-- **F1**: 0.641 (limit=100, goldset_v5.1_deduped)
-- **F1 (orig goldset)**: 0.526 (limit=100, candidate_gold_merged_r4)
-- **P**: 0.683, **R**: 0.603
-- **Strategy**: constrained_categories + rule-based recall boost + emoji stripping
+- **F1**: 0.566 (limit=100, candidate_gold_merged_r4)
+- **P**: 0.714, **R**: 0.469
+- **Strategy**: constrained_categories + rule-based boost + prompt refinement + FP filters
 - **Model**: lfm-1.2b (LFM2.5-1.2B-Instruct-MLX-4bit)
 
 ## Iteration Log
@@ -62,8 +61,47 @@
 ### FNs (27 total)
 - activity: 10, org: 5, place: 2, health_condition: 2, past_location: 2, others: 6
 
+### Iteration 7 - Prompt Refinement + FP Filters + Few-Shot Tuning
+- **F1**: 0.566 (P=0.714, R=0.469) on orig goldset
+- **Limit**: 100
+- **Changes**:
+  1. **System prompt**: "LASTING personal facts" + "DO NOT extract temporary actions/plans"
+  2. **Few-shot rebalance**: Added positive family example ("My mom texted me" -> mom), dolmas food, raiders org; reduced hard negative family examples from 3 to 2
+  3. **Rule-based family boost gating**: Always boost "my <family_word>" (not gated on LLM output)
+  4. **person_name FP filter**: Reject lowercase, common words (prof, prolly, dude)
+  5. **activity FP filter**: Added "hella bad", "figure the rest", etc.
+  6. **health_condition FP filter**: Added "rest a bit", "5k", "barring anything"
+  7. **job_role FP filter**: Added "working from home", "shelter in place", "ready to get"
+  8. **food_item vocabulary**: Added dolmas, biryani, samosa, roti, pho, ramen, etc.
+  9. **Span validation tightened**: Require majority of multi-word spans found in message
+- **Key Results**:
+  - TP: 33->45 (+12), FP: 29->18 (-11), FN: 63->51 (-12)
+  - health_condition: P=1.000, F1=0.750 (was 0.471)
+  - employer: F1=1.000 (perfect)
+  - current_location: F1=1.000 (perfect)
+  - family_member: F1=0.603 (was 0.526)
+  - Positive slice: P=0.900, R=0.469, F1=0.616
+  - Near_miss FP: 12 (all family_member from rule boost)
+- **Result**: IMPROVED (0.418 -> 0.566, +35%)
+
+## Error Analysis (Iteration 7)
+
+### FPs (18 total)
+- near_miss family_member: 12 (rule-based boost on transient messages)
+- positive: 5 (1 activity, 1 health, 1 org, 1 family, 1 job)
+- random_negative: 1 (family_member from "my moms")
+
+### FNs (51 total)
+- activity: 18 (largest gap - model misses many hobbies)
+- family_member: 10 (duplicate gold "my dad" vs "dad" entries)
+- org: 7 (model misses orgs like IHS, SB, Karya, swadhyay)
+- place: 6 (model rarely extracts places)
+- health_condition: 4
+- Others: 6
+
 ## Next Steps
-1. Reduce near_miss FPs (13/19 FPs are transient family mentions)
-2. Expand known_orgs for missed orgs
-3. Activity recall: rule-based "I like/love/hate X" patterns
-4. Context injection for transient vs lasting distinction
+1. **Activity recall**: Rule-based "I like/love/hate/enjoy X" extraction
+2. **Org recall**: Add more known orgs (IHS, SB, Karya) and "I hate X" -> org pattern
+3. **Near_miss FP reduction**: Only boost family if message has fact-bearing signals
+4. **Context injection**: Include prev/next messages to help distinguish lasting vs transient
+5. **Temperature experiment**: Try 0.1-0.3 for more diverse extraction

@@ -1,38 +1,30 @@
 {
-  "gold_path": "training_data/gliner_goldset/goldset_v5.1_deduped.json",
+  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r4.json",
   "num_records": 100,
   "limit": 100,
   "strategy": "constrained_categories",
   "model": "lfm-1.2b",
-  "num_predictions": 34,
-  "extraction_time_s": 526.24,
-  "ms_per_message": 5262.4,
+  "num_predictions": 63,
+  "extraction_time_s": 300.38,
+  "ms_per_message": 3003.8,
   "overall": {
-    "precision": 0.8824,
-    "recall": 0.4412,
-    "f1": 0.5882,
-    "tp": 30,
-    "fp": 4,
-    "fn": 38
+    "precision": 0.7143,
+    "recall": 0.4688,
+    "f1": 0.566,
+    "tp": 45,
+    "fp": 18,
+    "fn": 51
   },
   "per_label": {
     "activity": {
-      "precision": 1.0,
-      "recall": 0.375,
-      "f1": 0.5455,
+      "precision": 0.75,
+      "recall": 0.25,
+      "f1": 0.375,
       "tp": 6,
-      "fp": 0,
-      "fn": 10
+      "fp": 2,
+      "fn": 18
     },
     "current_location": {
-      "precision": 1.0,
-      "recall": 0.5,
-      "f1": 0.6667,
-      "tp": 1,
-      "fp": 0,
-      "fn": 1
-    },
-    "employer": {
       "precision": 1.0,
       "recall": 1.0,
       "f1": 1.0,
@@ -40,13 +32,21 @@
       "fp": 0,
       "fn": 0
     },
+    "employer": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 4,
+      "fp": 0,
+      "fn": 0
+    },
     "family_member": {
-      "precision": 0.875,
-      "recall": 0.3889,
-      "f1": 0.5385,
-      "tp": 7,
-      "fp": 1,
-      "fn": 11
+      "precision": 0.5588,
+      "recall": 0.6552,
+      "f1": 0.6032,
+      "tp": 19,
+      "fp": 15,
+      "fn": 10
     },
     "food_item": {
       "precision": 1.0,
@@ -73,36 +73,36 @@
       "fn": 1
     },
     "health_condition": {
-      "precision": 0.8571,
-      "recall": 0.75,
-      "f1": 0.8,
+      "precision": 1.0,
+      "recall": 0.6,
+      "f1": 0.75,
       "tp": 6,
-      "fp": 1,
-      "fn": 2
+      "fp": 0,
+      "fn": 4
     },
     "job_role": {
-      "precision": 0.5,
+      "precision": 1.0,
       "recall": 0.5,
-      "f1": 0.5,
+      "f1": 0.6667,
       "tp": 1,
-      "fp": 1,
+      "fp": 0,
       "fn": 1
     },
     "org": {
-      "precision": 0.8,
-      "recall": 0.4444,
-      "f1": 0.5714,
-      "tp": 4,
+      "precision": 0.6667,
+      "recall": 0.2222,
+      "f1": 0.3333,
+      "tp": 2,
       "fp": 1,
-      "fn": 5
+      "fn": 7
     },
     "past_location": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.6667,
+      "tp": 1,
       "fp": 0,
-      "fn": 2
+      "fn": 1
     },
     "person_name": {
       "precision": 0.0,
@@ -113,12 +113,12 @@
       "fn": 1
     },
     "place": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.1429,
+      "f1": 0.25,
+      "tp": 1,
       "fp": 0,
-      "fn": 2
+      "fn": 6
     }
   },
   "per_slice": {
@@ -127,16 +127,24 @@
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 1,
+      "fp": 12,
       "fn": 0
     },
     "positive": {
-      "precision": 0.9091,
-      "recall": 0.4412,
-      "f1": 0.5941,
-      "tp": 30,
-      "fp": 3,
-      "fn": 38
+      "precision": 0.9,
+      "recall": 0.4688,
+      "f1": 0.6164,
+      "tp": 45,
+      "fp": 5,
+      "fn": 51
+    },
+    "random_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
+      "fn": 0
     }
   }
 }
