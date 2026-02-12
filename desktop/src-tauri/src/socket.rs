@@ -448,7 +448,8 @@ pub async fn send_batch(
 
         let request_json = match serde_json::to_string(&request) {
             Ok(json) => json,
-            Err(_e) => {
+            Err(e) => {
+                eprintln!("[Socket] Failed to serialize batch request '{}': {}", req.method, e);
                 let mut pending = pending_arc.write().await;
                 pending.remove(&id);
                 receivers.push(None);
@@ -465,7 +466,8 @@ pub async fn send_batch(
                     Ok::<(), std::io::Error>(())
                 }.await;
 
-                if let Err(_e) = result {
+                if let Err(e) = result {
+                    eprintln!("[Socket] Batch write failed: {} (writer marked dead)", e);
                     let mut writer_dead = writer_dead_arc.write().await;
                     *writer_dead = true;
                     let mut pending = pending_arc.write().await;
@@ -493,7 +495,8 @@ pub async fn send_batch(
         if !is_dead {
             let mut writer_guard = writer_arc.lock().await;
             if let Some(writer) = writer_guard.as_mut() {
-                if let Err(_e) = writer.flush().await {
+                if let Err(e) = writer.flush().await {
+                    eprintln!("[Socket] Batch flush failed: {} (writer marked dead)", e);
                     let mut writer_dead = writer_dead_arc.write().await;
                     *writer_dead = true;
                 }
