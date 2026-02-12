@@ -356,7 +356,7 @@
     "sample_id": "r2_fact_gs_0157",
     "slice": "near_miss",
     "message_text": "cause my mom tried doin my bros arms",
-    "pred_span": "bros",
+    "pred_span": "mom",
     "pred_label": "family_member"
   },
   {
@@ -364,7 +364,7 @@
     "sample_id": "r2_fact_gs_0157",
     "slice": "near_miss",
     "message_text": "cause my mom tried doin my bros arms",
-    "pred_span": "mom",
+    "pred_span": "bros",
     "pred_label": "family_member"
   },
   {
