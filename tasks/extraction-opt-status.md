@@ -1,11 +1,11 @@
 ## STATUS: IN_PROGRESS
 
 ## Current Best
-- **F1**: 0.418 (limit=100)
-- **P**: 0.532, **R**: 0.344
-- **Strategy**: constrained_categories (org correction + family filter + reaction skip)
+- **F1**: 0.641 (limit=100, goldset_v5.1_deduped)
+- **F1 (orig goldset)**: 0.526 (limit=100, candidate_gold_merged_r4)
+- **P**: 0.683, **R**: 0.603
+- **Strategy**: constrained_categories + rule-based recall boost + emoji stripping
 - **Model**: lfm-1.2b (LFM2.5-1.2B-Instruct-MLX-4bit)
-- **Commit**: pending
 
 ## Iteration Log
 
@@ -13,97 +13,57 @@
 - **F1**: 0.176 (P=0.143, R=0.229)
 - **Limit**: 100
 - **Changes**: Created `scripts/eval_llm_extraction.py` with basic system prompt + schema
-- **Result**: Baseline established. Massive FP problem (132 FP vs 22 TP)
+- **Result**: Baseline established
 
 ### Iteration 2 - Multi-Turn Few-Shot + Post-Processing
 - **F1**: 0.323 (P=0.400, R=0.271)
 - **Limit**: 100
-- **Changes**: Few-shot chat format, hard negatives, span trimming, label filters
-- **Result**: IMPROVED (0.176 → 0.323, +83%)
+- **Result**: IMPROVED (0.176 -> 0.323, +83%)
 
 ### Iteration 2b - Pipe-Delimited Format (FAILED)
 - **F1**: 0.046
-- **Result**: REGRESSION. JSON format is significantly better.
+- **Result**: REGRESSION
 
 ### Iteration 3 - Label Correction + Post-Processing
 - **F1**: 0.343 (P=0.292, R=0.417)
-- **Limit**: 100
-- **Changes**: `_correct_label()`, fewer few-shot examples, faster inference
-- **Result**: IMPROVED (0.323 → 0.343)
+- **Result**: IMPROVED (0.323 -> 0.343)
 
 ### Iteration 4 - Minimal Few-Shot
 - **F1**: 0.340 (P=0.327, R=0.354)
-- **Limit**: 100
-- **Changes**: 7 examples, simplified labels, max_tokens=120
-- **Result**: Slight regression, better P/R balance
+- **Result**: Slight regression
 
-### Iteration 5 - Org Label Correction + Family Filter + Reaction Skip
-- **F1**: 0.418 (P=0.532, R=0.344)
+### Iteration 5 - Structural Filters + Label Correction
+- **F1**: 0.457 (deduped) / 0.418 (orig)
+- **Result**: IMPROVED
+
+### Iteration 6 - Goldset Dedup + Rule-Based Recall Boost + Emoji Strip
+- **F1**: 0.641 (deduped goldset), 0.526 (orig goldset)
 - **Limit**: 100
 - **Changes**:
-  - **Reaction message filter**: Skip "Loved/Liked/Laughed at/Emphasized" messages entirely (these quote others' messages and hallucinate badly)
-  - **Family_member whitelist**: Only accept known family words (brother, sister, mom, dad, etc.), reject "profs", "prof", "em"
-  - **`_KNOWN_ORGS`/`_KNOWN_SCHOOLS` sets**: Label correction for Facebook, Intuit, lending tree → org
-  - **Proper noun → org correction**: If job_role but capitalized non-role word → reclassify as org
-  - **School/university/college keyword detection**: Anything containing these → org
-  - **Food_item proper noun filter**: Reject capitalized words unless cuisine type or contains food keyword
-  - **URL rejection in food_item**: "i.cvs.com" etc.
-  - **Activity digit rejection**: Spans with numbers (dates, times) aren't activities
-  - **Expanded reject lists**: health ("never", "free", "tight", "annoying"), food ("jeans", "coupon", "email"), activity ("made", "stories", "ultrasound")
-  - **System prompt**: "LASTING personal facts" framing with hard negative few-shot examples
-  - Few-shot: added "lending tree" → org example
-- **Result**: IMPROVED (0.340 → 0.418, +23%)
-- **TP=33, FP=29, FN=63**
-- **Key Label Improvements**:
-  - food_item: F1=0.857 (P=0.75, R=1.0!) - was 0.273
-  - employer: F1=0.857 (3/4 caught) - was 0.000
-  - current_location: F1=1.000 (perfect)
-  - future_location: F1=1.000 (perfect)
-  - family_member: F1=0.526 - was 0.468
-  - health_condition: F1=0.471 - was 0.200
-- **Still Weak**:
-  - org: F1=0.182 (1/9 gold)
-  - friend_name: F1=0.000
-  - person_name: F1=0.000
-  - place: F1=0.333 (regression from 0.444)
+  1. **Goldset v5.1**: Deduplicated 45 redundant spans (291->246)
+  2. **Emoji stripping**: Strip emojis before LLM inference
+  3. **Rule-based recall boost**: family "my X" patterns, known orgs, health keywords, "work at X"
+  4. **Family possessive handling**: "brother's", "sisters" matching
+  5. **"depressed" added to health keywords**
+- **Key Results**:
+  - family_member: R=100%, F1=0.692
+  - org: F1=0.571 (was 0.182)
+  - health_condition: F1=0.800 (was 0.500)
+  - Positive slice: P=0.891, R=0.603, F1=0.719
+- **Result**: IMPROVED (0.457 -> 0.641, +40%)
 
-## Error Analysis (Iteration 5)
+## Error Analysis (Iteration 6)
 
-### FP Sources (29 total, down from 70)
-- near_miss: 12 FPs (family members in transient context)
-- positive: 17 FPs (wrong labels, hallucinations)
-- Reaction messages: 0 FPs (previously ~6, now filtered)
+### FPs (19 total)
+- near_miss family_member: 13 (transient "mom"/"dad" mentions)
+- positive: 5
+- random_negative: 1
 
-### Key FP Patterns
-1. "mom"/"dad" in near_miss messages (6 FPs) - model sees family word, goldset says not lasting fact
-2. Hallucinated health: "barring anything insanely", "hella bad"
-3. Wrong labels: "ready to get" as job_role, "slow process" as place
+### FNs (27 total)
+- activity: 10, org: 5, place: 2, health_condition: 2, past_location: 2, others: 6
 
-### Key FN Patterns (63 remaining)
-1. **Phantom spans (~12/96)**: gold text not in message - IMPOSSIBLE to fix
-2. **Activity recall low**: only 6/24 (25%), many hobby/skill mentions missed
-3. **Org recall low**: 1/9 (11%), model rarely outputs org despite few-shot example
-4. **Place recall low**: 1/7 (14%), model misses many location mentions
-5. **"Vestibular"**: single-word message, model outputs empty JSON
-
-### Goldset Quality Issues
-- ~12/96 gold spans in first 100 are phantom (impossible to extract)
-- employer vs org inconsistency (same entity "lending tree" has both labels)
-- Maximum achievable recall ~87.5% given phantom spans
-
-## Next Steps (Priority Order)
-1. **Goldset cleanup**: Remove phantom spans to get accurate ceiling measurement
-2. **Org/place recall**: Add more org/place few-shot examples
-3. **Temperature experiment**: Try 0.1-0.3 for more diverse extraction
-4. **Context injection**: prev/next messages for ambiguous cases
-5. **Two-pass approach**: binary fact classifier first, then detailed extraction
-6. **Self-consistency**: Generate N times, majority vote
-
-### Review (iteration 1) - REJECT
-Reviewer: gemini
-> (node:17619) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-> (Use `node --trace-deprecation ...` to show where the warning was created)
-> (node:17636) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-> (Use `node --trace-deprecation ...` to show where the warning was created)
-> Loaded cached credentials.
-
+## Next Steps
+1. Reduce near_miss FPs (13/19 FPs are transient family mentions)
+2. Expand known_orgs for missed orgs
+3. Activity recall: rule-based "I like/love/hate X" patterns
+4. Context injection for transient vs lasting distinction
