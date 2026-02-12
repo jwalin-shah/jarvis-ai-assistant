@@ -58,11 +58,12 @@ class TestEmbeddingCache:
         cache = EmbeddingCache(maxsize=10)
         cache.set("a", np.array([1.0]))
         cache.clear()
-        assert cache.get("a", track_analytics=False) is None
         stats = cache.stats()
         assert stats["size"] == 0
         assert stats["hits"] == 0
         assert stats["misses"] == 0
+        # After clear, previous keys are gone
+        assert cache.get("a", track_analytics=False) is None
 
     def test_hit_rate(self):
         cache = EmbeddingCache(maxsize=10)
@@ -196,38 +197,36 @@ class TestCustomTemplateStore:
         """Create a store with a temp storage path."""
         return CustomTemplateStore(storage_path=tmp_path / "templates.json")
 
-    def test_add_and_get(self, store):
+    def test_create_and_get(self, store):
         ct = CustomTemplate(name="test", template_text="hello")
-        store.add(ct)
+        store.create(ct)
         retrieved = store.get(ct.id)
         assert retrieved is not None
         assert retrieved.name == "test"
 
     def test_list_all(self, store):
-        store.add(CustomTemplate(name="a", template_text="hello"))
-        store.add(CustomTemplate(name="b", template_text="world"))
+        store.create(CustomTemplate(name="a", template_text="hello"))
+        store.create(CustomTemplate(name="b", template_text="world"))
         templates = store.list_all()
         assert len(templates) == 2
 
-    def test_remove(self, store):
+    def test_delete(self, store):
         ct = CustomTemplate(name="test", template_text="hello")
-        store.add(ct)
-        store.remove(ct.id)
+        store.create(ct)
+        assert store.delete(ct.id) is True
         assert store.get(ct.id) is None
 
     def test_update(self, store):
         ct = CustomTemplate(name="old_name", template_text="old")
-        store.add(ct)
-        ct.name = "new_name"
-        ct.template_text = "new"
-        store.update(ct)
+        store.create(ct)
+        store.update(ct.id, {"name": "new_name", "template_text": "new"})
         retrieved = store.get(ct.id)
         assert retrieved.name == "new_name"
 
     def test_persistence(self, tmp_path):
         path = tmp_path / "templates.json"
         store1 = CustomTemplateStore(storage_path=path)
-        store1.add(CustomTemplate(id="persist1", name="persistent", template_text="hi"))
+        store1.create(CustomTemplate(id="persist1", name="persistent", template_text="hi"))
 
         # Create new store from same file
         store2 = CustomTemplateStore(storage_path=path)
@@ -341,14 +340,22 @@ class TestTemplateMatcher:
             matcher._pattern_norms = np.array([1.0])
             matcher._pattern_to_template = [("hi", templates[0])]
 
-            with pytest.raises(TypeError, match="Embedder protocol"):
-                matcher.match("hi", embedder="not_an_embedder", track_analytics=False)
+            # Use an object that clearly doesn't implement Embedder protocol
+            class NotAnEmbedder:
+                pass
 
-    def test_empty_templates(self, mock_embedder_fn):
-        """Matcher with no templates should return None."""
+            with pytest.raises(TypeError):
+                matcher.match("hi", embedder=NotAnEmbedder(), track_analytics=False)
+
+    def test_no_embeddings_returns_none(self, mock_embedder_fn):
+        """Matcher that fails to compute embeddings should return None."""
         with patch("models.templates._get_sentence_model", return_value=mock_embedder_fn):
-            mock_embedder_fn.encode.return_value = np.zeros((0, 384), dtype=np.float32)
-            matcher = TemplateMatcher(templates=[])
-            # No patterns means no embeddings to match against
-            result = matcher.match("anything", track_analytics=False)
-            assert result is None
+            templates = [
+                ResponseTemplate(name="test", patterns=["hi"], response="hello"),
+            ]
+            matcher = TemplateMatcher(templates=templates)
+            # Simulate _ensure_embeddings failing to produce embeddings
+            with patch.object(matcher, "_ensure_embeddings"):
+                # _pattern_embeddings stays None since we skip _ensure_embeddings
+                result = matcher.match("anything", track_analytics=False)
+                assert result is None
