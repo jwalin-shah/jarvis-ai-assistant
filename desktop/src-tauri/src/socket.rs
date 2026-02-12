@@ -426,18 +426,12 @@ pub async fn send_batch(
 
     check_connection(&connected_arc, &writer_dead_arc).await?;
 
-    // Phase 1: Write all requests and collect response receivers
+    // Phase 1a: Serialize all requests and register pending receivers (no lock needed)
+    let mut prepared = Vec::with_capacity(requests.len());
     let mut receivers = Vec::with_capacity(requests.len());
 
     for req in &requests {
         let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
-        let (tx, rx) = mpsc::channel(1);
-
-        // Register pending request
-        {
-            let mut pending = pending_arc.write().await;
-            pending.insert(id, PendingRequest { response_tx: tx });
-        }
 
         let request = JsonRpcRequest {
             jsonrpc: "2.0",
@@ -446,61 +440,74 @@ pub async fn send_batch(
             id,
         };
 
-        let request_json = match serde_json::to_string(&request) {
-            Ok(json) => json,
+        match serde_json::to_string(&request) {
+            Ok(json) => {
+                let (tx, rx) = mpsc::channel(1);
+                {
+                    let mut pending = pending_arc.write().await;
+                    pending.insert(id, PendingRequest { response_tx: tx });
+                }
+                prepared.push(Some((id, json)));
+                receivers.push(Some((id, rx)));
+            }
             Err(e) => {
                 eprintln!("[Socket] Failed to serialize batch request '{}': {}", req.method, e);
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
+                prepared.push(None);
                 receivers.push(None);
-                continue;
-            }
-        };
-
-        {
-            let mut writer_guard = writer_arc.lock().await;
-            if let Some(writer) = writer_guard.as_mut() {
-                let result = async {
-                    writer.write_all(request_json.as_bytes()).await?;
-                    writer.write_all(b"\n").await?;
-                    Ok::<(), std::io::Error>(())
-                }.await;
-
-                if let Err(e) = result {
-                    eprintln!("[Socket] Batch write failed: {} (writer marked dead)", e);
-                    let mut writer_dead = writer_dead_arc.write().await;
-                    *writer_dead = true;
-                    let mut pending = pending_arc.write().await;
-                    pending.remove(&id);
-                    receivers.push(None);
-                    for _ in (receivers.len())..requests.len() {
-                        receivers.push(None);
-                    }
-                    break;
-                }
-            } else {
-                let mut pending = pending_arc.write().await;
-                pending.remove(&id);
-                receivers.push(None);
-                continue;
             }
         }
-
-        receivers.push(Some((id, rx)));
     }
 
-    // Flush all written requests in a single syscall
+    // Phase 1b: Hold writer lock once for all writes + flush (prevents interleaving)
     {
-        let is_dead = *writer_dead_arc.read().await;
-        if !is_dead {
-            let mut writer_guard = writer_arc.lock().await;
-            if let Some(writer) = writer_guard.as_mut() {
+        let mut writer_guard = writer_arc.lock().await;
+        if let Some(writer) = writer_guard.as_mut() {
+            for (i, item) in prepared.iter().enumerate() {
+                if let Some((_id, json)) = item {
+                    let result = async {
+                        writer.write_all(json.as_bytes()).await?;
+                        writer.write_all(b"\n").await?;
+                        Ok::<(), std::io::Error>(())
+                    }.await;
+
+                    if let Err(e) = result {
+                        eprintln!("[Socket] Batch write failed: {} (writer marked dead)", e);
+                        let mut writer_dead = writer_dead_arc.write().await;
+                        *writer_dead = true;
+                        // Clean up pending for this and all remaining requests
+                        let mut pending = pending_arc.write().await;
+                        for item in prepared.iter().skip(i) {
+                            if let Some((id, _)) = item {
+                                pending.remove(id);
+                            }
+                        }
+                        // Mark remaining receivers as failed
+                        for receiver in receivers.iter_mut().skip(i) {
+                            *receiver = None;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Flush all written requests
+            let is_dead = *writer_dead_arc.read().await;
+            if !is_dead {
                 if let Err(e) = writer.flush().await {
                     eprintln!("[Socket] Batch flush failed: {} (writer marked dead)", e);
                     let mut writer_dead = writer_dead_arc.write().await;
                     *writer_dead = true;
                 }
             }
+        } else {
+            // Writer not available - fail all pending requests
+            let mut pending = pending_arc.write().await;
+            for item in &prepared {
+                if let Some((id, _)) = item {
+                    pending.remove(id);
+                }
+            }
+            receivers.iter_mut().for_each(|r| *r = None);
         }
     }
 
