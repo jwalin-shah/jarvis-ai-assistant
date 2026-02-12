@@ -32,6 +32,14 @@
     "gold_label": "activity"
   },
   {
+    "type": "fp",
+    "sample_id": "r2_fact_gs_0144",
+    "slice": "positive",
+    "message_text": "Haha yea man, I used to work at a job where I could wake up later, but now definitely no longer the ",
+    "pred_span": "meditation",
+    "pred_label": "activity"
+  },
+  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0306",
     "slice": "positive",
