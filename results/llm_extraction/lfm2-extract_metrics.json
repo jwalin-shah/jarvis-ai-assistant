@@ -1,28 +1,28 @@
 {
-  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r4.json",
+  "gold_path": "training_data/gliner_goldset/goldset_v5_no_phantoms.json",
   "num_records": 100,
   "limit": 100,
   "strategy": "constrained_categories",
   "model": "lfm-1.2b",
-  "num_predictions": 63,
-  "extraction_time_s": 153.03,
-  "ms_per_message": 1530.3,
+  "num_predictions": 69,
+  "extraction_time_s": 408.47,
+  "ms_per_message": 4084.7,
   "overall": {
-    "precision": 0.7143,
-    "recall": 0.4688,
-    "f1": 0.566,
-    "tp": 45,
-    "fp": 18,
-    "fn": 51
+    "precision": 0.7246,
+    "recall": 0.5495,
+    "f1": 0.625,
+    "tp": 50,
+    "fp": 19,
+    "fn": 41
   },
   "per_label": {
     "activity": {
-      "precision": 0.75,
-      "recall": 0.25,
-      "f1": 0.375,
-      "tp": 6,
-      "fp": 2,
-      "fn": 18
+      "precision": 0.7273,
+      "recall": 0.4,
+      "f1": 0.5161,
+      "tp": 8,
+      "fp": 3,
+      "fn": 12
     },
     "current_location": {
       "precision": 1.0,
@@ -73,12 +73,12 @@
       "fn": 1
     },
     "health_condition": {
-      "precision": 1.0,
-      "recall": 0.6,
+      "precision": 0.8571,
+      "recall": 0.6667,
       "f1": 0.75,
       "tp": 6,
-      "fp": 0,
-      "fn": 4
+      "fp": 1,
+      "fn": 3
     },
     "job_role": {
       "precision": 1.0,
@@ -89,12 +89,12 @@
       "fn": 1
     },
     "org": {
-      "precision": 0.6667,
-      "recall": 0.2222,
-      "f1": 0.3333,
-      "tp": 2,
-      "fp": 1,
-      "fn": 7
+      "precision": 1.0,
+      "recall": 0.5556,
+      "f1": 0.7143,
+      "tp": 5,
+      "fp": 0,
+      "fn": 4
     },
     "past_location": {
       "precision": 1.0,
@@ -131,12 +131,12 @@
       "fn": 0
     },
     "positive": {
-      "precision": 0.9,
-      "recall": 0.4688,
-      "f1": 0.6164,
-      "tp": 45,
-      "fp": 5,
-      "fn": 51
+      "precision": 0.8929,
+      "recall": 0.5495,
+      "f1": 0.6803,
+      "tp": 50,
+      "fp": 6,
+      "fn": 41
     },
     "random_negative": {
       "precision": 0.0,
