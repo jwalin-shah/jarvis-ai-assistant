@@ -44,6 +44,51 @@ from jarvis.contracts.pipeline import (
     IntentType,
     UrgencyLevel,
 )
+from jarvis.nlp.patterns import (
+    GREETING_PATTERNS,
+    IMPERATIVE_VERBS_EXTENDED,
+    WH_WORDS,
+)
+
+
+@dataclass(frozen=True)
+class MobilizationConfig:
+    """Tunable thresholds for response mobilization classification.
+
+    Centralizes the most important magic numbers so they can be adjusted
+    without hunting through classification logic.
+    """
+
+    # Confidence for explicit question-mark + WH/aux questions
+    question_mark_wh_conf: float = 0.90
+    # Confidence for question-mark without WH/aux (confirmation-seeking)
+    question_mark_bare_conf: float = 0.75
+    # Confidence for rhetorical questions (downgraded)
+    rhetorical_conf: float = 0.80
+    # Confidence for requests and imperatives
+    request_conf: float = 0.95
+    # Confidence for backchannels and negated requests (closing)
+    backchannel_conf: float = 0.98
+    # Confidence for recipient-oriented commitment patterns
+    recipient_commitment_conf: float = 0.90
+    # Confidence for reactive / emotional content
+    reactive_conf: float = 0.85
+    # Confidence for greeting patterns
+    greeting_conf: float = 0.90
+    # Confidence for speaker-oriented / opinion / telling patterns
+    low_pressure_conf: float = 0.80
+    # Confidence for slang questions (wya, wyd, hbu)
+    slang_question_conf: float = 0.90
+    # Confidence for WH-word without question mark matching info pattern
+    wh_no_qmark_info_conf: float = 0.80
+    # Confidence for WH-word without question mark, no info pattern
+    wh_no_qmark_other_conf: float = 0.70
+    # Default fallback confidence
+    default_conf: float = 0.50
+
+
+# Module-level config instance; override for testing or tuning.
+MOBILIZATION_CONFIG = MobilizationConfig()
 
 
 class ResponsePressure(str, Enum):
@@ -149,8 +194,7 @@ class MobilizationResult:
 # Feature Detection Patterns
 # =============================================================================
 
-# Interrogative syntax: WH-words at start
-WH_WORDS = {"what", "where", "when", "who", "why", "how", "which", "whose"}
+# Interrogative syntax: WH-words at start (imported from jarvis.nlp.patterns)
 
 # Auxiliary verbs for subject-aux inversion (marks polar questions)
 AUX_VERBS = {
@@ -216,36 +260,8 @@ NEGATED_REQUEST_PATTERNS = [
     r"^(do not|don't|dont)\s+(text|call|ping|message|dm)\s+me\b",
 ]
 
-# Imperative verbs at start (commands/requests)
-IMPERATIVE_VERBS = {
-    "send",
-    "give",
-    "bring",
-    "take",
-    "get",
-    "grab",
-    "pick",
-    "call",
-    "text",
-    "email",
-    "check",
-    "look",
-    "help",
-    "come",
-    "go",
-    "tell",
-    "show",
-    "make",
-    "let",
-    "put",
-    "find",
-    "buy",
-    "read",
-    "watch",
-    "meet",
-    "try",
-    "open",
-}
+# Imperative verbs at start (imported from jarvis.nlp.patterns as IMPERATIVE_VERBS_EXTENDED)
+IMPERATIVE_VERBS = IMPERATIVE_VERBS_EXTENDED
 
 # === QUESTION PATTERNS (HIGH - ANSWER) ===
 # Direct information-seeking questions
@@ -403,10 +419,7 @@ BACKCHANNEL_PHRASES = {
 }
 
 # Greetings (NONE - or just return greeting)
-GREETING_PATTERNS = [
-    r"^(hey|hi|hello|yo|sup|hiya|howdy|what'?s up|wassup|whaddup)!*$",
-    r"^(good morning|good afternoon|good evening|good night|gm|gn)\b",
-]
+# GREETING_PATTERNS imported from jarvis.nlp.patterns
 
 # Pre-compiled pattern lists for _detect_features performance
 _COMPILED_SPEAKER_ORIENTED = [re.compile(p) for p in SPEAKER_ORIENTED_PATTERNS]
@@ -568,32 +581,50 @@ def _make_result(
 def _classify_question_mark(
     text_lower: str,
     features: dict[str, bool | int],
+    cfg: MobilizationConfig = MOBILIZATION_CONFIG,
 ) -> MobilizationResult:
     """Handle messages with explicit question mark."""
     if features["has_wh_word"] or features["has_aux_inversion"]:
         if features["is_rhetorical"]:
-            return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.80, features)
-        return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.90, features)
-    return _make_result(ResponsePressure.HIGH, ResponseType.CONFIRMATION, 0.75, features)
+            return _make_result(
+                ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.rhetorical_conf, features,
+            )
+        return _make_result(
+            ResponsePressure.HIGH, ResponseType.ANSWER, cfg.question_mark_wh_conf, features,
+        )
+    return _make_result(
+        ResponsePressure.HIGH, ResponseType.CONFIRMATION, cfg.question_mark_bare_conf, features,
+    )
 
 
 def _classify_recipient_oriented(
     text_lower: str,
     features: dict[str, bool | int],
+    cfg: MobilizationConfig = MOBILIZATION_CONFIG,
 ) -> MobilizationResult:
     """Handle recipient-oriented questions."""
     if re.match(r"^(are|is) (you|u|ya) (coming|going|in|down|free|busy|available)\b", text_lower):
-        return _make_result(ResponsePressure.HIGH, ResponseType.COMMITMENT, 0.90, features)
-    return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.90, features)
+        return _make_result(
+            ResponsePressure.HIGH, ResponseType.COMMITMENT,
+            cfg.recipient_commitment_conf, features,
+        )
+    return _make_result(
+        ResponsePressure.HIGH, ResponseType.ANSWER,
+        cfg.recipient_commitment_conf, features,
+    )
 
 
-def classify_response_pressure(text: str) -> MobilizationResult:
+def classify_response_pressure(
+    text: str,
+    cfg: MobilizationConfig = MOBILIZATION_CONFIG,
+) -> MobilizationResult:
     """Classify message by response pressure using linguistic features.
 
     Based on Stivers & Rossano (2010) response mobilization framework.
 
     Args:
         text: Message text (ideally after slang expansion)
+        cfg: Optional config override for thresholds.
 
     Returns:
         MobilizationResult with pressure level and appropriate response type
@@ -611,52 +642,79 @@ def classify_response_pressure(text: str) -> MobilizationResult:
     features = _detect_features(text, text_lower)
 
     if features["is_negated_request"] or features["is_backchannel"]:
-        return _make_result(ResponsePressure.NONE, ResponseType.CLOSING, 0.98, features)
+        return _make_result(
+            ResponsePressure.NONE, ResponseType.CLOSING, cfg.backchannel_conf, features,
+        )
 
     if features["is_greeting"]:
-        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.90, features)
+        return _make_result(
+            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.greeting_conf, features,
+        )
 
     if features["is_request"] or features["is_imperative"]:
-        return _make_result(ResponsePressure.HIGH, ResponseType.COMMITMENT, 0.95, features)
+        return _make_result(
+            ResponsePressure.HIGH, ResponseType.COMMITMENT, cfg.request_conf, features,
+        )
 
     if features["is_slang_question"]:
-        return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.90, features)
+        return _make_result(
+            ResponsePressure.HIGH, ResponseType.ANSWER, cfg.slang_question_conf, features,
+        )
 
     if features["is_recipient_oriented"]:
-        return _classify_recipient_oriented(text_lower, features)
+        return _classify_recipient_oriented(text_lower, features, cfg)
 
     if features["has_question_mark"]:
-        return _classify_question_mark(text_lower, features)
+        return _classify_question_mark(text_lower, features, cfg)
 
     if features["is_speaker_oriented"]:
-        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.90, features)
+        return _make_result(
+            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.greeting_conf, features,
+        )
 
     if features["is_rhetorical"]:
-        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.85, features)
+        return _make_result(
+            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.reactive_conf, features,
+        )
 
     if features["is_reactive"] or features["has_multiple_exclamation"]:
-        return _make_result(ResponsePressure.MEDIUM, ResponseType.EMOTIONAL, 0.85, features)
+        return _make_result(
+            ResponsePressure.MEDIUM, ResponseType.EMOTIONAL, cfg.reactive_conf, features,
+        )
 
     if features["is_opinion"]:
-        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.80, features)
+        return _make_result(
+            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.low_pressure_conf, features,
+        )
 
     if features["is_telling"]:
-        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.80, features)
+        return _make_result(
+            ResponsePressure.LOW, ResponseType.OPTIONAL, cfg.low_pressure_conf, features,
+        )
 
     # WH-word without ? - depends on pattern
     if features["has_wh_word"] and not features["has_question_mark"]:
         if _matches_info_question(text_lower):
-            return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.80, features)
-        return _make_result(ResponsePressure.LOW, ResponseType.OPTIONAL, 0.70, features)
+            return _make_result(
+                ResponsePressure.HIGH, ResponseType.ANSWER,
+                cfg.wh_no_qmark_info_conf, features,
+            )
+        return _make_result(
+            ResponsePressure.LOW, ResponseType.OPTIONAL,
+            cfg.wh_no_qmark_other_conf, features,
+        )
 
     # Short-form direct questions without WH-word
     if _matches_info_question(text_lower):
-        return _make_result(ResponsePressure.HIGH, ResponseType.ANSWER, 0.80, features)
+        return _make_result(
+            ResponsePressure.HIGH, ResponseType.ANSWER,
+            cfg.wh_no_qmark_info_conf, features,
+        )
 
     return _make_result(
         ResponsePressure.LOW,
         ResponseType.OPTIONAL,
-        0.50,
+        cfg.default_conf,
         features,
         method="default",
     )
@@ -779,6 +837,8 @@ def get_valid_response_options(result: MobilizationResult) -> list[ResponseOptio
 
 
 __all__ = [
+    "MobilizationConfig",
+    "MOBILIZATION_CONFIG",
     "ResponsePressure",
     "ResponseType",
     "MobilizationResult",

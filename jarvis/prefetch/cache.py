@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -425,8 +426,7 @@ class L2Cache:
                 tags_json,
             ),
         )
-
-        # Insert tag index entries
+        # Update tag junction table
         if entry.tags:
             conn.executemany(
                 "INSERT OR IGNORE INTO cache_tags (tag, cache_key) VALUES (?, ?)",
@@ -585,6 +585,10 @@ class L3Cache:
         # Dirty flag for batched metadata writes
         self._metadata_dirty = False
         self._last_flush: float = time.time()
+        # Tag -> keys index for O(1) tag invalidation (mirrors L1Cache pattern)
+        self._tag_index: dict[str, set[str]] = self._build_tag_index()
+        # Only flush access metadata every N reads to reduce I/O
+        self._ACCESS_UPDATE_INTERVAL = 10
 
     def _load_metadata(self) -> dict[str, dict]:
         """Load metadata from disk."""
@@ -596,14 +600,30 @@ class L3Cache:
         return {}
 
     def _build_tag_index(self) -> dict[str, set[str]]:
-        """Build tag index from metadata."""
+        """Build tag -> keys index from existing metadata."""
         index: dict[str, set[str]] = {}
         for key, meta in self._metadata.items():
             for tag in meta.get("tags", []):
-                if tag not in index:
-                    index[tag] = set()
-                index[tag].add(key)
+                index.setdefault(tag, set()).add(key)
         return index
+
+    def _add_to_tag_index(self, key: str, tags: list[str]) -> None:
+        """Add a key to the tag index."""
+        for tag in tags:
+            self._tag_index.setdefault(tag, set()).add(key)
+
+    def _remove_from_tag_index(self, key: str) -> None:
+        """Remove a key from the tag index."""
+        meta = self._metadata.get(key)
+        if not meta:
+            return
+        for tag in meta.get("tags", []):
+            tag_keys = self._tag_index.get(tag)
+            if tag_keys:
+                tag_keys.discard(key)
+                if not tag_keys:
+                    del self._tag_index[tag]
+
 
     def _mark_dirty(self) -> None:
         """Mark metadata as needing a flush."""
@@ -659,6 +679,7 @@ class L3Cache:
             file_path = self._key_to_path(key)
             if not file_path.exists():
                 self._total_bytes -= meta.get("size_bytes", 0)
+                self._remove_from_tag_index(key)
                 del self._metadata[key]
                 self._mark_dirty()
                 return None
@@ -687,10 +708,12 @@ class L3Cache:
                 tags=tags,
             )
 
-            # Update metadata (deferred write)
+            # Update access metadata in memory; only flush to disk periodically
             meta["accessed_at"] = time.time()
-            meta["access_count"] = meta.get("access_count", 0) + 1
-            self._mark_dirty()
+            count = meta.get("access_count", 0) + 1
+            meta["access_count"] = count
+            if count % self._ACCESS_UPDATE_INTERVAL == 0:
+                self._mark_dirty()
 
             entry.touch()
             return entry
@@ -723,35 +746,37 @@ class L3Cache:
                 logger.warning(f"Failed to write L3 cache entry {key}: {e}")
                 return
 
-            # Update running total and clean old tag index
+            # Update running total and metadata atomically (M7 fix)
             data_size = len(data)
-            if key in self._metadata:
-                self._total_bytes -= self._metadata[key].get("size_bytes", 0)
-                for old_tag in self._metadata[key].get("tags", []):
-                    if old_tag in self._tag_index:
-                        self._tag_index[old_tag].discard(key)
-                        if not self._tag_index[old_tag]:
-                            del self._tag_index[old_tag]
-            self._total_bytes += data_size
+            old_meta = self._metadata.get(key)
+            old_total = self._total_bytes
+            try:
+                if old_meta:
+                    self._total_bytes -= old_meta.get("size_bytes", 0)
+                    self._remove_from_tag_index(key)
+                self._total_bytes += data_size
 
-            # Update tag index for new tags
-            for tag in entry.tags:
-                if tag not in self._tag_index:
-                    self._tag_index[tag] = set()
-                self._tag_index[tag].add(key)
-
-            # Update metadata
-            self._metadata[key] = {
-                "created_at": entry.created_at,
-                "accessed_at": entry.accessed_at,
-                "ttl_seconds": entry.ttl_seconds,
-                "access_count": entry.access_count,
-                "size_bytes": data_size,
-                "value_type": value_type,
-                "tags": entry.tags,
-            }
-            self._mark_dirty()
-            self._maybe_flush()
+                self._metadata[key] = {
+                    "created_at": entry.created_at,
+                    "accessed_at": entry.accessed_at,
+                    "ttl_seconds": entry.ttl_seconds,
+                    "access_count": entry.access_count,
+                    "size_bytes": data_size,
+                    "value_type": value_type,
+                    "tags": entry.tags,
+                }
+                self._add_to_tag_index(key, entry.tags)
+                self._mark_dirty()
+                self._maybe_flush()
+            except Exception:
+                # Rollback metadata on failure
+                self._total_bytes = old_total
+                if old_meta:
+                    self._metadata[key] = old_meta
+                elif key in self._metadata:
+                    del self._metadata[key]
+                file_path.unlink(missing_ok=True)
+                raise
 
     def remove(self, key: str) -> bool:
         """Remove entry from cache.
@@ -766,14 +791,9 @@ class L3Cache:
             if key not in self._metadata:
                 return False
 
-            # Update running total and tag index before deleting
-            meta = self._metadata[key]
-            self._total_bytes -= meta.get("size_bytes", 0)
-            for tag in meta.get("tags", []):
-                if tag in self._tag_index:
-                    self._tag_index[tag].discard(key)
-                    if not self._tag_index[tag]:
-                        del self._tag_index[tag]
+            # Update running total before deleting
+            self._total_bytes -= self._metadata[key].get("size_bytes", 0)
+            self._remove_from_tag_index(key)
 
             file_path = self._key_to_path(key)
             try:
@@ -788,10 +808,10 @@ class L3Cache:
     def remove_by_tag(self, tag: str) -> int:
         """Remove all entries with a specific tag using tag index (O(k) not O(n))."""
         with self._lock:
-            keys = list(self._tag_index.get(tag, set()))
-            for key in keys:
+            keys_to_remove = list(self._tag_index.get(tag, set()))
+            for key in keys_to_remove:
                 self.remove(key)
-            return len(keys)
+            return len(keys_to_remove)
 
     def clear(self) -> None:
         """Clear all entries."""
@@ -959,6 +979,11 @@ class MultiTierCache:
             removed |= self._l3.remove(key)
             return removed
 
+    @property
+    def _tiers(self) -> list[L1Cache | L2Cache | L3Cache]:
+        """All cache tiers in order (L1, L2, L3)."""
+        return [self._l1, self._l2, self._l3]
+
     def invalidate_by_tag(self, tag: str) -> int:
         """Invalidate all entries with a specific tag.
 
@@ -969,12 +994,7 @@ class MultiTierCache:
             Number of entries invalidated.
         """
         with self._lock:
-            # L1 uses tag index for O(k) invalidation
-            count = self._l1.remove_by_tag(tag)
-
-            count += self._l2.remove_by_tag(tag)
-            count += self._l3.remove_by_tag(tag)
-            return count
+            return sum(tier.remove_by_tag(tag) for tier in self._tiers)
 
     def invalidate_by_pattern(self, pattern: str) -> int:
         """Invalidate entries matching a key pattern.
@@ -987,22 +1007,11 @@ class MultiTierCache:
         """
         with self._lock:
             count = 0
-            # Check all tiers
-            for key in self._l1.keys():
-                if key.startswith(pattern):
-                    self._l1.remove(key)
-                    count += 1
-
-            for key in self._l2.keys():
-                if key.startswith(pattern):
-                    self._l2.remove(key)
-                    count += 1
-
-            for key in self._l3.keys():
-                if key.startswith(pattern):
-                    self._l3.remove(key)
-                    count += 1
-
+            for tier in self._tiers:
+                for key in tier.keys():
+                    if key.startswith(pattern):
+                        tier.remove(key)
+                        count += 1
             return count
 
     def clear(self) -> None:
@@ -1110,14 +1119,16 @@ class MultiTierCache:
             return len(value)
         elif isinstance(value, str):
             return len(value.encode())
-        elif isinstance(value, (dict, list)):
-            return len(json.dumps(value))
+        elif isinstance(value, dict):
+            # Approximate: key + value sizes without full JSON serialization
+            return sum(
+                self._estimate_size(k) + self._estimate_size(v)
+                for k, v in value.items()
+            )
+        elif isinstance(value, list):
+            return sum(self._estimate_size(item) for item in value)
         else:
-            # Rough estimate for other objects
-            try:
-                return len(json.dumps(str(value)).encode())
-            except (TypeError, ValueError):
-                return 1024  # Default estimate
+            return sys.getsizeof(value)
 
 
 from jarvis.utils.singleton import thread_safe_singleton

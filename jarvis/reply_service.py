@@ -11,7 +11,7 @@ import logging
 import random
 import threading
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -243,7 +243,7 @@ class ReplyService:
             chat_id=chat_id or "",
             message_text=normalized_incoming,
             is_from_me=False,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             metadata={
                 "thread": thread_messages,
             },
@@ -300,7 +300,10 @@ class ReplyService:
         contact: Contact | None = None,
         cached_embedder: CachedEmbedder | None = None,
     ) -> GenerationResponse:
-        """Generate a reply from contract types."""
+        """Generate a reply from contract types.
+
+        Orchestrates: validation -> template shortcut -> context search -> LLM gen -> metrics.
+        """
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
         log_event(
@@ -315,20 +318,10 @@ class ReplyService:
 
         incoming = context.message_text.strip()
         if not incoming or not incoming.strip():
-            return GenerationResponse(
-                response="I received an empty message. Could you tell me what you need?",
-                confidence=0.2,
-                metadata={"type": "clarify", "reason": "empty_message", "similarity_score": 0.0},
-            )
+            return self._empty_message_response()
 
         chat_id = context.chat_id or None
-        thread_messages = thread
-        if thread_messages is None:
-            metadata_thread = context.metadata.get("thread", [])
-            if isinstance(metadata_thread, list):
-                thread_messages = [msg for msg in metadata_thread if isinstance(msg, str)]
-            else:
-                thread_messages = []
+        thread_messages = self._resolve_thread(thread, context)
 
         category_name = str(
             classification.metadata.get("category_name", classification.category.value)
@@ -336,38 +329,11 @@ class ReplyService:
         category_config = get_category_config(category_name)
 
         if category_config.skip_slm:
-            if category_name == "closing":
-                template_response = random.choice(CLOSING_TEMPLATES)
-            else:
-                template_response = random.choice(ACKNOWLEDGE_TEMPLATES)
+            return self._template_response(category_name, routing_start)
 
-            log_event(
-                logger,
-                "reply.skip_slm",
-                category=category_name,
-                latency_ms=round((time.perf_counter() - routing_start) * 1000, 1),
-            )
-            return GenerationResponse(
-                response=template_response,
-                confidence=0.95,
-                metadata={
-                    "type": category_name,
-                    "reason": f"category={category_name}",
-                    "category": category_name,
-                    "similarity_score": 0.0,
-                    "vec_candidates": 0,
-                },
-            )
-
-        if search_results is None:
-            search_start = time.perf_counter()
-            search_results = self.context_service.search_examples(
-                incoming,
-                chat_id=chat_id,
-                contact_id=contact.id if contact else None,
-                embedder=cached_embedder,
-            )
-            latency_ms["context_search"] = (time.perf_counter() - search_start) * 1000
+        search_results, latency_ms = self._search_context(
+            search_results, incoming, chat_id, contact, cached_embedder, latency_ms,
+        )
 
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
@@ -383,6 +349,97 @@ class ReplyService:
                 },
             )
 
+        result, latency_ms = self._generate_response(
+            context, classification, search_results, contact, thread_messages,
+            cached_embedder, latency_ms,
+        )
+
+        latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+        self._log_and_record_metrics(
+            result, category_name, incoming, search_results,
+            latency_ms, cached_embedder,
+        )
+
+        return result
+
+    def _empty_message_response(self) -> GenerationResponse:
+        """Return a clarification response for empty messages."""
+        return GenerationResponse(
+            response="I received an empty message. Could you tell me what you need?",
+            confidence=0.2,
+            metadata={"type": "clarify", "reason": "empty_message", "similarity_score": 0.0},
+        )
+
+    def _resolve_thread(
+        self, thread: list[str] | None, context: MessageContext,
+    ) -> list[str]:
+        """Extract thread messages from explicit param or context metadata."""
+        if thread is not None:
+            return thread
+        metadata_thread = context.metadata.get("thread", [])
+        if isinstance(metadata_thread, list):
+            return [msg for msg in metadata_thread if isinstance(msg, str)]
+        return []
+
+    def _template_response(
+        self, category_name: str, routing_start: float,
+    ) -> GenerationResponse:
+        """Return a template response for categories that skip the SLM."""
+        if category_name == "closing":
+            template_response = random.choice(CLOSING_TEMPLATES)
+        else:
+            template_response = random.choice(ACKNOWLEDGE_TEMPLATES)
+
+        log_event(
+            logger,
+            "reply.skip_slm",
+            category=category_name,
+            latency_ms=round((time.perf_counter() - routing_start) * 1000, 1),
+        )
+        return GenerationResponse(
+            response=template_response,
+            confidence=0.95,
+            metadata={
+                "type": category_name,
+                "reason": f"category={category_name}",
+                "category": category_name,
+                "similarity_score": 0.0,
+                "vec_candidates": 0,
+            },
+        )
+
+    def _search_context(
+        self,
+        search_results: list[dict[str, Any]] | None,
+        incoming: str,
+        chat_id: str | None,
+        contact: Contact | None,
+        cached_embedder: CachedEmbedder,
+        latency_ms: dict[str, float],
+    ) -> tuple[list[dict[str, Any]], dict[str, float]]:
+        """Run context search if results not already provided."""
+        if search_results is None:
+            search_start = time.perf_counter()
+            search_results = self.context_service.search_examples(
+                incoming,
+                chat_id=chat_id,
+                contact_id=contact.id if contact else None,
+                embedder=cached_embedder,
+            )
+            latency_ms["context_search"] = (time.perf_counter() - search_start) * 1000
+        return search_results, latency_ms
+
+    def _generate_response(
+        self,
+        context: MessageContext,
+        classification: ClassificationResult,
+        search_results: list[dict[str, Any]],
+        contact: Contact | None,
+        thread_messages: list[str],
+        cached_embedder: CachedEmbedder,
+        latency_ms: dict[str, float],
+    ) -> tuple[GenerationResponse, dict[str, float]]:
+        """Build generation request and run LLM inference."""
         gen_start = time.perf_counter()
         request = self.build_generation_request(
             context=context,
@@ -394,8 +451,18 @@ class ReplyService:
         )
         result = self._generate_llm_reply(request, search_results, thread_messages)
         latency_ms["generation"] = (time.perf_counter() - gen_start) * 1000
+        return result, latency_ms
 
-        latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+    def _log_and_record_metrics(
+        self,
+        result: GenerationResponse,
+        category_name: str,
+        incoming: str,
+        search_results: list[dict[str, Any]],
+        latency_ms: dict[str, float],
+        cached_embedder: CachedEmbedder,
+    ) -> None:
+        """Log completion event and record routing metrics."""
         log_event(
             logger,
             "reply.generate.complete",
@@ -422,8 +489,6 @@ class ReplyService:
             vec_candidates=len(search_results),
             model_loaded=self.generator.is_loaded(),
         )
-
-        return result
 
     # --- Internal Helpers ---
 

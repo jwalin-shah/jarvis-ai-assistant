@@ -318,3 +318,7 @@ class ConversationsListResponse(BaseModel):
         description="Total number of conversations returned",
         ge=0,
     )
+    has_more: bool = Field(
+        default=False,
+        description="Whether more conversations exist beyond this page",
+    )

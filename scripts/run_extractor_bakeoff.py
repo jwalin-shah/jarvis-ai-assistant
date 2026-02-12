@@ -40,6 +40,32 @@ logger = logging.getLogger(__name__)
 DEFAULT_GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold_merged_r4.json")
 OUTPUT_DIR = Path("results/extractor_bakeoff")
 
+# Named extractor configs: map short names to model_name + backend overrides.
+# All use the standard gliner package (PyTorch) unless overridden.
+EXTRACTOR_CONFIGS: dict[str, dict[str, Any]] = {
+    "gliner": {
+        "model_name": "urchade/gliner_medium-v2.1",
+    },
+    "gliner-small": {
+        "model_name": "urchade/gliner_small-v2.1",
+    },
+    # Knowledgator ModernBERT bi-encoder series (v2.0)
+    # Bi-encoder architecture: ModernBERT text encoder + BGE label encoder
+    # Up to 4x faster than DeBERTa-based models, 8192 token context
+    "knowledgator-edge": {
+        "model_name": "knowledgator/gliner-bi-edge-v2.0",
+    },
+    "knowledgator-small": {
+        "model_name": "knowledgator/gliner-bi-small-v2.0",
+    },
+    "knowledgator-base": {
+        "model_name": "knowledgator/gliner-bi-base-v2.0",
+    },
+    "knowledgator-large": {
+        "model_name": "knowledgator/gliner-bi-large-v2.0",
+    },
+}
+
 
 def setup_logging() -> None:
     """Configure logging."""
@@ -302,23 +328,51 @@ def run_extractor(
     logger.info(f"{'=' * 60}")
 
     cfg = config or {}
+    # Merge named extractor config (model_name etc.) with CLI overrides
+    if extractor_name in EXTRACTOR_CONFIGS:
+        named_cfg = dict(EXTRACTOR_CONFIGS[extractor_name])
+        named_cfg.update(cfg)  # CLI overrides take priority
+        cfg = named_cfg
 
     # Create CandidateExtractor with config overrides
     try:
+        try:
+            import mlx.core  # noqa: F401
+            _has_mlx = True
+        except ImportError:
+            _has_mlx = False
+        # Force PyTorch backend for non-default models (no MLX port)
+        backend = cfg.get("backend", "auto")
+        model_name = cfg.get("model_name", "urchade/gliner_medium-v2.1")
+        if model_name != "urchade/gliner_medium-v2.1" and backend == "auto":
+            backend = "pytorch"
+        # Determine verification backend
+        verifier = cfg.get("verifier", "none")
+        use_entailment = verifier == "nli" and _has_mlx
+        # LLM verifier runs as a separate post-extraction pass to avoid
+        # memory pressure (GLiNER + LLM can't coexist on 8GB).
+        use_llm_verifier_post = verifier == "llm"
+
         extractor = CandidateExtractor(
-            model_name=cfg.get("model_name", "urchade/gliner_medium-v2.1"),
+            model_name=model_name,
             label_profile=cfg.get("label_profile"),
             global_threshold=cfg.get("threshold", 0.35),
+            use_entailment=use_entailment,
+            use_llm_verifier=False,  # LLM runs post-extraction
+            backend=backend,
         )
         logger.info("Created CandidateExtractor")
     except (ImportError, ValueError, TypeError) as e:
         logger.error(f"Failed to create extractor: {e}")
         return {"extractor_name": extractor_name, "error": str(e)}
 
-    # Load model
+    # Load model (prefer MLX on Apple Silicon, skip PyTorch preload to save memory)
     logger.info("Loading model...")
     try:
-        extractor._load_model()
+        if _has_mlx and backend in ("auto", "mlx"):
+            extractor._load_mlx_model()
+        else:
+            extractor._load_model()
         logger.info("Model loaded")
     except (OSError, RuntimeError, ValueError) as e:
         logger.error(f"Failed to load model: {e}")
@@ -331,6 +385,8 @@ def run_extractor(
     predictions: dict[int, list[dict]] = {}
     timing: dict[int, float] = {}
     total_raw_entities = 0
+    # Store raw candidates for post-extraction LLM verification
+    raw_candidates_by_msg: dict[int, list] = {} if use_llm_verifier_post else {}
 
     # Incremental output file - survives crashes
     out_dir = args_output_dir or OUTPUT_DIR
@@ -368,6 +424,8 @@ def run_extractor(
                 )
                 elapsed = (time.perf_counter() - msg_start) * 1000
 
+                if use_llm_verifier_post:
+                    raw_candidates_by_msg[msg_id] = list(candidates)
                 pred_list = [
                     {
                         "span_text": c.span_text,
@@ -406,6 +464,68 @@ def run_extractor(
         f"Extraction complete in {total_time:.1f}s: "
         f"{total_raw_entities} entities from {msgs_with_preds}/{len(records)} messages"
     )
+
+    # Post-extraction LLM verification (two-pass to avoid memory pressure)
+    if use_llm_verifier_post and raw_candidates_by_msg:
+        import gc
+
+        # Unload GLiNER models to free memory for LLM
+        logger.info("Unloading GLiNER models for LLM verification pass...")
+        from jarvis.contacts.candidate_extractor import (
+            _gliner_mlx_model,
+            _gliner_model_lock,
+            _gliner_pytorch_model,
+        )
+        import jarvis.contacts.candidate_extractor as _ce_mod
+
+        with _gliner_model_lock:
+            _ce_mod._gliner_mlx_model = None
+            _ce_mod._gliner_pytorch_model = None
+        del extractor
+        gc.collect()
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+        except (ImportError, AttributeError):
+            pass
+        try:
+            import mlx.core as mx
+            mx.clear_cache()
+        except (ImportError, AttributeError):
+            pass
+        gc.collect()
+
+        logger.info("Running LLM verification on %d messages...", len(raw_candidates_by_msg))
+        from jarvis.contacts.llm_fact_verifier import LLMFactVerifier
+
+        verifier_obj = LLMFactVerifier()
+        all_candidates = []
+        for msg_id, cands in raw_candidates_by_msg.items():
+            all_candidates.extend(cands)
+
+        llm_start = time.time()
+        verified = verifier_obj.verify_candidates(all_candidates)
+        llm_time = time.time() - llm_start
+        logger.info(
+            "LLM verification: %d -> %d candidates (%.1fs)",
+            len(all_candidates),
+            len(verified),
+            llm_time,
+        )
+
+        # Rebuild predictions from verified candidates
+        predictions.clear()
+        for c in verified:
+            pred_list = predictions.setdefault(c.message_id, [])
+            pred_list.append({
+                "span_text": c.span_text,
+                "span_label": c.span_label,
+                "fact_type": c.fact_type,
+                "score": c.gliner_score,
+            })
+        total_raw_entities = len(verified)
+        total_time += llm_time
 
     # Compute metrics
     logger.info("Computing metrics...")
@@ -597,6 +717,13 @@ def main() -> None:
         default=False,
         help="Disable message gate pre-filter (evaluate raw extractor quality)",
     )
+    parser.add_argument(
+        "--verifier",
+        type=str,
+        choices=["nli", "llm", "none"],
+        default="nli",
+        help="Verification backend: 'nli' (entailment, default), 'llm' (LLM verifier), 'none'",
+    )
 
     args = parser.parse_args()
 
@@ -627,6 +754,8 @@ def main() -> None:
             config["model_name"] = args.model_name
         if args.no_gate:
             config["use_gate"] = False
+        if args.verifier:
+            config["verifier"] = args.verifier
 
         result = run_extractor(
             name,

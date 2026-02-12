@@ -25,6 +25,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Sentinel object to signal stream completion in the queue-based async bridge.
+# Using a dedicated sentinel (instead of None) makes the protocol explicit and
+# avoids any ambiguity with None values that might appear as legitimate data.
+_STREAM_DONE = object()
+
 # Lazy-loaded reference to SYSTEM_PREFIX from prompts.py (single source of truth).
 # Imported lazily to avoid circular imports (prompts -> relationships -> ... -> models).
 _SYSTEM_PREFIX: str | None = None
@@ -387,13 +392,20 @@ class MLXGenerator:
                 stream_prompt_cache = self._loader._prompt_cache
                 formatted_prompt = formatted_prompt[len(_get_system_prefix()) :]
 
-            # Use a queue to bridge sync generator and async iteration
-            token_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+            # Queue-based bridge: sync producer thread -> async consumer.
+            # Protocol:
+            #   1. Producer puts dict items (token data) into the queue.
+            #   2. Producer puts _STREAM_DONE sentinel to signal completion.
+            #   3. On error, producer stores the exception and puts _STREAM_DONE.
+            #   4. Consumer reads until it sees _STREAM_DONE, then checks for errors.
+            token_queue: queue.Queue[dict[str, Any] | object] = queue.Queue()
             generation_error: list[Exception] = []
-            generation_error_event = threading.Event()
 
             def producer() -> None:
-                """Run in thread: generate tokens and put in queue."""
+                """Run in thread: generate tokens and put in queue.
+
+                Puts _STREAM_DONE sentinel when finished (success or error).
+                """
                 try:
                     for stream_token in self._loader.generate_stream(
                         prompt=formatted_prompt,
@@ -410,24 +422,23 @@ class MLXGenerator:
                                 "is_final": stream_token.is_final,
                             }
                         )
-                    token_queue.put(None)  # Signal completion
                 except Exception as e:
                     generation_error.append(e)
-                    generation_error_event.set()
-                    token_queue.put(None)
+                finally:
+                    token_queue.put(_STREAM_DONE)
 
             # Start generation in background thread
             gen_thread = threading.Thread(target=producer, daemon=True)
             gen_thread.start()
 
-            # Consume tokens and yield to caller
+            # Consume tokens until sentinel signals completion
             while True:
                 try:
                     item = await asyncio.to_thread(token_queue.get, timeout=60.0)
                 except Exception:
                     break
 
-                if item is None:
+                if item is _STREAM_DONE:
                     break
 
                 yield item
@@ -542,7 +553,7 @@ class ThreadAwareGenerator:
         request = GenerationRequest(
             prompt=prompt,
             context_documents=[],  # Context is already in the prompt
-            few_shot_examples=examples,
+            few_shot_examples=[],  # Examples already embedded in prompt by build_threaded_reply_prompt
             max_tokens=max_tokens,
             temperature=temperature,
         )

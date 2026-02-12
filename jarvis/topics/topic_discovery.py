@@ -19,6 +19,7 @@ Usage:
 
 from __future__ import annotations
 
+import gc
 import logging
 from collections import Counter
 from dataclasses import dataclass, field
@@ -195,7 +196,11 @@ class TopicDiscovery:
             metric="euclidean",
             n_jobs=1,  # 8GB RAM constraint
         )
-        labels = clusterer.fit_predict(embeddings)
+        try:
+            labels = clusterer.fit_predict(embeddings)
+        finally:
+            del clusterer
+            gc.collect()
 
         unique_labels = set(labels)
         unique_labels.discard(-1)  # Remove noise label

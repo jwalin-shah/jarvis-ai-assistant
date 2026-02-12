@@ -204,6 +204,7 @@ CREATE TABLE IF NOT EXISTS contact_facts (
 CREATE INDEX IF NOT EXISTS idx_facts_contact ON contact_facts(contact_id);
 CREATE INDEX IF NOT EXISTS idx_facts_category ON contact_facts(category);
 CREATE INDEX IF NOT EXISTS idx_facts_linked_contact ON contact_facts(linked_contact_id);
+CREATE INDEX IF NOT EXISTS idx_facts_lookup ON contact_facts(contact_id, predicate, subject);
 
 -- Indexes for scheduling tables
 CREATE INDEX IF NOT EXISTS idx_scheduled_contact ON scheduled_drafts(contact_id);

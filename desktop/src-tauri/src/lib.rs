@@ -86,6 +86,16 @@ pub fn run() {
                     let _ = window.set_size(size);
                 }
 
+                // Ensure window shows after a short delay (fallback if frontend show() doesn't fire)
+                let show_window = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    if !show_window.is_visible().unwrap_or(true) {
+                        let _ = show_window.show();
+                        let _ = show_window.set_focus();
+                    }
+                });
+
                 // Handle close button - hide instead of quit, save window state
                 let window_clone = window.clone();
                 window.on_window_event(move |event| {

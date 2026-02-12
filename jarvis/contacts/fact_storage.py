@@ -62,7 +62,7 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
         ]
 
         with db.connection() as conn:
-            # Batch insert all facts at once
+            # Batch insert all facts at once; duplicates silently ignored
             cursor = conn.executemany(
                 """
                 INSERT OR IGNORE INTO contact_facts

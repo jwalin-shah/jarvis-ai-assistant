@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "withGlobalTauri": true,
     "trayIcon": {
       "iconPath": "icons/icon.png",
@@ -30,7 +31,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; connect-src 'self' http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; script-src 'self'; connect-src 'self' http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' blob:; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {

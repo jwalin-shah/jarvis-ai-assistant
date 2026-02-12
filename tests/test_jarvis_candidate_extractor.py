@@ -12,13 +12,11 @@ from jarvis.contacts.candidate_extractor import (
 
 @pytest.fixture
 def extractor():
-    with patch("gliner.GLiNER.from_pretrained") as mock_from:
-        mock_model = MagicMock()
-        mock_from.return_value = mock_model
-        ext = CandidateExtractor(use_entailment=False)
-        # Trigger lazy load
-        ext._load_model()
-        return ext
+    mock_model = MagicMock()
+    ext = CandidateExtractor(use_entailment=False, backend="pytorch")
+    # Inject mock model directly (skips real GLiNER load)
+    ext._model = mock_model
+    return ext
 
 
 def test_fact_candidate_to_dict():
@@ -176,8 +174,8 @@ def test_resolve_fact_type_new_patterns(extractor):
     )
 
 
-def test_candidate_to_hypothesis_speaker_aware(extractor):
-    """is_from_me=True -> 'the user', is_from_me=False -> 'the contact'."""
+def test_candidate_to_hypothesis_mnli_style(extractor):
+    """Hypotheses use MNLI-style impersonal 'Someone' patterns."""
     base = FactCandidate(
         message_id=1,
         span_text="Austin",
@@ -189,20 +187,18 @@ def test_candidate_to_hypothesis_speaker_aware(extractor):
         source_text="I live in Austin",
     )
 
-    # is_from_me=True (default None treated as True)
+    # Templates are speaker-agnostic (MNLI style)
     base.is_from_me = True
     h = extractor._candidate_to_hypothesis(base)
-    assert "the user lives in Austin" == h
+    assert h == "Someone lives in Austin"
 
-    # is_from_me=False -> "the contact"
     base.is_from_me = False
     h = extractor._candidate_to_hypothesis(base)
-    assert "the contact lives in Austin" == h
+    assert h == "Someone lives in Austin"
 
-    # is_from_me=None -> defaults to "the user"
     base.is_from_me = None
     h = extractor._candidate_to_hypothesis(base)
-    assert "the user lives in Austin" == h
+    assert h == "Someone lives in Austin"
 
 
 def test_vague_filter_expanded():

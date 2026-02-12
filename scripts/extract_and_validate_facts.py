@@ -6,6 +6,7 @@ Phase 5: Manual validation of fact extraction quality improvements.
 - Samples random facts for manual evaluation
 - Compares before/after quality
 """
+from __future__ import annotations
 
 import json
 import logging
@@ -55,6 +56,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         default=100,
         help="Fallback progress print interval when tqdm is unavailable (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--rule-based",
+        action="store_true",
+        default=False,
+        help="Use rule-based FactExtractor instead of GLiNER+NLI (for comparison).",
     )
     return parser.parse_args(argv)
 
@@ -157,6 +164,66 @@ def extract_facts_with_filters(messages: list[dict], progress_every: int = 100) 
     elapsed = (time.perf_counter() - start) * 1000
     logger.info(
         f"Extracted {len(all_facts)} facts from {len(messages)} messages in {elapsed:.1f}ms"
+    )
+    return all_facts
+
+
+def extract_facts_with_gliner(messages: list[dict], progress_every: int = 100) -> list[Fact]:
+    """Extract facts using GLiNER + NLI entailment verification pipeline."""
+    from jarvis.contacts.candidate_extractor import CandidateExtractor
+    from jarvis.contacts.contact_profile import Fact
+
+    extractor = CandidateExtractor(label_profile="balanced", use_entailment=True)
+    logger.info("Extracting facts with GLiNER + NLI entailment...")
+    start = time.perf_counter()
+
+    # Group by chat_id for batch extraction
+    chats: dict[str, list[dict]] = {}
+    for msg in messages:
+        chat_id = msg.get("chat_id", "unknown")
+        chats.setdefault(chat_id, []).append(msg)
+
+    from jarvis.text_normalizer import normalize_text
+
+    all_facts: list[Fact] = []
+    chat_items = list(chats.items())
+    for chat_id, chat_msgs in iter_with_progress(
+        chat_items, "GLiNER+NLI extraction", progress_every
+    ):
+        batch_msgs = []
+        for m in chat_msgs:
+            raw = m.get("text")
+            if not raw:
+                continue
+            normalized = normalize_text(raw)
+            if not normalized or not normalized.strip():
+                continue
+            batch_msgs.append(
+                {
+                    "text": normalized,
+                    "message_id": m.get("id", 0),
+                    "is_from_me": m.get("is_from_me", False),
+                    "chat_id": chat_id,
+                }
+            )
+        candidates = extractor.extract_batch(batch_msgs)
+        for c in candidates:
+            all_facts.append(
+                Fact(
+                    category=c.fact_type or c.span_label,
+                    subject=c.span_text,
+                    predicate=c.span_label,
+                    source_text=c.source_text[:200],
+                    confidence=c.gliner_score,
+                    contact_id=str(chat_id),
+                    extracted_at="",
+                )
+            )
+
+    elapsed = (time.perf_counter() - start) * 1000
+    logger.info(
+        f"GLiNER+NLI extracted {len(all_facts)} facts from {len(messages)} messages "
+        f"in {elapsed:.1f}ms"
     )
     return all_facts
 
@@ -298,8 +365,13 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     logger.info(f"Loaded {len(messages)} messages")
 
-    # Extract facts with quality filters
-    facts = extract_facts_with_filters(messages, progress_every=args.progress_every)
+    # Extract facts with chosen pipeline
+    if args.rule_based:
+        logger.info("Using rule-based FactExtractor pipeline")
+        facts = extract_facts_with_filters(messages, progress_every=args.progress_every)
+    else:
+        logger.info("Using GLiNER + NLI entailment pipeline")
+        facts = extract_facts_with_gliner(messages, progress_every=args.progress_every)
 
     if not facts:
         logger.error("No facts extracted - review extraction logic")

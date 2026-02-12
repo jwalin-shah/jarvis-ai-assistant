@@ -165,7 +165,7 @@ class IMessageSender:
 
         # Get absolute POSIX path for AppleScript
         abs_path = str(path.resolve())
-        escaped_path = abs_path.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_path = self._escape_for_applescript(abs_path)
 
         if is_group:
             if not chat_id:
@@ -175,7 +175,7 @@ class IMessageSender:
             if ";" in chat_id:
                 parts = chat_id.split(";")
                 actual_chat_id = parts[-1] if len(parts) > 1 else chat_id
-            escaped_chat_id = actual_chat_id.replace("\\", "\\\\").replace('"', '\\"')
+            escaped_chat_id = self._escape_for_applescript(actual_chat_id)
             applescript = f"""
 tell application "Messages"
     set targetChat to chat id "{escaped_chat_id}"
@@ -186,7 +186,7 @@ end tell
         else:
             if not recipient:
                 return SendResult(success=False, error="Recipient required")
-            escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
+            escaped_recipient = self._escape_for_applescript(recipient)
             applescript = f"""
 tell application "Messages"
     set targetService to 1st account whose service type = iMessage

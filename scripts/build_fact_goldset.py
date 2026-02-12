@@ -343,6 +343,39 @@ def pick_bucket(
     return selected
 
 
+def _context_query(direction: str) -> str:
+    """Build a context query for the given direction ('prev' or 'next').
+
+    The only differences between prev/next are the comparison operators
+    and the sort order.
+    """
+    if direction == "prev":
+        date_cmp, rowid_cmp, sort_order = "<", "<", "DESC"
+    else:
+        date_cmp, rowid_cmp, sort_order = ">", ">", "ASC"
+
+    return f"""
+    SELECT
+        m.ROWID AS message_id,
+        m.text AS message_text,
+        m.date AS message_date_raw,
+        m.is_from_me AS is_from_me,
+        COALESCE(h.id, 'me') AS sender_handle
+    FROM message m
+    JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+    LEFT JOIN handle h ON m.handle_id = h.ROWID
+    WHERE cmj.chat_id = ?
+      AND m.text IS NOT NULL
+      AND TRIM(m.text) != ''
+      AND (
+        m.date {date_cmp} ?
+        OR (m.date = ? AND m.ROWID {rowid_cmp} ?)
+      )
+    ORDER BY m.date {sort_order}, m.ROWID {sort_order}
+    LIMIT ?
+    """
+
+
 def fetch_context(
     conn: sqlite3.Connection,
     chat_rowid: int,
@@ -354,56 +387,9 @@ def fetch_context(
     if window <= 0:
         return [], []
 
-    prev_sql = """
-    SELECT
-        m.ROWID AS message_id,
-        m.text AS message_text,
-        m.date AS message_date_raw,
-        m.is_from_me AS is_from_me,
-        COALESCE(h.id, 'me') AS sender_handle
-    FROM message m
-    JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
-    LEFT JOIN handle h ON m.handle_id = h.ROWID
-    WHERE cmj.chat_id = ?
-      AND m.text IS NOT NULL
-      AND TRIM(m.text) != ''
-      AND (
-        m.date < ?
-        OR (m.date = ? AND m.ROWID < ?)
-      )
-    ORDER BY m.date DESC, m.ROWID DESC
-    LIMIT ?
-    """
-
-    next_sql = """
-    SELECT
-        m.ROWID AS message_id,
-        m.text AS message_text,
-        m.date AS message_date_raw,
-        m.is_from_me AS is_from_me,
-        COALESCE(h.id, 'me') AS sender_handle
-    FROM message m
-    JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
-    LEFT JOIN handle h ON m.handle_id = h.ROWID
-    WHERE cmj.chat_id = ?
-      AND m.text IS NOT NULL
-      AND TRIM(m.text) != ''
-      AND (
-        m.date > ?
-        OR (m.date = ? AND m.ROWID > ?)
-      )
-    ORDER BY m.date ASC, m.ROWID ASC
-    LIMIT ?
-    """
-
-    prev_rows = conn.execute(
-        prev_sql,
-        (chat_rowid, message_date_raw, message_date_raw, message_id, window),
-    ).fetchall()
-    next_rows = conn.execute(
-        next_sql,
-        (chat_rowid, message_date_raw, message_date_raw, message_id, window),
-    ).fetchall()
+    params = (chat_rowid, message_date_raw, message_date_raw, message_id, window)
+    prev_rows = conn.execute(_context_query("prev"), params).fetchall()
+    next_rows = conn.execute(_context_query("next"), params).fetchall()
 
     def to_context(row: sqlite3.Row) -> dict[str, Any]:
         raw = int(row["message_date_raw"] or 0)

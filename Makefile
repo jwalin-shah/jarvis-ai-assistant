@@ -916,3 +916,67 @@ db-verify-full: db-health db-backup db-test-migrations db-drill db-maintain
 	@echo "========================================"
 	@echo ""
 	@echo "All database reliability checks passed!"
+
+# ============================================================================
+# AUTONOMOUS LOOP RUNNER
+# ============================================================================
+
+auto-loop:
+ifndef PROMPT
+	$(error PROMPT is required. Usage: make auto-loop PROMPT="Fix issues" END_CONDITION="All resolved" [AGENT=claude] [REVIEWER=claude-haiku])
+endif
+ifndef END_CONDITION
+	$(error END_CONDITION is required.)
+endif
+	@./scripts/autonomous_loop.sh \
+		--prompt "$(PROMPT)" \
+		--end-condition "$(END_CONDITION)" \
+		--max-iterations $(or $(MAX_ITER),20) \
+		--cooldown $(or $(COOLDOWN),10) \
+		$(if $(AGENT),--agent $(AGENT)) \
+		$(if $(MODEL),--model $(MODEL)) \
+		$(if $(REVIEWER),--reviewer $(REVIEWER)) \
+		$(if $(REVIEWER_PROMPT),--reviewer-prompt $(REVIEWER_PROMPT))
+
+auto-loop-file:
+ifndef PROMPT_FILE
+	$(error PROMPT_FILE is required. Usage: make auto-loop-file PROMPT_FILE=tasks/prompt.md END_CONDITION="Done")
+endif
+ifndef END_CONDITION
+	$(error END_CONDITION is required.)
+endif
+	@./scripts/autonomous_loop.sh \
+		--prompt-file "$(PROMPT_FILE)" \
+		--end-condition "$(END_CONDITION)" \
+		--max-iterations $(or $(MAX_ITER),20) \
+		--cooldown $(or $(COOLDOWN),10) \
+		$(if $(AGENT),--agent $(AGENT)) \
+		$(if $(MODEL),--model $(MODEL)) \
+		$(if $(REVIEWER),--reviewer $(REVIEWER)) \
+		$(if $(REVIEWER_PROMPT),--reviewer-prompt $(REVIEWER_PROMPT))
+
+auto-loop-stop:
+	@touch tasks/.stop-loop
+	@echo "Stop signal sent. Loop will exit after current iteration."
+
+auto-loop-status:
+	@if [ -f tasks/loop-status.md ]; then \
+		echo "=== Loop Status ==="; \
+		head -5 tasks/loop-status.md; \
+		echo ""; \
+		echo "=== Recent Activity ==="; \
+		tail -20 tasks/loop-status.md; \
+	else \
+		echo "No active loop. Start one with: make auto-loop"; \
+	fi
+
+auto-loop-dry:
+ifndef PROMPT
+	$(error PROMPT is required.)
+endif
+	@./scripts/autonomous_loop.sh \
+		--prompt "$(PROMPT)" \
+		--end-condition "$(or $(END_CONDITION),Task complete)" \
+		$(if $(AGENT),--agent $(AGENT)) \
+		$(if $(REVIEWER),--reviewer $(REVIEWER)) \
+		--dry-run

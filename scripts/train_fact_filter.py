@@ -406,6 +406,8 @@ def load_training_data(path: Path) -> dict[str, list]:
 
 def evaluate_classifier(classifier: FactFilterClassifier, test_data: dict) -> dict[str, float]:
     """Evaluate classifier on test data."""
+    from scripts.training_utils import compute_binary_metrics
+
     predictions = []
     confidences = []
 
@@ -434,20 +436,7 @@ def evaluate_classifier(classifier: FactFilterClassifier, test_data: dict) -> di
     y_true = np.array(test_data["labels"])
     y_pred = np.array(predictions)
 
-    # Calculate metrics
-    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-
-    accuracy = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred, zero_division=0)
-    recall = recall_score(y_true, y_pred, zero_division=0)
-    f1 = f1_score(y_true, y_pred, zero_division=0)
-
-    return {
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-    }
+    return compute_binary_metrics(y_true, y_pred)
 
 
 def main():
@@ -501,19 +490,17 @@ def main():
     )
 
     # Evaluate on training data (overfit check)
+    from scripts.training_utils import log_metrics
+
     train_metrics = evaluate_classifier(classifier, train_data)
-    logger.info("Training metrics:")
-    for k, v in train_metrics.items():
-        logger.info(f"  {k}: {v:.3f}")
+    log_metrics(train_metrics, "Train", logger)
 
     # Evaluate on test data
     if args.test:
         logger.info(f"Loading test data from {args.test}")
         test_data = load_training_data(args.test)
         test_metrics = evaluate_classifier(classifier, test_data)
-        logger.info("Test metrics:")
-        for k, v in test_metrics.items():
-            logger.info(f"  {k}: {v:.3f}")
+        log_metrics(test_metrics, "Test", logger)
 
     # Save model
     classifier.save(args.output)

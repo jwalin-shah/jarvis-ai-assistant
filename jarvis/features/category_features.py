@@ -3,13 +3,14 @@
 Single source of truth for all category classification features.
 Eliminates train/serve skew by using identical feature extraction.
 
-Feature layout (531 total):
+Feature layout (915 total):
 - 384 BERT embeddings (via embedder.encode, normalized)
+- 384 context BERT embeddings (zeroed at inference, kept for model compatibility)
 - 26 hand-crafted features (structure, mobilization, context, reactions)
 - 94 spaCy features (14 original + 80 new: NER, deps, tokens, morphology)
 - 19 new hand-crafted features (8 error-analysis + 11 high-value additions)
 - 8 hard-class features (closing/request specific)
-Total: 147 non-BERT features, 531 total with BERT
+Total: 147 non-BERT features, 915 total with BERT + context BERT
 
 Usage:
     from jarvis.features.category_features import CategoryFeatureExtractor
@@ -31,74 +32,25 @@ from typing import TYPE_CHECKING
 import numpy as np
 import spacy
 
+from jarvis.nlp.patterns import (
+    ABBREVIATION_RE,
+    AGREEMENT_WORDS,
+    BRIEF_AGREEMENTS,
+    EMOJI_RE,
+    EMOTIONAL_MARKERS,
+    GREETING_PATTERN_RE,
+    IMPERATIVE_VERBS_CORE as IMPERATIVE_VERBS,
+    PROFESSIONAL_KEYWORDS_RE,
+    QUESTION_STARTERS,
+)
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-# Shared regex patterns (reused from text_normalizer)
-EMOJI_RE = re.compile(
-    r"[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"
-    r"\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF"
-    r"\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF]"
-)
-
-ABBREVIATION_RE = re.compile(
-    r"\b(lol|lmao|omg|wtf|brb|btw|smh|tbh|imo|idk|ngl|fr|rn|ong|nvm|wya|hmu|"
-    r"fyi|asap|dm|irl|fomo|goat|sus|bet|cap|no cap)\b",
-    re.IGNORECASE,
-)
-
-PROFESSIONAL_KEYWORDS_RE = re.compile(
-    r"\b(meeting|deadline|project|report|schedule|conference|presentation|"
-    r"budget|client|invoice|proposal)\b",
-    re.IGNORECASE,
-)
-
 # Feature extraction patterns
 REACTION_PATTERNS = ["Laughed at", "Loved", "Liked", "Disliked", "Emphasized", "Questioned"]
-EMOTIONAL_MARKERS = ["lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"]
-QUESTION_STARTERS = {
-    "what",
-    "why",
-    "how",
-    "when",
-    "where",
-    "who",
-    "did",
-    "do",
-    "does",
-    "can",
-    "could",
-    "would",
-    "will",
-    "should",
-}
-IMPERATIVE_VERBS = {
-    "make",
-    "send",
-    "get",
-    "tell",
-    "show",
-    "give",
-    "come",
-    "take",
-    "call",
-    "help",
-    "let",
-}
 REQUEST_VERBS = {"send", "give", "help", "tell", "show", "let", "call", "get", "make", "take"}
 PROMISE_VERBS = {"promise", "guarantee", "commit", "swear"}
-AGREEMENT_WORDS = {
-    "sure",
-    "okay",
-    "ok",
-    "yes",
-    "yeah",
-    "yep",
-    "yup",
-    "sounds good",
-    "bet",
-    "fs",
-}
 FIRST_PERSON_PRONOUNS = {"i", "me", "my", "mine", "myself"}
 SECOND_PERSON_PRONOUNS = {"you", "your", "yours", "yourself"}
 THIRD_PERSON_PRONOUNS = {
@@ -164,17 +116,12 @@ ENTITY_TYPES_NEW = [
 ]
 PAST_TENSE_TAGS = {"VBD", "VBN"}
 PRESENT_TENSE_TAGS = {"VBP", "VBZ", "VBG"}
-BRIEF_AGREEMENTS = {"ok", "okay", "k", "yeah", "yep", "yup", "sure", "cool", "bet", "fs", "aight"}
 
 # New hand-crafted feature patterns (from error analysis)
 CLAUSE_AFTER_AGREEMENT_RE = re.compile(
     r"\b(ok|okay|sure|yeah|yep|yup|cool|bet|sounds good)\b.*\b(but|though|however|if|when|"
     r"because|since|as long as|unless|after|before)\b",
     re.IGNORECASE,
-)
-
-GREETING_PATTERN_RE = re.compile(
-    r"^(hey|hi|hello|yo|sup|what's up|wassup|heyy|hiya|heya)\b", re.IGNORECASE
 )
 
 ELONGATED_WORD_RE = re.compile(r"(\w)\1{2,}")  # e.g., "yaasss", "nooo", "omgggg"
@@ -331,6 +278,18 @@ NEGATIVE_EMOJIS = {
 }
 NEUTRAL_EMOJIS = {"🤔", "🙃", "😐", "😑", "🤨", "🧐", "😶", "👀", "💬", "🗣️", "👋", "✌️"}
 
+# Pre-compiled word-boundary patterns to avoid substring false positives
+# (e.g. 'now' in 'knowledge', 'ty' in 'city', 'soon' in 'bassoon')
+_THANKS_RE = re.compile(
+    r'(?:' + '|'.join(re.escape(m) for m in THANKS_MARKERS) + r')', re.IGNORECASE
+)
+_URGENCY_RE = re.compile(
+    r'(?:' + '|'.join(re.escape(m) for m in URGENCY_MARKERS) + r')', re.IGNORECASE
+)
+_FUTURE_TIME_RE = re.compile(
+    r'(?:' + '|'.join(re.escape(m) for m in FUTURE_TIME_MARKERS) + r')', re.IGNORECASE
+)
+
 
 class CategoryFeatureExtractor:
     """Single source of truth for category classification features.
@@ -370,6 +329,7 @@ class CategoryFeatureExtractor:
         context: list[str] | None = None,
         mob_pressure: str = "none",
         mob_type: str = "answer",
+        doc: spacy.tokens.Doc | None = None,
     ) -> NDArray[np.float32]:
         """Extract 26 original hand-crafted features.
 
@@ -378,6 +338,7 @@ class CategoryFeatureExtractor:
             context: Previous messages in conversation
             mob_pressure: Mobilization pressure level (high/medium/low/none)
             mob_type: Mobilization response type (commitment/answer/emotional)
+            doc: Optional pre-parsed spaCy doc (reuse to avoid re-tokenizing)
 
         Returns:
             26-dim feature array
@@ -385,7 +346,8 @@ class CategoryFeatureExtractor:
         context = context or []
         features: list[float] = []
         text_lower = text.lower()
-        words = text.split()
+        # Reuse spaCy doc tokens if available, fall back to split()
+        words = [token.text for token in doc] if doc is not None else text.split()
         total_words = len(words)
 
         # Message structure (5)
@@ -718,7 +680,8 @@ class CategoryFeatureExtractor:
 
         features: list[float] = []
         text_lower = text.lower()
-        words = text.split()
+        # Reuse spaCy doc tokens if available, fall back to split()
+        words = [token.text for token in doc] if doc is not None else text.split()
         total_words = len(words)
 
         # 1. has_clause_after_agreement (~20 errors)
@@ -809,19 +772,17 @@ class CategoryFeatureExtractor:
         features.append(is_tag_q)
 
         # 13-14. Thanks and apology markers
-        has_thanks = 1.0 if any(marker in text_lower for marker in THANKS_MARKERS) else 0.0
+        has_thanks = 1.0 if _THANKS_RE.search(text_lower) else 0.0
         features.append(has_thanks)
 
         has_apology = 1.0 if any(marker in text_lower for marker in APOLOGY_MARKERS) else 0.0
         features.append(has_apology)
 
         # 15-16. Urgency and future time markers
-        has_urgency = 1.0 if any(marker in text_lower for marker in URGENCY_MARKERS) else 0.0
+        has_urgency = 1.0 if _URGENCY_RE.search(text_lower) else 0.0
         features.append(has_urgency)
 
-        has_future_time = (
-            1.0 if any(marker in text_lower for marker in FUTURE_TIME_MARKERS) else 0.0
-        )
+        has_future_time = 1.0 if _FUTURE_TIME_RE.search(text_lower) else 0.0
         features.append(has_future_time)
 
         # 17-19. Emoji sentiment (positive, negative, neutral counts)
@@ -908,86 +869,6 @@ class CategoryFeatureExtractor:
 
         return np.array(features, dtype=np.float32)
 
-    def extract_multilabel_indicators(
-        self,
-        text: str,
-        doc: spacy.tokens.Doc | None = None,
-    ) -> NDArray[np.float32]:
-        """Extract 10 features indicating multi-label likelihood.
-
-        These help the model learn when a message has multiple intents
-        vs a single clear intent.
-
-        Returns:
-            10-dim feature array
-        """
-        if doc is None:
-            doc = self.nlp(text)
-
-        features: list[float] = []
-        text_lower = text.lower()
-        words = text.split()
-
-        # 1. num_sentences (normalized)
-        num_sentences = max(1, text.count(".") + text.count("?") + text.count("!"))
-        features.append(min(num_sentences / 3.0, 1.0))  # Cap at 3
-
-        # 2. has_conjunction
-        conjunctions = ["but", "and", "also", "though", "however", "plus"]
-        has_conj = 1.0 if any(f" {c} " in text_lower for c in conjunctions) else 0.0
-        features.append(has_conj)
-
-        # 3. mixed_punctuation
-        has_question = "?" in text
-        has_exclamation = "!" in text
-        has_period = "." in text and not text.strip().endswith("...")
-        mixed_punct = 1.0 if sum([has_question, has_exclamation, has_period]) >= 2 else 0.0
-        features.append(mixed_punct)
-
-        # 4. is_very_short (<4 words → likely single-label)
-        is_very_short = 1.0 if len(words) < 4 else 0.0
-        features.append(is_very_short)
-
-        # 5. is_long (>25 words → might be multi-label)
-        is_long = 1.0 if len(words) > 25 else 0.0
-        features.append(is_long)
-
-        # 6. punctuation_diversity
-        punct_types = sum(
-            [
-                "?" in text,
-                "!" in text,
-                "," in text,
-                "." in text,
-                ";" in text,
-            ]
-        )
-        features.append(min(punct_types / 3.0, 1.0))
-
-        # 7. has_thanks_plus_more
-        has_thanks = any(word in text_lower for word in ["thanks", "thank you", "thx"])
-        thanks_plus_more = 1.0 if (has_thanks and len(words) > 3) else 0.0
-        features.append(thanks_plus_more)
-
-        # 8. question_with_context (long question might include statement)
-        question_with_context = 1.0 if ("?" in text and len(words) > 12) else 0.0
-        features.append(question_with_context)
-
-        # 9. words_per_sentence
-        words_per_sentence = len(words) / max(num_sentences, 1)
-        features.append(min(words_per_sentence / 15.0, 1.0))  # Normalize
-
-        # 10. has_discourse_marker (transitions between intents)
-        discourse_markers = ["so", "anyway", "well", "btw", "also", "oh"]
-        has_marker = (
-            1.0
-            if any(f"{m} " in text_lower or f" {m}" in text_lower for m in discourse_markers)
-            else 0.0
-        )
-        features.append(has_marker)
-
-        return np.array(features, dtype=np.float32)
-
     def extract_all(
         self,
         text: str,
@@ -1017,8 +898,8 @@ class CategoryFeatureExtractor:
         # Parse once, reuse
         doc = self.nlp(text)
 
-        # Extract all feature groups
-        hand_crafted = self.extract_hand_crafted(text, context, mob_pressure, mob_type)
+        # Extract all feature groups (reuse doc for all methods)
+        hand_crafted = self.extract_hand_crafted(text, context, mob_pressure, mob_type, doc)
         spacy_feats = self.extract_spacy_features(text, doc)
         new_hand_crafted = self.extract_new_hand_crafted(text, doc, context)
         hard_class_feats = self.extract_hard_class_features(text, doc)
@@ -1066,6 +947,7 @@ class CategoryFeatureExtractor:
                 contexts[i],
                 mob_pressures[i],
                 mob_types[i],
+                doc,
             )
             spacy_feats = self.extract_spacy_features(text, doc)
             new_hand_crafted = self.extract_new_hand_crafted(text, doc, contexts[i])
@@ -1080,32 +962,32 @@ class CategoryFeatureExtractor:
 class FeatureConfig:
     """Feature dimensions and metadata.
 
-    Feature layout (531 total):
-    - [0:384]   = BERT embedding (L2-normalized)
-    - [384:410] = 26 hand-crafted (structure, mobilization, context, reactions)
-    - [410:504] = 94 spaCy (POS, tags, deps, NER, tokens, morphology)
-    - [504:523] = 19 new hand-crafted (error-analysis + high-value additions)
-    - [523:531] = 8 hard-class (closing/request specific)
-
-    Context BERT embeddings were removed to eliminate train-serve skew.
-    Previously, context BERT (384 dims at indices 384:768) was zeroed at
-    inference but present during training, causing a distribution mismatch.
+    Feature layout (915 total):
+    - [0:384]     = BERT embedding (L2-normalized)
+    - [384:768]   = context BERT embedding (zeroed at inference, kept for model compatibility;
+                    present during training as auxiliary supervision / regularizer)
+    - [768:794]   = 26 hand-crafted (structure, mobilization, context, reactions)
+    - [794:888]   = 94 spaCy (POS, tags, deps, NER, tokens, morphology)
+    - [888:907]   = 19 new hand-crafted (error-analysis + high-value additions)
+    - [907:915]   = 8 hard-class (closing/request specific)
     """
 
     # Feature group sizes
     BERT_DIM = 384
+    CONTEXT_BERT_DIM = 384  # Zeroed at inference, kept for model compatibility
     HAND_CRAFTED_DIM = 26
     SPACY_DIM = 94  # 14 original + 80 new (15 NER + 5 deps + 5 tokens + 55 from before)
     NEW_HAND_CRAFTED_DIM = 19  # 8 error-analysis + 11 high-value additions
     HARD_CLASS_DIM = 8
-    MULTILABEL_INDICATOR_DIM = 10  # Closing + request specific features (unused in hardclass)
     TOTAL_NON_BERT = HAND_CRAFTED_DIM + SPACY_DIM + NEW_HAND_CRAFTED_DIM + HARD_CLASS_DIM  # 147
-    TOTAL_DIM = BERT_DIM + TOTAL_NON_BERT  # 531
+    TOTAL_DIM = BERT_DIM + CONTEXT_BERT_DIM + TOTAL_NON_BERT  # 915
 
     # Feature index ranges (for ColumnTransformer)
     BERT_START = 0
     BERT_END = BERT_DIM
-    HAND_CRAFTED_START = BERT_END
+    CONTEXT_BERT_START = BERT_END
+    CONTEXT_BERT_END = CONTEXT_BERT_START + CONTEXT_BERT_DIM
+    HAND_CRAFTED_START = CONTEXT_BERT_END
     HAND_CRAFTED_END = HAND_CRAFTED_START + HAND_CRAFTED_DIM
     SPACY_START = HAND_CRAFTED_END
     SPACY_END = SPACY_START + SPACY_DIM
@@ -1116,7 +998,8 @@ class FeatureConfig:
 
     # Binary feature indices (no scaling needed)
     # [0:384] = BERT (passthrough, already normalized)
-    # [389:396] = mobilization one-hots within hand-crafted (passthrough, binary)
+    # [384:768] = context BERT (passthrough, zeroed at inference)
+    # [773:780] = mobilization one-hots within hand-crafted (passthrough, binary)
     # Everything else gets scaled
     BINARY_INDICES = list(
         range(HAND_CRAFTED_START + 5, HAND_CRAFTED_START + 12)
@@ -1128,15 +1011,16 @@ class FeatureConfig:
 
         Feature layout:
         - [0:384]   = BERT → passthrough (already L2-normalized)
-        - [389:396] = mobilization one-hots → passthrough (binary)
+        - [384:768] = context BERT → passthrough (zeroed at inference)
+        - [773:780] = mobilization one-hots → passthrough (binary)
         - everything else → StandardScaler
 
         Returns:
             (bert_indices, binary_indices, scale_indices)
         """
         bert_indices = list(range(cls.BERT_START, cls.BERT_END))
+        context_bert_indices = list(range(cls.CONTEXT_BERT_START, cls.CONTEXT_BERT_END))
         binary_indices = cls.BINARY_INDICES
-        scale_indices = [
-            i for i in range(cls.TOTAL_DIM) if i not in bert_indices and i not in binary_indices
-        ]
-        return bert_indices, binary_indices, scale_indices
+        passthrough = set(bert_indices + context_bert_indices + binary_indices)
+        scale_indices = [i for i in range(cls.TOTAL_DIM) if i not in passthrough]
+        return bert_indices + context_bert_indices, binary_indices, scale_indices

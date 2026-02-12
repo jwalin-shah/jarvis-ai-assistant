@@ -38,6 +38,8 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 import mlx.core as mx
 import psutil
 from mlx_lm import generate, load, stream_generate
+
+from models.memory_config import apply_llm_limits
 from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
 
 from jarvis.errors import (
@@ -209,6 +211,8 @@ class MLXModelLoader:
         # KV cache for static prompt prefix reuse (MLX cache structure, opaque)
         self._prompt_cache: Any | None = None
         self._cache_prefix_len: int = 0
+        # Pre-encoded prefix tokens to avoid redundant tokenization
+        self._cache_prefix_tokens: mx.array | None = None
         self.last_load_time_ms: float | None = None
         # Speculative decoding draft model
         self._draft_model: Any = None  # MLX model
@@ -424,6 +428,7 @@ class MLXModelLoader:
             del self._prompt_cache
         self._prompt_cache = None
         self._cache_prefix_len = 0
+        self._cache_prefix_tokens = None
         # Explicitly delete draft model before setting to None
         if self._draft_model is not None:
             del self._draft_model
@@ -534,16 +539,20 @@ class MLXModelLoader:
         from mlx_lm.models.cache import make_prompt_cache
 
         try:
-            # Tokenize the prefix
+            # Tokenize the prefix once and store for reuse (avoids redundant
+            # re-encoding if callers need the token IDs later)
             tokens = mx.array(self._tokenizer.encode(prefix_text))
             self._prompt_cache = make_prompt_cache(self._model)
             self._cache_prefix_len = tokens.shape[0]
+            self._cache_prefix_tokens = tokens
 
-            # Prefill: run forward pass with max_tokens=0 to populate cache
+            # Prefill: run forward pass with max_tokens=0 to populate cache.
+            # generate_step receives pre-tokenized mx.array directly, no
+            # re-encoding occurs here.
             from mlx_lm.generate import generate_step
 
             for _ in generate_step(
-                tokens,
+                self._cache_prefix_tokens,
                 self._model,
                 max_tokens=0,
                 prompt_cache=self._prompt_cache,
@@ -556,6 +565,7 @@ class MLXModelLoader:
             logger.exception("Failed to prefill prompt cache")
             self._prompt_cache = None
             self._cache_prefix_len = 0
+            self._cache_prefix_tokens = None
 
     def trim_prompt_cache(self) -> None:
         """Reset the prompt cache back to the prefilled prefix state.
@@ -576,6 +586,7 @@ class MLXModelLoader:
             logger.debug("Could not trim prompt cache, will recreate on next use")
             self._prompt_cache = None
             self._cache_prefix_len = 0
+            self._cache_prefix_tokens = None
 
     @property
     def has_prompt_cache(self) -> bool:
@@ -775,12 +786,15 @@ class MLXModelLoader:
                     kwargs["prompt_cache"] = prompt_cache
 
                 with MLXModelLoader._mlx_load_lock:
+                    # Restore LLM memory limits in case embedder lowered them
+                    apply_llm_limits()
+
                     if self._draft_model is not None:
                         # Speculative decoding: use stream_generate with draft_model
                         # to track per-token acceptance
                         text = ""
                         total = 0
-                        accepted = 0
+                        draft_tokens_verified = 0
                         for resp in stream_generate(
                             model=self._model,
                             tokenizer=self._tokenizer,
@@ -795,8 +809,8 @@ class MLXModelLoader:
                             text = resp.text
                             total += 1
                             if getattr(resp, "from_draft", False):
-                                accepted += 1
-                        return text, accepted
+                                draft_tokens_verified += 1
+                        return text, draft_tokens_verified
                     else:
                         # Standard generation
                         result = generate(

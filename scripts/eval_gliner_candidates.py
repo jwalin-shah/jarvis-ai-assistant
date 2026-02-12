@@ -22,11 +22,11 @@ from pathlib import Path
 
 from jarvis.utils.logging import setup_script_logging
 
-GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold.json")
+GOLD_PATH = Path("training_data/gliner_goldset/candidate_gold_merged_r4.json")
 METRICS_PATH = Path("training_data/gliner_goldset/gliner_metrics.json")
 LOG_PATH = Path("eval_gliner_candidates.log")
 
-from eval_shared import spans_match
+from eval_shared import DEFAULT_LABEL_ALIASES, spans_match
 from gliner_shared import enforce_runtime_stack, parse_context_messages
 
 log = logging.getLogger(__name__)
@@ -74,6 +74,7 @@ class Metrics:
 def compute_metrics(
     gold_records: list[dict],
     predictions: dict[str, list[dict]],
+    label_aliases: dict[str, set[str]] | None = None,
 ) -> dict:
     """Compute span-level precision/recall/F1.
 
@@ -81,10 +82,14 @@ def compute_metrics(
         gold_records: list of gold records with expected_candidates
         predictions: sample_id -> list of predicted candidate dicts
             each with at least span_text, span_label
+        label_aliases: Optional label alias mapping for flexible matching.
+            Defaults to DEFAULT_LABEL_ALIASES if None.
 
     Returns:
         dict with overall, per_label, per_type, per_slice metrics
     """
+    if label_aliases is None:
+        label_aliases = DEFAULT_LABEL_ALIASES
     overall = Metrics()
     per_label: dict[str, Metrics] = defaultdict(Metrics)
     per_type: dict[str, Metrics] = defaultdict(Metrics)
@@ -111,6 +116,7 @@ def compute_metrics(
                     pc.get("span_label", ""),
                     gc.get("span_text", ""),
                     gc.get("span_label", ""),
+                    label_aliases=label_aliases,
                 ):
                     gold_matched[gi] = True
                     pred_matched[pi] = True
@@ -421,6 +427,7 @@ def run_evaluation(
     label_profile: str = "balanced",
     drop_labels: list[str] | None = None,
     allow_unstable_stack: bool = False,
+    dump_candidates: Path | None = None,
 ) -> dict:
     """Run the full evaluation pipeline."""
     enforce_runtime_stack(allow_unstable_stack)
@@ -466,7 +473,15 @@ def run_evaluation(
     log.info("  Label profile: %s", label_profile)
     log.info("  Active labels: %s", ", ".join(active_labels))
 
-    extractor = CandidateExtractor(labels=active_labels, label_profile=label_profile)
+    # Disable entailment in compat venv (no MLX available)
+    try:
+        import mlx.core  # noqa: F401
+        has_mlx = True
+    except ImportError:
+        has_mlx = False
+    extractor = CandidateExtractor(
+        labels=active_labels, label_profile=label_profile, use_entailment=has_mlx,
+    )
     extractor._load_model()
 
     # Run GLiNER on all messages
@@ -541,6 +556,23 @@ def run_evaluation(
         f"in {elapsed:.1f}s ({elapsed / len(gold_records) * 1000:.1f}ms/msg)"
     )
     log.info(f"Raw predictions (pre-filter): {raw_total_preds}")
+
+    # Dump intermediate candidates for two-stage eval (GLiNER compat -> MLX entailment)
+    if dump_candidates:
+        dump_data = {
+            "gold_path": str(gold_path),
+            "gold_records": gold_records,
+            "predictions": predictions,
+            "all_raw_preds": all_raw_preds,
+            "mode": mode,
+            "label_profile": label_profile,
+            "extraction_time_s": round(elapsed, 2),
+        }
+        dump_candidates.parent.mkdir(parents=True, exist_ok=True)
+        with open(dump_candidates, "w") as f:
+            json.dump(dump_data, f, indent=2)
+        log.info(f"Dumped {total_preds} candidates to {dump_candidates}")
+        log.info("Run stage 2 with: uv run python scripts/eval_entailment_filter.py")
 
     # Compute metrics
     log.info("Computing metrics...")
@@ -643,6 +675,12 @@ def main():
         action="store_true",
         help="Allow running outside GLiNER compat runtime (not recommended)",
     )
+    parser.add_argument(
+        "--dump-candidates",
+        type=Path,
+        default=None,
+        help="Save intermediate candidates to JSON for two-stage eval with entailment",
+    )
     args = parser.parse_args()
 
     if not args.gold.exists():
@@ -659,6 +697,7 @@ def main():
         label_profile=args.label_profile,
         drop_labels=args.drop_label,
         allow_unstable_stack=args.allow_unstable_stack,
+        dump_candidates=args.dump_candidates,
     )
     log.info("Finished eval_gliner_candidates.py")
 

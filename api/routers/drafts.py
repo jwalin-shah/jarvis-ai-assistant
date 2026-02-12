@@ -74,41 +74,36 @@ def _format_messages_for_context(messages: list[Message]) -> str:
     return "\n".join(lines)
 
 
+_ALLOWED_INSTRUCTION_PATTERN = re.compile(r"^[a-zA-Z0-9 ,.'!?;:\-/()]+$")
+
+
 def _sanitize_instruction(instruction: str | None) -> str:
     """Sanitize user instruction to prevent prompt injection.
 
-    Removes potentially malicious patterns that could override system prompts.
+    Uses an allowlist approach: only alphanumeric characters and common
+    punctuation are permitted. Any instruction containing characters outside
+    the allowlist is rejected entirely.
 
     Args:
         instruction: Raw user instruction
 
     Returns:
-        Sanitized instruction string
+        Sanitized instruction string, or "None" if empty/invalid
     """
     if not instruction:
         return "None"
 
     # Limit length to prevent excessive prompts
-    instruction = instruction[:200]
+    instruction = instruction[:200].strip()
 
-    # Remove common prompt injection patterns
-    dangerous_patterns = [
-        "ignore previous",
-        "ignore above",
-        "disregard",
-        "system:",
-        "assistant:",
-        "user:",
-        "<|im_start|>",
-        "<|im_end|>",
-        "###",
-    ]
+    if not instruction:
+        return "None"
 
-    for pattern in dangerous_patterns:
-        if re.search(re.escape(pattern), instruction, re.IGNORECASE):
-            instruction = re.sub(re.escape(pattern), "[removed]", instruction, flags=re.IGNORECASE)
+    # Allowlist: only permit safe characters (letters, digits, common punctuation)
+    if not _ALLOWED_INSTRUCTION_PATTERN.match(instruction):
+        return "None"
 
-    return instruction.strip()
+    return instruction
 
 
 def _build_reply_prompt(

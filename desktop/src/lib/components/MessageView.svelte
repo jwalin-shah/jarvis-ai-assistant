@@ -167,12 +167,17 @@
   }
 
   function getVisibleMessages(): Message[] {
-    return conversationsStore.messagesWithOptimistic.slice(visibleStartIndex, visibleEndIndex);
+    const allMessages = conversationsStore.messagesWithOptimistic;
+    // Extend end index to include optimistic messages if we're showing the tail
+    const effectiveEnd = visibleEndIndex >= conversationsStore.messages.length
+      ? allMessages.length
+      : visibleEndIndex;
+    return allMessages.slice(visibleStartIndex, effectiveEnd);
   }
 
   let rafPending = false;
   function updateVirtualScroll() {
-    if (!messagesContainer || rafPending) return;
+    if (!messagesContainer || rafPending || suppressScrollRecalc) return;
     rafPending = true;
     requestAnimationFrame(() => {
       rafPending = false;
@@ -232,6 +237,10 @@
       updateOptimisticMessage(optimisticId, { status: 'sending' });
     } else {
       optimisticId = addOptimisticMessage(text);
+      // Ensure optimistic message is visible and scroll to it
+      visibleEndIndex = conversationsStore.messages.length;
+      virtualBottomPadding = 0;
+      scrollToBottom();
     }
 
     try {
@@ -302,7 +311,7 @@
     removeOptimisticMessage(optimisticId);
   }
 
-  let previousFirstMessageId = $state<number | null>(null);
+  let previousLastMessageId = $state<number | null>(null);
 
   const SCROLL_THRESHOLD = 200;
 
@@ -321,24 +330,7 @@
       !conversationsStore.loadingMore &&
       conversationsStore.messages.length > 0
     ) {
-      const firstVisibleMessage = conversationsStore.messages[visibleStartIndex];
-      previousFirstMessageId = firstVisibleMessage?.id ?? null;
-
-      await loadMoreMessages();
-
-      await tick();
-      if (messagesContainer && previousFirstMessageId !== null) {
-        const messages = conversationsStore.messages;
-        const prevIndex = messages.findIndex((m) => m.id === previousFirstMessageId);
-        if (prevIndex > 0) {
-          let newScrollTop = 48;
-          for (let i = 0; i < prevIndex; i++) {
-            newScrollTop += getMessageHeight(messages[i]!.id);
-          }
-          messagesContainer.scrollTop = newScrollTop;
-        }
-        previousFirstMessageId = null;
-      }
+      await loadOlderAndMaintainScroll();
     }
 
     // Check if at bottom
@@ -351,35 +343,87 @@
     }
   }
 
-  async function handleLoadEarlier() {
-    if (messagesContainer) {
-      const firstVisibleMessage = conversationsStore.messages[visibleStartIndex];
-      previousFirstMessageId = firstVisibleMessage?.id ?? null;
-    }
+  /**
+   * Load older messages and maintain scroll position.
+   * Uses scrollHeight diff to compensate for added content above the viewport,
+   * avoiding reliance on estimated heights which cause "yeeting".
+   */
+  async function loadOlderAndMaintainScroll() {
+    if (!messagesContainer) return;
+
+    suppressScrollRecalc = true;
+    const prevCount = conversationsStore.messages.length;
+    const prevScrollTop = messagesContainer.scrollTop;
+
     await loadMoreMessages();
+
+    const addedCount = conversationsStore.messages.length - prevCount;
+    if (addedCount > 0 && messagesContainer) {
+      // Shift visible range to keep the same messages rendered
+      visibleStartIndex += addedCount;
+      visibleEndIndex += addedCount;
+
+      // Update padding using cumulative heights
+      virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
+      const totalLen = conversationsStore.messages.length;
+      virtualBottomPadding = cumulativeHeights[totalLen]! - cumulativeHeights[visibleEndIndex]!;
+
+      await tick();
+
+      // Compensate scroll position for the added top padding
+      const addedPadding = addedCount * ESTIMATED_MESSAGE_HEIGHT;
+      messagesContainer.scrollTop = prevScrollTop + addedPadding;
+    }
+
+    requestAnimationFrame(() => {
+      suppressScrollRecalc = false;
+      updateVirtualScroll();
+    });
+  }
+
+  async function handleLoadEarlier() {
+    await loadOlderAndMaintainScroll();
   }
 
   // Effects
   $effect(() => {
     const currentCount = conversationsStore.messages.length;
+    const currentLastId = conversationsStore.messages[currentCount - 1]?.id ?? null;
+
     if (currentCount > previousMessageCount && previousMessageCount > 0) {
-      const newMessages = conversationsStore.messages.slice(previousMessageCount);
-      const newIds = new Set(newMessageIds);
-      newMessages.forEach((m) => newIds.add(m.id));
-      newMessageIds = newIds;
+      // Only treat as "new messages" if last message changed (appended at end).
+      // When loading older messages (prepended), last message stays the same.
+      if (currentLastId !== previousLastMessageId) {
+        const newMessages = conversationsStore.messages.slice(previousMessageCount);
+        const newIds = new Set(newMessageIds);
+        newMessages.forEach((m) => newIds.add(m.id));
+        newMessageIds = newIds;
 
-      if (isAtBottom) {
-        visibleEndIndex = conversationsStore.messages.length;
-        scrollToBottom();
-      } else {
-        hasNewMessagesBelow = true;
+        if (isAtBottom) {
+          // Reset virtual scroll state properly (like needsScrollToBottom path)
+          const msgLen = conversationsStore.messages.length;
+          visibleEndIndex = msgLen;
+          visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+          virtualTopPadding = cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
+          virtualBottomPadding = 0;
+
+          suppressScrollRecalc = true;
+          scrollToBottom().then(() => {
+            requestAnimationFrame(() => {
+              suppressScrollRecalc = false;
+            });
+          });
+        } else {
+          hasNewMessagesBelow = true;
+        }
+
+        setTimeout(() => {
+          newMessageIds = new Set();
+        }, 1000);
       }
-
-      setTimeout(() => {
-        newMessageIds = new Set();
-      }, 1000);
     }
     previousMessageCount = currentCount;
+    previousLastMessageId = currentLastId;
   });
 
   $effect(() => {
@@ -402,7 +446,7 @@
       if (needsScrollToBottom) {
         visibleEndIndex = msgCount;
         visibleStartIndex = Math.max(0, msgCount - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-        virtualTopPadding = visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
+        virtualTopPadding = cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
         virtualBottomPadding = 0;
 
         needsScrollToBottom = false;
@@ -726,7 +770,18 @@
     </div>
 
     {#if !isAtBottom || hasNewMessagesBelow}
-      <button class="scroll-to-bottom-fab" onclick={handleNewMessagesClick} aria-label="Scroll to bottom">
+      <button
+        class="scroll-to-bottom-fab"
+        onclick={handleNewMessagesClick}
+        onkeydown={(e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleNewMessagesClick();
+          }
+        }}
+        tabindex="0"
+        aria-label="Scroll to bottom"
+      >
         {#if newMessageIds.size > 0}
           <span class="fab-badge">{newMessageIds.size > 99 ? '99+' : newMessageIds.size}</span>
         {/if}

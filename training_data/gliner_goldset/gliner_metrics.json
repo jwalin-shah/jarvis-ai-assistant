@@ -1,77 +1,78 @@
 {
   "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r4.json",
   "num_records": 796,
-  "num_predictions": 13,
+  "num_predictions": 192,
   "mode": "pipeline",
   "raw_threshold": 0.01,
   "disable_label_min": false,
   "context_window": 0,
-  "label_profile": "high_precision",
+  "label_profile": "balanced",
   "drop_labels": [],
   "active_labels": [
     "family_member",
+    "place",
     "org",
     "food_item",
     "job_role",
     "health_condition",
     "activity"
   ],
-  "num_raw_predictions": 4567,
-  "extraction_time_s": 130.62,
-  "ms_per_message": 164.1,
+  "num_raw_predictions": 2212,
+  "extraction_time_s": 97.93,
+  "ms_per_message": 123.0,
   "overall": {
-    "precision": 0.25,
-    "recall": 0.0128,
-    "f1": 0.0244,
-    "tp": 4,
-    "fp": 12,
-    "fn": 308,
+    "precision": 0.3165,
+    "recall": 0.2404,
+    "f1": 0.2732,
+    "tp": 75,
+    "fp": 162,
+    "fn": 237,
     "support": 312
   },
   "per_label": {
     "activity": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 52,
+      "precision": 0.0667,
+      "recall": 0.0192,
+      "f1": 0.0299,
+      "tp": 1,
+      "fp": 14,
+      "fn": 51,
       "support": 52
     },
     "current_location": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1": 0.8571,
+      "tp": 3,
       "fp": 0,
-      "fn": 4,
+      "fn": 1,
       "support": 4
     },
     "employer": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.6667,
+      "tp": 2,
       "fp": 0,
-      "fn": 4,
+      "fn": 2,
       "support": 4
     },
     "family_member": {
-      "precision": 0.6667,
-      "recall": 0.0244,
-      "f1": 0.0471,
-      "tp": 2,
-      "fp": 1,
-      "fn": 80,
+      "precision": 0.4923,
+      "recall": 0.3902,
+      "f1": 0.4354,
+      "tp": 32,
+      "fp": 33,
+      "fn": 50,
       "support": 82
     },
     "food_item": {
-      "precision": 1.0,
-      "recall": 0.0588,
-      "f1": 0.1111,
-      "tp": 1,
-      "fp": 0,
-      "fn": 16,
+      "precision": 0.3846,
+      "recall": 0.2941,
+      "f1": 0.3333,
+      "tp": 5,
+      "fp": 8,
+      "fn": 12,
       "support": 17
     },
     "friend_name": {
@@ -93,39 +94,39 @@
       "support": 3
     },
     "health_condition": {
-      "precision": 0.2,
-      "recall": 0.0154,
-      "f1": 0.0286,
-      "tp": 1,
-      "fp": 4,
-      "fn": 64,
+      "precision": 0.2727,
+      "recall": 0.1846,
+      "f1": 0.2202,
+      "tp": 12,
+      "fp": 32,
+      "fn": 53,
       "support": 65
     },
     "job_role": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 12,
+      "precision": 0.125,
+      "recall": 0.1667,
+      "f1": 0.1429,
+      "tp": 2,
+      "fp": 14,
+      "fn": 10,
       "support": 12
     },
     "org": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 7,
-      "fn": 31,
+      "precision": 0.2581,
+      "recall": 0.2581,
+      "f1": 0.2581,
+      "tp": 8,
+      "fp": 23,
+      "fn": 23,
       "support": 31
     },
     "past_location": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.3333,
+      "f1": 0.5,
+      "tp": 2,
       "fp": 0,
-      "fn": 6,
+      "fn": 4,
       "support": 6
     },
     "person_name": {
@@ -138,12 +139,12 @@
       "support": 2
     },
     "place": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 31,
+      "precision": 0.1739,
+      "recall": 0.2581,
+      "f1": 0.2078,
+      "tp": 8,
+      "fp": 38,
+      "fn": 23,
       "support": 31
     }
   },
@@ -158,21 +159,21 @@
       "support": 1
     },
     "health.condition": {
-      "precision": 1.0,
-      "recall": 0.0149,
-      "f1": 0.0294,
-      "tp": 1,
-      "fp": 0,
-      "fn": 66,
+      "precision": 0.2727,
+      "recall": 0.1791,
+      "f1": 0.2162,
+      "tp": 12,
+      "fp": 32,
+      "fn": 55,
       "support": 67
     },
     "location.current": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 14,
+      "precision": 0.1364,
+      "recall": 0.4286,
+      "f1": 0.2069,
+      "tp": 6,
+      "fp": 38,
+      "fn": 8,
       "support": 14
     },
     "location.future": {
@@ -185,30 +186,30 @@
       "support": 5
     },
     "location.past": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.3125,
+      "f1": 0.4762,
+      "tp": 5,
       "fp": 0,
-      "fn": 16,
+      "fn": 11,
       "support": 16
     },
     "other_personal_fact": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 11,
-      "fn": 17,
+      "precision": 1.0,
+      "recall": 0.1765,
+      "f1": 0.3,
+      "tp": 3,
+      "fp": 0,
+      "fn": 14,
       "support": 17
     },
     "personal.school": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 0.2353,
+      "f1": 0.381,
+      "tp": 4,
       "fp": 0,
-      "fn": 17,
+      "fn": 13,
       "support": 17
     },
     "preference": {
@@ -221,39 +222,39 @@
       "support": 1
     },
     "preference.activity": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 46,
+      "precision": 0.125,
+      "recall": 0.0435,
+      "f1": 0.0645,
+      "tp": 2,
+      "fp": 14,
+      "fn": 44,
       "support": 46
     },
     "preference.food_dislike": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 1,
       "fp": 0,
-      "fn": 1,
+      "fn": 0,
       "support": 1
     },
     "preference.food_like": {
-      "precision": 1.0,
-      "recall": 0.0769,
-      "f1": 0.1429,
-      "tp": 1,
-      "fp": 0,
-      "fn": 12,
+      "precision": 0.2727,
+      "recall": 0.2308,
+      "f1": 0.25,
+      "tp": 3,
+      "fp": 8,
+      "fn": 10,
       "support": 13
     },
     "relationship.family": {
-      "precision": 0.6667,
-      "recall": 0.0244,
-      "f1": 0.0471,
-      "tp": 2,
-      "fp": 1,
-      "fn": 80,
+      "precision": 0.4923,
+      "recall": 0.3902,
+      "f1": 0.4354,
+      "tp": 32,
+      "fp": 33,
+      "fn": 50,
       "support": 82
     },
     "relationship.friend": {
@@ -275,41 +276,59 @@
       "support": 1
     },
     "work.employer": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 17,
+      "precision": 0.1786,
+      "recall": 0.2941,
+      "f1": 0.2222,
+      "tp": 5,
+      "fp": 23,
+      "fn": 12,
       "support": 17
     },
     "work.former_employer": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 1,
       "fp": 0,
-      "fn": 1,
+      "fn": 0,
       "support": 1
     },
     "work.job_title": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 10,
+      "precision": 0.0667,
+      "recall": 0.1,
+      "f1": 0.08,
+      "tp": 1,
+      "fp": 14,
+      "fn": 9,
       "support": 10
     }
   },
   "per_slice": {
-    "positive": {
-      "precision": 0.5,
-      "recall": 0.0128,
-      "f1": 0.025,
-      "tp": 4,
+    "hard_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 2,
+      "fn": 0,
+      "support": 0
+    },
+    "near_miss": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
       "fp": 4,
-      "fn": 308,
+      "fn": 0,
+      "support": 0
+    },
+    "positive": {
+      "precision": 0.5474,
+      "recall": 0.2404,
+      "f1": 0.3341,
+      "tp": 75,
+      "fp": 62,
+      "fn": 237,
       "support": 312
     },
     "random_negative": {
@@ -317,7 +336,7 @@
       "recall": 0.0,
       "f1": 0.0,
       "tp": 0,
-      "fp": 8,
+      "fp": 94,
       "fn": 0,
       "support": 0
     }
@@ -325,164 +344,168 @@
   "threshold_sweep": [
     {
       "threshold": 0.3,
-      "precision": 0.1351,
-      "recall": 0.0801,
-      "f1": 0.1006,
-      "tp": 25,
-      "fp": 160,
-      "fn": 287,
+      "precision": 0.2041,
+      "recall": 0.3814,
+      "f1": 0.2659,
+      "tp": 119,
+      "fp": 464,
+      "fn": 193,
       "support": 312
     },
     {
       "threshold": 0.35,
-      "precision": 0.1667,
-      "recall": 0.0705,
-      "f1": 0.0991,
-      "tp": 22,
-      "fp": 110,
-      "fn": 290,
+      "precision": 0.2222,
+      "recall": 0.359,
+      "f1": 0.2745,
+      "tp": 112,
+      "fp": 392,
+      "fn": 200,
       "support": 312
     },
     {
       "threshold": 0.4,
-      "precision": 0.1538,
-      "recall": 0.0449,
-      "f1": 0.0695,
-      "tp": 14,
-      "fp": 77,
-      "fn": 298,
+      "precision": 0.2273,
+      "recall": 0.3205,
+      "f1": 0.266,
+      "tp": 100,
+      "fp": 340,
+      "fn": 212,
       "support": 312
     },
     {
       "threshold": 0.45,
-      "precision": 0.2281,
-      "recall": 0.0417,
-      "f1": 0.0705,
-      "tp": 13,
-      "fp": 44,
-      "fn": 299,
+      "precision": 0.2248,
+      "recall": 0.2788,
+      "f1": 0.2489,
+      "tp": 87,
+      "fp": 300,
+      "fn": 225,
       "support": 312
     },
     {
       "threshold": 0.5,
-      "precision": 0.1905,
-      "recall": 0.0256,
-      "f1": 0.0452,
-      "tp": 8,
-      "fp": 34,
-      "fn": 304,
+      "precision": 0.2267,
+      "recall": 0.25,
+      "f1": 0.2378,
+      "tp": 78,
+      "fp": 266,
+      "fn": 234,
       "support": 312
     },
     {
       "threshold": 0.55,
-      "precision": 0.1562,
-      "recall": 0.016,
-      "f1": 0.0291,
-      "tp": 5,
-      "fp": 27,
-      "fn": 307,
+      "precision": 0.2222,
+      "recall": 0.2244,
+      "f1": 0.2233,
+      "tp": 70,
+      "fp": 245,
+      "fn": 242,
       "support": 312
     },
     {
       "threshold": 0.6,
-      "precision": 0.0833,
-      "recall": 0.0064,
-      "f1": 0.0119,
-      "tp": 2,
-      "fp": 22,
-      "fn": 310,
+      "precision": 0.2148,
+      "recall": 0.1859,
+      "f1": 0.1993,
+      "tp": 58,
+      "fp": 212,
+      "fn": 254,
       "support": 312
     },
     {
       "threshold": 0.65,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 15,
-      "fn": 312,
+      "precision": 0.2232,
+      "recall": 0.1667,
+      "f1": 0.1908,
+      "tp": 52,
+      "fp": 181,
+      "fn": 260,
       "support": 312
     },
     {
       "threshold": 0.7,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 3,
-      "fn": 312,
+      "precision": 0.2169,
+      "recall": 0.1314,
+      "f1": 0.1637,
+      "tp": 41,
+      "fp": 148,
+      "fn": 271,
       "support": 312
     },
     {
       "threshold": 0.75,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 312,
+      "precision": 0.2071,
+      "recall": 0.0929,
+      "f1": 0.1283,
+      "tp": 29,
+      "fp": 111,
+      "fn": 283,
       "support": 312
     },
     {
       "threshold": 0.8,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "tp": 0,
-      "fp": 0,
-      "fn": 312,
+      "precision": 0.2121,
+      "recall": 0.0673,
+      "f1": 0.1022,
+      "tp": 21,
+      "fp": 78,
+      "fn": 291,
       "support": 312
     }
   ],
   "error_slices": {
-    "short_message_errors": 19,
-    "fp_on_negatives": 8,
+    "short_message_errors": 28,
+    "fp_on_negatives": 96,
     "message_length_distribution": {
       "<20": 173,
       "20-50": 275,
       "50-100": 207,
       ">100": 141
     },
-    "total_errors": 320
+    "total_errors": 399
   },
   "raw_stats": {
-    "raw_total_predictions": 4567,
-    "raw_messages_with_predictions": 648,
+    "raw_total_predictions": 2212,
+    "raw_messages_with_predictions": 629,
     "raw_messages_total": 648,
-    "raw_predictions_per_message": 7.0478,
+    "raw_predictions_per_message": 3.4136,
     "raw_score_summary": {
       "min": 0.01,
-      "p25": 0.0234,
-      "p50": 0.0467,
-      "p75": 0.0954,
-      "p90": 0.1793,
-      "p95": 0.2493,
-      "max": 0.7333
+      "p25": 0.0259,
+      "p50": 0.0683,
+      "p75": 0.2493,
+      "p90": 0.5838,
+      "p95": 0.7487,
+      "max": 0.9342
     },
     "raw_top_labels": [
       {
-        "label": "activity",
-        "count": 2175
-      },
-      {
-        "label": "org",
-        "count": 687
-      },
-      {
-        "label": "job_role",
-        "count": 571
-      },
-      {
         "label": "family_member",
-        "count": 510
-      },
-      {
-        "label": "food_item",
-        "count": 320
+        "count": 1209
       },
       {
         "label": "health_condition",
-        "count": 304
+        "count": 237
+      },
+      {
+        "label": "activity",
+        "count": 213
+      },
+      {
+        "label": "place",
+        "count": 207
+      },
+      {
+        "label": "org",
+        "count": 177
+      },
+      {
+        "label": "job_role",
+        "count": 108
+      },
+      {
+        "label": "food_item",
+        "count": 61
       }
     ]
   }

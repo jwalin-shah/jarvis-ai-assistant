@@ -35,7 +35,7 @@
 
   // Conversation name cache (chat_id -> display name), populated after search results arrive
   // This decouples groupedResults from $conversationsStore to avoid recomputation on every poll
-  let conversationNameCache = new Map<string, string>();
+  let conversationNameCache = $state(new Map<string, string>());
 
   // Debounce timer
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -235,8 +235,7 @@
         );
       }
     }
-    // Trigger reactivity by reassigning
-    conversationNameCache = new Map(conversationNameCache);
+    // $state with Map tracks .set() mutations, no reassignment needed
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -293,9 +292,6 @@
 
   function highlightMatch(text: string, searchQuery: string): string {
     if (!searchQuery.trim() || !text) return escapeHtml(text);
-
-    // For semantic search, don't highlight (no exact matches)
-    if (searchMode === "semantic") return escapeHtml(text);
 
     // Escape HTML in user text first to prevent XSS, then highlight
     const safeText = escapeHtml(text);

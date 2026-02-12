@@ -32,9 +32,9 @@ import mlx.nn as nn
 import numpy as np
 from tokenizers import Tokenizer
 
-logger = logging.getLogger(__name__)
+from models.utils import HF_CACHE, find_model_snapshot, map_hf_bert_key
 
-HF_CACHE = Path.home() / ".cache/huggingface/hub"
+logger = logging.getLogger(__name__)
 
 # Model registry: name -> (hf_repo, pooling_mode)
 MODEL_REGISTRY: dict[str, tuple[str, str]] = {
@@ -217,30 +217,14 @@ def load_bert_weights(model: BertModel, weights_path: Path, has_pooler: bool = T
     for hf_name in list(hf_weights.keys()):
         weight = hf_weights.pop(hf_name)
 
-        if "position_ids" in hf_name:
+        stripped = hf_name.replace("bert.", "")
+        mapped = map_hf_bert_key(stripped)
+        if mapped is None:
             continue
-
         if "pooler" in hf_name and not has_pooler:
             continue
 
-        name = hf_name.replace("bert.", "")
-
-        # Encoder layers
-        if "encoder.layer." in name:
-            name = name.replace("encoder.layer.", "encoder.layers.")
-            name = name.replace(".attention.self.query", ".attention.query")
-            name = name.replace(".attention.self.key", ".attention.key")
-            name = name.replace(".attention.self.value", ".attention.value")
-            name = name.replace(".attention.output.dense", ".attention_output_dense")
-            name = name.replace(".attention.output.LayerNorm", ".attention_output_LayerNorm")
-            name = name.replace(".intermediate.dense", ".intermediate_dense")
-            name = name.replace(".output.dense", ".output_dense")
-            name = name.replace(".output.LayerNorm", ".output_LayerNorm")
-
-        # Pooler
-        name = name.replace("pooler.dense", "pooler_dense")
-
-        hf_weights[name] = weight
+        hf_weights[mapped] = weight
 
     model.load_weights(list(hf_weights.items()))
     del hf_weights
@@ -255,7 +239,13 @@ def _check_has_pooler(weights_path: Path) -> bool:
     """Check if model has pooler by reading safetensors header (not full weights)."""
     with open(weights_path, "rb") as f:
         header_size = struct.unpack("<Q", f.read(8))[0]
-        header_json = f.read(header_size).decode("utf-8")
+        data = f.read(header_size)
+        if len(data) != header_size:
+            raise ValueError(
+                f"Truncated safetensors header in {weights_path}: "
+                f"expected {header_size} bytes, got {len(data)}"
+            )
+        header_json = data.decode("utf-8")
     return "pooler" in header_json
 
 
@@ -317,15 +307,10 @@ class InProcessEmbedder:
             if not model_dir.exists():
                 raise FileNotFoundError(
                     f"Model not found in cache: {model_dir}. "
-                    "Download it first with: huggingface-cli download {hf_repo}"
+                    f"Download it first with: huggingface-cli download {hf_repo}"
                 )
 
-            # Find snapshot
-            snapshots_dir = model_dir / "snapshots"
-            snapshots = list(snapshots_dir.iterdir())
-            if not snapshots:
-                raise FileNotFoundError(f"No snapshots found in {snapshots_dir}")
-            snapshot = snapshots[0]
+            snapshot = find_model_snapshot(model_dir)
 
             # Load config
             config_path = snapshot / "config.json"

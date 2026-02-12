@@ -8,7 +8,6 @@ notifications via the socket server.
 
 import asyncio
 import logging
-import os
 import sqlite3
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
@@ -16,6 +15,24 @@ from pathlib import Path
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Watcher Exception Hierarchy
+# =============================================================================
+
+
+class WatcherError(Exception):
+    """Base exception for watcher errors."""
+
+
+class TransientWatcherError(WatcherError):
+    """Transient error that may resolve on retry (e.g., DB locked, network hiccup)."""
+
+
+class PermanentWatcherError(WatcherError):
+    """Permanent error that will not resolve on retry (e.g., missing schema, bad path)."""
+
 
 # Path to iMessage database
 CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
@@ -102,8 +119,7 @@ class ChatDBWatcher:
         try:
             # Validate chat.db schema before starting
             if not await asyncio.to_thread(self._validate_schema):
-                logger.error("chat.db schema validation failed, watcher not started")
-                return
+                raise PermanentWatcherError("chat.db schema validation failed")
 
             self._running = True
 
@@ -123,6 +139,10 @@ class ChatDBWatcher:
                 )
                 self._task = asyncio.create_task(self._watch_polling())
 
+        except PermanentWatcherError:
+            logger.error("Watcher startup failed: permanent error, not retrying")
+            self._running = False
+            raise
         except Exception as e:
             logger.error("Watcher startup failed: %s", e)
             self._running = False
@@ -194,6 +214,13 @@ class ChatDBWatcher:
                             # Debounce rapid changes
                             await self._debounced_check()
                             consecutive_errors = 0
+                        except (OSError, sqlite3.OperationalError) as check_error:
+                            consecutive_errors += 1
+                            logger.warning(
+                                "Transient error processing DB change (consecutive: %d): %s",
+                                consecutive_errors,
+                                TransientWatcherError(str(check_error)),
+                            )
                         except Exception as check_error:
                             consecutive_errors += 1
                             logger.warning(
@@ -278,11 +305,21 @@ class ChatDBWatcher:
 
             except asyncio.CancelledError:
                 break
+            except (OSError, sqlite3.OperationalError) as e:
+                consecutive_errors += 1
+                logger.warning(
+                    "Transient watcher error (consecutive: %d): %s",
+                    consecutive_errors,
+                    TransientWatcherError(str(e)),
+                )
+
+                # Exponential backoff: 2s, 4s, 8s, max 30s
+                backoff_delay = min(self._poll_interval * (2**consecutive_errors), 30.0)
+                await asyncio.sleep(backoff_delay)
             except Exception as e:
                 consecutive_errors += 1
                 logger.warning("Watcher error (consecutive: %d): %s", consecutive_errors, e)
 
-                # Exponential backoff: 2s, 4s, 8s, max 30s
                 backoff_delay = min(self._poll_interval * (2**consecutive_errors), 30.0)
                 await asyncio.sleep(backoff_delay)
 
@@ -468,17 +505,19 @@ class ChatDBWatcher:
             logger.debug("Passive feedback detection error: %s", e)
 
     async def _extract_facts(self, messages: list[dict[str, Any]]) -> None:
-        """Extract and persist facts from new messages (background task)."""
+        """Extract and persist facts from new messages using GLiNER + NLI."""
         try:
-            from jarvis.contacts.fact_extractor import FactExtractor
-            from jarvis.contacts.fact_storage import save_and_index_facts
+            from jarvis.contacts.candidate_extractor import CandidateExtractor
+            from jarvis.contacts.fact_storage import save_candidate_facts
 
             # Process all messages with text (both incoming and outgoing)
             extractable = [m for m in messages if m.get("text")]
             if not extractable:
                 return
 
-            extractor = FactExtractor()
+            extractor = CandidateExtractor(
+                label_profile="balanced", use_entailment=True
+            )
 
             # Group by chat_id (proxy for contact)
             by_chat: dict[str, list[dict[str, Any]]] = {}
@@ -492,17 +531,39 @@ class ChatDBWatcher:
 
             for chat_id, chat_msgs in by_chat.items():
                 try:
-                    facts = await asyncio.to_thread(extractor.extract_facts, chat_msgs, chat_id)
-                    if facts:
-                        inserted = await asyncio.to_thread(save_and_index_facts, facts, chat_id)
+                    from jarvis.text_normalizer import normalize_text
+
+                    # Build batch input format for extract_batch()
+                    batch_msgs = []
+                    for m in chat_msgs:
+                        raw = m.get("text")
+                        if not raw:
+                            continue
+                        normalized = normalize_text(raw)
+                        if not normalized or not normalized.strip():
+                            continue
+                        batch_msgs.append(
+                            {
+                                "text": normalized,
+                                "message_id": m.get("id", 0),
+                                "is_from_me": m.get("is_from_me", False),
+                                "chat_id": chat_id,
+                            }
+                        )
+                    candidates = await asyncio.to_thread(
+                        extractor.extract_batch, batch_msgs
+                    )
+                    if candidates:
+                        inserted = await asyncio.to_thread(
+                            save_candidate_facts, candidates, chat_id
+                        )
                         if inserted:
                             logger.info(
-                                "Extracted %d facts (%d new) for %s",
-                                len(facts),
+                                "Extracted %d candidates (%d new) for %s",
+                                len(candidates),
                                 inserted,
                                 chat_id[:20],
                             )
-                            # Invalidate profile cache if significant new facts (threshold: 5+)
                             if inserted >= 5:
                                 chats_to_invalidate.append(chat_id)
                 except Exception as e:
@@ -515,82 +576,15 @@ class ChatDBWatcher:
 
                     await asyncio.to_thread(invalidate_profile_cache)
                     logger.info(
-                        "Invalidated contact profile cache after extracting facts for %d chats",
+                        "Invalidated contact profile cache after extracting facts "
+                        "for %d chats",
                         len(chats_to_invalidate),
                     )
                 except Exception as e:
                     logger.debug("Profile cache invalidation error: %s", e)
 
-            # Shadow GLiNER extraction (if enabled via env var)
-            if os.environ.get("JARVIS_SHADOW_EXTRACT") == "1":
-                await self._shadow_extract_gliner(extractable, by_chat)
-
         except Exception as e:
             logger.debug("Fact extraction pipeline error: %s", e)
-
-    async def _shadow_extract_gliner(
-        self,
-        incoming: list[dict[str, Any]],
-        by_chat: dict[str, list[dict[str, Any]]],
-    ) -> None:
-        """Run GLiNER candidate extraction in shadow mode (log only, no DB writes).
-
-        Extracts candidates using CandidateExtractor, filters through the fact gate,
-        and writes results to ~/.jarvis/shadow_facts.jsonl for offline analysis.
-        """
-        try:
-            import json
-
-            from jarvis.contacts.candidate_extractor import CandidateExtractor
-
-            shadow_path = Path.home() / ".jarvis" / "shadow_facts.jsonl"
-            shadow_path.parent.mkdir(parents=True, exist_ok=True)
-
-            extractor = CandidateExtractor(label_profile="balanced")
-
-            total_candidates = 0
-            total_messages = 0
-
-            for chat_id, chat_msgs in by_chat.items():
-                for msg in chat_msgs:
-                    text = msg.get("text", "")
-                    msg_id = msg.get("id", 0)
-                    if not text or len(text) < 5:
-                        continue
-
-                    total_messages += 1
-                    try:
-                        candidates = await asyncio.to_thread(
-                            extractor.extract_candidates,
-                            text,
-                            msg_id,
-                            chat_id=None,
-                            is_from_me=msg.get("is_from_me", False),
-                            use_gate=True,
-                        )
-
-                        if candidates:
-                            total_candidates += len(candidates)
-                            # Append to JSONL (incremental, crash-safe)
-                            with open(shadow_path, "a") as f:
-                                for c in candidates:
-                                    record = c.to_dict()
-                                    record["watcher_chat_id"] = chat_id
-                                    f.write(json.dumps(record) + "\n")
-
-                    except Exception as e:
-                        logger.debug("Shadow GLiNER extraction failed for msg %d: %s", msg_id, e)
-
-            if total_messages > 0:
-                logger.info(
-                    "Shadow GLiNER: %d candidates from %d messages -> %s",
-                    total_candidates,
-                    total_messages,
-                    shadow_path,
-                )
-
-        except Exception as e:
-            logger.debug("Shadow GLiNER extraction error: %s", e)
 
     async def _get_resegment_lock(self, chat_id: str) -> asyncio.Lock:
         """Get or create a per-chat lock for serializing resegmentation.
@@ -694,13 +688,32 @@ class ChatDBWatcher:
 
                 # Check required columns in message table (only what we query)
                 # Note: ROWID is always present in SQLite, no need to check
+                # PRAGMA table_info returns: (cid, name, type, notnull, dflt_value, pk)
                 cursor.execute("PRAGMA table_info(message)")
-                columns = {row[1] for row in cursor.fetchall()}
+                column_info = {row[1]: row[2].upper() for row in cursor.fetchall()}
                 required_columns = {"text", "date", "is_from_me", "handle_id"}
-                missing_columns = required_columns - columns
+                missing_columns = required_columns - set(column_info.keys())
                 if missing_columns:
                     logger.error("chat.db message table missing columns: %s", missing_columns)
                     return False
+
+                # Validate column types for the columns we depend on
+                expected_types = {
+                    "text": {"TEXT", ""},  # TEXT or untyped (SQLite is flexible)
+                    "date": {"INTEGER", "REAL", ""},
+                    "is_from_me": {"INTEGER", "BOOLEAN", ""},
+                    "handle_id": {"INTEGER", ""},
+                }
+                for col_name, valid_types in expected_types.items():
+                    actual_type = column_info.get(col_name, "")
+                    if actual_type not in valid_types:
+                        logger.error(
+                            "chat.db message.%s has unexpected type '%s' (expected one of %s)",
+                            col_name,
+                            actual_type,
+                            valid_types,
+                        )
+                        return False
 
                 return True
             finally:
@@ -731,6 +744,7 @@ class ChatDBWatcher:
                 f"file:{CHAT_DB_PATH}?mode=ro",
                 uri=True,
                 timeout=5.0,
+                check_same_thread=False,
             )
             return self._poll_conn
         except Exception as e:

@@ -111,19 +111,18 @@ class TestNERLinkingBoundaries:
     def test_resolve_only_matches_cached_contacts(self):
         """_resolve_person_to_contact uses only its contacts cache."""
         ext = FactExtractor()
-        ext._contacts_cache = [
-            (CONTACT_A, "Sarah Johnson", {"sarah", "johnson"}),
-        ]
+        cache = [(CONTACT_A, "Sarah Johnson", {"sarah", "johnson"})]
+        ext._get_contacts_for_resolution = lambda: cache
         assert ext._resolve_person_to_contact("Sarah Johnson") == CONTACT_A
         assert ext._resolve_person_to_contact("Mike Thompson") is None
 
     def test_different_contact_caches_independent(self):
         """Two extractors with different caches don't interfere."""
         ext1 = FactExtractor()
-        ext1._contacts_cache = [(CONTACT_A, "Alice", {"alice"})]
+        ext1._get_contacts_for_resolution = lambda: [(CONTACT_A, "Alice", {"alice"})]
 
         ext2 = FactExtractor()
-        ext2._contacts_cache = [(CONTACT_B, "Bob", {"bob"})]
+        ext2._get_contacts_for_resolution = lambda: [(CONTACT_B, "Bob", {"bob"})]
 
         assert ext1._resolve_person_to_contact("Alice") == CONTACT_A
         assert ext1._resolve_person_to_contact("Bob") is None

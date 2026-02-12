@@ -203,7 +203,7 @@ describe("initial state", () => {
     expect(conversationsStore.hasMore).toBe(false);
     expect(conversationsStore.error).toBeNull();
     expect(conversationsStore.connectionStatus).toBe("disconnected");
-    expect(conversationsStore.conversationsWithNewMessages.size).toBe(0);
+    expect(conversationsStore.unreadCounts.size).toBe(0);
     expect(conversationsStore.isWindowFocused).toBe(true);
     expect(conversationsStore.optimisticMessages).toEqual([]);
     expect(conversationsStore.prefetchedDraft).toBeNull();
@@ -233,7 +233,7 @@ describe("markConversationAsNew / clearNewMessageIndicator", () => {
     markConversationAsNew("chat-1");
     markConversationAsNew("chat-1");
     expect(conversationsStore.hasNewMessages("chat-1")).toBe(true);
-    expect(conversationsStore.conversationsWithNewMessages.size).toBe(1);
+    expect(conversationsStore.unreadCounts.size).toBe(1);
   });
 
   it("clearing removes from the set", () => {
@@ -244,7 +244,7 @@ describe("markConversationAsNew / clearNewMessageIndicator", () => {
 
   it("clearing a non-existent chatId is a no-op", () => {
     clearNewMessageIndicator("nonexistent");
-    expect(conversationsStore.conversationsWithNewMessages.size).toBe(0);
+    expect(conversationsStore.unreadCounts.size).toBe(0);
   });
 
   it("multiple conversations can be marked independently", () => {
