@@ -15,7 +15,7 @@ import secrets
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -27,6 +27,7 @@ from models import get_generator
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
+MAX_WS_MESSAGE_SIZE_BYTES = 1024 * 1024  # 1 MiB payload cap per inbound message
 
 # SECURITY: WebSocket authentication token
 # Set JARVIS_WS_TOKEN environment variable or generate a random token
@@ -81,7 +82,7 @@ def _validate_websocket_auth(websocket: WebSocket) -> bool:
     return False
 
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
     """WebSocket message types."""
 
     # Client -> Server
@@ -814,7 +815,22 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             # Receive message
             try:
                 raw_message = await websocket.receive_text()
+                if len(raw_message.encode("utf-8")) > MAX_WS_MESSAGE_SIZE_BYTES:
+                    await manager.send_message(
+                        client.client_id,
+                        MessageType.ERROR,
+                        {"error": "Message too large (max 1 MiB)."},
+                    )
+                    continue
+
                 message = json.loads(raw_message)
+                if not isinstance(message, dict):
+                    await manager.send_message(
+                        client.client_id,
+                        MessageType.ERROR,
+                        {"error": "Invalid message format: expected JSON object"},
+                    )
+                    continue
             except json.JSONDecodeError:
                 await manager.send_message(
                     client.client_id,

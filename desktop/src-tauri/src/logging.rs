@@ -12,4 +12,3 @@ pub async fn frontend_log(level: String, message: String) -> Result<(), String> 
     }
     Ok(())
 }
-
