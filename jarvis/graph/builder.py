@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -584,7 +585,7 @@ class GraphBuilder:
                             "updated_at": row[8],
                         }
                     )
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             logger.warning("Error fetching contacts: %s", e)
 
         return contacts
@@ -675,7 +676,7 @@ class GraphBuilder:
                         ):
                             stats[participant]["last_contact"] = last_str
 
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Error getting message stats: %s", e)
 
         return stats
@@ -763,14 +764,15 @@ class GraphBuilder:
                     )
                     messages_by_chat[row_chat_id].append(msg)
 
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             logger.warning("Batch message fetch failed, falling back to per-chat: %s", e)
             for cid in chat_ids:
                 try:
                     messages_by_chat[cid] = reader.get_messages(
                         cid, limit=limit_per_chat, after=after
                     )
-                except Exception:
+                except (sqlite3.Error, OSError, ValueError) as per_chat_err:
+                    logger.debug("Per-chat fetch failed for %s: %s", cid, per_chat_err)
                     messages_by_chat[cid] = []
 
         return dict(messages_by_chat)
@@ -965,22 +967,23 @@ class GraphBuilder:
         included_nodes: dict[str, GraphNode] = {target_node.id: target_node}
         included_edges: list[GraphEdge] = []
 
-        # BFS from target (uses nodes_by_id dict for O(1) lookups)
+        # Build adjacency map for O(degree) BFS instead of O(|E|) per level
+        adjacency: dict[str, list[tuple[str, GraphEdge]]] = defaultdict(list)
+        for edge in full_graph.edges:
+            adjacency[edge.source].append((edge.target, edge))
+            adjacency[edge.target].append((edge.source, edge))
+
+        # BFS from target (uses adjacency map + nodes_by_id dict for O(1) lookups)
         current_level = {target_node.id}
         for _ in range(depth):
             next_level: set[str] = set()
-            for edge in full_graph.edges:
-                if edge.source in current_level and edge.target not in included_nodes:
-                    next_level.add(edge.target)
-                    if edge.target in nodes_by_id:
-                        included_nodes[edge.target] = nodes_by_id[edge.target]
-                    included_edges.append(edge)
-
-                elif edge.target in current_level and edge.source not in included_nodes:
-                    next_level.add(edge.source)
-                    if edge.source in nodes_by_id:
-                        included_nodes[edge.source] = nodes_by_id[edge.source]
-                    included_edges.append(edge)
+            for node_id in current_level:
+                for neighbor, edge in adjacency.get(node_id, []):
+                    if neighbor not in included_nodes:
+                        next_level.add(neighbor)
+                        if neighbor in nodes_by_id:
+                            included_nodes[neighbor] = nodes_by_id[neighbor]
+                        included_edges.append(edge)
 
             current_level = next_level
             if len(included_nodes) >= max_neighbors + 1:
