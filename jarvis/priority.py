@@ -163,6 +163,7 @@ _COMPILED_ACTION_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in ACTION_P
 _COMPILED_TIME_SENSITIVE_PATTERNS = tuple(
     re.compile(p, re.IGNORECASE) for p in TIME_SENSITIVE_PATTERNS
 )
+_WORD_RE = re.compile(r"\b\w+\b")
 
 
 class MessagePriorityScorer:
@@ -435,7 +436,7 @@ class MessagePriorityScorer:
         text_lower = text.lower()
 
         # Check urgency keywords first (highest confidence)
-        words = set(re.findall(r"\b\w+\b", text_lower))
+        words = set(_WORD_RE.findall(text_lower))
         if words & URGENCY_KEYWORDS:
             return True, 0.95
 
