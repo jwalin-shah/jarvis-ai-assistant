@@ -21,6 +21,8 @@
   import { formatConversationDate } from '../utils/date';
   import { getNavAction, isTypingInInput } from '../utils/keyboard-nav';
   import { LRUCache } from '../utils/lru-cache';
+  import { jarvis } from '../socket';
+  import type { ConnectionInfo } from '../socket';
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
@@ -39,6 +41,10 @@
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; chatId: string } | null>(null);
+
+  // Connection status (UX-01)
+  let connectionInfo = $state<ConnectionInfo>(jarvis.getConnectionInfo());
+  let unsubConnectionInfo: (() => void) | null = null;
 
   // Search filter state
   let searchQuery = $state('');
@@ -117,6 +123,11 @@
     initializePolling().then((fn) => { cleanup = fn; });
     window.addEventListener('keydown', handleKeydown);
 
+    // Subscribe to connection info changes (UX-01)
+    unsubConnectionInfo = jarvis.on<ConnectionInfo>('connection_info_changed', (info) => {
+      connectionInfo = info;
+    });
+
     observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -155,6 +166,7 @@
 
     return () => {
       cleanup?.();
+      unsubConnectionInfo?.();
       window.removeEventListener('keydown', handleKeydown);
       observer?.disconnect();
       topicObserver?.disconnect();
@@ -451,6 +463,15 @@
 <div class="conversation-list">
   <div class="header">
     <h2>Messages</h2>
+    {#if connectionInfo.state !== 'connected'}
+      <span class="connection-badge disconnected" title="Disconnected from server">
+        <span class="connection-dot"></span>
+      </span>
+    {:else if connectionInfo.isFallback}
+      <span class="connection-badge fallback" title="Using WebSocket fallback (Unix socket unavailable)">
+        <span class="connection-dot"></span>
+      </span>
+    {/if}
   </div>
 
   <div class="search">
@@ -634,6 +655,9 @@
   .header {
     padding: var(--space-4);
     border-bottom: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .header h2 {
@@ -641,6 +665,26 @@
     font-weight: var(--font-weight-semibold);
     letter-spacing: var(--letter-spacing-tight);
     margin: 0;
+  }
+
+  .connection-badge {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+  }
+
+  .connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .connection-badge.disconnected .connection-dot {
+    background: var(--color-error);
+  }
+
+  .connection-badge.fallback .connection-dot {
+    background: var(--color-warning, #ff9500);
   }
 
   .search {
