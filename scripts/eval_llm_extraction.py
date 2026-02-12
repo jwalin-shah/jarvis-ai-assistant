@@ -728,7 +728,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
 
     # 5. Known activity keywords (word-boundary)
     _known_activities = {
-        "meditate", "yoga", "chess", "climbing",
+        "meditate", "meditation", "yoga", "chess", "climbing",
         "biking", "hiking", "swimming", "cooking",
         "baking", "gaming", "coding", "exercises",
         "diwali", "xbox", "reading", "sanskrit", "5k",
