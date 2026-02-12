@@ -7,18 +7,13 @@ Uses in-memory DB with fake embedder (no MLX required).
 
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
-import pytest
-
 from jarvis.contacts.contact_profile import Fact
 from jarvis.contacts.fact_extractor import FactExtractor
 from jarvis.contacts.fact_storage import get_facts_for_contact, save_facts
-
 
 # ---------------------------------------------------------------------------
 # Helpers

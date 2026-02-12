@@ -16,7 +16,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -131,7 +130,7 @@ class TestSettingsRouter:
     def test_get_settings(self, mock_models, mock_config, mock_load_settings, mock_sys_info):
         """GET /settings returns current settings."""
         from api.routers.settings import router
-        from api.schemas import BehaviorSettings, GenerationSettings, SystemInfo
+        from api.schemas import SystemInfo
 
         app = FastAPI()
         app.include_router(router)
@@ -160,7 +159,7 @@ class TestSettingsRouter:
 
         client = TestClient(app)
         response = client.get("/settings")
-        assert response.status_code in (200, 500)
+        assert response.status_code == 200
 
 
 # ---------------------------------------------------------------------------

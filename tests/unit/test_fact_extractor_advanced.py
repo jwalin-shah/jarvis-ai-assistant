@@ -13,11 +13,8 @@ import pytest
 
 from jarvis.contacts.contact_profile import Fact
 from jarvis.contacts.fact_extractor import (
-    FactExtractor,
-    LOCATION_FUTURE_PATTERN,
-    LOCATION_PAST_PATTERN,
-    LOCATION_PRESENT_PATTERN,
     PREFERENCE_PATTERN,
+    FactExtractor,
 )
 
 
@@ -48,9 +45,7 @@ def _make_fact(
 class TestResolvePersonToContact:
     """_resolve_person_to_contact fuzzy matching via Jaccard similarity."""
 
-    def _make_extractor_with_contacts(
-        self, contacts: list[tuple[str, str]]
-    ) -> FactExtractor:
+    def _make_extractor_with_contacts(self, contacts: list[tuple[str, str]]) -> FactExtractor:
         """Create extractor with pre-populated contacts cache."""
         ext = FactExtractor()
         cache = [(cid, name, set(name.lower().split())) for cid, name in contacts]
@@ -79,20 +74,24 @@ class TestResolvePersonToContact:
 
     def test_ambiguous_match_rejected(self):
         """Two contacts with similar scores (gap < 0.2) => None."""
-        ext = self._make_extractor_with_contacts([
-            ("c1", "John Smith"),
-            ("c2", "John Davis"),
-        ])
+        ext = self._make_extractor_with_contacts(
+            [
+                ("c1", "John Smith"),
+                ("c2", "John Davis"),
+            ]
+        )
         # "John" vs "John Smith": 1/2 = 0.5; "John" vs "John Davis": 1/2 = 0.5
         # Both < 0.7 anyway, but even if high, gap = 0 => ambiguous
         assert ext._resolve_person_to_contact("John") is None
 
     def test_clear_winner_accepted(self):
         """One contact scores high, others low => accepted with 0.2+ gap."""
-        ext = self._make_extractor_with_contacts([
-            ("c1", "Sarah Johnson"),
-            ("c2", "Mike Thompson"),
-        ])
+        ext = self._make_extractor_with_contacts(
+            [
+                ("c1", "Sarah Johnson"),
+                ("c2", "Mike Thompson"),
+            ]
+        )
         # "Sarah Johnson" vs "Sarah Johnson": 1.0; vs "Mike Thompson": 0.0
         # Gap = 1.0 - 0.0 = 1.0 >= 0.2 => match
         assert ext._resolve_person_to_contact("Sarah Johnson") == "c1"
@@ -110,13 +109,10 @@ class TestResolvePersonToContact:
 
     def test_contacts_cache_is_lazy(self):
         """_get_contacts_for_resolution uses module-level cache."""
-        from unittest.mock import patch
 
         cache = [("c1", "Test", {"test"})]
         ext = FactExtractor()
-        with patch(
-            "jarvis.contacts.fact_extractor._get_cached_contacts", return_value=cache
-        ):
+        with patch("jarvis.contacts.fact_extractor._get_cached_contacts", return_value=cache):
             result = ext._get_contacts_for_resolution()
         assert result == [("c1", "Test", {"test"})]
 
@@ -325,18 +321,14 @@ class TestEndToEndExtraction:
 
     def test_preference_sentiment_positive(self):
         ext = FactExtractor()
-        facts = ext.extract_facts(
-            [{"text": "I love spicy ramen so much"}], "c1"
-        )
+        facts = ext.extract_facts([{"text": "I love spicy ramen so much"}], "c1")
         prefs = [f for f in facts if f.category == "preference"]
         assert len(prefs) >= 1
         assert prefs[0].predicate == "likes"
 
     def test_preference_sentiment_negative(self):
         ext = FactExtractor()
-        facts = ext.extract_facts(
-            [{"text": "I hate cold weather every year"}], "c1"
-        )
+        facts = ext.extract_facts([{"text": "I hate cold weather every year"}], "c1")
         prefs = [f for f in facts if f.category == "preference"]
         assert len(prefs) >= 1
         assert prefs[0].predicate == "dislikes"

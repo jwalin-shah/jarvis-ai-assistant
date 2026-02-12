@@ -99,8 +99,16 @@ class TestChatDBWatcher:
             assert len(handler.broadcasts) == 1
             method, params = handler.broadcasts[0]
             assert method == "new_message"
+
+            # Validate all required broadcast fields are present
+            for field in ("message_id", "chat_id", "sender", "text", "date"):
+                assert field in params, f"Missing required field '{field}' in broadcast params"
+
             assert params["message_id"] == 101
             assert params["chat_id"] == "chat123"
+            assert params["sender"] == "+15551234567"
+            assert params["text"] == "Hello!"
+            assert params["date"] == "2024-01-15T10:00:00"
 
             # Last rowid should be updated
             assert watcher._last_rowid == 101

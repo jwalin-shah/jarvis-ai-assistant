@@ -15,7 +15,6 @@ import pytest
 class TestConversationsPerformance:
     """Conversations fetch must be fast even with 400k messages."""
 
-    @pytest.mark.asyncio
     @pytest.mark.timeout(5)
     def test_get_conversations_under_100ms(self, caplog: Any) -> None:
         """Verify getConversations completes in <100ms.
@@ -44,7 +43,6 @@ class TestConversationsPerformance:
 class TestMessagesPerformance:
     """Message loading must batch attachments/reactions, not N+1."""
 
-    @pytest.mark.asyncio
     @pytest.mark.timeout(5)
     def test_get_messages_batches_attachments(self, caplog: Any) -> None:
         """Verify getMessages batches attachment/reaction queries.

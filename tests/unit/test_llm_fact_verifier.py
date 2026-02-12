@@ -7,10 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from jarvis.contacts.candidate_extractor import FactCandidate
-from jarvis.contacts.llm_fact_verifier import LLMFactVerifier, _SKIP_CATEGORIES
+from jarvis.contacts.llm_fact_verifier import _SKIP_CATEGORIES, LLMFactVerifier
 
 
 def _make_candidate(
@@ -187,10 +185,10 @@ class TestVerifyCandidates:
     def test_mixed_verdicts(self):
         gen = _mock_generator("1. YES 2. NO")
         verifier = LLMFactVerifier(generator=gen)
-        c1 = _make_candidate(span_text="dad", span_label="family_member",
-                             fact_type="relationship.family")
-        c2 = _make_candidate(span_text="Intel", span_label="org",
-                             fact_type="work.employer")
+        c1 = _make_candidate(
+            span_text="dad", span_label="family_member", fact_type="relationship.family"
+        )
+        c2 = _make_candidate(span_text="Intel", span_label="org", fact_type="work.employer")
         result = verifier.verify_candidates([c1, c2])
         assert len(result) == 1
         assert result[0].span_text == "dad"
@@ -216,8 +214,13 @@ class TestVerifyCandidates:
         gen = _mock_generator("1. YES")
         verifier = LLMFactVerifier(generator=gen)
         c1 = _make_candidate(message_id=1, source_text="I live in Austin")
-        c2 = _make_candidate(message_id=2, span_text="Google", span_label="org",
-                             fact_type="work.employer", source_text="I work at Google")
+        c2 = _make_candidate(
+            message_id=2,
+            span_text="Google",
+            span_label="org",
+            fact_type="work.employer",
+            source_text="I work at Google",
+        )
         result = verifier.verify_candidates([c1, c2])
         # Two messages -> two LLM calls
         assert gen.generate.call_count == 2
@@ -227,10 +230,7 @@ class TestVerifyCandidates:
         """All candidates in skip categories -> no LLM calls."""
         gen = _mock_generator("")
         verifier = LLMFactVerifier(generator=gen)
-        candidates = [
-            _make_candidate(fact_type=ft)
-            for ft in list(_SKIP_CATEGORIES)[:3]
-        ]
+        candidates = [_make_candidate(fact_type=ft) for ft in list(_SKIP_CATEGORIES)[:3]]
         result = verifier.verify_candidates(candidates)
         assert len(result) == 3
         gen.generate.assert_not_called()
@@ -250,8 +250,7 @@ class TestVerifyCandidates:
         gen = _mock_generator("1. YES 2. NO")
         verifier = LLMFactVerifier(generator=gen)
         c1 = _make_candidate()
-        c2 = _make_candidate(span_text="Google", span_label="org",
-                             fact_type="work.employer")
+        c2 = _make_candidate(span_text="Google", span_label="org", fact_type="work.employer")
         verifier.verify_candidates([c1, c2])
 
         call_args = gen.generate.call_args

@@ -223,8 +223,8 @@ class TestPrefetchExecutor:
         executor.schedule(pred)
 
         # Wait for handler to be called
-        handler_called.wait(timeout=5.0)
-        assert handler_called.is_set()
+        handler_called.wait(timeout=2.0)
+        assert handler_called.is_set(), "Handler was not called within timeout"
 
         executor.stop()
 

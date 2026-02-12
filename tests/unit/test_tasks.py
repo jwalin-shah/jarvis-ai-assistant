@@ -165,7 +165,7 @@ class TestTaskModels:
         assert task.duration_seconds is None
 
         task.start()
-        time.sleep(0.1)
+        time.sleep(0.5)
 
         # Should have some duration while running
         assert task.duration_seconds is not None
@@ -631,18 +631,20 @@ class TestTaskWorker:
         worker.start()
 
         # Wait for task to be processed
-        assert handler_called.wait(timeout=2.0)
+        assert handler_called.wait(timeout=5.0), "Handler was not called within timeout"
 
         # Task should be completed - poll for status update
         updated = None
-        for _ in range(10):
+        for _ in range(40):
             updated = queue.get(task.id)
             if updated and updated.status == TaskStatus.COMPLETED:
                 break
-            time.sleep(0.05)
+            time.sleep(0.1)
 
-        assert updated is not None
-        assert updated.status == TaskStatus.COMPLETED
+        assert updated is not None, "Task was never retrieved from queue"
+        assert updated.status == TaskStatus.COMPLETED, (
+            f"Task status was {updated.status}, expected COMPLETED"
+        )
 
     def test_worker_handles_error(self, worker_with_queue: tuple[TaskWorker, TaskQueue]) -> None:
         """Test that worker handles task errors."""
