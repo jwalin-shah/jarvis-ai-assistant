@@ -8,20 +8,36 @@
     "pred_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0136",
-    "slice": "random_negative",
-    "message_text": "My phone is being like my moms",
-    "pred_span": "mom",
-    "pred_label": "family_member"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0005",
     "slice": "positive",
     "message_text": "Thanks for the contact. My brother ended up going to the emergency room, but he\u2019s fine now \ud83d\ude2a",
     "gold_span": "My brother",
     "gold_label": "family_member"
+  },
+  {
+    "type": "fn",
+    "sample_id": "r2_fact_gs_0070",
+    "slice": "positive",
+    "message_text": "I like product management atm so I\u2019m trying to get more PM experiences in as of now",
+    "gold_span": "python",
+    "gold_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "r2_fact_gs_0070",
+    "slice": "positive",
+    "message_text": "I like product management atm so I\u2019m trying to get more PM experiences in as of now",
+    "gold_span": "SQL",
+    "gold_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "v1_fact_gs_0125",
+    "slice": "positive",
+    "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
+    "gold_span": "1 min walking 1 min run",
+    "gold_label": "activity"
   },
   {
     "type": "fn",
@@ -46,14 +62,6 @@
     "message_text": "And my dad flew in",
     "gold_span": "my dad",
     "gold_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0179",
-    "slice": "near_miss",
-    "message_text": "Yeah that\u2019s fine I\u2019ll leave as soon as my mom gets home at 4:30",
-    "pred_span": "mom",
-    "pred_label": "family_member"
   },
   {
     "type": "fn",
@@ -117,14 +125,6 @@
     "slice": "near_miss",
     "message_text": "Idts today tho my dads working from home today",
     "pred_span": "dads",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0211",
-    "slice": "near_miss",
-    "message_text": "Idts today tho my dads working from home today",
-    "pred_span": "dad",
     "pred_label": "family_member"
   },
   {
@@ -216,14 +216,6 @@
     "gold_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0261",
-    "slice": "near_miss",
-    "message_text": "So they know my dad well",
-    "pred_span": "dad",
-    "pred_label": "family_member"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0102",
     "slice": "positive",
@@ -288,14 +280,6 @@
     "gold_label": "activity"
   },
   {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0107",
-    "slice": "near_miss",
-    "message_text": "Just call my phone my dad will pick up",
-    "pred_span": "dad",
-    "pred_label": "family_member"
-  },
-  {
     "type": "fn",
     "sample_id": "v1_fact_gs_0008",
     "slice": "positive",
@@ -312,12 +296,12 @@
     "pred_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0157",
-    "slice": "near_miss",
-    "message_text": "cause my mom tried doin my bros arms",
-    "pred_span": "bros",
-    "pred_label": "family_member"
+    "type": "fn",
+    "sample_id": "r2_fact_gs_0281",
+    "slice": "positive",
+    "message_text": "I'm doing aight just doing wtv I can but gonna try to rest a bit more. Def having more symptoms and ",
+    "gold_span": "depression",
+    "gold_label": "health_condition"
   },
   {
     "type": "fp",
@@ -325,6 +309,14 @@
     "slice": "near_miss",
     "message_text": "cause my mom tried doin my bros arms",
     "pred_span": "mom",
+    "pred_label": "family_member"
+  },
+  {
+    "type": "fp",
+    "sample_id": "r2_fact_gs_0157",
+    "slice": "near_miss",
+    "message_text": "cause my mom tried doin my bros arms",
+    "pred_span": "bros",
     "pred_label": "family_member"
   },
   {
@@ -388,6 +380,14 @@
     "sample_id": "r2_fact_gs_0372",
     "slice": "positive",
     "message_text": "im in delaware most of th summer chauffeur for my brother on his externship for culinary school",
+    "gold_span": "CrossFit",
+    "gold_label": "activity"
+  },
+  {
+    "type": "fn",
+    "sample_id": "r2_fact_gs_0372",
+    "slice": "positive",
+    "message_text": "im in delaware most of th summer chauffeur for my brother on his externship for culinary school",
     "gold_span": "delaware",
     "gold_label": "place"
   },
@@ -424,14 +424,6 @@
     "gold_label": "health_condition"
   },
   {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0129",
-    "slice": "near_miss",
-    "message_text": "Except for me and my dad \ud83e\udee1",
-    "pred_span": "dad",
-    "pred_label": "family_member"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0095",
     "slice": "positive",
@@ -462,14 +454,6 @@
     "message_text": "Oh nice! SB would be awesome too, I like it there",
     "gold_span": "SB",
     "gold_label": "place"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0033",
-    "slice": "near_miss",
-    "message_text": "I'll ask my dad later if there's a way",
-    "pred_span": "dad",
-    "pred_label": "family_member"
   },
   {
     "type": "fn",
