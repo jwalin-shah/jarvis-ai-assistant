@@ -35,6 +35,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -186,6 +187,9 @@ _STOPWORDS: frozenset[str] = frozenset(
         "wont",
     }
 )
+
+# Pre-compiled pattern for keyword extraction (called per message in loops)
+_LOWERCASE_WORD_RE = re.compile(r"\b[a-z]{3,}\b")
 
 
 # =============================================================================
@@ -1169,14 +1173,13 @@ class TopicSegmenter:
         Returns:
             List of top keywords.
         """
-        import re
         from collections import Counter
 
         word_counts: Counter[str] = Counter()
 
         for msg in segment.messages:
             if msg.text:
-                words = re.findall(r"\b[a-z]{3,}\b", msg.text.lower())
+                words = _LOWERCASE_WORD_RE.findall(msg.text.lower())
                 for word in words:
                     if word not in _STOPWORDS:
                         word_counts[word] += 1
