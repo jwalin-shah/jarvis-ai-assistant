@@ -318,6 +318,7 @@ def _correct_label(text: str, label: str, msg_lower: str) -> str:
         job_role_words = {
             "manager", "engineer", "developer", "nurse", "doctor",
             "teacher", "analyst", "designer", "consultant", "director",
+            "engineering", "nursing", "teaching",
             "intern", "coordinator", "specialist", "ceo", "cto", "cfo",
             "vp", "president", "founder", "product management",
         }
@@ -731,7 +732,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
         "meditate", "meditation", "yoga", "chess", "climbing",
         "biking", "hiking", "swimming", "cooking",
         "baking", "gaming", "coding", "exercises",
-        "diwali", "xbox", "reading", "sanskrit", "5k",
+        "diwali", "xbox", "reading", "sanskrit", "5k", "theory",
     }
     for act in _known_activities:
         match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
@@ -795,6 +796,40 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
         actual = message_text[idx : idx + len(roommate_match.group())]
         _add(actual, "friend_name", "relationship.friend")
 
+    # 9. Job role keyword boost (word-boundary)
+    _known_jobs = {
+        "engineering", "nursing", "teaching", "product management",
+        "data analyst", "internship",
+    }
+    for job in _known_jobs:
+        match = re.search(rf'\b{re.escape(job)}\b', msg_lower)
+        if match and (job, "job_role") not in existing:
+            idx = match.start()
+            actual = message_text[idx : idx + len(job)]
+            _add(actual, "job_role", "work.job_title")
+
+    # 10. "I got the job" / "get a job" / "interning as X" patterns
+    job_pattern = re.search(r'\b(?:got the|get a|love|love my)\s+(job|work)\b', msg_lower)
+    if job_pattern:
+        span_text = job_pattern.group(1)
+        _add(span_text, "job_role", "work.job_title")
+
+    interning_match = re.search(
+        r'\binterning\s+as\s+(?:a\s+)?([A-Z][a-zA-Z\s]+?)(?:\s+(?:this|next|last|at|for|in)\b|$)',
+        message_text,
+    )
+    if interning_match:
+        role = interning_match.group(1).strip()
+        if role and len(role) < 30:
+            _add(role, "job_role", "work.job_title")
+
+    # "My prof" / "My professor" patterns
+    prof_match = re.search(r'\b(my\s+(?:prof|professor))\b', msg_lower)
+    if prof_match:
+        idx = prof_match.start()
+        actual = message_text[idx : idx + len(prof_match.group())]
+        _add(actual, "job_role", "work.job_title")
+
     return spans
 
 
@@ -848,7 +883,7 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
     elif len(clean_text) < 1200:
         _max_tok = 300
     else:
-        _max_tok = 400
+        _max_tok = 500
     result = loader.generate_sync(
         formatted,
         max_tokens=_max_tok,

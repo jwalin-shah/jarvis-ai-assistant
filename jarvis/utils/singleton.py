@@ -42,8 +42,10 @@ def thread_safe_singleton(factory_fn):  # noqa: ANN001, ANN201
         if instance is not None:
             return instance
         with lock:
-            if instance is None:
-                instance = factory_fn(*args, **kwargs)
+            # Double-check inside lock to handle race with reset()
+            if instance is not None:
+                return instance
+            instance = factory_fn(*args, **kwargs)
             return instance
 
     def reset() -> None:
