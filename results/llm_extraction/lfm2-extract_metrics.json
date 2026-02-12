@@ -1,0 +1,150 @@
+{
+  "gold_path": "training_data/gliner_goldset/candidate_gold_merged_r4.json",
+  "num_records": 100,
+  "limit": 100,
+  "strategy": "constrained_categories",
+  "model": "lfm-1.2b",
+  "num_predictions": 137,
+  "extraction_time_s": 362.65,
+  "ms_per_message": 3626.5,
+  "overall": {
+    "precision": 0.292,
+    "recall": 0.4167,
+    "f1": 0.3433,
+    "tp": 40,
+    "fp": 97,
+    "fn": 56
+  },
+  "per_label": {
+    "activity": {
+      "precision": 0.2093,
+      "recall": 0.375,
+      "f1": 0.2687,
+      "tp": 9,
+      "fp": 34,
+      "fn": 15
+    },
+    "current_location": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "employer": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4
+    },
+    "family_member": {
+      "precision": 0.5,
+      "recall": 0.5862,
+      "f1": 0.5397,
+      "tp": 17,
+      "fp": 17,
+      "fn": 12
+    },
+    "food_item": {
+      "precision": 0.1364,
+      "recall": 1.0,
+      "f1": 0.24,
+      "tp": 3,
+      "fp": 19,
+      "fn": 0
+    },
+    "friend_name": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
+      "fn": 1
+    },
+    "future_location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 6,
+      "fn": 2
+    },
+    "health_condition": {
+      "precision": 0.3158,
+      "recall": 0.6,
+      "f1": 0.4138,
+      "tp": 6,
+      "fp": 13,
+      "fn": 4
+    },
+    "job_role": {
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.6667,
+      "tp": 1,
+      "fp": 0,
+      "fn": 1
+    },
+    "org": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 9
+    },
+    "past_location": {
+      "precision": 0.2857,
+      "recall": 1.0,
+      "f1": 0.4444,
+      "tp": 2,
+      "fp": 5,
+      "fn": 0
+    },
+    "person_name": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
+      "fn": 1
+    },
+    "place": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 1,
+      "fn": 7
+    }
+  },
+  "per_slice": {
+    "near_miss": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 34,
+      "fn": 0
+    },
+    "positive": {
+      "precision": 0.4211,
+      "recall": 0.4167,
+      "f1": 0.4188,
+      "tp": 40,
+      "fp": 55,
+      "fn": 56
+    },
+    "random_negative": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 8,
+      "fn": 0
+    }
+  }
+}

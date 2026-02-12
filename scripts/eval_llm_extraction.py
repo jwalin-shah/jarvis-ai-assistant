@@ -71,69 +71,24 @@ EXTRACTION_SCHEMA = """{
   ]
 }"""
 
-EXTRACT_SYSTEM_PROMPT = """You extract personal fact entities from chat messages as JSON.
-Each "text" field must be 1-3 words copied exactly from the message.
-Labels: family_member, activity, health_condition, job_role, org, food_item, current_location, future_location, past_location, place, friend_name, person_name
+EXTRACT_SYSTEM_PROMPT = """Extract named entities from chat messages as JSON.
+"text" = exact 1-3 words from message. Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
+Return {"facts": []} if none."""
 
-What to extract:
-- Family references: brother, sister, mom, dad, wife, etc.
-- Activities/hobbies: baking, gaming, hiking, coding, etc.
-- Health: conditions, allergies, symptoms
-- Work: job titles, employers, schools
-- Places: cities, countries, specific locations
-- Food: specific foods someone likes/dislikes
-
-What NOT to extract:
-- Temporary events ("flew in", "coming over")
-- Pronouns or generic words
-- Messages about objects/phones/things
-Return {"facts": []} if no personal entities found."""
-
-# Few-shot examples as chat turns (used in multi-turn format)
-# Mix of positive extractions and hard negatives to calibrate the model
+# Few-shot examples: keep minimal (4 positive, 2 negative) to reduce context length
 FEW_SHOT_TURNS = [
-    # Positive: family member + activity
     ("my brother bakes and I just eat whatever he makes",
      '{"facts": [{"text": "brother", "label": "family_member"}, {"text": "bakes", "label": "activity"}]}'),
-    # Positive: org + job_role
     ("I work at Google as an engineer",
      '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}'),
-    # Negative: greeting
-    ("helloooo",
-     '{"facts": []}'),
-    # Negative: mentions mom but no durable fact about her
-    ("My mom never ended up coming tho so gonna have to ship that bag",
-     '{"facts": []}'),
-    # Negative: mentions mom but just a comparison, not a fact
-    ("My phone is being like my moms",
-     '{"facts": []}'),
-    # Positive: health condition
     ("allergic to peanuts and it sucks",
      '{"facts": [{"text": "peanuts", "label": "health_condition"}]}'),
-    # Negative: opinion, no facts
-    ("i like it",
+    ("helloooo",
      '{"facts": []}'),
-    # Positive: future location
-    ("moving to Austin next month for a new job",
-     '{"facts": [{"text": "Austin", "label": "future_location"}]}'),
-    # Positive: family member mention
-    ("And my dad flew in",
-     '{"facts": [{"text": "dad", "label": "family_member"}]}'),
-    # Positive: employer
-    ("I work at lending tree",
-     '{"facts": [{"text": "lending tree", "label": "org"}]}'),
-    # Positive: multiple entities
-    ("My friend Sarah is a nurse",
-     '{"facts": [{"text": "Sarah", "label": "friend_name"}, {"text": "nurse", "label": "job_role"}]}'),
-    # Negative: time/schedule
-    ("Like 10:15ish",
+    ("My phone is being like my moms",
      '{"facts": []}'),
-    # Positive: school (org) + subject
-    ("I go to UCLA for computer science",
-     '{"facts": [{"text": "UCLA", "label": "org"}, {"text": "computer science", "label": "activity"}]}'),
-    # Positive: dad with durable facts (contrast with "dad flew in" negative)
-    ("my dad is a dentist in Chicago",
-     '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "dentist", "label": "job_role"}, {"text": "Chicago", "label": "current_location"}]}'),
+    ("Also my dad leaves the 22nd for India",
+     '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}'),
 ]
 
 INSTRUCT_USER_PROMPT = """Message: "{message}"
@@ -273,6 +228,48 @@ def _trim_span(text: str, label: str) -> str:
     return " ".join(words[:3])
 
 
+# Known entity patterns for label correction
+_FAMILY_WORDS = {
+    "brother", "sister", "mom", "mother", "dad", "father",
+    "wife", "husband", "girlfriend", "boyfriend", "partner",
+    "daughter", "son", "cousin", "aunt", "uncle", "grandma",
+    "grandmother", "grandpa", "grandfather", "fiancee", "fiancé",
+    "stepmom", "stepdad", "niece", "nephew",
+}
+
+_HEALTH_KEYWORDS = {
+    "allergic", "allergy", "asthma", "diabetes", "depression",
+    "anxiety", "adhd", "migraine", "migraines", "vestibular",
+    "surgery", "injury", "cancer", "arthritis", "insomnia",
+    "emergency room", "hospital", "therapy", "ptsd",
+}
+
+
+def _correct_label(text: str, label: str, msg_lower: str) -> str:
+    """Heuristic label correction for common model mistakes."""
+    text_lower = text.lower().strip()
+
+    # Family words should always be family_member
+    if text_lower in _FAMILY_WORDS:
+        return "family_member"
+
+    # Health keywords should be health_condition
+    if text_lower in _HEALTH_KEYWORDS:
+        return "health_condition"
+
+    # If span looks like a job title and was labeled activity
+    if label == "activity":
+        job_indicators = {
+            "manager", "engineer", "developer", "nurse", "doctor",
+            "teacher", "analyst", "designer", "consultant", "director",
+            "intern", "coordinator", "specialist", "product management",
+        }
+        if text_lower in job_indicators:
+            return "job_role"
+
+    return label
+
+
 def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
     """Convert parsed JSON facts to span predictions.
 
@@ -283,8 +280,8 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
     msg_lower = message_text.lower()
     msg_len = len(message_text)
 
-    # Skip very short messages entirely (no facts in "hi", "ok", "lol")
-    if msg_len < 8:
+    # Skip very short messages only if they're filler (not real words)
+    if msg_len < 4:
         return []
 
     for fact in facts:
@@ -304,6 +301,9 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
 
         # Trim overly long spans
         text = _trim_span(text, label)
+
+        # Correct common label mistakes
+        label = _correct_label(text, label, msg_lower)
 
         # Skip single-character or very short non-meaningful spans
         if len(text) < 2:
@@ -329,26 +329,59 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
 
         # Label-specific validation: reject common-word false positives
         if label in ("current_location", "future_location", "past_location", "place"):
-            # Locations should be proper nouns or known places, not common words
-            if text[0].islower() and len(text.split()) == 1:
-                continue  # Single lowercase word is not a location
+            # Reject only obvious non-locations (very common words)
+            location_rejects = {
+                "here", "there", "home", "somewhere", "anywhere", "nowhere",
+                "place", "area", "spot",
+            }
+            if text_lower in location_rejects:
+                continue
         if label == "food_item":
-            # Reject single common verbs as food
-            reject_foods = {"eat", "eating", "ate", "food", "cooking", "cook", "phone"}
+            # Only accept plausible food items: nouns that could be foods
+            reject_foods = {
+                "eat", "eating", "ate", "food", "cooking", "cook", "phone",
+                "whatever", "everything", "anything", "something", "stuff",
+                "it", "that", "this", "one", "all",
+            }
             if text_lower in reject_foods:
                 continue
+            # Multi-word food items with common non-food words
+            if any(w in text_lower for w in ["whatever", "everything", "phone", "he makes"]):
+                continue
         if label == "activity":
-            # Reject very common verbs that aren't hobbies
+            # Reject only the most generic verbs (keep specific activities)
             reject_activities = {
-                "eat", "eating", "go", "going", "get", "getting",
-                "fly", "flew", "ship", "talk", "come", "coming",
-                "try", "trying", "do", "doing", "make", "making",
-                "see", "seeing", "take", "taking", "want", "wanting",
-                "need", "needing", "think", "thinking", "know", "knowing",
-                "translate", "slow process",
+                "go", "going", "get", "getting",
+                "come", "coming", "do", "doing",
+                "see", "seeing", "take", "taking",
+                "want", "wanting", "need", "needing",
+                "think", "thinking", "know", "knowing",
+                "try", "trying", "make", "making",
+                "contact", "slow process",
             }
             if text_lower in reject_activities:
                 continue
+        if label == "health_condition":
+            # Reject common words that aren't health conditions
+            reject_health = {
+                "whatever", "slow", "slow process", "points of view",
+                "insanely big", "bad", "feel", "feeling", "tired",
+            }
+            if text_lower in reject_health:
+                continue
+            # Multi-word health spans should contain at least one medical-ish word
+            if len(text.split()) > 1:
+                medical_words = {
+                    "allerg", "condition", "disease", "disorder", "pain",
+                    "surgery", "hospital", "doctor", "emergency", "vestibular",
+                    "depression", "anxiety", "diabetes", "asthma", "cancer",
+                    "sleep", "insomnia", "adhd", "ptsd",
+                }
+                has_medical = any(
+                    mw in text_lower for mw in medical_words
+                )
+                if not has_medical:
+                    continue
         if label == "friend_name":
             # Friend names should start with uppercase
             if text[0].islower():
@@ -444,7 +477,7 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
 
     result = loader.generate_sync(
         formatted,
-        max_tokens=200,
+        max_tokens=120,
         temperature=0.0,
         top_p=0.1,
         repetition_penalty=1.0,
