@@ -8,14 +8,6 @@
     "pred_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0034",
-    "slice": "near_miss",
-    "message_text": "My mom never ended up coming tho so gonna have to ship that bag",
-    "pred_span": "never",
-    "pred_label": "health_condition"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0005",
     "slice": "positive",
@@ -41,6 +33,14 @@
   },
   {
     "type": "fn",
+    "sample_id": "r2_fact_gs_0070",
+    "slice": "positive",
+    "message_text": "I like product management atm so I\u2019m trying to get more PM experiences in as of now",
+    "gold_span": "PM experiences",
+    "gold_label": "activity"
+  },
+  {
+    "type": "fn",
     "sample_id": "v1_fact_gs_0125",
     "slice": "positive",
     "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
@@ -60,32 +60,24 @@
     "sample_id": "v1_fact_gs_0125",
     "slice": "positive",
     "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
-    "pred_span": "talk to some",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0125",
-    "slice": "positive",
-    "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
-    "pred_span": "points of view",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0125",
-    "slice": "positive",
-    "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
-    "pred_span": "ready to just",
+    "pred_span": "barring anything insanely",
     "pred_label": "health_condition"
   },
   {
     "type": "fp",
-    "sample_id": "r2_fact_gs_0253",
-    "slice": "random_negative",
-    "message_text": "and they\u2019ll do an ultrasound and stuff",
-    "pred_span": "ultrasound",
-    "pred_label": "activity"
+    "sample_id": "v1_fact_gs_0125",
+    "slice": "positive",
+    "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
+    "pred_span": "ready to get",
+    "pred_label": "job_role"
+  },
+  {
+    "type": "fp",
+    "sample_id": "v1_fact_gs_0125",
+    "slice": "positive",
+    "message_text": "Yeah exactly, but haven't totally decided yet, my dad just wants to talk to some other people first ",
+    "pred_span": "slow process",
+    "pred_label": "place"
   },
   {
     "type": "fn",
@@ -94,30 +86,6 @@
     "message_text": "Vestibular",
     "gold_span": "Vestibular",
     "gold_label": "health_condition"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0332",
-    "slice": "near_miss",
-    "message_text": "Loved \u201ci love profs that dgaf about proper email\u201d",
-    "pred_span": "profs",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0332",
-    "slice": "near_miss",
-    "message_text": "Loved \u201ci love profs that dgaf about proper email\u201d",
-    "pred_span": "dgaf",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0332",
-    "slice": "near_miss",
-    "message_text": "Loved \u201ci love profs that dgaf about proper email\u201d",
-    "pred_span": "email",
-    "pred_label": "food_item"
   },
   {
     "type": "fn",
@@ -136,20 +104,20 @@
     "pred_label": "family_member"
   },
   {
-    "type": "fp",
+    "type": "fn",
     "sample_id": "r2_fact_gs_0315",
     "slice": "positive",
     "message_text": "happy diwali my brother !!\ud83e\ude94",
-    "pred_span": "brother",
-    "pred_label": "family_member"
+    "gold_span": "Diwali",
+    "gold_label": "activity"
   },
   {
     "type": "fp",
     "sample_id": "r2_fact_gs_0315",
     "slice": "positive",
     "message_text": "happy diwali my brother !!\ud83e\ude94",
-    "pred_span": "Diwali",
-    "pred_label": "place"
+    "pred_span": "brother",
+    "pred_label": "family_member"
   },
   {
     "type": "fn",
@@ -172,8 +140,8 @@
     "sample_id": "r2_fact_gs_0357",
     "slice": "positive",
     "message_text": "My mom actually texted me this morning saying my acceptance letter went to the house",
-    "gold_span": "acceptance letter",
-    "gold_label": "activity"
+    "gold_span": "house",
+    "gold_label": "place"
   },
   {
     "type": "fn",
@@ -192,30 +160,6 @@
     "gold_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0180",
-    "slice": "positive",
-    "message_text": "Ohhh shit 1:30? I prolly can't then lmaooo my mom was needing me to help her translate for a doctor'",
-    "pred_span": "shit 1",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0180",
-    "slice": "positive",
-    "message_text": "Ohhh shit 1:30? I prolly can't then lmaooo my mom was needing me to help her translate for a doctor'",
-    "pred_span": "doctor's appointment",
-    "pred_label": "health_condition"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0180",
-    "slice": "positive",
-    "message_text": "Ohhh shit 1:30? I prolly can't then lmaooo my mom was needing me to help her translate for a doctor'",
-    "pred_span": "translation for",
-    "pred_label": "job_role"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0172",
     "slice": "positive",
@@ -228,7 +172,7 @@
     "sample_id": "r2_fact_gs_0172",
     "slice": "positive",
     "message_text": "My sleeps hella bad again and just been hella depressed and don\u2019t wanna do anything",
-    "pred_span": "don\u2019t wanna",
+    "pred_span": "hella bad",
     "pred_label": "activity"
   },
   {
@@ -236,8 +180,24 @@
     "sample_id": "r2_fact_gs_0211",
     "slice": "near_miss",
     "message_text": "Idts today tho my dads working from home today",
-    "pred_span": "dad",
+    "pred_span": "dads",
     "pred_label": "family_member"
+  },
+  {
+    "type": "fp",
+    "sample_id": "r2_fact_gs_0211",
+    "slice": "near_miss",
+    "message_text": "Idts today tho my dads working from home today",
+    "pred_span": "working from home",
+    "pred_label": "job_role"
+  },
+  {
+    "type": "fn",
+    "sample_id": "r2_fact_gs_0218",
+    "slice": "positive",
+    "message_text": "Smhhh I don't have my car rn my brother's using it",
+    "gold_span": "brother",
+    "gold_label": "family_member"
   },
   {
     "type": "fn",
@@ -248,22 +208,6 @@
     "gold_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0291",
-    "slice": "near_miss",
-    "message_text": "I like kinda remember it from last fall",
-    "pred_span": "kind",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0291",
-    "slice": "near_miss",
-    "message_text": "I like kinda remember it from last fall",
-    "pred_span": "last fall",
-    "pred_label": "place"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0171",
     "slice": "positive",
@@ -272,36 +216,12 @@
     "gold_label": "place"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0171",
-    "slice": "positive",
-    "message_text": "Also my dad leaves the 22nd for India",
-    "pred_span": "22nd",
-    "pred_label": "place"
-  },
-  {
     "type": "fn",
     "sample_id": "v1_fact_gs_0058",
     "slice": "positive",
     "message_text": "I love reading",
     "gold_span": "reading",
     "gold_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0299",
-    "slice": "near_miss",
-    "message_text": "Loved \u201cand yea my brother is p good at boba but hes doin \u2026\u201d",
-    "pred_span": "brother",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0299",
-    "slice": "near_miss",
-    "message_text": "Loved \u201cand yea my brother is p good at boba but hes doin \u2026\u201d",
-    "pred_span": "boba",
-    "pred_label": "food_item"
   },
   {
     "type": "fn",
@@ -344,22 +264,6 @@
     "gold_label": "activity"
   },
   {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0140",
-    "slice": "random_negative",
-    "message_text": "Ur jeans are tight haha",
-    "pred_span": "jeans",
-    "pred_label": "food_item"
-  },
-  {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0140",
-    "slice": "random_negative",
-    "message_text": "Ur jeans are tight haha",
-    "pred_span": "tight",
-    "pred_label": "health_condition"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0229",
     "slice": "positive",
@@ -369,11 +273,11 @@
   },
   {
     "type": "fp",
-    "sample_id": "r2_fact_gs_0233",
-    "slice": "random_negative",
-    "message_text": "Laughed at \u201cI think the coupon was supposed to be 2 dollars of\u2026\u201d",
-    "pred_span": "coupon",
-    "pred_label": "food_item"
+    "sample_id": "r2_fact_gs_0229",
+    "slice": "positive",
+    "message_text": "rn prolly just go back home live in cali",
+    "pred_span": "prolly",
+    "pred_label": "person_name"
   },
   {
     "type": "fn",
@@ -392,12 +296,12 @@
     "gold_label": "org"
   },
   {
-    "type": "fp",
+    "type": "fn",
     "sample_id": "r2_fact_gs_0217",
     "slice": "positive",
     "message_text": "I ate the cake my brother made",
-    "pred_span": "made",
-    "pred_label": "activity"
+    "gold_span": "brother",
+    "gold_label": "family_member"
   },
   {
     "type": "fn",
@@ -416,14 +320,6 @@
     "gold_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0082",
-    "slice": "positive",
-    "message_text": "im free after 11 am! im at my sisters rn but i'll prob be back in san jose by 11/12 ish",
-    "pred_span": "free",
-    "pred_label": "health_condition"
-  },
-  {
     "type": "fn",
     "sample_id": "v1_fact_gs_0177",
     "slice": "positive",
@@ -438,22 +334,6 @@
     "message_text": "Technically my brothers",
     "gold_span": "my brothers",
     "gold_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0261",
-    "slice": "near_miss",
-    "message_text": "So they know my dad well",
-    "pred_span": "dad",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0261",
-    "slice": "near_miss",
-    "message_text": "So they know my dad well",
-    "pred_span": "well",
-    "pred_label": "place"
   },
   {
     "type": "fn",
@@ -496,20 +376,20 @@
     "gold_label": "org"
   },
   {
-    "type": "fn",
+    "type": "fp",
     "sample_id": "r2_fact_gs_0192",
     "slice": "positive",
     "message_text": "Online classes for ihs are a shit show, the district and parents want us to teach according to the r",
-    "gold_span": "Online classes",
-    "gold_label": "activity"
+    "pred_span": "live instruction",
+    "pred_label": "activity"
   },
   {
-    "type": "fp",
+    "type": "fn",
     "sample_id": "v1_fact_gs_0171",
     "slice": "positive",
     "message_text": "I've never had spicy palak paneer",
-    "pred_span": "palak paneer",
-    "pred_label": "food_item"
+    "gold_span": "spicy palak paneer",
+    "gold_label": "food_item"
   },
   {
     "type": "fp",
@@ -517,15 +397,7 @@
     "slice": "near_miss",
     "message_text": "This prof doesn\u2019t not give a fuck I love it",
     "pred_span": "prof",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0288",
-    "slice": "near_miss",
-    "message_text": "This prof doesn\u2019t not give a fuck I love it",
-    "pred_span": "love it",
-    "pred_label": "health_condition"
+    "pred_label": "person_name"
   },
   {
     "type": "fn",
@@ -536,12 +408,12 @@
     "gold_label": "activity"
   },
   {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0107",
-    "slice": "near_miss",
-    "message_text": "Just call my phone my dad will pick up",
-    "pred_span": "dad",
-    "pred_label": "family_member"
+    "type": "fn",
+    "sample_id": "r2_fact_gs_0026",
+    "slice": "positive",
+    "message_text": "Also i liked the dolmas",
+    "gold_span": "dolmas",
+    "gold_label": "food_item"
   },
   {
     "type": "fn",
@@ -561,19 +433,11 @@
   },
   {
     "type": "fp",
-    "sample_id": "v1_fact_gs_0161",
-    "slice": "random_negative",
-    "message_text": "oh mb i assumed u meant u arent comin",
-    "pred_span": "comin",
-    "pred_label": "job_role"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0110",
-    "slice": "near_miss",
-    "message_text": "My mom is the one who sends an ok",
-    "pred_span": "mom",
-    "pred_label": "family_member"
+    "sample_id": "v1_fact_gs_0008",
+    "slice": "positive",
+    "message_text": "I was looking at the matchups w my brother",
+    "pred_span": "looking at matchups",
+    "pred_label": "activity"
   },
   {
     "type": "fn",
@@ -588,7 +452,7 @@
     "sample_id": "r2_fact_gs_0281",
     "slice": "positive",
     "message_text": "I'm doing aight just doing wtv I can but gonna try to rest a bit more. Def having more symptoms and ",
-    "pred_span": "not fun",
+    "pred_span": "rest a bit",
     "pred_label": "health_condition"
   },
   {
@@ -604,15 +468,7 @@
     "sample_id": "r2_fact_gs_0157",
     "slice": "near_miss",
     "message_text": "cause my mom tried doin my bros arms",
-    "pred_span": "bros",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0157",
-    "slice": "near_miss",
-    "message_text": "cause my mom tried doin my bros arms",
-    "pred_span": "arms",
+    "pred_span": "bros arms",
     "pred_label": "activity"
   },
   {
@@ -620,7 +476,7 @@
     "sample_id": "r2_fact_gs_0258",
     "slice": "positive",
     "message_text": "I'm like an ok now. My dad made me pack up my Xbox and put it away until this shelter in place thing",
-    "gold_span": "Xbox",
+    "gold_span": "5k",
     "gold_label": "activity"
   },
   {
@@ -644,7 +500,7 @@
     "sample_id": "r2_fact_gs_0258",
     "slice": "positive",
     "message_text": "I'm like an ok now. My dad made me pack up my Xbox and put it away until this shelter in place thing",
-    "pred_span": "shelter in place",
+    "pred_span": "5k",
     "pred_label": "health_condition"
   },
   {
@@ -652,24 +508,8 @@
     "sample_id": "r2_fact_gs_0258",
     "slice": "positive",
     "message_text": "I'm like an ok now. My dad made me pack up my Xbox and put it away until this shelter in place thing",
-    "pred_span": "annoying",
-    "pred_label": "health_condition"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0022",
-    "slice": "positive",
-    "message_text": "And my dad and cousin who literally work at Facebook and Intuit",
-    "gold_span": "Facebook",
-    "gold_label": "employer"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0022",
-    "slice": "positive",
-    "message_text": "And my dad and cousin who literally work at Facebook and Intuit",
-    "gold_span": "Intuit",
-    "gold_label": "employer"
+    "pred_span": "shelter in place",
+    "pred_label": "job_role"
   },
   {
     "type": "fn",
@@ -686,30 +526,6 @@
     "message_text": "And my dad and cousin who literally work at Facebook and Intuit",
     "gold_span": "my dad",
     "gold_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0022",
-    "slice": "positive",
-    "message_text": "And my dad and cousin who literally work at Facebook and Intuit",
-    "pred_span": "Facebook",
-    "pred_label": "job_role"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0022",
-    "slice": "positive",
-    "message_text": "And my dad and cousin who literally work at Facebook and Intuit",
-    "pred_span": "Intuit",
-    "pred_label": "job_role"
-  },
-  {
-    "type": "fn",
-    "sample_id": "r2_fact_gs_0372",
-    "slice": "positive",
-    "message_text": "im in delaware most of th summer chauffeur for my brother on his externship for culinary school",
-    "gold_span": "culinary school",
-    "gold_label": "org"
   },
   {
     "type": "fn",
@@ -732,16 +548,8 @@
     "sample_id": "r2_fact_gs_0372",
     "slice": "positive",
     "message_text": "im in delaware most of th summer chauffeur for my brother on his externship for culinary school",
-    "pred_span": "externship",
+    "pred_span": "summer chauffeur",
     "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0372",
-    "slice": "positive",
-    "message_text": "im in delaware most of th summer chauffeur for my brother on his externship for culinary school",
-    "pred_span": "culinary school",
-    "pred_label": "job_role"
   },
   {
     "type": "fn",
@@ -800,14 +608,6 @@
     "gold_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0015",
-    "slice": "positive",
-    "message_text": "But my mom comes back from india like the 28th",
-    "pred_span": "28th",
-    "pred_label": "activity"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0085",
     "slice": "positive",
@@ -828,32 +628,8 @@
     "sample_id": "r2_fact_gs_0085",
     "slice": "positive",
     "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip ",
-    "pred_span": "7 days",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0085",
-    "slice": "positive",
-    "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip ",
-    "pred_span": "SER",
-    "pred_label": "job_role"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0085",
-    "slice": "positive",
-    "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip ",
-    "pred_span": "PACIFIC COMMON CVS",
+    "pred_span": "SER @ the",
     "pred_label": "org"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0085",
-    "slice": "positive",
-    "message_text": "Friendly reminder, Jwalin: 7 days left for SER @ the 43950 PACIFIC COMMON CVS Pharmacy. Skip a trip ",
-    "pred_span": "i.cvs.com",
-    "pred_label": "food_item"
   },
   {
     "type": "fp",
@@ -864,76 +640,12 @@
     "pred_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0339",
-    "slice": "near_miss",
-    "message_text": "Loved \u201cYeah my mom was their realtor too so she is giving them her comission which is around 8-9k. W",
-    "pred_span": "mom",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0339",
-    "slice": "near_miss",
-    "message_text": "Loved \u201cYeah my mom was their realtor too so she is giving them her comission which is around 8-9k. W",
-    "pred_span": "realtor",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0339",
-    "slice": "near_miss",
-    "message_text": "Loved \u201cYeah my mom was their realtor too so she is giving them her comission which is around 8-9k. W",
-    "pred_span": "Kaylee",
-    "pred_label": "person_name"
-  },
-  {
     "type": "fn",
     "sample_id": "r2_fact_gs_0095",
     "slice": "positive",
     "message_text": "I do have a roommate and we get along pretty well and I like hearing her stories",
     "gold_span": "roommate",
     "gold_label": "friend_name"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0095",
-    "slice": "positive",
-    "message_text": "I do have a roommate and we get along pretty well and I like hearing her stories",
-    "pred_span": "roommate",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0095",
-    "slice": "positive",
-    "message_text": "I do have a roommate and we get along pretty well and I like hearing her stories",
-    "pred_span": "stories",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0168",
-    "slice": "random_negative",
-    "message_text": "yeah a lot of em i don\u2019t fuck with either",
-    "pred_span": "em",
-    "pred_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0168",
-    "slice": "random_negative",
-    "message_text": "yeah a lot of em i don\u2019t fuck with either",
-    "pred_span": "don\u2019t",
-    "pred_label": "activity"
-  },
-  {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0168",
-    "slice": "random_negative",
-    "message_text": "yeah a lot of em i don\u2019t fuck with either",
-    "pred_span": "fuck",
-    "pred_label": "health_condition"
   },
   {
     "type": "fn",
@@ -956,8 +668,16 @@
     "sample_id": "r2_fact_gs_0324",
     "slice": "near_miss",
     "message_text": "Yesterday I called my dad at like 1 and he was like aight just come home and we\u2019ll figure the rest o",
-    "pred_span": "packed everything up",
+    "pred_span": "figure the rest",
     "pred_label": "activity"
+  },
+  {
+    "type": "fp",
+    "sample_id": "r2_fact_gs_0324",
+    "slice": "near_miss",
+    "message_text": "Yesterday I called my dad at like 1 and he was like aight just come home and we\u2019ll figure the rest o",
+    "pred_span": "packed everything up",
+    "pred_label": "food_item"
   },
   {
     "type": "fn",
@@ -985,6 +705,14 @@
   },
   {
     "type": "fp",
+    "sample_id": "r2_fact_gs_0152",
+    "slice": "positive",
+    "message_text": "Oh nice! SB would be awesome too, I like it there",
+    "pred_span": "awesome",
+    "pred_label": "activity"
+  },
+  {
+    "type": "fp",
     "sample_id": "r2_fact_gs_0033",
     "slice": "near_miss",
     "message_text": "I'll ask my dad later if there's a way",
@@ -992,12 +720,12 @@
     "pred_label": "family_member"
   },
   {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0033",
-    "slice": "near_miss",
-    "message_text": "I'll ask my dad later if there's a way",
-    "pred_span": "later",
-    "pred_label": "activity"
+    "type": "fn",
+    "sample_id": "r2_fact_gs_0158",
+    "slice": "positive",
+    "message_text": "lol i came home and my sisters icing her neck",
+    "gold_span": "sisters",
+    "gold_label": "family_member"
   },
   {
     "type": "fn",
@@ -1006,21 +734,5 @@
     "message_text": "lol i came home and my sisters icing her neck",
     "gold_span": "my sisters",
     "gold_label": "family_member"
-  },
-  {
-    "type": "fp",
-    "sample_id": "r2_fact_gs_0158",
-    "slice": "positive",
-    "message_text": "lol i came home and my sisters icing her neck",
-    "pred_span": "her neck",
-    "pred_label": "food_item"
-  },
-  {
-    "type": "fp",
-    "sample_id": "v1_fact_gs_0117",
-    "slice": "random_negative",
-    "message_text": "Emphasized \u201cAshish tho is the kinda dude \u201d",
-    "pred_span": "Ashish",
-    "pred_label": "family_member"
   }
 ]
