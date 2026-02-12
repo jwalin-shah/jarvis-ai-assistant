@@ -414,14 +414,14 @@ class EmbeddingStore:
         """
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
-        # Enable WAL mode for better concurrent read/write performance
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
         return conn
 
     def _init_schema(self) -> None:
         """Initialize the database schema."""
         with self._get_connection() as conn:
+            # Set WAL mode once at init (persists across connections, not per-query)
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
             conn.executescript(
                 """
                 -- Main embeddings table
