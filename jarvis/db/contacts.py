@@ -56,44 +56,49 @@ class ContactMixin:
             handles_json = json.dumps(handles) if handles else None
 
             if chat_id:
-                # Check for existing contact
-                cursor = conn.execute("SELECT id FROM contacts WHERE chat_id = ?", (chat_id,))
-                existing = cursor.fetchone()
+                # UPSERT: single query instead of SELECT-then-UPDATE/INSERT
+                cursor = conn.execute(
+                    """
+                    INSERT INTO contacts
+                    (chat_id, display_name, phone_or_email, relationship,
+                     style_notes, handles_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(chat_id) DO UPDATE SET
+                        display_name = excluded.display_name,
+                        phone_or_email = excluded.phone_or_email,
+                        relationship = excluded.relationship,
+                        style_notes = excluded.style_notes,
+                        handles_json = excluded.handles_json,
+                        updated_at = excluded.updated_at
+                    RETURNING id
+                    """,
+                    (
+                        chat_id,
+                        display_name,
+                        phone_or_email,
+                        relationship,
+                        style_notes,
+                        handles_json,
+                        now,
+                    ),
+                )
+                row = cursor.fetchone()
+                # Invalidate caches (always safe; stats cache is cheap to rebuild)
+                self._contact_cache.invalidate(("contact_id", row["id"]))
+                self._contact_cache.invalidate(("chat_id", chat_id))
+                self._stats_cache.invalidate("db_stats")
+                return Contact(
+                    id=row["id"],
+                    chat_id=chat_id,
+                    display_name=display_name,
+                    phone_or_email=phone_or_email,
+                    relationship=relationship,
+                    style_notes=style_notes,
+                    handles_json=handles_json,
+                    updated_at=now,
+                )
 
-                if existing:
-                    # Update existing
-                    conn.execute(
-                        """
-                        UPDATE contacts
-                        SET display_name = ?, phone_or_email = ?, relationship = ?,
-                            style_notes = ?, handles_json = ?, updated_at = ?
-                        WHERE chat_id = ?
-                        """,
-                        (
-                            display_name,
-                            phone_or_email,
-                            relationship,
-                            style_notes,
-                            handles_json,
-                            now,
-                            chat_id,
-                        ),
-                    )
-                    # Invalidate cache entries for this contact
-                    self._contact_cache.invalidate(("contact_id", existing["id"]))
-                    self._contact_cache.invalidate(("chat_id", chat_id))
-                    return Contact(
-                        id=existing["id"],
-                        chat_id=chat_id,
-                        display_name=display_name,
-                        phone_or_email=phone_or_email,
-                        relationship=relationship,
-                        style_notes=style_notes,
-                        handles_json=handles_json,
-                        updated_at=now,
-                    )
-
-            # Insert new contact
+            # No chat_id: always a new insert
             cursor = conn.execute(
                 """
                 INSERT INTO contacts

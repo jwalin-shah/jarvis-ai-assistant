@@ -27,6 +27,7 @@ from jarvis.contacts.fact_index import (
 )
 from jarvis.contacts.fact_storage import (
     get_facts_for_contact,
+    save_and_index_facts,
     save_candidate_facts,
     save_facts,
 )
@@ -261,8 +262,8 @@ class TestEndToEndPipeline:
         # Should extract something from these clear messages
         assert len(facts) > 0, "Expected facts to be extracted from clear messages"
 
-        # Step 2: Store facts
-        inserted = save_facts(facts, CONTACT_A)
+        # Step 2: Store and index facts
+        inserted = save_and_index_facts(facts, CONTACT_A)
         assert inserted > 0, f"Expected facts to be inserted, got {inserted}"
 
         # Step 3: Verify facts persisted (reads back including TIMESTAMP columns —
@@ -270,7 +271,7 @@ class TestEndToEndPipeline:
         stored = get_facts_for_contact(CONTACT_A)
         assert len(stored) == inserted
 
-        # Step 4: Verify semantic index was populated by save_facts
+        # Step 4: Verify semantic index was populated by save_and_index_facts
         with self.db.connection() as conn:
             row = conn.execute(
                 "SELECT COUNT(*) FROM vec_facts WHERE contact_id = ?",
@@ -655,7 +656,7 @@ class TestCandidateToStoragePipeline:
 
         save_candidate_facts(candidates, CONTACT_A)
 
-        # save_candidate_facts calls save_facts which calls index_facts
+        # save_candidate_facts calls save_and_index_facts which indexes for search
         # Verify via semantic search
         results = search_relevant_facts("what food do you like for dinner?", CONTACT_A, limit=3)
 

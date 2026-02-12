@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 def save_facts(facts: list[Fact], contact_id: str) -> int:
     """Save facts to contact_facts table, skip duplicates.
 
+    This is a pure DB operation. For saving + semantic indexing,
+    use ``save_and_index_facts()`` instead.
+
     Args:
         facts: Extracted facts to persist.
         contact_id: Contact these facts belong to.
@@ -36,9 +39,6 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
         db = get_db()
         start_time = time.perf_counter()
 
-        # PERF FIX: Use batch INSERT with executemany() instead of loop
-        # Before: 50 individual INSERT statements = ~150ms
-        # After: 1 batch INSERT = ~3ms
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Prepare all fact data as tuples for batch insert
@@ -62,12 +62,8 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
         ]
 
         with db.connection() as conn:
-            # Get initial count to calculate how many were actually inserted
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
-                (contact_id,),
-            )
-            count_before = cursor.fetchone()[0]
+            # Track changes via total_changes to avoid 2 extra COUNT queries
+            changes_before = conn.total_changes
 
             # Batch insert all facts at once
             conn.executemany(
@@ -81,13 +77,7 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 fact_data,
             )
 
-            # Get final count to see how many were inserted (executemany rowcount is unreliable)
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?",
-                (contact_id,),
-            )
-            count_after = cursor.fetchone()[0]
-            inserted = count_after - count_before
+            inserted = conn.total_changes - changes_before
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         if inserted:
@@ -98,15 +88,34 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 elapsed_ms,
             )
 
-            # Index newly inserted facts into vec_facts for semantic retrieval
-            try:
-                from jarvis.contacts.fact_index import index_facts
-
-                index_facts(facts, contact_id)
-            except Exception as e:
-                logger.debug("Fact indexing skipped: %s", e)
-
         return inserted
+
+
+def save_and_index_facts(facts: list[Fact], contact_id: str) -> int:
+    """Save facts to DB and index them for semantic search.
+
+    Combines ``save_facts()`` (pure DB insert) with ``index_facts()``
+    (embedding + vec_facts). Indexing failures are logged but don't
+    affect the save.
+
+    Args:
+        facts: Extracted facts to persist and index.
+        contact_id: Contact these facts belong to.
+
+    Returns:
+        Number of new facts inserted.
+    """
+    inserted = save_facts(facts, contact_id)
+
+    if inserted:
+        try:
+            from jarvis.contacts.fact_index import index_facts
+
+            index_facts(facts, contact_id)
+        except Exception as e:
+            logger.debug("Fact indexing skipped: %s", e)
+
+    return inserted
 
 
 def get_facts_for_contact(contact_id: str) -> list[Fact]:
@@ -281,7 +290,7 @@ def save_candidate_facts(
     if not facts:
         return 0
 
-    return save_facts(facts, contact_id)
+    return save_and_index_facts(facts, contact_id)
 
 
 def delete_facts_by_predicate_prefix(prefix: str) -> int:

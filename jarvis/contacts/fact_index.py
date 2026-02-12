@@ -248,64 +248,63 @@ def search_relevant_facts(
 
     db = get_db()
 
-    # Check if vec_facts exists and has data for this contact
+    # Single connection for all 3 DB operations (was 3 separate connections)
     try:
         with db.connection() as conn:
+            # 1. Check if vec_facts has data for this contact
             row = conn.execute(
                 "SELECT COUNT(*) FROM vec_facts WHERE contact_id = ?",
                 (contact_id,),
             ).fetchone()
             if row is None or row[0] == 0:
                 return _fallback_get_facts(contact_id, limit)
+
+            # Encode query (GPU work happens outside DB lock)
+            embedder = get_embedder()
+            query_emb = embedder.encode([query], normalize=True)[0]
+            query_blob = _quantize(query_emb)
+
+            # 2. Vector search with contact_id filter
+            results = conn.execute(
+                """
+                SELECT rowid, distance, fact_id, fact_text, contact_id
+                FROM vec_facts
+                WHERE embedding MATCH vec_int8(?)
+                AND k = ?
+                AND contact_id = ?
+                """,
+                (query_blob, limit * 2, contact_id),
+            ).fetchall()
+
+            if not results:
+                return _fallback_get_facts(contact_id, limit)
+
+            # Filter by similarity threshold and collect fact IDs
+            relevant_ids = []
+            for row in results:
+                sim = _distance_to_similarity(row["distance"])
+                if sim >= _MIN_SIMILARITY:
+                    relevant_ids.append(row["fact_id"])
+                if len(relevant_ids) >= limit:
+                    break
+
+            if not relevant_ids:
+                return _fallback_get_facts(contact_id, limit)
+
+            # 3. Fetch full fact objects in one query
+            placeholders = ",".join("?" * len(relevant_ids))
+            fact_rows = conn.execute(
+                f"""
+                SELECT category, subject, predicate, value, confidence,
+                       source_text, source_message_id, extracted_at,
+                       linked_contact_id, valid_from, valid_until
+                FROM contact_facts
+                WHERE id IN ({placeholders})
+                """,  # noqa: S608
+                relevant_ids,
+            ).fetchall()
     except Exception:
         return _fallback_get_facts(contact_id, limit)
-
-    # Encode query
-    embedder = get_embedder()
-    query_emb = embedder.encode([query], normalize=True)[0]
-    query_blob = _quantize(query_emb)
-
-    # Vector search with contact_id filter
-    with db.connection() as conn:
-        results = conn.execute(
-            """
-            SELECT rowid, distance, fact_id, fact_text, contact_id
-            FROM vec_facts
-            WHERE embedding MATCH vec_int8(?)
-            AND k = ?
-            AND contact_id = ?
-            """,
-            (query_blob, limit * 2, contact_id),
-        ).fetchall()
-
-    if not results:
-        return _fallback_get_facts(contact_id, limit)
-
-    # Filter by similarity threshold and collect fact IDs
-    relevant_ids = []
-    for row in results:
-        sim = _distance_to_similarity(row["distance"])
-        if sim >= _MIN_SIMILARITY:
-            relevant_ids.append(row["fact_id"])
-        if len(relevant_ids) >= limit:
-            break
-
-    if not relevant_ids:
-        return _fallback_get_facts(contact_id, limit)
-
-    # Fetch full fact objects in one query
-    placeholders = ",".join("?" * len(relevant_ids))
-    with db.connection() as conn:
-        fact_rows = conn.execute(
-            f"""
-            SELECT category, subject, predicate, value, confidence,
-                   source_text, source_message_id, extracted_at,
-                   linked_contact_id, valid_from, valid_until
-            FROM contact_facts
-            WHERE id IN ({placeholders})
-            """,  # noqa: S608
-            relevant_ids,
-        ).fetchall()
 
     return [
         Fact(

@@ -45,7 +45,7 @@ def backfill(
 ) -> None:
     """Extract facts from historical messages for top contacts."""
     from integrations.imessage import ChatDBReader
-    from jarvis.contacts.fact_storage import get_fact_count, save_candidate_facts, save_facts
+    from jarvis.contacts.fact_storage import get_fact_count, save_and_index_facts, save_candidate_facts
     from jarvis.db import get_db
 
     # Ensure schema is up to date
@@ -114,7 +114,7 @@ def backfill(
                 total_facts += len(facts)
 
                 if facts:
-                    inserted = save_facts(facts, chat_id)
+                    inserted = save_and_index_facts(facts, chat_id)
                     total_inserted += inserted
                     if inserted:
                         print(f"  -> {len(facts)} facts, {inserted} new", flush=True)
