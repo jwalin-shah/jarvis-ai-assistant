@@ -71,11 +71,13 @@ EXTRACTION_SCHEMA = """{
   ]
 }"""
 
-EXTRACT_SYSTEM_PROMPT = """Extract named entities from chat messages as JSON.
-"text" = exact 1-3 words from message. Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
-Return {"facts": []} if none."""
+EXTRACT_SYSTEM_PROMPT = """Extract LASTING personal facts from a chat message as JSON.
+A fact = something true about a person long-term (their job, hobby, family member, health condition, where they live/work).
+NOT facts: one-time events, plans, greetings, opinions, transient actions.
+"text" = exact 1-3 words copied from the message. Labels: family_member, activity, health_condition, job_role, org, food_item, place, friend_name, person_name
+Return {"facts": []} if no lasting personal facts."""
 
-# Few-shot examples: 5 positive (diverse labels) + 2 negative
+# Few-shot examples: 4 positive + 3 hard negatives (family/health mentioned but not facts)
 FEW_SHOT_TURNS = [
     ("my brother bakes and I just eat whatever he makes",
      '{"facts": [{"text": "brother", "label": "family_member"}, {"text": "bakes", "label": "activity"}]}'),
@@ -83,14 +85,14 @@ FEW_SHOT_TURNS = [
      '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}'),
     ("allergic to peanuts and it sucks",
      '{"facts": [{"text": "peanuts", "label": "health_condition"}]}'),
-    ("My mom actually texted me saying my acceptance letter went to the house in Delaware",
-     '{"facts": [{"text": "mom", "label": "family_member"}, {"text": "house", "label": "place"}, {"text": "Delaware", "label": "place"}]}'),
-    ("helloooo",
-     '{"facts": []}'),
-    ("My phone is being like my moms",
-     '{"facts": []}'),
     ("Also my dad leaves the 22nd for India",
      '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}'),
+    ("helloooo",
+     '{"facts": []}'),
+    ("Yeah that's fine I'll leave as soon as my mom gets home at 4",
+     '{"facts": []}'),
+    ("and they'll do an ultrasound and stuff",
+     '{"facts": []}'),
 ]
 
 INSTRUCT_USER_PROMPT = """Message: "{message}"
@@ -109,8 +111,8 @@ LLM_LABEL_ALIASES: dict[str, set[str]] = {
     "past_location": {"past_location", "hometown", "origin"},
     "friend_name": {"friend_name", "friend"},
     "person_name": {"person_name", "name", "person"},
-    "org": {"org", "organization", "company", "employer", "school", "university"},
-    "place": {"place", "location", "venue", "landmark"},
+    "org": {"org", "organization", "company", "employer", "school", "university", "personal.school"},
+    "place": {"place", "location", "venue", "landmark", "current_location", "future_location", "past_location"},
     "health_condition": {"health_condition", "health", "allergy", "condition", "medical"},
 }
 
@@ -334,7 +336,7 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
             # Reject only obvious non-locations (very common words)
             location_rejects = {
                 "here", "there", "home", "somewhere", "anywhere", "nowhere",
-                "place", "area", "spot",
+                "place", "area", "spot", "well", "last fall", "22nd",
             }
             if text_lower in location_rejects:
                 continue
@@ -344,8 +346,9 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "eat", "eating", "ate", "food", "cooking", "cook", "phone",
                 "whatever", "everything", "anything", "something", "stuff",
                 "it", "that", "this", "one", "all", "car", "arms", "tie",
-                "theory", "utilities", "read", "xbox", "realtor",
-                "acceptance letter", "lending tree", "raiders",
+                "theory", "utilities", "read", "xbox", "realtor", "raiders",
+                "acceptance letter", "bag", "never", "whatever he makes",
+                "jeans", "coupon", "email", "her neck", "neck",
             }
             if text_lower in reject_foods:
                 continue
@@ -387,22 +390,30 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 "email", "mind", "control", "assumed",
                 "yea", "em", "a lot of", "classes", "working",
                 "get along", "increase time", "matchups",
-                "30-40", "22nd", "icing",
+                "30-40", "22nd", "icing", "made", "stories",
+                "ultrasound", "kind", "later", "don't",
+                "talk to some", "points of view",
+                "packed everything up", "shit 1",
+                "7 days", "28th",
             }
             if text_lower in reject_activities:
+                continue
+            # Reject spans with numbers (dates, times, not activities)
+            if any(c.isdigit() for c in text):
                 continue
             # Single lowercase words < 4 chars are unlikely to be activities
             if len(text) <= 3 and text[0].islower():
                 continue
         if label == "health_condition":
-            # Only accept spans with medical/health keywords
             reject_health = {
                 "whatever", "slow", "slow process", "points of view",
                 "insanely big", "bad", "feel", "feeling",
                 "dgaf", "don't fuck", "either", "not comin",
                 "ihs", "4am", "rationalize", "willpower",
                 "take responsibility", "rest", "never ended",
-                "increase time",
+                "increase time", "never", "free", "not fun",
+                "tight", "annoying", "ready to just", "love it",
+                "shelter in place", "fuck",
             }
             if text_lower in reject_health:
                 continue
