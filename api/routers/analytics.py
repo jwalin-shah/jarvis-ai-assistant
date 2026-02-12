@@ -496,5 +496,6 @@ async def clear_analytics_cache(request: Request) -> dict[str, str]:
     stale data issues.
     """
     global _analytics_cache
-    _analytics_cache = None
+    with _analytics_cache_lock:
+        _analytics_cache = None
     return {"status": "ok", "message": "Analytics cache cleared"}

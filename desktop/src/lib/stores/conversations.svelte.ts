@@ -104,6 +104,7 @@ class ConversationsState {
   lastKnownGlobalRowid = 0;
   lastSyncTimestamp = 0;
   SYNC_DEBOUNCE_MS = 120000; // 2 minutes
+  _messagePolling = false;
 
   // Derived properties
   selectedConversation = $derived(
@@ -320,7 +321,9 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
 
 export async function pollMessages(): Promise<Message[]> {
   if (!conversationsStore.selectedChatId || !conversationsStore.isWindowFocused) return [];
+  if (conversationsStore._messagePolling) return []; // Prevent concurrent polls
 
+  conversationsStore._messagePolling = true;
   const now = Date.now();
   const timeSinceLastSync = now - conversationsStore.lastSyncTimestamp;
 
@@ -387,6 +390,8 @@ export async function pollMessages(): Promise<Message[]> {
     return newMessages;
   } catch (e) {
     return [];
+  } finally {
+    conversationsStore._messagePolling = false;
   }
 }
 
