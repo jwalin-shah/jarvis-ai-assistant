@@ -21,7 +21,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_imessage_reader
-from integrations.imessage import ChatDBReader
 from api.schemas.tags import (
     BulkTagRequest,
     BulkTagResponse,
@@ -51,6 +50,7 @@ from api.schemas.tags import (
     TagUpdate,
     TagWithPath,
 )
+from integrations.imessage import ChatDBReader
 from jarvis.tags import (
     AutoTagger,
     RuleCondition,
@@ -742,13 +742,9 @@ def get_tag_suggestions(
         for m in messages
     ]
 
-    # Get contact name
-    conversations = reader.get_conversations(limit=500)
-    contact_name = None
-    for conv in conversations:
-        if conv.chat_id == request.chat_id:
-            contact_name = conv.display_name
-            break
+    # Get contact name via direct lookup (avoids N+1)
+    conv = reader.get_conversation(request.chat_id)
+    contact_name = conv.display_name if conv else None
 
     # Get suggestions
     auto_tagger = get_auto_tagger()

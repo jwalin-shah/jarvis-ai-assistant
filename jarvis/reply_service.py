@@ -259,7 +259,7 @@ class ReplyService:
         )
         model_request = self._to_model_generation_request(pipeline_request)
 
-        similarity = search_results[0]["similarity"] if search_results else 0.0
+        similarity = search_results[0].get("similarity", 0.0) if search_results else 0.0
         example_diversity = self._compute_example_diversity(search_results)
         pressure = self._pressure_from_classification(classification_result)
 
@@ -332,7 +332,12 @@ class ReplyService:
             return self._template_response(category_name, routing_start)
 
         search_results, latency_ms = self._search_context(
-            search_results, incoming, chat_id, contact, cached_embedder, latency_ms,
+            search_results,
+            incoming,
+            chat_id,
+            contact,
+            cached_embedder,
+            latency_ms,
         )
 
         can_generate, health_reason = self.can_use_llm()
@@ -350,14 +355,23 @@ class ReplyService:
             )
 
         result, latency_ms = self._generate_response(
-            context, classification, search_results, contact, thread_messages,
-            cached_embedder, latency_ms,
+            context,
+            classification,
+            search_results,
+            contact,
+            thread_messages,
+            cached_embedder,
+            latency_ms,
         )
 
         latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
         self._log_and_record_metrics(
-            result, category_name, incoming, search_results,
-            latency_ms, cached_embedder,
+            result,
+            category_name,
+            incoming,
+            search_results,
+            latency_ms,
+            cached_embedder,
         )
 
         return result
@@ -371,7 +385,9 @@ class ReplyService:
         )
 
     def _resolve_thread(
-        self, thread: list[str] | None, context: MessageContext,
+        self,
+        thread: list[str] | None,
+        context: MessageContext,
     ) -> list[str]:
         """Extract thread messages from explicit param or context metadata."""
         if thread is not None:
@@ -382,7 +398,9 @@ class ReplyService:
         return []
 
     def _template_response(
-        self, category_name: str, routing_start: float,
+        self,
+        category_name: str,
+        routing_start: float,
     ) -> GenerationResponse:
         """Return a template response for categories that skip the SLM."""
         if category_name == "closing":

@@ -789,7 +789,7 @@ class JarvisSocketServer:
             logger.debug(f"WebSocket client disconnected: {websocket.remote_address}")
 
     async def _process_message(
-        self, message: str, writer: "asyncio.StreamWriter | WebSocketWriter | None" = None
+        self, message: str, writer: asyncio.StreamWriter | WebSocketWriter | None = None
     ) -> str | None:
         """Process a JSON-RPC message.
 

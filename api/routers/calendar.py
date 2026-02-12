@@ -6,12 +6,11 @@ retrieving events, and creating calendar entries.
 
 from __future__ import annotations
 
-import asyncio
-import functools
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
 from api.schemas import (
@@ -100,9 +99,8 @@ async def list_calendars(
     Returns calendars that the user has access to, including both
     local calendars and synced calendars (iCloud, Google, etc.).
     """
-    # Run blocking calendar read in executor to avoid blocking the event loop
-    loop = asyncio.get_running_loop()
-    calendars = await loop.run_in_executor(None, reader.get_calendars)
+    # Run blocking calendar read in threadpool to avoid blocking the event loop
+    calendars = await run_in_threadpool(reader.get_calendars)
     return [CalendarResponse.model_validate(cal) for cal in calendars]
 
 

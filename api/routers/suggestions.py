@@ -14,11 +14,11 @@ import logging
 import re
 
 from fastapi import APIRouter, Request
-
-_WORD_BOUNDARY_RE = re.compile(r"\b\w+\b")
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.ratelimit import RATE_LIMIT_READ, limiter
+
+_WORD_BOUNDARY_RE = re.compile(r"\b\w+\b")
 
 logger = logging.getLogger(__name__)
 

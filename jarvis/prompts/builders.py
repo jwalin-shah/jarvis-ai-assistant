@@ -387,7 +387,9 @@ def _select_examples_for_tone(
         casual_tuples = [(ex.context, ex.output) for ex in CASUAL_REPLY_EXAMPLES]
         professional_tuples = [(ex.context, ex.output) for ex in PROFESSIONAL_REPLY_EXAMPLES]
         examples_list = select_matching_examples(
-            relationship_profile, casual_tuples, professional_tuples,
+            relationship_profile,
+            casual_tuples,
+            professional_tuples,
         )
         return [FewShotExample(context=ctx, output=out) for ctx, out in examples_list]
     elif effective_tone == "professional":

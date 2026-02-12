@@ -5,13 +5,13 @@ Includes caching and default avatar generation for contacts without photos.
 """
 
 import hashlib
-from xml.sax.saxutils import escape as xml_escape
 import io
 import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any
+from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
