@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+
+_URL_RE = re.compile(r"https?://\S+")
+_WORD_RE = re.compile(r"\b[a-zA-Z]{3,}\b")
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -302,9 +305,9 @@ def _extract_words(text: str) -> list[str]:
     if not text:
         return []
     # Remove URLs
-    text = re.sub(r"https?://\S+", "", text)
+    text = _URL_RE.sub("", text)
     # Remove special characters, keep letters and numbers
-    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+    words = _WORD_RE.findall(text.lower())
     return [w for w in words if w not in STOP_WORDS]
 
 
@@ -504,13 +507,9 @@ def get_conversation_stats(
     # Get time range start for filtering
     time_range_start = _get_time_range_start(time_range)
 
-    # Fetch messages - we fetch more than limit to account for time filtering
+    # Fetch messages with time filtering pushed to DB
     # The reader returns messages in reverse chronological order (newest first)
-    messages = reader.get_messages(chat_id=chat_id, limit=limit)
-
-    # Filter by time range if specified
-    if time_range_start is not None:
-        messages = [m for m in messages if m.date >= time_range_start]
+    messages = reader.get_messages(chat_id=chat_id, limit=limit, after=time_range_start)
 
     # Sort messages chronologically for response time calculation
     messages_sorted = sorted(messages, key=lambda m: m.date)

@@ -199,20 +199,19 @@ class ToneAnalyzer:
         "consequently",
     }
 
-    def __init__(self) -> None:
-        """Initialize the tone analyzer."""
-        # Emoji regex pattern
-        self._emoji_pattern = re.compile(
-            "["
-            "\U0001f600-\U0001f64f"  # emoticons
-            "\U0001f300-\U0001f5ff"  # symbols & pictographs
-            "\U0001f680-\U0001f6ff"  # transport & map symbols
-            "\U0001f1e0-\U0001f1ff"  # flags
-            "\U00002702-\U000027b0"
-            "\U000024c2-\U0001f251"
-            "]+",
-            flags=re.UNICODE,
-        )
+    # Pre-compiled at class level (avoid recompilation per ToneAnalyzer instance)
+    _emoji_pattern = re.compile(
+        "["
+        "\U0001f600-\U0001f64f"  # emoticons
+        "\U0001f300-\U0001f5ff"  # symbols & pictographs
+        "\U0001f680-\U0001f6ff"  # transport & map symbols
+        "\U0001f1e0-\U0001f1ff"  # flags
+        "\U00002702-\U000027b0"
+        "\U000024c2-\U0001f251"
+        "]+",
+        flags=re.UNICODE,
+    )
+    _sentence_split_pattern = re.compile(r"[.!?]+")
 
     def analyze(self, text: str) -> ToneAnalysis:
         """Analyze the tone of a text.
@@ -243,7 +242,7 @@ class ToneAnalyzer:
         emoji_density = (emoji_count / char_count * 100) if char_count > 0 else 0.0
 
         # Count sentences and punctuation
-        sentences = re.split(r"[.!?]+", text)
+        sentences = self._sentence_split_pattern.split(text)
         sentences = [s.strip() for s in sentences if s.strip()]
         sentence_count = max(1, len(sentences))
 

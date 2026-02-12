@@ -175,6 +175,10 @@ EMOJI_PATTERN = re.compile(
     r"\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF]"
 )
 
+# Pre-compiled patterns for per-message loops (avoid recompilation overhead)
+_WORD_RE = re.compile(r"\b\w+\b")
+_NON_ALPHA_RE = re.compile(r"[^a-zA-Z]")
+
 # Formality indicators (from unified_relationship.py)
 CASUAL_INDICATORS = frozenset(
     {
@@ -601,7 +605,7 @@ class ContactProfileBuilder:
                 continue
 
             text_lower = text.lower()
-            words = set(re.findall(r"\b\w+\b", text_lower))
+            words = set(_WORD_RE.findall(text_lower))
 
             casual_score += len(words & CASUAL_INDICATORS)
             formal_score += len(words & FORMAL_INDICATORS)
@@ -654,7 +658,7 @@ class ContactProfileBuilder:
             return False
         lowercase_count = 0
         for text in texts:
-            letters = re.sub(r"[^a-zA-Z]", "", text)
+            letters = _NON_ALPHA_RE.sub("", text)
             if letters:
                 ratio = sum(1 for c in letters if c.islower()) / len(letters)
                 if ratio > 0.8:
@@ -667,7 +671,7 @@ class ContactProfileBuilder:
             return False, []
         word_counts: Counter[str] = Counter()
         for text in texts:
-            word_counts.update(re.findall(r"\b\w+\b", text.lower()))
+            word_counts.update(_WORD_RE.findall(text.lower()))
         found = {w: word_counts[w] for w in word_counts if w in TEXT_ABBREVIATIONS}
         sorted_abbrevs = sorted(found, key=found.get, reverse=True)  # type: ignore[arg-type]
         return len(found) >= 2, sorted_abbrevs[:5]
@@ -720,7 +724,7 @@ class ContactProfileBuilder:
         for msg in messages:
             if not msg.text or len(msg.text) < 5:
                 continue
-            words = re.findall(r"\b\w+\b", msg.text.lower())
+            words = _WORD_RE.findall(msg.text.lower())
             for i in range(len(words) - 1):
                 w1, w2 = words[i], words[i + 1]
                 if w1 not in STOPWORDS and w2 not in STOPWORDS:

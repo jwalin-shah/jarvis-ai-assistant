@@ -241,6 +241,9 @@ EMOJI_PATTERN = re.compile(
     flags=re.UNICODE,
 )
 
+# Pre-compiled pattern for word tokenization in analyze_sentiment (called per message)
+_WORD_TOKEN_RE = re.compile(r"\b[a-zA-Z']+\b")
+
 
 @dataclass
 class SentimentScore:
@@ -355,7 +358,7 @@ def analyze_sentiment(text: str | None) -> SentimentScore:
     text_lower = text.lower()
 
     # Extract words (simple tokenization)
-    words = re.findall(r"\b[a-zA-Z\']+\b", text_lower)
+    words = _WORD_TOKEN_RE.findall(text_lower)
 
     # Calculate word-based sentiment
     positive_sum = 0.0
