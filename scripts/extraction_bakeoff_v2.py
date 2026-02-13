@@ -49,7 +49,11 @@ OUTPUT_DIR = Path("results/extraction_bakeoff_v2")
 LLM_LABEL_ALIASES: dict[str, set[str]] = {
     **DEFAULT_LABEL_ALIASES,
     "location": {
-        "current_location", "past_location", "future_location", "place", "hometown",
+        "current_location",
+        "past_location",
+        "future_location",
+        "place",
+        "hometown",
     },
     "person": {"friend_name", "partner_name", "person_name", "family_member"},
     "job": {"employer", "job_role", "job_title"},
@@ -75,25 +79,24 @@ MODELS: dict[str, dict] = {
         "is_base": False,
         "description": "LFM2.5 1.2B Instruct (4-bit)",
     },
-    "lfm-350m-extract": {
-        "path": "models/lfm2-350m-extract-mlx-4bit",
+    "lfm-350m": {
+        "path": "mlx-community/LFM2-350M-4bit",
         "chat_template": True,
         "is_base": False,
-        "description": "LFM2.5 350M Extract (4-bit)",
-    },
-    "lfm-350m-base": {
-        "path": "mlx-community/LFM2-350M-8bit",
-        "chat_template": False,
-        "is_base": True,
-        "description": "LFM2 350M Base (8-bit)",
+        "description": "LFM2.5 350M Base (4-bit)",
     },
 }
 
 # Strategies incompatible with base models (require chat template / system prompt)
 # Strategies that require system prompts / chat templates (skip for base models)
 BASE_INCOMPATIBLE_STRATEGIES = {
-    "schema_system", "minimal_extract", "direct_extract",
-    "few_shot_3", "negative_examples", "extractive_only", "constrained_categories",
+    "schema_system",
+    "minimal_extract",
+    "direct_extract",
+    "few_shot_3",
+    "negative_examples",
+    "extractive_only",
+    "constrained_categories",
 }
 
 # ─── Prompt Strategies ──────────────────────────────────────────────────────
@@ -143,7 +146,7 @@ Text: "{text}"
 def strategy_minimal_extract(text: str) -> tuple[str | None, str, str]:
     """Shortest possible, schema-driven."""
     system = (
-        'Extract facts as JSON. null if none. '
+        "Extract facts as JSON. null if none. "
         'Schema: {"facts": [{"category": str, "value": str}] | null}'
     )
     user = text
@@ -283,10 +286,25 @@ STRATEGIES: dict[str, callable] = {
 
 
 JUNK_VALUES = {
-    "none", "n/a", "null", "not mentioned", "not stated", "not applicable",
-    "no", "na", "unknown", "", "not specified", "unspecified", "not provided",
-    "none mentioned", "not explicitly stated", "none stated",
-    "not mentioned.", "not specified.", "none.",
+    "none",
+    "n/a",
+    "null",
+    "not mentioned",
+    "not stated",
+    "not applicable",
+    "no",
+    "na",
+    "unknown",
+    "",
+    "not specified",
+    "unspecified",
+    "not provided",
+    "none mentioned",
+    "not explicitly stated",
+    "none stated",
+    "not mentioned.",
+    "not specified.",
+    "none.",
 }
 
 
@@ -297,9 +315,14 @@ def _is_junk_value(val: str) -> bool:
         return True
     # Filter prompt-echo patterns: values that contain description text from prompts
     prompt_echoes = {
-        "city/state/country", "food, music, hobby", "brother, sister, mom, dad",
-        "company or job title", "allergies or health",
-        "not explicitly", "not provided", "not specified",
+        "city/state/country",
+        "food, music, hobby",
+        "brother, sister, mom, dad",
+        "company or job title",
+        "allergies or health",
+        "not explicitly",
+        "not provided",
+        "not specified",
     }
     for echo in prompt_echoes:
         if echo in cleaned:
@@ -336,10 +359,10 @@ def parse_json_output(text: str) -> list[tuple[str, str]]:
 def _try_full_json_parse(text: str) -> list[tuple[str, str]] | None:
     """Try to parse complete JSON. Returns None if no valid JSON found."""
     # Try to find JSON object
-    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
+    json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, re.DOTALL)
     if not json_match:
         # Try array
-        arr_match = re.search(r'\[.*\]', text, re.DOTALL)
+        arr_match = re.search(r"\[.*\]", text, re.DOTALL)
         if arr_match:
             try:
                 arr = json.loads(arr_match.group())
@@ -381,9 +404,20 @@ def _try_full_json_parse(text: str) -> list[tuple[str, str]] | None:
 
 # Known category keys for flat-JSON parsing (Extract model outputs these as top-level keys)
 KNOWN_CATEGORIES = {
-    "location", "person", "preference", "relationship", "job", "school",
-    "health", "activity", "job_or_school", "hobby", "hobbies", "family",
-    "personal_info", "interests",
+    "location",
+    "person",
+    "preference",
+    "relationship",
+    "job",
+    "school",
+    "health",
+    "activity",
+    "job_or_school",
+    "hobby",
+    "hobbies",
+    "family",
+    "personal_info",
+    "interests",
 }
 
 FLAT_KEY_MAP = {
@@ -407,7 +441,7 @@ def _parse_flat_json(text: str) -> list[tuple[str, str]] | None:
         data = json.loads(text)
     except json.JSONDecodeError:
         # Try to find a JSON object
-        m = re.search(r'\{[^{]*\}', text, re.DOTALL)
+        m = re.search(r"\{[^{]*\}", text, re.DOTALL)
         if not m:
             return None
         try:
@@ -481,7 +515,7 @@ def parse_kv_output(text: str) -> list[tuple[str, str]]:
     for line in text.strip().split("\n"):
         line = line.strip().lstrip("- •*")
         # Strip markdown bold
-        line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+        line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
         # Skip non-fact lines (e.g. "Facts:" header)
         if not line or ":" not in line:
             continue
@@ -570,7 +604,7 @@ def parse_gate_output(text: str) -> list[tuple[str, str]]:
     for line in lines[1:]:
         line = line.strip().lstrip("- •")
         # Strip markdown bold: **Brother** (relationship) -> Brother (relationship)
-        line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+        line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
         if not line:
             continue
         if ":" in line:
@@ -581,7 +615,7 @@ def parse_gate_output(text: str) -> list[tuple[str, str]]:
                 facts.append((key, value))
         else:
             # Handle "Brother (personal relationship)" format
-            paren_match = re.match(r'([^(]+)\s*\(([^)]+)\)', line)
+            paren_match = re.match(r"([^(]+)\s*\(([^)]+)\)", line)
             if paren_match:
                 value = paren_match.group(1).strip()
                 cat = paren_match.group(2).strip().lower()
@@ -638,8 +672,12 @@ def unload_model(model, tokenizer):
 
 
 def generate_unconstrained(
-    model, tokenizer, system_prompt: str | None, user_prompt: str,
-    is_base: bool = False, max_tokens: int = 200,
+    model,
+    tokenizer,
+    system_prompt: str | None,
+    user_prompt: str,
+    is_base: bool = False,
+    max_tokens: int = 200,
 ) -> tuple[str, float]:
     """Generate with standard mlx_lm.generate(). Returns (text, time_ms)."""
     from mlx_lm import generate
@@ -665,7 +703,9 @@ def generate_unconstrained(
 
     t0 = time.time()
     response = generate(
-        model, tokenizer, prompt=prompt,
+        model,
+        tokenizer,
+        prompt=prompt,
         max_tokens=max_tokens,
         sampler=sampler,
         logits_processors=[rep_penalty],
@@ -683,8 +723,12 @@ def generate_unconstrained(
 
 
 def generate_constrained(
-    model, tokenizer, system_prompt: str | None, user_prompt: str,
-    is_base: bool = False, max_tokens: int = 200,
+    model,
+    tokenizer,
+    system_prompt: str | None,
+    user_prompt: str,
+    is_base: bool = False,
+    max_tokens: int = 200,
 ) -> tuple[str, float]:
     """Generate with Outlines constrained decoding. Returns (text, time_ms)."""
     try:
@@ -695,8 +739,14 @@ def generate_constrained(
 
         class ExtractedFact(PydanticBaseModel):
             category: Literal[
-                "location", "person", "relationship", "preference",
-                "job", "school", "health", "activity"
+                "location",
+                "person",
+                "relationship",
+                "preference",
+                "job",
+                "school",
+                "health",
+                "activity",
             ]
             value: str
 
@@ -744,6 +794,7 @@ def generate_constrained(
 @dataclass
 class ComboMetrics:
     """Metrics for one model+strategy+mode combination."""
+
     tp: int = 0
     fp: int = 0
     fn: int = 0
@@ -773,6 +824,7 @@ class ComboMetrics:
 @dataclass
 class ExtractionResult:
     """Result for a single message in the bakeoff."""
+
     model: str
     strategy: str
     constrained: bool
@@ -804,7 +856,8 @@ def score_predictions(
             if pred_matched[pi]:
                 continue
             if spans_match(
-                pred_val, pred_cat,
+                pred_val,
+                pred_cat,
                 gold_cand.get("span_text", ""),
                 gold_cand.get("span_label", ""),
                 label_aliases=LLM_LABEL_ALIASES,
@@ -861,12 +914,14 @@ def run_bakeoff(
     # Add DSPy strategy if provided
     all_strategies = dict(STRATEGIES)
     if dspy_prompt:
+
         def strategy_dspy(text: str) -> tuple[str | None, str, str]:
             system = dspy_prompt.get("system_prompt")
             user_template = dspy_prompt.get("user_prompt_template", "{text}")
             user = user_template.replace("{text}", text)
             parse_mode = dspy_prompt.get("parse_mode", "json")
             return system, user, parse_mode
+
         all_strategies["dspy_optimized"] = strategy_dspy
         if "dspy_optimized" not in strategy_names:
             strategy_names = list(strategy_names) + ["dspy_optimized"]
@@ -896,8 +951,9 @@ def run_bakeoff(
     print(f"  Models: {len(model_names)} ({', '.join(model_names)})", flush=True)
     print(f"  Strategies: {len(strategy_names)}", flush=True)
     mode_str = (
-        'constrained + unconstrained' if len(modes) == 2
-        else ('constrained' if modes[0] else 'unconstrained')
+        "constrained + unconstrained"
+        if len(modes) == 2
+        else ("constrained" if modes[0] else "unconstrained")
     )
     print(f"  Modes: {mode_str}", flush=True)
     print(f"  Messages: {len(records)}", flush=True)
@@ -955,8 +1011,7 @@ def run_bakeoff(
 
             if (i + 1) % 25 == 0 or i == 0:
                 print(
-                    f"    Message {i + 1}/{len(records)} "
-                    f"(run {run_idx}/{total_runs})",
+                    f"    Message {i + 1}/{len(records)} (run {run_idx}/{total_runs})",
                     flush=True,
                 )
 
@@ -965,15 +1020,23 @@ def run_bakeoff(
 
                 if constrained:
                     response, time_ms = generate_constrained(
-                        model, tokenizer, system_prompt, user_prompt,
-                        is_base=is_base, max_tokens=max_tokens,
+                        model,
+                        tokenizer,
+                        system_prompt,
+                        user_prompt,
+                        is_base=is_base,
+                        max_tokens=max_tokens,
                     )
                     # Constrained output is always valid JSON
                     parsed = parse_json_output(response)
                 else:
                     response, time_ms = generate_unconstrained(
-                        model, tokenizer, system_prompt, user_prompt,
-                        is_base=is_base, max_tokens=max_tokens,
+                        model,
+                        tokenizer,
+                        system_prompt,
+                        user_prompt,
+                        is_base=is_base,
+                        max_tokens=max_tokens,
                     )
                     parser = PARSERS.get(parse_mode, parse_json_output)
                     parsed = parser(response)
@@ -982,10 +1045,17 @@ def run_bakeoff(
                 tp, fp, fn = score_predictions(parsed, gold_cands)
 
                 result = ExtractionResult(
-                    model=model_name, strategy=strat_name, constrained=constrained,
-                    message_id=msg_id, message_text=msg_text,
-                    response=response, parsed_facts=parsed,
-                    time_ms=time_ms, tp=tp, fp=fp, fn=fn,
+                    model=model_name,
+                    strategy=strat_name,
+                    constrained=constrained,
+                    message_id=msg_id,
+                    message_text=msg_text,
+                    response=response,
+                    parsed_facts=parsed,
+                    time_ms=time_ms,
+                    tp=tp,
+                    fp=fp,
+                    fn=fn,
                 )
                 metrics.tp += tp
                 metrics.fp += fp
@@ -997,9 +1067,14 @@ def run_bakeoff(
 
             except Exception as e:
                 result = ExtractionResult(
-                    model=model_name, strategy=strat_name, constrained=constrained,
-                    message_id=msg_id, message_text=msg_text,
-                    response="", parsed_facts=[], time_ms=0,
+                    model=model_name,
+                    strategy=strat_name,
+                    constrained=constrained,
+                    message_id=msg_id,
+                    message_text=msg_text,
+                    response="",
+                    parsed_facts=[],
+                    time_ms=0,
                     error=str(e),
                 )
                 metrics.n_errors += 1
@@ -1045,11 +1120,18 @@ def _save_incremental(
     serializable = []
     for r in results:
         d = {
-            "model": r.model, "strategy": r.strategy,
-            "constrained": r.constrained, "message_id": r.message_id,
-            "message_text": r.message_text, "response": r.response,
-            "parsed_facts": r.parsed_facts, "time_ms": r.time_ms,
-            "error": r.error, "tp": r.tp, "fp": r.fp, "fn": r.fn,
+            "model": r.model,
+            "strategy": r.strategy,
+            "constrained": r.constrained,
+            "message_id": r.message_id,
+            "message_text": r.message_text,
+            "response": r.response,
+            "parsed_facts": r.parsed_facts,
+            "time_ms": r.time_ms,
+            "error": r.error,
+            "tp": r.tp,
+            "fp": r.fp,
+            "fn": r.fn,
         }
         serializable.append(d)
     with open(results_path, "w") as f:
@@ -1066,9 +1148,7 @@ def _save_incremental(
     _save_metrics_summary(combo_metrics, output_dir)
 
 
-def _save_metrics_summary(
-    combo_metrics: dict[tuple, ComboMetrics], output_dir: Path
-) -> None:
+def _save_metrics_summary(combo_metrics: dict[tuple, ComboMetrics], output_dir: Path) -> None:
     """Save metrics summary JSON."""
     metrics_path = output_dir / "metrics_summary.json"
     summary = {}
@@ -1079,7 +1159,9 @@ def _save_metrics_summary(
             "recall": round(m.recall, 4),
             "f1": round(m.f1, 4),
             "avg_ms": round(m.avg_ms, 1),
-            "tp": m.tp, "fp": m.fp, "fn": m.fn,
+            "tp": m.tp,
+            "fp": m.fp,
+            "fn": m.fn,
             "n_messages": m.n_messages,
             "n_errors": m.n_errors,
             "n_parse_failures": m.n_parse_failures,
@@ -1088,22 +1170,22 @@ def _save_metrics_summary(
         json.dump(summary, f, indent=2)
 
 
-def _metrics_to_dicts(
-    combo_metrics: dict[tuple, ComboMetrics]
-) -> list[dict]:
+def _metrics_to_dicts(combo_metrics: dict[tuple, ComboMetrics]) -> list[dict]:
     """Convert combo metrics to sorted list of dicts for summary."""
     rows = []
     for (model, strat, constrained), m in sorted(combo_metrics.items()):
-        rows.append({
-            "model": model,
-            "strategy": strat,
-            "constrained": constrained,
-            "precision": round(m.precision, 4),
-            "recall": round(m.recall, 4),
-            "f1": round(m.f1, 4),
-            "avg_ms": round(m.avg_ms, 1),
-            "n_errors": m.n_errors,
-        })
+        rows.append(
+            {
+                "model": model,
+                "strategy": strat,
+                "constrained": constrained,
+                "precision": round(m.precision, 4),
+                "recall": round(m.recall, 4),
+                "f1": round(m.f1, 4),
+                "avg_ms": round(m.avg_ms, 1),
+                "n_errors": m.n_errors,
+            }
+        )
     return rows
 
 
@@ -1139,23 +1221,14 @@ def _write_review(
             best_p = max(valid, key=lambda x: x[1].precision)
             best_r = max(valid, key=lambda x: x[1].recall)
             k, m = best_f1
-            c_str = 'constrained' if k[2] else 'unconstrained'
-            f.write(
-                f"- **Best F1**: {k[0]}/{k[1]}/{c_str}"
-                f" = {m.f1:.3f}\n"
-            )
+            c_str = "constrained" if k[2] else "unconstrained"
+            f.write(f"- **Best F1**: {k[0]}/{k[1]}/{c_str} = {m.f1:.3f}\n")
             k, m = best_p
-            c_str = 'constrained' if k[2] else 'unconstrained'
-            f.write(
-                f"- **Best Precision**: {k[0]}/{k[1]}/{c_str}"
-                f" = {m.precision:.3f}\n"
-            )
+            c_str = "constrained" if k[2] else "unconstrained"
+            f.write(f"- **Best Precision**: {k[0]}/{k[1]}/{c_str} = {m.precision:.3f}\n")
             k, m = best_r
-            c_str = 'constrained' if k[2] else 'unconstrained'
-            f.write(
-                f"- **Best Recall**: {k[0]}/{k[1]}/{c_str}"
-                f" = {m.recall:.3f}\n"
-            )
+            c_str = "constrained" if k[2] else "unconstrained"
+            f.write(f"- **Best Recall**: {k[0]}/{k[1]}/{c_str} = {m.recall:.3f}\n")
 
         # Detailed per-combo results (sample)
         f.write("\n## Sample Outputs (first 5 per combo)\n\n")
@@ -1212,15 +1285,21 @@ def _write_review(
 def main():
     parser = argparse.ArgumentParser(description="Extraction Bakeoff v2")
     parser.add_argument(
-        "--models", type=str, default=None,
+        "--models",
+        type=str,
+        default=None,
         help=f"Comma-separated model names. Available: {','.join(MODELS.keys())}",
     )
     parser.add_argument(
-        "--strategies", type=str, default=None,
+        "--strategies",
+        type=str,
+        default=None,
         help=f"Comma-separated strategy names. Available: {','.join(STRATEGIES.keys())}",
     )
     parser.add_argument(
-        "--gold", type=str, default=str(GOLD_PATH),
+        "--gold",
+        type=str,
+        default=str(GOLD_PATH),
         help="Path to goldset JSON",
     )
     parser.add_argument("--limit", type=int, default=None, help="Limit to N messages (balanced)")
@@ -1228,15 +1307,19 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=200, help="Max tokens per generation")
     parser.add_argument("--output", type=str, default=str(OUTPUT_DIR))
     parser.add_argument(
-        "--constrained-only", action="store_true",
+        "--constrained-only",
+        action="store_true",
         help="Only run constrained mode",
     )
     parser.add_argument(
-        "--no-constrained", action="store_true",
+        "--no-constrained",
+        action="store_true",
         help="Skip constrained mode (unconstrained only)",
     )
     parser.add_argument(
-        "--dspy-prompt", type=str, default=None,
+        "--dspy-prompt",
+        type=str,
+        default=None,
         help="Path to DSPy-optimized prompt JSON",
     )
     parser.add_argument("--list-models", action="store_true")

@@ -1,6 +1,6 @@
 # Classification & Routing Pipeline
 
-> **Last Updated:** 2026-02-10
+> **Last Updated:** 2026-02-12
 
 ## Message Response Flow
 
@@ -46,14 +46,16 @@ See [TEXT_NORMALIZATION.md](./TEXT_NORMALIZATION.md) for details.
 
 ## Two-Layer Hybrid Classification
 
-The category classifier uses a LightGBM model with heuristic post-processing:
+The category classifier uses a cascade of classifiers with heuristic post-processing:
 
 ```
-LAYER 1: LightGBM CLASSIFIER (~15-30ms)
-├─ Input: BERT embedding (384d) + context BERT (384d) + hand-crafted (147d) = 915 features
-├─ OneVsRestClassifier(LGBMClassifier) for multi-label
-├─ Categories: acknowledge, closing, emotion, question, request, statement
-└─ Context BERT zeroed at inference (auxiliary supervision during training only)
+LAYER 1: CASCADE CLASSIFIER (~10-20ms)
+├─ Fast path: Pattern-based (reactions, acknowledgments)
+├─ LightGBM classifier (BERT → BGE embeddings + hand-crafted features)
+│   ├─ Input: BGE embedding (384d) + context BGE (384d) + hand-crafted (147d) = 915 features
+│   ├─ OneVsRestClassifier(LGBMClassifier) for multi-label
+│   └─ Categories: acknowledge, closing, emotion, question, request, statement
+└─ Context BGE zeroed at inference (auxiliary supervision during training only)
 
 LAYER 2: HEURISTIC POST-PROCESSING
 ├─ Fast path: reactions/acknowledgments → acknowledge
