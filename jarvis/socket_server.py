@@ -35,6 +35,7 @@ from urllib.parse import parse_qs, urlparse
 import websockets
 from websockets.server import ServerConnection
 
+from jarvis.config import get_config
 from jarvis.observability.logging import log_event, timed_operation
 from jarvis.utils.latency_tracker import track_latency
 
@@ -102,7 +103,6 @@ class RateLimiter:
 # Socket configuration
 SOCKET_PATH = Path.home() / ".jarvis" / "jarvis.sock"
 WS_TOKEN_PATH = Path.home() / ".jarvis" / "ws_token"
-WEBSOCKET_HOST = "127.0.0.1"
 WEBSOCKET_PORT = 8743
 MAX_MESSAGE_SIZE = 1024 * 1024  # 1MB max message size
 MAX_WS_CONNECTIONS = 10
@@ -294,12 +294,13 @@ class JarvisSocketServer:
             raise
 
         # Start WebSocket server for browser clients
+        server_cfg = get_config().server
         self._ws_server = await websockets.serve(
             self._handle_websocket_client,
-            WEBSOCKET_HOST,
+            server_cfg.websocket_host,
             WEBSOCKET_PORT,
             max_size=MAX_MESSAGE_SIZE,
-            origins=["tauri://localhost", "http://localhost", "http://127.0.0.1"],
+            origins=server_cfg.cors_origins,
         )
 
         self._running = True
@@ -307,7 +308,7 @@ class JarvisSocketServer:
             logger,
             "server.start",
             socket_path=str(SOCKET_PATH),
-            ws_host=WEBSOCKET_HOST,
+            ws_host=server_cfg.websocket_host,
             ws_port=WEBSOCKET_PORT,
         )
 

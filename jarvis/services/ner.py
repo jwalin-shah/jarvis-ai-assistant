@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import socket
 from pathlib import Path
 
 from .base import Service, ServiceConfig
+
+logger = logging.getLogger(__name__)
 
 
 class NERService(Service):
@@ -62,7 +65,8 @@ class NERService(Service):
 
             # Check if we got a response
             return len(response) > 0
-        except Exception:
+        except (OSError, ConnectionError):
+            logger.debug("NER health check failed", exc_info=True)
             return False
         finally:
             if sock is not None:

@@ -9,6 +9,7 @@ This module contains:
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,8 @@ from jarvis.prompts.examples import (
     SUMMARIZATION_EXAMPLES,
     THREAD_EXAMPLES,
 )
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # DSPy-Optimized Per-Category Prompt Loader
@@ -117,7 +120,7 @@ def _load_optimized_programs() -> dict[str, OptimizedCategoryProgram]:
                 demos=demos,
             )
         except Exception:
-            # Skip malformed files silently
+            logger.debug("Skipping malformed prompt: %s", path.name, exc_info=True)
             continue
 
     return programs

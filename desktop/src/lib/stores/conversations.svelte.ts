@@ -423,7 +423,7 @@ export async function selectConversation(chatId: string) {
     ) {
       conversationsStore.prefetchedDraft = { chatId, suggestions: result.draft.suggestions };
     }
-  }).catch((e) => { console.debug('prefetch_focus failed:', e); });
+  }).catch(() => {});
 
   const cached = getCacheEntry(conversationsStore.messageCache, chatId);
   if (cached) {

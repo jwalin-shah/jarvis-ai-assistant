@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import urllib.request
 from pathlib import Path
 
 from .base import Service, ServiceConfig
+
+logger = logging.getLogger(__name__)
 
 
 class FastAPIService(Service):
@@ -39,5 +42,6 @@ class FastAPIService(Service):
             with urllib.request.urlopen(req, timeout=self.config.health_check_timeout) as response:
                 status = int(getattr(response, "status", 0))
                 return status == 200
-        except Exception:
+        except (OSError, ConnectionError):
+            logger.debug("API health check failed", exc_info=True)
             return False

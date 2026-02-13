@@ -521,6 +521,32 @@ class NormalizationConfig(BaseModel):
     )
 
 
+class ServerConfig(BaseModel):
+    """Socket server configuration.
+
+    Attributes:
+        websocket_host: Host address for the WebSocket server.
+        cors_origins: Allowed CORS origins for WebSocket connections.
+    """
+
+    websocket_host: str = "127.0.0.1"
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["tauri://localhost", "http://localhost", "http://127.0.0.1"]
+    )
+
+
+class NERConfig(BaseModel):
+    """NER client configuration.
+
+    Attributes:
+        connect_timeout: Timeout in seconds for connecting to the NER service.
+        read_timeout: Timeout in seconds for reading NER service responses.
+    """
+
+    connect_timeout: float = Field(default=2.0, ge=0.1, le=30.0)
+    read_timeout: float = Field(default=10.0, ge=0.1, le=120.0)
+
+
 class JarvisConfig(BaseModel):
     """JARVIS configuration schema.
 
@@ -539,6 +565,8 @@ class JarvisConfig(BaseModel):
         metrics: Metrics collection configuration (enable/disable, batching).
         digest: Digest generation preferences.
         classifier_thresholds: Centralized classifier threshold configuration.
+        server: Socket server configuration (WebSocket host, CORS origins).
+        ner: NER client configuration (timeouts).
     """
 
     config_version: int = CONFIG_VERSION
@@ -560,6 +588,8 @@ class JarvisConfig(BaseModel):
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
     segmentation: SegmentationConfig = Field(default_factory=SegmentationConfig)
+    server: ServerConfig = Field(default_factory=ServerConfig)
+    ner: NERConfig = Field(default_factory=NERConfig)
 
 
 # Module-level singleton with thread safety
