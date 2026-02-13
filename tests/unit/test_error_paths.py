@@ -294,8 +294,8 @@ class TestModelLoadFailures:
 # =============================================================================
 
 
-class TestEmbeddingServiceFailures:
-    """Tests for embedding service timeout/failure scenarios."""
+class TestEmbeddingCacheFailures:
+    """Tests for embedding cache timeout/failure scenarios."""
 
     def test_semantic_search_returns_empty_when_no_messages(self, tmp_path):
         """SemanticSearcher should return empty results when reader has no messages."""

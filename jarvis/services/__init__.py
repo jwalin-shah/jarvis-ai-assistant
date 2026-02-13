@@ -7,7 +7,6 @@ lifecycle management, health checks, and dependency handling.
 from .api import FastAPIService
 from .base import Service, ServiceStatus
 from .context_service import ContextService
-from .embedding import EmbeddingService
 from .manager import ServiceManager
 from .ner import NERService
 from .socket import SocketService
@@ -18,7 +17,6 @@ __all__ = [
     "ServiceStatus",
     "FastAPIService",
     "SocketService",
-    "EmbeddingService",
     "NERService",
     "ContextService",
 ]
