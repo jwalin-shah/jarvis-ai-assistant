@@ -148,6 +148,32 @@ METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 
+# Confidence gating: drafts below this threshold are not shown to the user
+DRAFT_CONFIDENCE_THRESHOLD = 0.4
+
+
+def _record_rpc_latency(method: str, elapsed_ms: float) -> None:
+    """Record RPC call latency to the global latency tracker."""
+    from jarvis.utils.latency_tracker import OPERATION_BUDGETS, LatencyRecord, get_tracker
+
+    op = f"rpc.{method}"
+    budget = OPERATION_BUDGETS.get(op)
+    threshold = budget[1] if budget and budget[1] > 0 else None
+    exceeded = threshold is not None and elapsed_ms > threshold
+    get_tracker()._records.append(
+        LatencyRecord(
+            operation=op,
+            elapsed_ms=elapsed_ms,
+            timestamp=time.time(),
+            threshold_ms=threshold,
+            exceeded=exceeded,
+        )
+    )
+    if exceeded:
+        logging.getLogger(__name__).warning(
+            f"[RPC Budget] {method} took {elapsed_ms:.1f}ms (budget: {threshold}ms)"
+        )
+
 
 class JarvisSocketServer:
     """JSON-RPC server over Unix socket.
@@ -235,8 +261,13 @@ class JarvisSocketServer:
         # Conversation methods
         self.register("list_conversations", self._list_conversations)
 
+        # Direct chat with SLM
+        self.register("chat", self._chat, streaming=True)
+
         # Metrics
         self.register("get_routing_metrics", self._get_routing_metrics)
+        self.register("get_performance_slo", self._get_performance_slo)
+        self.register("get_draft_metrics", self._get_draft_metrics)
 
         # Prefetch/cache operations
         self.register("prefetch_stats", self._prefetch_stats)
@@ -842,6 +873,7 @@ class JarvisSocketServer:
                 else:
                     result = await handler(_writer=writer, _request_id=request_id)
                 _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
+                _record_rpc_latency(method, _rpc_ms)
                 log_event(
                     logger,
                     "rpc.complete",
@@ -864,6 +896,7 @@ class JarvisSocketServer:
                     result = await handler()
 
                 _rpc_ms = (_time.perf_counter() - _rpc_start) * 1000
+                _record_rpc_latency(method, _rpc_ms)
                 log_event(
                     logger,
                     "rpc.complete",
@@ -991,6 +1024,124 @@ class JarvisSocketServer:
 
     # ========== RPC Method Handlers ==========
 
+    async def _chat(
+        self,
+        message: str,
+        history: list[dict[str, str]] | None = None,
+        system_prompt: str | None = None,
+        _writer: asyncio.StreamWriter | None = None,
+        _request_id: Any = None,
+    ) -> dict[str, Any]:
+        """Direct chat with the SLM (no iMessage pipeline).
+
+        Formats a multi-turn conversation using the model's chat template
+        and streams tokens back. History is ephemeral (client-managed).
+
+        Args:
+            message: The user's message
+            history: Prior turns as [{role: "user"|"assistant", content: str}, ...]
+            system_prompt: Optional system prompt override
+            _writer: Stream writer for streaming mode
+            _request_id: Request ID for streaming mode
+
+        Returns:
+            Dict with response text and token count
+        """
+        if not message or not message.strip():
+            raise JsonRpcError(INVALID_PARAMS, "Message cannot be empty")
+
+        try:
+            # Build the prompt using the model's chat template
+            system = system_prompt or "You are a helpful assistant."
+            prompt = f"<|system|>\n{system}<|endoftext|>\n"
+
+            # Append history (last 10 turns to fit context window)
+            turns = (history or [])[-10:]
+            for turn in turns:
+                role = turn.get("role", "user")
+                content = turn.get("content", "")
+                if role == "user":
+                    prompt += f"<|user|>\n{content}<|endoftext|>\n"
+                elif role == "assistant":
+                    prompt += f"<|assistant|>\n{content}<|endoftext|>\n"
+
+            # Add current user message and start assistant turn
+            prompt += f"<|user|>\n{message}<|endoftext|>\n<|assistant|>\n"
+
+            from contracts.models import GenerationRequest
+
+            request = GenerationRequest(
+                prompt=prompt,
+                context_documents=[],
+                few_shot_examples=[],
+                max_tokens=512,
+                temperature=0.7,
+                top_p=0.9,
+                repetition_penalty=1.05,
+                stop_sequences=["<|endoftext|>", "<|user|>"],
+            )
+
+            if _writer is not None:
+                return await self._chat_streaming(request, _writer, _request_id)
+
+            # Non-streaming fallback
+            from models import get_generator
+
+            generator = get_generator()
+            full_response = ""
+            token_count = 0
+            async for token_data in generator.generate_stream(request):
+                full_response += token_data["token"]
+                token_count += 1
+
+            return {
+                "response": full_response.strip(),
+                "tokens_generated": token_count,
+            }
+
+        except JsonRpcError:
+            raise
+        except Exception as e:
+            logger.exception("Error in chat")
+            raise JsonRpcError(INTERNAL_ERROR, "Chat failed") from e
+
+    async def _chat_streaming(
+        self,
+        request: Any,
+        writer: asyncio.StreamWriter,
+        request_id: Any,
+    ) -> dict[str, Any]:
+        """Stream chat tokens to client."""
+        from models import get_generator
+
+        generator = get_generator()
+        full_response = ""
+        token_count = 0
+
+        try:
+            async for token_data in generator.generate_stream(request):
+                token_text = token_data["token"]
+                token_index = token_data["token_index"]
+                is_final = token_data["is_final"]
+
+                full_response += token_text
+                token_count += 1
+
+                await self._send_stream_token(
+                    writer, token_text, token_index, is_final, request_id=request_id
+                )
+        except Exception as e:
+            logger.exception("Chat streaming failed")
+            raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
+
+        result = {
+            "response": full_response.strip(),
+            "tokens_generated": token_count,
+            "streamed": True,
+        }
+        await self._send_stream_response(writer, request_id, result)
+        return result
+
     async def _ping(self) -> dict[str, str | bool]:
         """Health check with model readiness status."""
         return {
@@ -1105,8 +1256,26 @@ class JarvisSocketServer:
             )
 
             response_text = result.get("response", "")
-            confidence = 0.8 if result.get("confidence") == "high" else 0.6
+            confidence = float(result.get("confidence_score", 0.6))
 
+            # Gate low-confidence drafts
+            if confidence < DRAFT_CONFIDENCE_THRESHOLD:
+                logger.info(
+                    f"Draft gated: confidence {confidence:.2f} < {DRAFT_CONFIDENCE_THRESHOLD}"
+                )
+                from jarvis.metrics import get_draft_metrics
+
+                get_draft_metrics().record(confidence, gated=True)
+                return {
+                    "suggestions": [],
+                    "gated": True,
+                    "gated_confidence": confidence,
+                    "context_used": context_used,
+                }
+
+            from jarvis.metrics import get_draft_metrics
+
+            get_draft_metrics().record(confidence, gated=False)
             return {
                 "suggestions": [{"text": response_text, "confidence": confidence}],
                 "context_used": context_used,
@@ -1152,7 +1321,23 @@ class JarvisSocketServer:
             logger.exception("Failed to prepare streaming context")
             raise JsonRpcError(INTERNAL_ERROR, f"Context preparation failed: {e}") from e
 
-        confidence = 0.8 if metadata.get("confidence") == "high" else 0.6
+        confidence = float(metadata.get("confidence_score", 0.6))
+
+        # Gate low-confidence drafts before streaming
+        if confidence < DRAFT_CONFIDENCE_THRESHOLD:
+            logger.info(
+                f"Draft gated (streaming): confidence {confidence:.2f} "
+                f"< {DRAFT_CONFIDENCE_THRESHOLD}"
+            )
+            from jarvis.metrics import get_draft_metrics
+
+            get_draft_metrics().record(confidence, gated=True)
+            return {
+                "suggestions": [],
+                "gated": True,
+                "gated_confidence": confidence,
+                "context_used": context_used,
+            }
 
         # Phase 2: Stream tokens from generator
         full_response = ""
@@ -1435,33 +1620,38 @@ Summary:"""
             Dict with results and total_results
         """
         try:
-            from integrations.imessage.reader import ChatDBReader
-            from jarvis.search.semantic_search import SearchFilters, get_semantic_searcher
+            from datetime import datetime
 
-            # Build filter args
-            search_filters = SearchFilters()
-            if filters:
-                if "chat_id" in filters:
-                    search_filters.chat_id = filters["chat_id"]
-                if "sender" in filters:
-                    search_filters.sender = filters["sender"]
+            from jarvis.search.vec_search import get_vec_searcher
 
-            with ChatDBReader() as reader:
-                searcher = get_semantic_searcher(reader)
-                searcher.similarity_threshold = threshold
-                results = searcher.search(query, filters=search_filters, limit=limit)
+            chat_id = filters.get("chat_id") if filters else None
+            sender_filter = filters.get("sender") if filters else None
+
+            searcher = get_vec_searcher()
+            results = searcher.search(query, chat_id=chat_id, limit=limit)
+
+            # Post-filter by sender if requested
+            if sender_filter:
+                results = [r for r in results if r.sender == sender_filter]
+
+            # Filter by threshold
+            results = [r for r in results if r.score >= threshold]
 
             return {
                 "results": [
                     {
                         "message": {
-                            "id": r.message.id,
-                            "chat_id": r.message.chat_id,
-                            "text": r.message.text,
-                            "sender": r.message.sender,
-                            "date": r.message.date.isoformat(),
+                            "id": r.rowid,
+                            "chat_id": r.chat_id,
+                            "text": r.text,
+                            "sender": r.sender or "",
+                            "date": (
+                                datetime.fromtimestamp(r.timestamp).isoformat()
+                                if r.timestamp
+                                else ""
+                            ),
                         },
-                        "similarity": r.similarity,
+                        "similarity": round(r.score, 4),
                     }
                     for r in results
                 ],
@@ -1748,6 +1938,24 @@ Summary:"""
         except Exception as e:
             logger.warning(f"Failed to get routing metrics: {e}")
             return {"recent_requests": [], "summary": {}}
+
+    async def _get_performance_slo(
+        self, operation: str | None = None
+    ) -> dict[str, Any]:
+        """Get SLO compliance stats from the latency tracker."""
+        from jarvis.utils.latency_tracker import get_tracker
+
+        tracker = get_tracker()
+        return {
+            "compliance": tracker.get_slo_compliance(operation),
+            "summary": tracker.summary(),
+        }
+
+    async def _get_draft_metrics(self) -> dict[str, Any]:
+        """Get draft confidence gating metrics."""
+        from jarvis.metrics import get_draft_metrics
+
+        return get_draft_metrics().get_stats()
 
     # ========== Prefetch RPC Methods ==========
 

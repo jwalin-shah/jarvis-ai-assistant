@@ -58,9 +58,8 @@ def mock_message():
 class TestSearchRouter:
     """Tests for /search endpoints."""
 
-    @patch("api.routers.search._get_searcher")
-    @patch("api.dependencies.get_imessage_reader")
-    def test_semantic_search_empty_results(self, mock_dep, mock_searcher):
+    @patch("api.routers.search._get_vec_searcher")
+    def test_semantic_search_empty_results(self, mock_get_searcher):
         """POST /search/semantic returns empty results for no matches."""
         from api.routers.search import router
 
@@ -69,11 +68,7 @@ class TestSearchRouter:
 
         mock_searcher_instance = MagicMock()
         mock_searcher_instance.search.return_value = []
-        mock_searcher.return_value = (mock_searcher_instance, 0.5)
-
-        mock_reader = MagicMock()
-        mock_dep.return_value = mock_reader
-        app.dependency_overrides[mock_dep] = lambda: mock_reader
+        mock_get_searcher.return_value = mock_searcher_instance
 
         client = TestClient(app)
         response = client.post(
