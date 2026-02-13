@@ -152,14 +152,14 @@ class ContextService:
 
             # Standard search path (no segment data)
             if contact_id is not None:
-                results = searcher.search_with_pairs(
+                results = searcher.search_with_chunks(
                     query=incoming,
                     limit=5,
                     contact_id=contact_id,
                     embedder=embedder,
                 )
             else:
-                results = searcher.search_with_pairs_global(
+                results = searcher.search_with_chunks_global(
                     query=incoming,
                     limit=5,
                     embedder=embedder,

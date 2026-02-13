@@ -16,8 +16,8 @@ Usage:
     # Search for messages
     results = searcher.search("dinner plans", limit=5)
 
-    # Search for similar conversation pairs (RAG)
-    pairs = searcher.search_with_pairs("Want to grab lunch?", limit=5)
+    # Search for similar conversation chunks (RAG)
+    chunks = searcher.search_with_chunks("Want to grab lunch?", limit=5)
 """
 
 from __future__ import annotations
@@ -543,7 +543,7 @@ class VecSearcher:
 
         return results
 
-    def search_with_pairs(
+    def search_with_chunks(
         self,
         query: str,
         limit: int = 5,
@@ -551,7 +551,7 @@ class VecSearcher:
         contact_id: int | None = None,
         embedder: Any | None = None,
     ) -> list[VecSearchResult]:
-        """Search for conversation pairs (chunks) in vec_chunks.
+        """Search for conversation chunks in vec_chunks.
 
         Args:
             query: Input trigger text
@@ -617,7 +617,7 @@ class VecSearcher:
 
         return results
 
-    def search_with_pairs_global(
+    def search_with_chunks_global(
         self,
         query: str,
         limit: int = 5,
@@ -629,7 +629,7 @@ class VecSearcher:
         Phase 2: Re-rank candidates by L2 distance on stored int8 embeddings
         Phase 3: Fetch metadata from vec_chunks for top results
 
-        Falls back to standard search_with_pairs() if vec_binary is empty/missing.
+        Falls back to standard search_with_chunks() if vec_binary is empty/missing.
 
         Args:
             query: Input trigger text
@@ -661,7 +661,7 @@ class VecSearcher:
 
                 if not rows:
                     # Fall back to standard search
-                    return self.search_with_pairs(query, limit=limit, embedder=embedder)
+                    return self.search_with_chunks(query, limit=limit, embedder=embedder)
 
                 # Phase 2: Re-rank by L2 distance on int8 embeddings
                 scored: list[tuple[int, float]] = []
@@ -720,7 +720,7 @@ class VecSearcher:
 
         except Exception as e:
             logger.warning("Two-phase search failed, falling back: %s", e)
-            return self.search_with_pairs(query, limit=limit, embedder=embedder)
+            return self.search_with_chunks(query, limit=limit, embedder=embedder)
 
     def backfill_vec_binary(self) -> int:
         """Populate vec_binary from existing vec_chunks embeddings.
@@ -815,7 +815,7 @@ class VecSearcher:
 
         Joins vec_chunks hits to conversation_segments and segment_messages
         to retrieve full topic blocks instead of just trigger/response text.
-        Falls back to search_with_pairs() if segment tables don't exist.
+        Falls back to search_with_chunks() if segment tables don't exist.
 
         Args:
             query: Search query text.
@@ -828,11 +828,11 @@ class VecSearcher:
         """
         # First, do the standard search
         if contact_id is not None:
-            hits = self.search_with_pairs(
+            hits = self.search_with_chunks(
                 query=query, limit=limit, contact_id=contact_id, embedder=embedder
             )
         else:
-            hits = self.search_with_pairs_global(
+            hits = self.search_with_chunks_global(
                 query=query, limit=limit, embedder=embedder
             )
 

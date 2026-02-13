@@ -254,12 +254,12 @@ class TestIndexMessages:
 
 
 # ---------------------------------------------------------------------------
-# Indexing into vec_chunks and search_with_pairs
+# Indexing into vec_chunks and search_with_chunks
 # ---------------------------------------------------------------------------
 
 
 class TestSearchWithPairs:
-    """Insert into vec_chunks and test search_with_pairs."""
+    """Insert into vec_chunks and test search_with_chunks."""
 
     def _insert_chunk(
         self,
@@ -311,7 +311,7 @@ class TestSearchWithPairs:
             )
 
     def test_returns_trigger_and_response(self, db, searcher):
-        """search_with_pairs returns joined trigger/response text."""
+        """search_with_chunks returns joined trigger/response text."""
         emb = _make_normalized(50)
         self._insert_chunk(
             db,
@@ -325,7 +325,7 @@ class TestSearchWithPairs:
         )
 
         searcher._embedder = FakeEmbedder(emb)
-        results = searcher.search_with_pairs("lunch query", limit=5)
+        results = searcher.search_with_chunks("lunch query", limit=5)
         assert len(results) == 1
         r = results[0]
         assert r.trigger_text == "Want to grab lunch?"
@@ -356,16 +356,16 @@ class TestSearchWithPairs:
 
         searcher._embedder = FakeEmbedder(emb)
 
-        results_c1 = searcher.search_with_pairs("q", limit=10, contact_id=1)
+        results_c1 = searcher.search_with_chunks("q", limit=10, contact_id=1)
         assert len(results_c1) == 1
         assert results_c1[0].trigger_text == "hi"
 
-        results_c2 = searcher.search_with_pairs("q", limit=10, contact_id=2)
+        results_c2 = searcher.search_with_chunks("q", limit=10, contact_id=2)
         assert len(results_c2) == 1
         assert results_c2[0].trigger_text == "yo"
 
     def test_ranking(self, db, searcher):
-        """Closer chunks rank higher in search_with_pairs."""
+        """Closer chunks rank higher in search_with_chunks."""
         close_emb = _make_normalized(70)
         far_emb = _make_normalized(999)
 
@@ -387,14 +387,14 @@ class TestSearchWithPairs:
         )
 
         searcher._embedder = FakeEmbedder(close_emb)
-        results = searcher.search_with_pairs("q", limit=10)
+        results = searcher.search_with_chunks("q", limit=10)
         assert len(results) == 2
         assert results[0].trigger_text == "close"
         assert results[0].score >= results[1].score
 
     def test_empty(self, db, searcher):
-        """search_with_pairs on empty vec_chunks returns []."""
-        results = searcher.search_with_pairs("anything", limit=5)
+        """search_with_chunks on empty vec_chunks returns []."""
+        results = searcher.search_with_chunks("anything", limit=5)
         assert results == []
 
     def test_custom_embedder_override(self, db, searcher):
@@ -414,7 +414,7 @@ class TestSearchWithPairs:
 
         # Override with an embedder that returns the correct vector
         custom = FakeEmbedder(emb)
-        results = searcher.search_with_pairs("q", limit=5, embedder=custom)
+        results = searcher.search_with_chunks("q", limit=5, embedder=custom)
         assert len(results) == 1
         assert results[0].trigger_text == "test"
 
@@ -571,7 +571,7 @@ class TestDeleteChunksForChat:
 
         # chat_B still exists
         searcher._embedder = FakeEmbedder(emb)
-        results = searcher.search_with_pairs("q", limit=10)
+        results = searcher.search_with_chunks("q", limit=10)
         assert len(results) == 1
         assert results[0].trigger_text == "b1"
 
