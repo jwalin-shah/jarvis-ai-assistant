@@ -69,7 +69,7 @@ class TestSearchRouter:
 
         mock_searcher_instance = MagicMock()
         mock_searcher_instance.search.return_value = []
-        mock_searcher.return_value = mock_searcher_instance
+        mock_searcher.return_value = (mock_searcher_instance, 0.5)
 
         mock_reader = MagicMock()
         mock_dep.return_value = mock_reader
