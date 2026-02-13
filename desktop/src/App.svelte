@@ -9,7 +9,7 @@
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import Toast from './lib/components/Toast.svelte';
   import { checkApiConnection } from './lib/stores/health';
-  import { clearSelection, conversationsStore, selectConversation } from './lib/stores/conversations.svelte';
+  import { clearSelection, conversationsStore, selectConversation, handleUserActivity } from './lib/stores/conversations.svelte';
   import { initializeTheme } from './lib/stores/theme';
   import { initAnnouncer } from './lib/stores/keyboard';
 
@@ -20,7 +20,7 @@
   const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
   // View state
-  let currentView = $state<'messages' | 'dashboard' | 'health' | 'settings' | 'templates' | 'network'>('messages');
+  let currentView = $state<'messages' | 'dashboard' | 'health' | 'settings' | 'templates' | 'network' | 'chat'>('messages');
   let showSearch = $state(false);
   let showShortcuts = $state(false);
   let showCommandPalette = $state(false);
@@ -62,6 +62,12 @@
   const RelationshipGraph = $derived(
     currentView === 'network'
       ? import('./lib/components/graph/RelationshipGraph.svelte').then((m) => m.default)
+      : null
+  );
+
+  const ChatView = $derived(
+    currentView === 'chat'
+      ? import('./lib/components/ChatView.svelte').then((m) => m.default)
       : null
   );
 
@@ -137,6 +143,10 @@
           event.preventDefault();
           currentView = 'network';
           return;
+        case '5':
+          event.preventDefault();
+          currentView = 'chat';
+          return;
       }
     }
   }
@@ -173,10 +183,25 @@
     const apiCheckTimer = setTimeout(() => void checkApiConnection(), 3000);
 
     let unlisten: (() => void) | null = null;
+    let unlistenBackend: (() => void) | null = null;
 
     // Listen for navigation events from tray menu (Tauri only)
     if (isTauri) {
       void installFrontendLogBridge();
+
+      // Listen for backend ready event to trigger immediate connection
+      void (async () => {
+        try {
+          const { listen } = await import('@tauri-apps/api/event');
+          unlistenBackend = await listen('jarvis:backend_ready', () => {
+            console.info('[App] Backend ready, connecting...');
+            void checkApiConnection();
+          });
+        } catch (error) {
+          console.warn('Failed to listen for backend_ready:', error);
+        }
+      })();
+
       void (async () => {
         try {
           const { listen } = await import('@tauri-apps/api/event');
@@ -188,7 +213,8 @@
               view === 'messages' ||
               view === 'settings' ||
               view === 'templates' ||
-              view === 'network'
+              view === 'network' ||
+              view === 'chat'
             ) {
               currentView = view;
               if (view !== 'messages') {
@@ -204,10 +230,26 @@
 
     window.addEventListener('keydown', handleKeydown);
 
+    // Throttled user activity tracking for adaptive polling backoff
+    let activityThrottled = false;
+    const onUserActivity = () => {
+      if (activityThrottled) return;
+      activityThrottled = true;
+      handleUserActivity();
+      setTimeout(() => { activityThrottled = false; }, 5000);
+    };
+    window.addEventListener('mousemove', onUserActivity);
+    window.addEventListener('keydown', onUserActivity);
+    window.addEventListener('click', onUserActivity);
+
     return () => {
       clearTimeout(apiCheckTimer);
       if (unlisten) unlisten();
+      if (unlistenBackend) unlistenBackend();
       window.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('mousemove', onUserActivity);
+      window.removeEventListener('keydown', onUserActivity);
+      window.removeEventListener('click', onUserActivity);
       mediaQuery.removeEventListener('change', handleResize as (e: MediaQueryListEvent) => void);
       cleanupTheme();
     };
@@ -308,6 +350,12 @@
           <div class="error-fallback">Failed to load Network Graph</div>
         {/await}
       </div>
+    {:else if currentView === 'chat'}
+      {#await ChatView then Component}
+        <Component />
+      {:catch}
+        <div class="error-fallback">Failed to load Chat</div>
+      {/await}
     {:else}
       <div class="messages-container">
         <div class="search-bar">

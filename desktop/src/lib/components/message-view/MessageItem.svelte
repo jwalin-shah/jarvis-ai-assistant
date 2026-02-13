@@ -3,6 +3,7 @@
   import { isOptimisticMessage, getOptimisticStatus, getOptimisticId } from '../../types';
   import { formatRelativeTime, formatFullTimestamp } from '../../utils/date';
   import LinkPreview from './LinkPreview.svelte';
+  import { WS_HTTP_BASE } from '../../api/websocket';
 
   interface Props {
     message: Message;
@@ -138,14 +139,32 @@
       {#if message.attachments.length > 0}
         <div class="attachments">
           {#each message.attachments as attachment}
-            <div class="attachment">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path
-                  d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
-                />
-              </svg>
-              <span>{attachment.filename}</span>
-            </div>
+            {#if attachment.mime_type?.startsWith('image/') && attachment.file_path}
+              <img
+                class="attachment-thumbnail"
+                src="{WS_HTTP_BASE}/attachments/thumbnail?file_path={encodeURIComponent(attachment.file_path)}"
+                alt={attachment.filename}
+                loading="lazy"
+                onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
+              />
+              <div class="attachment hidden">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path
+                    d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                  />
+                </svg>
+                <span>{attachment.filename}</span>
+              </div>
+            {:else}
+              <div class="attachment">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path
+                    d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                  />
+                </svg>
+                <span>{attachment.filename}</span>
+              </div>
+            {/if}
           {/each}
         </div>
       {/if}
@@ -366,6 +385,18 @@
     gap: var(--space-1);
     font-size: var(--text-sm);
     color: var(--text-secondary);
+  }
+
+  .attachment.hidden {
+    display: none;
+  }
+
+  .attachment-thumbnail {
+    max-width: 300px;
+    max-height: 300px;
+    border-radius: var(--radius-md);
+    object-fit: cover;
+    margin-top: var(--space-1);
   }
 
   .attachment svg {

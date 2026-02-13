@@ -484,7 +484,7 @@ class TestSocketServerMalformedRequests:
 
         parsed = json.loads(result)
         assert "result" in parsed
-        assert parsed["result"]["status"] == "ok"
+        assert parsed["result"]["status"] in ("healthy", "degraded", "unhealthy")
         assert parsed["result"]["models_ready"] is False
 
     def test_rate_limiter_allows_normal_traffic(self):

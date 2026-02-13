@@ -604,13 +604,14 @@ def reset_metrics() -> None:
     with _metrics_lock:
         # CRITICAL: Declare globals INSIDE lock to prevent race conditions (CODE_REVIEW.md #16)
         global _memory_sampler, _request_counter, _latency_histogram, _template_analytics
-        global _conversation_cache, _health_cache, _model_info_cache
+        global _conversation_cache, _health_cache, _model_info_cache, _draft_metrics
         if _memory_sampler:
             _memory_sampler.stop()
             _memory_sampler = None
         _request_counter = None
         _latency_histogram = None
         _template_analytics = None
+        _draft_metrics = None
         _conversation_cache = None
         _health_cache = None
         _model_info_cache = None
@@ -805,7 +806,8 @@ class TemplateAnalytics:
             List of missed query info (most recent first)
         """
         with self._lock:
-            return list(reversed(self._missed_queries[-limit:]))
+            items = list(self._missed_queries)
+            return list(reversed(items[-limit:]))
 
     def get_category_averages(self) -> dict[str, float]:
         """Get average similarity scores per template category.
@@ -898,6 +900,63 @@ def get_template_analytics() -> TemplateAnalytics:
             if _template_analytics is None:
                 _template_analytics = TemplateAnalytics()
     return _template_analytics
+
+
+class DraftMetrics:
+    """Thread-safe metrics for draft confidence gating."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._total = 0
+        self._gated = 0
+        self._shown = 0
+        # Histogram buckets: [0, 0.1), [0.1, 0.2), ..., [0.9, 1.0]
+        self._confidence_histogram: list[int] = [0] * 10
+
+    def record(self, confidence: float, gated: bool) -> None:
+        with self._lock:
+            self._total += 1
+            if gated:
+                self._gated += 1
+            else:
+                self._shown += 1
+            bucket = min(int(confidence * 10), 9)
+            self._confidence_histogram[bucket] += 1
+
+    def get_stats(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "total_requests": self._total,
+                "gated_count": self._gated,
+                "shown_count": self._shown,
+                "gate_rate_pct": (
+                    round(self._gated / self._total * 100, 2) if self._total > 0 else 0.0
+                ),
+                "confidence_histogram": {
+                    f"{i/10:.1f}-{(i+1)/10:.1f}": count
+                    for i, count in enumerate(self._confidence_histogram)
+                },
+            }
+
+    def reset(self) -> None:
+        with self._lock:
+            self._total = 0
+            self._gated = 0
+            self._shown = 0
+            self._confidence_histogram = [0] * 10
+
+
+_draft_metrics: DraftMetrics | None = None
+
+
+def get_draft_metrics() -> DraftMetrics:
+    """Get the global draft metrics instance."""
+    global _draft_metrics
+    if _draft_metrics is None:
+        with _metrics_lock:
+            if _draft_metrics is None:
+                _draft_metrics = DraftMetrics()
+    return _draft_metrics
 
 
 # Pre-configured caches for common use cases

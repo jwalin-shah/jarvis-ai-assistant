@@ -210,21 +210,15 @@ Messages: [
 
 ## Model Registry
 
-JARVIS supports multiple LLM models via `models/registry.py`. The registry automatically selects the best model based on available RAM.
+JARVIS supports LFM models via `models/registry.py`:
 
 | Model ID | Display Name | Size | Quality | Best For |
 |----------|--------------|------|---------|----------|
-| `lfm-1.2b` | LFM 2.5 1.2B (Conversational) | 1.2GB | Excellent | iMessage, quick replies |
-| `lfm-1.2b-thinking` | LFM 2.5 1.2B (Thinking) | 1.2GB | Excellent | Complex reasoning |
-| `lfm-1.2b-ft` | LFM 2.5 1.2B Fine-Tuned | 1.2GB | Excellent | Best for texting |
-| `gemma3-4b` | Gemma 3 4B Instruct | 2.75GB | Excellent | Natural conversation |
-| `qwen-3b` | Qwen 2.5 3B | 2.5GB | Excellent | Complex replies |
-| `qwen-1.5b` | Qwen 2.5 1.5B | 1.5GB | Good | Balanced |
-| `qwen-0.5b` | Qwen 2.5 0.5B | 0.8GB | Basic | Fast responses |
-| `lfm-0.3b` | LFM 2.5 0.3B | 0.3GB | Basic | Testing |
-
-**Extraction Models** (specialized for fact extraction):
-- `lfm-350m`: `mlx-community/LFM2-350M-4bit` - 350M parameter base model for fast extraction
+| **`lfm-350m`** | **LFM 2.5 350M (Base)** | **0.35GB** | **Basic** | **Fact extraction** |
+| `lfm-1.2b-base` | LFM 2.5 1.2B (Base) | 1.2GB | Good | Few-shot, completion |
+| `lfm-1.2b-ft` | LFM 2.5 1.2B Fine-Tuned | 1.2GB | Excellent | **Default** - iMessage |
+| `lfm-1.2b-sft` | LFM 2.5 1.2B SFT Only | 1.2GB | Excellent | iMessage |
+| `lfm-0.3b-ft` | LFM 2.5 0.3B Fine-Tuned | 0.3GB | Basic | Speculative decoding |
 
 ---
 

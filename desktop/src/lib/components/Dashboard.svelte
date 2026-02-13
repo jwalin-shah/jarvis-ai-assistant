@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { healthStore, fetchHealth } from "../stores/health";
-  import { conversationsStore, fetchConversations } from "../stores/conversations.svelte";
+  import { conversationsStore } from "../stores/conversations.svelte";
   import {
     metricsStore,
     startMetricsPolling,
@@ -14,7 +14,6 @@
 
   onMount(() => {
     fetchHealth();
-    fetchConversations();
     startMetricsPolling(10000);
   });
 
@@ -207,6 +206,7 @@
               </thead>
               <tbody>
                 {#each $metricsStore.recentRequests.slice(0, 50) as req (req.timestamp + req.query_hash)}
+                  {@const maxLatency = getMaxLatency($metricsStore.recentRequests)}
                   <tr>
                     <td class="mono">{formatTimestamp(req.timestamp)}</td>
                     <td>
@@ -231,7 +231,7 @@
                         {#each getPhases(req.latency) as [phase, ms]}
                           <div
                             class="bar-segment"
-                            style="width: {Math.max(2, (ms / getMaxLatency($metricsStore.recentRequests)) * 120)}px; background: {getPhaseColor(phase)};"
+                            style="width: {Math.max(2, (ms / maxLatency) * 120)}px; background: {getPhaseColor(phase)};"
                             title="{phase}: {formatLatency(ms)}"
                           ></div>
                         {/each}

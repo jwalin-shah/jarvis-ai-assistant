@@ -137,6 +137,7 @@
   --z-popover: 500;
   --z-tooltip: 600;
   --z-toast: 700;
+  --z-error: 800;
 
   /* Legacy aliases for backward compatibility */
   --bg-primary: var(--surface-base);

@@ -100,14 +100,14 @@ class TestInProcessCrossEncoder:
         assert isinstance(result, np.ndarray)
         assert len(result) == 0
 
-    @patch("models.cross_encoder.InProcessCrossEncoder._get_gpu_lock")
-    def test_predict_returns_correct_shape(self, mock_gpu_lock):
+    @patch("models.cross_encoder.gpu_context")
+    def test_predict_returns_correct_shape(self, mock_gpu_ctx):
         """predict() returns one score per pair."""
         import mlx.core as mx
 
         from models.cross_encoder import InProcessCrossEncoder
 
-        mock_gpu_lock.return_value = MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+        mock_gpu_ctx.return_value = MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
 
         ce = InProcessCrossEncoder()
         ce.model_name = "test"
@@ -143,14 +143,14 @@ class TestCrossEncoderReranker:
     """Test the reranker service layer."""
 
     def test_rerank_empty_candidates(self):
-        from models.reranker import CrossEncoderReranker
+        from models.cross_encoder import CrossEncoderReranker
 
         reranker = CrossEncoderReranker()
         result = reranker.rerank("query", [])
         assert result == []
 
     def test_rerank_single_candidate(self):
-        from models.reranker import CrossEncoderReranker
+        from models.cross_encoder import CrossEncoderReranker
 
         reranker = CrossEncoderReranker()
         candidates = [{"trigger_text": "hello", "response_text": "hi", "similarity": 0.9}]
@@ -160,7 +160,7 @@ class TestCrossEncoderReranker:
 
     def test_rerank_sorts_by_score(self):
         """Reranker should sort candidates by cross-encoder score."""
-        from models.reranker import CrossEncoderReranker
+        from models.cross_encoder import CrossEncoderReranker
 
         reranker = CrossEncoderReranker()
 
@@ -184,7 +184,7 @@ class TestCrossEncoderReranker:
         assert result[1]["rerank_score"] == pytest.approx(0.3)
 
     def test_rerank_respects_top_k(self):
-        from models.reranker import CrossEncoderReranker
+        from models.cross_encoder import CrossEncoderReranker
 
         reranker = CrossEncoderReranker()
         mock_ce = MagicMock()
@@ -201,7 +201,7 @@ class TestCrossEncoderReranker:
 
     def test_rerank_handles_missing_text_key(self):
         """Candidates without the text key get score 0."""
-        from models.reranker import CrossEncoderReranker
+        from models.cross_encoder import CrossEncoderReranker
 
         reranker = CrossEncoderReranker()
         mock_ce = MagicMock()
@@ -280,7 +280,7 @@ class TestSingletons:
             reset_cross_encoder()
 
     def test_get_reranker_returns_instance(self):
-        from models.reranker import get_reranker, reset_reranker
+        from models.cross_encoder import get_reranker, reset_reranker
 
         try:
             r = get_reranker()

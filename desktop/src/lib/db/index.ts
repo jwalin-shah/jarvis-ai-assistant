@@ -16,6 +16,8 @@ export {
   getNewMessagesSince,
   populateContactsCache,
   isContactsCacheLoaded,
+  loadContactsFromAddressBook,
+  resolveContactName,
 } from "./direct";
 
 export {

@@ -48,7 +48,7 @@ from jarvis.observability.metrics_router import (
     get_routing_metrics_store,
     hash_query,
 )
-from jarvis.reply_service import ReplyService
+from jarvis.reply_service import ReplyService, get_reply_service
 from jarvis.services import ContextService
 
 if TYPE_CHECKING:
@@ -79,30 +79,6 @@ class IndexNotAvailableError(RouterError):
 # =============================================================================
 # Data Classes & Type Definitions
 # =============================================================================
-
-
-class RoutingResponse(TypedDict, total=False):
-    """Typed dictionary for routing response.
-
-    Attributes:
-        type: Response type ('generated' or 'clarify')
-        response: The response text
-        confidence: Confidence level ('high', 'medium', 'low')
-        similarity_score: Best similarity score from vector search
-        cluster_name: Name of matched cluster
-        contact_style: Style notes for the contact
-        similar_triggers: List of similar past triggers
-        reason: Reason for clarification (if type='clarify')
-    """
-
-    type: str
-    response: str
-    confidence: str
-    similarity_score: float
-    cluster_name: str | None
-    contact_style: str | None
-    similar_triggers: list[str] | None
-    reason: str
 
 
 class StatsResponse(TypedDict, total=False):
@@ -221,14 +197,23 @@ class ReplyRouter:
 
     @property
     def reply_service(self) -> ReplyService:
-        """Get or create the reply service."""
+        """Get or create the reply service.
+
+        Uses the shared singleton when no explicit dependencies were injected,
+        otherwise creates an instance with the injected deps (e.g. in tests).
+        """
         with self._lock:
             if self._reply_service is None:
-                from jarvis.reply_service import ReplyService
-
-                self._reply_service = ReplyService(
-                    db=self.db, generator=self.generator, imessage_reader=self.imessage_reader
-                )
+                if self._db is not None or self._generator is not None:
+                    # Explicit deps provided (tests, custom setup) - use them
+                    self._reply_service = ReplyService(
+                        db=self.db,
+                        generator=self.generator,
+                        imessage_reader=self.imessage_reader,
+                    )
+                else:
+                    # Production path - share the singleton
+                    self._reply_service = get_reply_service()
             return self._reply_service
 
     def close(self) -> None:
@@ -339,6 +324,7 @@ class ReplyRouter:
             "type": str(metadata.get("type", "generated")),
             "response": response.response,
             "confidence": ReplyRouter._to_confidence_label(response.confidence),
+            "confidence_score": response.confidence,
             "similarity_score": float(metadata.get("similarity_score", 0.0)),
             "similar_triggers": metadata.get("similar_triggers"),
             "reason": str(metadata.get("reason", "")),
@@ -670,11 +656,6 @@ def get_reply_router() -> ReplyRouter:
     return _router
 
 
-def route_message(context: MessageContext) -> GenerationResponse:
-    """Route a typed message context using the shared router instance."""
-    return get_reply_router().route_message(context)
-
-
 def reset_reply_router() -> None:
     """Reset the singleton ReplyRouter.
 
@@ -701,6 +682,5 @@ __all__ = [
     "ReplyRouter",
     # Singleton functions
     "get_reply_router",
-    "route_message",
     "reset_reply_router",
 ]

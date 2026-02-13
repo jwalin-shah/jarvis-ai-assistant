@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 if TYPE_CHECKING:
     from contracts.imessage import Message
 
@@ -145,7 +147,8 @@ def detect_anomalies(
 ) -> list[AnomalyResult]:
     """Detect anomalies in time series data.
 
-    Uses standard deviation-based detection.
+    Uses standard deviation-based detection with numpy for vectorized
+    computation (much faster for large datasets).
 
     Args:
         data: List of (date_key, value) tuples
@@ -157,20 +160,23 @@ def detect_anomalies(
     if len(data) < 5:
         return []
 
-    values = [v for _, v in data]
-
-    # Calculate mean and standard deviation
-    mean = sum(values) / len(values)
-    variance = sum((v - mean) ** 2 for v in values) / len(values)
-    std_dev = variance**0.5
+    # Use numpy for vectorized computation (10-100x faster than Python loops)
+    values = np.array([v for _, v in data], dtype=np.float64)
+    mean = float(np.mean(values))
+    std_dev = float(np.std(values))
 
     if std_dev == 0:
         return []
 
+    # Vectorized deviation calculation
+    deviations = (values - mean) / std_dev
+    threshold = abs(threshold_std)
+
+    # Build results for anomalous points only
     anomalies: list[AnomalyResult] = []
-    for date_key, value in data:
-        deviation = (value - mean) / std_dev
-        if abs(deviation) >= threshold_std:
+    for i, (date_key, value) in enumerate(data):
+        deviation = float(deviations[i])
+        if abs(deviation) >= threshold:
             anomaly_type = "spike" if deviation > 0 else "drop"
             anomalies.append(
                 AnomalyResult(

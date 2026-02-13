@@ -746,30 +746,71 @@ class ContactProfileBuilder:
             return []
 
         try:
+            from jarvis.db import get_db
+            from jarvis.search.vec_search import get_vec_searcher
             from jarvis.topics.topic_discovery import TopicDiscovery
 
-            texts = [m.text for m in messages if m.text]
-            if len(texts) != len(embeddings):
-                # Mismatch, filter to texts with content
-                valid = [(m.text, i) for i, m in enumerate(messages) if m.text]
-                texts = [t for t, _ in valid]
-                indices = [i for _, i in valid]
-                embeddings = embeddings[indices]
+            db = get_db()
+            searcher = get_vec_searcher()
 
-            if len(embeddings) < 30:
-                return []
+            # 1. Fetch pre-computed segment data for this contact
+            with db.connection() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT topic_label, keywords_json, entities_json, vec_chunk_rowid
+                    FROM conversation_segments
+                    WHERE chat_id = ? AND vec_chunk_rowid IS NOT NULL
+                    ORDER BY start_time DESC
+                    LIMIT 200
+                    """,
+                    (contact_id,),
+                ).fetchall()
+
+            if not rows or len(rows) < 3:
+                # Fall back to raw message labels if no segments found
+                labels = [m.text for m in messages if m.text and len(m.text) > 20][:10]
+                return [l[:30] for l in labels] if labels else []
+
+            # 2. Extract labels and fetch centroids from vector searcher
+            chunk_ids = [row["vec_chunk_rowid"] for row in rows]
+            id_to_centroid = searcher.get_embeddings_by_ids(chunk_ids)
+
+            if not id_to_centroid:
+                # Fall back to stored topic labels
+                unique_labels = list({r["topic_label"] for r in rows if r["topic_label"]})
+                return unique_labels[:3]
+
+            # 3. Cluster segment centroids to find "Global Topics"
+            centroids = np.array(
+                [id_to_centroid[cid] for cid in chunk_ids if cid in id_to_centroid],
+                dtype=np.float32,
+            )
+            # For keywords, use the stored topic labels and keywords
+            texts = []
+            for r in rows:
+                kws = json.loads(r["keywords_json"]) if r["keywords_json"] else []
+                label = r["topic_label"] or ""
+                texts.append(f"{label} {' '.join(kws)}")
+
+            if len(centroids) < 5:
+                # Too few for HDBSCAN, just return unique labels
+                unique_labels = list({r["topic_label"] for r in rows if r["topic_label"]})
+                return unique_labels[:3]
 
             discovery = TopicDiscovery()
-            topics = discovery.discover_topics(
+            result = discovery.discover_topics(
                 contact_id=contact_id,
-                embeddings=embeddings,
+                embeddings=centroids,
                 texts=texts,
+                min_cluster_size=max(2, len(centroids) // 10),
+                min_samples=1,
             )
-            # Extract keyword labels from top topics by message count
-            sorted_topics = sorted(topics.topics, key=lambda t: t.message_count, reverse=True)
+
+            # 4. Extract keyword labels from top clusters
+            sorted_topics = sorted(result.topics, key=lambda t: t.message_count, reverse=True)
             return [", ".join(t.keywords[:3]) for t in sorted_topics[:3]]
         except Exception as e:
-            logger.warning("Topic discovery failed for %s: %s", contact_id, e)
+            logger.warning("Segment-based topic discovery failed for %s: %s", contact_id, e)
             return []
 
 

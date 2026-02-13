@@ -36,7 +36,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from models.embeddings import DEFAULT_MLX_EMBEDDING_MODEL, MLX_EMBEDDING_DIM
+from models.bert_embedder import DEFAULT_MLX_EMBEDDING_MODEL, MLX_EMBEDDING_DIM
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 # =============================================================================
 
-# Re-export from canonical source (models/embeddings.py)
+# Re-export from canonical source (models/bert_embedder.py)
 EMBEDDING_DIM = MLX_EMBEDDING_DIM
 EMBEDDING_MODEL = DEFAULT_MLX_EMBEDDING_MODEL
 

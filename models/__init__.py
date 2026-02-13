@@ -19,7 +19,7 @@ Model Registry:
 
 import threading
 
-from models.embeddings import (
+from models.bert_embedder import (
     DEFAULT_MLX_EMBEDDING_MODEL,
     MLX_EMBEDDING_DIM,
     MLXEmbeddingError,

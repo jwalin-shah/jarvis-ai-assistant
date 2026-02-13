@@ -31,11 +31,12 @@ class StatsMixin:
         with self.connection() as conn:
             stats: dict[str, Any] = {}
 
-            # Single query for all scalar counts (was 5 separate queries)
+            # Single query for all scalar counts
             row = conn.execute(
                 """
                 SELECT
                     (SELECT COUNT(*) FROM contacts) as contacts,
+                    (SELECT COUNT(*) FROM conversation_segments) as chunks,
                     (SELECT COUNT(*) FROM pairs) as pairs,
                     (SELECT COUNT(*) FROM pairs WHERE quality_score >= 0.5) as pairs_quality,
                     (SELECT COUNT(*) FROM clusters) as clusters,
@@ -43,18 +44,34 @@ class StatsMixin:
                 """
             ).fetchone()
             stats["contacts"] = row["contacts"]
+            stats["chunks"] = row["chunks"]
             stats["pairs"] = row["pairs"]
             stats["pairs_quality_gte_50"] = row["pairs_quality"]
             stats["clusters"] = row["clusters"]
             stats["embeddings"] = row["embeddings"]
 
-            # Active index (inlined to reuse same connection instead of opening a new one)
+            # Active index
             idx_row = conn.execute(
                 "SELECT version_id FROM index_versions WHERE is_active = TRUE LIMIT 1"
             ).fetchone()
             stats["active_index"] = idx_row["version_id"] if idx_row else None
 
-            # Pairs per contact
+            # Chunks per contact (New system)
+            cursor = conn.execute(
+                """
+                SELECT c.display_name, COUNT(cs.id) as chunk_count
+                FROM contacts c
+                LEFT JOIN conversation_segments cs ON c.chat_id = cs.chat_id
+                GROUP BY c.id
+                ORDER BY chunk_count DESC
+                LIMIT 10
+                """
+            )
+            stats["chunks_per_contact"] = [
+                {"name": row["display_name"], "count": row["chunk_count"]} for row in cursor
+            ]
+
+            # Legacy: Pairs per contact
             cursor = conn.execute(
                 """
                 SELECT c.display_name, COUNT(p.id) as pair_count
@@ -62,7 +79,7 @@ class StatsMixin:
                 LEFT JOIN pairs p ON c.id = p.contact_id
                 GROUP BY c.id
                 ORDER BY pair_count DESC
-                LIMIT 10
+                LIMIT 5
                 """
             )
             stats["pairs_per_contact"] = [

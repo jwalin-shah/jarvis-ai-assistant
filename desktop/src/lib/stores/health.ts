@@ -130,16 +130,16 @@ export async function fetchHealth(): Promise<void> {
       if (connected) {
         const result = await jarvis.ping();
         const data: HealthResponse = {
-          status: result.status === "ok" ? "healthy" : "degraded",
-          imessage_access: null,  // Unknown via socket ping
-          memory_available_gb: null,  // Not available via socket
-          memory_used_gb: null,  // Not available via socket
-          memory_mode: null,  // Not available via socket
-          model_loaded: (result as { models_ready?: boolean }).models_ready ?? null,
-          permissions_ok: null,  // Not available via socket
-          details: 'Health details unavailable via socket - use HTTP for full status',
-          jarvis_rss_mb: null,  // Not available via socket
-          jarvis_vms_mb: null,  // Not available via socket
+          status: (result.status as HealthResponse["status"]) ?? "degraded",
+          imessage_access: (result.imessage_access as boolean) ?? null,
+          memory_available_gb: (result.memory_available_gb as number) ?? null,
+          memory_used_gb: (result.memory_used_gb as number) ?? null,
+          memory_mode: (result.memory_mode as HealthResponse["memory_mode"]) ?? null,
+          model_loaded: (result.model_loaded as boolean) ?? (result.models_ready as boolean) ?? null,
+          permissions_ok: (result.permissions_ok as boolean) ?? null,
+          details: (result.details as HealthResponse["details"]) ?? null,
+          jarvis_rss_mb: (result.jarvis_rss_mb as number) ?? null,
+          jarvis_vms_mb: (result.jarvis_vms_mb as number) ?? null,
         };
         healthStore.update((state) => ({
           ...state,

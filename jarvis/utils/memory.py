@@ -17,8 +17,6 @@ import platform
 import re
 import subprocess
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 
 import psutil
@@ -197,56 +195,6 @@ def log_memory_snapshot(label: str = "") -> None:
     info = get_memory_info()
     prefix = f"[{label}] " if label else ""
     logger.info(f"{prefix}{info}")
-
-
-@contextmanager
-def track_memory(
-    label: str = "",
-    *,
-    interval_sec: float = 5.0,
-    swap_threshold_mb: float = 500.0,
-    abort_on_threshold: bool = False,
-) -> Iterator[list[MemoryInfo]]:
-    """Context manager that tracks memory usage during an operation.
-
-    Args:
-        label: Optional label for logging
-        interval_sec: How often to sample memory (0 = only start/end)
-        swap_threshold_mb: Warn if swap exceeds this (default 500MB)
-        abort_on_threshold: If True, raise SwapThresholdExceeded on threshold breach
-
-    Yields:
-        List that will be populated with MemoryInfo snapshots
-
-    Example:
-        with track_memory("training", interval_sec=10, swap_threshold_mb=500) as snapshots:
-            train_model()
-        # snapshots now contains periodic memory measurements
-    """
-    snapshots: list[MemoryInfo] = []
-    start_info = get_memory_info()
-    snapshots.append(start_info)
-
-    prefix = f"[{label}] " if label else ""
-    logger.info(f"{prefix}Memory tracking started: {start_info}")
-
-    # Background monitoring if interval > 0
-    time.time()
-
-    try:
-        yield snapshots
-    finally:
-        end_info = get_memory_info()
-        snapshots.append(end_info)
-
-        # Calculate deltas
-        rss_delta = end_info.rss_mb - start_info.rss_mb
-        swap_delta = end_info.swap_used_mb - start_info.swap_used_mb
-
-        logger.info(
-            f"{prefix}Memory tracking finished: {end_info}\n"
-            f"  RSS delta: {rss_delta:+.1f}MB, Swap delta: {swap_delta:+.1f}MB"
-        )
 
 
 class MemoryMonitor:

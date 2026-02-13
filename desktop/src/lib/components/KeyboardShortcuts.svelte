@@ -82,7 +82,7 @@
   aria-label="Close keyboard shortcuts"
   tabindex="0"
 >
-  <div class="shortcuts-panel glass" role="dialog" aria-label="Keyboard Shortcuts" tabindex="-1">
+  <div class="shortcuts-panel glass" role="dialog" aria-label="Keyboard Shortcuts" aria-modal="true" tabindex="-1">
     <header class="shortcuts-header">
       <div class="shortcuts-title">
         <Icon name="settings" size={20} />
@@ -133,7 +133,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
     animation: fadeIn 0.15s ease;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);

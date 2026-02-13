@@ -15,7 +15,7 @@ from jarvis.db import Contact, JarvisDB, get_db
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
     from jarvis.search.vec_search import VecSearcher
-    from models.reranker import CrossEncoderReranker
+    from models.cross_encoder import CrossEncoderReranker
 
 logger = logging.getLogger(__name__)
 

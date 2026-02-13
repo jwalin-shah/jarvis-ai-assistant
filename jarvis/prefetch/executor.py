@@ -226,9 +226,10 @@ class PrefetchExecutor:
 
     Concurrency Model:
     - Default 2 workers handle IO-bound (DB, cache) and GPU-bound (LLM, embeddings) tasks.
-    - MLXModelLoader._mlx_load_lock serializes all GPU operations across workers.
+    - GPU operations (encode, generate, load) acquire MLXModelLoader._mlx_load_lock
+      internally within the model/embedder classes. No outer locking needed here.
     - Multiple workers benefit IO-bound tasks (contact profiles, search, vec index).
-    - GPU-bound tasks (draft replies, embeddings) block on the lock regardless.
+    - GPU-bound tasks (draft replies, embeddings) block on the internal lock regardless.
     - ResourceManager dynamically adjusts 1-4 workers based on CPU/memory/battery.
     """
 
@@ -721,22 +722,41 @@ class PrefetchExecutor:
             if not last_incoming:
                 return None
 
-            # Route and generate (acquire MLX lock to serialize GPU ops)
-            # Pass conversation_messages so router skips re-fetching from DB
-            from models.loader import MLXModelLoader
+            # Route and generate reply draft.
+            # GPU operations (embedding encode, LLM generate) acquire
+            # MLXModelLoader._mlx_load_lock internally, so no outer lock needed.
+            # Holding the lock here would block ALL GPU ops for the entire
+            # route() duration (1-5s), including CPU-only work (classification,
+            # contact lookup, RAG search, prompt building).
+            result = router.route(
+                incoming=last_incoming,
+                chat_id=chat_id,
+                conversation_messages=messages,
+            )
 
-            with MLXModelLoader._mlx_load_lock:
-                result = router.route(
-                    incoming=last_incoming,
-                    chat_id=chat_id,
-                    conversation_messages=messages,
+            confidence = float(result.get("confidence_score", 0.6))
+
+            # Gate low-confidence drafts
+            from jarvis.socket_server import DRAFT_CONFIDENCE_THRESHOLD
+
+            if confidence < DRAFT_CONFIDENCE_THRESHOLD:
+                logger.debug(
+                    f"Prefetch draft gated for {chat_id}: "
+                    f"confidence {confidence:.2f} < {DRAFT_CONFIDENCE_THRESHOLD}"
                 )
+                return {
+                    "suggestions": [],
+                    "gated": True,
+                    "gated_confidence": confidence,
+                    "prefetched": True,
+                    "prefetch_time": time.time(),
+                }
 
             return {
                 "suggestions": [
                     {
                         "text": result.get("response", ""),
-                        "confidence": 0.8 if result.get("confidence") == "high" else 0.6,
+                        "confidence": confidence,
                     }
                 ],
                 "prefetched": True,
@@ -766,10 +786,8 @@ class PrefetchExecutor:
             from jarvis.embedding_adapter import get_embedder
 
             embedder = get_embedder()
-            from models.loader import MLXModelLoader
-
-            with MLXModelLoader._mlx_load_lock:
-                embeddings = embedder.encode(texts)
+            # encode() acquires MLXModelLoader._mlx_load_lock internally
+            embeddings = embedder.encode(texts)
 
             return {
                 "embeddings": embeddings,
@@ -836,24 +854,21 @@ class PrefetchExecutor:
             return None
 
         try:
-            from models.loader import MLXModelLoader
-
             if model_type == "llm":
                 from models.loader import get_model
 
                 model = get_model()
+                # load() acquires MLXModelLoader._mlx_load_lock internally
                 if model and not model.is_loaded():
-                    with MLXModelLoader._mlx_load_lock:
-                        model.load()
+                    model.load()
                 return {"model": "llm", "warm": True, "prefetch_time": time.time()}
 
             elif model_type == "embeddings":
                 from jarvis.embedding_adapter import get_embedder
 
                 embedder = get_embedder()
-                # Warm up with a test embedding
-                with MLXModelLoader._mlx_load_lock:
-                    embedder.encode(["warmup test"])
+                # encode() acquires MLXModelLoader._mlx_load_lock internally
+                embedder.encode(["warmup test"])
                 return {"model": "embeddings", "warm": True, "prefetch_time": time.time()}
 
             return None

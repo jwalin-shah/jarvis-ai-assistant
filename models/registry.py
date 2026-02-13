@@ -64,127 +64,18 @@ class ModelSpec:
         return self.size_gb * 1024
 
 
-# Registry of supported models, ordered by quality tier (ascending)
+# Registry of supported models - LFM only
 MODEL_REGISTRY: dict[str, ModelSpec] = {
-    "qwen-0.5b": ModelSpec(
-        id="qwen-0.5b",
-        path="mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-        display_name="Qwen 2.5 0.5B (Fast)",
-        size_gb=0.8,
-        min_ram_gb=8,
-        quality_tier="basic",
-        description="Fastest responses, basic quality. Good for quick replies.",
-        recommended_for=["quick_replies"],
-    ),
-    "qwen-1.5b": ModelSpec(
-        id="qwen-1.5b",
-        path="mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-        display_name="Qwen 2.5 1.5B (Balanced)",
-        size_gb=1.5,
-        min_ram_gb=8,
-        quality_tier="good",
-        description="Good balance of speed and quality. Recommended for most users.",
-        recommended_for=["quick_replies", "summarization", "drafting"],
-    ),
-    "qwen-3b": ModelSpec(
-        id="qwen-3b",
-        path="mlx-community/Qwen2.5-3B-Instruct-4bit",
-        display_name="Qwen 2.5 3B (Quality)",
-        size_gb=2.5,
-        min_ram_gb=8,
-        quality_tier="excellent",
-        description="Best quality responses for 4-bit quantized model.",
-        recommended_for=["summarization", "drafting", "complex_replies"],
-    ),
-    "phi3-mini": ModelSpec(
-        id="phi3-mini",
-        path="mlx-community/Phi-3-mini-4k-instruct-4bit",
-        display_name="Phi-3 Mini 4K",
-        size_gb=2.5,
-        min_ram_gb=8,
-        quality_tier="good",
-        description="Fast generation (28 tok/s), excellent for coding. Can be verbose.",
-        recommended_for=["quick_replies", "coding_assistance"],
-    ),
-    "gemma3-4b": ModelSpec(
-        id="gemma3-4b",
-        path="mlx-community/gemma-3-4b-it-4bit",
-        display_name="Gemma 3 4B Instruct",
-        size_gb=2.75,
-        min_ram_gb=8,
-        quality_tier="excellent",
-        description="Best instruction following, natural tone, concise responses. Recommended.",
-        recommended_for=["quick_replies", "summarization", "drafting", "natural_conversation"],
-    ),
-    "lfm-0.3b": ModelSpec(
-        id="lfm-0.3b",
-        path="mlx-community/LFM2-350M-4bit",
-        display_name="LFM 2.5 0.3B (Fast)",
-        size_gb=0.3,
-        min_ram_gb=4,
-        quality_tier="basic",
-        description="LFM 2.5 0.3B - fastest responses, lighter quality. Good for quick tests.",
-        recommended_for=["quick_replies", "testing", "fact_extraction"],
-    ),
+    # Base models
     "lfm-350m": ModelSpec(
         id="lfm-350m",
         path="mlx-community/LFM2-350M-4bit",
-        display_name="LFM 2.5 350M",
+        display_name="LFM 2.5 350M (Base)",
         size_gb=0.35,
         min_ram_gb=4,
         quality_tier="basic",
-        description="LFM 2.5 350M - base model optimized for fact extraction and fast inference.",
-        recommended_for=["fact_extraction", "quick_replies", "testing"],
-    ),
-    "lfm-0.7b": ModelSpec(
-        id="lfm-0.7b",
-        path="lmstudio-community/LFM2-700M-MLX-8bit",
-        display_name="LFM 2 0.7B (8-bit)",
-        size_gb=0.8,
-        min_ram_gb=8,
-        quality_tier="basic",
-        description="LFM 2 700M 8-bit MLX. Base model (no instruct tuning).",
-        recommended_for=["quick_replies", "testing"],
-    ),
-    "lfm-0.7b-4bit": ModelSpec(
-        id="lfm-0.7b-4bit",
-        path="models/lfm-0.7b-4bit",
-        display_name="LFM 2 0.7B (4-bit)",
-        size_gb=0.4,
-        min_ram_gb=4,
-        quality_tier="basic",
-        description="LFM 2 700M locally quantized to 4-bit. Smaller memory footprint.",
-        recommended_for=["quick_replies", "speculative_decoding"],
-    ),
-    "lfm-2.6b": ModelSpec(
-        id="lfm-2.6b",
-        path="mlx-community/LFM2-2.6B-4bit",
-        display_name="LFM 2 2.6B (4-bit)",
-        size_gb=1.5,
-        min_ram_gb=8,
-        quality_tier="good",
-        description="LFM 2 2.6B 4-bit MLX. Largest LFM base model, no instruct tuning.",
-        recommended_for=["few_shot", "completion", "natural_conversation"],
-    ),
-    "lfm-1.2b": ModelSpec(
-        id="lfm-1.2b",
-        path="LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit",
-        display_name="LFM 2.5 1.2B (Conversational)",
-        size_gb=1.2,
-        min_ram_gb=8,
-        quality_tier="excellent",
-        description="LFM 2.5 1.2B optimized for conversation. Best for natural chat.",
-        recommended_for=["quick_replies", "natural_conversation", "drafting", "iMessage"],
-    ),
-    "lfm-1.2b-thinking": ModelSpec(
-        id="lfm-1.2b-thinking",
-        path="LiquidAI/LFM2.5-1.2B-Thinking-MLX-4bit",
-        display_name="LFM 2.5 1.2B (Thinking)",
-        size_gb=1.2,
-        min_ram_gb=8,
-        quality_tier="excellent",
-        description="LFM 2.5 1.2B with chain-of-thought reasoning. Better for complex decisions.",
-        recommended_for=["complex_replies", "reasoning", "analysis"],
+        description="LFM 2.5 350M base model for fast fact extraction.",
+        recommended_for=["fact_extraction"],
     ),
     "lfm-1.2b-base": ModelSpec(
         id="lfm-1.2b-base",
@@ -196,7 +87,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         description="LFM 2.5 1.2B base model. No instruct tuning - raw completion.",
         recommended_for=["completion", "few_shot", "style_matching"],
     ),
-    # Fine-tuned variants (SOC conversation data)
+    # Fine-tuned variants
     "lfm-1.2b-ft": ModelSpec(
         id="lfm-1.2b-ft",
         path="models/lfm-1.2b-final",
@@ -220,7 +111,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     "lfm-0.3b-ft": ModelSpec(
         id="lfm-0.3b-ft",
         path="models/lfm-0.3b-soc-fused",
-        display_name="LFM 2.5 0.3B Fine-Tuned (Draft)",
+        display_name="LFM 2.5 0.3B Fine-Tuned",
         size_gb=0.3,
         min_ram_gb=4,
         quality_tier="basic",
@@ -230,8 +121,8 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
 }
 
 # Default model ID when none specified
-# LFM 2.5 is recommended as the default for conversational use cases
-DEFAULT_MODEL_ID = "lfm-1.2b"
+# LFM 2.5 fine-tuned is the default for conversational use cases
+DEFAULT_MODEL_ID = "lfm-1.2b-ft"
 
 
 def get_model_spec(model_id: str) -> ModelSpec | None:

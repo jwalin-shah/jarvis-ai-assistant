@@ -21,6 +21,9 @@ import {
   getLastMessageRowid,
   getNewMessagesSince,
   populateContactsCache,
+  loadContactsFromAddressBook,
+  isContactsCacheLoaded,
+  resolveContactName,
 } from "../db";
 import { jarvis } from "../socket";
 import type { NewMessageEvent } from "../socket/client";
@@ -103,6 +106,7 @@ class ConversationsState {
   messageCache = new Map<string, MessageCacheEntry>();
   lastKnownGlobalRowid = 0;
   lastSyncTimestamp = 0;
+  lastConversationFetchTime = 0;
   SYNC_DEBOUNCE_MS = 120000; // 2 minutes
   _messagePolling = false;
 
@@ -295,6 +299,7 @@ export async function fetchConversations(isPolling = false) {
     conversationsStore.isInitialLoad = false;
     conversationsStore.isPolling = false;
     conversationsStore.connectionStatus = "connected";
+    conversationsStore.lastConversationFetchTime = Date.now();
   } catch (e) {
     conversationsStore.loading = false;
     conversationsStore.isInitialLoad = false;
@@ -319,8 +324,9 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
   }
 }
 
-export async function pollMessages(): Promise<Message[]> {
-  if (!conversationsStore.selectedChatId || !conversationsStore.isWindowFocused) return [];
+export async function pollMessages(force = false): Promise<Message[]> {
+  if (!conversationsStore.selectedChatId) return [];
+  if (!force && !conversationsStore.isWindowFocused) return [];
   if (conversationsStore._messagePolling) return []; // Prevent concurrent polls
 
   conversationsStore._messagePolling = true;
@@ -334,6 +340,7 @@ export async function pollMessages(): Promise<Message[]> {
       const currentGlobalRowid = await getLastMessageRowid();
       // Skip if nothing changed globally AND we synchronized recently
       if (
+        !force &&
         currentGlobalRowid > 0 &&
         currentGlobalRowid === conversationsStore.lastKnownGlobalRowid &&
         timeSinceLastSync < conversationsStore.SYNC_DEBOUNCE_MS
@@ -407,7 +414,7 @@ export async function selectConversation(chatId: string) {
   pendingPrefetchChatId = chatId;
 
   // Background prefetch - fire and forget, but guard against stale results
-  const prefetchPromise = jarvis.call<{
+  void jarvis.call<{
     status: string;
     prefetched?: boolean;
     draft?: { suggestions: DraftSuggestion[] };
@@ -504,7 +511,7 @@ export async function loadMoreMessages(): Promise<boolean> {
 
 // Socket push handler for real-time new messages
 export async function handleNewMessagePush(data: NewMessageEvent) {
-  const { chat_id, message_id } = data;
+  const { chat_id, message_id, text_preview } = data;
 
   if (chat_id !== conversationsStore.selectedChatId) {
     markConversationAsNew(chat_id);
@@ -519,6 +526,23 @@ export async function handleNewMessagePush(data: NewMessageEvent) {
           cached.messages = conversationsStore.messages;
         }
       }
+      // Clear matching optimistic messages when real sent message arrives
+      if (msg?.is_from_me && conversationsStore.optimisticMessages.length > 0) {
+        // First try exact text match
+        const matching = conversationsStore.optimisticMessages.find(
+          (opt) => opt.text.trim() === msg.text?.trim()
+        );
+        if (matching) {
+          removeOptimisticMessage(matching.id);
+        } else {
+          // Fallback: clear oldest optimistic message with 'sent' status
+          // (it's almost certainly the one that produced this real message)
+          const oldest = conversationsStore.optimisticMessages.find(
+            (opt) => opt.status === "sent"
+          );
+          if (oldest) removeOptimisticMessage(oldest.id);
+        }
+      }
     } else {
       const freshMessages = await fetchMessages(chat_id);
       if (conversationsStore.selectedChatId === chat_id) {
@@ -531,20 +555,54 @@ export async function handleNewMessagePush(data: NewMessageEvent) {
     }
   }
 
-  // Always refresh conversation list (updates order, preview text)
-  fetchConversations(true);
+  // Update conversation list in-place instead of re-fetching
+  updateConversationInPlace(chat_id, text_preview);
+}
+
+/** Update a conversation's preview and reorder to top without a network request. */
+function updateConversationInPlace(chatId: string, textPreview: string | null) {
+  const convos = conversationsStore.conversations;
+  const idx = convos.findIndex((c) => c.chat_id === chatId);
+  if (idx === -1) {
+    // Unknown chat - need a full fetch to pick it up
+    fetchConversations(true);
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const conv = convos[idx]!;
+  const updated: Conversation = { ...conv, last_message_date: now };
+  if (textPreview !== null) {
+    updated.last_message_text = textPreview;
+  }
+
+  // Move to top: remove from current position and prepend
+  const next: Conversation[] = [updated, ...convos.slice(0, idx), ...convos.slice(idx + 1)];
+  conversationsStore.conversations = next;
+
+  // Update last known date to prevent false "new message" detection on next full fetch
+  conversationsStore.lastKnownMessageDates.set(chatId, now);
+}
+
+// User activity tracking for adaptive polling
+let lastUserActivity = Date.now();
+
+export function handleUserActivity() {
+  lastUserActivity = Date.now();
 }
 
 // Polling Logic
 let conversationPollInterval: ReturnType<typeof setInterval> | null = null;
-let messagePollInterval: ReturnType<typeof setInterval> | null = null;
+let messagePollTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function startConversationPolling() {
   if (conversationPollInterval) clearInterval(conversationPollInterval);
   fetchConversations();
   conversationPollInterval = setInterval(() => {
-    if (conversationsStore.isWindowFocused) fetchConversations(true);
-  }, 30000);
+    if (conversationsStore.isWindowFocused) {
+      fetchConversations(true);
+    }
+  }, 30_000);
 }
 
 export function stopConversationPolling() {
@@ -553,15 +611,52 @@ export function stopConversationPolling() {
 }
 
 export function startMessagePolling() {
-  if (messagePollInterval) clearInterval(messagePollInterval);
-  messagePollInterval = setInterval(() => {
-    if (conversationsStore.isWindowFocused && conversationsStore.selectedChatId) pollMessages();
-  }, 10000);
+  if (messagePollTimeout) clearTimeout(messagePollTimeout);
+  scheduleNextPoll();
+}
+
+function scheduleNextPoll() {
+  const idle = Date.now() - lastUserActivity;
+  const interval = idle < 60_000 ? 10_000 : idle < 300_000 ? 30_000 : 60_000;
+  messagePollTimeout = setTimeout(() => {
+    if (conversationsStore.isWindowFocused && conversationsStore.selectedChatId) {
+      pollMessages().then(scheduleNextPoll);
+    } else {
+      scheduleNextPoll();
+    }
+  }, interval);
 }
 
 export function stopMessagePolling() {
-  if (messagePollInterval) clearInterval(messagePollInterval);
-  messagePollInterval = null;
+  if (messagePollTimeout) clearTimeout(messagePollTimeout);
+  messagePollTimeout = null;
+}
+
+/**
+ * Re-resolve display names on already-rendered conversations using the contact cache.
+ * Called after contacts load asynchronously so names replace phone numbers.
+ */
+function refreshConversationNames() {
+  const convos = conversationsStore.conversations;
+  if (convos.length === 0) return;
+
+  let changed = false;
+  const updated = convos.map((conv) => {
+    // Only patch 1:1 chats that still show a phone number / no display name
+    if (conv.is_group || conv.display_name) return conv;
+    if (conv.participants.length !== 1) return conv;
+
+    const resolved = resolveContactName(conv.participants[0]!);
+    if (resolved && resolved !== conv.display_name) {
+      changed = true;
+      return { ...conv, display_name: resolved };
+    }
+    return conv;
+  });
+
+  if (changed) {
+    conversationsStore.conversations = updated;
+  }
 }
 
 export async function initializePolling(): Promise<() => void> {
@@ -572,22 +667,42 @@ export async function initializePolling(): Promise<() => void> {
   if (isDirectAccessAvailable()) {
     conversationsStore.lastKnownGlobalRowid = await getLastMessageRowid();
 
-    // Populate contact names before loading conversations so names display immediately
-    try {
-      const contacts = await jarvis.call<Record<string, string | null>>("get_contacts", {});
-      if (contacts && typeof contacts === "object") {
-        populateContactsCache(contacts);
-      }
-    } catch {
-      // Contact resolution not critical - will fall back to phone numbers
-    }
-  }
+    // Fire contact loading without blocking conversation render.
+    // Conversations show phone numbers initially, then names patch in.
+    const contactsP = loadContactsFromAddressBook().catch(() => {});
 
-  startConversationPolling();
+    // Start conversation polling immediately (renders with phone numbers)
+    startConversationPolling();
+
+    // When contacts arrive, patch display names on already-rendered conversations
+    await contactsP;
+    if (isContactsCacheLoaded()) {
+      refreshConversationNames();
+    }
+
+    // Socket fallback if AddressBook failed (only if still no contacts)
+    if (!isContactsCacheLoaded()) {
+      try {
+        const contacts = await jarvis.call<Record<string, string | null>>("get_contacts", {});
+        if (contacts && typeof contacts === "object") {
+          populateContactsCache(contacts);
+          refreshConversationNames();
+        }
+      } catch {
+        // Contact resolution not critical - will fall back to phone numbers
+      }
+    }
+  } else {
+    startConversationPolling();
+  }
   
+  const FOCUS_STALE_MS = 60000; // Only re-fetch if >60s since last fetch
   const handleFocus = () => {
     conversationsStore.isWindowFocused = true;
-    fetchConversations(true);
+    const elapsed = Date.now() - conversationsStore.lastConversationFetchTime;
+    if (elapsed > FOCUS_STALE_MS) {
+      fetchConversations(true);
+    }
     if (conversationsStore.selectedChatId) pollMessages();
   };
   const handleBlur = () => {

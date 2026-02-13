@@ -1,34 +1,16 @@
 """Speculative prefetching system for near-instant responses.
 
-This module provides intelligent prediction and caching to minimize
-perceived latency in the JARVIS assistant.
-
 Components:
-- cache: Multi-tier caching system (L1/L2/L3)
+- cache: Simple in-memory TTL cache
 - predictor: Prediction strategies for speculative prefetching
 - executor: Background prefetch execution with resource management
-- invalidation: Smart cache invalidation
+- invalidation: Cache invalidation on new messages
 
 Usage:
-    from jarvis.prefetch import (
-        get_cache,
-        get_predictor,
-        get_executor,
-        get_invalidator,
-        PrefetchManager,
-    )
+    from jarvis.prefetch import PrefetchManager, get_prefetch_manager
 
-    # Use the unified manager
-    manager = PrefetchManager()
+    manager = get_prefetch_manager()
     manager.start()
-
-    # Or use individual components
-    cache = get_cache()
-    predictor = get_predictor()
-    executor = get_executor()
-    invalidator = get_invalidator()
-
-Metrics target: 80% cache hit rate, 10x perceived latency improvement.
 """
 
 from __future__ import annotations
@@ -47,6 +29,7 @@ from jarvis.prefetch.cache import (
     L2Cache,
     L3Cache,
     MultiTierCache,
+    PrefetchCache,
     get_cache,
     reset_cache,
 )
@@ -91,7 +74,12 @@ from jarvis.prefetch.predictor import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    # Primary public API
+    "PrefetchManager",
+    "get_prefetch_manager",
+    "reset_prefetch_manager",
     # Cache
+    "PrefetchCache",
     "CacheEntry",
     "CacheError",
     "CacheStats",
@@ -136,10 +124,6 @@ __all__ = [
     "InvalidationStats",
     "get_invalidator",
     "reset_invalidator",
-    # Manager
-    "PrefetchManager",
-    "get_prefetch_manager",
-    "reset_prefetch_manager",
 ]
 
 
@@ -170,14 +154,6 @@ class PrefetchManager:
         warmup_on_start: bool = True,  # Run startup warmup
         startup_delay: float = 10.0,  # Delay before first prediction cycle
     ) -> None:
-        """Initialize the prefetch manager.
-
-        Args:
-            prediction_interval: Seconds between prediction cycles.
-            cleanup_interval: Seconds between cache cleanup.
-            warmup_on_start: Whether to run startup warming.
-            startup_delay: Seconds to wait before first prediction cycle.
-        """
         self._cache = get_cache()
         self._predictor = get_predictor()
         self._executor = get_executor()
@@ -231,11 +207,7 @@ class PrefetchManager:
             logger.info("Prefetch manager started")
 
     def stop(self, timeout: float = 5.0) -> None:
-        """Stop the prefetch system.
-
-        Args:
-            timeout: Maximum seconds to wait for shutdown.
-        """
+        """Stop the prefetch system."""
         with self._lock:
             if not self._running:
                 return
@@ -258,13 +230,7 @@ class PrefetchManager:
         logger.info("Prefetch manager stopped")
 
     def on_message(self, chat_id: str, text: str, is_from_me: bool = False) -> None:
-        """Handle new message event.
-
-        Args:
-            chat_id: Chat identifier.
-            text: Message text.
-            is_from_me: Whether message was from user.
-        """
+        """Handle new message event."""
         self._last_activity_time = time.time()
 
         # Update predictor
@@ -280,11 +246,7 @@ class PrefetchManager:
             self._executor.schedule_batch(high_priority)
 
     def on_focus(self, chat_id: str) -> None:
-        """Handle UI focus event.
-
-        Args:
-            chat_id: Chat identifier.
-        """
+        """Handle UI focus event."""
         self._last_activity_time = time.time()
         self._predictor.record_focus(chat_id)
 
@@ -294,46 +256,22 @@ class PrefetchManager:
         self._executor.schedule_batch(critical)
 
     def on_hover(self, chat_id: str) -> None:
-        """Handle UI hover event.
-
-        Args:
-            chat_id: Chat identifier.
-        """
+        """Handle UI hover event."""
         self._last_activity_time = time.time()
         self._predictor.record_hover(chat_id)
 
     def on_search(self, query: str) -> None:
-        """Handle search event.
-
-        Args:
-            query: Search query.
-        """
+        """Handle search event."""
         self._last_activity_time = time.time()
         self._predictor.record_search(query)
 
     def get(self, key: str) -> Any | None:
-        """Get cached value.
-
-        Args:
-            key: Cache key.
-
-        Returns:
-            Cached value or None.
-        """
-        # Record access for prediction
+        """Get cached value."""
         self._predictor.record_access(key)
         return self._cache.get(key)
 
     def get_draft(self, chat_id: str) -> dict[str, Any] | None:
-        """Get prefetched draft for a chat.
-
-        Args:
-            chat_id: Chat identifier.
-
-        Returns:
-            Draft data or None if not prefetched.
-        """
-        # Try multiple possible keys
+        """Get prefetched draft for a chat."""
         for prefix in ["draft:focus:", "draft:cont:", "draft:tod:", "draft:"]:
             result = self._cache.get(f"{prefix}{chat_id}")
             if result is not None:
@@ -341,48 +279,19 @@ class PrefetchManager:
         return None
 
     def get_embedding(self, chat_id: str) -> dict[str, Any] | None:
-        """Get prefetched embeddings for a chat.
-
-        Args:
-            chat_id: Chat identifier.
-
-        Returns:
-            Embedding data or None if not prefetched.
-        """
+        """Get prefetched embeddings for a chat."""
         return self._cache.get(f"embed:ctx:{chat_id}")
 
     def get_contact(self, chat_id: str) -> dict[str, Any] | None:
-        """Get prefetched contact profile.
-
-        Args:
-            chat_id: Chat identifier.
-
-        Returns:
-            Contact data or None if not prefetched.
-        """
+        """Get prefetched contact profile."""
         return self._cache.get(f"contact:{chat_id}")
 
     def schedule_prefetch(self, prediction: Prediction) -> bool:
-        """Manually schedule a prefetch.
-
-        Args:
-            prediction: Prediction to prefetch.
-
-        Returns:
-            True if scheduled.
-        """
+        """Manually schedule a prefetch."""
         return self._executor.schedule(prediction)
 
     def invalidate(self, chat_id: str | None = None, tags: list[str] | None = None) -> int:
-        """Manually invalidate cache entries.
-
-        Args:
-            chat_id: Chat ID to invalidate.
-            tags: Tags to invalidate.
-
-        Returns:
-            Number of entries invalidated.
-        """
+        """Manually invalidate cache entries."""
         keys = []
         all_tags = tags or []
 
@@ -399,6 +308,14 @@ class PrefetchManager:
             all_tags.append(f"chat:{chat_id}")
 
         return self._invalidator.manual_invalidate(keys=keys, tags=all_tags)
+
+    def pause(self) -> None:
+        """Pause prefetch execution (prevents new GPU work from starting)."""
+        self._executor.pause()
+
+    def resume(self) -> None:
+        """Resume prefetch execution."""
+        self._executor.resume()
 
     def stats(self) -> dict[str, Any]:
         """Get comprehensive statistics."""
@@ -453,7 +370,6 @@ class PrefetchManager:
         """Background cleanup loop."""
         while not self._shutdown_event.is_set():
             try:
-                # Cleanup expired entries
                 count = self._invalidator.cleanup_expired()
                 if count > 0:
                     logger.debug(f"Cleaned up {count} expired entries")
@@ -468,7 +384,6 @@ class PrefetchManager:
         """Run startup warming sequence."""
         logger.info("Running startup warmup...")
 
-        # Schedule model warming
         warmup_predictions = [
             Prediction(
                 type=PredictionType.MODEL_WARM,

@@ -166,9 +166,9 @@ class TestPrefetchPipelineFlow:
             assert call_kwargs["chat_id"] == "chat123"
             assert "conversation_messages" in call_kwargs
 
-            # Verify cache stats
+            # Verify cache stats (flat dict, not nested by tier)
             stats = cache.stats()
-            assert stats["hits"]["l1"] > 0 or stats["l1"]["entries"] > 0
+            assert stats["hits"] > 0 or stats["entries"] > 0
 
         finally:
             executor.stop(timeout=2.0)
@@ -542,8 +542,8 @@ class TestPrefetchPipelineFlow:
             result = cache.get(high_pred.key)
             assert result is not None, "High priority should be cached"
 
-            # L1 should have at least one entry (the high priority one)
-            assert stats["l1"]["entries"] > 0, "High priority should go to L1"
+            # Cache should have at least one entry (the high priority one)
+            assert stats["entries"] > 0, "High priority should be cached"
 
         finally:
             executor.stop(timeout=2.0)

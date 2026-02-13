@@ -39,13 +39,7 @@ import type {
   CustomTemplateUpdateRequest,
   CustomTemplateUsageStats,
   DetectedEvent,
-  DigestExportRequest,
-  DigestExportResponse,
-  DigestGenerateRequest,
-  DigestPreferences,
-  DigestPreferencesUpdateRequest,
-  DigestResponse,
-  DownloadStatus,
+DownloadStatus,
   DraftReplyResponse,
   Experiment,
   ExperimentListResponse,
@@ -234,7 +228,7 @@ class ApiClient {
     if (socketReady) {
       try {
         const result = await jarvis.ping();
-        return { status: result.status };
+        return { status: result.status as string };
       } catch {
         // Fall through to HTTP
       }
@@ -1140,61 +1134,6 @@ class ApiClient {
    */
   getAttachmentUrl(filePath: string): string {
     return `${this.baseUrl}/attachments/file?file_path=${encodeURIComponent(filePath)}`;
-  }
-
-  // Digest endpoints
-  async generateDigest(
-    options: DigestGenerateRequest = {},
-    signal?: AbortSignal
-  ): Promise<DigestResponse> {
-    const body = {
-      period: options.period ?? "daily",
-      end_date: options.end_date || null,
-    };
-
-    return this.request<DigestResponse>("/digest/generate", {
-      method: "POST",
-      body: JSON.stringify(body),
-      ...(signal ? { signal } : {}),
-    });
-  }
-
-  async getDailyDigest(signal?: AbortSignal): Promise<DigestResponse> {
-    return this.request<DigestResponse>("/digest/daily", signal ? { signal } : {});
-  }
-
-  async getWeeklyDigest(signal?: AbortSignal): Promise<DigestResponse> {
-    return this.request<DigestResponse>("/digest/weekly", signal ? { signal } : {});
-  }
-
-  async exportDigest(
-    options: DigestExportRequest = {},
-    signal?: AbortSignal
-  ): Promise<DigestExportResponse> {
-    const body = {
-      period: options.period ?? "daily",
-      format: options.format ?? "markdown",
-      end_date: options.end_date || null,
-    };
-
-    return this.request<DigestExportResponse>("/digest/export", {
-      method: "POST",
-      body: JSON.stringify(body),
-      ...(signal ? { signal } : {}),
-    });
-  }
-
-  async getDigestPreferences(): Promise<DigestPreferences> {
-    return this.request<DigestPreferences>("/digest/preferences");
-  }
-
-  async updateDigestPreferences(
-    settings: DigestPreferencesUpdateRequest
-  ): Promise<DigestPreferences> {
-    return this.request<DigestPreferences>("/digest/preferences", {
-      method: "PUT",
-      body: JSON.stringify(settings),
-    });
   }
 
   // Feedback endpoints

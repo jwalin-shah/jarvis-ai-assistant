@@ -64,8 +64,15 @@ def router(
     mock_db: MagicMock,
     mock_generator: MagicMock,
 ) -> ReplyRouter:
-    """Create a ReplyRouter with all mocked dependencies."""
+    """Create a ReplyRouter with all mocked dependencies.
+
+    The router uses get_reply_service() singleton internally, so we inject
+    a ReplyService wired to our mock generator directly.
+    """
+    from jarvis.reply_service import ReplyService
+
     r = ReplyRouter(db=mock_db, generator=mock_generator)
+    r._reply_service = ReplyService(db=mock_db, generator=mock_generator)
     return r
 
 
@@ -285,7 +292,7 @@ class TestRouteGeneratePath:
 
         with (
             patch.object(router.context_service, "search_examples", return_value=search_results),
-            patch("models.reranker.get_reranker", return_value=mock_reranker),
+            patch("models.cross_encoder.get_reranker", return_value=mock_reranker),
         ):
             result = router.route("want to grab coffee?")
 

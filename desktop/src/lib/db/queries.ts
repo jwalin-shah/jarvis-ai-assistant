@@ -120,6 +120,44 @@ export function getMessagesQuery(options: {
 }
 
 /**
+ * Query to get messages using chat ROWID directly (skips chat JOIN).
+ * Used when chatGuidToRowid cache is populated from getConversations().
+ */
+export function getMessagesQueryDirect(options: {
+  withBeforeFilter?: boolean;
+}): string {
+  const beforeFilter = options.withBeforeFilter ? "AND message.date < ?" : "";
+
+  return `
+    SELECT
+      message.ROWID as id,
+      message.guid,
+      COALESCE(handle.id, 'me') as sender,
+      CASE
+        WHEN message.text IS NOT NULL AND message.text != ''
+        THEN message.text
+        ELSE NULL
+      END as text,
+      message.attributedBody,
+      message.date as date,
+      message.is_from_me,
+      message.thread_originator_guid as reply_to_guid,
+      message.date_delivered,
+      message.date_read,
+      message.group_action_type,
+      affected_handle.id as affected_handle_id
+    FROM message
+    JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+    LEFT JOIN handle ON message.handle_id = handle.ROWID
+    LEFT JOIN handle AS affected_handle ON message.other_handle = affected_handle.ROWID
+    WHERE chat_message_join.chat_id = ?
+    ${beforeFilter}
+    ORDER BY message.date DESC
+    LIMIT ?
+  `;
+}
+
+/**
  * Query to get attachments for a message
  */
 export const ATTACHMENTS_QUERY = `
@@ -248,7 +286,12 @@ export function normalizePhoneNumber(phone: string | null): string | null {
 
   if (!digits) return null;
 
-  return hasPlus ? `+${digits}` : digits;
+  // Match backend normalization: add +1 for US numbers
+  if (hasPlus) return `+${digits}`;
+  if (digits.startsWith("1") && digits.length === 11) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+
+  return digits;
 }
 
 /**

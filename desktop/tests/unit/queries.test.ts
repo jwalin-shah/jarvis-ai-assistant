@@ -246,16 +246,16 @@ describe("normalizePhoneNumber", () => {
     expect(normalizePhoneNumber("+1 (408) 555-1234")).toBe("+14085551234");
   });
 
-  it('strips formatting from "408-555-1234"', () => {
-    expect(normalizePhoneNumber("408-555-1234")).toBe("4085551234");
+  it('normalizes 10-digit US number to E.164', () => {
+    expect(normalizePhoneNumber("408-555-1234")).toBe("+14085551234");
   });
 
   it("preserves leading + when present", () => {
     expect(normalizePhoneNumber("+44 20 7946 0958")).toBe("+442079460958");
   });
 
-  it("does not add + when absent", () => {
-    expect(normalizePhoneNumber("(650) 555-0100")).toBe("6505550100");
+  it("normalizes 10-digit US number with parens to E.164", () => {
+    expect(normalizePhoneNumber("(650) 555-0100")).toBe("+16505550100");
   });
 
   it("lowercases email addresses", () => {
