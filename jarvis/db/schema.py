@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS contact_facts (
     valid_from TIMESTAMP,                    -- when fact became true (v14+)
     valid_until TIMESTAMP,                   -- when fact stopped being true (v14+)
     attribution TEXT DEFAULT 'contact',      -- who fact is about: contact/user/third_party (v16+)
+    segment_id INTEGER,                      -- FK to conversation_segments(id) (v17+)
     UNIQUE(contact_id, category, subject, predicate)
 );
 
@@ -205,6 +206,40 @@ CREATE INDEX IF NOT EXISTS idx_facts_contact ON contact_facts(contact_id);
 CREATE INDEX IF NOT EXISTS idx_facts_category ON contact_facts(category);
 CREATE INDEX IF NOT EXISTS idx_facts_linked_contact ON contact_facts(linked_contact_id);
 CREATE INDEX IF NOT EXISTS idx_facts_lookup ON contact_facts(contact_id, predicate, subject);
+
+-- Persistent topic segments (v17+)
+CREATE TABLE IF NOT EXISTS conversation_segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    segment_id TEXT UNIQUE NOT NULL,
+    chat_id TEXT NOT NULL,
+    contact_id TEXT,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    topic_label TEXT,
+    keywords_json TEXT,
+    entities_json TEXT,
+    message_count INTEGER NOT NULL,
+    confidence REAL DEFAULT 1.0,
+    vec_chunk_rowid INTEGER,
+    facts_extracted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS segment_messages (
+    segment_id INTEGER NOT NULL REFERENCES conversation_segments(id),
+    message_rowid INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    is_from_me BOOLEAN NOT NULL,
+    PRIMARY KEY (segment_id, message_rowid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_segments_chat ON conversation_segments(chat_id);
+CREATE INDEX IF NOT EXISTS idx_segments_chat_time
+    ON conversation_segments(chat_id, start_time DESC);
+CREATE INDEX IF NOT EXISTS idx_segments_segment_id ON conversation_segments(segment_id);
+CREATE INDEX IF NOT EXISTS idx_segments_contact ON conversation_segments(contact_id);
+CREATE INDEX IF NOT EXISTS idx_segmsg_message ON segment_messages(message_rowid);
 
 -- Indexes for scheduling tables
 CREATE INDEX IF NOT EXISTS idx_scheduled_contact ON scheduled_drafts(contact_id);
@@ -241,9 +276,15 @@ EXPECTED_INDICES = {
     # Contact facts indexes (v12+)
     "idx_facts_contact",
     "idx_facts_category",
+    # Segment indexes (v17+)
+    "idx_segments_chat",
+    "idx_segments_chat_time",
+    "idx_segments_segment_id",
+    "idx_segments_contact",
+    "idx_segmsg_message",
 }
 
-CURRENT_SCHEMA_VERSION = 16  # attribution column on contact_facts
+CURRENT_SCHEMA_VERSION = 17  # conversation_segments + segment_messages tables
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {
@@ -270,6 +311,8 @@ VALID_MIGRATION_COLUMNS = {
     "linked_contact_id",
     # v16: attribution
     "attribution",
+    # v17: segment traceability
+    "segment_id",
 }
 
 # Allowlist of valid column types for ALTER TABLE migrations

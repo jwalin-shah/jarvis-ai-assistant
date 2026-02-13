@@ -181,8 +181,10 @@ def extract_segments(
 
             # Batch index all eligible segments (single connection + executemany)
             if eligible_segments:
-                stats.segments_indexed += vec_searcher.index_segments(
-                    eligible_segments, contact_id, conv.chat_id
+                stats.segments_indexed += len(
+                    vec_searcher.index_segments(
+                        eligible_segments, contact_id, conv.chat_id
+                    )
                 )
 
             stats.conversations_processed += 1

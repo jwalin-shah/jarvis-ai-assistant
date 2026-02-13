@@ -102,6 +102,8 @@ class ContextService:
         """Search vec_chunks for similar conversation segments.
 
         Returns chunks with trigger/response text for few-shot prompting.
+        When segment data is available, enriches results with full segment
+        context (all message ROWIDs for coreference-preserving RAG).
 
         Args:
             embedder: Optional embedder override (e.g. CachedEmbedder) to avoid
@@ -112,8 +114,44 @@ class ContextService:
             if not searcher:
                 return []
 
+            # Try segment-aware search first for richer context
+            try:
+                segment_results = searcher.search_with_full_segments(
+                    query=incoming,
+                    limit=5,
+                    contact_id=contact_id,
+                    embedder=embedder,
+                )
+                if segment_results:
+                    exchanges = []
+                    for r in segment_results:
+                        if r.get("trigger_text") and r.get("response_text"):
+                            entry = {
+                                "trigger_text": r["trigger_text"],
+                                "response_text": r["response_text"],
+                                "similarity": r["score"],
+                                "topic": r.get("topic"),
+                            }
+                            # Include segment metadata if available
+                            if "segment" in r:
+                                entry["segment"] = r["segment"]
+                            exchanges.append(entry)
+
+                    if exchanges:
+                        # Cross-encoder reranking
+                        if self._reranker is not None and len(exchanges) > 1:
+                            exchanges = self._reranker.rerank(
+                                query=incoming,
+                                candidates=exchanges,
+                                text_key="trigger_text",
+                                top_k=3,
+                            )
+                        return exchanges
+            except Exception:
+                pass  # Fall through to standard search
+
+            # Standard search path (no segment data)
             if contact_id is not None:
-                # Fast path: partition-filtered search (~0.2ms)
                 results = searcher.search_with_pairs(
                     query=incoming,
                     limit=5,
@@ -121,7 +159,6 @@ class ContextService:
                     embedder=embedder,
                 )
             else:
-                # Global search: hamming pre-filter via vec_binary (~5ms)
                 results = searcher.search_with_pairs_global(
                     query=incoming,
                     limit=5,

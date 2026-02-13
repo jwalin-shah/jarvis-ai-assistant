@@ -234,6 +234,24 @@ _MIGRATIONS: list[tuple[int, bool, Any]] = [
 ]
 
 
+def _migrate_v16_to_v17(conn: sqlite3.Connection) -> None:
+    """Migration v16 -> v17: Add conversation_segments tables and segment_id column."""
+    # Tables are created by SCHEMA_SQL; only need ALTER for existing contact_facts
+    try:
+        conn.execute("ALTER TABLE contact_facts ADD COLUMN segment_id INTEGER")
+        logger.info("Added segment_id column to contact_facts table")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            logger.debug("segment_id column already exists")
+        else:
+            logger.error("Migration v16->v17 failed: %s", e)
+            raise
+
+
+# Append v16->v17 migration after function definition
+_MIGRATIONS.append((16, True, _migrate_v16_to_v17))
+
+
 class JarvisDBBase:
     """Base class for JARVIS database with connection management and schema init.
 
@@ -495,6 +513,7 @@ class JarvisDBBase:
                 "valid_from": "TIMESTAMP",
                 "valid_until": "TIMESTAMP",
                 "attribution": "TEXT DEFAULT 'contact'",
+                "segment_id": "INTEGER",
             }
 
             for col_name, col_type in required_columns.items():
