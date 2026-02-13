@@ -140,7 +140,7 @@ data/*.md
 !data/README.md
 
 # Local archives and generated review outputs
-archive/
+/archive/
 tools/multi-agent/outputs/
 tasks/sessions/
 tasks/*.md
