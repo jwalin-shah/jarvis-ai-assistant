@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS pairs (
     UNIQUE(trigger_msg_id, response_msg_id)
 );
 
--- Heavy artifacts for pairs (split table to keep pairs lean)
+-- [LEGACY] Heavy artifacts for pairs (split table to keep pairs lean)
+-- DEPRECATED: Use conversation_segments instead.
 CREATE TABLE IF NOT EXISTS pair_artifacts (
     pair_id INTEGER PRIMARY KEY REFERENCES pairs(id),
     context_json TEXT,                -- Structured context window (JSON list of messages)
@@ -85,7 +86,8 @@ CREATE TABLE IF NOT EXISTS pair_artifacts (
     raw_response_text TEXT            -- Original text before normalization
 );
 
--- Clustered intent groups (optional, for later analytics)
+-- [LEGACY] Clustered intent groups (optional, for later analytics)
+-- DEPRECATED: Cluster labels are now part of conversation_segments.
 CREATE TABLE IF NOT EXISTS clusters (
     id INTEGER PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,        -- 'INVITATION', 'GREETING', 'SCHEDULE'
@@ -95,8 +97,8 @@ CREATE TABLE IF NOT EXISTS clusters (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Links pairs to vector index positions (keyed by pair_id for stability)
--- Note: faiss_id column name is legacy; now backed by sqlite-vec
+-- [LEGACY] Links pairs to vector index positions (keyed by pair_id for stability)
+-- DEPRECATED: Use vec_chunks instead.
 CREATE TABLE IF NOT EXISTS pair_embeddings (
     pair_id INTEGER PRIMARY KEY REFERENCES pairs(id),
     faiss_id INTEGER UNIQUE,          -- position in vector index (legacy name)
