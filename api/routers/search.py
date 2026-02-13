@@ -28,27 +28,28 @@ _searcher_lock = threading.Lock()
 _cache_ops_lock = threading.Lock()
 
 
-def _get_searcher(reader: ChatDBReader, threshold: float) -> SemanticSearcher:
+def _get_searcher(reader: ChatDBReader, threshold: float) -> tuple[SemanticSearcher, float]:
     """Get or create singleton SemanticSearcher instance.
 
     Reuses searcher across requests to avoid repeated model loading.
     Creates a dedicated reader with a limited connection pool (max 2 connections)
     to avoid unbounded pool growth from the singleton's long lifetime.
-    Threshold is applied per-request, not baked into the singleton.
+
+    Returns the searcher and the threshold separately to avoid mutating
+    shared state under concurrent requests (threshold is per-request).
 
     Args:
         reader: iMessage database reader (used only for first creation)
-        threshold: Similarity threshold (applied per-request)
+        threshold: Similarity threshold (returned for per-request use)
 
     Returns:
-        SemanticSearcher instance with updated threshold
+        Tuple of (SemanticSearcher instance, threshold)
     """
     global _searcher_instance
 
     # Fast path: skip lock if already initialized (double-check locking)
     if _searcher_instance is not None:
-        _searcher_instance.similarity_threshold = threshold
-        return _searcher_instance
+        return _searcher_instance, threshold
 
     with _searcher_lock:
         if _searcher_instance is None:
@@ -59,7 +60,7 @@ def _get_searcher(reader: ChatDBReader, threshold: float) -> SemanticSearcher:
                 reader=dedicated_reader,
                 similarity_threshold=threshold,
             )
-    return _searcher_instance
+    return _searcher_instance, threshold
 
 
 class SemanticSearchRequest(BaseModel):
@@ -368,7 +369,8 @@ async def semantic_search(
     def _do_search() -> list[Any]:
         """Perform blocking search operation in thread pool."""
         # Use singleton searcher for resource reuse
-        searcher = _get_searcher(reader, request.threshold)
+        searcher, threshold = _get_searcher(reader, request.threshold)
+        searcher.similarity_threshold = threshold
         return searcher.search(
             query=request.query,
             filters=search_filters,
