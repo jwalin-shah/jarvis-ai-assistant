@@ -328,6 +328,11 @@ class JarvisSocket {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
+    // Reject all pending requests when cleanup stops (e.g., on disconnect)
+    for (const [_requestId, pending] of this.wsPendingRequests) {
+      pending.reject(new Error("WebSocket cleanup stopped"));
+    }
+    this.wsPendingRequests.clear();
   }
 
   /**
