@@ -76,10 +76,7 @@ def _get_default_db_path() -> Path:
     return get_embeddings_db_path()
 
 
-# Use bge-small-en-v1.5 via unified adapter for consistency
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-EMBEDDING_DIM = 384  # Dimension for bge-small-en-v1.5
-BATCH_SIZE = 100  # Batch size for embedding computation
+from jarvis.embedding_adapter import EMBEDDING_DIM, EMBEDDING_MODEL, MLX_BATCH_SIZE as BATCH_SIZE
 MIN_TEXT_LENGTH = 3  # Minimum text length to embed
 # Schema version - bump when changing embedding model to invalidate cache
 SCHEMA_VERSION = 2
