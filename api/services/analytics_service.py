@@ -106,19 +106,32 @@ def build_timeline_from_counts(
     return []
 
 
+def _capped_message_stream(
+    reader: ChatDBReader,
+    time_range_start: datetime | None,
+    per_conversation_limit: int = 500,
+    max_total: int = 50_000,
+) -> list[Any]:
+    """Collect messages across conversations with a total cap to prevent OOM on 8GB systems."""
+    messages: list[Any] = []
+    conversations = reader.get_conversations(limit=200)
+    for conv in conversations:
+        batch = reader.get_messages(
+            conv.chat_id, limit=per_conversation_limit, after=time_range_start
+        )
+        messages.extend(batch)
+        if len(messages) >= max_total:
+            break
+    return messages
+
+
 def fetch_overview_data(
     reader: ChatDBReader,
     time_range: TimeRangeEnum,
     time_range_start: datetime | None,
 ) -> dict[str, Any]:
     """Fetch and compute overview analytics data (blocking I/O)."""
-
-    def message_stream() -> Iterator[Any]:
-        conversations = reader.get_conversations(limit=200)
-        for conv in conversations:
-            yield from reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
-
-    all_messages = list(message_stream())
+    all_messages = _capped_message_stream(reader, time_range_start)
 
     engine = get_analytics_engine()
     overview = engine.compute_overview(all_messages)
@@ -503,13 +516,7 @@ def fetch_export_data(
     report_gen = get_report_generator()
 
     if export_format == "csv":
-
-        def message_stream() -> Iterator[Any]:
-            conversations = reader.get_conversations(limit=200)
-            for conv in conversations:
-                yield from reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
-
-        all_messages = list(message_stream())
+        all_messages = _capped_message_stream(reader, time_range_start)
         csv_exports = report_gen.export_to_csv(all_messages)
         daily_csv = csv_exports.get("daily_analytics.csv", "")
         del all_messages
