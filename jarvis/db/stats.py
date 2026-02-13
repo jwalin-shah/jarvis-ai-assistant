@@ -37,18 +37,18 @@ class StatsMixin:
                 SELECT
                     (SELECT COUNT(*) FROM contacts) as contacts,
                     (SELECT COUNT(*) FROM conversation_segments) as chunks,
-                    (SELECT COUNT(*) FROM pairs) as pairs,
-                    (SELECT COUNT(*) FROM pairs WHERE quality_score >= 0.5) as pairs_quality,
-                    (SELECT COUNT(*) FROM clusters) as clusters,
-                    (SELECT COUNT(*) FROM pair_embeddings) as embeddings
+                    (SELECT COUNT(*) FROM pairs) as legacy_pairs,
+                    (SELECT COUNT(*) FROM pairs WHERE quality_score >= 0.5) as legacy_pairs_quality,
+                    (SELECT COUNT(*) FROM clusters) as legacy_clusters,
+                    (SELECT COUNT(*) FROM pair_embeddings) as legacy_embeddings
                 """
             ).fetchone()
             stats["contacts"] = row["contacts"]
             stats["chunks"] = row["chunks"]
-            stats["pairs"] = row["pairs"]
-            stats["pairs_quality_gte_50"] = row["pairs_quality"]
-            stats["clusters"] = row["clusters"]
-            stats["embeddings"] = row["embeddings"]
+            stats["legacy_pairs"] = row["legacy_pairs"]
+            stats["legacy_pairs_quality_gte_50"] = row["legacy_pairs_quality"]
+            stats["legacy_clusters"] = row["legacy_clusters"]
+            stats["legacy_embeddings"] = row["legacy_embeddings"]
 
             # Active index
             idx_row = conn.execute(

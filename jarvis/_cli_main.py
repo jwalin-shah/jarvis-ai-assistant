@@ -723,8 +723,8 @@ def _cmd_db_stats(args: argparse.Namespace) -> int:
 
     overview.add_row("Contacts", str(stats["contacts"]))
     overview.add_row("Chunks (topic segments)", str(stats.get("chunks", 0)))
-    overview.add_row("Legacy pairs", str(stats.get("pairs", 0)))
-    overview.add_row("Embeddings", str(stats["embeddings"]))
+    overview.add_row("Legacy pairs", str(stats.get("legacy_pairs", 0)))
+    overview.add_row("Legacy embeddings", str(stats.get("legacy_embeddings", 0)))
 
     console.print(overview)
 

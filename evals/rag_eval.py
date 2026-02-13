@@ -125,8 +125,8 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
         query = tc["last_message"]
         name = tc["name"]
 
-        # Retrieve similar pairs
-        search_results = searcher.search_with_pairs_global(query=query, limit=3)
+        # Retrieve similar chunks
+        search_results = searcher.search_with_chunks_global(query=query, limit=3)
 
         triggers = []
         vec_scores = []
@@ -208,7 +208,7 @@ def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationRes
         reply_no_rag = result_no_rag.text.strip()
 
         # --- With RAG: add retrieved examples to prompt ---
-        search_results = searcher.search_with_pairs_global(query=query, limit=3)
+        search_results = searcher.search_with_chunks_global(query=query, limit=3)
         rag_examples = ""
         for sr in search_results:
             if sr.trigger_text and sr.response_text:
