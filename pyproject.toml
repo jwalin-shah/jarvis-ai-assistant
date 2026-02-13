@@ -101,7 +101,6 @@ coref = [
 
 [project.scripts]
 jarvis = "jarvis._cli_main:run"
-jarvis-tools = "jarvis.tools.cli:run"
 
 [project.urls]
 Homepage = "https://github.com/jwalinshah/jarvis-ai-assistant"
@@ -130,7 +129,6 @@ ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
 "scripts/train_*.py" = ["N803", "N806"]
 "scripts/label_*.py" = ["N803", "N806"]
 "scripts/eval_*.py" = ["N806"]
-"jarvis/tools/**/*.py" = ["N803", "N806"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -139,7 +137,7 @@ warn_return_any = true
 warn_unused_ignores = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "tests/tools/unit", "tests/tools/integration", "tests/tools/e2e"]
+testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 addopts = "-v --doctest-modules --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing -m 'not benchmark'"
@@ -155,7 +153,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["jarvis", "api", "models", "core", "integrations", "contracts", "benchmarks", "jarvis/tools"]
+source = ["jarvis", "api", "models", "core", "integrations", "contracts", "benchmarks"]
 omit = ["tests/*", "*/test_*.py"]
 
 [tool.coverage.report]

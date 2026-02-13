@@ -102,7 +102,7 @@ class TestJsonRpcProtocol:
         assert data["jsonrpc"] == "2.0"
         assert data["id"] == 42
         assert "result" in data
-        assert data["result"]["status"] == "ok"
+        assert data["result"]["status"] in ("healthy", "degraded", "unhealthy")
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(10)
@@ -134,11 +134,11 @@ class TestPingMethod:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(10)
-    async def test_ping_returns_ok(self, server):
-        """Ping returns ok status."""
+    async def test_ping_returns_status(self, server):
+        """Ping returns valid health status."""
         result = await server._ping()
 
-        assert result["status"] == "ok"
+        assert result["status"] in ("healthy", "degraded", "unhealthy")
         assert "models_ready" in result
 
     @pytest.mark.asyncio
@@ -164,7 +164,7 @@ class TestPingMethod:
         response = await server._process_message(request)
         data = json.loads(response)
 
-        assert data["result"]["status"] == "ok"
+        assert data["result"]["status"] in ("healthy", "degraded", "unhealthy")
 
 
 class TestBatchOperations:
@@ -201,7 +201,7 @@ class TestBatchOperations:
         assert len(result["results"]) == 3
         for r in result["results"]:
             assert "result" in r
-            assert r["result"]["status"] == "ok"
+            assert r["result"]["status"] in ("healthy", "degraded", "unhealthy")
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(10)

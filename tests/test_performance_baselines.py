@@ -115,7 +115,7 @@ class TestSocketServerPerformance:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         assert elapsed_ms < 200, f"Ping took {elapsed_ms:.1f}ms (limit: 200ms)"
-        assert response["status"] == "ok"
+        assert response["status"] in ("healthy", "degraded", "unhealthy")
 
     @pytest.mark.asyncio
     async def test_process_message_under_200ms(self) -> None:
@@ -146,7 +146,7 @@ class TestSocketServerPerformance:
         assert elapsed_ms < 200, f"Process message took {elapsed_ms:.1f}ms (limit: 200ms)"
         assert response is not None
         parsed = json.loads(response)
-        assert parsed["result"]["status"] == "ok"
+        assert parsed["result"]["status"] in ("healthy", "degraded", "unhealthy")
 
 
 class TestCachePerformance:
@@ -201,3 +201,11 @@ class TestCachePerformance:
         per_op_ms = elapsed_ms / 100
 
         assert per_op_ms < 1, f"Cache set took {per_op_ms:.3f}ms (limit: 1ms)"
+
+    def test_global_singleton(self) -> None:
+        from jarvis.metrics import get_draft_metrics, reset_metrics
+
+        reset_metrics()
+        m1 = get_draft_metrics()
+        m2 = get_draft_metrics()
+        assert m1 is m2

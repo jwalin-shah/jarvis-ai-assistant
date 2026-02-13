@@ -270,19 +270,3 @@ class TestRateLimiter:
         # client2 should still be allowed
         assert limiter.is_allowed("client2") is True
 
-    def test_rate_limiter_cleanup(self):
-        """cleanup() removes stale entries."""
-        from jarvis.socket_server import RateLimiter
-
-        limiter = RateLimiter(max_requests=100, window_seconds=1.0)
-        limiter.is_allowed("client1")
-        assert "client1" in limiter._buckets
-
-        # Simulate time passing
-        import time as _time
-
-        limiter._buckets["client1"][1] = _time.monotonic() - 20.0
-        limiter._buckets["client1"][0] = 100.0  # Full bucket
-
-        limiter.cleanup()
-        assert "client1" not in limiter._buckets

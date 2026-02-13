@@ -268,9 +268,18 @@
     }
   }
 
+  let searchResultsRef: HTMLDivElement | null = null;
+
   function scrollSelectedIntoView() {
-    const element = document.querySelector(`[data-result-index="${selectedIndex}"]`);
-    element?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const element = document.querySelector(`[data-result-index="${selectedIndex}"]`) as HTMLElement | null;
+    if (!element || !searchResultsRef) return;
+    const containerRect = searchResultsRef.getBoundingClientRect();
+    const itemRect = element.getBoundingClientRect();
+    if (itemRect.bottom > containerRect.bottom) {
+      searchResultsRef.scrollTop += itemRect.bottom - containerRect.bottom;
+    } else if (itemRect.top < containerRect.top) {
+      searchResultsRef.scrollTop -= containerRect.top - itemRect.top;
+    }
   }
 
   async function handleResultClick(message: Message) {
@@ -388,7 +397,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="search-overlay" onclick={handleOverlayClick} role="presentation">
   <!-- svelte-ignore a11y_interactive_supports_focus -->
-  <div class="search-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Global Search">
+  <div class="search-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Global Search" aria-modal="true">
     <div class="search-header">
       <div class="search-input-wrapper">
         {#if searchMode === "semantic"}
@@ -512,7 +521,7 @@
       </div>
     {/if}
 
-    <div class="search-results">
+    <div class="search-results" bind:this={searchResultsRef}>
       {#if searchState === "idle"}
         <div class="empty-state">
           {#if searchMode === "semantic"}
@@ -645,7 +654,7 @@
     align-items: flex-start;
     justify-content: center;
     padding-top: 10vh;
-    z-index: 1000;
+    z-index: var(--z-modal-backdrop);
     animation: fadeIn 0.15s ease;
   }
 

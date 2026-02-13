@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS contact_style_targets (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Extracted message pairs from history (lean table)
+-- [LEGACY] Extracted message pairs from history (lean table)
+-- DEPRECATED: Use conversation_segments instead.
 CREATE TABLE IF NOT EXISTS pairs (
     id INTEGER PRIMARY KEY,
     contact_id INTEGER REFERENCES contacts(id),

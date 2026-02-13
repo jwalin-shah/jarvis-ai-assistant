@@ -51,16 +51,23 @@ def test_mlx_embedding_quality():
 
     embedder = get_embedder()
 
-    # Test semantic similarity
-    emb1 = embedder.encode("king")
-    emb2 = embedder.encode("queen")
-    emb3 = embedder.encode("apple")
+    # Test semantic similarity using cosine similarity on full sentences
+    # (single words like "king"/"queen" are too short for BERT to distinguish well)
+    emb1 = embedder.encode("The weather is sunny and warm today").flatten()
+    emb2 = embedder.encode("It's a beautiful day with clear skies").flatten()
+    emb3 = embedder.encode("The stock market crashed yesterday").flatten()
 
-    # King and queen should be more similar than king and apple
-    sim_king_queen = np.dot(emb1.flatten(), emb2.flatten())
-    sim_king_apple = np.dot(emb1.flatten(), emb3.flatten())
+    def cosine_sim(a, b):
+        return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-    assert sim_king_queen > sim_king_apple, "Embeddings should capture semantics"
+    # Similar sentences should have higher cosine similarity than unrelated ones
+    sim_related = cosine_sim(emb1, emb2)
+    sim_unrelated = cosine_sim(emb1, emb3)
+
+    assert sim_related > sim_unrelated, (
+        f"Embeddings should capture semantics: related={sim_related:.4f} "
+        f"vs unrelated={sim_unrelated:.4f}"
+    )
 
 
 @pytest.mark.hardware

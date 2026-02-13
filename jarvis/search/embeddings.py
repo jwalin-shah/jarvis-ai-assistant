@@ -10,13 +10,11 @@ Key Features:
 - Similar situation detection for context-aware responses
 - Privacy-preserving local storage (no cloud transmission)
 
-Architecture (3-layer embedding stack):
+Architecture (2-layer embedding stack):
     1. jarvis/embeddings.py       - Embedding STORAGE (this file)
            Stores embeddings in SQLite, provides search APIs
     2. jarvis/embedding_adapter.py - UNIFIED INTERFACE (use for computing)
-           MLX-first with CPU fallback
-    3. models/embeddings.py       - MLX SERVICE CLIENT (low-level)
-           Direct HTTP client to MLX microservice
+           Wraps InProcessEmbedder from models/bert_embedder.py
 
 NOTE: If you need to compute embeddings, import from jarvis/embedding_adapter.py:
     from jarvis.embedding_adapter import get_embedder

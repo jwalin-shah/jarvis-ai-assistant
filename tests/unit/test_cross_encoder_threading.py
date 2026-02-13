@@ -99,12 +99,11 @@ class TestCrossEncoderThreadSafety:
         assert len(result) == 0
 
     def test_gpu_lock_shared_with_embedder_and_loader(self):
-        """Cross-encoder's GPU lock is the same as MLXModelLoader's."""
-        from models.cross_encoder import InProcessCrossEncoder
+        """gpu_context() uses the same lock as MLXModelLoader's."""
         from models.loader import MLXModelLoader
+        from models.memory_config import _get_gpu_lock
 
-        ce = InProcessCrossEncoder()
-        assert ce._get_gpu_lock() is MLXModelLoader._mlx_load_lock
+        assert _get_gpu_lock() is MLXModelLoader._mlx_load_lock
 
     def test_singleton_thread_safety(self):
         """get_cross_encoder() returns same instance from multiple threads."""

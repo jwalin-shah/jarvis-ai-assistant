@@ -299,23 +299,23 @@ class TestCacheHitSkip:
 
 
 class TestCacheEviction:
-    """Verify the L1 cache evicts old entries when full."""
+    """Verify PrefetchCache evicts entries when full."""
 
-    def test_l1_eviction_on_capacity(self, tmp_path: Path) -> None:
-        small_cache = MultiTierCache(
-            l1_maxsize=3,
-            l2_db_path=tmp_path / "evict.db",
-            l3_cache_dir=tmp_path / "l3",
-        )
+    def test_eviction_on_capacity(self, tmp_path: Path) -> None:
+        """When maxsize is exceeded, the entry with the soonest expiry is evicted."""
+        small_cache = MultiTierCache(l1_maxsize=3)
 
-        for i in range(3):
-            small_cache.set(f"key{i}", f"val{i}", tier=CacheTier.L1)
+        # Set entries with different TTLs so we know which gets evicted
+        small_cache.set("key0", "val0", ttl_seconds=100)
+        small_cache.set("key1", "val1", ttl_seconds=10)   # shortest TTL -> evicted first
+        small_cache.set("key2", "val2", ttl_seconds=200)
 
-        small_cache.get("key0")
-        small_cache.set("key3", "val3", tier=CacheTier.L1)
+        # Adding a 4th triggers eviction of key1 (soonest expiry)
+        small_cache.set("key3", "val3", ttl_seconds=150)
 
         assert small_cache.get("key0") is not None
-        assert small_cache.get("key1") is None
+        assert small_cache.get("key1") is None  # evicted (soonest expiry)
+        assert small_cache.get("key2") is not None
         assert small_cache.get("key3") is not None
 
 

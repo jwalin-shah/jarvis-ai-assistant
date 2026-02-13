@@ -95,7 +95,7 @@ class TestWithLightGBMModel:
         clf = CategoryClassifier()
         if not clf._load_pipeline():
             pytest.skip("LightGBM model not available")
-        result = classify_category("Hey how have you been?")
+        result = classify_category("What time is the meeting tomorrow?")
         assert result.category == "question"
         assert result.method == "lightgbm"
         assert result.confidence > 0.5

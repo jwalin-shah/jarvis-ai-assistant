@@ -11,6 +11,7 @@ import logging
 import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -132,7 +133,7 @@ class ReplyService:
         if self._reranker is None:
             with self._lock:
                 if self._reranker is None:
-                    from models.reranker import get_reranker
+                    from models.cross_encoder import get_reranker
 
                     self._reranker = get_reranker()
         return self._reranker
@@ -284,6 +285,7 @@ class ReplyService:
 
         metadata = {
             "confidence": confidence,
+            "confidence_score": base_confidence,
             "similarity_score": similarity,
             "example_diversity": example_diversity,
             "mobilization_pressure": pressure.value,
@@ -602,8 +604,11 @@ class ReplyService:
             context.metadata.setdefault("contact_name", contact.display_name)
 
         if chat_id:
-            self._fetch_contact_facts(context, chat_id)
-            self._fetch_graph_context(context, chat_id)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                facts_future = pool.submit(self._fetch_contact_facts, context, chat_id)
+                graph_future = pool.submit(self._fetch_graph_context, context, chat_id)
+                facts_future.result()
+                graph_future.result()
 
         instruction = self._resolve_instruction(
             instruction, category_name, category_config, classification

@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from jarvis.db import TTLCache
+from jarvis.cache import TTLCache
 from jarvis.tags.models import (
     ConversationTag,
     SmartFolder,
@@ -727,26 +727,32 @@ class TagManager:
         Returns:
             Number of tag assignments created.
         """
-        count = 0
         now = datetime.now(UTC)
 
         with self.connection() as conn:
-            for chat_id in chat_ids:
-                for tag_id in tag_ids:
-                    try:
-                        conn.execute(
-                            """
-                            INSERT INTO conversation_tags (chat_id, tag_id, added_by, added_at)
-                            VALUES (?, ?, ?, ?)
-                            """,
-                            (chat_id, tag_id, added_by, now),
-                        )
-                        count += 1
-                    except sqlite3.IntegrityError:
-                        # Already exists
-                        pass
+            # Build batch of all (chat_id, tag_id) pairs
+            batch = [(chat_id, tag_id, added_by, now) for chat_id in chat_ids for tag_id in tag_ids]
 
-        return count
+            # Get count before batch insert
+            count_before = conn.execute(
+                "SELECT COUNT(*) FROM conversation_tags"
+            ).fetchone()[0]
+
+            # Batch insert with INSERT OR IGNORE
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO conversation_tags (chat_id, tag_id, added_by, added_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                batch,
+            )
+
+            # Get count after to determine how many were actually inserted
+            count_after = conn.execute(
+                "SELECT COUNT(*) FROM conversation_tags"
+            ).fetchone()[0]
+
+        return count_after - count_before
 
     def bulk_remove_tags(
         self,
@@ -791,15 +797,16 @@ class TagManager:
             # Remove existing tags
             conn.execute("DELETE FROM conversation_tags WHERE chat_id = ?", (chat_id,))
 
-            # Add new tags
-            now = datetime.now(UTC)
-            for tag_id in tag_ids:
-                conn.execute(
+            # Add new tags in batch
+            if tag_ids:
+                now = datetime.now(UTC)
+                batch = [(chat_id, tag_id, added_by, now) for tag_id in tag_ids]
+                conn.executemany(
                     """
                     INSERT INTO conversation_tags (chat_id, tag_id, added_by, added_at)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (chat_id, tag_id, added_by, now),
+                    batch,
                 )
 
     # -------------------------------------------------------------------------

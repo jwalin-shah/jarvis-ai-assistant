@@ -212,7 +212,7 @@ format-check:
 	uv run ruff format --check .
 
 typecheck:
-	uv run mypy jarvis/ core/ models/ integrations/ benchmarks/ api/ --ignore-missing-imports
+	uv run mypy jarvis/ core/ models/ integrations/ api/ --ignore-missing-imports
 
 check: lint format-check typecheck svelte-check
 	@echo ""

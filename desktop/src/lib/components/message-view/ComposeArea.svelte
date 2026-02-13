@@ -79,6 +79,7 @@
       bind:value
       {placeholder}
       rows="1"
+      aria-label="Compose message"
       onkeydown={handleKeydown}
       oninput={autoResize}
       onfocus={onFocus}

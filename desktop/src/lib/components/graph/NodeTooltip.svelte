@@ -114,7 +114,7 @@
 <style>
   .tooltip {
     position: fixed;
-    z-index: 1000;
+    z-index: var(--z-tooltip);
     padding: 12px 16px;
     background: rgba(40, 40, 40, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.1);

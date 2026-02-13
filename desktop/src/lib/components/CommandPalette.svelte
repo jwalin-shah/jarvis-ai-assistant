@@ -15,7 +15,7 @@
 
   interface Props {
     onClose: () => void;
-    onNavigate: (view: "messages" | "dashboard" | "health" | "settings" | "templates" | "network") => void;
+    onNavigate: (view: "messages" | "dashboard" | "health" | "settings" | "templates" | "network" | "chat") => void;
     onOpenSearch: () => void;
     onOpenShortcuts: () => void;
   }
@@ -46,6 +46,15 @@
       icon: "bar-chart-2",
       category: "Navigation",
       action: () => { onNavigate("dashboard"); onClose(); },
+    },
+    {
+      id: "nav-chat",
+      label: "Go to Chat",
+      description: "Chat directly with the local AI",
+      shortcut: ["⌘", "5"],
+      icon: "message-circle",
+      category: "Navigation",
+      action: () => { onNavigate("chat"); onClose(); },
     },
     {
       id: "nav-templates",
@@ -223,10 +232,19 @@
     }
   }
 
+  let paletteContentRef = $state<HTMLDivElement | null>(null);
+
   function scrollToSelected() {
     tick().then(() => {
-      const selected = document.querySelector(".command-item.selected");
-      selected?.scrollIntoView({ block: "nearest" });
+      const selected = document.querySelector(".command-item.selected") as HTMLElement | null;
+      if (!selected || !paletteContentRef) return;
+      const containerRect = paletteContentRef.getBoundingClientRect();
+      const itemRect = selected.getBoundingClientRect();
+      if (itemRect.bottom > containerRect.bottom) {
+        paletteContentRef.scrollTop += itemRect.bottom - containerRect.bottom;
+      } else if (itemRect.top < containerRect.top) {
+        paletteContentRef.scrollTop -= containerRect.top - itemRect.top;
+      }
     });
   }
 
@@ -261,7 +279,7 @@
   aria-label="Close command palette"
   tabindex="0"
 >
-  <div class="palette glass" role="dialog" aria-label="Command Palette" tabindex="-1">
+  <div class="palette glass" role="dialog" aria-label="Command Palette" aria-modal="true" tabindex="-1">
     <div class="palette-header">
       <Icon name="search" size={18} />
       <input
@@ -277,7 +295,7 @@
       <kbd class="esc-hint">esc</kbd>
     </div>
 
-    <div class="palette-content">
+    <div class="palette-content" bind:this={paletteContentRef}>
       {#if filteredCommands.length === 0}
         <div class="no-results">
           <p>No commands found for "{searchQuery}"</p>
@@ -341,7 +359,7 @@
     align-items: flex-start;
     justify-content: center;
     padding-top: 15vh;
-    z-index: 9999;
+    z-index: var(--z-modal);
     animation: fadeIn 0.1s ease;
   }
 

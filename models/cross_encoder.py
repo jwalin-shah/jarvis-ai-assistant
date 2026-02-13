@@ -25,6 +25,7 @@ import logging
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -32,6 +33,7 @@ import numpy as np
 from tokenizers import Tokenizer
 
 from models.bert_embedder import BertModel
+from models.memory_config import gpu_context
 from models.utils import HF_CACHE, find_model_snapshot, map_hf_bert_key
 
 logger = logging.getLogger(__name__)
@@ -127,12 +129,6 @@ class InProcessCrossEncoder:
         self._num_labels: int = 1
         self._activation: str = "sigmoid"
 
-    def _get_gpu_lock(self) -> threading.Lock:
-        """Get the shared MLX GPU lock from MLXModelLoader."""
-        from models.loader import MLXModelLoader
-
-        return MLXModelLoader._mlx_load_lock
-
     def load_model(self, model_name: str | None = None) -> None:
         """Load a cross-encoder model. Thread-safe via shared GPU lock."""
         model_name = model_name or self._default_model
@@ -146,11 +142,7 @@ class InProcessCrossEncoder:
                 f"Available: {list(CROSS_ENCODER_REGISTRY.keys())}"
             )
 
-        with self._get_gpu_lock():
-            # Set MLX memory limits to prevent memory spikes on 8GB systems
-            from models.memory_config import apply_embedder_limits
-
-            apply_embedder_limits()
+        with gpu_context():
 
             if self.model_name == model_name:
                 return
@@ -239,7 +231,7 @@ class InProcessCrossEncoder:
 
     def unload(self) -> None:
         """Unload model to free memory. Thread-safe."""
-        with self._get_gpu_lock():
+        with gpu_context():
             self._unload_unlocked()
 
     def predict(
@@ -266,7 +258,7 @@ class InProcessCrossEncoder:
         # The GPU lock protects both the tokenizer state (padding config)
         # and the Metal GPU operations, preventing race conditions where
         # another thread changes padding between tokenization and forward pass.
-        with self._get_gpu_lock():
+        with gpu_context():
             # Tokenize WITHOUT padding so each batch pads only to its own
             # max length (not global max), saving memory.
             self.tokenizer.no_padding()
@@ -364,3 +356,113 @@ def reset_cross_encoder() -> None:
         if _cross_encoder is not None:
             _cross_encoder.unload()
         _cross_encoder = None
+
+
+# =============================================================================
+# Reranker - thin layer over cross-encoder for retrieval reranking
+# =============================================================================
+
+
+class CrossEncoderReranker:
+    """Reranks retrieval candidates using a cross-encoder.
+
+    Lazy-loads the cross-encoder on first call to avoid startup cost
+    when reranking is disabled.
+    """
+
+    def __init__(self, model_name: str = "ms-marco-MiniLM-L-6-v2") -> None:
+        self._model_name = model_name
+        self._cross_encoder: InProcessCrossEncoder | None = None
+
+    def _get_cross_encoder(self) -> InProcessCrossEncoder:
+        """Lazy-load the cross-encoder singleton."""
+        if self._cross_encoder is None:
+            self._cross_encoder = get_cross_encoder(self._model_name)
+        return self._cross_encoder
+
+    def rerank(
+        self,
+        query: str,
+        candidates: list[dict[str, Any]],
+        text_key: str = "trigger_text",
+        top_k: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Rerank candidates by cross-encoder relevance to query.
+
+        Args:
+            query: The query text to score against.
+            candidates: List of candidate dicts from vec_search.
+            text_key: Key in candidate dicts containing the text to score.
+            top_k: Number of top candidates to return.
+
+        Returns:
+            Top-k candidates sorted by rerank_score (descending),
+            each augmented with a 'rerank_score' field.
+        """
+        if not candidates:
+            return []
+
+        if len(candidates) <= 1:
+            for c in candidates:
+                c["rerank_score"] = 1.0
+            return candidates
+
+        # Build (query, doc) pairs
+        pairs = []
+        valid_indices: set[int] = set()
+        for i, cand in enumerate(candidates):
+            text = cand.get(text_key, "")
+            if text:
+                pairs.append((query, text))
+                valid_indices.add(i)
+
+        if not pairs:
+            return candidates[:top_k]
+
+        try:
+            ce = self._get_cross_encoder()
+            scores = ce.predict(pairs)
+        except (FileNotFoundError, OSError) as e:
+            logger.warning("Cross-encoder unavailable, skipping reranking: %s", e)
+            return candidates[:top_k]
+
+        # Assign scores back to candidates
+        scored = []
+        score_idx = 0
+        for i, cand in enumerate(candidates):
+            if i in valid_indices:
+                cand["rerank_score"] = float(scores[score_idx])
+                score_idx += 1
+            else:
+                cand["rerank_score"] = 0.0
+            scored.append(cand)
+
+        # Sort by rerank_score descending
+        scored.sort(key=lambda x: x["rerank_score"], reverse=True)
+
+        return scored[:top_k]
+
+
+_reranker: CrossEncoderReranker | None = None
+_reranker_lock = threading.Lock()
+
+
+def get_reranker(model_name: str = "ms-marco-MiniLM-L-6-v2") -> CrossEncoderReranker:
+    """Get or create the singleton CrossEncoderReranker."""
+    global _reranker
+
+    if _reranker is not None:
+        return _reranker
+
+    with _reranker_lock:
+        if _reranker is None:
+            _reranker = CrossEncoderReranker(model_name=model_name)
+        return _reranker
+
+
+def reset_reranker() -> None:
+    """Reset the singleton for testing."""
+    global _reranker
+
+    with _reranker_lock:
+        _reranker = None

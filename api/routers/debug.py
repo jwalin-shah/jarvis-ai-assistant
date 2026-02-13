@@ -297,7 +297,7 @@ async def get_system_status(request: Request) -> dict[str, Any]:
     # Check embedding service
     embedding_available = False
     try:
-        from models.embeddings import is_mlx_available
+        from models.bert_embedder import is_mlx_available
 
         embedding_available = is_mlx_available()
     except Exception:

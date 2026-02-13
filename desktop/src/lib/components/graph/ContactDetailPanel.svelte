@@ -163,7 +163,7 @@
     right: 0;
     bottom: 0;
     width: 380px;
-    z-index: 1000;
+    z-index: var(--z-popover);
     background: rgba(0, 0, 0, 0.1);
   }
 

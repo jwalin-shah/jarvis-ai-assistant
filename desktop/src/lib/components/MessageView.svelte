@@ -3,7 +3,6 @@
   import {
     conversationsStore,
     loadMoreMessages,
-    pollMessages,
     stopMessagePolling,
     highlightedMessageId,
     scrollToMessageId,
@@ -209,10 +208,6 @@
     }
 
     await tick();
-    const element = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
   }
 
   // Send message
@@ -226,6 +221,7 @@
     } else {
       optimisticId = addOptimisticMessage(text);
       // Ensure optimistic message is visible and scroll to it
+      isAtBottom = true;
       visibleEndIndex = conversationsStore.messages.length;
       virtualBottomPadding = 0;
       scrollToBottom();
@@ -265,12 +261,9 @@
 
       if (result.success) {
         updateOptimisticMessage(optimisticId, { status: 'sent' });
-        pollMessages()
-          .then(() => {
-            removeOptimisticMessage(optimisticId);
-            scrollToBottom();
-          })
-          .catch((err) => console.error('Poll error:', err));
+        // Watcher push (handleNewMessagePush) clears optimistic when real message arrives.
+        // Safety timeout: auto-clear if watcher push doesn't arrive within 10s.
+        setTimeout(() => removeOptimisticMessage(optimisticId), 10000);
       } else {
         updateOptimisticMessage(optimisticId, {
           status: 'failed',
@@ -578,12 +571,8 @@
     if (index < 0 || index >= messages.length) return;
 
     const messageId = messages[index]!.id;
-    tick().then(() => {
-      const element = document.querySelector(`[data-message-id="${messageId}"]`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    });
+    // Reuse the same scrollToMessage logic which uses container-scoped scrollTo
+    scrollToMessage(messageId);
   }
 
   function announceMessage(message: Message) {
@@ -902,6 +891,7 @@
 
   .messages {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: var(--space-4);
     display: flex;

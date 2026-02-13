@@ -130,6 +130,8 @@ export interface GenerateDraftResult {
     participants: string[];
     last_message: string | null;
   };
+  gated?: boolean;
+  gated_confidence?: number;
   streamed?: boolean;
   tokens_generated?: number;
 }
@@ -141,6 +143,70 @@ export interface SummarizeResult {
   message_count: number;
   streamed?: boolean;
   tokens_generated?: number;
+}
+
+/** Budget tiers for RPC operations (ms) */
+const RPC_BUDGETS: Record<string, number> = {
+  ping: 100,
+  get_conversations: 100,
+  get_messages: 100,
+  get_health: 100,
+  classify_intent: 100,
+  get_smart_replies: 500,
+  semantic_search: 500,
+  generate_draft: 5000,
+  summarize: 5000,
+};
+
+/** RPC timing record */
+interface RPCTimingRecord {
+  method: string;
+  elapsed_ms: number;
+  budget_ms: number | undefined;
+  exceeded: boolean;
+  timestamp: number;
+}
+
+/** Bounded buffer of recent RPC timings */
+const MAX_RPC_TIMINGS = 500;
+const rpcTimings: RPCTimingRecord[] = [];
+
+function recordRPCTiming(method: string, elapsed_ms: number): void {
+  const budget_ms = RPC_BUDGETS[method];
+  const exceeded = budget_ms !== undefined && elapsed_ms > budget_ms;
+  if (exceeded) {
+    console.warn(
+      `[RPC Budget] ${method} took ${elapsed_ms.toFixed(1)}ms (budget: ${budget_ms}ms)`
+    );
+  }
+  rpcTimings.push({ method, elapsed_ms, budget_ms, exceeded, timestamp: Date.now() });
+  if (rpcTimings.length > MAX_RPC_TIMINGS) {
+    rpcTimings.splice(0, rpcTimings.length - MAX_RPC_TIMINGS);
+  }
+}
+
+/** Get RPC compliance stats */
+export function getRPCCompliance(method?: string): {
+  total: number;
+  compliant: number;
+  compliance_pct: number;
+  p95_ms: number;
+} {
+  const filtered = method
+    ? rpcTimings.filter((r) => r.method === method)
+    : rpcTimings.filter((r) => r.budget_ms !== undefined);
+  if (filtered.length === 0) {
+    return { total: 0, compliant: 0, compliance_pct: 100, p95_ms: 0 };
+  }
+  const compliant = filtered.filter((r) => !r.exceeded).length;
+  const sorted = filtered.map((r) => r.elapsed_ms).sort((a, b) => a - b);
+  const p95Index = Math.min(Math.floor(sorted.length * 0.95), sorted.length - 1);
+  return {
+    total: filtered.length,
+    compliant,
+    compliance_pct: (compliant / filtered.length) * 100,
+    p95_ms: sorted[p95Index] ?? 0,
+  };
 }
 
 /**
@@ -175,6 +241,7 @@ class JarvisSocket {
       onToken?: (token: string, index: number) => void;
       createdAt: number;
       isStreaming: boolean;
+      timeoutId?: ReturnType<typeof setTimeout>;
     }
   > = new Map();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -328,11 +395,6 @@ class JarvisSocket {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
-    // Reject all pending requests when cleanup stops (e.g., on disconnect)
-    for (const [_requestId, pending] of this.wsPendingRequests) {
-      pending.reject(new Error("WebSocket cleanup stopped"));
-    }
-    this.wsPendingRequests.clear();
   }
 
   /**
@@ -415,6 +477,9 @@ class JarvisSocket {
           this.wsBatchQueue.rejectAll(new Error("WebSocket disconnected"));
           // Reject all pending requests on disconnect
           for (const [_requestId, pending] of this.wsPendingRequests) {
+            if (pending.timeoutId) {
+              clearTimeout(pending.timeoutId);
+            }
             pending.reject(new Error("WebSocket disconnected"));
           }
           this.wsPendingRequests.clear();
@@ -495,6 +560,9 @@ class JarvisSocket {
       if ("id" in message && message.id !== null) {
         const pending = this.wsPendingRequests.get(message.id);
         if (pending) {
+          if (pending.timeoutId) {
+            clearTimeout(pending.timeoutId);
+          }
           this.wsPendingRequests.delete(message.id);
           if (message.error) {
             pending.reject(new Error(message.error.message));
@@ -581,21 +649,32 @@ class JarvisSocket {
 
     // Use WebSocket in browser mode
     if (!isTauri) {
-      return this.callWebSocket<T>(method, params);
+      const wsStart = performance.now();
+      try {
+        const result = await this.callWebSocket<T>(method, params);
+        recordRPCTiming(method, performance.now() - wsStart);
+        return result;
+      } catch (error) {
+        recordRPCTiming(method, performance.now() - wsStart);
+        throw error;
+      }
     }
 
     if (!invoke) {
       throw new Error("Tauri invoke not available");
     }
 
+    const rpcStart = performance.now();
     try {
       const result = await withTimeout(
         invoke<T>("send_message", { method, params }),
         REQUEST_TIMEOUT,
         `send_message(${method})`
       );
+      recordRPCTiming(method, performance.now() - rpcStart);
       return result;
     } catch (error) {
+      recordRPCTiming(method, performance.now() - rpcStart);
       // On error, try to reconnect
       this.state = "disconnected";
       this.scheduleReconnect();
@@ -633,12 +712,18 @@ class JarvisSocket {
       this.ws.send(JSON.stringify(request));
 
       // Timeout after configured duration
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (this.wsPendingRequests.has(requestId)) {
           this.wsPendingRequests.delete(requestId);
           reject(new Error("Request timeout"));
         }
       }, REQUEST_TIMEOUT);
+
+      // Store timeout ID so it can be cleared when request resolves
+      const pending = this.wsPendingRequests.get(requestId);
+      if (pending) {
+        pending.timeoutId = timeoutId;
+      }
     });
   }
 
@@ -1203,9 +1288,36 @@ class JarvisSocket {
   }
 
   /**
+   * Chat directly with the SLM (streaming).
+   * Returns the full response after streaming completes.
+   */
+  async chatStream(
+    message: string,
+    history: Array<{ role: "user" | "assistant"; content: string }>,
+    onToken?: (token: string) => void
+  ): Promise<{ response: string; tokens_generated: number }> {
+    let fullText = "";
+    let tokenCount = 0;
+
+    for await (const token of this.callStream(
+      "chat",
+      { message, history },
+      (t) => { if (onToken) onToken(t); }
+    )) {
+      fullText += token;
+      tokenCount++;
+    }
+
+    return {
+      response: fullText.trim(),
+      tokens_generated: tokenCount,
+    };
+  }
+
+  /**
    * Ping the server
    */
-  async ping(): Promise<{ status: string }> {
+  async ping(): Promise<Record<string, unknown>> {
     return this.call("ping");
   }
 }

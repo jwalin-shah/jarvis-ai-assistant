@@ -26,6 +26,9 @@ def persist_segments(
 ) -> list[int]:
     """Insert segments and their message memberships into the database.
 
+    Uses batch inserts (executemany) for optimal performance.
+    SQLite 3.35+ RETURNING clause used to get inserted row IDs.
+
     Args:
         conn: Active database connection (caller manages transaction).
         segments: TopicSegment objects from the segmenter.
@@ -38,20 +41,12 @@ def persist_segments(
     if not segments:
         return []
 
-    db_ids: list[int] = []
-
+    # Prepare batch data for segments
+    segment_rows = []
     for segment in segments:
         entities_json = json.dumps(segment.entities) if segment.entities else None
         keywords_json = json.dumps(segment.keywords) if segment.keywords else None
-
-        cursor = conn.execute(
-            """
-            INSERT INTO conversation_segments
-            (segment_id, chat_id, contact_id, start_time, end_time,
-             topic_label, keywords_json, entities_json, message_count,
-             confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+        segment_rows.append(
             (
                 segment.segment_id,
                 chat_id,
@@ -63,30 +58,64 @@ def persist_segments(
                 entities_json,
                 segment.message_count,
                 segment.confidence,
-            ),
+            )
         )
-        seg_db_id = cursor.lastrowid
-        db_ids.append(seg_db_id)
 
-        # Batch insert message memberships
-        msg_rows = [
-            (
-                seg_db_id,
-                msg.message_id or 0,
-                pos,
-                msg.is_from_me,
-            )
-            for pos, msg in enumerate(segment.messages)
-        ]
-        if msg_rows:
-            conn.executemany(
+    # Batch insert segments with RETURNING to get IDs
+    # SQLite 3.35+ supports RETURNING; fallback for older versions
+    try:
+        cursor = conn.executemany(
+            """
+            INSERT INTO conversation_segments
+            (segment_id, chat_id, contact_id, start_time, end_time,
+             topic_label, keywords_json, entities_json, message_count,
+             confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            """,
+            segment_rows,
+        )
+        db_ids = [row[0] for row in cursor.fetchall()]
+    except sqlite3.OperationalError:
+        # Fallback: insert individually if RETURNING not supported (SQLite < 3.35)
+        # This maintains compatibility with older SQLite versions
+        db_ids = []
+        for row_data in segment_rows:
+            cursor = conn.execute(
                 """
-                INSERT OR IGNORE INTO segment_messages
-                (segment_id, message_rowid, position, is_from_me)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO conversation_segments
+                (segment_id, chat_id, contact_id, start_time, end_time,
+                 topic_label, keywords_json, entities_json, message_count,
+                 confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                msg_rows,
+                row_data,
             )
+            db_ids.append(cursor.lastrowid)
+
+    # Build message membership rows with the retrieved segment IDs
+    msg_rows = []
+    for seg_db_id, segment in zip(db_ids, segments):
+        for pos, msg in enumerate(segment.messages):
+            msg_rows.append(
+                (
+                    seg_db_id,
+                    msg.message_id or 0,
+                    pos,
+                    msg.is_from_me,
+                )
+            )
+
+    # Batch insert all message memberships at once
+    if msg_rows:
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO segment_messages
+            (segment_id, message_rowid, position, is_from_me)
+            VALUES (?, ?, ?, ?)
+            """,
+            msg_rows,
+        )
 
     logger.debug(
         "Persisted %d segments (%d messages) for chat %s",

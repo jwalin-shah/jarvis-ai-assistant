@@ -128,6 +128,9 @@ class VecSearcher:
     def index_message(self, message: Message) -> bool:
         """Index a single message into vec_messages.
 
+        For batch indexing multiple messages, use index_messages() instead
+        to benefit from batch embedding computation and bulk inserts.
+
         Args:
             message: Message to index
 

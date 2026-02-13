@@ -24,6 +24,7 @@ import hmac
 import json
 import logging
 import os
+import functools
 import secrets
 import signal
 import time
@@ -90,14 +91,6 @@ class RateLimiter:
         bucket[0] = tokens - 1.0
         bucket[1] = now
         return True
-
-    def cleanup(self) -> None:
-        """Remove stale client entries (call periodically)."""
-        now = self._time.monotonic()
-        # Clients whose buckets are full and haven't been seen in 10s
-        stale = [k for k, v in self._buckets.items() if now - v[1] > 10.0]
-        for k in stale:
-            del self._buckets[k]
 
 
 # Socket configuration
@@ -175,6 +168,37 @@ def _record_rpc_latency(method: str, elapsed_ms: float) -> None:
         )
 
 
+def rpc_handler(error_msg: str) -> Callable:
+    """Decorator that wraps async RPC handlers with standard error handling.
+
+    Catches exceptions and converts them to JsonRpcError with a consistent
+    pattern, letting JsonRpcError pass through unmodified.
+
+    Args:
+        error_msg: User-facing error message for unexpected exceptions.
+
+    Usage:
+        @rpc_handler("Search failed")
+        async def _semantic_search(self, query: str) -> dict:
+            ...
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return await fn(*args, **kwargs)
+            except JsonRpcError:
+                raise
+            except Exception as e:
+                logger.exception("Error in %s", fn.__name__)
+                raise JsonRpcError(INTERNAL_ERROR, error_msg) from e
+
+        return wrapper
+
+    return decorator
+
+
 class JarvisSocketServer:
     """JSON-RPC server over Unix socket.
 
@@ -231,6 +255,10 @@ class JarvisSocketServer:
 
         # Prefetch manager for speculative caching
         self._prefetch_manager: PrefetchManager | None = None
+
+        # Cached iMessage access check (30s TTL)
+        self._imessage_access_cache: bool | None = None
+        self._imessage_access_cache_time: float = 0.0
 
         # Rate limiter: 100 req/s per client
         self._rate_limiter = RateLimiter(max_requests=100, window_seconds=1.0)
@@ -404,6 +432,7 @@ class JarvisSocketServer:
                 self._preload_embeddings,
                 self._preload_cross_encoder,
                 self._preload_vec_index,
+                self._preload_category_classifier,
             ]:
                 try:
                     with timed_operation(logger, f"model.preload.{loader.__name__}"):
@@ -505,6 +534,21 @@ class JarvisSocketServer:
 
         except (ImportError, OSError, RuntimeError) as e:
             logger.debug(f"Vec searcher preload skipped: {e}")
+
+    def _preload_category_classifier(self) -> None:
+        """Preload the category classifier pipeline (sync).
+
+        Triggers joblib.load() of the LightGBM model so the first classify()
+        call doesn't incur a 5-15s cold-start penalty.
+        """
+        try:
+            from jarvis.classifiers.category_classifier import get_classifier
+
+            classifier = get_classifier()
+            classifier._load_pipeline()
+            logger.debug("Category classifier preloaded")
+        except (ImportError, OSError, RuntimeError) as e:
+            logger.debug(f"Category classifier preload skipped: {e}")
 
     async def stop(self) -> None:
         """Stop the socket server."""
@@ -1024,6 +1068,7 @@ class JarvisSocketServer:
 
     # ========== RPC Method Handlers ==========
 
+    @rpc_handler("Chat failed")
     async def _chat(
         self,
         message: str,
@@ -1050,60 +1095,51 @@ class JarvisSocketServer:
         if not message or not message.strip():
             raise JsonRpcError(INVALID_PARAMS, "Message cannot be empty")
 
-        try:
-            # Build the prompt using the model's chat template
-            system = system_prompt or "You are a helpful assistant."
-            prompt = f"<|system|>\n{system}<|endoftext|>\n"
+        # Build the prompt using the model's chat template
+        system = system_prompt or "You are a helpful assistant."
+        prompt = f"<|system|>\n{system}<|endoftext|>\n"
 
-            # Append history (last 10 turns to fit context window)
-            turns = (history or [])[-10:]
-            for turn in turns:
-                role = turn.get("role", "user")
-                content = turn.get("content", "")
-                if role == "user":
-                    prompt += f"<|user|>\n{content}<|endoftext|>\n"
-                elif role == "assistant":
-                    prompt += f"<|assistant|>\n{content}<|endoftext|>\n"
+        # Append history (last 10 turns to fit context window)
+        turns = (history or [])[-10:]
+        for turn in turns:
+            role = turn.get("role", "user")
+            content = turn.get("content", "")
+            if role == "user":
+                prompt += f"<|user|>\n{content}<|endoftext|>\n"
+            elif role == "assistant":
+                prompt += f"<|assistant|>\n{content}<|endoftext|>\n"
 
-            # Add current user message and start assistant turn
-            prompt += f"<|user|>\n{message}<|endoftext|>\n<|assistant|>\n"
+        # Add current user message and start assistant turn
+        prompt += f"<|user|>\n{message}<|endoftext|>\n<|assistant|>\n"
 
-            from contracts.models import GenerationRequest
+        from contracts.models import GenerationRequest
 
-            request = GenerationRequest(
-                prompt=prompt,
-                context_documents=[],
-                few_shot_examples=[],
-                max_tokens=512,
-                temperature=0.7,
-                top_p=0.9,
-                repetition_penalty=1.05,
-                stop_sequences=["<|endoftext|>", "<|user|>"],
-            )
+        request = GenerationRequest(
+            prompt=prompt,
+            context_documents=[],
+            few_shot_examples=[],
+            max_tokens=512,
+            temperature=0.7,
+            top_p=0.9,
+            repetition_penalty=1.05,
+            stop_sequences=["<|endoftext|>", "<|user|>"],
+        )
 
-            if _writer is not None:
-                return await self._chat_streaming(request, _writer, _request_id)
+        if _writer is not None:
+            return await self._chat_streaming(request, _writer, _request_id)
 
-            # Non-streaming fallback
-            from models import get_generator
+        # Non-streaming fallback
+        from models import get_generator
 
-            generator = get_generator()
-            full_response = ""
-            token_count = 0
-            async for token_data in generator.generate_stream(request):
-                full_response += token_data["token"]
-                token_count += 1
+        generator = get_generator()
+        response_tokens: list[str] = []
+        async for token_data in generator.generate_stream(request):
+            response_tokens.append(token_data["token"])
 
-            return {
-                "response": full_response.strip(),
-                "tokens_generated": token_count,
-            }
-
-        except JsonRpcError:
-            raise
-        except Exception as e:
-            logger.exception("Error in chat")
-            raise JsonRpcError(INTERNAL_ERROR, "Chat failed") from e
+        return {
+            "response": "".join(response_tokens).strip(),
+            "tokens_generated": len(response_tokens),
+        }
 
     async def _chat_streaming(
         self,
@@ -1115,8 +1151,7 @@ class JarvisSocketServer:
         from models import get_generator
 
         generator = get_generator()
-        full_response = ""
-        token_count = 0
+        response_tokens: list[str] = []
 
         try:
             async for token_data in generator.generate_stream(request):
@@ -1124,8 +1159,7 @@ class JarvisSocketServer:
                 token_index = token_data["token_index"]
                 is_final = token_data["is_final"]
 
-                full_response += token_text
-                token_count += 1
+                response_tokens.append(token_text)
 
                 await self._send_stream_token(
                     writer, token_text, token_index, is_final, request_id=request_id
@@ -1135,18 +1169,100 @@ class JarvisSocketServer:
             raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
 
         result = {
-            "response": full_response.strip(),
-            "tokens_generated": token_count,
+            "response": "".join(response_tokens).strip(),
+            "tokens_generated": len(response_tokens),
             "streamed": True,
         }
         await self._send_stream_response(writer, request_id, result)
         return result
 
-    async def _ping(self) -> dict[str, str | bool]:
-        """Health check with model readiness status."""
+    def _get_cached_imessage_access(self) -> bool:
+        """Check iMessage access with 30s TTL cache."""
+        now = time.monotonic()
+        if self._imessage_access_cache is not None and (now - self._imessage_access_cache_time) < 30:
+            return self._imessage_access_cache
+        try:
+            from integrations.imessage.reader import ChatDBReader
+
+            reader = ChatDBReader()
+            try:
+                self._imessage_access_cache = reader.check_access()
+            finally:
+                reader.close()
+        except Exception:
+            self._imessage_access_cache = False
+        self._imessage_access_cache_time = now
+        return self._imessage_access_cache  # type: ignore[return-value]
+
+    async def _ping(self) -> dict[str, Any]:
+        """Health check with model readiness, memory, and iMessage status."""
+
+        # Collect blocking psutil + iMessage access checks off the event loop
+        def _collect_system_info() -> tuple[float, float, str, float, float]:
+            import psutil
+
+            vm = psutil.virtual_memory()
+            mem_available_gb = round(vm.available / (1024**3), 2)
+            mem_used_gb = round(vm.used / (1024**3), 2)
+
+            if mem_available_gb >= 4.0:
+                memory_mode = "FULL"
+            elif mem_available_gb >= 2.0:
+                memory_mode = "LITE"
+            else:
+                memory_mode = "MINIMAL"
+
+            proc = psutil.Process()
+            mem_info = proc.memory_info()
+            rss_mb = round(mem_info.rss / (1024**2), 1)
+            vms_mb = round(mem_info.vms / (1024**2), 1)
+
+            return mem_available_gb, mem_used_gb, memory_mode, rss_mb, vms_mb
+
+        mem_available_gb, mem_used_gb, memory_mode, rss_mb, vms_mb = (
+            await asyncio.to_thread(_collect_system_info)
+        )
+
+        # Model status (pure Python attribute checks, no I/O)
+        model_loaded = False
+        try:
+            from models import get_generator
+
+            generator = get_generator()
+            if generator._loader and generator._loader.is_loaded():
+                model_loaded = True
+        except Exception:
+            pass
+
+        # iMessage access (cached, 30s TTL) - may open SQLite, run off event loop
+        imessage_access = await asyncio.to_thread(self._get_cached_imessage_access)
+
+        # Determine overall status
+        details: dict[str, str] = {}
+        if not imessage_access:
+            details["imessage"] = "No Full Disk Access"
+        if not self._models_ready:
+            details["models"] = "Models not ready"
+
+        if not imessage_access:
+            status = "unhealthy"
+        elif not self._models_ready or memory_mode == "MINIMAL":
+            status = "degraded"
+        else:
+            status = "healthy"
+
         return {
-            "status": "ok",
+            "status": status,
             "models_ready": self._models_ready,
+            "model_loaded": model_loaded,
+            "memory_available_gb": mem_available_gb,
+            "memory_used_gb": mem_used_gb,
+            "memory_mode": memory_mode,
+            "jarvis_rss_mb": rss_mb,
+            "jarvis_vms_mb": vms_mb,
+            "imessage_access": imessage_access,
+            "permissions_ok": imessage_access,
+            "details": details if details else None,
         }
 
     @staticmethod
@@ -1169,6 +1285,7 @@ class JarvisSocketServer:
                 context.append(f"{prefix}: {msg.text}")
         return context, participants
 
+    @rpc_handler("Generation failed")
     async def _generate_draft(
         self,
         chat_id: str,
@@ -1194,98 +1311,98 @@ class JarvisSocketServer:
         Returns:
             Dict with suggestions and context_used
         """
+        # Check prefetch cache first for instant response (non-streaming only)
+        if not skip_cache and _writer is None and self._prefetch_manager:
+            cached_draft = self._prefetch_manager.get_draft(chat_id)
+            if cached_draft and "suggestions" in cached_draft:
+                logger.debug(f"Serving prefetched draft for {chat_id}")
+                cached_draft["from_cache"] = True
+                return cached_draft
+
+        # Get context from iMessage
+        from integrations.imessage import ChatDBReader
+
+        with track_latency("socket_get_messages", chat_id=chat_id, limit=context_messages):
+            with ChatDBReader() as reader:
+                messages = reader.get_messages(chat_id, limit=context_messages)
+
+        if not messages:
+            raise JsonRpcError(INVALID_PARAMS, "No messages found in conversation")
+
+        # Build context from messages
+        context, participants = self._build_message_context(messages)
+
+        # Get the last incoming message to respond to
+        last_incoming = None
+        for msg in messages:
+            if not msg.is_from_me and msg.text:
+                last_incoming = msg.text
+                break
+
+        if not last_incoming:
+            raise JsonRpcError(INVALID_PARAMS, "No message to respond to")
+
+        context_used = {
+            "num_messages": len(messages),
+            "participants": list(participants),
+            "last_message": messages[0].text if messages else None,
+        }
+
+        # Check if streaming is requested
+        if _writer is not None:
+            return await self._generate_draft_streaming(
+                last_incoming=last_incoming,
+                context=context,
+                chat_id=chat_id,
+                instruction=instruction,
+                writer=_writer,
+                request_id=_request_id,
+                context_used=context_used,
+            )
+
+        # Non-streaming: use router (run in thread to avoid blocking event loop)
+        # Pause prefetch to avoid GPU lock contention during user-initiated generation
+        from jarvis.router import get_reply_router
+
+        router = get_reply_router()
+        if self._prefetch_manager:
+            self._prefetch_manager.pause()
         try:
-            # Check prefetch cache first for instant response (non-streaming only)
-            if not skip_cache and _writer is None and self._prefetch_manager:
-                cached_draft = self._prefetch_manager.get_draft(chat_id)
-                if cached_draft and "suggestions" in cached_draft:
-                    logger.debug(f"Serving prefetched draft for {chat_id}")
-                    cached_draft["from_cache"] = True
-                    return cached_draft
-
-            # Get context from iMessage
-            from integrations.imessage import ChatDBReader
-
-            with track_latency("socket_get_messages", chat_id=chat_id, limit=context_messages):
-                with ChatDBReader() as reader:
-                    messages = reader.get_messages(chat_id, limit=context_messages)
-
-            if not messages:
-                raise JsonRpcError(INVALID_PARAMS, "No messages found in conversation")
-
-            # Build context from messages
-            context, participants = self._build_message_context(messages)
-
-            # Get the last incoming message to respond to
-            last_incoming = None
-            for msg in messages:
-                if not msg.is_from_me and msg.text:
-                    last_incoming = msg.text
-                    break
-
-            if not last_incoming:
-                raise JsonRpcError(INVALID_PARAMS, "No message to respond to")
-
-            context_used = {
-                "num_messages": len(messages),
-                "participants": list(participants),
-                "last_message": messages[0].text if messages else None,
-            }
-
-            # Check if streaming is requested
-            if _writer is not None:
-                return await self._generate_draft_streaming(
-                    last_incoming=last_incoming,
-                    context=context,
-                    chat_id=chat_id,
-                    instruction=instruction,
-                    writer=_writer,
-                    request_id=_request_id,
-                    context_used=context_used,
-                )
-
-            # Non-streaming: use router (run in thread to avoid blocking event loop)
-            from jarvis.router import get_reply_router
-
-            router = get_reply_router()
             result = await asyncio.to_thread(
                 router.route,
                 incoming=last_incoming,
                 thread=context[-10:] if context else None,
                 chat_id=chat_id,
             )
+        finally:
+            if self._prefetch_manager:
+                self._prefetch_manager.resume()
 
-            response_text = result.get("response", "")
-            confidence = float(result.get("confidence_score", 0.6))
+        response_text = result.get("response", "")
+        confidence = float(result.get("confidence_score", 0.6))
 
-            # Gate low-confidence drafts
-            if confidence < DRAFT_CONFIDENCE_THRESHOLD:
-                logger.info(
-                    f"Draft gated: confidence {confidence:.2f} < {DRAFT_CONFIDENCE_THRESHOLD}"
-                )
-                from jarvis.metrics import get_draft_metrics
-
-                get_draft_metrics().record(confidence, gated=True)
-                return {
-                    "suggestions": [],
-                    "gated": True,
-                    "gated_confidence": confidence,
-                    "context_used": context_used,
-                }
-
+        # Gate low-confidence drafts
+        if confidence < DRAFT_CONFIDENCE_THRESHOLD:
+            logger.info(
+                f"Draft gated: confidence {confidence:.2f} < {DRAFT_CONFIDENCE_THRESHOLD}"
+            )
             from jarvis.metrics import get_draft_metrics
 
-            get_draft_metrics().record(confidence, gated=False)
+            get_draft_metrics().record(confidence, gated=True)
             return {
-                "suggestions": [{"text": response_text, "confidence": confidence}],
+                "suggestions": [],
+                "gated": True,
+                "gated_confidence": confidence,
                 "context_used": context_used,
             }
 
-        except JsonRpcError:
-            raise
-        except Exception as e:
-            logger.exception("Error generating draft")
-            raise JsonRpcError(INTERNAL_ERROR, "Generation failed") from e
+        from jarvis.metrics import get_draft_metrics
+
+        get_draft_metrics().record(confidence, gated=False)
+        return {
+            "suggestions": [{"text": response_text, "confidence": confidence}],
+            "context_used": context_used,
+        }
 
     async def _generate_draft_streaming(
         self,
@@ -1308,67 +1425,76 @@ class JarvisSocketServer:
 
         reply_service = get_reply_service()
 
-        # Phase 1: Build request through full pipeline (sync, run in thread)
+        # Pause prefetch to avoid GPU lock contention during user-initiated generation
+        if self._prefetch_manager:
+            self._prefetch_manager.pause()
         try:
-            request, metadata = await asyncio.to_thread(
-                reply_service.prepare_streaming_context,
-                incoming=last_incoming,
-                thread=context[-10:] if context else None,
-                chat_id=chat_id,
-                instruction=instruction,
-            )
-        except Exception as e:
-            logger.exception("Failed to prepare streaming context")
-            raise JsonRpcError(INTERNAL_ERROR, f"Context preparation failed: {e}") from e
-
-        confidence = float(metadata.get("confidence_score", 0.6))
-
-        # Gate low-confidence drafts before streaming
-        if confidence < DRAFT_CONFIDENCE_THRESHOLD:
-            logger.info(
-                f"Draft gated (streaming): confidence {confidence:.2f} "
-                f"< {DRAFT_CONFIDENCE_THRESHOLD}"
-            )
-            from jarvis.metrics import get_draft_metrics
-
-            get_draft_metrics().record(confidence, gated=True)
-            return {
-                "suggestions": [],
-                "gated": True,
-                "gated_confidence": confidence,
-                "context_used": context_used,
-            }
-
-        # Phase 2: Stream tokens from generator
-        full_response = ""
-        token_count = 0
-
-        try:
-            async for token_data in reply_service.generator.generate_stream(request):
-                token_text = token_data["token"]
-                token_index = token_data["token_index"]
-                is_final = token_data["is_final"]
-
-                full_response += token_text
-                token_count += 1
-
-                await self._send_stream_token(
-                    writer, token_text, token_index, is_final, request_id=request_id
+            # Phase 1: Build request through full pipeline (sync, run in thread)
+            try:
+                request, metadata = await asyncio.to_thread(
+                    reply_service.prepare_streaming_context,
+                    incoming=last_incoming,
+                    thread=context[-10:] if context else None,
+                    chat_id=chat_id,
+                    instruction=instruction,
                 )
-        except Exception as e:
-            logger.exception("Streaming generation failed")
-            raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
+            except Exception as e:
+                logger.exception("Failed to prepare streaming context")
+                raise JsonRpcError(
+                    INTERNAL_ERROR, f"Context preparation failed: {e}"
+                ) from e
+
+            confidence = float(metadata.get("confidence_score", 0.6))
+
+            # Gate low-confidence drafts before streaming
+            if confidence < DRAFT_CONFIDENCE_THRESHOLD:
+                logger.info(
+                    f"Draft gated (streaming): confidence {confidence:.2f} "
+                    f"< {DRAFT_CONFIDENCE_THRESHOLD}"
+                )
+                from jarvis.metrics import get_draft_metrics
+
+                get_draft_metrics().record(confidence, gated=True)
+                return {
+                    "suggestions": [],
+                    "gated": True,
+                    "gated_confidence": confidence,
+                    "context_used": context_used,
+                }
+
+            # Phase 2: Stream tokens from generator
+            response_tokens: list[str] = []
+
+            try:
+                async for token_data in reply_service.generator.generate_stream(request):
+                    token_text = token_data["token"]
+                    token_index = token_data["token_index"]
+                    is_final = token_data["is_final"]
+
+                    response_tokens.append(token_text)
+
+                    await self._send_stream_token(
+                        writer, token_text, token_index, is_final, request_id=request_id
+                    )
+            except Exception as e:
+                logger.exception("Streaming generation failed")
+                raise JsonRpcError(INTERNAL_ERROR, "Streaming failed") from e
+        finally:
+            if self._prefetch_manager:
+                self._prefetch_manager.resume()
 
         # Phase 3: Send final response
+        full_response = "".join(response_tokens)
         result = {
             "suggestions": [{"text": full_response.strip(), "confidence": confidence}],
             "context_used": context_used,
             "streamed": True,
-            "tokens_generated": token_count,
+            "tokens_generated": len(response_tokens),
         }
         await self._send_stream_response(writer, request_id, result)
         return result
 
+    @rpc_handler("Summarization failed")
     async def _summarize(
         self,
         chat_id: str,
@@ -1389,80 +1515,73 @@ class JarvisSocketServer:
         Returns:
             Dict with summary, key_points, and message_count
         """
-        try:
-            # Get messages from iMessage
-            from integrations.imessage import ChatDBReader
+        # Get messages from iMessage
+        from integrations.imessage import ChatDBReader
 
-            with ChatDBReader() as reader:
-                messages = reader.get_messages(chat_id, limit=num_messages)
+        with ChatDBReader() as reader:
+            messages = reader.get_messages(chat_id, limit=num_messages)
 
-            if not messages:
-                raise JsonRpcError(INVALID_PARAMS, "No messages found")
+        if not messages:
+            raise JsonRpcError(INVALID_PARAMS, "No messages found")
 
-            # Build conversation text
-            conversation, _ = self._build_message_context(messages)
+        # Build conversation text
+        conversation, _ = self._build_message_context(messages)
 
-            if not conversation:
-                return {
-                    "summary": "No text messages found in conversation",
-                    "key_points": [],
-                    "message_count": len(messages),
-                }
+        if not conversation:
+            return {
+                "summary": "No text messages found in conversation",
+                "key_points": [],
+                "message_count": len(messages),
+            }
 
-            from models.loader import get_model
+        from models.loader import get_model
 
-            model = get_model()
-            if not model:
-                raise JsonRpcError(INTERNAL_ERROR, "Model not available")
+        model = get_model()
+        if not model:
+            raise JsonRpcError(INTERNAL_ERROR, "Model not available")
 
-            conversation_text = "\n".join(conversation[-30:])  # Limit for context window
-            prompt = f"""Summarize this conversation in 2-3 sentences, then list key points:
+        conversation_text = "\n".join(conversation[-30:])  # Limit for context window
+        prompt = f"""Summarize this conversation in 2-3 sentences, then list key points:
 
 {conversation_text}
 
 Summary:"""
 
-            # Check if streaming is requested
-            if _writer is not None:
-                return await self._summarize_streaming(
-                    model=model,
-                    prompt=prompt,
-                    message_count=len(messages),
-                    writer=_writer,
-                    request_id=_request_id,
-                )
+        # Check if streaming is requested
+        if _writer is not None:
+            return await self._summarize_streaming(
+                model=model,
+                prompt=prompt,
+                message_count=len(messages),
+                writer=_writer,
+                request_id=_request_id,
+            )
 
-            # Non-streaming generation - run in thread to avoid blocking event loop
-            def _summarize_sync():
-                if not model.is_loaded():
-                    model.load()
-                return model.generate_sync(prompt, max_tokens=300)
+        # Non-streaming generation - run in thread to avoid blocking event loop
+        def _summarize_sync():
+            if not model.is_loaded():
+                model.load()
+            return model.generate_sync(prompt, max_tokens=300)
 
-            result = await asyncio.to_thread(_summarize_sync)
-            response_text = result.text
+        result = await asyncio.to_thread(_summarize_sync)
+        response_text = result.text
 
-            # Parse response - simple extraction
-            lines = response_text.strip().split("\n")
-            summary = lines[0] if lines else "Conversation summary unavailable"
+        # Parse response - simple extraction
+        lines = response_text.strip().split("\n")
+        summary = lines[0] if lines else "Conversation summary unavailable"
 
-            # Extract bullet points
-            key_points = [
-                line.lstrip("•-*0123456789.)").strip()
-                for line in lines[1:]
-                if line.strip() and len(line.strip()) > 5
-            ][:5]  # Max 5 key points
+        # Extract bullet points
+        key_points = [
+            line.lstrip("•-*0123456789.)").strip()
+            for line in lines[1:]
+            if line.strip() and len(line.strip()) > 5
+        ][:5]  # Max 5 key points
 
-            return {
-                "summary": summary,
-                "key_points": key_points or ["See full conversation for details"],
-                "message_count": len(messages),
-            }
-
-        except JsonRpcError:
-            raise
-        except Exception as e:
-            logger.exception("Error summarizing conversation")
-            raise JsonRpcError(INTERNAL_ERROR, "Summarization failed") from e
+        return {
+            "summary": summary,
+            "key_points": key_points or ["See full conversation for details"],
+            "message_count": len(messages),
+        }
 
     async def _summarize_streaming(
         self,
@@ -1509,8 +1628,7 @@ Summary:"""
         gen_thread = threading.Thread(target=producer, daemon=True)
         gen_thread.start()
 
-        full_response = ""
-        token_count = 0
+        response_tokens: list[str] = []
 
         try:
             while True:
@@ -1523,8 +1641,7 @@ Summary:"""
                     break
 
                 token_text, token_index, is_final = item
-                full_response += token_text
-                token_count += 1
+                response_tokens.append(token_text)
 
                 await self._send_stream_token(
                     writer, token_text, token_index, is_final, request_id=request_id
@@ -1542,6 +1659,7 @@ Summary:"""
             stop_event.set()
 
         # Parse the streamed response
+        full_response = "".join(response_tokens)
         lines = full_response.strip().split("\n")
         summary = lines[0] if lines else "Conversation summary unavailable"
         key_points = [
@@ -1555,11 +1673,12 @@ Summary:"""
             "key_points": key_points or ["See full conversation for details"],
             "message_count": message_count,
             "streamed": True,
-            "tokens_generated": token_count,
+            "tokens_generated": len(response_tokens),
         }
         await self._send_stream_response(writer, request_id, result)
         return result
 
+    @rpc_handler("Smart replies failed")
     async def _get_smart_replies(
         self,
         last_message: str,
@@ -1574,33 +1693,29 @@ Summary:"""
         Returns:
             Dict with suggestions list
         """
-        try:
-            # Use the router to generate a response (run in thread to avoid blocking event loop)
-            from jarvis.router import get_reply_router
+        # Use the router to generate a response (run in thread to avoid blocking event loop)
+        from jarvis.router import get_reply_router
 
-            router = get_reply_router()
-            result = await asyncio.to_thread(router.route, incoming=last_message)
+        router = get_reply_router()
+        result = await asyncio.to_thread(router.route, incoming=last_message)
 
-            # Get the main response
-            response_text = result.get("response", "")
+        # Get the main response
+        response_text = result.get("response", "")
 
-            suggestions = []
-            if response_text:
-                suggestions.append(
-                    {
-                        "text": response_text,
-                        "score": 0.9 if result.get("confidence") == "high" else 0.7,
-                    }
-                )
+        suggestions = []
+        if response_text:
+            suggestions.append(
+                {
+                    "text": response_text,
+                    "score": 0.9 if result.get("confidence") == "high" else 0.7,
+                }
+            )
 
-            # For additional suggestions, we could generate variations
-            # For now, just return the single best response
-            return {"suggestions": suggestions}
+        # For additional suggestions, we could generate variations
+        # For now, just return the single best response
+        return {"suggestions": suggestions}
 
-        except Exception as e:
-            logger.exception("Error getting smart replies")
-            raise JsonRpcError(INTERNAL_ERROR, "Smart replies failed") from e
-
+    @rpc_handler("Search failed")
     async def _semantic_search(
         self,
         query: str,
@@ -1619,48 +1734,43 @@ Summary:"""
         Returns:
             Dict with results and total_results
         """
-        try:
-            from datetime import datetime
+        from datetime import datetime
 
-            from jarvis.search.vec_search import get_vec_searcher
+        from jarvis.search.vec_search import get_vec_searcher
 
-            chat_id = filters.get("chat_id") if filters else None
-            sender_filter = filters.get("sender") if filters else None
+        chat_id = filters.get("chat_id") if filters else None
+        sender_filter = filters.get("sender") if filters else None
 
-            searcher = get_vec_searcher()
-            results = searcher.search(query, chat_id=chat_id, limit=limit)
+        searcher = get_vec_searcher()
+        results = searcher.search(query, chat_id=chat_id, limit=limit)
 
-            # Post-filter by sender if requested
-            if sender_filter:
-                results = [r for r in results if r.sender == sender_filter]
+        # Post-filter by sender if requested
+        if sender_filter:
+            results = [r for r in results if r.sender == sender_filter]
 
-            # Filter by threshold
-            results = [r for r in results if r.score >= threshold]
+        # Filter by threshold
+        results = [r for r in results if r.score >= threshold]
 
-            return {
-                "results": [
-                    {
-                        "message": {
-                            "id": r.rowid,
-                            "chat_id": r.chat_id,
-                            "text": r.text,
-                            "sender": r.sender or "",
-                            "date": (
-                                datetime.fromtimestamp(r.timestamp).isoformat()
-                                if r.timestamp
-                                else ""
-                            ),
-                        },
-                        "similarity": round(r.score, 4),
-                    }
-                    for r in results
-                ],
-                "total_results": len(results),
-            }
-
-        except Exception as e:
-            logger.exception("Error in semantic search")
-            raise JsonRpcError(INTERNAL_ERROR, "Search failed") from e
+        return {
+            "results": [
+                {
+                    "message": {
+                        "id": r.rowid,
+                        "chat_id": r.chat_id,
+                        "text": r.text,
+                        "sender": r.sender or "",
+                        "date": (
+                            datetime.fromtimestamp(r.timestamp).isoformat()
+                            if r.timestamp
+                            else ""
+                        ),
+                    },
+                    "similarity": round(r.score, 4),
+                }
+                for r in results
+            ],
+            "total_results": len(results),
+        }
 
     async def _batch(
         self,
@@ -1770,12 +1880,22 @@ Summary:"""
 
         try:
             from integrations.imessage import ChatDBReader
+            from integrations.imessage.reader import normalize_phone_number
 
             def _resolve_sync() -> dict[str, str | None]:
                 result: dict[str, str | None] = {}
                 with ChatDBReader() as reader:
+                    # Warm the contacts cache once (loads AddressBook)
+                    # then do O(1) dict lookups per identifier
+                    reader._resolve_contact_name(identifiers[0])
+                    cache = reader._contacts_cache or {}
+
                     for identifier in identifiers:
-                        result[identifier] = reader._resolve_contact_name(identifier)
+                        if not identifier or identifier == "me":
+                            result[identifier] = None
+                            continue
+                        normalized = normalize_phone_number(identifier)
+                        result[identifier] = cache.get(normalized) if normalized else None
                 return result
 
             return await asyncio.to_thread(_resolve_sync)
@@ -1842,6 +1962,7 @@ Summary:"""
             logger.warning(f"get_contacts failed: {e}")
             return {}
 
+    @rpc_handler("Failed to list conversations")
     async def _list_conversations(
         self,
         limit: int = 50,
@@ -1860,59 +1981,53 @@ Summary:"""
         """
         import time
 
+        from datetime import datetime
+
+        from integrations.imessage import ChatDBReader
+
         start_time = time.time()
 
-        try:
-            from datetime import datetime
+        # Convert Unix timestamps to datetime if provided
+        since_dt = datetime.fromtimestamp(since) if since else None
+        before_dt = datetime.fromtimestamp(before) if before else None
 
-            from integrations.imessage import ChatDBReader
+        db_start = time.time()
+        # Wrap the DB call with latency tracking
+        with track_latency("socket_list_conversations", limit=limit):
+            with ChatDBReader() as reader:
+                conversations = reader.get_conversations(
+                    limit=limit,
+                    since=since_dt,
+                    before=before_dt,
+                )
+        db_elapsed_ms = (time.time() - db_start) * 1000
 
-            # Convert Unix timestamps to datetime if provided
-            since_dt = datetime.fromtimestamp(since) if since else None
-            before_dt = datetime.fromtimestamp(before) if before else None
+        # Convert Conversation objects to dicts for JSON serialization
+        serialize_start = time.time()
+        result = {
+            "conversations": [
+                {
+                    "chat_id": c.chat_id,
+                    "participants": c.participants,
+                    "display_name": c.display_name,
+                    "last_message_date": c.last_message_date.isoformat(),
+                    "message_count": c.message_count,
+                    "is_group": c.is_group,
+                    "last_message_text": c.last_message_text,
+                }
+                for c in conversations
+            ],
+            "total": len(conversations),
+        }
+        serialize_elapsed_ms = (time.time() - serialize_start) * 1000
+        total_elapsed_ms = (time.time() - start_time) * 1000
 
-            db_start = time.time()
-            # Wrap the DB call with latency tracking
-            with track_latency("socket_list_conversations", limit=limit):
-                with ChatDBReader() as reader:
-                    conversations = reader.get_conversations(
-                        limit=limit,
-                        since=since_dt,
-                        before=before_dt,
-                    )
-            db_elapsed_ms = (time.time() - db_start) * 1000
-
-            # Convert Conversation objects to dicts for JSON serialization
-            serialize_start = time.time()
-            result = {
-                "conversations": [
-                    {
-                        "chat_id": c.chat_id,
-                        "participants": c.participants,
-                        "display_name": c.display_name,
-                        "last_message_date": c.last_message_date.isoformat(),
-                        "message_count": c.message_count,
-                        "is_group": c.is_group,
-                        "last_message_text": c.last_message_text,
-                    }
-                    for c in conversations
-                ],
-                "total": len(conversations),
-            }
-            serialize_elapsed_ms = (time.time() - serialize_start) * 1000
-            total_elapsed_ms = (time.time() - start_time) * 1000
-
-            logger.info(
-                f"[list_conversations] returned {len(conversations)} convos in "
-                f"{total_elapsed_ms:.1f}ms (db={db_elapsed_ms:.1f}ms, "
-                f"serialize={serialize_elapsed_ms:.1f}ms)"
-            )
-            return result
-
-        except Exception as e:
-            elapsed_ms = (time.time() - start_time) * 1000
-            logger.exception(f"Error listing conversations (failed after {elapsed_ms:.1f}ms)")
-            raise JsonRpcError(INTERNAL_ERROR, "Failed to list conversations") from e
+        logger.info(
+            f"[list_conversations] returned {len(conversations)} convos in "
+            f"{total_elapsed_ms:.1f}ms (db={db_elapsed_ms:.1f}ms, "
+            f"serialize={serialize_elapsed_ms:.1f}ms)"
+        )
+        return result
 
     # ========== Metrics ==========
 
@@ -1959,6 +2074,7 @@ Summary:"""
 
     # ========== Prefetch RPC Methods ==========
 
+    @rpc_handler("Stats retrieval failed")
     async def _prefetch_stats(self) -> dict[str, Any]:
         """Get prefetch system statistics.
 
@@ -1971,14 +2087,11 @@ Summary:"""
                 "error": "Prefetch system not enabled",
             }
 
-        try:
-            stats = self._prefetch_manager.stats()
-            stats["enabled"] = True
-            return stats
-        except Exception as e:
-            logger.exception("Error getting prefetch stats")
-            raise JsonRpcError(INTERNAL_ERROR, "Stats retrieval failed") from e
+        stats = self._prefetch_manager.stats()
+        stats["enabled"] = True
+        return stats
 
+    @rpc_handler("Invalidation failed")
     async def _prefetch_invalidate(
         self,
         chat_id: str | None = None,
@@ -1996,12 +2109,8 @@ Summary:"""
         if not self._prefetch_manager:
             return {"invalidated": 0, "error": "Prefetch system not enabled"}
 
-        try:
-            count = self._prefetch_manager.invalidate(chat_id=chat_id, tags=tags)
-            return {"invalidated": count}
-        except Exception as e:
-            logger.exception("Error invalidating cache")
-            raise JsonRpcError(INTERNAL_ERROR, "Invalidation failed") from e
+        count = self._prefetch_manager.invalidate(chat_id=chat_id, tags=tags)
+        return {"invalidated": count}
 
     async def _prefetch_focus(self, chat_id: str) -> dict[str, Any]:
         """Signal that user focused on a chat (triggers high-priority prefetch).

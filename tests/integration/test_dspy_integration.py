@@ -25,6 +25,10 @@ def test_dspy_mlx_integration():
     except ImportError:
         pytest.skip("MLX not installed")
 
+    import psutil
+    if psutil.virtual_memory().available < 2 * 1024**3:
+        pytest.skip("Insufficient available memory (<2GB) to load LLM")
+
     local_lm = DSPYMLXClient(max_tokens=20, temperature=0.1)
     dspy.configure(lm=local_lm)
 

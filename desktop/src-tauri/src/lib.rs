@@ -2,6 +2,7 @@
 //!
 //! Provides the Tauri application setup and tray functionality.
 
+mod backend;
 mod logging;
 mod socket;
 mod tray;
@@ -54,16 +55,45 @@ fn update_tray_badge(app: tauri::AppHandle, count: u32) {
     }
 }
 
+/// List AddressBook source directory UUIDs for direct contact resolution.
+/// Returns paths to AddressBook-v22.abcddb files that exist.
+#[tauri::command]
+fn list_addressbook_sources() -> Vec<String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+    let sources_dir = std::path::PathBuf::from(&home)
+        .join("Library")
+        .join("Application Support")
+        .join("AddressBook")
+        .join("Sources");
+
+    let mut paths = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&sources_dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                let db_path = entry.path().join("AddressBook-v22.abcddb");
+                if db_path.exists() {
+                    if let Some(path_str) = db_path.to_str() {
+                        paths.push(path_str.to_string());
+                    }
+                }
+            }
+        }
+    }
+    paths
+}
+
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::default().build())
         // Register socket state for persistent connection
         .manage(socket::SocketState::default())
+        // Register backend process state for auto-launch
+        .manage(backend::BackendProcess::default())
         .invoke_handler(tauri::generate_handler![
             socket::connect_socket,
             socket::disconnect_socket,
@@ -73,10 +103,15 @@ pub fn run() {
             socket::is_socket_connected,
             logging::frontend_log,
             update_tray_badge,
+            list_addressbook_sources,
         ])
         .setup(|app| {
             // Set up the system tray
             tray::setup_tray(app)?;
+
+            // Auto-launch backend socket server
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(backend::ensure_backend_running(handle));
 
             // Get the main window
             if let Some(window) = app.get_webview_window("main") {
@@ -126,10 +161,20 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .unwrap_or_else(|e| {
-            eprintln!(
-                "Failed to run JARVIS Tauri application - check dependencies/configuration: {e}"
+            panic!(
+                "Failed to build JARVIS Tauri application - check dependencies/configuration: {e}"
             );
         });
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // Kill the backend process on app exit
+            if let Some(state) = app_handle.try_state::<backend::BackendProcess>() {
+                eprintln!("[App] Shutting down backend process");
+                state.kill();
+            }
+        }
+    });
 }

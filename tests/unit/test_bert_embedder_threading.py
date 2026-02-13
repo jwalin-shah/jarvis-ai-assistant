@@ -168,9 +168,8 @@ class TestBertEmbedderThreadSafety:
         reset_in_process_embedder()
 
     def test_gpu_lock_is_shared_with_loader(self):
-        """InProcessEmbedder's GPU lock is the same as MLXModelLoader's."""
-        from models.bert_embedder import InProcessEmbedder
+        """gpu_context() uses the same lock as MLXModelLoader's."""
         from models.loader import MLXModelLoader
+        from models.memory_config import _get_gpu_lock
 
-        embedder = InProcessEmbedder()
-        assert embedder._get_gpu_lock() is MLXModelLoader._mlx_load_lock
+        assert _get_gpu_lock() is MLXModelLoader._mlx_load_lock

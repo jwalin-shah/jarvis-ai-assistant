@@ -58,7 +58,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    z-index: 9999;
+    z-index: var(--z-toast);
     pointer-events: none;
     max-width: 400px;
   }

@@ -1,17 +1,17 @@
-"""JARVIS Database Management - SQLite database for contacts, pairs, and clusters.
+"""JARVIS Database Management - SQLite database for contacts, segments, and facts.
 
 Manages ~/.jarvis/jarvis.db which stores:
 - Contacts with relationship labels and handle mappings
-- Extracted (trigger, response) pairs from iMessage history
-- Intent clusters mined from response patterns (optional)
+- Conversation segments (topic-coherent chunks) from iMessage history
+- Extracted facts (biographical, preferences, work) from segments
 - FAISS vector index metadata and versioning
 
 Usage:
     jarvis db init                     # Create database
     jarvis db add-contact --name "Sarah" --relationship "sister"
     jarvis db list-contacts            # View contacts
-    jarvis db extract                  # Extract pairs from chat.db
-    jarvis db build-index              # Build FAISS index
+    jarvis db extract                  # Extract segments and facts from chat.db
+    jarvis db build-index              # Build FAISS index for segments
 """
 
 import threading
@@ -23,6 +23,7 @@ from jarvis.db.contacts import ContactMixin
 from jarvis.db.core import JarvisDBBase
 from jarvis.db.embeddings import EmbeddingMixin
 from jarvis.db.index_versions import IndexVersionMixin
+from jarvis.cache import TTLCache
 from jarvis.db.models import (
     INDEXES_DIR,
     JARVIS_DB_PATH,
@@ -33,7 +34,6 @@ from jarvis.db.models import (
     Pair,
     PairArtifact,
     PairEmbedding,
-    TTLCache,
     _convert_timestamp,
 )
 from jarvis.db.pairs import PairMixin

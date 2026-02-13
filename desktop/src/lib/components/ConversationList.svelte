@@ -367,11 +367,18 @@
     announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
   }
 
+  let listContainerRef = $state<HTMLDivElement | null>(null);
+
   function scrollToItem(index: number) {
     tick().then(() => {
       const item = itemRefs[index];
-      if (item) {
-        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (!item || !listContainerRef) return;
+      const containerRect = listContainerRef.getBoundingClientRect();
+      const itemRect = item.getBoundingClientRect();
+      if (itemRect.bottom > containerRect.bottom) {
+        listContainerRef.scrollTop += itemRect.bottom - containerRect.bottom;
+      } else if (itemRect.top < containerRect.top) {
+        listContainerRef.scrollTop -= containerRect.top - itemRect.top;
       }
     });
   }
@@ -487,7 +494,7 @@
   {:else if conversationsStore.conversations.length === 0}
     <div class="empty">No conversations found</div>
   {:else}
-    <div class="list" role="listbox" aria-label="Conversations">
+    <div class="list" role="listbox" aria-label="Conversations" bind:this={listContainerRef}>
       {#each sortedConversations as conv, index (conv.chat_id)}
         {@const identifier = getPrimaryIdentifier(conv)}
         {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}

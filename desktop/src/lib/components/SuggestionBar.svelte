@@ -36,6 +36,10 @@
           streamingText += token;
         }
       );
+      if (result.gated || result.suggestions.length === 0) {
+        handleClose();
+        return;
+      }
       suggestions = result.suggestions;
       barState = "results";
     } catch {
@@ -48,6 +52,10 @@
           3,
           abortController!.signal
         );
+        if (response.gated || response.suggestions.length === 0) {
+          handleClose();
+          return;
+        }
         suggestions = response.suggestions;
         barState = "results";
       } catch (e2) {
@@ -135,8 +143,9 @@
       {#each suggestions as suggestion}
         <button
           class="chip"
+          style:opacity={suggestion.confidence < 0.7 ? 0.85 : 1}
           onclick={() => onSelect(suggestion.text)}
-          title={suggestion.text}
+          title="{suggestion.text} (confidence: {Math.round(suggestion.confidence * 100)}%)"
         >
           {truncate(suggestion.text, 100)}
         </button>

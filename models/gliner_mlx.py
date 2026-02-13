@@ -33,6 +33,7 @@ import numpy as np
 from tokenizers import Tokenizer
 
 from models.deberta import DebertaModel, convert_hf_weights
+from models.memory_config import gpu_context
 
 logger = logging.getLogger(__name__)
 
@@ -632,18 +633,12 @@ class MLXGLiNER:
         self.tokenizer: GLiNERTokenizer | None = None
         self._loaded = False
 
-    def _get_gpu_lock(self) -> threading.Lock:
-        """Get the shared MLX GPU lock."""
-        from models.loader import MLXModelLoader
-
-        return MLXModelLoader._mlx_load_lock
-
     def load_model(self) -> None:
         """Load the GLiNER model. Thread-safe via GPU lock."""
         if self._loaded:
             return
 
-        with self._get_gpu_lock():
+        with gpu_context():
             if self._loaded:
                 return
 
@@ -662,11 +657,6 @@ class MLXGLiNER:
                 "Loading MLX GLiNER model %s (hidden=768→512, 12 layers, BiLSTM)",
                 self._model_name,
             )
-
-            # Set MLX memory limits for 8GB system
-            from models.memory_config import apply_embedder_limits
-
-            apply_embedder_limits()
 
             self.model = GLiNERModel(
                 DEBERTA_CONFIG,
@@ -764,7 +754,7 @@ class MLXGLiNER:
 
     def unload(self) -> None:
         """Unload model to free memory."""
-        with self._get_gpu_lock():
+        with gpu_context():
             self.model = None
             self.tokenizer = None
             self._loaded = False
@@ -837,7 +827,7 @@ class MLXGLiNER:
 
             # Tokenize + forward pass under single GPU lock to prevent race
             # conditions on shared tokenizer state and Metal GPU.
-            with self._get_gpu_lock():
+            with gpu_context():
                 batch_data = self.tokenizer.tokenize_batch(word_lists, labels)
 
                 logits = self.model(
