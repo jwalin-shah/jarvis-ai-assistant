@@ -14,7 +14,6 @@ from types import TracebackType
 
 from .api import FastAPIService
 from .base import Service, ServiceError
-from .embedding import EmbeddingService
 from .ner import NERService
 from .socket import SocketService
 
@@ -56,21 +55,12 @@ class ServiceManager:
         main_venv = self.project_root / ".venv"
 
         # Service-specific venvs (with legacy fallbacks)
-        embedding_venv = venvs_dir / "embedding"
-        legacy_embedding_dir = jarvis_home / "mlx-embed-service"
-        if not embedding_venv.exists() and legacy_embedding_dir.exists():
-            embedding_venv = legacy_embedding_dir
-
         ner_venv = venvs_dir / "ner"
         legacy_ner_venv = jarvis_home / "ner_venv"
         if not ner_venv.exists() and legacy_ner_venv.exists():
             ner_venv = legacy_ner_venv
 
         self.services = {
-            "embedding": EmbeddingService(
-                venv_path=embedding_venv,
-                service_dir=embedding_venv,
-            ),
             "ner": NERService(
                 venv_path=ner_venv,
                 script_path=self.project_root / "scripts" / "ner_server.py",
@@ -102,8 +92,8 @@ class ServiceManager:
         with self._lock:
             self._initialize_services()
 
-            # Dependency order: embedding/ner can start in parallel, then socket, then api
-            start_order = ["embedding", "ner", "socket", "api"]
+            # Dependency order: ner first, then socket, then api
+            start_order = ["ner", "socket", "api"]
 
             logger.info("Starting all services...")
 
@@ -153,8 +143,8 @@ class ServiceManager:
             if not self._initialized:
                 return
 
-            # Reverse order: api, socket, then embedding/ner
-            stop_order = ["api", "socket", "ner", "embedding"]
+            # Reverse order: api, socket, then ner
+            stop_order = ["api", "socket", "ner"]
 
             logger.info("Stopping all services...")
 
