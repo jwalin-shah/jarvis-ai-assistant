@@ -114,6 +114,7 @@ desktop/playwright-report/
 # Logs
 *.log
 logs/
+nohup.out
 
 # Temporary files
 tmp/
@@ -143,6 +144,7 @@ archive/
 tools/multi-agent/outputs/
 tasks/sessions/
 tasks/*.md
+tasks/prompts/
 
 # Experiment artifacts (data, models, results - all regeneratable)
 experiments/**/data/*.jsonl
@@ -246,6 +248,9 @@ models/*_imessage_thresholds.json
 optuna_bayesian.db
 optuna_studies.db
 
+# Training data (personal, regeneratable)
+training_data/
+
 # Data artifacts (personal, regeneratable)
 all_extracted_facts.json
 fact_extraction_sample.json
@@ -268,6 +273,7 @@ adapters/
 
 # Downloaded model weights
 models/lfm-*/
+models/lfm2-*/
 models/nuextract-*/
 
 # Eval results (regeneratable)
@@ -275,9 +281,11 @@ evals/results/
 
 # Multi-agent scratch outputs
 tools/multi-agent/prompts/
+.hub/
 
 # Scratch notes and review drafts
 model_selection_debate.txt
 review_prompt.txt
 set*_*_draft.md
 validation_evaluation_results*.txt
+fact_extraction_review.md

@@ -353,7 +353,7 @@ class VecSearcher:
         segments: list[TopicSegment],
         contact_id: int | None = None,
         chat_id: str | None = None,
-    ) -> int:
+    ) -> list[int]:
         """Index multiple topic segments into vec_chunks.
 
         Args:
@@ -362,10 +362,10 @@ class VecSearcher:
             chat_id: Chat ID for the conversation.
 
         Returns:
-            Number of segments successfully indexed.
+            List of vec_chunks rowids for successfully indexed segments.
         """
         if not segments:
-            return 0
+            return []
 
         import json
 
@@ -411,7 +411,7 @@ class VecSearcher:
             )
 
         if not vec_chunks_batch:
-            return 0
+            return []
 
         try:
             with self.db.connection() as conn:
@@ -425,7 +425,7 @@ class VecSearcher:
                         keywords_json, message_count, source_type, source_id
                     ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
-                chunk_rowids = []
+                chunk_rowids: list[int] = []
                 for row in vec_chunks_batch:
                     cursor = conn.execute(insert_sql, row[:14])
                     chunk_rowids.append(cursor.lastrowid)
@@ -446,11 +446,11 @@ class VecSearcher:
                 except Exception as e:
                     logger.debug("vec_binary batch insert skipped: %s", e)
 
-                return len(vec_chunks_batch)
+                return chunk_rowids
 
         except Exception as e:
             logger.error("Failed to batch index segments: %s", e)
-            return 0
+            return []
 
     def delete_chunks_for_chat(self, chat_id: str) -> int:
         """Delete all chunks for a chat_id. Returns count deleted."""
@@ -800,6 +800,150 @@ class VecSearcher:
                     int8_arr = np.frombuffer(row["embedding"], dtype=np.int8)
                     result[row["rowid"]] = int8_arr.astype(np.float32) / self._INT8_SCALE
         return result
+
+    def search_with_full_segments(
+        self,
+        query: str,
+        limit: int = 5,
+        contact_id: int | None = None,
+        embedder: Any | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search vec_chunks and return full segment context with all messages.
+
+        Joins vec_chunks hits to conversation_segments and segment_messages
+        to retrieve full topic blocks instead of just trigger/response text.
+        Falls back to search_with_pairs() if segment tables don't exist.
+
+        Args:
+            query: Search query text.
+            limit: Max results.
+            contact_id: Optional partition key filter.
+            embedder: Optional embedder override.
+
+        Returns:
+            List of dicts with segment metadata and message_rowids.
+        """
+        # First, do the standard search
+        if contact_id is not None:
+            hits = self.search_with_pairs(
+                query=query, limit=limit, contact_id=contact_id, embedder=embedder
+            )
+        else:
+            hits = self.search_with_pairs_global(
+                query=query, limit=limit, embedder=embedder
+            )
+
+        if not hits:
+            return []
+
+        # Try to enrich with segment data
+        try:
+            chunk_rowids = [h.rowid for h in hits]
+            placeholders = ",".join("?" * len(chunk_rowids))
+            _validate_placeholders(placeholders)
+
+            with self.db.connection() as conn:
+                # Check if conversation_segments table exists
+                table_check = conn.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name='conversation_segments'"
+                ).fetchone()
+                if table_check is None:
+                    # Fall back to basic results
+                    return self._hits_to_dicts(hits)
+
+                # Join vec_chunks rowids → conversation_segments
+                seg_rows = conn.execute(
+                    f"""
+                    SELECT cs.id, cs.segment_id, cs.chat_id, cs.contact_id,
+                           cs.start_time, cs.end_time, cs.topic_label,
+                           cs.keywords_json, cs.entities_json,
+                           cs.message_count, cs.vec_chunk_rowid
+                    FROM conversation_segments cs
+                    WHERE cs.vec_chunk_rowid IN ({placeholders})
+                    """,  # noqa: S608
+                    chunk_rowids,
+                ).fetchall()
+
+                if not seg_rows:
+                    return self._hits_to_dicts(hits)
+
+                # Batch fetch message memberships
+                seg_ids = [r["id"] for r in seg_rows]
+                seg_ph = ",".join("?" * len(seg_ids))
+                _validate_placeholders(seg_ph)
+                msg_rows = conn.execute(
+                    f"""
+                    SELECT segment_id, message_rowid, position, is_from_me
+                    FROM segment_messages
+                    WHERE segment_id IN ({seg_ph})
+                    ORDER BY segment_id, position
+                    """,  # noqa: S608
+                    seg_ids,
+                ).fetchall()
+
+            # Group messages by segment
+            msgs_by_seg: dict[int, list[dict[str, Any]]] = {}
+            for mr in msg_rows:
+                sid = mr["segment_id"]
+                msgs_by_seg.setdefault(sid, []).append(
+                    {
+                        "message_rowid": mr["message_rowid"],
+                        "position": mr["position"],
+                        "is_from_me": bool(mr["is_from_me"]),
+                    }
+                )
+
+            # Build enriched results, keyed by vec_chunk_rowid
+            seg_by_chunk: dict[int, dict[str, Any]] = {}
+            for sr in seg_rows:
+                seg_by_chunk[sr["vec_chunk_rowid"]] = {
+                    "segment_id": sr["segment_id"],
+                    "chat_id": sr["chat_id"],
+                    "contact_id": sr["contact_id"],
+                    "start_time": sr["start_time"],
+                    "end_time": sr["end_time"],
+                    "topic_label": sr["topic_label"],
+                    "keywords_json": sr["keywords_json"],
+                    "entities_json": sr["entities_json"],
+                    "message_count": sr["message_count"],
+                    "messages": msgs_by_seg.get(sr["id"], []),
+                }
+
+            # Merge search hits with segment data
+            results = []
+            for hit in hits:
+                entry: dict[str, Any] = {
+                    "rowid": hit.rowid,
+                    "score": hit.score,
+                    "trigger_text": hit.trigger_text,
+                    "response_text": hit.response_text,
+                    "topic": hit.topic,
+                }
+                seg_data = seg_by_chunk.get(hit.rowid)
+                if seg_data:
+                    entry["segment"] = seg_data
+                results.append(entry)
+
+            return results
+
+        except Exception as e:
+            logger.debug("Full segment search failed, falling back: %s", e)
+            return self._hits_to_dicts(hits)
+
+    @staticmethod
+    def _hits_to_dicts(hits: list[VecSearchResult]) -> list[dict[str, Any]]:
+        """Convert VecSearchResult list to basic dicts."""
+        return [
+            {
+                "rowid": h.rowid,
+                "score": h.score,
+                "trigger_text": h.trigger_text,
+                "response_text": h.response_text,
+                "topic": h.topic,
+            }
+            for h in hits
+        ]
 
     def get_stats(self) -> dict[str, Any]:
         """Get index statistics.

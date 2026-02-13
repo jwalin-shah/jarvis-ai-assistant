@@ -19,7 +19,11 @@ from jarvis.utils.latency_tracker import track_latency
 logger = logging.getLogger(__name__)
 
 
-def save_facts(facts: list[Fact], contact_id: str) -> int:
+def save_facts(
+    facts: list[Fact],
+    contact_id: str,
+    segment_id: int | None = None,
+) -> int:
     """Save facts to contact_facts table, skip duplicates.
 
     This is a pure DB operation. For saving + semantic indexing,
@@ -28,6 +32,7 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
     Args:
         facts: Extracted facts to persist.
         contact_id: Contact these facts belong to.
+        segment_id: Optional segment DB ID for traceability.
 
     Returns:
         Number of new facts inserted.
@@ -61,6 +66,7 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 fact.valid_from,
                 fact.valid_until,
                 fact.attribution,
+                getattr(fact, "_segment_db_id", segment_id),
             )
             for fact in facts
         ]
@@ -72,8 +78,8 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
                 INSERT OR IGNORE INTO contact_facts
                 (contact_id, category, subject, predicate, value, confidence,
                  source_message_id, source_text, extracted_at, linked_contact_id,
-                 valid_from, valid_until, attribution)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 valid_from, valid_until, attribution, segment_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 fact_data,
             )
@@ -91,7 +97,11 @@ def save_facts(facts: list[Fact], contact_id: str) -> int:
         return inserted
 
 
-def save_and_index_facts(facts: list[Fact], contact_id: str) -> int:
+def save_and_index_facts(
+    facts: list[Fact],
+    contact_id: str,
+    segment_id: int | None = None,
+) -> int:
     """Save facts to DB and index them for semantic search.
 
     Combines ``save_facts()`` (pure DB insert) with ``index_facts()``
@@ -101,11 +111,12 @@ def save_and_index_facts(facts: list[Fact], contact_id: str) -> int:
     Args:
         facts: Extracted facts to persist and index.
         contact_id: Contact these facts belong to.
+        segment_id: Optional segment DB ID for traceability.
 
     Returns:
         Number of new facts inserted.
     """
-    inserted = save_facts(facts, contact_id)
+    inserted = save_facts(facts, contact_id, segment_id=segment_id)
 
     if inserted:
         try:
@@ -227,6 +238,7 @@ def delete_facts_for_contact(contact_id: str) -> int:
 def save_candidate_facts(
     candidates: list[FactCandidate],
     contact_id: str,
+    segment_id: int | None = None,
 ) -> int:
     """Convert FactCandidates to Facts and save them.
 
@@ -236,6 +248,7 @@ def save_candidate_facts(
     Args:
         candidates: List of FactCandidate objects from CandidateExtractor.
         contact_id: Contact ID to associate facts with.
+        segment_id: Optional segment DB ID for traceability.
 
     Returns:
         Number of new facts inserted.
@@ -290,7 +303,7 @@ def save_candidate_facts(
     if not facts:
         return 0
 
-    return save_and_index_facts(facts, contact_id)
+    return save_and_index_facts(facts, contact_id, segment_id=segment_id)
 
 
 def delete_facts_by_predicate_prefix(prefix: str) -> int:

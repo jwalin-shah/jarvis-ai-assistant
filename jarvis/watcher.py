@@ -626,6 +626,8 @@ class ChatDBWatcher:
         """Sync worker: re-segment recent messages for a single chat."""
         from integrations.imessage import ChatDBReader
         from jarvis.search.vec_search import get_vec_searcher
+        from jarvis.topics.segment_pipeline import process_segments
+        from jarvis.topics.segment_storage import delete_segments_for_chat
         from jarvis.topics.topic_segmenter import segment_conversation
 
         try:
@@ -633,6 +635,14 @@ class ChatDBWatcher:
         except Exception as e:
             logger.debug("Cannot get vec_searcher for re-segmentation: %s", e)
             return
+
+        db = None
+        try:
+            from jarvis.db import get_db
+
+            db = get_db()
+        except Exception as e:
+            logger.debug("Cannot get db for segment persistence: %s", e)
 
         with ChatDBReader() as reader:
             # Get recent messages (newest-first from reader), reverse to chronological
@@ -644,15 +654,23 @@ class ChatDBWatcher:
 
             segments = segment_conversation(messages, contact_id=chat_id)
 
-            # Replace old chunks for this chat
+            # Clear old data
+            if db is not None:
+                with db.connection() as conn:
+                    delete_segments_for_chat(conn, chat_id)
             deleted = searcher.delete_chunks_for_chat(chat_id)
-            indexed = searcher.index_segments(segments, chat_id=chat_id)
+
+            # Unified persist + index + extract
+            stats = process_segments(
+                segments, chat_id, contact_id=chat_id, extract_facts=False
+            )
 
             logger.info(
-                "Re-segmented %s: deleted=%d, indexed=%d segments",
+                "Re-segmented %s: deleted=%d, persisted=%d, indexed=%d",
                 chat_id,
                 deleted,
-                indexed,
+                stats["persisted"],
+                stats["indexed"],
             )
 
     def _validate_schema(self) -> bool:
