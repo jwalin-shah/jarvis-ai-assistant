@@ -7,6 +7,7 @@ Guidance for Claude Code when working with this repository.
 JARVIS is a local-first AI assistant for macOS providing intelligent iMessage management using MLX-based language models on Apple Silicon.
 
 **Default Model**: lfm-1.2b (LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit)
+**Extraction Model**: lfm-350m-extract (LiquidAI/LFM2-350M-extract-MLX-4bit)
 
 **Documentation:**
 - `docs/HOW_IT_WORKS.md` - How JARVIS works end-to-end (start here)

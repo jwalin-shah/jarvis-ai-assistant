@@ -1,6 +1,6 @@
 # JARVIS Database Schema
 
-> **Last Updated:** 2026-02-11
+> **Last Updated:** 2026-02-12
 
 This document describes the database schemas used by JARVIS.
 
@@ -143,7 +143,7 @@ JARVIS uses the `sqlite-vec` extension for high-performance vector search direct
 ### JARVIS Primary Database
 
 **Location**: `~/.jarvis/jarvis.db`
-**Current Schema Version**: 15
+**Current Schema Version**: 17
 
 #### `contacts`
 Stores contact relationship metadata and handle mappings.
@@ -335,10 +335,12 @@ Extracted facts about contacts from message history. Used by the knowledge graph
 | linked_contact_id | TEXT | Resolved contact reference from NER person linking (v13+) |
 | valid_from | TIMESTAMP | When the fact became true (v14+) |
 | valid_until | TIMESTAMP | When the fact stopped being true (v14+) |
+| attribution | TEXT | Who fact is about: contact/user/third_party (v16+) |
+| segment_id | INTEGER | FK to conversation_segments(id) (v17+) |
 
 **Unique constraint**: `(contact_id, category, subject, predicate)` prevents duplicate facts.
 
-**Indexes**: `idx_facts_contact` on contact_id, `idx_facts_category` on category, `idx_facts_linked_contact` on linked_contact_id.
+**Indexes**: `idx_facts_contact` on contact_id, `idx_facts_category` on category, `idx_facts_linked_contact` on linked_contact_id, `idx_facts_lookup` on (contact_id, predicate, subject).
 
 #### `vec_facts` (sqlite-vec, v15+)
 Semantic vector index over contact facts for similarity search.
@@ -347,6 +349,37 @@ Semantic vector index over contact facts for similarity search.
 |--------|------|-------------|
 | rowid | INTEGER | Primary key (matches contact_facts.id) |
 | embedding | BLOB | 384-dim embedding of fact text |
+
+#### `conversation_segments` (v17+)
+Persistent topic segments from message history.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| segment_id | TEXT | Unique segment identifier |
+| chat_id | TEXT | Source conversation |
+| contact_id | TEXT | Associated contact |
+| start_time | TIMESTAMP | Segment start time |
+| end_time | TIMESTAMP | Segment end time |
+| topic_label | TEXT | Detected topic/summary |
+| keywords_json | TEXT | JSON array of keywords |
+| entities_json | TEXT | JSON array of named entities |
+| message_count | INTEGER | Number of messages in segment |
+| confidence | REAL | Segment confidence score |
+| vec_chunk_rowid | INTEGER | FK to vector chunk |
+| facts_extracted | BOOLEAN | Whether facts have been extracted |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+#### `segment_messages` (v17+)
+Links messages to their parent segments.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| segment_id | INTEGER | FK to conversation_segments |
+| message_rowid | INTEGER | FK to message ROWID |
+| position | INTEGER | Message position in segment |
+| is_from_me | BOOLEAN | Whether message was sent by user |
 
 ### Quality Metrics (In-Memory)
 
@@ -385,6 +418,8 @@ iMessage DB (read-only)
 | v13 | `linked_contact_id` column + NER person linking |
 | v14 | Temporal fields: `valid_from`, `valid_until` on contact_facts |
 | v15 | `vec_facts` semantic index for contact fact similarity search |
+| v16 | `attribution` column on contact_facts (contact/user/third_party) |
+| v17 | `conversation_segments` and `segment_messages` tables + `segment_id` FK |
 
 ## Migration Notes
 

@@ -1,6 +1,6 @@
 # How JARVIS Works
 
-> **Last Updated:** 2026-02-10
+> **Last Updated:** 2026-02-12
 
 This document explains the JARVIS system architecture, services, and message flow.
 
@@ -173,9 +173,16 @@ Messages: [
 
 ### Generation
 
-- **Model**: LFM-2.5-1.2B-Instruct-4bit (default)
+- **Default Model**: LFM-2.5-1.2B-Instruct-4bit
 - **Latency**: ~2-3s warm, 10-15s cold start
 - **Memory**: ~1.2GB model + ~200MB embeddings
+- **Model Registry**: See `models/registry.py` for all available models (Qwen, Phi-3, Gemma-3, LFM variants)
+
+### Fact Extraction
+
+- **Extraction Model**: LFM-2.5-350M-extract-4bit (specialized fine-tuned variant)
+- **NER**: GLiNER (`urchade/gliner_medium-v2.1`) for named entity recognition
+- **Verification**: MLX NLI cross-encoder for entailment checking
 
 ---
 
@@ -198,3 +205,48 @@ Messages: [
 | `~/.jarvis/jarvis.db` | JARVIS data (chunks, pairs, and vector index) |
 | `~/.jarvis/embeddings/` | Model-specific artifacts and embeddings.db |
 | `~/.jarvis/config.json` | User configuration |
+
+---
+
+## Model Registry
+
+JARVIS supports multiple LLM models via `models/registry.py`. The registry automatically selects the best model based on available RAM.
+
+| Model ID | Display Name | Size | Quality | Best For |
+|----------|--------------|------|---------|----------|
+| `lfm-1.2b` | LFM 2.5 1.2B (Conversational) | 1.2GB | Excellent | iMessage, quick replies |
+| `lfm-1.2b-thinking` | LFM 2.5 1.2B (Thinking) | 1.2GB | Excellent | Complex reasoning |
+| `lfm-1.2b-ft` | LFM 2.5 1.2B Fine-Tuned | 1.2GB | Excellent | Best for texting |
+| `gemma3-4b` | Gemma 3 4B Instruct | 2.75GB | Excellent | Natural conversation |
+| `qwen-3b` | Qwen 2.5 3B | 2.5GB | Excellent | Complex replies |
+| `qwen-1.5b` | Qwen 2.5 1.5B | 1.5GB | Good | Balanced |
+| `qwen-0.5b` | Qwen 2.5 0.5B | 0.8GB | Basic | Fast responses |
+| `lfm-0.3b` | LFM 2.5 0.3B | 0.3GB | Basic | Testing |
+
+**Extraction Models** (specialized for fact extraction):
+- `lfm-350m`: `mlx-community/LFM2-350M-4bit` - 350M parameter base model for fast extraction
+
+---
+
+## Observability
+
+JARVIS includes a structured observability system for debugging and monitoring:
+
+| Module | Purpose |
+|--------|---------|
+| `jarvis/observability/logging.py` | Structured logging with `log_event()` and `timed_operation()` |
+| `jarvis/observability/metrics_router.py` | Routing metrics collection and storage |
+| `jarvis/observability/insights.py` | Sentiment analysis and conversation insights |
+
+**Usage:**
+```python
+from jarvis.observability.logging import log_event, timed_operation
+
+# Log an event
+log_event("fact_extraction", contact_id="chat123", facts_found=5)
+
+# Time an operation
+with timed_operation("model_inference", model_id="lfm-350m") as ctx:
+    result = generate_reply(...)
+    ctx["tokens_generated"] = len(result)
+```

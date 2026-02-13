@@ -124,7 +124,17 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         min_ram_gb=4,
         quality_tier="basic",
         description="LFM 2.5 0.3B - fastest responses, lighter quality. Good for quick tests.",
-        recommended_for=["quick_replies", "testing"],
+        recommended_for=["quick_replies", "testing", "fact_extraction"],
+    ),
+    "lfm-350m": ModelSpec(
+        id="lfm-350m",
+        path="mlx-community/LFM2-350M-4bit",
+        display_name="LFM 2.5 350M",
+        size_gb=0.35,
+        min_ram_gb=4,
+        quality_tier="basic",
+        description="LFM 2.5 350M - base model optimized for fact extraction and fast inference.",
+        recommended_for=["fact_extraction", "quick_replies", "testing"],
     ),
     "lfm-0.7b": ModelSpec(
         id="lfm-0.7b",
