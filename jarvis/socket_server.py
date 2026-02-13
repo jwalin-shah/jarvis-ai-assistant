@@ -1629,11 +1629,17 @@ Summary:"""
                     logger.debug(f"jarvis.db contacts lookup failed: {e}")
 
                 # 2. Fill gaps from AddressBook for handles not in jarvis.db
+                # Pre-warm the contacts cache once, then do O(1) lookups per handle
+                # instead of N individual _resolve_contact_name calls
                 with ChatDBReader() as reader:
                     with reader._connection_context() as conn:
                         cursor = conn.cursor()
                         cursor.execute("SELECT id FROM handle")
                         all_handles = [row[0] for row in cursor.fetchall()]
+
+                    # Trigger lazy cache load once (populates reader._contacts_cache)
+                    if all_handles:
+                        reader._resolve_contact_name(all_handles[0])
 
                     for identifier in all_handles:
                         if identifier not in result:

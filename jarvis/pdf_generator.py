@@ -213,6 +213,13 @@ class PDFGenerator:
         self.page_width, self.page_height = letter
         self.margin = 0.75 * inch
         self.content_width = self.page_width - 2 * self.margin
+        # Pre-create timestamp styles to avoid per-message allocation
+        self._ts_style_right = ParagraphStyle(
+            "ts_right", parent=self.styles["timestamp"], alignment=TA_RIGHT
+        )
+        self._ts_style_left = ParagraphStyle(
+            "ts_left", parent=self.styles["timestamp"], alignment=TA_LEFT
+        )
 
     def generate(
         self,
@@ -415,11 +422,7 @@ class PDFGenerator:
 
             # Timestamp
             timestamp = _format_timestamp(message.date)
-            ts_style = ParagraphStyle(
-                "ts",
-                parent=self.styles["timestamp"],
-                alignment=TA_RIGHT if message.is_from_me else TA_LEFT,
-            )
+            ts_style = self._ts_style_right if message.is_from_me else self._ts_style_left
             msg_elements.append(Paragraph(timestamp, ts_style))
 
             # Reactions

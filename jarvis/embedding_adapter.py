@@ -434,6 +434,7 @@ class CachedEmbedder:
         cached_vectors: list[np.ndarray | None] = [None] * len(texts)
         missing_texts: list[str] = []
         missing_indices: list[int] = []
+        missing_keys: list[str] = []
 
         for i, text in enumerate(texts):
             key = self._make_key(text)
@@ -443,6 +444,7 @@ class CachedEmbedder:
             else:
                 missing_texts.append(text)
                 missing_indices.append(i)
+                missing_keys.append(key)
 
         if missing_texts:
             embeddings = self.base.encode(
@@ -451,10 +453,10 @@ class CachedEmbedder:
                 convert_to_numpy=convert_to_numpy,
                 normalize_embeddings=normalize_embeddings,
             )
-            for idx, emb in zip(missing_indices, embeddings):
+            for idx, emb, cache_key in zip(missing_indices, embeddings, missing_keys):
                 vector = np.asarray(emb, dtype=np.float32).reshape(1, -1)
                 cached_vectors[idx] = vector
-                self._set(self._make_key(texts[idx]), vector)
+                self._set(cache_key, vector)
             self._computations += len(missing_texts)
 
         if any(v is None for v in cached_vectors):

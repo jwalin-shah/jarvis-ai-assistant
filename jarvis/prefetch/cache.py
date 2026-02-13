@@ -585,8 +585,6 @@ class L3Cache:
         # Dirty flag for batched metadata writes
         self._metadata_dirty = False
         self._last_flush: float = time.time()
-        # Tag -> keys index for O(1) tag invalidation (mirrors L1Cache pattern)
-        self._tag_index: dict[str, set[str]] = self._build_tag_index()
         # Only flush access metadata every N reads to reduce I/O
         self._ACCESS_UPDATE_INTERVAL = 10
 

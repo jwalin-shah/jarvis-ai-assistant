@@ -16,7 +16,7 @@ import os
 import threading
 import time
 import types
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -151,7 +151,7 @@ class MemorySampler:
             max_samples: Maximum number of samples to retain
             interval_seconds: Sampling interval in seconds
         """
-        self._samples: list[MemorySample] = []
+        self._samples: deque[MemorySample] = deque(maxlen=max_samples)
         self._max_samples = max_samples
         self._interval = interval_seconds
         self._lock = threading.Lock()
@@ -202,9 +202,6 @@ class MemorySampler:
 
             with self._lock:
                 self._samples.append(sample)
-                # Trim to max samples
-                if len(self._samples) > self._max_samples:
-                    self._samples = self._samples[-self._max_samples :]
 
         except Exception:
             logger.debug("Memory sampling error", exc_info=True)
@@ -667,7 +664,7 @@ class TemplateAnalytics:
         self._category_similarities: dict[str, list[float]] = defaultdict(list)
 
         # Missed queries (queries below threshold): list of (query_hash, similarity, timestamp)
-        self._missed_queries: list[dict[str, Any]] = []
+        self._missed_queries: deque[dict[str, Any]] = deque(maxlen=self.MAX_MISSED_QUERIES)
 
         # Cache hit tracking
         self._cache_hits = 0
@@ -720,10 +717,6 @@ class TemplateAnalytics:
                 "timestamp": datetime.now(UTC).isoformat(),
             }
             self._missed_queries.append(missed)
-
-            # Trim to max size (keep most recent)
-            if len(self._missed_queries) > self.MAX_MISSED_QUERIES:
-                self._missed_queries = self._missed_queries[-self.MAX_MISSED_QUERIES :]
 
     def record_cache_access(self, hit: bool) -> None:
         """Record a cache access for hit rate tracking.
