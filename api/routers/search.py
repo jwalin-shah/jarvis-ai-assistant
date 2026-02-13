@@ -11,56 +11,30 @@ import threading
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from api.dependencies import get_imessage_reader
 from api.schemas import ErrorResponse, MessageResponse
-from integrations.imessage import ChatDBReader
-from jarvis.search.semantic_search import SearchFilters, SemanticSearcher
+from jarvis.search.vec_search import VecSearcher, get_vec_searcher
 
 router = APIRouter(prefix="/search", tags=["search"])
 
-# Singleton searcher instance for resource reuse
-_searcher_instance: SemanticSearcher | None = None
 _searcher_lock = threading.Lock()
-_cache_ops_lock = threading.Lock()
+_vec_searcher: VecSearcher | None = None
 
 
-def _get_searcher(reader: ChatDBReader, threshold: float) -> tuple[SemanticSearcher, float]:
-    """Get or create singleton SemanticSearcher instance.
+def _get_vec_searcher() -> VecSearcher:
+    """Get or create singleton VecSearcher instance."""
+    global _vec_searcher
 
-    Reuses searcher across requests to avoid repeated model loading.
-    Creates a dedicated reader with a limited connection pool (max 2 connections)
-    to avoid unbounded pool growth from the singleton's long lifetime.
-
-    Returns the searcher and the threshold separately to avoid mutating
-    shared state under concurrent requests (threshold is per-request).
-
-    Args:
-        reader: iMessage database reader (used only for first creation)
-        threshold: Similarity threshold (returned for per-request use)
-
-    Returns:
-        Tuple of (SemanticSearcher instance, threshold)
-    """
-    global _searcher_instance
-
-    # Fast path: skip lock if already initialized (double-check locking)
-    if _searcher_instance is not None:
-        return _searcher_instance, threshold
+    if _vec_searcher is not None:
+        return _vec_searcher
 
     with _searcher_lock:
-        if _searcher_instance is None:
-            # Use a dedicated connection (not the shared pool) to avoid
-            # holding pool slots for the singleton's entire lifetime
-            dedicated_reader = ChatDBReader(use_pool=False)
-            _searcher_instance = SemanticSearcher(
-                reader=dedicated_reader,
-                similarity_threshold=threshold,
-            )
-    return _searcher_instance, threshold
+        if _vec_searcher is None:
+            _vec_searcher = get_vec_searcher()
+    return _vec_searcher
 
 
 class SemanticSearchRequest(BaseModel):
@@ -316,7 +290,6 @@ class CacheStatsResponse(BaseModel):
 )
 async def semantic_search(
     request: SemanticSearchRequestWithFilters,
-    reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> SemanticSearchResponse:
     """Search messages by semantic similarity.
 
@@ -355,28 +328,26 @@ async def semantic_search(
     Raises:
         HTTPException 403: Full Disk Access permission not granted
     """
-    # Convert filters
-    search_filters = None
-    if request.filters:
-        search_filters = SearchFilters(
-            sender=request.filters.sender,
-            chat_id=request.filters.chat_id,
-            after=request.filters.after,
-            before=request.filters.before,
-            has_attachments=request.filters.has_attachments,
-        )
+    chat_id_filter = request.filters.chat_id if request.filters else None
 
     def _do_search() -> list[Any]:
         """Perform blocking search operation in thread pool."""
-        # Use singleton searcher for resource reuse
-        searcher, threshold = _get_searcher(reader, request.threshold)
-        searcher.similarity_threshold = threshold
-        return searcher.search(
+        searcher = _get_vec_searcher()
+        results = searcher.search(
             query=request.query,
-            filters=search_filters,
+            chat_id=chat_id_filter,
             limit=request.limit,
-            index_limit=request.index_limit,
         )
+
+        # Post-filter by threshold
+        results = [r for r in results if r.score >= request.threshold]
+
+        # Post-filter by sender if requested
+        if request.filters and request.filters.sender:
+            sender = request.filters.sender
+            results = [r for r in results if r.sender == sender]
+
+        return results
 
     # Run blocking search in thread pool
     results = await run_in_threadpool(_do_search)
@@ -384,8 +355,15 @@ async def semantic_search(
     # Convert to response format
     result_items = [
         SemanticSearchResultItem(
-            message=MessageResponse.model_validate(r.message),
-            similarity=round(r.similarity, 4),
+            message=MessageResponse(
+                id=r.rowid,
+                chat_id=r.chat_id or "",
+                sender=r.sender or "",
+                text=r.text or "",
+                date=datetime.fromtimestamp(r.timestamp) if r.timestamp else datetime.min,
+                is_from_me=r.is_from_me or False,
+            ),
+            similarity=round(r.score, 4),
         )
         for r in results
     ]
@@ -395,7 +373,7 @@ async def semantic_search(
         results=result_items,
         total_results=len(result_items),
         threshold_used=request.threshold,
-        messages_searched=request.index_limit,
+        messages_searched=request.limit,
     )
 
 
@@ -406,26 +384,32 @@ async def semantic_search(
     response_description="Cache statistics including size and count",
 )
 async def get_cache_stats() -> CacheStatsResponse:
-    """Get statistics about the semantic search embedding cache.
+    """Get statistics about the vector search index.
 
-    Returns information about the cached message embeddings including
-    the number of cached embeddings and storage size.
-
-    This is useful for monitoring cache growth and deciding when to clear it.
+    Returns information about indexed message embeddings including
+    the count and estimated storage size.
 
     Returns:
-        CacheStatsResponse with cache statistics
+        CacheStatsResponse with index statistics
     """
-    from jarvis.search.semantic_search import EmbeddingCache
+    from jarvis.db import get_db
 
     def _get_stats() -> dict[str, Any]:
-        """Get cache stats in thread pool (file I/O) with locking."""
-        with _cache_ops_lock:
-            cache = EmbeddingCache()
+        """Get vec table stats in thread pool."""
+        db = get_db()
+        with db.connection() as conn:
             try:
-                return cache.stats()
-            finally:
-                cache.close()
+                row = conn.execute("SELECT COUNT(*) as cnt FROM vec_messages").fetchone()
+                count = row["cnt"] if row else 0
+            except Exception:
+                count = 0
+            # Estimate: each int8 embedding is 384 bytes + metadata
+            size_bytes = count * 400
+            return {
+                "embedding_count": count,
+                "size_bytes": size_bytes,
+                "size_mb": round(size_bytes / (1024 * 1024), 2),
+            }
 
     stats = await run_in_threadpool(_get_stats)
     return CacheStatsResponse(
@@ -441,11 +425,10 @@ async def get_cache_stats() -> CacheStatsResponse:
     response_description="Confirmation of cache clear",
 )
 async def clear_cache() -> dict[str, str]:
-    """Clear the semantic search embedding cache.
+    """Clear the vector search index.
 
-    This removes all cached message embeddings. The next semantic search
-    will need to recompute embeddings, which will be slower but ensures
-    fresh results.
+    This removes all indexed message embeddings. The next indexing
+    operation will recompute them.
 
     Use this if:
     - Embeddings seem stale or incorrect
@@ -455,22 +438,28 @@ async def clear_cache() -> dict[str, str]:
     Returns:
         Confirmation message
     """
-    from jarvis.search.semantic_search import EmbeddingCache
+    from jarvis.db import get_db
 
     def _clear_cache() -> dict[str, Any]:
-        """Clear cache in thread pool (file I/O) with locking."""
-        with _cache_ops_lock:
-            cache = EmbeddingCache()
+        """Clear vec table in thread pool."""
+        db = get_db()
+        with db.connection() as conn:
             try:
-                stats_before = cache.stats()
-                cache.clear()
-                return stats_before
-            finally:
-                cache.close()
+                row = conn.execute("SELECT COUNT(*) as cnt FROM vec_messages").fetchone()
+                count = row["cnt"] if row else 0
+                size_bytes = count * 400
+                conn.execute("DELETE FROM vec_messages")
+                conn.commit()
+                return {
+                    "embedding_count": count,
+                    "size_mb": round(size_bytes / (1024 * 1024), 2),
+                }
+            except Exception:
+                return {"embedding_count": 0, "size_mb": 0.0}
 
     stats_before = await run_in_threadpool(_clear_cache)
     return {
         "status": "success",
-        "message": f"Cleared {stats_before['embedding_count']} cached embeddings "
+        "message": f"Cleared {stats_before['embedding_count']} indexed embeddings "
         f"({stats_before['size_mb']} MB)",
     }
