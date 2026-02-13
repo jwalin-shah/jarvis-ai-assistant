@@ -22,15 +22,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from jarvis.config import get_config
+
 logger = logging.getLogger(__name__)
 
 # Default socket path
 SOCKET_PATH = Path(os.getenv("JARVIS_NER_SOCKET", str(Path.home() / ".jarvis" / "jarvis-ner.sock")))
 PID_FILE = Path.home() / ".jarvis" / "ner_server.pid"
 
-# Connection timeout
-CONNECT_TIMEOUT = 2.0
-READ_TIMEOUT = 10.0
+# Connection timeouts (from config, with fallback defaults)
+def _get_connect_timeout() -> float:
+    return get_config().ner.connect_timeout
+
+
+def _get_read_timeout() -> float:
+    return get_config().ner.read_timeout
 
 
 @dataclass
@@ -66,7 +72,7 @@ def is_service_running() -> bool:
 
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        sock.settimeout(CONNECT_TIMEOUT)
+        sock.settimeout(_get_connect_timeout())
         sock.connect(str(SOCKET_PATH))
         return True
     except OSError:
@@ -107,11 +113,11 @@ def _send_request(request: dict[str, Any]) -> dict[str, Any]:
         TimeoutError: If request times out.
     """
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(CONNECT_TIMEOUT)
+    sock.settimeout(_get_connect_timeout())
 
     try:
         sock.connect(str(SOCKET_PATH))
-        sock.settimeout(READ_TIMEOUT)
+        sock.settimeout(_get_read_timeout())
 
         # Send length-prefixed JSON
         data = json.dumps(request).encode("utf-8")

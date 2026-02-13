@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import socket
 from pathlib import Path
 
 from .base import Service, ServiceConfig
+
+logger = logging.getLogger(__name__)
 
 
 class SocketService(Service):
@@ -51,5 +54,6 @@ class SocketService(Service):
                 return len(response) > 0
             finally:
                 sock.close()
-        except Exception:
+        except (OSError, ConnectionError):
+            logger.debug("Socket health check failed", exc_info=True)
             return False

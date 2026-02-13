@@ -191,7 +191,7 @@ export function initializeWebSocket(): void {
 
     onHealthUpdate: (data: unknown) => {
       // Health updates can be handled by the health store if needed
-      console.log("Health update received:", data);
+      // Health updates handled by health store if needed
     },
 
     onError: (error: string) => {

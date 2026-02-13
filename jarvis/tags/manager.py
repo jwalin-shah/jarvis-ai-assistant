@@ -238,6 +238,7 @@ class TagManager:
             yield conn
             conn.commit()
         except Exception:
+            logger.debug("Transaction rolled back", exc_info=True)
             conn.rollback()
             raise
 

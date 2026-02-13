@@ -57,5 +57,6 @@ class EmbeddingService(Service):
             from models.embeddings import is_mlx_available
 
             return is_mlx_available()
-        except Exception:
+        except (OSError, ImportError):
+            logger.debug("Embedding health check failed", exc_info=True)
             return False

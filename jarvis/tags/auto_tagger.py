@@ -99,6 +99,19 @@ NEEDS_ATTENTION_PATTERNS: list[re.Pattern[str]] = [
 # Pre-compiled pattern for keyword extraction (called per content analysis)
 _KEYWORD_EXTRACT_RE = re.compile(r"\b[a-zA-Z]{3,}\b")
 
+# Common English stop-words filtered during keyword extraction
+_COMMON_WORDS: frozenset[str] = frozenset({
+    "the", "and", "for", "are", "but", "not", "you", "all", "can", "her",
+    "was", "one", "our", "out", "day", "had", "has", "his", "how", "its",
+    "may", "new", "now", "old", "see", "way", "who", "boy", "did", "get",
+    "let", "put", "say", "she", "too", "use", "that", "this", "with",
+    "have", "from", "they", "been", "call", "come", "could", "each",
+    "find", "first", "into", "just", "know", "like", "long", "look",
+    "make", "many", "more", "most", "over", "such", "take", "than",
+    "them", "then", "there", "these", "thing", "think", "time", "very",
+    "what", "when", "which", "will", "would", "your", "about", "after",
+})
+
 
 @dataclass
 class ContentAnalysis:
@@ -208,88 +221,7 @@ class AutoTagger:
         words = _KEYWORD_EXTRACT_RE.findall(all_text.lower())
         word_counts = Counter(words)
         # Filter out common words
-        common_words = {
-            "the",
-            "and",
-            "for",
-            "are",
-            "but",
-            "not",
-            "you",
-            "all",
-            "can",
-            "her",
-            "was",
-            "one",
-            "our",
-            "out",
-            "day",
-            "had",
-            "has",
-            "his",
-            "how",
-            "its",
-            "may",
-            "new",
-            "now",
-            "old",
-            "see",
-            "way",
-            "who",
-            "boy",
-            "did",
-            "get",
-            "let",
-            "put",
-            "say",
-            "she",
-            "too",
-            "use",
-            "that",
-            "this",
-            "with",
-            "have",
-            "from",
-            "they",
-            "been",
-            "call",
-            "come",
-            "could",
-            "each",
-            "find",
-            "first",
-            "into",
-            "just",
-            "know",
-            "like",
-            "long",
-            "look",
-            "make",
-            "many",
-            "more",
-            "most",
-            "over",
-            "such",
-            "take",
-            "than",
-            "them",
-            "then",
-            "there",
-            "these",
-            "thing",
-            "think",
-            "time",
-            "very",
-            "what",
-            "when",
-            "which",
-            "will",
-            "would",
-            "your",
-            "about",
-            "after",
-        }
-        keywords = [w for w, c in word_counts.most_common(20) if w not in common_words][:10]
+        keywords = [w for w, c in word_counts.most_common(20) if w not in _COMMON_WORDS][:10]
 
         # Detect topics from keyword patterns
         topics = []
