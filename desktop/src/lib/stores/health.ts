@@ -33,10 +33,27 @@ export const healthStore = writable<HealthState>(initialState);
 // Cache connection state to avoid redundant updates
 let cachedConnectionState: Pick<HealthState, "connected" | "source"> | null = null;
 
+// In-flight promise to deduplicate concurrent connection checks
+let inflightCheck: Promise<boolean> | null = null;
+
 /**
  * Check API connection - uses socket when available
  */
 export async function checkApiConnection(): Promise<boolean> {
+  // If a check is already in progress, return its promise instead of starting a new one
+  if (inflightCheck) {
+    return inflightCheck;
+  }
+
+  inflightCheck = checkApiConnectionInternal();
+  try {
+    return await inflightCheck;
+  } finally {
+    inflightCheck = null;
+  }
+}
+
+async function checkApiConnectionInternal(): Promise<boolean> {
   healthStore.update((state) => ({ ...state, loading: true, error: null }));
 
   // Try socket first in Tauri context

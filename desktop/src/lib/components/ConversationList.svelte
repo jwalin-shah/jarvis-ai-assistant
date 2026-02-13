@@ -193,6 +193,8 @@
   }
 
   async function fetchTopicsForChat(chatId: string) {
+    if (topicsMap.has(chatId)) return;
+
     const existingController = topicFetchControllers.get(chatId);
     if (existingController) {
       existingController.abort();

@@ -192,25 +192,13 @@
     const msgIndex = messages.findIndex((m) => m.id === messageId);
     if (msgIndex === -1) return;
 
-    let scrollPosition = 48;
-    for (let i = 0; i < msgIndex; i++) {
-      scrollPosition += getMessageHeight(messages[i]!.id);
-    }
+    const scrollPosition = cumulativeHeights[msgIndex]! + 48;
 
     visibleStartIndex = Math.max(0, msgIndex - BUFFER_SIZE);
     visibleEndIndex = Math.min(messages.length, msgIndex + BUFFER_SIZE + MIN_VISIBLE_MESSAGES);
 
-    let topPadding = 0;
-    for (let i = 0; i < visibleStartIndex; i++) {
-      topPadding += getMessageHeight(messages[i]!.id);
-    }
-    virtualTopPadding = topPadding;
-
-    let bottomPadding = 0;
-    for (let i = visibleEndIndex; i < messages.length; i++) {
-      bottomPadding += getMessageHeight(messages[i]!.id);
-    }
-    virtualBottomPadding = bottomPadding;
+    virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
+    virtualBottomPadding = cumulativeHeights[messages.length]! - cumulativeHeights[visibleEndIndex]!;
 
     await tick();
 
@@ -516,11 +504,7 @@
     visibleEndIndex = messages.length;
     visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
 
-    let topPadding = 0;
-    for (let i = 0; i < visibleStartIndex; i++) {
-      topPadding += getMessageHeight(messages[i]!.id);
-    }
-    virtualTopPadding = topPadding;
+    virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
     virtualBottomPadding = 0;
 
     scrollToBottom();
