@@ -37,11 +37,8 @@ if TYPE_CHECKING:
     from contracts.imessage import Message
     from integrations.imessage import ChatDBReader
 
-from jarvis.embedding_adapter import get_embedder
+from jarvis.embedding_adapter import EMBEDDING_DIM, get_embedder
 from jarvis.utils.latency_tracker import track_latency
-
-# Embedding dimension for bge-small-en-v1.5
-EMBEDDING_DIM = 384
 
 logger = logging.getLogger(__name__)
 

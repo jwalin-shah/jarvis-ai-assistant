@@ -36,6 +36,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from models.embeddings import DEFAULT_MLX_EMBEDDING_MODEL, MLX_EMBEDDING_DIM
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -46,8 +47,9 @@ logger = logging.getLogger(__name__)
 # Configuration
 # =============================================================================
 
-# Embedding dimension is 384 for all supported models
-EMBEDDING_DIM = 384
+# Re-export from canonical source (models/embeddings.py)
+EMBEDDING_DIM = MLX_EMBEDDING_DIM
+EMBEDDING_MODEL = DEFAULT_MLX_EMBEDDING_MODEL
 
 # Batch size for MLX embedding requests
 MLX_BATCH_SIZE = 100
@@ -68,9 +70,6 @@ EMBEDDING_MODEL_REGISTRY: dict[str, tuple[str, str]] = {
     # bge-micro (3 layers, ~30-40ms, MTEB ~54) - fastest, lowest quality
     "bge-micro": ("TaylorAI/bge-micro-v2", "bge-micro"),
 }
-
-# Legacy constant for backwards compatibility (do not use directly)
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
 
 def get_model_info(model_name: str | None = None) -> tuple[str, str]:
