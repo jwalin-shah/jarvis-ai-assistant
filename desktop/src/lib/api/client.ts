@@ -329,24 +329,9 @@ class ApiClient {
     }
 
     const url = `/conversations/search?${params.toString()}`;
-    const response = await fetch(`${this.baseUrl}${url}`, {
-      headers: { "Content-Type": "application/json" },
-      signal: signal ?? null,
+    return this.request<Message[]>(url, {
+      ...(signal ? { signal } : {}),
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    return response.json();
   }
 
   // Semantic search endpoint
@@ -397,26 +382,11 @@ class ApiClient {
       filters: options.filters || null,
     };
 
-    const response = await fetch(`${this.baseUrl}/search/semantic`, {
+    return this.request<SemanticSearchResponse>("/search/semantic", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: signal ?? null,
+      ...(signal ? { signal } : {}),
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    return response.json();
   }
 
   // Semantic search cache stats
@@ -507,26 +477,11 @@ class ApiClient {
       context_messages: 20,
     };
 
-    const response = await fetch(`${this.baseUrl}/drafts/reply`, {
+    return this.request<DraftReplyResponse>("/drafts/reply", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: signal ?? null,
+      ...(signal ? { signal } : {}),
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    return response.json();
   }
 
   // Smart reply suggestions endpoint
@@ -591,26 +546,11 @@ class ApiClient {
       num_messages: numMessages,
     };
 
-    const response = await fetch(`${this.baseUrl}/drafts/summarize`, {
+    const data = await this.request<SummaryResponse>("/drafts/summarize", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: signal ?? null,
+      ...(signal ? { signal } : {}),
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    const data = await response.json();
     // Add message_count for UI display
     return { ...data, message_count: numMessages };
   }
@@ -674,29 +614,14 @@ class ApiClient {
       limit: options.limit ?? 1000,
     };
 
-    const response = await fetch(
-      `${this.baseUrl}/export/pdf/${encodeURIComponent(chatId)}`,
+    return this.request<PDFExportResponse>(
+      `/export/pdf/${encodeURIComponent(chatId)}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal: signal ?? null,
+        ...(signal ? { signal } : {}),
       }
     );
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    return response.json();
   }
 
   /**
@@ -842,27 +767,12 @@ class ApiClient {
       params.set("min_level", minLevel);
     }
 
-    const response = await fetch(
-      `${this.baseUrl}/priority?${params.toString()}`,
+    return this.request<PriorityInboxResponse>(
+      `/priority?${params.toString()}`,
       {
-        headers: { "Content-Type": "application/json" },
-        signal: signal ?? null,
+        ...(signal ? { signal } : {}),
       }
     );
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    return response.json();
   }
 
   async markMessageHandled(
@@ -1242,26 +1152,11 @@ class ApiClient {
       end_date: options.end_date || null,
     };
 
-    const response = await fetch(`${this.baseUrl}/digest/generate`, {
+    return this.request<DigestResponse>("/digest/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: signal ?? null,
+      ...(signal ? { signal } : {}),
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    return response.json();
   }
 
   async getDailyDigest(signal?: AbortSignal): Promise<DigestResponse> {
@@ -1282,26 +1177,11 @@ class ApiClient {
       end_date: options.end_date || null,
     };
 
-    const response = await fetch(`${this.baseUrl}/digest/export`, {
+    return this.request<DigestExportResponse>("/digest/export", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: signal ?? null,
+      ...(signal ? { signal } : {}),
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "Request failed",
-        detail: response.statusText,
-      }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
-    }
-
-    return response.json();
   }
 
   async getDigestPreferences(): Promise<DigestPreferences> {
