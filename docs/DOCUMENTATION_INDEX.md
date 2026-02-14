@@ -55,6 +55,7 @@
 
 | Doc | Purpose |
 |-----|---------|
+| [V4_MIGRATION_REPORT.md](./V4_MIGRATION_REPORT.md) | V4 Fact Extraction design decisions, findings, and lessons learned |
 | [COMPONENT_CATALOG.md](./COMPONENT_CATALOG.md) | Svelte component reference (41 components) |
 | [EXTRACTOR_BAKEOFF.md](./EXTRACTOR_BAKEOFF.md) | Fact extraction approach comparison |
 | [SQL_OPTIMIZATION_REPORT.md](./SQL_OPTIMIZATION_REPORT.md) | SQL query optimization findings |
