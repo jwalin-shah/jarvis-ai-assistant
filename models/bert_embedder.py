@@ -19,13 +19,16 @@ Usage:
 from __future__ import annotations
 
 import gc
+import hashlib
 import json
 import logging
 import math
 import struct
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -36,6 +39,9 @@ from jarvis.errors import ErrorCode, JarvisError
 from models.memory_config import gpu_context
 from models.utils import HF_CACHE, find_model_snapshot, map_hf_bert_key
 
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -45,8 +51,11 @@ logger = logging.getLogger(__name__)
 # Embedding dimension is 384 for all supported models
 MLX_EMBEDDING_DIM = 384
 
-# Legacy constant for backwards compatibility
+# Default model ID
 DEFAULT_MLX_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+# Batch size for MLX embedding requests
+MLX_BATCH_SIZE = 100
 
 # =============================================================================
 # Embedding Exceptions
@@ -101,6 +110,18 @@ MODEL_REGISTRY: dict[str, tuple[str, str]] = {
     "arctic-s": ("Snowflake--snowflake-arctic-embed-s", "cls"),
     "arctic-m": ("Snowflake--snowflake-arctic-embed-m", "cls"),
     "arctic-l": ("Snowflake--snowflake-arctic-embed-l", "cls"),
+    # Fast models from old adapter registry
+    "gte-tiny": ("TaylorAI--gte-tiny", "cls"),
+    "minilm-l6": ("sentence-transformers--all-MiniLM-L6-v2", "cls"),
+    "bge-micro": ("TaylorAI--bge-micro-v2", "cls"),
+}
+
+# Maps config name to registry name
+EMBEDDING_MODEL_REGISTRY: dict[str, tuple[str, str]] = {
+    "bge-small": ("BAAI/bge-small-en-v1.5", "bge-small"),
+    "gte-tiny": ("TaylorAI/gte-tiny", "gte-tiny"),
+    "minilm-l6": ("sentence-transformers/all-MiniLM-L6-v2", "minilm-l6"),
+    "bge-micro": ("TaylorAI/bge-micro-v2", "bge-micro"),
 }
 
 
@@ -535,3 +556,245 @@ def reset_in_process_embedder() -> None:
         if _in_process_embedder is not None:
             _in_process_embedder.unload()
         _in_process_embedder = None
+
+
+def get_model_info(model_name: str | None = None) -> tuple[str, str]:
+    """Get HuggingFace model ID and MLX model name for a config model name."""
+    if model_name is None:
+        from jarvis.config import get_config
+
+        model_name = get_config().embedding.model_name
+
+    if model_name not in EMBEDDING_MODEL_REGISTRY:
+        valid_models = ", ".join(EMBEDDING_MODEL_REGISTRY.keys())
+        raise ValueError(f"Unknown embedding model '{model_name}'. Valid options: {valid_models}")
+
+    return EMBEDDING_MODEL_REGISTRY[model_name]
+
+
+def get_configured_model_name() -> str:
+    """Get the currently configured embedding model name."""
+    from jarvis.config import get_config
+
+    return get_config().embedding.model_name
+
+
+class MLXEmbedder:
+    """High-level MLX embedder adapter."""
+
+    def __init__(self) -> None:
+        self._mlx_embedder: Any = None
+        self._model_name: str | None = None
+        self._lock = threading.Lock()
+        self._init_attempted = False
+
+    def _initialize(self) -> None:
+        if self._init_attempted:
+            return
+        with self._lock:
+            if self._init_attempted:
+                return
+            self._init_attempted = True
+            _, mlx_model_name = get_model_info()
+            self._model_name = get_configured_model_name()
+            try:
+                self._mlx_embedder = get_in_process_embedder(model_name=mlx_model_name)
+            except Exception as e:
+                logger.error("Failed to initialize MLX embedder: %s", e)
+                raise RuntimeError(f"Could not initialize MLX embedder: {e}") from e
+
+    def is_available(self) -> bool:
+        try:
+            self._initialize()
+            return self._mlx_embedder is not None
+        except RuntimeError:
+            return False
+
+    @property
+    def backend(self) -> str:
+        return "mlx"
+
+    @property
+    def embedding_dim(self) -> int:
+        return MLX_EMBEDDING_DIM
+
+    @property
+    def model_name(self) -> str:
+        if self._model_name is None:
+            return get_configured_model_name()
+        return self._model_name
+
+    def encode(
+        self,
+        texts: list[str] | str,
+        normalize: bool = True,
+        convert_to_numpy: bool = True,
+        normalize_embeddings: bool | None = None,
+    ) -> NDArray[np.float32]:
+        self._initialize()
+        if normalize_embeddings is not None:
+            normalize = normalize_embeddings
+        if isinstance(texts, str):
+            texts = [texts]
+        if not texts:
+            return np.array([], dtype=np.float32).reshape(0, MLX_EMBEDDING_DIM)
+
+        if len(texts) <= MLX_BATCH_SIZE:
+            return self._mlx_embedder.encode(texts, normalize=normalize)
+
+        all_embeddings: list[np.ndarray] = []
+        for i in range(0, len(texts), MLX_BATCH_SIZE):
+            batch = texts[i : i + MLX_BATCH_SIZE]
+            all_embeddings.append(self._mlx_embedder.encode(batch, normalize=normalize))
+        return np.vstack(all_embeddings)
+
+    def unload(self) -> None:
+        with self._lock:
+            if self._mlx_embedder is not None:
+                self._mlx_embedder.unload()
+            self._init_attempted = False
+
+
+class CachedEmbedder:
+    """Per-request embedding cache wrapper."""
+
+    def __init__(self, base_embedder: MLXEmbedder, maxsize: int = 1000) -> None:
+        self.base = base_embedder
+        self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._maxsize = maxsize
+        self._lock = threading.Lock()
+        self._computations = 0
+        self._cache_hits = 0
+        self._cache_misses = 0
+
+    @property
+    def backend(self) -> str:
+        return self.base.backend
+
+    @property
+    def embedding_dim(self) -> int:
+        return self.base.embedding_dim
+
+    @property
+    def model_name(self) -> str:
+        return self.base.model_name
+
+    def is_available(self) -> bool:
+        return self.base.is_available()
+
+    def unload(self) -> None:
+        with self._lock:
+            self._cache.clear()
+        self.base.unload()
+
+    def _make_key(self, text: str) -> str:
+        return hashlib.blake2b(text.encode("utf-8"), digest_size=8).hexdigest()
+
+    def _get(self, key: str) -> np.ndarray | None:
+        with self._lock:
+            value = self._cache.get(key)
+            if value is None:
+                self._cache_misses += 1
+                return None
+            self._cache_hits += 1
+            self._cache.move_to_end(key)
+            return value
+
+    def _set(self, key: str, value: np.ndarray) -> None:
+        with self._lock:
+            self._cache[key] = value
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._maxsize:
+                self._cache.popitem(last=False)
+
+    @property
+    def embedding_computations(self) -> int:
+        return self._computations
+
+    @property
+    def cache_hit(self) -> bool:
+        return self._cache_hits > 0
+
+    def encode(
+        self,
+        texts: list[str] | str,
+        normalize: bool = True,
+        convert_to_numpy: bool = True,
+        normalize_embeddings: bool | None = None,
+    ) -> NDArray[np.float32]:
+        if normalize_embeddings is not None:
+            normalize = normalize_embeddings
+        if isinstance(texts, str):
+            key = self._make_key(texts)
+            cached = self._get(key)
+            if cached is not None:
+                return cached
+            result = self.base.encode([texts], normalize=normalize)
+            vector = result.reshape(1, -1)
+            self._set(key, vector)
+            self._computations += 1
+            return vector
+        if not texts:
+            return np.array([], dtype=np.float32).reshape(0, MLX_EMBEDDING_DIM)
+
+        cached_vectors: list[np.ndarray | None] = [None] * len(texts)
+        missing_texts: list[str] = []
+        missing_indices: list[int] = []
+        missing_keys: list[str] = []
+
+        for i, text in enumerate(texts):
+            key = self._make_key(text)
+            cached = self._get(key)
+            if cached is not None:
+                cached_vectors[i] = cached
+            else:
+                missing_texts.append(text)
+                missing_indices.append(i)
+                missing_keys.append(key)
+
+        if missing_texts:
+            embeddings = self.base.encode(missing_texts, normalize=normalize)
+            for idx, emb, cache_key in zip(missing_indices, embeddings, missing_keys):
+                vector = np.asarray(emb, dtype=np.float32).reshape(1, -1)
+                cached_vectors[idx] = vector
+                self._set(cache_key, vector)
+            self._computations += len(missing_texts)
+        return np.vstack(cached_vectors)
+
+    def embed_batch(self, texts: list[str]) -> NDArray[np.float32]:
+        """Alias for encode for common internal API compatibility."""
+        return self.encode(texts)
+
+
+_embedder: MLXEmbedder | None = None
+_cached_embedder: CachedEmbedder | None = None
+_embedder_lock = threading.Lock()
+
+
+def get_embedder() -> CachedEmbedder:
+    global _embedder, _cached_embedder
+    if _cached_embedder is None:
+        with _embedder_lock:
+            if _cached_embedder is None:
+                if _embedder is None:
+                    _embedder = MLXEmbedder()
+                _cached_embedder = CachedEmbedder(_embedder)
+    return _cached_embedder
+
+
+def reset_embedder() -> None:
+    global _embedder, _cached_embedder
+    with _embedder_lock:
+        if _cached_embedder is not None:
+            _cached_embedder.unload()
+            _cached_embedder = None
+        if _embedder is not None:
+            _embedder = None
+
+
+def is_embedder_available() -> bool:
+    try:
+        embedder = get_embedder()
+        return embedder.is_available()
+    except RuntimeError:
+        return False

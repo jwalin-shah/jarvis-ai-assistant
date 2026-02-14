@@ -18,6 +18,7 @@ export {
   isContactsCacheLoaded,
   loadContactsFromAddressBook,
   resolveContactName,
+  formatParticipant,
 } from "./direct";
 
 export {

@@ -110,22 +110,6 @@ export interface Conversation {
   last_message_text: Nullable<string>;
 }
 
-// Topic Types
-export interface Topic {
-  topic: string;
-  confidence: number;
-  color: string;
-  display_name: string;
-}
-
-export interface TopicsResponse {
-  chat_id: string;
-  topics: Topic[];
-  all_topics: Topic[];
-  cached: boolean;
-  message_count_analyzed: number;
-}
-
 // Draft Suggestion Types
 export interface DraftSuggestion {
   text: string;

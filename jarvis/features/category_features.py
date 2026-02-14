@@ -875,14 +875,34 @@ class CategoryFeatureExtractor:
 
         return np.array(features, dtype=np.float32)
 
+    def extract_relationship_features(self, chat_id: str | None) -> NDArray[np.float32]:
+        """Extract 1 feature representing relationship formality.
+
+        Returns:
+            1-dim array with formality_score (0.5 if unknown)
+        """
+        if not chat_id:
+            return np.array([0.5], dtype=np.float32)
+
+        try:
+            from jarvis.contacts.contact_profile import get_contact_profile
+            profile = get_contact_profile(chat_id)
+            if profile:
+                return np.array([profile.formality_score], dtype=np.float32)
+        except Exception:
+            pass
+
+        return np.array([0.5], dtype=np.float32)
+
     def extract_all(
         self,
         text: str,
         context: list[str] | None = None,
         mob_pressure: str = "none",
         mob_type: str = "answer",
+        chat_id: str | None = None,
     ) -> NDArray[np.float32]:
-        """Extract all 147 non-BERT features.
+        """Extract all 148 non-BERT features.
 
         Parse spaCy doc ONCE, reuse for all extraction methods.
 
@@ -891,15 +911,17 @@ class CategoryFeatureExtractor:
         - 94 spaCy (POS, tags, deps, NER, tokens, morphology)
         - 19 new hand-crafted (error analysis + high-value additions)
         - 8 hard-class (closing/request specific)
+        - 1 relationship formality
 
         Args:
             text: Message text
             context: Previous messages in conversation
             mob_pressure: Mobilization pressure level
             mob_type: Mobilization response type
+            chat_id: Optional chat_id for relationship features
 
         Returns:
-            147-dim feature array (26 + 94 + 19 + 8)
+            148-dim feature array (26 + 94 + 19 + 8 + 1)
         """
         # Parse once, reuse
         doc = self.nlp(text)
@@ -909,9 +931,10 @@ class CategoryFeatureExtractor:
         spacy_feats = self.extract_spacy_features(text, doc)
         new_hand_crafted = self.extract_new_hand_crafted(text, doc, context)
         hard_class_feats = self.extract_hard_class_features(text, doc)
+        rel_feats = self.extract_relationship_features(chat_id)
 
         # Concatenate
-        return np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats])
+        return np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats, rel_feats])
 
     def extract_all_batch(
         self,
@@ -919,8 +942,9 @@ class CategoryFeatureExtractor:
         contexts: list[list[str] | None] | None = None,
         mob_pressures: list[str] | None = None,
         mob_types: list[str] | None = None,
+        chat_ids: list[str | None] | None = None,
     ) -> list[NDArray[np.float32]]:
-        """Extract all 147 non-BERT features for a batch of texts.
+        """Extract all 148 non-BERT features for a batch of texts.
 
         Uses nlp.pipe() for 5-10x faster spaCy processing vs individual nlp() calls.
 
@@ -929,9 +953,10 @@ class CategoryFeatureExtractor:
             contexts: Optional list of context lists (one per text).
             mob_pressures: Optional list of mobilization pressures.
             mob_types: Optional list of mobilization response types.
+            chat_ids: Optional list of chat_ids for relationship features.
 
         Returns:
-            List of 147-dim feature arrays.
+            List of 148-dim feature arrays.
         """
         if not texts:
             return []
@@ -943,6 +968,8 @@ class CategoryFeatureExtractor:
             mob_pressures = ["none"] * n
         if mob_types is None:
             mob_types = ["answer"] * n
+        if chat_ids is None:
+            chat_ids = [None] * n
 
         docs = list(self.nlp.pipe(texts, batch_size=50))
 
@@ -958,8 +985,9 @@ class CategoryFeatureExtractor:
             spacy_feats = self.extract_spacy_features(text, doc)
             new_hand_crafted = self.extract_new_hand_crafted(text, doc, contexts[i])
             hard_class_feats = self.extract_hard_class_features(text, doc)
+            rel_feats = self.extract_relationship_features(chat_ids[i])
             results.append(
-                np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats])
+                np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats, rel_feats])
             )
 
         return results

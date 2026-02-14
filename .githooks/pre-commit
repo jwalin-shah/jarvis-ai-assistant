@@ -52,13 +52,36 @@ if [ -n "$potential_secrets" ]; then
 fi
 
 # 5. Branch protection
-echo "  [5/4] Branch check..."
+echo "  [5/6] Branch check..."
 branch=$(git branch --show-current)
 if [ "$branch" = "main" ]; then
     echo ""
     echo "❌ ERROR: Direct commits to main not allowed."
     echo "   Create a feature branch: git checkout -b feature/your-feature"
     exit 1
+fi
+
+# 6. Import check (critical)
+echo "  [6/6] API import check..."
+if ! python -c "from api import app" 2>/dev/null; then
+    echo ""
+    echo "❌ ERROR: API imports failed. Check for missing modules."
+    echo "   Run: python -c 'from api import app' for details"
+    exit 1
+fi
+
+# 7. Full health check on critical file changes (optional, can be skipped with --no-verify)
+# Check if critical backend files changed
+critical_changed=$(git diff --cached --name-only | grep -E "(api/|integrations/imessage|jarvis/)" | head -5 || true)
+if [ -n "$critical_changed" ]; then
+    echo ""
+    echo "Critical backend files changed - running full health check..."
+    if ! python scripts/health_check.py; then
+        echo ""
+        echo "❌ Health check failed. Fix issues before committing."
+        echo "   Or skip with: git commit --no-verify (not recommended)"
+        exit 1
+    fi
 fi
 
 echo ""

@@ -1,34 +1,0 @@
-======================================================================
-VALIDATION: LinearSVC vs Groq LLM on Real Messages
-======================================================================
-
-Loading training data to exclude...
-Excluding 13468 training examples
-
-Loading 100 real messages from chat.db...
-Loaded 100 messages
-
-======================================================================
-LINEAR SVC PREDICTIONS
-======================================================================
-Extracting BERT embeddings...
-BERT:   0%|          | 0/1 [00:00<?, ?it/s]mx.metal.set_memory_limit is deprecated and will be removed in a future version. Use mx.set_memory_limit instead.
-mx.metal.set_cache_limit is deprecated and will be removed in a future version. Use mx.set_cache_limit instead.
-[BERT] BEFORE mx.load: RSS=223.2 MB, VMS=402374.9 MB
-[BERT] AFTER mx.load: RSS=223.6 MB (+0.4), VMS=402374.9 MB (+0.0)
-[BERT] BEFORE model.load_weights: RSS=223.7 MB, VMS=402374.9 MB
-[BERT] AFTER model.load_weights: RSS=223.9 MB (+0.2), VMS=402374.9 MB (+0.0)
-[BERT] AFTER deleting weight dicts: RSS=223.9 MB, VMS=402374.9 MB
-[BERT] BEFORE mx.eval: RSS=223.9 MB, VMS=402374.9 MB
-[BERT] AFTER mx.eval: RSS=334.7 MB (+110.8), VMS=402506.6 MB (+131.7)
-[BERT] AFTER mx.clear_cache: RSS=379.9 MB, VMS=402506.6 MB
-BERT: 100%|██████████| 1/1 [00:02<00:00,  2.34s/it]BERT: 100%|██████████| 1/1 [00:02<00:00,  2.34s/it]
-Extracting hand-crafted features...
-Hand-crafted:   0%|          | 0/100 [00:00<?, ?it/s]Hand-crafted: 100%|██████████| 100/100 [00:00<00:00, 40733.26it/s]
-Extracting spaCy features...
-SpaCy:   0%|          | 0/100 [00:00<?, ?it/s]SpaCy:  27%|██▋       | 27/100 [00:00<00:00, 266.14it/s]SpaCy:  67%|██████▋   | 67/100 [00:00<00:00, 338.39it/s]SpaCy: 100%|██████████| 100/100 [00:00<00:00, 312.66it/s]
-
-======================================================================
-GROQ LLM PREDICTIONS
-======================================================================
-ERROR: GROQ_API_KEY not set

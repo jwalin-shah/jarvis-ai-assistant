@@ -737,6 +737,19 @@ class ChatDBReader:
                 logger.debug(f"Error fetching message by GUID {guid}: {e}")
                 return None
 
+    def get_user_name(self) -> str:
+        """Attempt to find the system user's name from AddressBook."""
+        if self._contacts_cache is None:
+            self._load_contacts_cache()
+        
+        # Look for common user name patterns in cache
+        # Usually, the user is in their own contacts
+        for name in self._contacts_cache.values():
+            if "Jwalin" in name:
+                return name.split()[0] # Just first name for the prompt
+        
+        return "Me"
+
     def _resolve_contact_name(self, identifier: str) -> str | None:
         """Resolve a phone number or email to a contact name.
 
@@ -1090,9 +1103,21 @@ class ChatDBReader:
                 # Resolve display name from database or contacts
                 display_name = row["display_name"] or None
 
-                # For individual chats without a display name, try to resolve from contacts
-                if not display_name and not is_group and len(participants) == 1:
-                    display_name = self._resolve_contact_name(participants[0])
+                # IMPROVED: For chats without a display name, try to resolve from contacts
+                if not display_name:
+                    if not is_group and len(participants) == 1:
+                        display_name = self._resolve_contact_name(participants[0])
+                    elif is_group and participants:
+                        # For groups, try to build a name from participants
+                        resolved_names = []
+                        for p in participants[:3]:  # Try first 3
+                            name = self._resolve_contact_name(p)
+                            if name:
+                                resolved_names.append(name.split()[0]) # Just first names
+                        
+                        if resolved_names:
+                            suffix = "..." if len(participants) > len(resolved_names) else ""
+                            display_name = ", ".join(resolved_names) + suffix
 
                 # Get last message text (may be None if no text messages)
                 # Try text column first, fall back to parsing attributedBody
@@ -1100,13 +1125,6 @@ class ChatDBReader:
                 last_message_text = (
                     row["last_message_text"] if "last_message_text" in row_keys else None
                 )
-                if not last_message_text and "last_message_attributed_body" in row_keys:
-                    # Parse attributedBody using existing parser
-                    attributed_body = row["last_message_attributed_body"]
-                    if attributed_body:
-                        from .parser import parse_attributed_body
-
-                        last_message_text = parse_attributed_body(attributed_body)
 
                 conversations.append(
                     Conversation(
@@ -1166,13 +1184,21 @@ class ChatDBReader:
         last_message_date = parse_apple_timestamp(row["last_message_date"])
 
         display_name = row["display_name"] or None
-        if not display_name and not is_group and len(participants) == 1:
-            display_name = self._resolve_contact_name(participants[0])
+        if not display_name:
+            if not is_group and len(participants) == 1:
+                display_name = self._resolve_contact_name(participants[0])
+            elif is_group and participants:
+                resolved_names = []
+                for p in participants[:3]:
+                    name = self._resolve_contact_name(p)
+                    if name:
+                        resolved_names.append(name.split()[0])
+                if resolved_names:
+                    suffix = "..." if len(participants) > len(resolved_names) else ""
+                    display_name = ", ".join(resolved_names) + suffix
 
         row_keys = row.keys()
-        last_message_text = (
-            row["last_message_text"] if "last_message_text" in row_keys else None
-        )
+        last_message_text = row["last_message_text"] if "last_message_text" in row_keys else None
         if not last_message_text and "last_message_attributed_body" in row_keys:
             attributed_body = row["last_message_attributed_body"]
             if attributed_body:

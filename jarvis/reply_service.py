@@ -49,6 +49,7 @@ from jarvis.prompts import (
     build_prompt_from_request,
     get_category_config,
 )
+from jarvis.search.hybrid_search import get_hybrid_searcher
 from jarvis.services.context_service import ContextService
 
 if TYPE_CHECKING:
@@ -96,9 +97,14 @@ class ReplyService:
         if self._generator is None:
             with self._lock:
                 if self._generator is None:
-                    from models import get_generator
+                    from jarvis.model_warmer import get_warm_generator
 
-                    self._generator = get_generator(skip_templates=True)
+                    self._generator = get_warm_generator(skip_templates=True)
+        else:
+            # Touch warmer if generator already exists
+            from jarvis.model_warmer import get_model_warmer
+
+            get_model_warmer().touch()
         return self._generator
 
     @property
@@ -230,14 +236,12 @@ class ReplyService:
             )
 
         if search_results is None:
-            # Pre-encode so search_examples gets a cache hit (skip if results pre-provided)
-            if normalized_incoming:
-                cached_embedder.encode(normalized_incoming)
-            search_results = self.context_service.search_examples(
-                normalized_incoming,
-                chat_id=chat_id,
-                contact_id=contact.id if contact else None,
-                embedder=cached_embedder,
+            # Hybrid search for better retrieval precision
+            hybrid_searcher = get_hybrid_searcher()
+            search_results = hybrid_searcher.search(
+                query=normalized_incoming,
+                limit=5,
+                rerank=True
             )
 
         message_context = MessageContext(
@@ -437,14 +441,15 @@ class ReplyService:
         cached_embedder: CachedEmbedder,
         latency_ms: dict[str, float],
     ) -> tuple[list[dict[str, Any]], dict[str, float]]:
-        """Run context search if results not already provided."""
+        """Run hybrid context search if results not already provided."""
         if search_results is None:
             search_start = time.perf_counter()
-            search_results = self.context_service.search_examples(
-                incoming,
-                chat_id=chat_id,
-                contact_id=contact.id if contact else None,
-                embedder=cached_embedder,
+            hybrid_searcher = get_hybrid_searcher()
+            # Hybrid search already uses vec_searcher internally
+            search_results = hybrid_searcher.search(
+                query=incoming,
+                limit=5,
+                rerank=True
             )
             latency_ms["context_search"] = (time.perf_counter() - search_start) * 1000
         return search_results, latency_ms
@@ -619,7 +624,7 @@ class ReplyService:
             search_results = self.reranker.rerank(
                 query=incoming,
                 candidates=search_results,
-                text_key="trigger_text",
+                text_key="context_text",
                 top_k=5,
             )
 
@@ -628,7 +633,7 @@ class ReplyService:
 
         top_results = search_results[:3]
         similar_exchanges = [
-            (str(r.get("trigger_text", "")), str(r.get("response_text", ""))) for r in top_results
+            (str(r.get("context_text", "")), str(r.get("reply_text", ""))) for r in top_results
         ]
         rag_rerank_scores = [
             self._safe_float(r.get("rerank_score"), default=0.0) for r in top_results
@@ -650,12 +655,12 @@ class ReplyService:
 
         rag_documents: list[RAGDocument] = []
         for result in top_results:
-            trigger_text = str(result.get("trigger_text", "")).strip()
-            if not trigger_text:
+            context_text = str(result.get("context_text", "")).strip()
+            if not context_text:
                 continue
             rag_documents.append(
                 RAGDocument(
-                    content=trigger_text,
+                    content=context_text,
                     source=str(result.get("topic") or chat_id or "rag"),
                     score=self._safe_float(result.get("similarity"), default=0.0),
                     metadata={
@@ -913,9 +918,9 @@ class ReplyService:
             )
 
             similar_triggers = [
-                str(row.get("trigger_text", ""))
+                str(row.get("context_text", ""))
                 for row in search_results[:3]
-                if row.get("trigger_text")
+                if row.get("context_text")
             ]
             used_docs = [doc.content for doc in request.retrieved_docs[:3] if doc.content]
 

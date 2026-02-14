@@ -1,5 +1,7 @@
 # Fact KG Build Plan
 
+> **Status Update (2026-02-13):** Phase 4 (V4 Fact Extraction & Contact Profiling) has been implemented. This includes Turn-Based extraction, Address Book integration for dynamic identity resolution, and NLI-based fact verification. The extraction pipeline now produces `relationship_reasoning` and stores verified facts in `contact_facts`.
+
 Date: 2026-02-10
 
 ## Goal
@@ -13,9 +15,15 @@ Build a reliable personal knowledge graph ingestion pipeline from messy iMessage
 
 ## Current State (What Already Exists)
 
-### Implemented
+### Implemented (Updated 2026-02-13)
 
-1. Stage-1 candidate extractor (GLiNER):
+1. **V4 Fact Extraction Pipeline**:
+   - **Turn-Based Extraction**: Groups consecutive messages from same sender for context.
+   - **Address Book Integration**: Resolves contact names and user identity ("Jwalin Shah") dynamically.
+   - **NLI Verification**: Cross-encoder validation of candidate facts against source text.
+   - **Enriched Profiles**: `relationship_reasoning` included in contact profiles.
+
+2. Stage-1 candidate extractor (GLiNER):
    - `jarvis/contacts/candidate_extractor.py`
    - Supports label profiles (`high_recall`, `balanced`, `high_precision`) and natural-language labels.
 

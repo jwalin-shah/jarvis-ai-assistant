@@ -7,7 +7,7 @@ DSPy's high-level logic with the local MLX model via BaseLM.forward().
 import dspy
 import pytest
 
-from jarvis.dspy_client import DSPYMLXClient
+from evals.dspy_client import DSPYMLXClient
 
 
 class SimpleReply(dspy.Signature):
@@ -26,6 +26,7 @@ def test_dspy_mlx_integration():
         pytest.skip("MLX not installed")
 
     import psutil
+
     if psutil.virtual_memory().available < 2 * 1024**3:
         pytest.skip("Insufficient available memory (<2GB) to load LLM")
 

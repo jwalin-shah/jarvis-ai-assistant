@@ -217,6 +217,7 @@ class MLXGenerator:
                 stop_sequences=request.stop_sequences,
                 prompt_cache=prompt_cache,
                 pre_formatted=True,
+                system_prompt=request.system_prompt,
             )
 
             # Trim cache back to prefix for next call (CPU-only operation)
@@ -414,6 +415,7 @@ class MLXGenerator:
                         stop_sequences=request.stop_sequences,
                         prompt_cache=stream_prompt_cache,
                         pre_formatted=True,
+                        system_prompt=request.system_prompt,
                     ):
                         token_queue.put(
                             {

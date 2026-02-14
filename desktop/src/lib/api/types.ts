@@ -182,22 +182,6 @@ export interface SmartReplySuggestionsResponse {
   suggestions: SmartReplySuggestion[];
 }
 
-// Topic types
-export interface Topic {
-  topic: string;
-  confidence: number;
-  color: string;
-  display_name: string;
-}
-
-export interface TopicsResponse {
-  chat_id: string;
-  topics: Topic[];
-  all_topics: Topic[];
-  cached: boolean;
-  message_count_analyzed: number;
-}
-
 // Search types
 export interface SearchFilters {
   sender?: string;
@@ -1573,7 +1557,6 @@ export interface ContactProfileDetail {
   message_count: number;
   avg_message_length: number;
   avg_response_time_minutes: number | null;
-  top_topics: string[];
   facts: ContactFact[];
 }
 

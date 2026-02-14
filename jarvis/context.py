@@ -21,6 +21,7 @@ class ReplyContext:
     messages: list[Message]
     formatted_context: str  # Ready for LLM prompt
     last_received_message: Message | None
+    current_topic: str | None = None  # Topic label of current conversation thread
 
 
 @dataclass
@@ -233,13 +234,42 @@ class ContextFetcher:
                 last_received = msg
                 break
 
+        # Find current topic from segments (most recent segment containing messages)
+        current_topic = self._get_current_topic(chat_id, messages)
+
         return ReplyContext(
             chat_id=chat_id,
             participant_names=participant_names,
             messages=messages,
             formatted_context=formatted,
             last_received_message=last_received,
+            current_topic=current_topic,
         )
+
+    def _get_current_topic(self, chat_id: str, messages: list[Message]) -> str | None:
+        """Get the topic label of the most recent segment."""
+        if not messages:
+            return None
+
+        # Get the newest message timestamp
+        newest_time = max(m.date for m in messages)
+
+        try:
+            from jarvis.db import get_db
+            from jarvis.topics.segment_storage import get_segments_for_chat
+
+            db = get_db()
+            with db.connection() as conn:
+                # Get most recent segment that overlaps with our messages
+                segments = get_segments_for_chat(conn, chat_id, limit=5)
+                for seg in segments:
+                    # Segments are ordered by start_time DESC
+                    if seg.get("start_time") and seg["start_time"] <= newest_time:
+                        return seg.get("topic_label")
+        except Exception:
+            pass
+
+        return None
 
     def get_summary_context(self, chat_id: str, num_messages: int = 50) -> SummaryContext:
         """Get context for summarizing a conversation.

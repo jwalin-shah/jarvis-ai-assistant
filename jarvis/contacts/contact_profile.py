@@ -370,6 +370,7 @@ class ContactProfile:
     # Relationship (from RelationshipClassifier)
     relationship: str = "unknown"
     relationship_confidence: float = 0.0
+    relationship_reasoning: str | None = None
 
     # Style (computed from MY messages to this contact)
     formality: str = "casual"  # formal, casual, very_casual
@@ -390,6 +391,9 @@ class ContactProfile:
     # Topics (from HDBSCAN on both parties' messages)
     top_topics: list[str] = field(default_factory=list)
 
+    # Facts (from instruction_extractor)
+    extracted_facts: list[dict[str, Any]] = field(default_factory=list)
+
     # Metadata
     message_count: int = 0
     my_message_count: int = 0
@@ -402,6 +406,7 @@ class ContactProfile:
             "contact_name": self.contact_name,
             "relationship": self.relationship,
             "relationship_confidence": self.relationship_confidence,
+            "relationship_reasoning": self.relationship_reasoning,
             "formality": self.formality,
             "formality_score": self.formality_score,
             "avg_message_length": self.avg_message_length,
@@ -415,6 +420,7 @@ class ContactProfile:
             "signoff_style": self.signoff_style,
             "common_phrases": self.common_phrases,
             "top_topics": self.top_topics,
+            "extracted_facts": self.extracted_facts,
             "message_count": self.message_count,
             "my_message_count": self.my_message_count,
             "updated_at": self.updated_at,
@@ -428,6 +434,7 @@ class ContactProfile:
             contact_name=data.get("contact_name"),
             relationship=data.get("relationship", "unknown"),
             relationship_confidence=data.get("relationship_confidence", 0.0),
+            relationship_reasoning=data.get("relationship_reasoning"),
             formality=data.get("formality", "casual"),
             formality_score=data.get("formality_score", 0.5),
             avg_message_length=data.get("avg_message_length", 50.0),
@@ -441,6 +448,7 @@ class ContactProfile:
             signoff_style=data.get("signoff_style", []),
             common_phrases=data.get("common_phrases", []),
             top_topics=data.get("top_topics", []),
+            extracted_facts=data.get("extracted_facts", []),
             message_count=data.get("message_count", 0),
             my_message_count=data.get("my_message_count", 0),
             updated_at=data.get("updated_at", ""),
@@ -473,18 +481,20 @@ class ContactProfileBuilder:
         contact_name: str | None = None,
         embeddings: NDArray[np.float32] | None = None,
     ) -> ContactProfile:
-        """Build a complete profile for a contact.
-
-        Args:
-            contact_id: Chat identifier.
-            messages: All messages in the conversation (both parties).
-            contact_name: Display name.
-            embeddings: Pre-computed embeddings for topic discovery.
-
-        Returns:
-            ContactProfile with all available fields populated.
-        """
+        """Build a complete profile for a contact."""
         now = datetime.now().isoformat()
+        
+        # IMPROVED: Resolve name if missing
+        if not contact_name or contact_name in ["None", "Unknown", "Contact"]:
+            from integrations.imessage.reader import ChatDBReader
+            try:
+                # Use cached reader logic
+                with ChatDBReader() as reader:
+                    conv = reader.get_conversation(contact_id)
+                    if conv and conv.display_name:
+                        contact_name = conv.display_name
+            except:
+                pass
 
         if len(messages) < self.min_messages:
             return ContactProfile(
@@ -503,6 +513,13 @@ class ContactProfileBuilder:
         relationship, rel_confidence = self._classify_relationship(
             contact_id, messages, contact_name
         )
+        
+        # LLM Refinement
+        relationship_reasoning = None
+        if len(messages) >= 5:
+            relationship, rel_confidence, relationship_reasoning = self._refine_relationship_with_llm(
+                messages, contact_name or "Contact", relationship, rel_confidence
+            )
 
         # Formality (Laplace-smoothed)
         formality_score = self._compute_formality(analyze_msgs)
@@ -529,11 +546,15 @@ class ContactProfileBuilder:
         # Topics (optional)
         top_topics = self._discover_topics(contact_id, messages, embeddings)
 
+        # Extracted Facts (from DB)
+        extracted_facts = self._fetch_db_facts(contact_id)
+
         return ContactProfile(
             contact_id=contact_id,
             contact_name=contact_name,
             relationship=relationship,
             relationship_confidence=rel_confidence,
+            relationship_reasoning=relationship_reasoning,
             formality=formality,
             formality_score=round(formality_score, 3),
             avg_message_length=round(avg_length, 1),
@@ -547,12 +568,92 @@ class ContactProfileBuilder:
             signoff_style=signoff_style,
             common_phrases=common_phrases,
             top_topics=top_topics,
+            extracted_facts=extracted_facts,
             message_count=len(messages),
             my_message_count=len(my_messages),
             updated_at=now,
         )
 
+    # --- Facts ---
+
+    def _fetch_db_facts(self, contact_id: str) -> list[dict[str, Any]]:
+        """Fetch facts for this contact from the database."""
+        try:
+            from jarvis.db import get_db
+            db = get_db()
+            with db.connection() as conn:
+                rows = conn.execute(
+                    "SELECT category, subject, predicate, value, confidence, extracted_at FROM contact_facts WHERE contact_id = ? ORDER BY extracted_at DESC",
+                    (contact_id,)
+                ).fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.warning("Failed to fetch facts for profile %s: %s", contact_id, e)
+            return []
+
     # --- Relationship ---
+
+    def _refine_relationship_with_llm(
+        self, 
+        messages: list[Message], 
+        contact_name: str,
+        base_rel: str,
+        base_conf: float
+    ) -> tuple[str, float, str]:
+        """Use LLM to refine the relationship type and provide reasoning."""
+        try:
+            from models.loader import get_model
+            loader = get_model()
+            
+            if not loader.is_loaded():
+                return base_rel, base_conf, "Rule-based analysis."
+
+            # Format a small sample of the chat
+            sample = messages[-15:] # Last 15 messages
+            turns = []
+            curr_sender = "User" if sample[0].is_from_me else contact_name
+            curr_msgs = []
+            for m in sample:
+                sender = "User" if m.is_from_me else contact_name
+                if sender == curr_sender:
+                    curr_msgs.append(m.text or "")
+                else:
+                    if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                    curr_sender = sender
+                    curr_msgs = [m.text or ""]
+            if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+            chat_text = "\n".join(turns)
+
+            prompt = f"""Analyze this chat and determine the relationship between User and {contact_name}.
+Categories: family, close friend, coworker, acquaintance, romantic partner.
+
+Chat:
+{chat_text}
+
+Rules:
+1. Pick the best category.
+2. Provide 1 sentence of reasoning.
+3. Output format: Category | Confidence (0-1) | Reasoning
+
+Result:"""
+            
+            res = loader.generate_sync(prompt=prompt, max_tokens=60, temperature=0.0)
+            text = res.text.strip()
+            
+            if "|" in text:
+                parts = text.split("|")
+                if len(parts) >= 3:
+                    rel = parts[0].strip().lower()
+                    # Extract float confidence
+                    conf_str = re.search(r"[\d\.]+", parts[1])
+                    conf = float(conf_str.group()) if conf_str else base_conf
+                    reason = parts[2].strip()
+                    return rel, conf, reason
+                
+        except Exception as e:
+            logger.debug("LLM relationship refinement failed: %s", e)
+            
+        return base_rel, base_conf, "Rule-based analysis."
 
     def _classify_relationship(
         self,

@@ -447,6 +447,18 @@ class TestTaskQueue:
         """Clean up after each test."""
         reset_task_queue()
 
+    @pytest.fixture(autouse=True)
+    def _isolate_queue(self, tmp_path):
+        """Use temp persistence path to avoid stale data from previous runs."""
+        from unittest.mock import patch
+        from jarvis.tasks.queue import DEFAULT_QUEUE_PATH
+        
+        queue_path = tmp_path / "test_queue.json"
+        with patch("jarvis.tasks.queue.DEFAULT_QUEUE_PATH", queue_path):
+            reset_task_queue()
+            yield
+            reset_task_queue()
+
     def test_enqueue_creates_task(self):
         """Enqueue creates a new task with correct properties."""
         queue = TaskQueue(auto_persist=False)
@@ -581,6 +593,8 @@ class TestTaskQueue:
         task = queue1.enqueue(TaskType.BATCH_EXPORT, {"chat_id": "123"})
 
         # Create new queue instance (simulates restart)
+        # Must delete first to clear in-memory state
+        del queue1
         queue2 = TaskQueue(persistence_path=queue_path, auto_persist=True)
 
         # Task should be recovered
@@ -598,7 +612,8 @@ class TestTaskQueue:
         task.status = TaskStatus.RUNNING
         queue1.update(task)
 
-        # Simulate restart
+        # Simulate restart - must delete first to clear in-memory state
+        del queue1
         queue2 = TaskQueue(persistence_path=queue_path, auto_persist=True)
 
         recovered = queue2.get(task.id)

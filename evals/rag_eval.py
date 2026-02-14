@@ -133,7 +133,7 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
         relevance_scores = []
 
         for sr in search_results:
-            trigger = sr.trigger_text or ""
+            trigger = sr.context_text or ""
             triggers.append(trigger)
             vec_scores.append(sr.score)
 
@@ -211,11 +211,11 @@ def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationRes
         search_results = searcher.search_with_chunks_global(query=query, limit=3)
         rag_examples = ""
         for sr in search_results:
-            if sr.trigger_text and sr.response_text:
+            if sr.context_text and sr.reply_text:
                 rag_examples += (
                     f"\nExample:\n"
-                    f"  Context: {sr.trigger_text[:200]}\n"
-                    f"  Reply: {sr.response_text[:100]}\n"
+                    f"  Context: {sr.context_text[:200]}\n"
+                    f"  Reply: {sr.reply_text[:100]}\n"
                 )
 
         # Build RAG-enhanced prompt by inserting examples before <reply>

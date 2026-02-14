@@ -267,71 +267,45 @@ class TestSearchWithPairs:
         embedding,
         contact_id,
         chat_id,
-        trigger_text,
-        response_text,
-        topic_label="",
-        quality_score=0.5,
+        context_text,
         source_timestamp=1000.0,
+        message_count=2,
     ):
-        """Low-level insert into vec_chunks."""
+        """Low-level insert into vec_chunks (simplified schema)."""
         int8_blob = (embedding * 127).astype(np.int8).tobytes()
         with db.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO vec_chunks(
-                    embedding, contact_id, chat_id,
-                    response_da_type, source_timestamp, quality_score,
-                    topic_label, trigger_text, response_text,
-                    formatted_text, keywords_json, message_count,
-                    source_type, source_id
-                ) VALUES (
-                    vec_int8(?), ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?
-                )
+                    embedding, contact_id, chat_id, source_timestamp, context_text, message_count
+                ) VALUES (vec_int8(?), ?, ?, ?, ?, ?)
                 """,
                 (
                     int8_blob,
                     contact_id,
                     chat_id,
-                    "",
                     source_timestamp,
-                    quality_score,
-                    topic_label,
-                    trigger_text,
-                    response_text,
-                    (trigger_text or "")[:500],
-                    None,
-                    2,
-                    "chunk",
-                    f"seg_{hash(trigger_text or '') % 10000}",
+                    context_text,
+                    message_count,
                 ),
             )
 
     def test_returns_trigger_and_response(self, db, searcher):
-        """search_with_chunks returns joined trigger/response text."""
+        """search_with_chunks returns context text."""
         emb = _make_normalized(50)
         self._insert_chunk(
             db,
             emb,
             contact_id=1,
             chat_id="chat_1",
-            trigger_text="Want to grab lunch?",
-            response_text="Sure, how about noon?",
-            topic_label="food",
-            quality_score=0.9,
+            context_text="Want to grab lunch? Sure, how about noon?",
         )
 
         searcher._embedder = FakeEmbedder(emb)
         results = searcher.search_with_chunks("lunch query", limit=5)
         assert len(results) == 1
         r = results[0]
-        assert r.trigger_text == "Want to grab lunch?"
-        assert r.response_text == "Sure, how about noon?"
-        assert r.topic == "food"
-        assert r.quality_score == pytest.approx(0.9, abs=0.01)
+        assert "lunch" in r.context_text.lower()
         assert r.chat_id == "chat_1"
 
     def test_contact_id_filter(self, db, searcher):
@@ -342,27 +316,25 @@ class TestSearchWithPairs:
             emb,
             contact_id=1,
             chat_id="c1",
-            trigger_text="hi",
-            response_text="hey",
+            context_text="hi",
         )
         self._insert_chunk(
             db,
             emb,
             contact_id=2,
             chat_id="c2",
-            trigger_text="yo",
-            response_text="sup",
+            context_text="yo",
         )
 
         searcher._embedder = FakeEmbedder(emb)
 
         results_c1 = searcher.search_with_chunks("q", limit=10, contact_id=1)
         assert len(results_c1) == 1
-        assert results_c1[0].trigger_text == "hi"
+        assert results_c1[0].context_text == "hi"
 
         results_c2 = searcher.search_with_chunks("q", limit=10, contact_id=2)
         assert len(results_c2) == 1
-        assert results_c2[0].trigger_text == "yo"
+        assert results_c2[0].context_text == "yo"
 
     def test_ranking(self, db, searcher):
         """Closer chunks rank higher in search_with_chunks."""
@@ -374,22 +346,20 @@ class TestSearchWithPairs:
             close_emb,
             contact_id=0,
             chat_id="c",
-            trigger_text="close",
-            response_text="near resp",
+            context_text="close",
         )
         self._insert_chunk(
             db,
             far_emb,
             contact_id=0,
             chat_id="c",
-            trigger_text="far",
-            response_text="far resp",
+            context_text="far",
         )
 
         searcher._embedder = FakeEmbedder(close_emb)
         results = searcher.search_with_chunks("q", limit=10)
         assert len(results) == 2
-        assert results[0].trigger_text == "close"
+        assert results[0].context_text == "close"
         assert results[0].score >= results[1].score
 
     def test_empty(self, db, searcher):
@@ -405,8 +375,7 @@ class TestSearchWithPairs:
             emb,
             contact_id=0,
             chat_id="c",
-            trigger_text="test",
-            response_text="resp",
+            context_text="test",
         )
 
         # Default embedder points elsewhere
@@ -416,7 +385,7 @@ class TestSearchWithPairs:
         custom = FakeEmbedder(emb)
         results = searcher.search_with_chunks("q", limit=5, embedder=custom)
         assert len(results) == 1
-        assert results[0].trigger_text == "test"
+        assert results[0].context_text == "test"
 
 
 # ---------------------------------------------------------------------------
@@ -538,33 +507,23 @@ class TestGetStats:
 
 
 class TestDeleteChunksForChat:
-    def _insert_chunk(self, db, embedding, chat_id, trigger="t", response="r"):
+    def _insert_chunk(self, db, embedding, chat_id, context_text="test"):
         int8_blob = (embedding * 127).astype(np.int8).tobytes()
         with db.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO vec_chunks(
-                    embedding, contact_id, chat_id,
-                    response_da_type, source_timestamp, quality_score,
-                    topic_label, trigger_text, response_text,
-                    formatted_text, keywords_json, message_count,
-                    source_type, source_id
-                ) VALUES (
-                    vec_int8(?), 0, ?,
-                    '', 1000.0, 0.5,
-                    '', ?, ?,
-                    '', NULL, 1,
-                    'chunk', 'seg_1'
-                )
+                    embedding, contact_id, chat_id, source_timestamp, context_text, message_count
+                ) VALUES (vec_int8(?), 0, ?, 1000.0, ?, 1)
                 """,
-                (int8_blob, chat_id, trigger, response),
+                (int8_blob, chat_id, context_text),
             )
 
     def test_delete_specific_chat(self, db, searcher):
         emb = _make_normalized(1)
-        self._insert_chunk(db, emb, "chat_A", trigger="a1", response="a1r")
-        self._insert_chunk(db, emb, "chat_A", trigger="a2", response="a2r")
-        self._insert_chunk(db, emb, "chat_B", trigger="b1", response="b1r")
+        self._insert_chunk(db, emb, "chat_A", context_text="a1")
+        self._insert_chunk(db, emb, "chat_A", context_text="a2")
+        self._insert_chunk(db, emb, "chat_B", context_text="b1")
 
         deleted = searcher.delete_chunks_for_chat("chat_A")
         assert deleted == 2
@@ -573,7 +532,7 @@ class TestDeleteChunksForChat:
         searcher._embedder = FakeEmbedder(emb)
         results = searcher.search_with_chunks("q", limit=10)
         assert len(results) == 1
-        assert results[0].trigger_text == "b1"
+        assert results[0].context_text == "b1"
 
     def test_delete_nonexistent_chat(self, db, searcher):
         deleted = searcher.delete_chunks_for_chat("no_such_chat")

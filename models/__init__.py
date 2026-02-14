@@ -127,8 +127,16 @@ def get_generator(
         if _generator is None or (model_id is not None and _current_model_id != model_id):
             if _generator is not None:
                 _generator.unload()
-            config = ModelConfig(model_id=model_id) if model_id else None
-            _generator = MLXGenerator(config=config, skip_templates=skip_templates)
+
+            from models.loader import get_model
+
+            # Use the singleton loader to share weights and memory
+            loader = get_model()
+            if model_id:
+                loader.switch_model(model_id)
+
+            config = ModelConfig(model_id=model_id) if model_id else loader.config
+            _generator = MLXGenerator(loader=loader, config=config, skip_templates=skip_templates)
             _current_model_id = model_id
         return _generator
 

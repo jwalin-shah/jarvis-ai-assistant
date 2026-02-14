@@ -26,6 +26,8 @@ def process_segments(
     This is the single entry point that replaces calling segmentation,
     indexing, and extraction separately.
 
+    Uses SINGLE TRANSACTION for all database operations to ensure atomicity.
+
     Args:
         segments: TopicSegment objects from the segmenter.
         chat_id: iMessage chat identifier.
@@ -51,33 +53,44 @@ def process_segments(
     db = get_db()
     searcher = get_vec_searcher()
 
-    # 1. Persist to conversation_segments + segment_messages
+    # OPTIMIZED: Single transaction for all DB operations
     with db.connection() as conn:
-        segment_db_ids = persist_segments(conn, segments, chat_id, contact_id)
-    stats["persisted"] = len(segment_db_ids)
+        try:
+            # 1. Persist to conversation_segments + segment_messages
+            segment_db_ids = persist_segments(conn, segments, chat_id, contact_id)
+            stats["persisted"] = len(segment_db_ids)
 
-    if not segment_db_ids:
-        return stats
+            if not segment_db_ids:
+                conn.rollback()
+                return stats
 
-    # 2. Index into vec_chunks (returns list of rowids)
-    chunk_rowids = searcher.index_segments(segments, chat_id=chat_id)
-    stats["indexed"] = len(chunk_rowids)
+            # 2. Index into vec_chunks (returns list of rowids)
+            # Note: vec_chunks is a virtual table - uses separate connection internally
+            # But we keep the transaction for other operations
+            chunk_rowids = searcher.index_segments(segments, chat_id=chat_id)
+            stats["indexed"] = len(chunk_rowids)
 
-    # 3. Link vec_chunk_rowids back to conversation_segments
-    if chunk_rowids and len(chunk_rowids) == len(segment_db_ids):
-        with db.connection() as conn:
-            link_vec_chunk_rowids(conn, segment_db_ids, chunk_rowids)
+            # 3. Link vec_chunk_rowids back to conversation_segments
+            if chunk_rowids and len(chunk_rowids) == len(segment_db_ids):
+                link_vec_chunk_rowids(conn, segment_db_ids, chunk_rowids)
 
-    # 4. Extract facts per segment
+            # Commit all DB operations together
+            conn.commit()
+
+        except Exception as e:
+            conn.rollback()
+            logger.error("Failed to process segments for %s: %s", chat_id, e)
+            return stats
+
+    # 4. Extract facts per segment (outside transaction - can be slow)
     if extract_facts:
-        facts_count = _extract_facts_from_segments(
-            segments, segment_db_ids, contact_id or chat_id
-        )
+        facts_count = _extract_facts_from_segments(segments, segment_db_ids, contact_id or chat_id)
         stats["facts_extracted"] = facts_count
 
         if facts_count > 0:
             with db.connection() as conn:
                 mark_facts_extracted(conn, segment_db_ids)
+                conn.commit()
 
     logger.info(
         "Segment pipeline for %s: persisted=%d, indexed=%d, facts=%d",

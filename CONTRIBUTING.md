@@ -104,7 +104,7 @@ All LLM prompts must be defined in `jarvis/prompts.py` - nowhere else.
 - **desktop/**: Tauri + Svelte desktop app
 - **tests/**: Unit and integration tests
 
-See `docs/DESIGN.md` for detailed architecture documentation.
+See `docs/ARCHITECTURE.md` for detailed architecture documentation.
 
 ## Pull Request Process
 
@@ -130,13 +130,14 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 ## Performance Guidelines
 
-JARVIS runs on memory-constrained systems (8GB RAM). Follow these rules:
+JARVIS runs on memory-constrained systems (8GB RAM). Follow these rules strictly:
 
-1. **Always parallelize**: Use `n_jobs=2` for scikit-learn operations (memory-constrained)
-2. **Always batch**: Process lists together, not one-at-a-time loops
-3. **Always cache**: Cache expensive computations (embeddings, model loads)
-4. **Stream large data**: Never hold >500MB in RAM; use memmap for large arrays
-5. **Binary over JSON**: Use binary encoding for embeddings and large arrays
+1. **One Model at a Time**: Never load multiple MLX models simultaneously. Use the shared `MLXModelLoader` singleton via `get_model()`.
+2. **Always parallelize**: Use `n_jobs=1` or `n_jobs=2` for scikit-learn operations (memory-constrained)
+3. **Always batch**: Process lists together, not one-at-a-time loops
+4. **Always cache**: Cache expensive computations (embeddings, model loads)
+5. **Stream large data**: Never hold >500MB in RAM; use memmap for large arrays
+6. **Binary over JSON**: Use binary encoding for embeddings and large arrays
 
 ## Testing Guidelines
 

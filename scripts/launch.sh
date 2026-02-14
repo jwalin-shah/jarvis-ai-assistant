@@ -12,7 +12,12 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DESKTOP_DIR="$PROJECT_ROOT/desktop"
 API_PID=""
 SOCKET_PID=""
+WORKER_PID=""
 TAURI_PID=""
+SOCKET_MONITOR_PID=""
+SOCKET_RESTART_COUNT=0
+MAX_SOCKET_RESTARTS=5
+SOCKET_RESTART_DELAY=3
 
 # Colors for output
 RED='\033[0;31m'
@@ -48,11 +53,25 @@ cleanup() {
         wait "$API_PID" 2>/dev/null || true
     fi
 
+    # Kill the socket monitor if running
+    if [ -n "$SOCKET_MONITOR_PID" ] && kill -0 "$SOCKET_MONITOR_PID" 2>/dev/null; then
+        log_info "Stopping socket monitor (PID: $SOCKET_MONITOR_PID)..."
+        kill "$SOCKET_MONITOR_PID" 2>/dev/null || true
+        wait "$SOCKET_MONITOR_PID" 2>/dev/null || true
+    fi
+
     # Kill the socket server if we started it
     if [ -n "$SOCKET_PID" ] && kill -0 "$SOCKET_PID" 2>/dev/null; then
         log_info "Stopping socket server (PID: $SOCKET_PID)..."
         kill "$SOCKET_PID" 2>/dev/null || true
         wait "$SOCKET_PID" 2>/dev/null || true
+    fi
+
+    # Kill the background worker if we started it
+    if [ -n "$WORKER_PID" ] && kill -0 "$WORKER_PID" 2>/dev/null; then
+        log_info "Stopping background worker (PID: $WORKER_PID)..."
+        kill "$WORKER_PID" 2>/dev/null || true
+        wait "$WORKER_PID" 2>/dev/null || true
     fi
 
     # Kill any remaining processes on the API port
@@ -124,6 +143,92 @@ wait_for_api() {
     return 1
 }
 
+# Check if socket server is healthy
+is_socket_healthy() {
+    # Check if process is running
+    if [ -z "$SOCKET_PID" ] || ! kill -0 "$SOCKET_PID" 2>/dev/null; then
+        return 1
+    fi
+    # Check if socket file exists
+    if [ ! -e "$SOCKET_PATH" ]; then
+        return 1
+    fi
+    # Try to connect
+    if ! python3 -c "
+import socket, os, sys
+try:
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(2)
+    sock.connect(os.path.expanduser('$SOCKET_PATH'))
+    sock.close()
+    sys.exit(0)
+except:
+    sys.exit(1)
+" 2>/dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+# Start socket server
+start_socket_server() {
+    log_info "Starting socket server (models load on-demand)..."
+    cd "$PROJECT_ROOT"
+    uv run python -m jarvis.socket_server --no-preload &
+    SOCKET_PID=$!
+    log_info "Socket server started (PID: $SOCKET_PID)"
+
+    # Wait up to 5 seconds for socket to be ready
+    local socket_wait=0
+    while [ $socket_wait -lt 50 ] && [ ! -e "$SOCKET_PATH" ]; do
+        sleep 0.1
+        socket_wait=$((socket_wait + 1))
+    done
+
+    if [ -e "$SOCKET_PATH" ]; then
+        log_success "Socket server ready at $SOCKET_PATH (${socket_wait}00ms)"
+    else
+        log_warn "Socket server starting in background (app will use SQLite fallback)"
+    fi
+}
+
+# Monitor socket server health and restart if needed
+monitor_socket_server() {
+    while true; do
+        sleep 10
+
+        # Skip check if we've exceeded max restarts
+        if [ $SOCKET_RESTART_COUNT -ge $MAX_SOCKET_RESTARTS ]; then
+            log_error "Socket server has crashed $MAX_SOCKET_RESTARTS times. Giving up."
+            break
+        fi
+
+        # Check if socket is healthy
+        if ! is_socket_healthy; then
+            log_warn "Socket server appears unhealthy (restart #$((SOCKET_RESTART_COUNT + 1))/$MAX_SOCKET_RESTARTS)"
+
+            # Clean up old socket file if it exists
+            if [ -e "$SOCKET_PATH" ]; then
+                rm -f "$SOCKET_PATH"
+            fi
+
+            # Kill old process if still running
+            if [ -n "$SOCKET_PID" ] && kill -0 "$SOCKET_PID" 2>/dev/null; then
+                kill "$SOCKET_PID" 2>/dev/null || true
+                wait "$SOCKET_PID" 2>/dev/null || true
+            fi
+
+            SOCKET_RESTART_COUNT=$((SOCKET_RESTART_COUNT + 1))
+
+            # Wait before restarting
+            sleep $SOCKET_RESTART_DELAY
+
+            # Restart the socket server
+            start_socket_server
+        fi
+    done
+}
+
 # Main function
 main() {
     log_info "Starting JARVIS..."
@@ -165,27 +270,21 @@ main() {
     # Step 4: Start the socket server for direct desktop communication
     # Use --no-preload to avoid blocking startup with model loading
     # Models will load on-demand when first used (first message generation, etc.)
-    log_info "Starting socket server (models load on-demand)..."
+    start_socket_server
+
+    # Start socket health monitor in background
+    log_info "Starting socket health monitor..."
+    monitor_socket_server &
+    SOCKET_MONITOR_PID=$!
+
+    # Step 5: Start the background task worker
+    log_info "Starting background task worker..."
     cd "$PROJECT_ROOT"
-    uv run python -m jarvis.socket_server --no-preload &
-    SOCKET_PID=$!
-    log_info "Socket server started (PID: $SOCKET_PID)"
+    uv run python scripts/start_worker_loop.py &
+    WORKER_PID=$!
+    log_info "Background worker started (PID: $WORKER_PID)"
 
-    # Wait up to 5 seconds for socket to be ready
-    # If socket takes longer, app will use direct SQLite and retry in background
-    local socket_wait=0
-    while [ $socket_wait -lt 50 ] && [ ! -e "$SOCKET_PATH" ]; do
-        sleep 0.1
-        socket_wait=$((socket_wait + 1))
-    done
-
-    if [ -e "$SOCKET_PATH" ]; then
-        log_success "Socket server ready at $SOCKET_PATH (${socket_wait}00ms)"
-    else
-        log_warn "Socket server starting in background (app will use SQLite fallback)"
-    fi
-
-    # Step 5: Start the Tauri desktop app
+    # Step 6: Start the Tauri desktop app
     log_info "Starting JARVIS desktop app..."
     cd "$DESKTOP_DIR"
 

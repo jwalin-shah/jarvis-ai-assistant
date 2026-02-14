@@ -138,7 +138,7 @@ class ReplyRouter:
         """Initialize the router.
 
         Args:
-            db: Database instance for contacts and pairs. Uses default if None.
+            db: Database instance for contacts and segments. Uses default if None.
             generator: MLX generator for LLM responses. Created lazily if None.
             imessage_reader: iMessage reader for fetching conversation history.
                 Created lazily if None.
@@ -165,9 +165,14 @@ class ReplyRouter:
         """Get or create the MLX generator."""
         with self._lock:
             if self._generator is None:
-                from models import get_generator
+                from jarvis.model_warmer import get_warm_generator
 
-                self._generator = get_generator(skip_templates=True)
+                self._generator = get_warm_generator(skip_templates=True)
+            else:
+                # Touch warmer if generator already exists
+                from jarvis.model_warmer import get_model_warmer
+
+                get_model_warmer().touch()
             return self._generator
 
     @property

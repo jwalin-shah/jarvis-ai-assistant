@@ -8,6 +8,7 @@ display appropriate warnings or errors to the user.
 """
 
 import os
+from typing import Any
 
 import psutil
 from fastapi import APIRouter, Request
@@ -310,3 +311,118 @@ async def root(request: Request) -> dict[str, str]:
         dict: Simple status object with service name
     """
     return {"status": "ok", "service": "jarvis-api"}
+
+
+@router.get(
+    "/health/diagnostic",
+    response_model_exclude_unset=True,
+    response_description="Deep diagnostic check of all system components",
+    summary="Run deep diagnostic checks",
+)
+@limiter.limit(RATE_LIMIT_READ)
+async def get_diagnostic(request: Request) -> dict[str, Any]:
+    """Run comprehensive diagnostic checks on all system components.
+
+    This endpoint performs deeper checks than /health, including:
+    - Router registration validation
+    - Schema consistency checks
+    - iMessage sender functionality
+    - AppleScript accessibility
+
+    **Rate Limiting:**
+    This endpoint is rate limited to 10 requests per minute (expensive checks).
+
+    **Example Response:**
+    ```json
+    {
+        "status": "healthy",
+        "checks": {
+            "routers": {"status": "ok", "registered": 25},
+            "schemas": {"status": "ok"},
+            "imessage_sender": {"status": "ok"},
+            "applescript": {"status": "ok", "chat_count": 42}
+        },
+        "issues": []
+    }
+    ```
+
+    Returns:
+        dict: Diagnostic results with detailed check status
+    """
+    checks: dict[str, dict[str, Any]] = {}
+    issues: list[str] = []
+
+    # Check 1: Router registration
+    try:
+        from api.main import create_app
+
+        app = create_app()
+        route_count = len([r for r in app.routes if hasattr(r, "path")])
+        checks["routers"] = {"status": "ok", "registered": route_count}
+    except Exception as e:
+        checks["routers"] = {"status": "error", "message": str(e)}
+        issues.append(f"Router registration failed: {e}")
+
+    # Check 2: Schema validation
+    try:
+        from api.schemas import SendMessageRequest, DraftReplyRequest
+
+        # Validate schemas can be instantiated
+        test_send = SendMessageRequest(text="test", recipient="+1234567890", is_group=False)
+        checks["schemas"] = {"status": "ok"}
+    except Exception as e:
+        checks["schemas"] = {"status": "error", "message": str(e)}
+        issues.append(f"Schema validation failed: {e}")
+
+    # Check 3: iMessage sender
+    try:
+        from integrations.imessage.sender import IMessageSender
+
+        sender = IMessageSender()
+        # Check method exists
+        assert hasattr(sender, "send_message")
+        assert hasattr(sender, "send_attachment")
+        checks["imessage_sender"] = {"status": "ok"}
+    except Exception as e:
+        checks["imessage_sender"] = {"status": "error", "message": str(e)}
+        issues.append(f"iMessage sender check failed: {e}")
+
+    # Check 4: AppleScript access
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["osascript", "-e", 'tell application "Messages" to return count of chats'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            checks["applescript"] = {"status": "ok", "chat_count": int(result.stdout.strip())}
+        else:
+            checks["applescript"] = {"status": "error", "message": result.stderr}
+            issues.append(f"AppleScript error: {result.stderr}")
+    except Exception as e:
+        checks["applescript"] = {"status": "error", "message": str(e)}
+        issues.append(f"AppleScript access failed: {e}")
+
+    # Check 5: Database access
+    try:
+        from integrations.imessage import ChatDBReader
+
+        reader = ChatDBReader()
+        conv_count = len(reader.get_conversations(limit=1))
+        reader.close()
+        checks["database"] = {"status": "ok", "accessible": True}
+    except Exception as e:
+        checks["database"] = {"status": "error", "message": str(e)}
+        issues.append(f"Database access failed: {e}")
+
+    # Overall status
+    status = "healthy" if not issues else "degraded" if len(issues) < 3 else "unhealthy"
+
+    return {
+        "status": status,
+        "checks": checks,
+        "issues": issues,
+    }

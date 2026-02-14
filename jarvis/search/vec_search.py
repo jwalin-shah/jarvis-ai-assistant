@@ -68,7 +68,7 @@ def _validate_placeholders(placeholders: str) -> None:
 
 @dataclass
 class VecSearchResult:
-    """Result from vector search."""
+    """Result from vector search (simplified schema)."""
 
     rowid: int
     distance: float
@@ -81,13 +81,10 @@ class VecSearchResult:
     timestamp: float | None = None
     is_from_me: bool | None = None
 
-    # Chunk fields (if searching pairs)
-    trigger_text: str | None = None
-    response_text: str | None = None
-    response_type: str | None = None
-    response_da_conf: float | None = None
+    # Chunk fields (if searching chunks)
+    context_text: str | None = None
+    reply_text: str | None = None
     topic: str | None = None
-    quality_score: float | None = None
 
 
 class VecSearcher:
@@ -102,14 +99,24 @@ class VecSearcher:
         self._lock = threading.Lock()
 
     @staticmethod
-    def _distance_to_similarity(distance: float) -> float:
-        """Convert int8-quantized L2 distance to approximate cosine similarity.
+    def _distance_to_similarity(
+        distance: float, query_vec: np.ndarray | None = None, doc_vec: np.ndarray | None = None
+    ) -> float:
+        """Convert distance to approximate cosine similarity.
+
+        If query_vec and doc_vec (dequantized float32) are provided, computes
+        exact cosine similarity via dot product. Otherwise uses the
+        L2-in-int8-space approximation.
 
         For normalized embeddings quantized to int8 via (emb * 127):
             L2_int8 = 127 * L2_float
             L2_float^2 = 2 * (1 - cos_sim)
             cos_sim = 1 - (L2_int8 / 127)^2 / 2
         """
+        if query_vec is not None and doc_vec is not None:
+            # Exact cosine similarity for normalized vectors is just dot product
+            return float(np.dot(query_vec, doc_vec))
+
         cos_sim = 1.0 - (distance / VecSearcher._INT8_SCALE) ** 2 / 2.0
         return max(0.0, min(1.0, cos_sim))
 
@@ -277,18 +284,16 @@ class VecSearcher:
         if segment.centroid is None or not segment.messages:
             return False
 
-        # Collect trigger (them) and response (me) text from the segment
-        trigger_parts = [m.text for m in segment.messages if not m.is_from_me and m.text]
-        response_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
+        # Collect context/reply text
+        context_parts = [m.text for m in segment.messages if not m.is_from_me and m.text]
+        reply_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
 
-        trigger_text = "\n".join(trigger_parts) if trigger_parts else None
-        response_text = "\n".join(response_parts) if response_parts else None
+        context_text = "\n".join(context_parts) if context_parts else None
+        reply_text = "\n".join(reply_parts) if reply_parts else None
 
-        # Skip segments with no response text (nothing to learn from)
-        if not response_text:
+        # Skip segments with no text
+        if not context_text or not reply_text:
             return False
-
-        import json
 
         try:
             int8_blob = self._quantize_embedding(segment.centroid)
@@ -298,37 +303,19 @@ class VecSearcher:
                 cursor = conn.execute(
                     """
                     INSERT INTO vec_chunks(
-                        embedding,
-                        contact_id,
-                        chat_id,
-                        response_da_type,
-                        source_timestamp,
-                        quality_score,
-                        topic_label,
-                        trigger_text,
-                        response_text,
-                        formatted_text,
-                        keywords_json,
-                        message_count,
-                        source_type,
-                        source_id
-                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        embedding, contact_id, chat_id, source_timestamp,
+                        context_text, reply_text, topic_label, message_count
+                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         int8_blob,
                         contact_id or 0,
                         chat_id or "",
-                        "",  # response_da_type: not classified during segment ingestion
                         segment.start_time.timestamp(),
-                        segment.confidence or 0.0,
+                        context_text[:1000],
+                        reply_text[:1000],
                         segment.topic_label,
-                        trigger_text,
-                        response_text,
-                        segment.text[:500],  # formatted_text preview
-                        json.dumps(segment.keywords) if segment.keywords else None,
                         segment.message_count,
-                        "chunk",
-                        segment.segment_id,
                     ),
                 )
                 chunk_rowid = cursor.lastrowid
@@ -370,8 +357,6 @@ class VecSearcher:
         if not segments:
             return []
 
-        import json
-
         # Prepare batch data
         vec_chunks_batch = []
 
@@ -379,15 +364,15 @@ class VecSearcher:
             if segment.centroid is None or not segment.messages:
                 continue
 
-            # Collect trigger/response text
-            trigger_parts = [m.text for m in segment.messages if not m.is_from_me and m.text]
-            response_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
+            # Collect context/reply text
+            context_parts = [m.text for m in segment.messages if not m.is_from_me and m.text]
+            reply_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
 
-            trigger_text = "\n".join(trigger_parts) if trigger_parts else None
-            response_text = "\n".join(response_parts) if response_parts else None
+            context_text = "\n".join(context_parts) if context_parts else None
+            reply_text = "\n".join(reply_parts) if reply_parts else None
 
-            # Skip segments with no response text
-            if not response_text:
+            # Skip segments with no reply text
+            if not reply_text:
                 continue
 
             int8_blob = self._quantize_embedding(segment.centroid)
@@ -398,17 +383,11 @@ class VecSearcher:
                     int8_blob,
                     contact_id or 0,
                     chat_id or "",
-                    "",  # response_da_type
                     segment.start_time.timestamp(),
-                    segment.confidence or 0.0,
+                    context_text[:1000],
+                    reply_text[:1000],
                     segment.topic_label,
-                    trigger_text,
-                    response_text,
-                    segment.text[:500],  # formatted_text preview
-                    json.dumps(segment.keywords) if segment.keywords else None,
                     segment.message_count,
-                    "chunk",
-                    segment.segment_id,
                     binary_blob,  # Store for vec_binary insert
                 )
             )
@@ -418,36 +397,46 @@ class VecSearcher:
 
         try:
             with self.db.connection() as conn:
-                # Insert chunks individually to get reliable rowids.
-                # executemany + lastrowid is unreliable for virtual tables (sqlite-vec).
+                # OPTIMIZED: Use single transaction with RETURNING for reliable rowids
                 insert_sql = """
                     INSERT INTO vec_chunks(
-                        embedding, contact_id, chat_id, response_da_type,
-                        source_timestamp, quality_score, topic_label,
-                        trigger_text, response_text, formatted_text,
-                        keywords_json, message_count, source_type, source_id
-                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        embedding, contact_id, chat_id, source_timestamp,
+                        context_text, reply_text, topic_label, message_count
+                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?)
+                    RETURNING rowid
                 """
-                chunk_rowids: list[int] = []
-                for row in vec_chunks_batch:
-                    cursor = conn.execute(insert_sql, row[:14])
-                    chunk_rowids.append(cursor.lastrowid)
 
-                # Batch insert into vec_binary
+                chunk_rowids: list[int] = []
+                # Use single transaction for all inserts
                 try:
-                    binary_batch = [
-                        (row[14], chunk_rowid, row[0])
-                        for row, chunk_rowid in zip(vec_chunks_batch, chunk_rowids)
-                    ]
-                    conn.executemany(
-                        """
-                        INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8)
-                        VALUES (vec_bit(?), ?, ?)
-                        """,
-                        binary_batch,
-                    )
+                    for row in vec_chunks_batch:
+                        cursor = conn.execute(insert_sql, row[:8])
+                        result = cursor.fetchone()
+                        if result:
+                            chunk_rowids.append(result["rowid"])
+
+                    # Commit once after all inserts
+                    conn.commit()
                 except Exception as e:
-                    logger.debug("vec_binary batch insert skipped: %s", e)
+                    conn.rollback()
+                    raise
+
+                # Batch insert into vec_binary (if it exists)
+                if chunk_rowids and len(chunk_rowids) == len(vec_chunks_batch):
+                    try:
+                        binary_batch = [
+                            (row[8], chunk_rowid, row[0])  # binary_blob, chunk_rowid, int8_blob
+                            for row, chunk_rowid in zip(vec_chunks_batch, chunk_rowids)
+                        ]
+                        conn.executemany(
+                            """
+                            INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8)
+                            VALUES (vec_bit(?), ?, ?)
+                            """,
+                            binary_batch,
+                        )
+                    except Exception as e:
+                        logger.debug("vec_binary batch insert skipped: %s", e)
 
                 return chunk_rowids
 
@@ -556,12 +545,12 @@ class VecSearcher:
         Args:
             query: Input trigger text
             limit: Max results
-            response_type: Optional filter for response_da_type
+            response_type: Optional filter (ignored in simplified schema)
             contact_id: Optional partition key to search only one contact's chunks
             embedder: Optional embedder override (e.g. CachedEmbedder)
 
         Returns:
-            List of results with trigger/response details
+            List of results with context/reply details
         """
         enc = embedder or self._embedder
         embedding = enc.encode(query, normalize=True)
@@ -573,12 +562,9 @@ class VecSearcher:
                     rowid,
                     distance,
                     chat_id,
-                    trigger_text,
-                    response_text,
-                    response_da_type,
-                    response_da_conf,
-                    topic_label,
-                    quality_score
+                    context_text,
+                    reply_text,
+                    topic_label
                 FROM vec_chunks
                 WHERE embedding MATCH vec_int8(?)
                 AND k = ?
@@ -588,10 +574,6 @@ class VecSearcher:
             if contact_id is not None:
                 sql += " AND contact_id = ?"
                 params.append(contact_id)
-
-            if response_type:
-                sql += " AND response_da_type = ?"
-                params.append(response_type)
 
             rows = conn.execute(sql, params).fetchall()
 
@@ -606,12 +588,9 @@ class VecSearcher:
                     distance=dist,
                     score=score,
                     chat_id=row["chat_id"],
-                    trigger_text=row["trigger_text"],
-                    response_text=row["response_text"],
-                    response_type=row["response_da_type"],
-                    response_da_conf=row["response_da_conf"],
+                    context_text=row["context_text"],
+                    reply_text=row["reply_text"],
                     topic=row["topic_label"],
-                    quality_score=row["quality_score"],
                 )
             )
 
@@ -622,12 +601,16 @@ class VecSearcher:
         query: str,
         limit: int = 5,
         embedder: Any | None = None,
+        rerank: bool = True,
     ) -> list[VecSearchResult]:
         """Two-phase global search: fast hamming pre-filter then int8 re-rank.
+
+        Optional Phase 4: Rerank top candidates with a cross-encoder for max precision.
 
         Phase 1: Hamming search on vec_binary for limit*10 candidates
         Phase 2: Re-rank candidates by L2 distance on stored int8 embeddings
         Phase 3: Fetch metadata from vec_chunks for top results
+        Phase 4: (Optional) Cross-encoder rerank top results
 
         Falls back to standard search_with_chunks() if vec_binary is empty/missing.
 
@@ -635,16 +618,18 @@ class VecSearcher:
             query: Input trigger text
             limit: Max results
             embedder: Optional embedder override
+            rerank: Whether to rerank top candidates with cross-encoder
 
         Returns:
-            List of results with trigger/response details, sorted by int8 L2 distance
+            List of results with trigger/response details, sorted by relevance
         """
         enc = embedder or self._embedder
         embedding = enc.encode(query, normalize=True)
         binary_blob = self._binarize_embedding(embedding)
         int8_query = (embedding * self._INT8_SCALE).astype(np.int8)
 
-        candidates_k = limit * 10
+        # Increase candidate pool if reranking is enabled
+        candidates_k = limit * (20 if rerank else 10)
 
         try:
             with self.db.connection() as conn:
@@ -674,20 +659,19 @@ class VecSearcher:
                     scored.append((chunk_rowid, dist))
 
                 scored.sort(key=lambda x: x[1])
-                top = scored[:limit]
+                # Take slightly more for the cross-encoder to refine
+                top_candidates_count = limit * 3 if rerank else limit
+                top_indices = scored[:top_candidates_count]
 
                 # Phase 3: Fetch metadata from vec_chunks
-                chunk_rowids = [r[0] for r in top]
-                dist_by_rowid = {r[0]: r[1] for r in top}
+                chunk_rowids = [r[0] for r in top_indices]
+                dist_by_rowid = {r[0]: r[1] for r in top_indices}
 
                 placeholders = ",".join("?" * len(chunk_rowids))
-                # SECURITY: Validate placeholders only contain "?" and "," before SQL interpolation
                 _validate_placeholders(placeholders)
                 meta_rows = conn.execute(
                     f"""
-                    SELECT rowid, chat_id, trigger_text, response_text,
-                           response_da_type, response_da_conf, topic_label,
-                           quality_score
+                    SELECT rowid, chat_id, context_text, reply_text, topic_label
                     FROM vec_chunks
                     WHERE rowid IN ({placeholders})
                     """,
@@ -705,18 +689,50 @@ class VecSearcher:
                             distance=dist,
                             score=score,
                             chat_id=mrow["chat_id"],
-                            trigger_text=mrow["trigger_text"],
-                            response_text=mrow["response_text"],
-                            response_type=mrow["response_da_type"],
-                            response_da_conf=mrow["response_da_conf"],
+                            context_text=mrow["context_text"],
+                            reply_text=mrow["reply_text"],
                             topic=mrow["topic_label"],
-                            quality_score=mrow["quality_score"],
                         )
                     )
 
-                # Sort by distance ascending (best first)
+                # Phase 4: Cross-encoder rerank
+                if rerank and len(results) > 1:
+                    try:
+                        from models.cross_encoder import get_reranker
+
+                        reranker = get_reranker()
+                        # Convert to dict format expected by reranker
+                        candidates_dicts = [
+                            {
+                                "index": i,
+                                "context_text": r.context_text or "",
+                            }
+                            for i, r in enumerate(results)
+                        ]
+                        # Rerank based on context_text
+                        reranked = reranker.rerank(
+                            query=query,
+                            candidates=candidates_dicts,
+                            text_key="context_text",
+                            top_k=limit,
+                        )
+                        # Map back to VecSearchResult objects
+                        final_results = []
+                        for item in reranked:
+                            res = results[item["index"]]
+                            res.score = item["rerank_score"]  # Update score with rerank score
+                            final_results.append(res)
+                        return final_results
+                    except Exception as e:
+                        logger.warning("Cross-encoder rerank failed: %s", e)
+
+                # Standard sort by distance ascending if no rerank or rerank failed
                 results.sort(key=lambda r: r.distance)
-                return results
+                return results[:limit]
+
+        except Exception as e:
+            logger.warning("Two-phase search failed, falling back: %s", e)
+            return self.search_with_chunks(query, limit=limit, embedder=embedder)
 
         except Exception as e:
             logger.warning("Two-phase search failed, falling back: %s", e)
@@ -832,9 +848,7 @@ class VecSearcher:
                 query=query, limit=limit, contact_id=contact_id, embedder=embedder
             )
         else:
-            hits = self.search_with_chunks_global(
-                query=query, limit=limit, embedder=embedder
-            )
+            hits = self.search_with_chunks_global(query=query, limit=limit, embedder=embedder)
 
         if not hits:
             return []
@@ -859,8 +873,7 @@ class VecSearcher:
                 seg_rows = conn.execute(
                     f"""
                     SELECT cs.id, cs.segment_id, cs.chat_id, cs.contact_id,
-                           cs.start_time, cs.end_time, cs.topic_label,
-                           cs.keywords_json, cs.entities_json,
+                           cs.start_time, cs.end_time, cs.preview,
                            cs.message_count, cs.vec_chunk_rowid
                     FROM conversation_segments cs
                     WHERE cs.vec_chunk_rowid IN ({placeholders})
@@ -906,9 +919,6 @@ class VecSearcher:
                     "contact_id": sr["contact_id"],
                     "start_time": sr["start_time"],
                     "end_time": sr["end_time"],
-                    "topic_label": sr["topic_label"],
-                    "keywords_json": sr["keywords_json"],
-                    "entities_json": sr["entities_json"],
                     "message_count": sr["message_count"],
                     "messages": msgs_by_seg.get(sr["id"], []),
                 }
@@ -919,8 +929,8 @@ class VecSearcher:
                 entry: dict[str, Any] = {
                     "rowid": hit.rowid,
                     "score": hit.score,
-                    "trigger_text": hit.trigger_text,
-                    "response_text": hit.response_text,
+                    "context_text": hit.context_text,
+                    "reply_text": hit.reply_text,
                     "topic": hit.topic,
                 }
                 seg_data = seg_by_chunk.get(hit.rowid)
@@ -941,9 +951,7 @@ class VecSearcher:
             {
                 "rowid": h.rowid,
                 "score": h.score,
-                "trigger_text": h.trigger_text,
-                "response_text": h.response_text,
-                "topic": h.topic,
+                "context_text": h.context_text,
             }
             for h in hits
         ]

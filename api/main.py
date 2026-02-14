@@ -13,6 +13,7 @@ Documentation:
 """
 
 import time
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -82,6 +83,20 @@ messages, or personal information is ever sent to external servers.
 3. List conversations: `GET /conversations`
 4. Generate reply suggestions: `POST /drafts/reply`
 """
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    """Lifecycle event handler for the FastAPI application."""
+    # Start model warmer
+    from jarvis.model_warmer import get_model_warmer
+
+    get_model_warmer().start()
+
+    yield
+
+    # Stop model warmer
+    get_model_warmer().stop()
 
 API_TAGS_METADATA = [
     {
@@ -198,12 +213,7 @@ API_TAGS_METADATA = [
         "Build and manage profiles that capture communication patterns with each contact "
         "for personalized reply generation.",
     },
-    {
-        "name": "tags",
-        "description": "Conversation tagging and smart folders. "
-        "Create hierarchical tags, organize conversations into smart folders with dynamic rules, "
-        "and get AI-powered tag suggestions based on content analysis.",
-    },
+
 ]
 
 API_CONTACT = {
@@ -328,7 +338,7 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.custom_templates import router as custom_templates_router
     from api.routers.debug import router as debug_router
     from api.routers.drafts import router as drafts_router
-    from api.routers.embeddings import router as embeddings_router
+    # from api.routers.embeddings import router as embeddings_router  # Missing
     from api.routers.experiments import router as experiments_router
     from api.routers.export import router as export_router
     from api.routers.feedback import router as feedback_router
@@ -337,17 +347,15 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.metrics import router as metrics_router
     from api.routers.pdf_export import router as pdf_export_router
     from api.routers.priority import router as priority_router
-    from api.routers.relationships import router as relationships_router
-    from api.routers.scheduler import router as scheduler_router
+    # from api.routers.relationships import router as relationships_router  # Missing
     from api.routers.search import router as search_router
     from api.routers.settings import router as settings_router
     from api.routers.stats import router as stats_router
     from api.routers.suggestions import router as suggestions_router
-    from api.routers.tags import router as tags_router
     from api.routers.tasks import router as tasks_router
     from api.routers.template_analytics import router as template_analytics_router
     from api.routers.threads import router as threads_router
-    from api.routers.topics import router as topics_router
+    # from api.routers.topics import router as topics_router  # Missing
     from api.routers.websocket import router as websocket_router
 
     # Register routers in logical order
@@ -359,7 +367,7 @@ def _register_routers(app_instance: FastAPI) -> None:
     app_instance.include_router(conversations_router)
     app_instance.include_router(custom_templates_router)
     app_instance.include_router(drafts_router)
-    app_instance.include_router(embeddings_router)
+    # app_instance.include_router(embeddings_router)  # Missing
     app_instance.include_router(export_router)
     app_instance.include_router(pdf_export_router)
     app_instance.include_router(search_router)
@@ -369,16 +377,14 @@ def _register_routers(app_instance: FastAPI) -> None:
     app_instance.include_router(metrics_router)
     app_instance.include_router(template_analytics_router)
     app_instance.include_router(threads_router)
-    app_instance.include_router(topics_router)
+    # app_instance.include_router(topics_router)  # Missing
     app_instance.include_router(websocket_router)
     app_instance.include_router(tasks_router)
     app_instance.include_router(batch_router)
     app_instance.include_router(priority_router)
-    app_instance.include_router(scheduler_router)
     app_instance.include_router(feedback_router)
     app_instance.include_router(experiments_router)
-    app_instance.include_router(relationships_router)
-    app_instance.include_router(tags_router)
+    # app_instance.include_router(relationships_router)  # Missing
     app_instance.include_router(analytics_router)
     app_instance.include_router(graph_router)
 
@@ -405,6 +411,7 @@ def create_app() -> FastAPI:
         openapi_tags=API_TAGS_METADATA,
         contact=API_CONTACT,
         license_info=API_LICENSE,
+        lifespan=lifespan,
     )
 
     # Configure rate limiting

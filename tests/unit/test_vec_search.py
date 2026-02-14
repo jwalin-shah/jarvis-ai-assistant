@@ -88,21 +88,23 @@ class TestVecSearchResult:
             rowid=42,
             distance=10.0,
             score=0.95,
-            trigger_text="hello",
-            response_text="hi there",
+            context_text="hello",
+            reply_text="hi there",
             response_type="AGREE",
             response_da_conf=0.9,
             quality_score=0.8,
         )
         assert r.rowid == 42
         assert r.score == 0.95
-        assert r.trigger_text == "hello"
+        assert r.context_text == "hello"
+        assert r.reply_text == "hi there"
         assert r.response_da_conf == 0.9
 
     def test_default_none_fields(self):
         """Optional fields default to None."""
         r = VecSearchResult(rowid=1, distance=0.0, score=1.0)
         assert r.chat_id is None
-        assert r.trigger_text is None
+        assert r.context_text is None
+        assert r.reply_text is None
         assert r.response_da_conf is None
         assert r.quality_score is None

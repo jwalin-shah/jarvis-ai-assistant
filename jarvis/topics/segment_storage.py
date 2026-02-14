@@ -27,7 +27,7 @@ def persist_segments(
     """Insert segments and their message memberships into the database.
 
     Uses batch inserts (executemany) for optimal performance.
-    SQLite 3.35+ RETURNING clause used to get inserted row IDs.
+    Simplified schema - no topic labels/keywords (they were low quality).
 
     Args:
         conn: Active database connection (caller manages transaction).
@@ -41,11 +41,15 @@ def persist_segments(
     if not segments:
         return []
 
-    # Prepare batch data for segments
+    # Prepare batch data for segments (simplified - no topic_label, keywords, entities)
     segment_rows = []
     for segment in segments:
-        entities_json = json.dumps(segment.entities) if segment.entities else None
-        keywords_json = json.dumps(segment.keywords) if segment.keywords else None
+        # Create simple preview from first message
+        preview = ""
+        if segment.messages and segment.messages[0].text:
+            text = segment.messages[0].text
+            preview = text[:100] + "..." if len(text) > 100 else text
+
         segment_rows.append(
             (
                 segment.segment_id,
@@ -53,41 +57,34 @@ def persist_segments(
                 contact_id,
                 segment.start_time.isoformat(),
                 segment.end_time.isoformat(),
-                segment.topic_label,
-                keywords_json,
-                entities_json,
                 segment.message_count,
-                segment.confidence,
+                preview,
             )
         )
 
     # Batch insert segments with RETURNING to get IDs
-    # SQLite 3.35+ supports RETURNING; fallback for older versions
-    try:
-        cursor = conn.executemany(
-            """
-            INSERT INTO conversation_segments
-            (segment_id, chat_id, contact_id, start_time, end_time,
-             topic_label, keywords_json, entities_json, message_count,
-             confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
-            """,
-            segment_rows,
-        )
-        db_ids = [row[0] for row in cursor.fetchall()]
-    except sqlite3.OperationalError:
-        # Fallback: insert individually if RETURNING not supported (SQLite < 3.35)
-        # This maintains compatibility with older SQLite versions
-        db_ids = []
-        for row_data in segment_rows:
+    db_ids = []
+    for row_data in segment_rows:
+        try:
             cursor = conn.execute(
                 """
                 INSERT INTO conversation_segments
-                (segment_id, chat_id, contact_id, start_time, end_time,
-                 topic_label, keywords_json, entities_json, message_count,
-                 confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (segment_id, chat_id, contact_id, start_time, end_time, message_count, preview)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                RETURNING id
+                """,
+                row_data,
+            )
+            row = cursor.fetchone()
+            if row:
+                db_ids.append(row[0])
+        except sqlite3.OperationalError:
+            # Fallback for older SQLite versions
+            cursor = conn.execute(
+                """
+                INSERT INTO conversation_segments
+                (segment_id, chat_id, contact_id, start_time, end_time, message_count, preview)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 row_data,
             )
@@ -97,10 +94,12 @@ def persist_segments(
     msg_rows = []
     for seg_db_id, segment in zip(db_ids, segments):
         for pos, msg in enumerate(segment.messages):
+            # Handle both Message objects (id) and SegmentMessage (id)
+            msg_id = getattr(msg, "id", None) or getattr(msg, "message_id", 0)
             msg_rows.append(
                 (
                     seg_db_id,
-                    msg.message_id or 0,
+                    msg_id,
                     pos,
                     msg.is_from_me,
                 )
@@ -141,10 +140,7 @@ def link_vec_chunk_rowids(
     if not segment_db_ids or not vec_chunk_rowids:
         return
 
-    batch = [
-        (rowid, db_id)
-        for db_id, rowid in zip(segment_db_ids, vec_chunk_rowids)
-    ]
+    batch = [(rowid, db_id) for db_id, rowid in zip(segment_db_ids, vec_chunk_rowids)]
     conn.executemany(
         "UPDATE conversation_segments SET vec_chunk_rowid = ? WHERE id = ?",
         batch,
@@ -229,7 +225,7 @@ def get_segments_for_chat(
     seg_rows = conn.execute(
         """
         SELECT id, segment_id, chat_id, contact_id, start_time, end_time,
-               topic_label, keywords_json, entities_json, message_count,
+               topic_label, summary, keywords_json, entities_json, message_count,
                confidence, vec_chunk_rowid, facts_extracted
         FROM conversation_segments
         WHERE chat_id = ?

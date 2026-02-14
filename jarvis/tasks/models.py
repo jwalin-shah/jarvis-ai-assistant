@@ -40,6 +40,7 @@ class TaskType(str, Enum):
     SINGLE_EXPORT = "single_export"
     SINGLE_SUMMARIZE = "single_summarize"
     SINGLE_GENERATE_REPLY = "single_generate_reply"
+    FACT_EXTRACTION = "fact_extraction"
 
 
 @dataclass

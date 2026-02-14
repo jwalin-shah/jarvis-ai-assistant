@@ -8,7 +8,7 @@
     toggleArchiveChat,
   } from '../stores/conversations.svelte';
   import { api } from '../api/client';
-  import type { Topic, Conversation } from '../types';
+  import type { Conversation } from '../types';
   import ConversationSkeleton from './ConversationSkeleton.svelte';
   import {
     activeZone,
@@ -23,6 +23,7 @@
   import { LRUCache } from '../utils/lru-cache';
   import { jarvis } from '../socket';
   import type { ConnectionInfo } from '../socket';
+  import { resolveContactName, formatParticipant } from '../db';
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
@@ -32,12 +33,6 @@
   $effect(() => {
     focusedIndex = $conversationIndex;
   });
-
-  // Topics state
-  let topicsMap = $state<Map<string, Topic[]>>(new Map());
-  let allTopicsMap = $state<Map<string, Topic[]>>(new Map());
-  let loadingTopics = $state<Set<string>>(new Set());
-  let topicFetchControllers = $state<Map<string, AbortController>>(new Map());
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; chatId: string } | null>(null);
@@ -93,11 +88,9 @@
     }
   }));
 
-  // Intersection Observer for lazy loading avatars and topics
+  // Intersection Observer for lazy loading avatars
   let observer = $state<IntersectionObserver | null>(null);
-  let topicObserver = $state<IntersectionObserver | null>(null);
   let observedElements = $state<Map<string, HTMLElement>>(new Map());
-  let observedTopicElements = $state<Map<string, HTMLElement>>(new Map());
 
   const API_BASE = getApiBaseUrl();
   let cleanup: (() => void) | null = null;
@@ -109,15 +102,6 @@
       .map((c) => c.chat_id)
       .join(',')
   );
-
-  // Defer topic fetching - topics are cosmetic tags, not critical for initial render
-  // Only fetch for first 5 conversations to avoid N+1 burst
-  $effect(() => {
-    const fingerprint = conversationFingerprint;
-    if (!fingerprint) return;
-    const timer = setTimeout(() => void fetchTopicsForConversations(), 2000);
-    return () => clearTimeout(timer);
-  });
 
   onMount(() => {
     initializePolling().then((fn) => { cleanup = fn; });
@@ -146,83 +130,15 @@
       }
     );
 
-    topicObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const chatId = entry.target.getAttribute('data-chat-id');
-            if (chatId && !topicsMap.has(chatId) && !loadingTopics.has(chatId)) {
-              void fetchTopicsForChat(chatId);
-            }
-          }
-        });
-      },
-      {
-        root: null,
-        rootMargin: '100px',
-        threshold: 0.1,
-      }
-    );
-
     return () => {
       cleanup?.();
       unsubConnectionInfo?.();
       window.removeEventListener('keydown', handleKeydown);
       observer?.disconnect();
-      topicObserver?.disconnect();
       // LRU cache clear() now handles blob URL revocation via onEvict callback
       avatarUrls.clear();
-      topicFetchControllers.forEach((controller) => controller.abort());
     };
   });
-
-  async function fetchTopicsForConversations() {
-    // Only fetch topics for first 5 conversations to avoid N+1 burst
-    // Topics for other conversations will be fetched on-demand when scrolled into view
-    const visibleConvs = conversationsStore.conversations.slice(0, 5);
-    const toFetch = visibleConvs.filter(
-      (conv) => !topicsMap.has(conv.chat_id) && !loadingTopics.has(conv.chat_id)
-    );
-
-    // Limit concurrent topic requests to avoid server overload
-    const BATCH_SIZE = 3;
-    for (let i = 0; i < toFetch.length; i += BATCH_SIZE) {
-      const batch = toFetch.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map((conv) => fetchTopicsForChat(conv.chat_id)));
-    }
-  }
-
-  async function fetchTopicsForChat(chatId: string) {
-    if (topicsMap.has(chatId)) return;
-
-    const existingController = topicFetchControllers.get(chatId);
-    if (existingController) {
-      existingController.abort();
-    }
-
-    const controller = new AbortController();
-    topicFetchControllers.set(chatId, controller);
-
-    loadingTopics.add(chatId);
-    loadingTopics = loadingTopics;
-
-    try {
-      const response = await api.getTopics(chatId);
-      if (controller.signal.aborted) return;
-
-      topicsMap.set(chatId, response.topics);
-      allTopicsMap.set(chatId, response.all_topics);
-      topicsMap = topicsMap;
-      allTopicsMap = allTopicsMap;
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
-      console.debug('Failed to fetch topics for', chatId, error);
-    } finally {
-      loadingTopics.delete(chatId);
-      loadingTopics = loadingTopics;
-      topicFetchControllers.delete(chatId);
-    }
-  }
 
   // Avatar loading with concurrency limit
   const MAX_CONCURRENT_AVATARS = 3;
@@ -311,23 +227,6 @@
     };
   }
 
-  function observeTopics(node: HTMLElement, chatId: string) {
-    if (topicObserver && chatId) {
-      node.setAttribute('data-chat-id', chatId);
-      topicObserver.observe(node);
-      observedTopicElements.set(chatId, node);
-    }
-
-    return {
-      destroy() {
-        if (topicObserver && node) {
-          topicObserver.unobserve(node);
-        }
-        observedTopicElements.delete(chatId);
-      },
-    };
-  }
-
   function handleKeydown(event: KeyboardEvent) {
     if ($activeZone !== 'conversations' && $activeZone !== null) return;
     if (isTypingInInput(event)) return;
@@ -383,47 +282,17 @@
     });
   }
 
-  function formatParticipant(p: string): string {
-    const atParts = p.split('@');
-    if (p.includes('@') && atParts[0]) return atParts[0];
-    if (/^\+?\d{10,}$/.test(p.replace(/[\s\-()]/g, ''))) {
-      return '...' + p.replace(/\D/g, '').slice(-4);
-    }
-    return p;
-  }
-
   function getDisplayName(conv: Conversation): string {
     if (conv.display_name) return conv.display_name;
     if (conv.participants.length === 1) {
       return formatParticipant(conv.participants[0]!);
     }
-    const formatted = conv.participants.slice(0, 2).map(formatParticipant);
+    // For group chats, format participant names
+    const formatted = conv.participants.slice(0, 2).map(p => formatParticipant(p));
     return (
       formatted.join(', ') +
       (conv.participants.length > 2 ? ` +${conv.participants.length - 2}` : '')
     );
-  }
-
-  function getTopicColorClass(color: string): string {
-    const colorMap: Record<string, string> = {
-      blue: 'topic-blue',
-      green: 'topic-green',
-      purple: 'topic-purple',
-      pink: 'topic-pink',
-      orange: 'topic-orange',
-      gray: 'topic-gray',
-      indigo: 'topic-indigo',
-      amber: 'topic-amber',
-      cyan: 'topic-cyan',
-      rose: 'topic-rose',
-    };
-    return colorMap[color] || 'topic-gray';
-  }
-
-  function getAllTopicsTooltip(chatId: string): string {
-    const allTopics = allTopicsMap.get(chatId) || [];
-    if (allTopics.length <= 2) return '';
-    return allTopics.map((t) => `${t.display_name} (${Math.round(t.confidence * 100)}%)`).join('\n');
   }
 
   function hasNewMessages(chatId: string): boolean {
@@ -557,23 +426,6 @@
               <span class="date" class:has-new={hasNewMessages(conv.chat_id)}>
                 {formatConversationDate(conv.last_message_date)}
               </span>
-            </div>
-            <div class="topics-row" use:observeTopics={conv.chat_id}>
-              {#if topicsMap.has(conv.chat_id)}
-                {#each topicsMap.get(conv.chat_id) || [] as topic}
-                  <span
-                    class="topic-tag {getTopicColorClass(topic.color)}"
-                    title={getAllTopicsTooltip(conv.chat_id) || topic.display_name}
-                  >
-                    {topic.display_name}
-                  </span>
-                {/each}
-                {#if (allTopicsMap.get(conv.chat_id)?.length || 0) > 2}
-                  <span class="topic-more" title={getAllTopicsTooltip(conv.chat_id)}>
-                    +{(allTopicsMap.get(conv.chat_id)?.length || 0) - 2}
-                  </span>
-                {/if}
-              {/if}
             </div>
             <div class="preview" class:has-new={hasNewMessages(conv.chat_id)}>
               {conv.last_message_text || 'No messages'}
@@ -849,72 +701,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .topics-row {
-    display: flex;
-    gap: var(--space-1);
-    margin-bottom: var(--space-1);
-    flex-wrap: wrap;
-  }
-
-  .topic-tag {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: var(--radius-full);
-    font-weight: var(--font-weight-medium);
-    white-space: nowrap;
-  }
-
-  .topic-more {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: var(--radius-full);
-    background: var(--surface-base);
-    color: var(--text-secondary);
-    cursor: help;
-  }
-
-  /* Topic color variants */
-  .topic-blue {
-    background: rgba(0, 122, 255, 0.15);
-    color: #007aff;
-  }
-  .topic-green {
-    background: rgba(52, 199, 89, 0.15);
-    color: #34c759;
-  }
-  .topic-purple {
-    background: rgba(88, 86, 214, 0.15);
-    color: #5856d6;
-  }
-  .topic-pink {
-    background: rgba(255, 45, 85, 0.15);
-    color: #ff2d55;
-  }
-  .topic-orange {
-    background: rgba(255, 149, 0, 0.15);
-    color: #ff9500;
-  }
-  .topic-gray {
-    background: rgba(142, 142, 147, 0.15);
-    color: #8e8e93;
-  }
-  .topic-indigo {
-    background: rgba(94, 92, 230, 0.15);
-    color: #5e5ce6;
-  }
-  .topic-amber {
-    background: rgba(255, 204, 0, 0.15);
-    color: #ffcc00;
-  }
-  .topic-cyan {
-    background: rgba(90, 200, 250, 0.15);
-    color: #5ac8fa;
-  }
-  .topic-rose {
-    background: rgba(255, 59, 48, 0.15);
-    color: #ff3b30;
   }
 
   .preview.has-new {

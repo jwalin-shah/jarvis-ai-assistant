@@ -115,18 +115,6 @@
             {/if}
           </section>
 
-          <!-- Topics -->
-          {#if profile.top_topics.length > 0}
-            <section>
-              <h3>Topics</h3>
-              <div class="tags">
-                {#each profile.top_topics as topic}
-                  <span class="tag">{topic}</span>
-                {/each}
-              </div>
-            </section>
-          {/if}
-
           <!-- Facts -->
           {#if Object.keys(groupedFacts).length > 0}
             <section>

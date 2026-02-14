@@ -29,6 +29,7 @@
   import { MessageIcon } from './icons';
   import { formatDate, getMessageDateString } from '../utils/date';
   import { getNavAction, isTypingInInput } from '../utils/keyboard-nav';
+  import { formatParticipant } from '../db';
 
   // Panel visibility state
   let showDraftPanel = $state(false);
@@ -220,9 +221,13 @@
       updateOptimisticMessage(optimisticId, { status: 'sending' });
     } else {
       optimisticId = addOptimisticMessage(text);
-      // Ensure optimistic message is visible and scroll to it
+      // Ensure optimistic message is visible - it gets appended to messagesWithOptimistic
+      // So we need to include it in the visible range
       isAtBottom = true;
-      visibleEndIndex = conversationsStore.messages.length;
+      const totalWithOptimistic = conversationsStore.messages.length + conversationsStore.optimisticMessages.length;
+      visibleEndIndex = totalWithOptimistic;
+      visibleStartIndex = Math.max(0, totalWithOptimistic - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+      virtualTopPadding = Math.max(0, (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT);
       virtualBottomPadding = 0;
       scrollToBottom();
     }
@@ -381,11 +386,15 @@
         newMessageIds = newIds;
 
         if (isAtBottom) {
-          // Reset virtual scroll state properly (like needsScrollToBottom path)
-          const msgLen = conversationsStore.messages.length;
+          // Include optimistic messages in the total count for proper visibility
+          const optimisticCount = conversationsStore.optimisticMessages.length;
+          const msgLen = conversationsStore.messages.length + optimisticCount;
           visibleEndIndex = msgLen;
           visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-          virtualTopPadding = cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
+          // Calculate top padding based on real messages only (optimistic don't have heights yet)
+          virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
+            ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+            : conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT + (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
           virtualBottomPadding = 0;
 
           suppressScrollRecalc = true;
@@ -654,12 +663,12 @@
             />
           </svg>
         {:else}
-          {(conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants[0] || '?').charAt(0).toUpperCase()}
+          {(conversationsStore.selectedConversation.display_name || formatParticipant(conversationsStore.selectedConversation.participants[0]) || '?').charAt(0).toUpperCase()}
         {/if}
       </div>
       <div class="info">
         <h2>
-          {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.join(', ')}
+          {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.map(p => formatParticipant(p)).join(', ')}
         </h2>
         <p>{conversationsStore.selectedConversation.message_count} messages</p>
       </div>

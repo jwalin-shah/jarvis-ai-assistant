@@ -299,3 +299,4 @@ review_prompt.txt
 set*_*_draft.md
 validation_evaluation_results*.txt
 fact_extraction_review.md
+\n# Data exports (PII)\ndata/*.txt
