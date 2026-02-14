@@ -129,7 +129,7 @@ from jarvis.search.vec_search import get_vec_searcher
 searcher = get_vec_searcher(db)
 
 # Search for similar conversations
-results = searcher.search_with_pairs(
+results = searcher.search_with_chunks(
     query=incoming_text,
     k=3,
     contact_id=current_chat_id  # Optional: same contact only

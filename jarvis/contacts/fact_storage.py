@@ -50,51 +50,92 @@ def save_facts(
 
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Prepare all fact data as tuples for batch insert
-        fact_data = [
-            (
-                contact_id,
-                fact.category,
-                fact.subject,
-                fact.predicate,
-                fact.value or "",
-                fact.confidence,
-                fact.source_message_id,
-                fact.source_text[:500] if fact.source_text else "",
-                current_time,
-                fact.linked_contact_id,
-                fact.valid_from,
-                fact.valid_until,
-                fact.attribution,
-                getattr(fact, "_segment_db_id", segment_id),
-            )
-            for fact in facts
-        ]
+        # Build lookup of facts to insert, keyed by unique constraint
+        fact_keys: dict[tuple[str, str, str, str], Fact] = {}
+        for fact in facts:
+            key = (contact_id, fact.category, fact.subject, fact.predicate)
+            # Keep the last occurrence if duplicates in input list
+            fact_keys[key] = fact
 
         with db.connection() as conn:
-            # Batch insert all facts at once; duplicates silently ignored
-            cursor = conn.executemany(
-                """
-                INSERT OR IGNORE INTO contact_facts
-                (contact_id, category, subject, predicate, value, confidence,
-                 source_message_id, source_text, extracted_at, linked_contact_id,
-                 valid_from, valid_until, attribution, segment_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                fact_data,
-            )
-            inserted = cursor.rowcount
+            # Check which facts already exist (single query for all)
+            existing_keys: set[tuple[str, str, str, str]] = set()
+            if fact_keys:
+                # Build OR conditions for efficient lookup
+                conditions = []
+                params = []
+                for key in fact_keys:
+                    conditions.append(
+                        "(contact_id = ? AND category = ? AND subject = ? AND predicate = ?)"
+                    )
+                    params.extend(key)
+
+                # Query in chunks to avoid SQLite parameter limit
+                chunk_size = 250  # SQLite has 999 param limit, 250*4=1000
+                keys_list = list(fact_keys.keys())
+                for i in range(0, len(keys_list), chunk_size):
+                    chunk = keys_list[i : i + chunk_size]
+                    chunk_conditions = []
+                    chunk_params = []
+                    for key in chunk:
+                        chunk_conditions.append(
+                            "(contact_id = ? AND category = ? AND subject = ? AND predicate = ?)"
+                        )
+                        chunk_params.extend(key)
+
+                    query = f"SELECT contact_id, category, subject, predicate FROM contact_facts WHERE {' OR '.join(chunk_conditions)}"
+                    cursor = conn.execute(query, chunk_params)
+                    for row in cursor:
+                        existing_keys.add((row[0], row[1], row[2], row[3]))
+
+            # Filter to only new facts
+            new_facts = [fact for key, fact in fact_keys.items() if key not in existing_keys]
+            inserted_count = len(new_facts)
+
+            if new_facts:
+                # Prepare data for only new facts
+                fact_data = [
+                    (
+                        contact_id,
+                        fact.category,
+                        fact.subject,
+                        fact.predicate,
+                        fact.value or "",
+                        fact.confidence,
+                        fact.source_message_id,
+                        fact.source_text[:500] if fact.source_text else "",
+                        current_time,
+                        fact.linked_contact_id,
+                        fact.valid_from,
+                        fact.valid_until,
+                        fact.attribution,
+                        getattr(fact, "_segment_db_id", segment_id),
+                    )
+                    for fact in new_facts
+                ]
+
+                # Batch insert only new facts
+                conn.executemany(
+                    """
+                    INSERT INTO contact_facts
+                    (contact_id, category, subject, predicate, value, confidence,
+                     source_message_id, source_text, extracted_at, linked_contact_id,
+                     valid_from, valid_until, attribution, segment_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    fact_data,
+                )
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        if inserted:
+        if inserted_count:
             logger.info(
                 "Saved %d new facts for %s in %.1fms (batch insert)",
-                inserted,
+                inserted_count,
                 contact_id[:16],
                 elapsed_ms,
             )
 
-        return inserted
+        return inserted_count
 
 
 def save_and_index_facts(
@@ -287,6 +328,11 @@ def save_candidate_facts(
             continue
         category, predicate = mapping
 
+        # Resolve attribution: if contact sent message, fact is about contact
+        # if user sent message, fact is about user
+        is_from_me = getattr(c, "is_from_me", None) or False
+        attribution = "user" if is_from_me else "contact"
+
         facts.append(
             Fact(
                 category=category,
@@ -297,6 +343,7 @@ def save_candidate_facts(
                 confidence=c.gliner_score if c.gliner_score > 0 else 0.5,
                 contact_id=contact_id,
                 source_message_id=c.message_id,
+                attribution=attribution,
             )
         )
 

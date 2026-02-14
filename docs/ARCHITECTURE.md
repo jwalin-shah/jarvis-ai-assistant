@@ -17,28 +17,47 @@ This document describes the optimized architecture for JARVIS, replacing HTTP po
 
 ## Socket Server API
 
-The socket server runs at `~/.jarvis/jarvis.sock` with JSON-RPC 2.0 protocol.
+The socket server supports two protocols:
+- **Unix Socket:** `~/.jarvis/jarvis.sock` (for Tauri app)
+- **WebSocket:** `ws://localhost:8743` (for browser/Playwright)
+
+Protocol: JSON-RPC 2.0 over newline-delimited JSON
+
+```
+Request:  {"jsonrpc": "2.0", "method": "...", "params": {...}, "id": 1}
+Response: {"jsonrpc": "2.0", "result": {...}, "id": 1}
+Error:    {"jsonrpc": "2.0", "error": {"code": -32600, "message": "..."}, "id": 1}
+```
 
 **Available Methods:**
-| Method | Description | Parameters |
-|--------|-------------|------------|
-| `ping` | Health check | None |
-| `generate_draft` | Generate reply suggestions | `chat_id`, `instruction?`, `num_suggestions?` |
-| `summarize` | Summarize conversation | `chat_id`, `num_messages?` |
-| `get_smart_replies` | Quick reply suggestions | `last_message`, `num_suggestions?` |
-| `semantic_search` | Search messages | `query`, `limit?`, `threshold?`, `filters?` |
-| `list_conversations` | List recent conversations | `limit?` |
-| `batch` | Execute multiple RPC calls | `requests` (array) |
-| `resolve_contacts` | Resolve contact info | `handles` |
-| `get_routing_metrics` | Get routing metrics | None |
-| `prefetch_stats` | Get prefetch cache stats | None |
-| `prefetch_focus` | Signal conversation focused | `chat_id` |
-| `prefetch_hover` | Signal conversation hovered | `chat_id` |
+| Method | Description | Parameters | Streaming |
+|--------|-------------|------------|-----------|
+| `ping` | Health check | None | No |
+| `generate_draft` | Generate reply suggestions | `chat_id`, `instruction?`, `num_suggestions?`, `stream?` | Yes |
+| `summarize` | Summarize conversation | `chat_id`, `num_messages?`, `stream?` | Yes |
+| `get_smart_replies` | Quick reply suggestions | `last_message`, `num_suggestions?` | No |
+| `semantic_search` | Search messages | `query`, `chat_id?`, `limit?`, `threshold?` | No |
+| `list_conversations` | List recent conversations | `limit?` | No |
+| `batch` | Execute multiple RPC calls | `requests` (array) | No |
+| `resolve_contacts` | Resolve contact info | `handles` | No |
+| `get_contacts` | Get contacts | `limit?`, `search?` | No |
+| `chat` | Direct chat with SLM | `message`, `context?`, `stream?` | Yes |
+| `get_routing_metrics` | Get routing metrics | None | No |
+| `get_performance_slo` | Get SLO performance | None | No |
+| `get_draft_metrics` | Get draft quality metrics | `chat_id?` | No |
+| `prefetch_stats` | Get prefetch cache stats | None | No |
+| `prefetch_focus` | Signal conversation focused | `chat_id` | No |
+| `prefetch_hover` | Signal conversation hovered | `chat_id` | No |
+
+**Streaming:**
+For streaming methods (`generate_draft`, `summarize`, `chat`), set `"stream": true` in params. Tokens are sent as notifications, followed by final response.
 
 **Push Notifications:**
 | Event | Description | Data |
 |-------|-------------|------|
 | `new_message` | New message received | `message_id`, `chat_id`, `sender`, `text`, `date`, `is_from_me` |
+| `streaming_token` | Token generated (streaming) | `token`, `done` |
+| `prefetch_complete` | Prefetch finished | `chat_id` |
 
 ## Current Architecture (V1)
 
@@ -105,8 +124,8 @@ Problems:
 | Database | Location | Access | Contains |
 |----------|----------|--------|----------|
 | chat.db | ~/Library/Messages/chat.db | Read-only | Messages, conversations, attachments |
-| jarvis.db | ~/.jarvis/jarvis.db | Read-write | Contacts, scheduled messages, pairs |
-| embeddings.db| ~/.jarvis/embeddings/{model}/embeddings.db | Read-write | Vector index (sqlite-vec) and profiles |
+| jarvis.db | ~/.jarvis/jarvis.db | Read-write | Contacts, segments, facts, and scheduled messages |
+| Vec Index | ~/.jarvis/jarvis.db | Read-write | Vector index (sqlite-vec) in vec_messages/vec_chunks |
 
 **Implementation:**
 ```typescript
@@ -193,133 +212,160 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 - Enables push notifications (no polling)
 - Persistent connection (no connection overhead)
 
-**Socket Location:** `~/.jarvis/jarvis.sock`
+**Socket Locations:** 
+- Unix Socket: `~/.jarvis/jarvis.sock`
+- WebSocket: `ws://localhost:8743` (with auth token at `~/.jarvis/ws_token`)
 
-**Protocol:** JSON-RPC 2.0
-
-```
-Request:  {"jsonrpc": "2.0", "method": "generate_draft", "params": {...}, "id": 1}
-Response: {"jsonrpc": "2.0", "result": {...}, "id": 1}
-Push:     {"jsonrpc": "2.0", "method": "new_message", "params": {...}}
-```
+**Protocol:** JSON-RPC 2.0 over newline-delimited JSON
 
 **Python Server (jarvis/socket_server.py):**
 ```python
 import asyncio
-import json
-import os
-from pathlib import Path
+import websockets
+from websockets.server import ServerConnection
 
-SOCKET_PATH = "~/.jarvis/jarvis.sock"
+# Configuration
+SOCKET_PATH = Path.home() / ".jarvis" / "jarvis.sock"
+WS_PORT = 8743
 
 class JarvisSocketServer:
-    def __init__(self):
-        self.clients: set[asyncio.StreamWriter] = set()
-        self.handlers = {
-            "generate_draft": self.handle_generate_draft,
-            "semantic_search": self.handle_semantic_search,
-            "get_smart_replies": self.handle_smart_replies,
-        }
+    def __init__(self, enable_watcher: bool = True, preload_models: bool = True):
+        self._methods: dict[str, Callable] = {}
+        self._streaming_methods: set[str] = set()
+        self._clients: set[asyncio.StreamWriter] = set()
+        self._ws_clients: set[ServerConnection] = set()
+        self._rate_limiter = RateLimiter(max_requests=100, window_seconds=1.0)
+        
+        # Register built-in methods
+        self._register_methods()
+
+    def _register_methods(self) -> None:
+        """Register available RPC methods."""
+        self.register("ping", self._ping)
+        self.register("generate_draft", self._generate_draft, streaming=True)
+        self.register("summarize", self._summarize, streaming=True)
+        self.register("get_smart_replies", self._get_smart_replies)
+        self.register("semantic_search", self._semantic_search)
+        self.register("batch", self._batch)
+        self.register("resolve_contacts", self._resolve_contacts)
+        self.register("get_contacts", self._get_contacts)
+        self.register("list_conversations", self._list_conversations)
+        self.register("chat", self._chat, streaming=True)
+        self.register("get_routing_metrics", self._get_routing_metrics)
+        self.register("get_performance_slo", self._get_performance_slo)
+        self.register("get_draft_metrics", self._get_draft_metrics)
+        self.register("prefetch_stats", self._prefetch_stats)
+        self.register("prefetch_focus", self._prefetch_focus)
+        self.register("prefetch_hover",_hover)
+
+    self._prefetch def register(self, name: str, handler, streaming: bool = False) -> None:
+        """Register a method handler."""
+        self._methods[name] = handler
+        if streaming:
+            self._streaming_methods.add(name)
 
     async def start(self):
-        # Clean up stale socket
-        if os.path.exists(SOCKET_PATH):
-            os.unlink(SOCKET_PATH)
-
-        server = await asyncio.start_unix_server(
-            self.handle_client,
-            path=SOCKET_PATH
+        # Start Unix socket server
+        if SOCKET_PATH.exists():
+            SOCKET_PATH.unlink()
+        self._server = await asyncio.start_unix_server(
+            self._handle_client, path=SOCKET_PATH
+        )
+        SOCKET_PATH.chmod(0o600)
+        
+        # Start WebSocket server
+        self._ws_server = await websockets.serve(
+            self._handle_ws_client, "localhost", WS_PORT
+        )
+        
+        # Start file watcher and model preload
+        await asyncio.gather(
+            self._server.serve_forever(),
+            self._watcher.watch() if self._watcher else asyncio.sleep(float('inf'))
         )
 
-        # Set permissions (owner only)
-        os.chmod(SOCKET_PATH, 0o600)
+    async def _handle_client(self, reader, writer):
+        """Handle Unix socket client."""
+        # Length-prefixed JSON-RPC protocol
+        length_bytes = await reader.readexactly(4)
+        length = int.from_bytes(length_bytes, 'big')
+        data = await reader.readexactly(length)
+        request = json.loads(data.decode())
+        
+        response = await self._handle_request(request)
+        if response:
+            await self._send(writer, response)
 
-        async with server:
-            await server.serve_forever()
-
-    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        self.clients.add(writer)
+    async def _handle_ws_client(self, websocket: ServerConnection):
+        """Handle WebSocket client."""
+        self._ws_clients.add(websocket)
         try:
-            while True:
-                # Read length-prefixed message
-                length_bytes = await reader.readexactly(4)
-                length = int.from_bytes(length_bytes, 'big')
-                data = await reader.readexactly(length)
-
-                request = json.loads(data.decode())
-                response = await self.handle_request(request)
-
-                if response:  # Don't respond to notifications
-                    await self.send(writer, response)
-        except asyncio.IncompleteReadError:
-            pass  # Client disconnected
+            async for message in websocket:
+                request = json.loads(message)
+                response = await self._handle_request(request)
+                if response:
+                    await websocket.send(json.dumps(response))
         finally:
-            self.clients.discard(writer)
-            writer.close()
+            self._ws_clients.discard(websocket)
 
-    async def handle_request(self, request: dict) -> dict | None:
+    async def _handle_request(self, request: dict) -> dict:
+        """Process JSON-RPC request with rate limiting."""
+        # Rate limit check
+        client_id = request.get("client_id", "unknown")
+        if not self._rate_limiter.is_allowed(client_id):
+            return {"jsonrpc": "2.0", "error": {"code": -32001, "message": "Rate limited"}, "id": request.get("id")}
+        
         method = request.get("method")
         params = request.get("params", {})
         request_id = request.get("id")
-
-        handler = self.handlers.get(method)
+        
+        handler = self._methods.get(method)
         if not handler:
-            return {
-                "jsonrpc": "2.0",
-                "error": {"code": -32601, "message": f"Method not found: {method}"},
-                "id": request_id
-            }
-
+            return {"jsonrpc": "2.0", "error": {"code": -32601, "message": f"Method not found: {method}"}, "id": request_id}
+        
         try:
             result = await handler(params)
             return {"jsonrpc": "2.0", "result": result, "id": request_id}
+        except JsonRpcError as e:
+            return {"jsonrpc": "2.0", "error": {"code": e.code, "message": e.message}, "id": request_id}
         except Exception as e:
-            return {
-                "jsonrpc": "2.0",
-                "error": {"code": -32000, "message": str(e)},
-                "id": request_id
-            }
+            return {"jsonrpc": "2.0", "error": {"code": -32000, "message": str(e)}, "id": request_id}
 
     async def broadcast(self, method: str, params: dict):
         """Push notification to all connected clients."""
         message = {"jsonrpc": "2.0", "method": method, "params": params}
-        for writer in self.clients:
+        
+        # Unix socket clients
+        for writer in self._clients:
             try:
-                await self.send(writer, message)
+                await self._send(writer, message)
             except:
-                self.clients.discard(writer)
+                self._clients.discard(writer)
+        
+        # WebSocket clients
+        for ws in self._ws_clients:
+            try:
+                await ws.send(json.dumps(message))
+            except:
+                self._ws_clients.discard(ws)
 
-    async def send(self, writer: asyncio.StreamWriter, data: dict):
-        encoded = json.dumps(data).encode()
-        length = len(encoded).to_bytes(4, 'big')
-        writer.write(length + encoded)
-        await writer.drain()
-
-    # --- Handlers ---
-
-    async def handle_generate_draft(self, params: dict) -> dict:
+    async def _generate_draft(self, params: dict) -> dict:
+        """Generate draft replies with optional streaming."""
         from jarvis.router import generate_response
+        
+        stream = params.get("stream", False)
         chat_id = params["chat_id"]
+        
+        if stream:
+            # Register streaming callback for token notifications
+            async def on_token(token: str):
+                await self.broadcast("streaming_token", {"token": token, "done": False})
+            
+            result = await asyncio.to_thread(generate_response, chat_id, stream_callback=on_token)
+            return {"drafts": result}
+        
         result = await asyncio.to_thread(generate_response, chat_id)
         return {"drafts": result}
-
-    async def handle_semantic_search(self, params: dict) -> dict:
-        from jarvis.search.vec_search import search
-        results = await asyncio.to_thread(
-            search,
-            query=params["query"],
-            chat_id=params.get("chat_id"),
-            limit=params.get("limit", 20)
-        )
-        return {"results": results}
-
-    async def handle_smart_replies(self, params: dict) -> dict:
-        from jarvis.router import get_smart_replies
-        result = await asyncio.to_thread(
-            get_smart_replies,
-            chat_id=params["chat_id"]
-        )
-        return {"replies": result}
 ```
 
 **TypeScript Client (desktop/src/lib/socket/client.ts):**
@@ -598,6 +644,13 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 - Security hardening: rate limiting, path validation, timing-safe token comparison
 - Documentation updates (SECURITY.md, TROUBLESHOOTING.md)
 
+### Phase 4: V4 Fact Extraction & Contact Profiling (2026-02-13)
+- **Turn-Based Extraction**: Switched from segment-based to Turn-Based grouping. Consecutive messages from the same sender are combined into single turns, providing coherent context for the LLM.
+- **Dynamic Identity Anchor**: Automatically resolves the user's name (e.g., "Jwalin Shah") from the Address Book, eliminating hardcoded identity references.
+- **AddressBook Integration**: Generalizable name resolution for all contacts (including group chats) by resolving participant numbers against macOS AddressBook.
+- **Targeted NLI Verification**: Each candidate fact is verified against the specific source message turn it originated from, using full-sentence hypotheses for maximum accuracy.
+- **Enriched Contact Profiles**: `ContactProfile` now stores `extracted_facts` and `relationship_reasoning` (LLM-derived justification for relationship labels).
+
 ---
 
 ## Performance Comparison
@@ -695,11 +748,10 @@ These optimizations are independent of V2 and improve base performance:
 |-------------|------|--------|--------|
 | Vectorized semantic search | `jarvis/search/vec_search.py` | ✅ Done | 10-50x faster for large searches |
 | Scale thread pool | `jarvis/router.py` | ✅ Done | `max_workers=min(4, cpu_count)` for multi-core |
-| Batch message indexing | `jarvis/embeddings.py` | ✅ Already had | Uses `executemany` + batch encoding |
+| Batch message indexing | `jarvis/search/vec_search.py` | ✅ Done | Uses `executemany` + batch encoding |
 | Embedding result cache | `jarvis/embedding_adapter.py` | ✅ Done | Increased LRU cache to 1000 entries |
 | Intent classification | `jarvis/router.py` | ✅ Done | Streamlined to single intent classifier |
-| Profile caching | `jarvis/embeddings.py` | ✅ Done | 5-min TTL cache for relationship profiles |
-| Stop words optimization | `jarvis/embeddings.py` | ✅ Done | Module-level frozenset for O(1) lookup |
+| Stop words optimization | `jarvis/text_normalizer.py` | ✅ Done | Module-level frozenset for O(1) lookup |
 | Quick reply O(1) lookup | `jarvis/router.py` | ✅ Done | Dict lookup instead of linear search |
 
 **Details:**

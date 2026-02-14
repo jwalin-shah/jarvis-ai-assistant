@@ -1063,6 +1063,29 @@ export function isContactsCacheLoaded(): boolean {
 }
 
 /**
+ * Format a participant identifier for display
+ * Resolves the contact name if available, otherwise formats the phone/email
+ */
+export function formatParticipant(identifier: string): string {
+  if (!identifier || identifier === "me") return "You";
+  
+  // Try to resolve contact name
+  const name = resolveContactName(identifier);
+  if (name) return name;
+  
+  // Format phone number or email
+  const normalized = normalizePhoneNumber(identifier);
+  if (normalized) {
+    // Show last 4 digits for privacy: "+1 (555) 123-4567" -> "...4567"
+    const digits = normalized.replace(/\D/g, '');
+    if (digits.length >= 10) {
+      return '...' + digits.slice(-4);
+    }
+  }
+  return identifier;
+}
+
+/**
  * Generate human-readable text for group events
  */
 function generateGroupEventText(

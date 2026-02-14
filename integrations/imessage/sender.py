@@ -282,20 +282,18 @@ end tell
         if not chat_id:
             return SendResult(success=False, error="Chat ID is required for group chats")
 
-        # Extract the actual chat identifier from the guid format
-        # Database guid format: "iMessage;+;chat<numbers>" or "iMessage;-;+<phone>"
-        # We need just the "chat<numbers>" part for AppleScript
+        # AppleScript expects the FULL GUID format: "iMessage;+;chat<numbers>"
+        # NOT just the "chat<numbers>" part. The full GUID is needed to identify
+        # the chat in the Messages app.
+        # Database stores: "iMessage;+;chat128521969456139942"
+        # AppleScript needs: "iMessage;+;chat128521969456139942"
         actual_chat_id = chat_id
-        if ";" in chat_id:
-            # Split by semicolon and take the last part
-            parts = chat_id.split(";")
-            actual_chat_id = parts[-1] if len(parts) > 1 else chat_id
 
         # Escape special characters for AppleScript
         escaped_text = self._escape_for_applescript(text)
         escaped_chat_id = actual_chat_id.replace("\\", "\\\\").replace('"', '\\"')
 
-        # For group chats, we find the chat by its ID and send directly to it
+        # For group chats, we find the chat by its full GUID and send directly to it
         applescript = f"""
 tell application "Messages"
     set targetChat to chat id "{escaped_chat_id}"

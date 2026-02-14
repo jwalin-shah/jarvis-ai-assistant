@@ -125,10 +125,10 @@ class ContextService:
                 if segment_results:
                     exchanges = []
                     for r in segment_results:
-                        if r.get("trigger_text") and r.get("response_text"):
+                        if r.get("context_text") and r.get("reply_text"):
                             entry = {
-                                "trigger_text": r["trigger_text"],
-                                "response_text": r["response_text"],
+                                "context_text": r["context_text"],
+                                "reply_text": r["reply_text"],
                                 "similarity": r["score"],
                                 "topic": r.get("topic"),
                             }
@@ -143,7 +143,7 @@ class ContextService:
                             exchanges = self._reranker.rerank(
                                 query=incoming,
                                 candidates=exchanges,
-                                text_key="trigger_text",
+                                text_key="context_text",
                                 top_k=3,
                             )
                         return exchanges
@@ -167,11 +167,11 @@ class ContextService:
 
             exchanges = []
             for r in results:
-                if r.trigger_text and r.response_text:
+                if r.context_text and r.reply_text:
                     exchanges.append(
                         {
-                            "trigger_text": r.trigger_text,
-                            "response_text": r.response_text,
+                            "context_text": r.context_text,
+                            "reply_text": r.reply_text,
                             "similarity": r.score,
                             "topic": r.topic,
                         }
@@ -182,7 +182,7 @@ class ContextService:
                 exchanges = self._reranker.rerank(
                     query=incoming,
                     candidates=exchanges,
-                    text_key="trigger_text",
+                    text_key="context_text",
                     top_k=3,
                 )
 

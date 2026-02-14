@@ -1,15 +1,10 @@
-"""Segment-Based Ingestion - Extract topic segments from iMessage conversations.
+"""Segment-Based Ingestion - Extract conversation segments from iMessage.
 
-Replaces the legacy ExchangeBuilder pipeline with NLP-based topic segmentation.
-Segments become the primary retrieval unit in vec_chunks.
+Two-phase sequential extraction optimized for 8GB RAM:
+Phase 1: Segment conversations using basic segmentation (no topic labels).
+Phase 2: Extract facts from segments using fine-tuned LLM.
 
-Usage:
-    jarvis db extract   # CLI command (updated to use this module)
-
-Pipeline:
-    1. For each conversation: segment_conversation(messages) -> list[TopicSegment]
-    2. For each segment: index into vec_chunks (centroid embedding + metadata)
-    3. Within each segment: extract trigger/response pairs for few-shot retrieval
+Uses basic_segmenter for clean boundaries without low-quality topic metadata.
 """
 
 from __future__ import annotations
@@ -57,32 +52,20 @@ def extract_segments(
     vec_searcher: VecSearcher,
     progress_callback: Any | None = None,
     limit: int = 1000,
+    tier: str = "0.7b",  # CHANGED: Use 0.7B model for optimal extraction quality/speed balance
 ) -> dict[str, Any]:
-    """Extract topic segments from all conversations and index into vec_chunks.
-
-    Args:
-        chat_db_reader: ChatDBReader instance for reading iMessage.
-        jarvis_db: JarvisDB instance.
-        vec_searcher: VecSearcher instance for indexing.
-        progress_callback: Optional callback(current, total, chat_id).
-        limit: Max conversations to process.
-
-    Returns:
-        Stats dictionary.
-    """
-    from jarvis.topics.topic_segmenter import segment_conversation
+    """Extract conversation segments and index into vec_chunks."""
+    from jarvis.topics.basic_segmenter import segment_conversation_basic
 
     stats = SegmentExtractionStats()
-
     conversations = chat_db_reader.get_conversations(limit=limit)
     total = len(conversations)
 
-    # Batch-load all contacts to avoid N+1 queries in the loop
+    # Batch-load all contacts
     chat_ids = [conv.chat_id for conv in conversations]
     contact_by_chat_id: dict[str, Any] = {}
     if chat_ids:
         with jarvis_db.connection() as conn:
-            # Build placeholders for IN clause
             placeholders = ",".join("?" * len(chat_ids))
             cursor = conn.execute(
                 f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id IN ({placeholders})",
@@ -93,104 +76,140 @@ def extract_segments(
                 if contact:
                     contact_by_chat_id[contact.chat_id] = contact
 
-            # Also try extracting identifiers for iMessage-format chat_ids
-            # (e.g., "iMessage;-;+15551234567" -> "+15551234567")
-            missing_ids = [cid for cid in chat_ids if cid not in contact_by_chat_id]
-            identifier_map: dict[str, str] = {}  # identifier -> original chat_id
-            for cid in missing_ids:
-                if ";" in cid:
-                    identifier = cid.rsplit(";", 1)[-1]
-                    if identifier:
-                        identifier_map[identifier] = cid
-            if identifier_map:
-                id_placeholders = ",".join("?" * len(identifier_map))
-                cursor = conn.execute(
-                    f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id IN ({id_placeholders})",
-                    list(identifier_map.keys()),
-                )
-                for row in cursor.fetchall():
-                    contact = jarvis_db._row_to_contact(row)
-                    if contact and contact.chat_id in identifier_map:
-                        orig_chat_id = identifier_map[contact.chat_id]
-                        contact_by_chat_id[orig_chat_id] = contact
-
-    # Batch-load messages for all conversations (single query per chunk of 900)
+    # Batch-load messages
     conv_messages: dict[str, list] = {}
     if chat_ids:
         conv_messages = chat_db_reader.get_messages_batch(chat_ids, limit_per_chat=10000)
         for messages in conv_messages.values():
             stats.total_messages_scanned += len(messages)
 
-    # Batch-fetch all cached embeddings once across all contacts (PERF-08)
+    # Pre-fetch embeddings
     all_msg_ids: list[int] = []
     for messages in conv_messages.values():
         for m in messages:
-            msg_id = getattr(m, "id", None)
-            if msg_id is not None:
-                all_msg_ids.append(msg_id)
+            if hasattr(m, "id") and m.id is not None:
+                all_msg_ids.append(m.id)
 
     pre_fetched_embeddings: dict[int, Any] = {}
     if all_msg_ids:
         try:
             pre_fetched_embeddings = vec_searcher.get_embeddings_by_ids(all_msg_ids)
-            logger.info(
-                "Pre-fetched %d/%d embeddings from vec_messages cache",
-                len(pre_fetched_embeddings),
-                len(all_msg_ids),
-            )
         except Exception:
-            pass  # Fall through to per-contact encoding
+            pass
+
+    # --- Phase 1: Segmentation ---
+    all_created_segments: list[tuple[int, Any, str]] = []  # (db_id, segment_obj, chat_id)
 
     for idx, conv in enumerate(conversations):
         if progress_callback:
             progress_callback(idx, total, conv.chat_id)
 
         try:
-            # Resolve contact from batch-loaded dict
+            # Ensure contact exists
             contact = contact_by_chat_id.get(conv.chat_id)
-            contact_id = contact.id if contact else None
+            if not contact:
+                contact = jarvis_db.add_contact(
+                    chat_id=conv.chat_id, display_name=conv.display_name or conv.chat_id
+                )
+                contact_by_chat_id[conv.chat_id] = contact
 
-            # Get messages (already batch-loaded above)
+            contact_id = contact.id
             messages = conv_messages.get(conv.chat_id, [])
-
             if len(messages) < 2:
                 continue
 
-            # Segment the conversation with pre-fetched embeddings
-            segments = segment_conversation(
-                messages,
-                contact_id=str(contact_id) if contact_id else None,
-                pre_fetched_embeddings=pre_fetched_embeddings,
+            segments = segment_conversation_basic(
+                messages, contact_id=str(contact_id), pre_fetched_embeddings=pre_fetched_embeddings
             )
             stats.segments_created += len(segments)
 
-            # Filter segments before batch indexing
-            eligible_segments = []
-            for segment in segments:
-                # Skip segments without any response (me) messages
-                has_response = any(m.is_from_me for m in segment.messages)
-                if not has_response:
-                    stats.segments_skipped_no_response += 1
-                    continue
+            # Filter for indexing (more permissive to catch facts from small exchanges)
+            eligible = [s for s in segments if s.message_count >= 1]
 
-                if segment.message_count < 2:
-                    stats.segments_skipped_too_short += 1
-                    continue
+            if eligible:
+                from jarvis.topics.segment_storage import link_vec_chunk_rowids, persist_segments
 
-                eligible_segments.append(segment)
+                with jarvis_db.connection() as conn:
+                    db_ids = persist_segments(conn, eligible, conv.chat_id, str(contact_id))
 
-            # Batch index all eligible segments (single connection + executemany)
-            if eligible_segments:
-                stats.segments_indexed += len(
-                    vec_searcher.index_segments(
-                        eligible_segments, contact_id, conv.chat_id
-                    )
-                )
+                vec_ids = vec_searcher.index_segments(eligible, contact_id, conv.chat_id)
+                stats.segments_indexed += len(vec_ids)
+
+                if db_ids and vec_ids:
+                    with jarvis_db.connection() as conn:
+                        link_vec_chunk_rowids(conn, db_ids, vec_ids)
+
+                    for db_id, seg_obj in zip(db_ids, eligible):
+                        all_created_segments.append((db_id, seg_obj, conv.chat_id))
 
             stats.conversations_processed += 1
-
         except Exception as e:
             logger.warning("Error segmenting %s: %s", conv.chat_id, e)
             stats.errors.append({"chat_id": conv.chat_id, "error": str(e)})
+
+    # --- Phase 2: Batched Fact Extraction (Model kept warm) ---
+    if all_created_segments:
+        logger.info("Phase 1 complete. Freeing memory for Phase 2...")
+
+        # Explicitly unload Phase 1 resources
+        from jarvis.embedding_adapter import reset_embedder
+
+        reset_embedder()
+
+        from jarvis.contacts.batched_extractor import get_batched_instruction_extractor
+        from jarvis.contacts.fact_storage import save_facts
+
+        # Use batched extractor with model kept warm
+        extractor = get_batched_instruction_extractor(tier=tier, batch_size=5)
+        logger.info(
+            "Phase 2: Extracting facts from %d segments using %s model (batch_size=5)...",
+            len(all_created_segments),
+            tier,
+        )
+
+        # Load model ONCE and keep warm for all extractions
+        if extractor.load():
+            try:
+                # Collect all segments for batch processing
+                all_segments = [seg for _, seg, _ in all_created_segments]
+                segment_db_ids = [db_id for db_id, _, _ in all_created_segments]
+                chat_ids = [chat_id for _, _, chat_id in all_created_segments]
+
+                # Extract facts in batches (5 segments per LLM call)
+                batch_results = extractor.extract_facts_from_segments_batch(
+                    all_segments,
+                    contact_id="",  # Per-segment attribution handled in results
+                    contact_name="Contact",
+                    user_name="Me",
+                )
+
+                # Save facts with proper segment linking
+                total_facts = 0
+                for batch_idx, (local_idx, facts) in enumerate(batch_results):
+                    global_idx = batch_idx * extractor._batch_size + local_idx
+                    if global_idx < len(segment_db_ids) and facts:
+                        seg_db_id = segment_db_ids[global_idx]
+                        chat_id = chat_ids[global_idx]
+
+                        # Update contact_id for each fact
+                        for fact in facts:
+                            fact.contact_id = chat_id
+
+                        save_facts(facts, chat_id, segment_id=seg_db_id)
+                        total_facts += len(facts)
+
+                logger.info(
+                    "Extracted %d facts total from %d segments",
+                    total_facts,
+                    len(all_created_segments),
+                )
+
+            finally:
+                # Unload model ONCE at the end
+                extractor.unload()
+        else:
+            logger.error("Failed to load extractor model")
+
+        logger.info("Extraction complete.")
 
     return stats.to_dict()

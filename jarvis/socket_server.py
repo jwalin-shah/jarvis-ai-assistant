@@ -379,6 +379,11 @@ class JarvisSocketServer:
             self._watcher_task = asyncio.create_task(self._watcher.start())
             logger.info("Started chat.db watcher for real-time notifications")
 
+        # Start model warmer to manage LLM lifecycle and free memory when idle
+        from jarvis.model_warmer import get_model_warmer
+
+        get_model_warmer().start()
+
         # Preload models in background for faster first request
         # NOTE: Must complete BEFORE prefetch manager starts. Concurrent MLX
         # model loads crash the Metal GPU (assertion failures / malloc errors).
@@ -472,13 +477,11 @@ class JarvisSocketServer:
     def _preload_llm(self) -> None:
         """Preload the LLM model (sync).
 
-        Loads both the singleton loader (get_model()) AND the generator's
-        internal loader. These are separate MLXModelLoader instances that
-        share a class-level _mlx_load_lock, so both loads are serialized
-        and safe from concurrent Metal GPU access.
+        Uses the shared singleton model loader (from get_model()) which is
+        now also used by the generator. This ensures the model is loaded
+        exactly once into memory.
         """
         try:
-            from models import get_generator
             from models.loader import get_model
 
             # Load the singleton model loader
@@ -487,11 +490,8 @@ class JarvisSocketServer:
                 model.load()
                 logger.debug(f"LLM model preloaded: {model.config.display_name}")
 
-            # Also preload the generator's internal loader (separate instance)
-            generator = get_generator()
-            if generator._loader and not generator._loader.is_loaded():
-                generator._loader.load()
-                logger.debug("Generator LLM loader preloaded")
+            # Note: get_generator() now shares the same loader instance,
+            # so no separate preload is needed for the generator.
 
         except (ImportError, OSError, RuntimeError) as e:
             logger.debug(f"LLM preload skipped: {e}")
@@ -553,6 +553,14 @@ class JarvisSocketServer:
     async def stop(self) -> None:
         """Stop the socket server."""
         self._running = False
+
+        # Stop model warmer
+        from jarvis.model_warmer import get_model_warmer
+
+        try:
+            get_model_warmer().stop()
+        except Exception as e:
+            logger.debug(f"Error stopping warmer: {e}")
 
         # Stop the watcher
         if self._watcher:
@@ -1095,6 +1103,11 @@ class JarvisSocketServer:
         if not message or not message.strip():
             raise JsonRpcError(INVALID_PARAMS, "Message cannot be empty")
 
+        # Touch model warmer
+        from jarvis.model_warmer import get_model_warmer
+
+        get_model_warmer().touch()
+
         # Build the prompt using the model's chat template
         system = system_prompt or "You are a helpful assistant."
         prompt = f"<|system|>\n{system}<|endoftext|>\n"
@@ -1319,6 +1332,11 @@ class JarvisSocketServer:
                 cached_draft["from_cache"] = True
                 return cached_draft
 
+        # Touch model warmer to record activity and keep model warm
+        from jarvis.model_warmer import get_model_warmer
+
+        get_model_warmer().touch()
+
         # Get context from iMessage
         from integrations.imessage import ChatDBReader
 
@@ -1523,6 +1541,11 @@ class JarvisSocketServer:
 
         if not messages:
             raise JsonRpcError(INVALID_PARAMS, "No messages found")
+
+        # Touch model warmer
+        from jarvis.model_warmer import get_model_warmer
+
+        get_model_warmer().touch()
 
         # Build conversation text
         conversation, _ = self._build_message_context(messages)

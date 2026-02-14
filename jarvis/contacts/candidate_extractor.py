@@ -30,14 +30,13 @@ logger = logging.getLogger(__name__)
 _gliner_mlx_model: Any = None
 _gliner_pytorch_model: Any = None
 _gliner_model_lock = threading.Lock()
-_spacy_nlp_model: Any = None
 
 # ---------------------------------------------------------------------------
 # GLiNER config
 # ---------------------------------------------------------------------------
 
 MODEL = "urchade/gliner_medium-v2.1"
-GLOBAL_THRESHOLD = 0.35  # high recall
+GLOBAL_THRESHOLD = 0.25  # high recall
 
 # Canonical extraction labels used by default for stage-1 candidate generation.
 # These are intentionally coarse; downstream filtering and attribution resolve
@@ -86,48 +85,48 @@ LABEL_PROFILES: dict[str, list[str]] = {
 # Keep these semantically explicit and close to everyday wording.
 # Tuned via scripts/sweep_gliner_thresholds.py --label-variants
 NATURAL_LANGUAGE_LABELS: dict[str, str] = {
-    "person_name": "first name or nickname of a person",
-    "family_member": "family member (mom, sister, etc)",
-    "place": "city, town, country, or geographic location",
-    "org": "company, school, university, or employer",
-    "date_ref": "date or time reference",
-    "food_item": "food or drink",
-    "job_role": "job title or profession",
-    "health_condition": "medical condition or symptom",
-    "activity": "hobby, sport, game, or pastime",
-    "skill": "programming language, technical skill, or tool",
-    "cultural_event": "holiday, festival, or cultural celebration",
+    "person_name": "person",
+    "family_member": "family member",
+    "place": "place",
+    "org": "organization",
+    "date_ref": "date",
+    "food_item": "food",
+    "job_role": "job title",
+    "health_condition": "medical condition",
+    "activity": "activity",
+    "skill": "skill",
+    "cultural_event": "holiday",
     # Optional aliases retained for custom label sets.
     "allergy": "allergy",
     "employer": "employer",
-    "current_location": "current location",
-    "future_location": "future location",
-    "past_location": "past location",
-    "friend_name": "friend name",
-    "partner_name": "romantic partner",
+    "current_location": "location",
+    "future_location": "location",
+    "past_location": "location",
+    "friend_name": "person",
+    "partner_name": "person",
 }
 
 # Per-label minimum thresholds (after global threshold)
 PER_LABEL_MIN: dict[str, float] = {
-    "person_name": 0.45,  # Was 0.55; lowered for recall with improved prompt
-    "family_member": 0.35,  # Was 0.45; "brother" at 0.391 was rejected
-    "place": 0.40,  # Was 0.45; soft entailment handles precision
-    "org": 0.45,  # Was 0.55; soft entailment handles precision
-    "date_ref": 0.60,
-    "food_item": 0.40,  # Was 0.50; soft entailment handles precision
-    "job_role": 0.35,  # Was 0.40; 83% miss rate needs more recall
-    "health_condition": 0.35,  # Was 0.40; 81% miss rate needs more recall
-    "activity": 0.30,  # Was 0.35; 98% miss rate needs more recall
-    "skill": 0.40,
-    "cultural_event": 0.45,
+    "person_name": 0.30,
+    "family_member": 0.25,
+    "place": 0.30,
+    "org": 0.30,
+    "date_ref": 0.40,
+    "food_item": 0.30,
+    "job_role": 0.30,
+    "health_condition": 0.30,
+    "activity": 0.25,
+    "skill": 0.30,
+    "cultural_event": 0.35,
     # Optional aliases retained for custom label sets.
-    "allergy": 0.45,
-    "employer": 0.50,
-    "current_location": 0.45,
-    "future_location": 0.45,
-    "past_location": 0.45,
-    "friend_name": 0.50,
-    "partner_name": 0.50,
+    "allergy": 0.35,
+    "employer": 0.35,
+    "current_location": 0.30,
+    "future_location": 0.30,
+    "past_location": 0.30,
+    "friend_name": 0.30,
+    "partner_name": 0.30,
 }
 DEFAULT_MIN = 0.50
 # Words that GLiNER falsely tags as "activity" in sports/household context
@@ -1182,30 +1181,30 @@ class CandidateExtractor:
     # Previous per-type thresholds were tuned against broken formal templates that
     # scored ~0 for most types. Revisit after observing real score distributions.
     _ENTAILMENT_THRESHOLDS: dict[str, float] = {
-        # Work: high bar - filter recruiters, spam, medical facilities
-        "work.employer": 0.45,
-        "work.former_employer": 0.45,
-        "work.job_title": 0.55,
-        # Location: moderate - valid at 0.38+ but noise at 0.10-0.18
-        "location.current": 0.30,
-        "location.past": 0.30,
-        "location.future": 0.20,
-        "location.hometown": 0.30,
-        # Preferences: filter list mentions (0.10-0.14), keep clear prefs (0.50+)
-        "preference.food_like": 0.35,
-        "preference.food_dislike": 0.35,
-        "preference.activity": 0.30,
+        # Work: moderate bar - filter recruiters, spam, medical facilities
+        "work.employer": 0.25,
+        "work.former_employer": 0.25,
+        "work.job_title": 0.30,
+        # Location: low - valid at 0.15+
+        "location.current": 0.15,
+        "location.past": 0.15,
+        "location.future": 0.15,
+        "location.hometown": 0.15,
+        # Preferences: filter list mentions (0.10-0.14), keep clear prefs (0.15+)
+        "preference.food_like": 0.20,
+        "preference.food_dislike": 0.20,
+        "preference.activity": 0.15,
         # Relationships: filter pronouns/generic terms, keep named people
-        "relationship.family": 0.30,
-        "relationship.friend": 0.30,
-        "relationship.partner": 0.30,
-        # Health/personal: conservative, high-value facts
-        "health.condition": 0.45,
-        "health.allergy": 0.45,
-        "health.dietary": 0.45,
-        "personal.school": 0.55,
-        "personal.birthday": 0.45,
-        "personal.pet": 0.45,
+        "relationship.family": 0.15,
+        "relationship.friend": 0.15,
+        "relationship.partner": 0.15,
+        # Health/personal: slightly higher for sensitive facts
+        "health.condition": 0.25,
+        "health.allergy": 0.25,
+        "health.dietary": 0.20,
+        "personal.school": 0.30,
+        "personal.birthday": 0.25,
+        "personal.pet": 0.25,
     }
 
     # MNLI-style hypotheses: simple "Someone [verb] [entity]" patterns.
@@ -1328,91 +1327,6 @@ class CandidateExtractor:
         return skip_nli + verified
 
     # ------------------------------------------------------------------
-    # spaCy NER extraction (high-recall for common entity types)
-    # ------------------------------------------------------------------
-
-    _SPACY_LABEL_MAP: dict[str, str] = {
-        "PERSON": "person_name",
-        "ORG": "org",
-        "GPE": "place",
-        "LOC": "place",
-        "FAC": "place",
-    }
-
-    def extract_spacy_candidates(
-        self,
-        text: str,
-        message_id: int,
-        *,
-        chat_id: int | None = None,
-        is_from_me: bool | None = None,
-        sender_handle_id: int | None = None,
-        message_date: int | None = None,
-    ) -> list[FactCandidate]:
-        """Extract candidates using spaCy NER only.
-
-        Maps spaCy entity labels (PERSON, ORG, GPE, LOC, FAC) to our taxonomy.
-        Returns FactCandidate objects with gliner_score=0.50 (moderate confidence).
-        """
-        nlp = self._get_spacy_nlp()
-        if nlp is None:
-            return []
-
-        doc = nlp(text)
-        candidates: list[FactCandidate] = []
-        seen: set[tuple[str, str]] = set()
-
-        for ent in doc.ents:
-            label = self._SPACY_LABEL_MAP.get(ent.label_)
-            if label is None:
-                continue
-            span_text = ent.text.strip().strip(".,!?;:'\"()[]{}").strip()
-            if len(span_text) < 2 or span_text.casefold() in VAGUE:
-                continue
-
-            key = (span_text.casefold(), label)
-            if key in seen:
-                continue
-            seen.add(key)
-
-            fact_type = self._resolve_fact_type(text, span_text, label)
-            if fact_type == "other_personal_fact":
-                continue
-
-            candidates.append(
-                FactCandidate(
-                    message_id=message_id,
-                    span_text=span_text,
-                    span_label=label,
-                    gliner_score=0.50,
-                    fact_type=fact_type,
-                    start_char=ent.start_char,
-                    end_char=ent.end_char,
-                    source_text=text,
-                    chat_id=chat_id,
-                    is_from_me=is_from_me,
-                    sender_handle_id=sender_handle_id,
-                    message_date=message_date,
-                )
-            )
-
-        return candidates
-
-    @staticmethod
-    def _get_spacy_nlp() -> Any:
-        """Lazy-load spaCy en_core_web_sm model (singleton)."""
-        global _spacy_nlp_model
-        if _spacy_nlp_model is not None:
-            return _spacy_nlp_model
-        try:
-            import spacy
-            _spacy_nlp_model = spacy.load("en_core_web_sm")
-            return _spacy_nlp_model
-        except (ImportError, OSError):
-            logger.warning("spaCy en_core_web_sm not available; spaCy extraction disabled")
-            return None
-
-    # ------------------------------------------------------------------
     # LLM extraction (nuanced, context-aware for complex entity types)
     # ------------------------------------------------------------------
 
@@ -1431,7 +1345,7 @@ class CandidateExtractor:
     ) -> list[FactCandidate]:
         """Extract candidates using LLM with structured prompt.
 
-        Handles entity types that spaCy struggles with: family_member, activity,
+        Handles nuanced entity types: family_member, activity,
         health_condition, food_item, job_role.
         """
 
@@ -1439,14 +1353,17 @@ class CandidateExtractor:
         user_prompt = self._build_llm_user_prompt(text, context_prev, context_next)
 
         try:
-            from models.generator import get_generator
+            from models import get_generator
+            from contracts.models import GenerationRequest
             gen = get_generator()
-            response = gen.generate(
+            request = GenerationRequest(
                 prompt=user_prompt,
                 system_prompt=system_prompt,
                 max_tokens=512,
                 temperature=0.1,
             )
+            response_obj = gen.generate(request)
+            response = response_obj.text
             spans = self._parse_llm_spans(response)
         except Exception as e:
             logger.warning("LLM extraction failed: %s", e)
@@ -1499,15 +1416,17 @@ class CandidateExtractor:
         import json as _json
 
         prompt = (
-            "You are a personal fact extractor. Given an iMessage, extract lasting "
-            "personal facts as structured spans.\n\n"
-            "Labels: family_member, person_name, place, org, job_role, food_item, "
-            "activity, health_condition\n\n"
-            "Rules:\n"
-            "- Only extract LASTING personal facts (not transient events)\n"
+            "You are a precise personal fact extractor. Given an iMessage, extract lasting "
+            "personal facts as structured JSON spans.\n\n"
+            "STRICT OUTPUT RULES:\n"
+            "- ONLY output a JSON array of objects with {\"span_text\": \"...\", \"span_label\": \"...\"}\n"
+            "- NO commentary, NO explanations, NO extra text\n"
+            "- Labels: family_member, person_name, place, org, job_role, food_item, activity, health_condition\n\n"
+            "CONTENT RULES:\n"
+            "- Only extract LASTING personal facts (e.g. \"works at Google\", \"lives in SF\")\n"
+            "- Skip transient events (e.g. \"going to the store\", \"eating lunch\")\n"
             "- Extract minimal spans (just the entity, not surrounding words)\n"
             "- Skip vague references (it, that, stuff)\n"
-            "- Output JSON array of {span_text, span_label} or empty array []\n"
         )
         if few_shot_examples:
             prompt += "\nExamples:\n"
@@ -1571,83 +1490,6 @@ class CandidateExtractor:
 
         logger.warning("Could not parse LLM response: %s", response[:100])
         return []
-
-    # ------------------------------------------------------------------
-    # Hybrid extraction (spaCy + LLM merged)
-    # ------------------------------------------------------------------
-
-    def extract_hybrid(
-        self,
-        text: str,
-        message_id: int,
-        *,
-        chat_id: int | None = None,
-        is_from_me: bool | None = None,
-        sender_handle_id: int | None = None,
-        message_date: int | None = None,
-        context_prev: str = "",
-        context_next: str = "",
-        few_shot_examples: list[dict[str, Any]] | None = None,
-    ) -> list[FactCandidate]:
-        """Hybrid extraction: union of spaCy + LLM candidates, deduplicated.
-
-        spaCy handles PERSON, ORG, GPE/LOC entities with high recall.
-        LLM handles nuanced types: family_member, activity, health_condition, food_item.
-        Regex patterns provide high-precision anchors.
-
-        Dedup: on span overlap (Jaccard > 0.5 = same entity), keep higher confidence.
-        """
-        common_kwargs: dict[str, Any] = {
-            "chat_id": chat_id,
-            "is_from_me": is_from_me,
-            "sender_handle_id": sender_handle_id,
-            "message_date": message_date,
-        }
-
-        # Layer 1: Regex (highest precision, ~0.85 confidence)
-        extra_kwargs: dict[str, Any] = {}
-        if chat_id is not None:
-            extra_kwargs["chat_id"] = chat_id
-        if is_from_me is not None:
-            extra_kwargs["is_from_me"] = is_from_me
-        if sender_handle_id is not None:
-            extra_kwargs["sender_handle_id"] = sender_handle_id
-        if message_date is not None:
-            extra_kwargs["message_date"] = message_date
-        regex_cands = self._regex_extract(text, message_id, **extra_kwargs)
-
-        # Layer 2: spaCy NER
-        spacy_cands = self.extract_spacy_candidates(
-            text, message_id, **common_kwargs,
-        )
-
-        # Layer 3: LLM
-        llm_cands = self.extract_llm_candidates(
-            text,
-            message_id,
-            context_prev=context_prev,
-            context_next=context_next,
-            few_shot_examples=few_shot_examples,
-            **common_kwargs,
-        )
-
-        # Merge with priority: regex > LLM > spaCy
-        merged = list(regex_cands)
-        merged_keys = {(c.span_text.casefold(), c.span_label) for c in merged}
-
-        for cand in llm_cands:
-            key = (cand.span_text.casefold(), cand.span_label)
-            if key not in merged_keys and not self._overlaps_existing(cand, merged):
-                merged.append(cand)
-                merged_keys.add(key)
-
-        for cand in spacy_cands:
-            key = (cand.span_text.casefold(), cand.span_label)
-            if key not in merged_keys and not self._overlaps_existing(cand, merged):
-                merged.append(cand)
-                merged_keys.add(key)
-
-        return merged
 
     @staticmethod
     def _overlaps_existing(

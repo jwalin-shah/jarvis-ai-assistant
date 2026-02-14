@@ -169,6 +169,57 @@ class StreamToken:
     from_draft: bool = False
 
 
+class NegativeConstraintLogitsProcessor:
+    """Logits processor that penalizes specified token sequences (phrases).
+
+    Used to reduce 'AI-isms' like 'As an AI language model' or 'I hope this helps'.
+    """
+
+    def __init__(
+        self,
+        tokenizer: Any,
+        phrases: list[str],
+        penalty: float = 5.0,
+    ) -> None:
+        self.tokenizer = tokenizer
+        self.penalty = penalty
+        # Pre-tokenize phrases into token IDs
+        self.phrase_ids = [tokenizer.encode(p, add_special_tokens=False) for p in phrases]
+        # Filter out empty or single-token phrases (handled better by logit bias)
+        self.phrase_ids = [p for p in self.phrase_ids if len(p) > 1]
+        # For single tokens, we can just use a set for O(1) lookup
+        self.single_token_penalties: dict[int, float] = {}
+        for p in phrases:
+            ids = tokenizer.encode(p, add_special_tokens=False)
+            if len(ids) == 1:
+                self.single_token_penalties[ids[0]] = penalty
+
+    def __call__(self, input_ids: mx.array, logits: mx.array) -> mx.array:
+        """Apply penalties to logits based on input_ids history."""
+        # 1. Apply single token penalties
+        if self.single_token_penalties:
+            for token_id, penalty in self.single_token_penalties.items():
+                logits[:, token_id] -= penalty
+
+        # 2. Apply multi-token sequence penalties
+        # input_ids shape can be (L,) or (1, L) depending on the generator step
+        if input_ids.ndim == 1:
+            input_list = input_ids.tolist()
+        else:
+            input_list = input_ids[0].tolist()
+
+        for phrase in self.phrase_ids:
+            # Check if current input_ids end matches phrase prefix
+            for i in range(1, len(phrase)):
+                prefix = phrase[:i]
+                if input_list[-i:] == prefix:
+                    # Penalize the NEXT token in the phrase
+                    next_token = phrase[i]
+                    logits[:, next_token] -= self.penalty
+
+        return logits
+
+
 class MLXModelLoader:
     """MLX model lifecycle manager with thread-safe loading and memory tracking.
 
@@ -612,7 +663,9 @@ class MLXModelLoader:
         top_k: int | None,
         repetition_penalty: float | None,
         pre_formatted: bool,
-    ) -> tuple[str, int, Any, list[Any] | None]:
+        negative_constraints: list[str] | None = None,
+        system_prompt: str | None = None,
+    ) -> tuple[str, int, Any, list[Any]]:
         """Resolve defaults and prepare shared generation parameters.
 
         Returns:
@@ -624,10 +677,27 @@ class MLXModelLoader:
         top_k = top_k if top_k is not None else 50
         repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
 
+        DEFAULT_NEGATIVE_CONSTRAINTS = [
+            "as an ai",
+            "i'm an ai",
+            "i am an ai",
+            "as a language model",
+            "i hope this helps",
+            "certainly!",
+            "of course!",
+            "happy to help",
+            "feel free to",
+            "let me know if",
+        ]
+
         if pre_formatted:
             formatted_prompt = prompt
         else:
-            messages = [{"role": "user", "content": prompt}]
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
             formatted_prompt = self._tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
@@ -635,9 +705,16 @@ class MLXModelLoader:
         min_p = min_p if min_p is not None else 0.0
         sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
 
-        logits_processors = None
+        logits_processors: list[Any] = []
         if repetition_penalty > 1.0:
-            logits_processors = [make_repetition_penalty(repetition_penalty)]
+            logits_processors.append(make_repetition_penalty(repetition_penalty))
+
+        # Add negative constraints to reduce AI-sounding output
+        constraints = negative_constraints or DEFAULT_NEGATIVE_CONSTRAINTS
+        if constraints:
+            logits_processors.append(
+                NegativeConstraintLogitsProcessor(self._tokenizer, constraints)
+            )
 
         return formatted_prompt, max_tokens, sampler, logits_processors
 
@@ -697,6 +774,8 @@ class MLXModelLoader:
         prompt_cache: list[Any] | None = None,
         num_draft_tokens: int | None = None,
         pre_formatted: bool = False,
+        negative_constraints: list[str] | None = None,
+        system_prompt: str | None = None,
     ) -> GenerationResult:
         """Generate text synchronously.
 
@@ -715,6 +794,8 @@ class MLXModelLoader:
                 until completion. This is a limitation of MLX's synchronous API.
             prompt_cache: Optional pre-computed KV cache from prefill_prompt_cache().
                 If provided, passed through to mlx_lm.generate() for prefix reuse.
+            negative_constraints: Optional list of phrases to penalize (logit bias).
+            system_prompt: Optional system prompt to include in chat template.
 
         Returns:
             GenerationResult with text, token count, and timing
@@ -760,6 +841,8 @@ class MLXModelLoader:
                     top_k,
                     repetition_penalty,
                     pre_formatted,
+                    negative_constraints=negative_constraints,
+                    system_prompt=system_prompt,
                 )
             )
 
@@ -893,6 +976,7 @@ class MLXModelLoader:
         prompt_cache: list[Any] | None = None,
         num_draft_tokens: int | None = None,
         pre_formatted: bool = False,
+        system_prompt: str | None = None,
     ) -> Any:
         """Generate text with true streaming output (yields tokens as generated).
 
@@ -908,6 +992,7 @@ class MLXModelLoader:
             repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
             stop_sequences: Strings that stop generation
             stop_event: If set, generation stops early (e.g. on client disconnect)
+            system_prompt: Optional system prompt to include in chat template.
 
         Yields:
             StreamToken objects with individual tokens as they're generated
@@ -941,6 +1026,7 @@ class MLXModelLoader:
                     top_k,
                     repetition_penalty,
                     pre_formatted,
+                    system_prompt=system_prompt,
                 )
             )
 

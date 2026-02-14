@@ -25,214 +25,6 @@ logger = logging.getLogger(__name__)
 # Version-specific migration functions
 # ---------------------------------------------------------------------------
 
-def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
-    """Migration v2 -> v3: Add context_text column to pairs."""
-    try:
-        conn.execute("ALTER TABLE pairs ADD COLUMN context_text TEXT")
-        logger.info("Added context_text column to pairs table")
-    except sqlite3.OperationalError as e:
-        if "duplicate column" in str(e).lower():
-            logger.debug("context_text column already exists")
-        else:
-            logger.error("Migration v2->v3 failed: %s", e)
-            raise
-
-
-def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
-    """Migration v3 -> v4: Add is_group column to pairs."""
-    try:
-        conn.execute("ALTER TABLE pairs ADD COLUMN is_group BOOLEAN DEFAULT FALSE")
-        logger.info("Added is_group column to pairs table")
-    except sqlite3.OperationalError as e:
-        if "duplicate column" in str(e).lower():
-            logger.debug("is_group column already exists")
-        else:
-            logger.error("Migration v3->v4 failed: %s", e)
-            raise
-
-
-def _migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
-    """Migration v4 -> v5: Add is_holdout column for train/test split."""
-    try:
-        conn.execute("ALTER TABLE pairs ADD COLUMN is_holdout BOOLEAN DEFAULT FALSE")
-        logger.info("Added is_holdout column to pairs table")
-    except sqlite3.OperationalError as e:
-        if "duplicate column" in str(e).lower():
-            logger.debug("is_holdout column already exists")
-        else:
-            logger.error("Migration v4->v5 failed: %s", e)
-            raise
-
-
-def _migrate_v5_to_v6(conn: sqlite3.Connection) -> None:
-    """Migration v5 -> v6: Add validity gate columns and split tables."""
-    gate_columns = [
-        ("gate_a_passed", "BOOLEAN"),
-        ("gate_b_score", "REAL"),
-        ("gate_c_verdict", "TEXT"),
-        ("validity_status", "TEXT"),
-    ]
-    for col_name, col_type in gate_columns:
-        if col_name not in VALID_MIGRATION_COLUMNS:
-            raise ValueError(f"Invalid migration column name: {col_name}")
-        if col_type not in VALID_COLUMN_TYPES:
-            raise ValueError(f"Invalid migration column type: {col_type}")
-        try:
-            # SECURITY: f-string is safe here because both col_name and col_type
-            # are validated against strict allow-lists (VALID_MIGRATION_COLUMNS
-            # and VALID_COLUMN_TYPES). SQLite's ALTER TABLE doesn't support
-            # parameterized column names/types, so validation is the correct approach.
-            conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
-            logger.info("Added %s column to pairs table", col_name)
-        except sqlite3.OperationalError as e:
-            if "duplicate column" in str(e).lower():
-                logger.debug("%s column already exists", col_name)
-            else:
-                logger.error("Migration v5->v6 failed adding %s: %s", col_name, e)
-                raise
-
-
-def _migrate_v6_to_v7(conn: sqlite3.Connection) -> None:
-    """Migration v6 -> v7: Add dialogue act classification and cluster columns."""
-    da_columns = [
-        ("trigger_da_type", "TEXT"),
-        ("trigger_da_conf", "REAL"),
-        ("response_da_type", "TEXT"),
-        ("response_da_conf", "REAL"),
-        ("cluster_id", "INTEGER"),
-    ]
-    for col_name, col_type in da_columns:
-        if col_name not in VALID_MIGRATION_COLUMNS:
-            raise ValueError(f"Invalid migration column name: {col_name}")
-        if col_type not in VALID_COLUMN_TYPES:
-            raise ValueError(f"Invalid migration column type: {col_type}")
-        try:
-            # SECURITY: f-string is safe here because both col_name and col_type
-            # are validated against strict allow-lists (VALID_MIGRATION_COLUMNS
-            # and VALID_COLUMN_TYPES). SQLite's ALTER TABLE doesn't support
-            # parameterized column names/types, so validation is the correct approach.
-            conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
-            logger.info("Added %s column to pairs table", col_name)
-        except sqlite3.OperationalError as e:
-            if "duplicate column" in str(e).lower():
-                logger.debug("%s column already exists", col_name)
-            else:
-                logger.error("Migration v6->v7 failed adding %s: %s", col_name, e)
-                raise
-
-
-def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
-    """Migration v8 -> v9: Add content_hash for text-based deduplication."""
-    try:
-        conn.execute("ALTER TABLE pairs ADD COLUMN content_hash TEXT")
-        logger.info("Added content_hash column to pairs table")
-    except sqlite3.OperationalError as e:
-        if "duplicate column" in str(e).lower():
-            logger.debug("content_hash column already exists")
-        else:
-            logger.error("Migration v8->v9 failed: %s", e)
-            raise
-
-
-def _migrate_v9_to_v10(conn: sqlite3.Connection) -> None:
-    """Migration v9 -> v10: sqlite-vec virtual tables for vector search."""
-    try:
-        conn.execute(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-                embedding int8[384] distance_metric=L2,
-                contact_id integer partition key,
-                chat_id text,
-                response_da_type text,
-                quality_score float,
-                source_timestamp float,
-                +topic_label text,
-                +trigger_text text,
-                +response_text text,
-                +formatted_text text,
-                +keywords_json text,
-                +message_count integer,
-                +response_da_conf float,
-                +source_type text,
-                +source_id text
-            )
-        """
-        )
-        conn.execute(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0(
-                embedding int8[384] distance_metric=L2,
-                chat_id text partition key,
-                +text_preview text,
-                +sender text,
-                +timestamp integer,
-                +is_from_me integer
-            )
-        """
-        )
-        conn.execute(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0(
-                embedding bit[384],
-                +chunk_rowid integer,
-                +embedding_int8 blob
-            )
-        """
-        )
-        logger.info(
-            "Created sqlite-vec virtual tables (vec_chunks, vec_messages, vec_binary)"
-        )
-    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
-        if "already exists" in str(e).lower():
-            logger.debug("vec tables already exist")
-        else:
-            logger.warning(
-                "sqlite-vec migration skipped (extension unavailable): %s", e
-            )
-
-
-def _migrate_v10_to_v11(conn: sqlite3.Connection) -> None:
-    """Migration v10 -> v11: Recreate vec_binary with aux columns."""
-    try:
-        # Old vec_binary had no aux columns; drop and recreate
-        conn.execute("DROP TABLE IF EXISTS vec_binary")
-        conn.execute(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0(
-                embedding bit[384],
-                +chunk_rowid integer,
-                +embedding_int8 blob
-            )
-        """
-        )
-        logger.info("Recreated vec_binary with chunk_rowid + embedding_int8 columns")
-    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
-        if "already exists" in str(e).lower():
-            logger.debug("vec_binary already has new schema")
-        else:
-            logger.warning(
-                "vec_binary migration skipped (extension unavailable): %s", e
-            )
-
-
-# Maps (max_version_inclusive) -> migration callable.
-# A migration runs when current_version > 0 and current_version <= max_version.
-# Entries with exact_version=True run only when current_version == that version.
-# Order matters: applied sequentially from lowest to highest version.
-_MIGRATIONS: list[tuple[int, bool, Any]] = [
-    # (max_version, exact_match_only, callable)
-    (2, True, _migrate_v2_to_v3),
-    (3, False, _migrate_v3_to_v4),
-    (4, False, _migrate_v4_to_v5),
-    (5, False, _migrate_v5_to_v6),
-    (6, False, _migrate_v6_to_v7),
-    # v7 -> v8: scheduling tables created by SCHEMA_SQL, no column migration
-    (8, False, _migrate_v8_to_v9),
-    (9, False, _migrate_v9_to_v10),
-    (10, True, _migrate_v10_to_v11),
-    # v11 -> v12: contact_facts table created by SCHEMA_SQL, no column migration
-]
-
 
 def _migrate_v16_to_v17(conn: sqlite3.Connection) -> None:
     """Migration v16 -> v17: Add conversation_segments tables and segment_id column."""
@@ -248,8 +40,14 @@ def _migrate_v16_to_v17(conn: sqlite3.Connection) -> None:
             raise
 
 
-# Append v16->v17 migration after function definition
-_MIGRATIONS.append((16, True, _migrate_v16_to_v17))
+# Maps (max_version_inclusive) -> migration callable.
+# A migration runs when current_version > 0 and current_version <= max_version.
+# Entries with exact_version=True run only when current_version == that version.
+# Order matters: applied sequentially from lowest to highest version.
+_MIGRATIONS: list[tuple[int, bool, Any]] = [
+    # (max_version, exact_match_only, callable)
+    (16, True, _migrate_v16_to_v17),
+]
 
 
 class JarvisDBBase:
@@ -428,18 +226,11 @@ class JarvisDBBase:
                         embedding int8[384] distance_metric=L2,
                         contact_id integer partition key,
                         chat_id text,
-                        response_da_type text,
-                        quality_score float,
                         source_timestamp float,
+                        +context_text text,
+                        +reply_text text,
                         +topic_label text,
-                        +trigger_text text,
-                        +response_text text,
-                        +formatted_text text,
-                        +keywords_json text,
-                        +message_count integer,
-                        +response_da_conf float,
-                        +source_type text,
-                        +source_id text
+                        +message_count integer
                     )
                 """
                 )
@@ -549,6 +340,8 @@ class JarvisDBBase:
                 current_version = 0
 
             if current_version >= CURRENT_SCHEMA_VERSION:
+                # Ensure all tables from SCHEMA_SQL exist (e.g. if one was dropped)
+                conn.executescript(SCHEMA_SQL)
                 # Ensure vec tables exist even if version is current
                 # (they may have been skipped if sqlite-vec wasn't loaded initially)
                 self._ensure_vec_tables(conn)

@@ -48,53 +48,69 @@ def detect_schema_version(conn: sqlite3.Connection) -> str:
 # Base SQL query templates (shared between v14 and v15 until divergence needed)
 _BASE_QUERIES = {
     "conversations": """
-        WITH chat_stats AS (
-            SELECT chat_id,
-                   MAX(message_date) as last_date,
-                   COUNT(*) as message_count
+        WITH recent_chats AS (
+            SELECT DISTINCT chat_id
             FROM chat_message_join
-            GROUP BY chat_id
-        ),
-        top_chats AS (
-            SELECT chat_id, last_date, message_count
-            FROM chat_stats
-            WHERE message_count > 0
             {since_filter}
             {before_filter}
-            ORDER BY last_date DESC
+            ORDER BY message_date DESC
             LIMIT ?
+        ),
+        chat_stats AS (
+            SELECT 
+                cmj.chat_id,
+                MAX(cmj.message_date) as last_date,
+                COUNT(*) as message_count
+            FROM chat_message_join cmj
+            JOIN recent_chats rc ON cmj.chat_id = rc.chat_id
+            GROUP BY cmj.chat_id
         ),
         chat_participants AS (
             SELECT chat_handle_join.chat_id,
                    GROUP_CONCAT(handle.id, ', ') as participants
             FROM chat_handle_join
             JOIN handle ON chat_handle_join.handle_id = handle.ROWID
+            WHERE chat_handle_join.chat_id IN (SELECT chat_id FROM recent_chats)
             GROUP BY chat_handle_join.chat_id
         ),
         last_messages AS (
-            SELECT cmj.chat_id, m.text, m.attributedBody,
+            SELECT cmj.chat_id, m.text,
                    ROW_NUMBER() OVER (
                        PARTITION BY cmj.chat_id ORDER BY cmj.message_date DESC
                    ) as rn
             FROM chat_message_join cmj
             JOIN message m ON cmj.message_id = m.ROWID
-            WHERE cmj.chat_id IN (SELECT chat_id FROM top_chats)
+            WHERE cmj.chat_id IN (SELECT chat_id FROM recent_chats)
         )
         SELECT
             chat.ROWID as chat_rowid,
             chat.guid as chat_id,
             chat.display_name,
             chat.chat_identifier,
-            cp.participants,
-            tc.message_count,
-            tc.last_date as last_message_date,
-            COALESCE(lm.text, '') as last_message_text,
-            COALESCE(lm.attributedBody, '') as last_message_attributed_body
-        FROM top_chats tc
-        JOIN chat ON tc.chat_id = chat.ROWID
+            COALESCE(cp.participants, '') as participants,
+            cs.message_count,
+            cs.last_date as last_message_date,
+            COALESCE(lm.text, '') as last_message_text
+        FROM chat
+        JOIN chat_stats cs ON chat.ROWID = cs.chat_id
         LEFT JOIN chat_participants cp ON chat.ROWID = cp.chat_id
-        LEFT JOIN last_messages lm ON tc.chat_id = lm.chat_id AND lm.rn = 1
-        ORDER BY tc.last_date DESC
+        LEFT JOIN last_messages lm ON cs.chat_id = lm.chat_id AND lm.rn = 1
+        ORDER BY cs.last_date DESC
+    """,
+    "conversations_light": """
+        SELECT 
+            chat.ROWID as chat_id,
+            chat.guid as chat_guid,
+            chat.display_name,
+            MAX(cmj.message_date) as last_message_date,
+            COUNT(*) as message_count
+        FROM chat
+        JOIN chat_message_join cmj ON chat.ROWID = cmj.chat_id
+        {since_filter}
+        {before_filter}
+        GROUP BY chat.ROWID
+        ORDER BY last_message_date DESC
+        LIMIT ?
     """,
     "messages": """
         SELECT
@@ -425,9 +441,16 @@ def get_query(
 
     # Build filter clauses from boolean flags (never from user input)
     # Conversations query uses top_chats CTE with last_date column
-    since_filter = "AND last_date > ?" if with_since_filter else ""
+    # conversations_light uses message_date directly in the JOIN
+    since_filter = (
+        "AND cmj.message_date > ?"
+        if (with_since_filter and name == "conversations_light")
+        else ("AND last_date > ?" if with_since_filter else "")
+    )
     conversations_before_filter = (
-        "AND last_date < ?" if with_conversations_before_filter else ""
+        "AND cmj.message_date < ?"
+        if (with_conversations_before_filter and name == "conversations_light")
+        else ("AND last_date < ?" if with_conversations_before_filter else "")
     )
 
     # For messages query, use with_before_filter
@@ -435,7 +458,7 @@ def get_query(
     # For conversations query, use with_conversations_before_filter
     if name == "search":
         before_filter = "AND message.date < ?" if with_search_before_filter else ""
-    elif name == "conversations":
+    elif name in ("conversations", "conversations_light"):
         before_filter = conversations_before_filter
     else:
         before_filter = "AND message.date < ?" if with_before_filter else ""

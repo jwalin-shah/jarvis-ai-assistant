@@ -363,10 +363,19 @@ class ChatDBWatcher:
                         e,
                     )
 
-            # Extract facts from new messages (background, non-blocking)
+            # Extract facts from new messages via background task queue
             if new_messages:
-                task = asyncio.create_task(self._extract_facts(new_messages))
-                task.add_done_callback(self._log_task_exception)
+                from jarvis.tasks.queue import get_task_queue
+                from jarvis.tasks.models import TaskType
+                
+                queue = get_task_queue()
+                # Group by chat_id and enqueue one task per active chat
+                chats = {msg["chat_id"] for msg in new_messages}
+                for chat_id in chats:
+                    queue.enqueue(
+                        TaskType.FACT_EXTRACTION,
+                        {"chat_id": chat_id, "limit": 25} # Process small window for real-time
+                    )
 
             # Track per-chat message counts for incremental re-segmentation
             chats_to_resegment: list[str] = []

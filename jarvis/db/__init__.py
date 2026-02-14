@@ -17,26 +17,18 @@ Usage:
 import threading
 from pathlib import Path
 
-from jarvis.db.artifacts import ArtifactMixin
-from jarvis.db.clusters import ClusterMixin
 from jarvis.db.contacts import ContactMixin
 from jarvis.db.core import JarvisDBBase
-from jarvis.db.embeddings import EmbeddingMixin
 from jarvis.db.index_versions import IndexVersionMixin
 from jarvis.cache import TTLCache
 from jarvis.db.models import (
     INDEXES_DIR,
     JARVIS_DB_PATH,
-    Cluster,
     Contact,
     ContactStyleTargets,
     IndexVersion,
-    Pair,
-    PairArtifact,
-    PairEmbedding,
     _convert_timestamp,
 )
-from jarvis.db.pairs import PairMixin
 from jarvis.db.schema import (
     CURRENT_SCHEMA_VERSION,
     EXPECTED_INDICES,
@@ -44,19 +36,13 @@ from jarvis.db.schema import (
     VALID_COLUMN_TYPES,
     VALID_MIGRATION_COLUMNS,
 )
-from jarvis.db.search import PairSearchMixin
 from jarvis.db.stats import StatsMixin
 
 
 class JarvisDB(
     JarvisDBBase,
     ContactMixin,
-    PairMixin,
-    PairSearchMixin,
-    ClusterMixin,
-    EmbeddingMixin,
     IndexVersionMixin,
-    ArtifactMixin,
     StatsMixin,
 ):
     """Manager for the JARVIS SQLite database.
@@ -67,13 +53,8 @@ class JarvisDB(
     Composed from focused mixin classes for maintainability:
     - JarvisDBBase: Connection management, schema init, index verification
     - ContactMixin: Contact CRUD operations
-    - PairMixin: Pair CRUD, bulk ops, DA/cluster updates
-    - PairSearchMixin: DA queries, pattern matching, train/test split
-    - ClusterMixin: Cluster CRUD
-    - EmbeddingMixin: FAISS embedding refs, batch lookups
     - IndexVersionMixin: FAISS index version management
-    - ArtifactMixin: Pair artifacts, style targets, validated pairs
-    - StatsMixin: Database and gate statistics
+    - StatsMixin: Database and segment statistics
     """
 
     pass
@@ -110,11 +91,7 @@ __all__ = [
     "reset_db",
     # Data models
     "Contact",
-    "Pair",
-    "PairArtifact",
     "ContactStyleTargets",
-    "Cluster",
-    "PairEmbedding",
     "IndexVersion",
     "TTLCache",
     # Constants

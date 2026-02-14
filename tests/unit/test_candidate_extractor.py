@@ -121,9 +121,9 @@ class TestExtractCandidates:
 
 class TestThresholdFiltering:
     def test_per_label_threshold_rejects_low_score(self):
-        # org requires 0.45, give it 0.40
+        # org requires 0.30 per PER_LABEL_MIN, test with a lower score
         # Use text that won't match regex patterns to isolate GLiNER behavior
-        ents = [_make_entity("Acme", "org", 0.40)]
+        ents = [_make_entity("Acme", "org", 0.25)]
         ext = _mock_extractor(ents)
 
         candidates = ext.extract_candidates("Acme is interesting", message_id=1, use_gate=False)

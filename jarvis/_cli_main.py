@@ -271,19 +271,12 @@ def cmd_db(args: argparse.Namespace) -> int:
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
         console.print(
-            "Available: init, sync-contacts, add-contact, "
-            "list-contacts, extract, stats, build-profiles"
+            "Available: init, extract, stats, build-profiles, feedback"
         )
         return 1
 
     if subcommand == "init":
         return _cmd_db_init(args)
-    elif subcommand == "sync-contacts":
-        return _cmd_db_sync_contacts(args)
-    elif subcommand == "add-contact":
-        return _cmd_db_add_contact(args)
-    elif subcommand == "list-contacts":
-        return _cmd_db_list_contacts(args)
     elif subcommand == "extract":
         return _cmd_db_extract(args)
     elif subcommand == "stats":
@@ -471,28 +464,6 @@ def cmd_ner(args: argparse.Namespace) -> int:
     return 1
 
 
-def _cmd_db_sync_contacts(args: argparse.Namespace) -> int:
-    """Sync contacts from macOS Address Book into JARVIS DB."""
-    from jarvis.search.ingest import ingest_contacts
-
-    db = get_db()
-    db.init_schema()
-
-    console.print("[bold]Syncing contacts from macOS Address Book...[/bold]")
-    stats = ingest_contacts(db)
-
-    if "error" in stats:
-        console.print(f"[red]Error: {stats['error']}[/red]")
-        return 1
-
-    console.print("\n[bold green]Contact sync complete![/bold green]")
-    console.print(f"  Processed: {stats['processed']}")
-    console.print(f"  Created: {stats['created']}")
-    console.print(f"  Updated: {stats['updated']}")
-    console.print(f"  Skipped (unchanged): {stats['skipped']}")
-    return 0
-
-
 def _cmd_db_init(args: argparse.Namespace) -> int:
     """Initialize the JARVIS database."""
     console.print("[bold]Initializing JARVIS database...[/bold]")
@@ -511,67 +482,6 @@ def _cmd_db_init(args: argparse.Namespace) -> int:
     else:
         console.print(f"[green]Database already up to date at {db.db_path}[/green]")
 
-    return 0
-
-
-def _cmd_db_add_contact(args: argparse.Namespace) -> int:
-    """Add or update a contact."""
-    db = get_db()
-
-    if not db.exists():
-        db.init_schema()
-
-    contact = db.add_contact(
-        display_name=args.name,
-        chat_id=args.chat_id,
-        phone_or_email=args.phone,
-        relationship=args.relationship,
-        style_notes=args.style,
-    )
-
-    console.print("[green]Contact added/updated:[/green]")
-    console.print(f"  Name: {contact.display_name}")
-    if contact.relationship:
-        console.print(f"  Relationship: {contact.relationship}")
-    if contact.style_notes:
-        console.print(f"  Style: {contact.style_notes}")
-    if contact.chat_id:
-        console.print(f"  Chat ID: {contact.chat_id}")
-
-    return 0
-
-
-def _cmd_db_list_contacts(args: argparse.Namespace) -> int:
-    """List all contacts."""
-    db = get_db()
-
-    if not db.exists():
-        console.print("[yellow]Database not initialized. Run 'jarvis db init' first.[/yellow]")
-        return 1
-
-    contacts = db.list_contacts(limit=args.limit)
-
-    if not contacts:
-        console.print("[dim]No contacts found. Add some with 'jarvis db add-contact'[/dim]")
-        return 0
-
-    table = Table(title=f"Contacts ({len(contacts)})")
-    table.add_column("ID", style="dim")
-    table.add_column("Name")
-    table.add_column("Relationship")
-    table.add_column("Style")
-    table.add_column("Chat ID", style="dim")
-
-    for c in contacts:
-        table.add_row(
-            str(c.id),
-            c.display_name,
-            c.relationship or "",
-            c.style_notes or "",
-            c.chat_id or "",
-        )
-
-    console.print(table)
     return 0
 
 
@@ -594,6 +504,12 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
     from integrations.imessage import ChatDBReader
     from jarvis.search.segment_ingest import extract_segments
     from jarvis.search.vec_search import get_vec_searcher
+    from jarvis.topics.topic_segmenter import reset_segmenter
+    from jarvis.topics.segment_labeler import reset_labeler
+
+    # Reset singletons to force reload of refined logic/config
+    reset_segmenter()
+    reset_labeler()
 
     vec_searcher = get_vec_searcher(db)
 
@@ -613,7 +529,7 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
                     description=f"Processing {current}/{total}: {chat_id[:30]}...",
                 )
 
-            stats = extract_segments(reader, db, vec_searcher, progress_cb)
+            stats = extract_segments(reader, db, vec_searcher, progress_cb, limit=args.limit)
 
     console.print("\n[bold green]Extraction complete![/bold green]")
     console.print(f"  Messages scanned: {stats['total_messages_scanned']}")
@@ -723,8 +639,6 @@ def _cmd_db_stats(args: argparse.Namespace) -> int:
 
     overview.add_row("Contacts", str(stats["contacts"]))
     overview.add_row("Chunks (topic segments)", str(stats.get("chunks", 0)))
-    overview.add_row("Legacy pairs", str(stats.get("legacy_pairs", 0)))
-    overview.add_row("Legacy embeddings", str(stats.get("legacy_embeddings", 0)))
 
     console.print(overview)
 
@@ -841,27 +755,15 @@ def create_parser() -> argparse.ArgumentParser:
     db_init_parser = db_subparsers.add_parser("init", help="initialize the database")
     db_init_parser.add_argument("--force", action="store_true", help="force reinitialization")
 
-    # db add-contact
-    db_add_contact_parser = db_subparsers.add_parser("add-contact", help="add or update a contact")
-    db_add_contact_parser.add_argument(
-        "--name", required=True, metavar="<name>", help="contact name"
-    )
-    db_add_contact_parser.add_argument("--relationship", metavar="<type>", help="relationship type")
-    db_add_contact_parser.add_argument("--style", metavar="<notes>", help="communication style")
-    db_add_contact_parser.add_argument("--phone", metavar="<number>", help="phone or email")
-    db_add_contact_parser.add_argument(
-        "--chat-id", dest="chat_id", metavar="<id>", help="iMessage chat ID"
-    )
-
-    # db sync-contacts
-    db_subparsers.add_parser("sync-contacts", help="import names from macOS Address Book")
-
-    # db list-contacts
-    db_list_contacts_parser = db_subparsers.add_parser("list-contacts", help="list all contacts")
-    db_list_contacts_parser.add_argument("-l", "--limit", type=int, default=100, metavar="<n>")
-
     # db extract
-    db_subparsers.add_parser("extract", help="segment conversations and index chunks")
+    db_extract_parser = db_subparsers.add_parser("extract", help="segment conversations and index chunks")
+    db_extract_parser.add_argument(
+        "--limit",
+        type=int,
+        default=1000,
+        metavar="<n>",
+        help="max conversations to process",
+    )
 
     # db stats
     db_stats_parser = db_subparsers.add_parser("stats", help="show database statistics")

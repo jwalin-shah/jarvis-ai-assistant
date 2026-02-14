@@ -69,6 +69,7 @@ class TaskWorker:
         self._handlers[TaskType.SINGLE_EXPORT] = self._handle_single_export
         self._handlers[TaskType.SINGLE_SUMMARIZE] = self._handle_single_summarize
         self._handlers[TaskType.SINGLE_GENERATE_REPLY] = self._handle_single_generate_reply
+        self._handlers[TaskType.FACT_EXTRACTION] = self._handle_fact_extraction
 
     def register_handler(self, task_type: TaskType, handler: TaskHandler) -> None:
         """Register a custom handler for a task type.
@@ -480,6 +481,145 @@ class TaskWorker:
 
         task.params = {**task.params, "chat_ids": [chat_id]}
         return self._handle_batch_generate_replies(task, update_progress)
+
+    def _handle_fact_extraction(
+        self,
+        task: Task,
+        update_progress: Callable[[int, int, str], None],
+    ) -> TaskResult:
+        """Handle background fact extraction task using sliding windows with progress tracking."""
+        from integrations.imessage import ChatDBReader
+        from jarvis.contacts.instruction_extractor import get_instruction_extractor
+        from jarvis.contacts.fact_storage import save_facts
+        from jarvis.db import get_db
+
+        params = task.params
+        chat_id = params.get("chat_id")
+        if not chat_id:
+            return TaskResult(success=False, error="No chat_id provided")
+
+        window_size = params.get("window_size", 25)
+        overlap = params.get("overlap", 5)
+        force_historical = params.get("force_historical", False)  # Re-extract everything
+
+        db = get_db()
+
+        # Get last extracted rowid for this chat
+        last_extracted_rowid = None
+        with db.connection() as conn:
+            row = conn.execute(
+                "SELECT last_extracted_rowid FROM contacts WHERE chat_id = ?", (chat_id,)
+            ).fetchone()
+            if row and row[0]:
+                last_extracted_rowid = row[0]
+
+        update_progress(0, 100, f"Fetching messages for {chat_id}")
+
+        with ChatDBReader() as reader:
+            if force_historical or last_extracted_rowid is None:
+                # Historical pass: get all messages
+                messages = reader.get_messages(chat_id, limit=10000)
+                messages.reverse()  # oldest first
+                mode = "historical"
+            else:
+                # Incremental: get messages after last_extracted_rowid
+                messages = reader.get_messages_after(last_extracted_rowid, chat_id, limit=10000)
+                # Already returns oldest first
+                mode = "incremental"
+
+            if not messages:
+                return TaskResult(
+                    success=True,
+                    items_processed=0,
+                    data={"mode": mode, "fact_count": 0, "messages_processed": 0},
+                )
+
+            # Get names for identity anchor
+            user_name = reader.get_user_name()
+            contact_name = "Contact"
+            with db.connection() as conn:
+                row = conn.execute(
+                    "SELECT display_name FROM contacts WHERE chat_id = ?", (chat_id,)
+                ).fetchone()
+                if row and row[0]:
+                    contact_name = row[0].split()[0]
+
+            # Create sliding windows with overlap for better NLI
+            windows = []
+            for i in range(0, len(messages), window_size - overlap):
+                window = messages[i : i + window_size]
+                if len(window) < 5:
+                    break
+
+                from dataclasses import dataclass
+
+                @dataclass
+                class MockSeg:
+                    messages: list
+                    text: str
+
+                seg_lines = []
+                if window:
+                    curr_sender = user_name if window[0].is_from_me else contact_name
+                    curr_msgs = []
+                    for m in window:
+                        sender = user_name if m.is_from_me else contact_name
+                        text = " ".join((m.text or "").splitlines()).strip()
+                        if not text: continue
+                        if sender == curr_sender:
+                            curr_msgs.append(text)
+                        else:
+                            if curr_msgs: seg_lines.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                            curr_sender = sender
+                            curr_msgs = [text]
+                    if curr_msgs: seg_lines.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                
+                seg_text = "\n".join(seg_lines)
+                windows.append(MockSeg(messages=window, text=seg_text))
+
+            total_segments = len(windows)
+            if not total_segments:
+                return TaskResult(success=True, items_processed=0)
+
+            extractor = get_instruction_extractor(tier="0.7b")
+            total_extracted = 0
+            max_rowid_processed = last_extracted_rowid or 0
+            for msg in messages:
+                if msg.id and msg.id > max_rowid_processed:
+                    max_rowid_processed = msg.id
+
+            for i, seg in enumerate(windows):
+                update_progress(
+                    i, total_segments, f"Extracting from window {i + 1}/{total_segments} ({mode})"
+                )
+
+                facts = extractor.extract_facts_from_segment(
+                    seg, contact_id=chat_id, contact_name=contact_name, user_name=user_name
+                )
+                if facts:
+                    total_extracted += len(facts)
+                    save_facts(facts, chat_id)
+
+            # Update tracking after successful extraction
+            if max_rowid_processed > (last_extracted_rowid or 0):
+                with db.connection() as conn:
+                    conn.execute(
+                        """UPDATE contacts 
+                           SET last_extracted_rowid = ?, last_extracted_at = CURRENT_TIMESTAMP 
+                           WHERE chat_id = ?""",
+                        (max_rowid_processed, chat_id),
+                    )
+
+            return TaskResult(
+                success=True,
+                items_processed=total_extracted,
+                data={
+                    "mode": mode,
+                    "fact_count": total_extracted,
+                    "messages_processed": len(messages),
+                    "last_extracted_rowid": max_rowid_processed,
+                },
+            )
 
 
 # Module-level singleton

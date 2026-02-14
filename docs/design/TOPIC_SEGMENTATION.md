@@ -1,10 +1,10 @@
 # Topic Segmentation
 
-> **Last Updated:** 2026-02-10
+> **Last Updated:** 2026-02-13
 
 Semantic topic boundary detection for conversation chunking. Replaces arbitrary time-based turn bundling with intelligent boundary detection.
 
-**Module:** `jarvis/topic_segmenter.py`
+**Module:** `jarvis/topics/topic_segmenter.py`
 
 ## Overview
 
@@ -18,15 +18,17 @@ Topic segmentation divides long conversations into coherent topic chunks, enabli
 ```
 Raw Messages
     |
-normalize_for_task_with_entities()  -> text + entities
+normalize_text()  -> expanded slang, cleaned text
     |
-CorefResolver.resolve() (optional)  -> resolved pronouns
+embedder.encode()                   -> (N, 384) embeddings via get_embedder()
     |
-embedder.encode()                   -> (N, 384) embeddings
+EntityAnchorTracker.get_anchors()  -> entity continuity check
     |
-TopicSegmenter._compute_boundary_scores()
+boundary_score = 0.4 * embedding_drift + 0.3 * entity_component + 0.2 * time_penalty + shift_penalty
     |
-Split at boundaries + merge small segments
+Split at boundaries (score >= threshold OR hard time gap)
+    |
+_create_segment() + _compute_segment_metadata()
     |
 list[TopicSegment]
 ```
@@ -36,13 +38,17 @@ list[TopicSegment]
 The segmenter computes a boundary score between consecutive messages:
 
 ```python
-boundary_score = 0.4 * embedding_drift
-               + 0.3 * (1 - entity_jaccard)
-               + 0.2 * time_penalty
-               + 0.4 * topic_shift_marker  # only if marker present
+embedding_component = drift  # cosine similarity drop
+entity_component = 1.0 - entity_jaccard if entity_jaccard > 0 else 1.0
+time_penalty = min(time_diff_hours / dynamic_gap_threshold, 1.0) if is_large_gap else 0.0
+shift_penalty = topic_shift_weight if has_topic_shift else 0.0
+
+boundary_score = (
+    0.4 * embedding_component + 0.3 * entity_component + 0.2 * time_penalty + shift_penalty
+)
 ```
 
-A boundary is created when `score >= threshold` (default 0.5).
+A boundary is created when `score >= boundary_threshold` (default 0.5) OR when there's a hard time gap (30+ minutes by default).
 
 ### Signal Components
 
@@ -73,10 +79,21 @@ For each position `i`, the algorithm computes a centroid (mean embedding) of the
     "topic_shift_weight": 0.4,
     "min_segment_messages": 1,
     "max_segment_messages": 50,
-    "boundary_threshold": 0.5
+    "boundary_threshold": 0.5,
+    "drift_threshold": 0.35
   }
 }
 ```
+
+### Key Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `boundary_threshold` | 0.5 | Score above this creates a boundary |
+| `drift_threshold` | 0.35 | Default threshold in `segment_conversation()` function |
+| `similarity_threshold` | 0.55 | Cosine similarity below this indicates drift |
+| `time_gap_minutes` | 30.0 | Hard gap threshold (always splits) |
+| `soft_gap_minutes` | 10.0 | Soft gap threshold (contributes to score) |
 
 ## Data Types
 
@@ -110,26 +127,33 @@ class SegmentBoundaryReason(Enum):
 ### Basic Segmentation
 
 ```python
-from jarvis.topic_segmenter import segment_conversation
+from jarvis.topics.topic_segmenter import segment_conversation
 
-segments = segment_conversation(messages, contact_id="...")
+# With pre-fetched embeddings (for efficiency)
+segments = segment_conversation(
+    messages, 
+    contact_id="...",
+    drift_threshold=0.35,
+    pre_fetched_embeddings={msg.id: embedding for msg, embedding in zip(messages, embeddings)}
+)
 
 for seg in segments:
-    print(f"Topic: {seg.message_count} messages, {seg.duration_seconds:.0f}s")
-    print(f"Entities: {seg.entities}")
+    print(f"Segment: {seg.message_count} messages")
+    print(f"Topic label: {seg.topic_label}")
+    print(f"Summary: {seg.summary}")
+    print(f"Keywords: {seg.keywords}")
 ```
 
 ### Extraction Pipeline Integration
 
 ```python
-from jarvis.topic_segmenter import segment_for_extraction
+from jarvis.topics.segment_pipeline import process_segments
 
-# Returns list[list[Message]] for direct use in extraction
-message_groups = segment_for_extraction(messages)
+# Full pipeline: persist segments, optionally extract facts
+results = process_segments(messages, contact_id="...", extract_facts=True)
 
-for group in message_groups:
-    # Process each topic group
-    extract_from_messages(group)
+for seg in results.segments:
+    print(f"Segment {seg.segment_id}: {seg.message_count} messages")
 ```
 
 ## Optional: Coreference Resolution
@@ -142,26 +166,31 @@ When `coreference_enabled=True`, the segmenter resolves pronouns before embeddin
 
 ## Performance
 
-- Embedding computation: ~1ms per message (batched)
+- Embedding computation: ~1ms per message (batched via `embed_batch`)
 - Boundary scoring: O(n) linear scan
 - Total: ~3-5ms for 100 messages
-- Embeddings cached via `CachedEmbedder`
+- Embeddings cached via `CachedEmbedder` (1000 entry LRU)
+- Entity anchors cached via `EntityAnchorTracker` singleton
 
 ## Topic Shift Markers
 
-Detected from `text_normalizer.TOPIC_SHIFT_MARKERS`:
+Detected from `jarvis.text_normalizer.TOPIC_SHIFT_MARKERS`:
 
 ```python
-TOPIC_SHIFT_MARKERS = {
+TOPIC_SHIFT_MARKERS = frozenset({
     "btw", "anyway", "oh also", "random but",
     "unrelated", "side note", "speaking of",
-    "quick question", "totally different topic"
-}
+    "quick question", "totally different topic",
+    "by the way", "side note", "changing subject"
+})
 ```
 
 ## Related Modules
 
-- `jarvis/text_normalizer.py` - Entity extraction, topic shift detection
-- `jarvis/embedding_adapter.py` - Embedding computation
-- `jarvis/coref_resolver.py` - Coreference resolution (optional)
-- `jarvis/ner_client.py` - Named entity recognition
+- `jarvis/topics/entity_anchor.py` - EntityAnchorTracker for continuity detection
+- `jarvis/topics/segment_labeler.py` - Topic label generation
+- `jarvis/topics/segment_storage.py` - Database persistence
+- `jarvis/topics/segment_pipeline.py` - Full extraction pipeline orchestration
+- `jarvis/topics/segment_extractor.py` - Bridge to fact extraction
+- `jarvis/text_normalizer.py` - Text normalization, topic shift detection
+- `jarvis/embedding_adapter.py` - Embedding computation via get_embedder()

@@ -23,7 +23,7 @@ class MessageGateFeatures:
     """Extract lightweight numeric features from messages for the gate model."""
 
     PREF_WORDS = {"love", "like", "hate", "prefer", "obsessed", "favorite", "enjoy", "allergic"}
-    LOCATION_WORDS = {"live", "living", "moving", "moved", "from", "to", "based", "relocating"}
+    LOCATION_WORDS = {"live", "living", "moving", "moved", "from", "to", "based", "relocating", "sf", "dallas", "nyc", "austin"}
     REL_WORDS = {
         "my",
         "mom",
@@ -36,8 +36,11 @@ class MessageGateFeatures:
         "boyfriend",
         "partner",
         "friend",
+        "neighbor",
     }
-    HEALTH_WORDS = {"pain", "hospital", "injury", "allergic", "anxious", "depressed", "headache"}
+    HEALTH_WORDS = {"pain", "hospital", "injury", "allergic", "anxious", "depressed", "headache", "surgery", "therapy", "dental"}
+    WORK_WORDS = {"work", "job", "hired", "fired", "interview", "company", "office", "career", "salary", "raise"}
+    PERSONAL_WORDS = {"jacket", "car", "tesla", "dog", "zodiac", "gemini", "bday", "birthday", "gift", "bought"}
     BOT_PATTERNS = {
         "cvs pharmacy",
         "prescription is ready",
@@ -59,6 +62,8 @@ class MessageGateFeatures:
             "location_marker",
             "relationship_marker",
             "health_marker",
+            "work_marker",
+            "personal_marker",
             "likely_bot",
             "is_short_msg",
             "is_from_me",
@@ -88,11 +93,13 @@ class MessageGateFeatures:
             (digit_count / char_len) if char_len else 0.0,
             1.0 if "?" in t else 0.0,
             1.0 if "!" in t else 0.0,
-            1.0 if any(w in {"i", "i'm", "my", "me"} for w in words[:5]) else 0.0,
+            1.0 if any(w in {"i", "i'm", "my", "me", "we"} for w in words[:5]) else 0.0,
             1.0 if any(w in lower for w in self.PREF_WORDS) else 0.0,
             1.0 if any(w in lower for w in self.LOCATION_WORDS) else 0.0,
             1.0 if any(w in lower for w in self.REL_WORDS) else 0.0,
             1.0 if any(w in lower for w in self.HEALTH_WORDS) else 0.0,
+            1.0 if any(w in lower for w in self.WORK_WORDS) else 0.0,
+            1.0 if any(w in lower for w in self.PERSONAL_WORDS) else 0.0,
             1.0 if any(p in lower for p in self.BOT_PATTERNS) else 0.0,
             1.0 if word_len <= 3 else 0.0,
             1.0 if is_from_me else 0.0,
@@ -112,7 +119,7 @@ class MessageGate:
         self.model: Any = None
         self.vectorizer: Any = None
         self.scaler: Any = None
-        self.threshold: float = 0.5
+        self.threshold: float = 0.35  # Lowered from 0.5
         self.num_features = MessageGateFeatures()
         self._loaded = False
 

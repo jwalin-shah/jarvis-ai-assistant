@@ -194,89 +194,6 @@ class MigrationTester:
                 (chat_id, name, contact, rel),
             )
 
-        # Insert sample pairs
-        for i in range(1, 101):
-            contact_id = (i % 3) + 1
-
-            # Build INSERT based on available columns for version
-            columns = [
-                "contact_id",
-                "trigger_text",
-                "response_text",
-                "trigger_timestamp",
-                "response_timestamp",
-                "chat_id",
-            ]
-            values: list[Any] = [
-                contact_id,
-                f"Trigger message {i}",
-                f"Response message {i}",
-                datetime.now(),
-                datetime.now(),
-                f"chat_{contact_id:03d}",
-            ]
-
-            # Add version-specific columns
-            if version >= 3:
-                columns.append("context_text")
-                values.append(f"Context for message {i}")
-
-            if version >= 4:
-                columns.append("is_group")
-                values.append(False)
-
-            if version >= 5:
-                columns.append("is_holdout")
-                values.append(i % 10 == 0)  # 10% holdout
-
-            if version >= 6:
-                columns.extend(
-                    [
-                        "gate_a_passed",
-                        "gate_b_score",
-                        "gate_c_verdict",
-                        "validity_status",
-                    ]
-                )
-                values.extend([True, 0.85, "accept", "valid"])
-
-            if version >= 7:
-                columns.extend(
-                    [
-                        "trigger_da_type",
-                        "trigger_da_conf",
-                        "response_da_type",
-                        "response_da_conf",
-                        "cluster_id",
-                    ]
-                )
-                values.extend(
-                    [
-                        "WH_QUESTION" if i % 2 == 0 else "STATEMENT",
-                        0.9,
-                        "ANSWER" if i % 2 == 0 else "ACKNOWLEDGE",
-                        0.85,
-                        i % 5,
-                    ]
-                )
-
-            if version >= 9:
-                columns.append("content_hash")
-                import hashlib
-
-                hash_val = hashlib.md5(
-                    f"trigger{i}|response{i}".encode(),
-                    usedforsecurity=False,
-                ).hexdigest()
-                values.append(hash_val)
-
-            # Execute INSERT
-            placeholders = ",".join(["?"] * len(values))
-            conn.execute(
-                f"INSERT INTO pairs ({','.join(columns)}) VALUES ({placeholders})",
-                values,
-            )
-
         # Insert sample facts (v12+)
         if version >= 12:
             facts = [
@@ -393,81 +310,8 @@ class MigrationTester:
         to_version: int,
     ) -> None:
         """Run migrations between versions."""
-        # Import here to avoid circular dependency
-        from jarvis.db.schema import VALID_COLUMN_TYPES
-
-        # Migration v2 -> v3: Add context_text
-        if from_version <= 2 < to_version:
-            try:
-                conn.execute("ALTER TABLE pairs ADD COLUMN context_text TEXT")
-            except sqlite3.OperationalError as e:
-                if "duplicate column" not in str(e).lower():
-                    raise
-
-        # Migration v3 -> v4: Add is_group
-        if from_version <= 3 < to_version:
-            try:
-                conn.execute("ALTER TABLE pairs ADD COLUMN is_group BOOLEAN DEFAULT FALSE")
-            except sqlite3.OperationalError as e:
-                if "duplicate column" not in str(e).lower():
-                    raise
-
-        # Migration v4 -> v5: Add is_holdout
-        if from_version <= 4 < to_version:
-            try:
-                conn.execute("ALTER TABLE pairs ADD COLUMN is_holdout BOOLEAN DEFAULT FALSE")
-            except sqlite3.OperationalError as e:
-                if "duplicate column" not in str(e).lower():
-                    raise
-
-        # Migration v5 -> v6: Validity gates
-        if from_version <= 5 < to_version:
-            gate_columns = [
-                ("gate_a_passed", "BOOLEAN"),
-                ("gate_b_score", "REAL"),
-                ("gate_c_verdict", "TEXT"),
-                ("validity_status", "TEXT"),
-            ]
-            for col_name, col_type in gate_columns:
-                if col_name not in VALID_MIGRATION_COLUMNS:
-                    raise ValueError(f"Invalid migration column: {col_name}")
-                if col_type not in VALID_COLUMN_TYPES:
-                    raise ValueError(f"Invalid column type: {col_type}")
-                try:
-                    conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
-                except sqlite3.OperationalError as e:
-                    if "duplicate column" not in str(e).lower():
-                        raise
-
-        # Migration v6 -> v7: Dialogue acts
-        if from_version <= 6 < to_version:
-            da_columns = [
-                ("trigger_da_type", "TEXT"),
-                ("trigger_da_conf", "REAL"),
-                ("response_da_type", "TEXT"),
-                ("response_da_conf", "REAL"),
-                ("cluster_id", "INTEGER"),
-            ]
-            for col_name, col_type in da_columns:
-                if col_name not in VALID_MIGRATION_COLUMNS:
-                    raise ValueError(f"Invalid migration column: {col_name}")
-                if col_type not in VALID_COLUMN_TYPES:
-                    raise ValueError(f"Invalid column type: {col_type}")
-                try:
-                    conn.execute(f"ALTER TABLE pairs ADD COLUMN {col_name} {col_type}")
-                except sqlite3.OperationalError as e:
-                    if "duplicate column" not in str(e).lower():
-                        raise
-
-        # Migration v8 -> v9: Content hash
-        if from_version < 9 <= to_version:
-            try:
-                conn.execute("ALTER TABLE pairs ADD COLUMN content_hash TEXT")
-            except sqlite3.OperationalError as e:
-                if "duplicate column" not in str(e).lower():
-                    raise
-
         # Migration to current: Apply full schema
+        # Legacy pairs table migrations (v2-v9) removed - pairs is deprecated
         conn.executescript(SCHEMA_SQL)
 
         # Update schema version
@@ -519,13 +363,6 @@ class MigrationTester:
 
         # Version-specific checks
         with sqlite3.connect(str(db_path)) as conn:
-            # Verify new columns have appropriate defaults
-            if from_version < 4 <= to_version:
-                cursor = conn.execute("SELECT COUNT(*) FROM pairs WHERE is_group IS NULL")
-                null_count = cursor.fetchone()[0]
-                if null_count > 0:
-                    errors.append(f"{null_count} rows have NULL is_group")
-
             # Verify foreign key constraints
             cursor = conn.execute("PRAGMA foreign_key_check")
             fk_violations = cursor.fetchall()
@@ -567,9 +404,9 @@ class MigrationTester:
             # Create database at higher version
             db_path = self.create_db_at_version(from_version, with_sample_data)
 
-            # Record pre-rollback state
+            # Record pre-rollback state (use contacts table instead of deprecated pairs)
             with sqlite3.connect(str(db_path)) as conn:
-                cursor = conn.execute("SELECT COUNT(*) FROM pairs")
+                cursor = conn.execute("SELECT COUNT(*) FROM contacts")
                 pre_rollback_count = cursor.fetchone()[0]
 
             # Simulate rollback by:
@@ -596,8 +433,8 @@ class MigrationTester:
                         f"Rollback version mismatch: expected {to_version}, got {actual_version}"
                     )
 
-                # Verify data still accessible
-                cursor = conn.execute("SELECT COUNT(*) FROM pairs")
+                # Verify data still accessible (use contacts table instead of deprecated pairs)
+                cursor = conn.execute("SELECT COUNT(*) FROM contacts")
                 post_rollback_count = cursor.fetchone()[0]
 
                 if post_rollback_count != pre_rollback_count:
@@ -607,7 +444,7 @@ class MigrationTester:
 
                 # Verify core columns still work
                 cursor = conn.execute(
-                    "SELECT id, contact_id, trigger_text, response_text FROM pairs LIMIT 1"
+                    "SELECT id, chat_id, display_name FROM contacts LIMIT 1"
                 )
                 row = cursor.fetchone()
                 if row is None and pre_rollback_count > 0:

@@ -18,6 +18,7 @@ class GenerationRequest:
 
     Attributes:
         prompt: Input prompt for generation.
+        system_prompt: Optional system prompt to include in chat template.
         context_documents: RAG context documents to inject.
         few_shot_examples: Few-shot examples as (input, output) tuples.
         max_tokens: Maximum tokens to generate.
@@ -29,6 +30,7 @@ class GenerationRequest:
     """
 
     prompt: str
+    system_prompt: str | None = None
     context_documents: list[str] = field(default_factory=list)
     few_shot_examples: list[tuple[str, str]] = field(default_factory=list)
     max_tokens: int = 100

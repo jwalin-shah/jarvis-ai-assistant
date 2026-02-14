@@ -3,6 +3,7 @@
   import TagBadge from "./TagBadge.svelte";
   import TagPicker from "./TagPicker.svelte";
   import { createEventDispatcher } from "svelte";
+  import { formatParticipant } from "../../db";
 
   export let isOpen: boolean = false;
   export let tags: Tag[] = [];
@@ -71,7 +72,7 @@
           <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
             {#each selectedConversations.slice(0, 10) as conv (conv.chat_id)}
               <span class="px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full">
-                {conv.display_name || conv.participants.join(", ")}
+                {conv.display_name || conv.participants.map(p => formatParticipant(p)).join(", ")}
               </span>
             {/each}
             {#if selectedConversations.length > 10}

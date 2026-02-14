@@ -215,27 +215,6 @@ class EntitySpan:
     end: int
 
 
-# Module-level spaCy singleton (shared across all FactExtractor instances)
-_spacy_nlp: Any = None
-_spacy_nlp_lock = threading.Lock()
-
-
-def _get_shared_nlp() -> Any:
-    """Return shared spaCy model, loading once on first call (thread-safe)."""
-    global _spacy_nlp
-    if _spacy_nlp is None:
-        with _spacy_nlp_lock:
-            if _spacy_nlp is None:
-                try:
-                    import spacy
-
-                    _spacy_nlp = spacy.load("en_core_web_sm")
-                except (ImportError, OSError) as e:
-                    logger.warning("spaCy not available, using regex-only extraction: %s", e)
-                    _spacy_nlp = False  # sentinel: don't retry
-    return _spacy_nlp if _spacy_nlp is not False else None
-
-
 # Module-level contacts cache with TTL (shared across all FactExtractor instances).
 # Avoids repeated DB queries when multiple extractors are instantiated.
 _contacts_cache_data: list[tuple[str, str, set[str]]] | None = None
@@ -283,7 +262,6 @@ class FactExtractor:
     """Extracts structured facts from messages.
 
     Uses rule-based patterns as the primary extraction method.
-    Optionally uses spaCy NER for entity detection and NLI for verification.
     Includes quality filters to reject bot messages, vague subjects, and short phrases.
     """
 
@@ -293,10 +271,6 @@ class FactExtractor:
     ) -> None:
         self.confidence_threshold = confidence_threshold
         self._attribution_resolver = AttributionResolver()
-
-    def _get_nlp(self) -> Any:
-        """Return shared spaCy model singleton."""
-        return _get_shared_nlp()
 
     def extract_facts(self, messages: list[Any], contact_id: str = "") -> list[Fact]:
         """Extract facts from a list of messages.
@@ -821,122 +795,6 @@ class FactExtractor:
                 seen.add(key)
                 unique.append(fact)
         return unique
-
-    def extract_facts_with_ner(self, messages: list[Any], contact_id: str = "") -> list[Fact]:
-        """Extract facts using spaCy NER + rule-based patterns.
-
-        Falls back to pure rule-based if spaCy is unavailable.
-        """
-        nlp = self._get_nlp()
-        if nlp is None:
-            return self.extract_facts(messages, contact_id)
-
-        now = datetime.now().isoformat()
-        facts: list[Fact] = []
-
-        # Process in chunks for memory efficiency
-        chunk_size = 100
-        texts = [getattr(m, "text", "") or "" for m in messages if getattr(m, "text", None)]
-
-        for i in range(0, len(texts), chunk_size):
-            chunk = texts[i : i + chunk_size]
-            docs = list(nlp.pipe(chunk, batch_size=50))
-
-            for doc in docs:
-                text = doc.text
-                # Rule-based first
-                facts.extend(self._extract_rule_based(text, contact_id, now))
-
-                # Build dedup set for O(1) lookups instead of O(n) scans
-                _ner_seen = {(f.category, f.subject.lower()) for f in facts}
-
-                # NER-enhanced: extract entities spaCy found
-                for ent in doc.ents:
-                    ent_lower = ent.text.lower()
-                    if ent.label_ == "PERSON" and len(ent.text) > 1:
-                        if ("relationship", ent_lower) not in _ner_seen:
-                            facts.append(
-                                Fact(
-                                    category="relationship",
-                                    subject=ent.text,
-                                    predicate="mentioned_person",
-                                    source_text=text[:200],
-                                    confidence=0.4,
-                                    contact_id=contact_id,
-                                    extracted_at=now,
-                                )
-                            )
-                            _ner_seen.add(("relationship", ent_lower))
-                    elif ent.label_ in ("GPE", "LOC") and len(ent.text) > 1:
-                        if ("location", ent_lower) not in _ner_seen:
-                            facts.append(
-                                Fact(
-                                    category="location",
-                                    subject=ent.text,
-                                    predicate="mentioned_location",
-                                    source_text=text[:200],
-                                    confidence=0.3,
-                                    contact_id=contact_id,
-                                    extracted_at=now,
-                                )
-                            )
-                            _ner_seen.add(("location", ent_lower))
-                    elif ent.label_ == "ORG" and len(ent.text) > 1:
-                        if ("work", ent_lower) not in _ner_seen:
-                            facts.append(
-                                Fact(
-                                    category="work",
-                                    subject=ent.text,
-                                    predicate="mentioned_org",
-                                    source_text=text[:200],
-                                    confidence=0.3,
-                                    contact_id=contact_id,
-                                    extracted_at=now,
-                                )
-                            )
-                            _ner_seen.add(("work", ent_lower))
-
-        return self._deduplicate(facts)
-
-    # =========================================================================
-    # NER Person Extraction
-    # =========================================================================
-
-    def _extract_person_facts_ner(self, text: str, contact_id: str, timestamp: str) -> list[Fact]:
-        """Extract PERSON entities from text using spaCy NER.
-
-        Resolves person names to contacts and creates relationship facts.
-        Returns empty list if spaCy unavailable.
-        """
-        nlp = self._get_nlp()
-        if nlp is None:
-            return []
-
-        facts: list[Fact] = []
-        try:
-            doc = nlp(text)
-            for ent in doc.ents:
-                if ent.label_ == "PERSON" and len(ent.text) > 1:
-                    person_name = ent.text.strip()
-
-                    # Try to resolve to contact
-                    self._resolve_person_to_contact(person_name)
-
-                    facts.append(
-                        Fact(
-                            category="relationship",
-                            subject=person_name,
-                            predicate="mentioned_person",
-                            source_text=text[:200],
-                            confidence=0.5,
-                            contact_id=contact_id,
-                            extracted_at=timestamp,
-                        )
-                    )
-        except (RuntimeError, ValueError, TypeError, AttributeError) as e:
-            logger.warning("NER person extraction failed: %s", e)
-
-        return facts
 
     def _get_contacts_for_resolution(self) -> list[tuple[str, str, set[str]]]:
         """Load and cache contacts with pre-tokenized names for fuzzy matching.

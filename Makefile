@@ -167,6 +167,23 @@ endif
 	@echo "Results saved to test_results.txt and test_results.xml"
 
 # ============================================================================
+# HEALTH CHECKS & VALIDATION
+# Quick validation commands to catch common issues
+# ============================================================================
+
+# Quick health check - validates imports and basic connectivity
+health-check:
+	@uv run python scripts/health_check.py
+
+# Full self-test - validates all system components (more thorough)
+self-test:
+	@uv run python scripts/self_test.py
+
+# Pre-flight check before committing
+preflight: health-check test-fast
+	@echo "✅ Pre-flight checks passed! Ready to commit."
+
+# ============================================================================
 # TIERED TEST TARGETS (New Architecture)
 # ============================================================================
 

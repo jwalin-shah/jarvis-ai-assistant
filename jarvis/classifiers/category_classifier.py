@@ -242,6 +242,7 @@ class CategoryClassifier(EmbedderMixin):
         text: str,
         context: list[str],
         mobilization: MobilizationResult | None,
+        chat_id: str | None = None,
     ) -> CategoryResult | None:
         """Layer 1: LightGBM pipeline prediction.
 
@@ -256,15 +257,23 @@ class CategoryClassifier(EmbedderMixin):
             extractor = _get_feature_extractor()
 
             try:
-                embedding = self.embedder.encode([text], normalize=True)[0]
+                # Encode both text and context
+                embeddings = self.embedder.encode([text] + (context[-1:] if context else []), normalize=True)
+                embedding = embeddings[0]
+                # Use real context embedding if available, otherwise zeroed
+                if len(embeddings) > 1:
+                    context_embedding = embeddings[1]
+                else:
+                    context_embedding = np.zeros(384, dtype=np.float32)
             except Exception as embed_err:
                 logger.warning("BERT encode failed, falling back to default: %s", embed_err)
                 return None
 
+            # Pass chat_id to extractor for relationship features (if we decide to use them)
+            # For now, keep 147 features to avoid dimension mismatch with existing model
             non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
+            
             # Model trained with 915 features: BERT(384) + context_BERT(384) + handcrafted(147)
-            # Context BERT zeroed at inference — intentional auxiliary supervision (regularizer).
-            context_embedding = np.zeros(384, dtype=np.float32)
             features = np.concatenate([embedding, context_embedding, non_bert_features])
             features = features.reshape(1, -1)
 
@@ -291,6 +300,7 @@ class CategoryClassifier(EmbedderMixin):
         text: str,
         context: list[str] | None = None,
         mobilization: MobilizationResult | None = None,
+        chat_id: str | None = None,
     ) -> CategoryResult:
         """Classify message into category.
 
@@ -298,6 +308,7 @@ class CategoryClassifier(EmbedderMixin):
             text: Message text
             context: Recent conversation messages (before this message)
             mobilization: MobilizationResult from mobilization classifier
+            chat_id: Optional chat_id for relationship context
 
         Returns:
             CategoryResult with category, confidence, method
@@ -314,7 +325,7 @@ class CategoryClassifier(EmbedderMixin):
 
         result = self._classify_fast_path(text)
         if result is None:
-            result = self._classify_pipeline(text, context, mobilization)
+            result = self._classify_pipeline(text, context, mobilization, chat_id=chat_id)
         if result is None:
             log_event(
                 logger,

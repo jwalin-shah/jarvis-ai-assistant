@@ -90,7 +90,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     # Fine-tuned variants
     "lfm-1.2b-ft": ModelSpec(
         id="lfm-1.2b-ft",
-        path="models/lfm-1.2b-final",
+        path="mlx-community/LFM2.5-1.2B-Instruct-4bit",
         display_name="LFM 2.5 1.2B Fine-Tuned",
         size_gb=1.2,
         min_ram_gb=8,
@@ -118,11 +118,21 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         description="LFM 2.5 0.3B fine-tuned draft model for speculative decoding.",
         recommended_for=["speculative_decoding", "testing"],
     ),
+    "lfm-0.7b": ModelSpec(
+        id="lfm-0.7b",
+        path="models/lfm-0.7b-4bit",
+        display_name="LFM 2.5 700M (4-bit)",
+        size_gb=0.35,
+        min_ram_gb=6,
+        quality_tier="good",
+        description="LFM 2.5 700M with 4-bit quantization (local). Perfect for fact extraction.",
+        recommended_for=["fact_extraction", "balanced"],
+    ),
 }
 
 # Default model ID when none specified
 # LFM 2.5 fine-tuned is the default for conversational use cases
-DEFAULT_MODEL_ID = "lfm-1.2b-ft"
+DEFAULT_MODEL_ID = "lfm-0.7b"
 
 
 def get_model_spec(model_id: str) -> ModelSpec | None:

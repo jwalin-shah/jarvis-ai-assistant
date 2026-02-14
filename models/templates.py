@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, runtime_check
 
 import numpy as np
 
-from jarvis.embedding_adapter import get_embedder, reset_embedder
+from models.bert_embedder import get_embedder, reset_embedder
 from jarvis.errors import ErrorCode, JarvisError
 from jarvis.metrics import get_template_analytics
 

@@ -249,7 +249,7 @@ class ContactMixin:
     def delete_contact(self: JarvisDBBase, contact_id: int) -> bool:
         """Delete a contact and all associated data.
 
-        Removes pairs, artifacts, style, timing, drafts, and facts.
+        Removes segments, facts, style, timing, drafts, and scheduled drafts.
         """
         with self.connection() as conn:
             # Get chat_id before deletion for cache invalidation
@@ -257,19 +257,10 @@ class ContactMixin:
             row = cursor.fetchone()
             chat_id = row["chat_id"] if row else None
 
-            # Delete dependent tables that reference pairs
+            # Delete conversation segments and related data
             conn.execute(
-                """DELETE FROM pair_artifacts WHERE pair_id IN
-                   (SELECT id FROM pairs WHERE contact_id = ?)""",
-                (contact_id,),
+                "DELETE FROM conversation_segments WHERE contact_id = ?", (contact_id,)
             )
-            conn.execute(
-                """DELETE FROM pair_embeddings WHERE pair_id IN
-                   (SELECT id FROM pairs WHERE contact_id = ?)""",
-                (contact_id,),
-            )
-            # Delete pairs
-            conn.execute("DELETE FROM pairs WHERE contact_id = ?", (contact_id,))
             # Delete dependent tables that reference contacts directly
             conn.execute(
                 "DELETE FROM contact_style_targets WHERE contact_id = ?", (contact_id,)

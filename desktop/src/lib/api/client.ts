@@ -95,7 +95,7 @@ DownloadStatus,
   TimeRange,
   TimingSuggestionsResponse,
   TrendingPatterns,
-  TopicsResponse,
+
   VariantConfig,
 } from "./types";
 
@@ -283,19 +283,6 @@ class ApiClient {
       url
     );
     return response.messages;
-  }
-
-  // Topics endpoints
-  async getTopics(
-    chatId: string,
-    limit: number = 50,
-    refresh: boolean = false
-  ): Promise<TopicsResponse> {
-    let url = `/conversations/${encodeURIComponent(chatId)}/topics?limit=${limit}`;
-    if (refresh) {
-      url += "&refresh=true";
-    }
-    return this.request<TopicsResponse>(url, { method: "POST" });
   }
 
   // Search endpoint

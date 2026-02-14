@@ -156,6 +156,7 @@ Stores contact relationship metadata and handle mappings.
 | phone_or_email | TEXT | Primary contact method |
 | handles_json | TEXT | JSON array of associated handles |
 | relationship | TEXT | sister, coworker, friend, boss |
+| relationship_reasoning | TEXT | LLM-derived justification for relationship label (v18+) |
 | style_notes | TEXT | e.g. "casual, uses emojis" |
 | created_at | TIMESTAMP | Record creation time |
 | updated_at | TIMESTAMP | Last update time |
@@ -326,9 +327,9 @@ Extracted facts about contacts from message history. Used by the knowledge graph
 | contact_id | TEXT | FK to contacts (chat_id) |
 | category | TEXT | relationship, location, work, preference, event |
 | subject | TEXT | Entity name (e.g., "Sarah", "Austin", "Google") |
-| predicate | TEXT | Relation type (e.g., is_family_of, lives_in, works_at, likes) |
-| value | TEXT | Optional detail (e.g., "sister", "software engineer") |
-| confidence | REAL | 0.0-1.0, from rule-based patterns or NLI verification |
+| predicate | TEXT | Relation type (optional, can be empty) |
+| value | TEXT | Primary fact content (e.g., "is a software engineer") |
+| confidence | REAL | 0.0-1.0, from NLI verification |
 | source_message_id | INTEGER | Which message this fact was extracted from |
 | source_text | TEXT | Source message text (truncated to 500 chars) |
 | extracted_at | TIMESTAMP | When the fact was extracted |

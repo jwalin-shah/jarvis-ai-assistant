@@ -371,29 +371,6 @@ class TestExportRouter:
 
 
 # ---------------------------------------------------------------------------
-# Relationships Router
-# ---------------------------------------------------------------------------
-
-
-class TestRelationshipsRouter:
-    """Tests for /relationships endpoints."""
-
-    @patch("api.routers.relationships.load_profile")
-    def test_get_profile_not_found(self, mock_load):
-        """GET /relationships/{contact_id} returns 404 when no profile."""
-        from api.routers.relationships import router
-
-        app = FastAPI()
-        app.include_router(router)
-
-        mock_load.return_value = None
-
-        client = TestClient(app)
-        response = client.get("/relationships/unknown_contact")
-        assert response.status_code == 404
-
-
-# ---------------------------------------------------------------------------
 # Drafts Router
 # ---------------------------------------------------------------------------
 

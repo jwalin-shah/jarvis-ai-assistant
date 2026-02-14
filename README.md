@@ -182,12 +182,14 @@ uv run python scripts/check_gates.py results/latest/
 
 ```
 jarvis-ai-assistant/
-├── jarvis/             # CLI, config, metrics, export, intent classification
-│   ├── _cli_main.py    # CLI implementation (re-exported via cli/ package)
-│   ├── config.py       # Nested configuration with migration
-│   ├── export.py       # JSON/CSV/TXT export functionality
-│   ├── metrics.py      # Memory sampling, latency histograms, caching
-│   └── intent.py       # Intent classification for routing
+├── jarvis/             # CLI, config, metrics, export, core services
+│   ├── _cli_main.py    # CLI implementation
+│   ├── config.py       # Nested configuration
+│   ├── export.py       # JSON/CSV/TXT export
+│   ├── metrics.py      # Memory and latency tracking
+│   ├── classifiers/    # Intent, relationship, and pressure classification
+│   ├── socket_server.py # V2 Unix socket JSON-RPC server
+│   └── watcher.py      # chat.db real-time file watcher
 ├── api/                # FastAPI REST layer
 │   └── routers/        # Conversations, drafts, metrics, settings
 ├── benchmarks/         # Validation gate implementations
