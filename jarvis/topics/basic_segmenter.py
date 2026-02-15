@@ -12,12 +12,11 @@ without the overhead of TF-IDF labeling.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from jarvis.contracts.imessage import Message
@@ -79,6 +78,34 @@ def segment_conversation_basic(
 
     # Sort by date
     messages = sorted(messages, key=lambda m: m.date)
+
+    # Pre-filter junk/system/spam messages before embedding and boundary scoring.
+    from jarvis.contacts.junk_filters import is_junk_message
+    from jarvis.text_normalizer import normalize_text
+
+    filtered_messages: list[Message] = []
+    for m in messages:
+        raw_text = m.text or ""
+        norm_text = normalize_text(
+            raw_text,
+            expand_slang=True,
+            filter_garbage=True,
+            filter_attributed_artifacts=True,
+            strip_signatures=True,
+        )
+        if not norm_text:
+            continue
+        if is_junk_message(norm_text, m.chat_id):
+            continue
+        filtered_messages.append(m)
+
+    # If all messages are filtered, preserve fallback behavior.
+    if not filtered_messages:
+        if messages:
+            return [_create_basic_segment(messages, contact_id)]
+        return []
+
+    messages = filtered_messages
 
     if len(messages) < 2:
         return [_create_basic_segment(messages, contact_id)]

@@ -63,8 +63,9 @@ class TaskQueue:
         self._auto_persist = auto_persist
         self._callbacks: dict[str, list[Callable[[Task], None]]] = {}
 
-        # Load persisted state
-        self._load()
+        # Load persisted state only if auto_persist is enabled
+        if auto_persist:
+            self._load()
 
     def enqueue(
         self,

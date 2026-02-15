@@ -128,7 +128,6 @@ SLANG_MAP: dict[str, str] = {
     "frr": "for real",
     "frfr": "for real for real",
     "frfrfr": "for real for real",
-    "tbh": "to be honest",
     "tbhh": "to be honest",
     "lowkey": "kind of",
     "highkey": "definitely",

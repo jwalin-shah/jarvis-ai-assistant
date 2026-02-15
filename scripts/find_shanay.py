@@ -1,5 +1,6 @@
 from integrations.imessage.reader import get_connection_pool
 
+
 def find_shanay_messages():
     pool = get_connection_pool()
     with pool.connection() as conn:

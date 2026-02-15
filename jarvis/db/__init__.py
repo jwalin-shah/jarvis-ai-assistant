@@ -17,10 +17,11 @@ Usage:
 import threading
 from pathlib import Path
 
+from jarvis.cache import TTLCache
 from jarvis.db.contacts import ContactMixin
 from jarvis.db.core import JarvisDBBase
 from jarvis.db.index_versions import IndexVersionMixin
-from jarvis.cache import TTLCache
+from jarvis.db.reply_logs import ReplyLogMixin
 from jarvis.db.models import (
     INDEXES_DIR,
     JARVIS_DB_PATH,
@@ -44,6 +45,7 @@ class JarvisDB(
     ContactMixin,
     IndexVersionMixin,
     StatsMixin,
+    ReplyLogMixin,
 ):
     """Manager for the JARVIS SQLite database.
 

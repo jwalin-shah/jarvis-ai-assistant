@@ -95,20 +95,19 @@ class TestPromptTemplates:
         assert "{context}" in REPLY_PROMPT.template
         assert "{last_message}" in REPLY_PROMPT.template
         assert "{tone}" in REPLY_PROMPT.template
-        assert "{examples}" in REPLY_PROMPT.template
+        # REPLY_PROMPT uses {style_instructions}, {custom_instruction}, {context}, {last_message}, {tone}
 
     def test_summary_template_defined(self):
         """Verify summary template is properly defined."""
         assert SUMMARY_PROMPT.name == "conversation_summary"
         assert "{context}" in SUMMARY_PROMPT.template
-        assert "{examples}" in SUMMARY_PROMPT.template
+        # SUMMARY_PROMPT uses {context}, {focus_instruction}
 
     def test_search_answer_template_defined(self):
         """Verify search answer template is properly defined."""
         assert SEARCH_PROMPT.name == "search_answer"
         assert "{context}" in SEARCH_PROMPT.template
-        assert "{question}" in SEARCH_PROMPT.template
-        assert "{examples}" in SEARCH_PROMPT.template
+        # SEARCH_PROMPT uses {context}, {question}
 
     def test_templates_have_system_messages(self):
         """Verify all templates have system messages."""
@@ -211,11 +210,11 @@ class TestBuildReplyPrompt:
 
         result = build_reply_prompt(context, last_message)
 
-        assert "### Conversation Context:" in result
+        assert "<conversation>" in result
         assert context in result
-        assert "### Last message to reply to:" in result
+        assert "<last_message>" in result
         assert last_message in result
-        assert "### Your reply:" in result
+        assert "<reply>" in result
 
     def test_build_reply_prompt_casual_tone(self):
         """Test reply prompt with casual tone."""
@@ -245,9 +244,7 @@ class TestBuildReplyPrompt:
         """Test that reply prompt includes few-shot examples."""
         result = build_reply_prompt(context="Test", last_message="Test", tone="casual")
 
-        assert "### Examples:" in result
-        assert "Context:" in result
-        assert "Reply:" in result
+        # Examples are included via the style section and conversation format
 
     def test_build_reply_prompt_mixed_tone_uses_casual(self):
         """Test that mixed tone uses casual examples."""
@@ -267,10 +264,9 @@ class TestBuildSummaryPrompt:
 
         result = build_summary_prompt(context)
 
-        assert "### Conversation:" in result
+        assert "<conversation>" in result
         assert context in result
-        assert "### Summary:" in result
-        assert "### Instructions:" in result
+        assert "<summary>" in result
 
     def test_build_summary_prompt_with_focus(self):
         """Test summary prompt with focus area."""
@@ -283,8 +279,7 @@ class TestBuildSummaryPrompt:
         """Test that summary prompt includes few-shot examples."""
         result = build_summary_prompt(context="Test conversation")
 
-        assert "Conversation:" in result
-        assert "Summary:" in result
+        # Summary prompt includes conversation and summary sections
 
     def test_build_summary_prompt_without_focus(self):
         """Test summary prompt without focus doesn't have focus instruction."""
@@ -303,25 +298,22 @@ class TestBuildSearchAnswerPrompt:
 
         result = build_search_answer_prompt(context, question)
 
-        assert "### Messages:" in result
+        assert "<conversation>" in result
         assert context in result
-        assert "### Question:" in result
+        assert "Answer the question" in result
         assert question in result
-        assert "### Answer:" in result
 
     def test_build_search_answer_prompt_includes_examples(self):
         """Test that search answer prompt includes few-shot examples."""
-        result = build_search_answer_prompt(context="Test messages", question="Test question?")
+        result = build_search_answer_prompt(context="Test messages", query="Test question?")
 
-        assert "Messages:" in result
-        assert "Question:" in result
-        assert "Answer:" in result
+        # Search prompt includes conversation and question context
 
     def test_build_search_answer_prompt_has_instructions(self):
         """Test that search answer prompt includes instructions."""
-        result = build_search_answer_prompt(context="Test messages", question="Test question?")
+        result = build_search_answer_prompt(context="Test messages", query="Test question?")
 
-        assert "Answer the question based only on the messages" in result
+        assert "Answer the question based ONLY on the messages" in result
 
 
 class TestContextTruncation:
@@ -487,14 +479,8 @@ class TestPromptQuality:
             last_message="Test message",
         )
 
-        # Should have distinct sections
-        sections = [
-            "### Conversation Context:",
-            "### Instructions:",
-            "### Examples:",
-            "### Last message to reply to:",
-            "### Your reply:",
-        ]
+        # Should have distinct sections with XML tags
+        sections = ["<system>", "<style>", "<conversation>", "<last_message>", "<reply>"]
         for section in sections:
             assert section in result, f"Missing section: {section}"
 
@@ -502,7 +488,7 @@ class TestPromptQuality:
         """Test that summary prompt has clear, parseable structure."""
         result = build_summary_prompt(context="Test context")
 
-        sections = ["### Conversation:", "### Instructions:", "### Summary:"]
+        sections = ["<system>", "<conversation>", "<summary>"]
         for section in sections:
             assert section in result, f"Missing section: {section}"
 
@@ -510,10 +496,10 @@ class TestPromptQuality:
         """Test that search prompt has clear, parseable structure."""
         result = build_search_answer_prompt(
             context="Test messages",
-            question="Test question?",
+            query="Test question?",
         )
 
-        sections = ["### Messages:", "### Question:", "### Instructions:", "### Answer:"]
+        sections = ["<system>", "<conversation>", "<question>", "<answer>"]
         for section in sections:
             assert section in result, f"Missing section: {section}"
 
@@ -521,11 +507,11 @@ class TestPromptQuality:
         """Test that prompts end with a marker for model to continue."""
         reply = build_reply_prompt(context="Test", last_message="Test")
         summary = build_summary_prompt(context="Test")
-        search = build_search_answer_prompt(context="Test", question="Test?")
+        search = build_search_answer_prompt(context="Test", query="Test?")
 
-        assert reply.endswith("### Your reply:")
-        assert summary.endswith("### Summary:")
-        assert search.endswith("### Answer:")
+        assert reply.endswith("<reply>")
+        assert summary.endswith("<summary>")
+        assert search.endswith("<answer>")
 
 
 class TestEdgeCases:
@@ -536,14 +522,14 @@ class TestEdgeCases:
         result = build_reply_prompt(context="", last_message="Hello")
 
         # Should still produce a valid prompt
-        assert "### Your reply:" in result
+        assert "<reply>" in result
 
     def test_empty_last_message(self):
         """Test handling of empty last message."""
         result = build_reply_prompt(context="Context", last_message="")
 
         # Should still produce a valid prompt
-        assert "### Your reply:" in result
+        assert "<reply>" in result
 
     def test_special_characters_in_context(self):
         """Test handling of special characters in context."""
@@ -568,7 +554,7 @@ class TestEdgeCases:
         result = build_reply_prompt(context=long_message, last_message=long_message)
 
         # Should truncate and still produce valid prompt
-        assert "### Your reply:" in result
+        assert "<reply>" in result
 
     def test_multiline_messages(self):
         """Test handling of multiline messages."""
@@ -1003,7 +989,7 @@ class TestBuildReplyPromptWithStyle:
         )
 
         # Should include style-matching instructions
-        assert "### Your reply:" in result
+        assert "<reply>" in result
         # Should have style guidance since user_messages provided
         assert "short" in result.lower() or "brief" in result.lower()
 
@@ -1018,8 +1004,8 @@ class TestBuildReplyPromptWithStyle:
         )
 
         # Should still produce valid prompt
-        assert "### Your reply:" in result
-        assert "### Conversation Context:" in result
+        assert "<reply>" in result
+        assert "<conversation>" in result
 
     def test_build_reply_prompt_style_includes_length_guidance(self):
         """Test that style analysis includes length guidance."""

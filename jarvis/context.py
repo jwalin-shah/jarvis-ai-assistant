@@ -6,6 +6,7 @@ Retrieves and formats iMessage data for use in LLM prompts.
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from contracts.imessage import Conversation, Message, iMessageReader
 
@@ -22,6 +23,9 @@ class ReplyContext:
     formatted_context: str  # Ready for LLM prompt
     last_received_message: Message | None
     current_topic: str | None = None  # Topic label of current conversation thread
+    contact_facts: str = ""  # Formatted facts for prompt
+    relationship_graph: str = ""  # Formatted graph context
+    contact_profile: dict[str, Any] | None = None  # Profile for style matching
 
 
 @dataclass
@@ -120,7 +124,7 @@ class ContextFetcher:
         return message.sender_name or message.sender
 
     def _format_messages(self, messages: list[Message], participant_names: list[str]) -> str:
-        """Format messages as context for LLM.
+        """Format messages as turn-based context for LLM.
 
         Args:
             messages: List of messages to format
@@ -140,37 +144,55 @@ class ContextFetcher:
             lines.append(f"Conversation with: {names_str}")
         lines.append("---")
 
-        # Format each message
-        for msg in messages:
-            # Skip system messages from formatting (or format them specially)
-            if msg.is_system_message:
-                timestamp = msg.date.strftime("%Y-%m-%d %H:%M")
-                lines.append(f"[{timestamp}] [System] {msg.text}")
-                continue
+        # Turn-based grouping: merge consecutive messages from same sender
+        if messages:
+            current_sender = self._format_sender_name(messages[0])
+            current_msgs = []
 
-            timestamp = msg.date.strftime("%Y-%m-%d %H:%M")
-            sender = self._format_sender_name(msg)
-            text = msg.text
+            for msg in messages:
+                if msg.is_system_message:
+                    # Flush current turn before system message
+                    if current_msgs:
+                        lines.append(f"{current_sender}: {' '.join(current_msgs)}")
+                        current_msgs = []
 
-            # Include attachment info if present
-            if msg.attachments:
-                attachment_info = []
-                for att in msg.attachments:
-                    if att.mime_type and att.mime_type.startswith("image/"):
-                        attachment_info.append("[Image]")
-                    elif att.mime_type and att.mime_type.startswith("video/"):
-                        attachment_info.append("[Video]")
-                    elif att.mime_type and att.mime_type.startswith("audio/"):
-                        attachment_info.append("[Audio]")
-                    else:
-                        attachment_info.append(f"[Attachment: {att.filename}]")
+                    timestamp = msg.date.strftime("%H:%M")
+                    lines.append(f"[{timestamp}] [System] {msg.text}")
+                    continue
 
-                if text:
-                    text = f"{text} {' '.join(attachment_info)}"
+                sender = self._format_sender_name(msg)
+                text = msg.text or ""
+
+                # Add attachment info
+                if msg.attachments:
+                    attachment_info = []
+                    for att in msg.attachments:
+                        if att.mime_type and att.mime_type.startswith("image/"):
+                            attachment_info.append("[Image]")
+                        elif att.mime_type and att.mime_type.startswith("video/"):
+                            attachment_info.append("[Video]")
+                        elif att.mime_type and att.mime_type.startswith("audio/"):
+                            attachment_info.append("[Audio]")
+                        else:
+                            attachment_info.append(f"[Attachment: {att.filename}]")
+
+                    text = f"{text} {' '.join(attachment_info)}".strip()
+
+                if not text:
+                    continue
+
+                if sender == current_sender:
+                    current_msgs.append(text)
                 else:
-                    text = " ".join(attachment_info)
+                    # Flush previous turn
+                    if current_msgs:
+                        lines.append(f"{current_sender}: {' '.join(current_msgs)}")
+                    current_sender = sender
+                    current_msgs = [text]
 
-            lines.append(f"[{timestamp}] {sender}: {text}")
+            # Final flush
+            if current_msgs:
+                lines.append(f"{current_sender}: {' '.join(current_msgs)}")
 
         lines.append("---")
 
@@ -224,26 +246,58 @@ class ContextFetcher:
         # Messages come newest-first, reverse for chronological order
         messages = messages[::-1]
 
-        participant_names = self._get_participant_names(chat_id)
-        formatted = self._format_messages(messages, participant_names)
-
         # Find last received message (not from me) - iterate backwards
         last_received: Message | None = None
-        for msg in messages[::-1]:
+        last_received_idx = -1
+        for i, msg in enumerate(reversed(messages)):
             if not msg.is_from_me:
                 last_received = msg
+                last_received_idx = len(messages) - 1 - i
                 break
 
-        # Find current topic from segments (most recent segment containing messages)
-        current_topic = self._get_current_topic(chat_id, messages)
+        # TRUNCATE: Only include messages up to the last received one
+        if last_received_idx != -1:
+            context_messages = messages[:last_received_idx + 1]
+        else:
+            context_messages = messages
+
+        participant_names = self._get_participant_names(chat_id)
+        formatted = self._format_messages(context_messages, participant_names)
+
+        # Find current topic from segments
+        current_topic = self._get_current_topic(chat_id, context_messages)
+
+        # V4 ENHANCEMENT: Fetch facts and profile
+        contact_facts = ""
+        relationship_graph = ""
+        contact_profile = None
+
+        try:
+            from jarvis.contacts.fact_storage import get_facts_for_contact
+            from jarvis.prompts.builders import format_facts_for_prompt
+            facts = get_facts_for_contact(chat_id)
+            contact_facts = format_facts_for_prompt(facts)
+        except Exception:
+            pass
+
+        try:
+            from jarvis.contacts.contact_profile import get_contact_profile
+            profile = get_contact_profile(chat_id)
+            if profile:
+                contact_profile = profile.to_dict()
+        except Exception:
+            pass
 
         return ReplyContext(
             chat_id=chat_id,
             participant_names=participant_names,
-            messages=messages,
+            messages=context_messages,
             formatted_context=formatted,
             last_received_message=last_received,
             current_topic=current_topic,
+            contact_facts=contact_facts,
+            relationship_graph=relationship_graph,
+            contact_profile=contact_profile,
         )
 
     def _get_current_topic(self, chat_id: str, messages: list[Message]) -> str | None:

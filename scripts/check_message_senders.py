@@ -4,9 +4,9 @@ target_chat_id = 'iMessage;-;+15629643639'
 
 with ChatDBReader() as reader:
     messages = reader.get_messages(target_chat_id, limit=500)
-    
+
     keywords = ["neuropathy", "ultimate frisbee"]
-    
+
     print(f"--- Message Sender Check for {target_chat_id} ---")
     for m in messages:
         text = (m.text or "").lower()

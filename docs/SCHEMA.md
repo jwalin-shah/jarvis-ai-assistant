@@ -143,7 +143,7 @@ JARVIS uses the `sqlite-vec` extension for high-performance vector search direct
 ### JARVIS Primary Database
 
 **Location**: `~/.jarvis/jarvis.db`
-**Current Schema Version**: 17
+**Current Schema Version**: 20
 
 #### `contacts`
 Stores contact relationship metadata and handle mappings.
@@ -158,11 +158,13 @@ Stores contact relationship metadata and handle mappings.
 | relationship | TEXT | sister, coworker, friend, boss |
 | relationship_reasoning | TEXT | LLM-derived justification for relationship label (v18+) |
 | style_notes | TEXT | e.g. "casual, uses emojis" |
+| last_extracted_rowid | INTEGER | iMessage ROWID of last extracted message (v18) |
+| last_extracted_at | TIMESTAMP | when extraction was last run (v18) |
 | created_at | TIMESTAMP | Record creation time |
 | updated_at | TIMESTAMP | Last update time |
 
 #### `contact_style_targets`
-Computed style targets from a contact's message pairs.
+Computed style targets from a contact's message history.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -172,6 +174,57 @@ Computed style targets from a contact's message pairs.
 | emoji_rate | REAL | Fraction containing emojis |
 | greeting_rate | REAL | Fraction starting with greeting |
 | updated_at | TIMESTAMP | Last update time |
+
+#### `contact_timing_prefs`
+Contact timing preferences for smart scheduling (v8+).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| contact_id | INTEGER | FK to contacts(id) |
+| timezone | TEXT | Contact's timezone (IANA format) |
+| quiet_hours_json | TEXT | JSON with quiet hours config |
+| preferred_hours_json | TEXT | JSON array of preferred hours (0-23) |
+| optimal_weekdays_json | TEXT | JSON array of preferred weekdays (0-6) |
+| avg_response_time_mins | REAL | Average response time in minutes |
+| last_interaction | TIMESTAMP | Last interaction timestamp |
+| updated_at | TIMESTAMP | Last update time |
+
+#### `fact_candidates_log` (v16+)
+Keeps every extracted fact candidate for auditing and quality tracking.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| contact_id | TEXT | Contact ID |
+| chat_id | TEXT | Chat ID |
+| message_id | INTEGER | Source message ID |
+| subject | TEXT | Fact subject |
+| predicate | TEXT | Fact predicate |
+| value | TEXT | Fact value |
+| category | TEXT | Fact category |
+| confidence | REAL | Extraction confidence |
+| source_text | TEXT | Original message text |
+| attribution | TEXT | Who fact is about |
+| segment_id | INTEGER | FK to conversation_segments |
+| log_stage | TEXT | Stage where fact was logged |
+| created_at | TIMESTAMP | Logging time |
+
+#### `reply_logs` (v20+)
+Full traceability for every AI-generated response.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| chat_id | TEXT | Chat ID |
+| contact_id | TEXT | Contact ID |
+| incoming_text | TEXT | Incoming user message |
+| classification_json | TEXT | Category, urgency, etc. |
+| rag_context_json | TEXT | Retrieved document content |
+| final_prompt | TEXT | Exact prompt sent to LLM |
+| response_text | TEXT | Generated response |
+| confidence | REAL | Generation confidence |
+| metadata_json | TEXT | Latency, model info, etc. |
+| created_at | TIMESTAMP | Log time |
 
 #### `pairs`
 Extracted message pairs (trigger + response) from iMessage history.

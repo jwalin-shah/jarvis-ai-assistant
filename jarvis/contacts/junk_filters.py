@@ -1,7 +1,6 @@
 """Shared junk/spam/bot message filters for fact extraction pipelines.
 
-Used by both FactExtractor (regex-based) and CandidateExtractor (GLiNER-based)
-to avoid duplicating filtering logic.
+Used by fact extractors to avoid duplicating filtering logic.
 """
 
 from __future__ import annotations
@@ -111,7 +110,7 @@ def is_professional_message(text: str) -> bool:
 
 
 _TAPBACK_RE = re.compile(
-    r"^(Loved|Liked|Disliked|Laughed at|Emphasized|Questioned|Reacted with a sticker to) \u201c",
+    r"^(Loved|Liked|Disliked|Laughed at|Emphasized|Questioned|Reacted with a sticker to)\s+(?:\u201c|an attachment\b)",
 )
 
 # Code snippet markers
@@ -170,10 +169,19 @@ _SPAM_RE = re.compile(
     re.IGNORECASE,
 )
 
+_GROUP_SYSTEM_RE = re.compile(
+    r"(?:"
+    r"\b(?:added|removed|left)\s+.+\s+(?:to|from)\s+the\s+group\b|"
+    r"\bchanged\s+the\s+group\s+name\b|"
+    r"\bstarted\s+(?:a|an)\s+group\s+call\b"
+    r")",
+    re.IGNORECASE,
+)
+
 
 def is_spam_message(text: str) -> bool:
     """Detect insurance, legal, recruitment spam, and marketing messages."""
-    return bool(_SPAM_RE.search(text))
+    return bool(_SPAM_RE.search(text) or _GROUP_SYSTEM_RE.search(text))
 
 
 def is_code_message(text: str) -> bool:

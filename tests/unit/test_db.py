@@ -4,17 +4,13 @@ Covers database initialization, schema versioning, and contact CRUD operations.
 Legacy pair/cluster operations are tested in the archived test suite.
 """
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from jarvis.db import (
     CURRENT_SCHEMA_VERSION,
-    Contact,
     JarvisDB,
-    get_db,
-    reset_db,
 )
 
 

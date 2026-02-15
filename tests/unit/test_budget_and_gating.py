@@ -220,7 +220,7 @@ class TestConfidenceGatingThreshold:
     def test_threshold_value(self) -> None:
         from jarvis.socket_server import DRAFT_CONFIDENCE_THRESHOLD
 
-        assert DRAFT_CONFIDENCE_THRESHOLD == 0.4
+        assert DRAFT_CONFIDENCE_THRESHOLD == 0.25
 
     def test_router_includes_confidence_score(self) -> None:
         """Verify _to_legacy_response includes confidence_score float."""

@@ -325,6 +325,18 @@ class TaskWorker:
                     )
                     response = generator.generate(request)
 
+                    # Log for traceability
+                    from jarvis.reply_service import get_reply_service
+                    reply_service = get_reply_service()
+                    reply_service.log_custom_generation(
+                        chat_id=chat_id,
+                        incoming_text=f"Batch summarize {len(context.messages)} messages",
+                        final_prompt=formatted_prompt,
+                        response_text=response.text,
+                        category="batch_summary",
+                        metadata={"num_messages": len(context.messages), "task_id": task.id}
+                    )
+
                     start_date = context.date_range[0].strftime("%Y-%m-%d")
                     end_date = context.date_range[1].strftime("%Y-%m-%d")
 
@@ -361,7 +373,6 @@ class TaskWorker:
         from contracts.models import GenerationRequest
         from integrations.imessage import ChatDBReader
         from jarvis.context import ContextFetcher
-        from jarvis.prompts import REPLY_EXAMPLES, build_reply_prompt
         from models import get_generator
 
         params = task.params
@@ -398,23 +409,46 @@ class TaskWorker:
                         continue
 
                     last_msg = context.last_received_message
-                    formatted_prompt = build_reply_prompt(
+
+                    # Resolve contact name
+                    contact_name = display_name or "them"
+
+                    from jarvis.prompts.builders import build_rag_reply_prompt
+                    formatted_prompt = build_rag_reply_prompt(
                         context=context.formatted_context,
                         last_message=last_msg.text,
+                        contact_name=contact_name,
+                        similar_exchanges=[], # Vector search for similar exchanges would go here
+                        relationship_profile=context.contact_profile,
+                        contact_facts=context.contact_facts,
+                        relationship_graph=context.relationship_graph,
                         instruction=instruction,
                     )
 
+                    from jarvis.reply_service import get_reply_service
+                    reply_service = get_reply_service()
+                    
                     suggestions: list[str] = []
                     for j in range(num_suggestions):
                         request = GenerationRequest(
                             prompt=formatted_prompt,
-                            context_documents=[context.formatted_context],
-                            few_shot_examples=REPLY_EXAMPLES,
+                            context_documents=[], # Already in prompt
+                            few_shot_examples=[], # V4 favors zero-shot/RAG anchors
                             max_tokens=150,
                             temperature=0.7 + (j * 0.1),
                         )
                         response = generator.generate(request)
                         suggestions.append(response.text)
+                        
+                        # Log for traceability
+                        reply_service.log_custom_generation(
+                            chat_id=chat_id,
+                            incoming_text=last_msg.text,
+                            final_prompt=formatted_prompt,
+                            response_text=response.text,
+                            category="batch_reply",
+                            metadata={"suggestion_index": j, "task_id": task.id}
+                        )
 
                     results.append(
                         {
@@ -489,8 +523,8 @@ class TaskWorker:
     ) -> TaskResult:
         """Handle background fact extraction task using sliding windows with progress tracking."""
         from integrations.imessage import ChatDBReader
-        from jarvis.contacts.instruction_extractor import get_instruction_extractor
         from jarvis.contacts.fact_storage import save_facts
+        from jarvis.contacts.instruction_extractor import get_instruction_extractor
         from jarvis.db import get_db
 
         params = task.params
@@ -565,15 +599,18 @@ class TaskWorker:
                     for m in window:
                         sender = user_name if m.is_from_me else contact_name
                         text = " ".join((m.text or "").splitlines()).strip()
-                        if not text: continue
+                        if not text:
+                            continue
                         if sender == curr_sender:
                             curr_msgs.append(text)
                         else:
-                            if curr_msgs: seg_lines.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                            if curr_msgs:
+                                seg_lines.append(f"{curr_sender}: {' '.join(curr_msgs)}")
                             curr_sender = sender
                             curr_msgs = [text]
-                    if curr_msgs: seg_lines.append(f"{curr_sender}: {' '.join(curr_msgs)}")
-                
+                    if curr_msgs:
+                        seg_lines.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+
                 seg_text = "\n".join(seg_lines)
                 windows.append(MockSeg(messages=window, text=seg_text))
 
@@ -598,14 +635,20 @@ class TaskWorker:
                 )
                 if facts:
                     total_extracted += len(facts)
-                    save_facts(facts, chat_id)
+                    save_facts(
+                        facts,
+                        chat_id,
+                        log_raw_facts=True,
+                        log_chat_id=chat_id,
+                        log_stage="task_worker",
+                    )
 
             # Update tracking after successful extraction
             if max_rowid_processed > (last_extracted_rowid or 0):
                 with db.connection() as conn:
                     conn.execute(
-                        """UPDATE contacts 
-                           SET last_extracted_rowid = ?, last_extracted_at = CURRENT_TIMESTAMP 
+                        """UPDATE contacts
+                           SET last_extracted_rowid = ?, last_extracted_at = CURRENT_TIMESTAMP
                            WHERE chat_id = ?""",
                         (max_rowid_processed, chat_id),
                     )

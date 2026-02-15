@@ -526,12 +526,30 @@ async def _handle_generate(
 
         if stream:
             # Use streaming generation
-            await _stream_generation(client, generator, request, generation_id)
+            await _stream_generation(client, generator, request, generation_id, data)
         else:
             # Use regular generation - run in threadpool to avoid blocking event loop
             start_time = time.perf_counter()
             response = await run_in_threadpool(generator.generate, request)
             generation_time = (time.perf_counter() - start_time) * 1000
+
+            # Log for traceability
+            from jarvis.reply_service import get_reply_service
+
+            reply_service = get_reply_service()
+            await run_in_threadpool(
+                reply_service.log_custom_generation,
+                chat_id=data.get("chat_id"),
+                incoming_text=prompt[:200],
+                final_prompt=prompt,
+                response_text=response.text,
+                category="websocket_generate",
+                metadata={
+                    "generation_id": generation_id,
+                    "generation_time_ms": generation_time,
+                    "stream": False,
+                },
+            )
 
             await manager.send_message(
                 client.client_id,
@@ -565,6 +583,7 @@ async def _stream_generation(
     generator: Any,
     request: GenerationRequest,
     generation_id: str,
+    data: dict[str, Any],
 ) -> None:
     """Stream generation tokens to the client.
 
@@ -573,6 +592,7 @@ async def _stream_generation(
         generator: The generator instance.
         request: The generation request.
         generation_id: Unique ID for this generation.
+        data: Original request data for context.
     """
     start_time = time.perf_counter()
     tokens_sent = 0
@@ -608,6 +628,25 @@ async def _stream_generation(
             if hasattr(generator, "config"):
                 model_name = generator.config.model_path
 
+            # Log for traceability
+            from jarvis.reply_service import get_reply_service
+
+            reply_service = get_reply_service()
+            await run_in_threadpool(
+                reply_service.log_custom_generation,
+                chat_id=data.get("chat_id"),
+                incoming_text=request.prompt[:200],
+                final_prompt=request.prompt,
+                response_text=full_text,
+                category="websocket_stream",
+                metadata={
+                    "generation_id": generation_id,
+                    "generation_time_ms": generation_time,
+                    "stream": True,
+                    "model_name": model_name,
+                },
+            )
+
             await manager.send_message(
                 client.client_id,
                 MessageType.GENERATION_COMPLETE,
@@ -627,6 +666,24 @@ async def _stream_generation(
             # Run in threadpool to avoid blocking event loop
             response = await run_in_threadpool(generator.generate, request)
             generation_time = (time.perf_counter() - start_time) * 1000
+
+            # Log for traceability
+            from jarvis.reply_service import get_reply_service
+
+            reply_service = get_reply_service()
+            await run_in_threadpool(
+                reply_service.log_custom_generation,
+                chat_id=data.get("chat_id"),
+                incoming_text=request.prompt[:200],
+                final_prompt=request.prompt,
+                response_text=response.text,
+                category="websocket_stream_simulated",
+                metadata={
+                    "generation_id": generation_id,
+                    "generation_time_ms": generation_time,
+                    "stream": True,
+                },
+            )
 
             # Send tokens one at a time with small delays to simulate streaming
             words = response.text.split()

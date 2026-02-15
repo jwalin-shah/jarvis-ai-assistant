@@ -338,6 +338,7 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.custom_templates import router as custom_templates_router
     from api.routers.debug import router as debug_router
     from api.routers.drafts import router as drafts_router
+
     # from api.routers.embeddings import router as embeddings_router  # Missing
     from api.routers.experiments import router as experiments_router
     from api.routers.export import router as export_router
@@ -347,6 +348,7 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.metrics import router as metrics_router
     from api.routers.pdf_export import router as pdf_export_router
     from api.routers.priority import router as priority_router
+
     # from api.routers.relationships import router as relationships_router  # Missing
     from api.routers.search import router as search_router
     from api.routers.settings import router as settings_router
@@ -355,6 +357,7 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.tasks import router as tasks_router
     from api.routers.template_analytics import router as template_analytics_router
     from api.routers.threads import router as threads_router
+
     # from api.routers.topics import router as topics_router  # Missing
     from api.routers.websocket import router as websocket_router
 

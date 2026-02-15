@@ -940,38 +940,60 @@ class JarvisSocket {
       },
     });
 
+    // Overall timeout for the entire stream (2 minutes)
+    const streamStartTime = Date.now();
+    const MAX_STREAM_DURATION = 120000;
+
     try {
       // Yield tokens as they arrive
       while (!completed) {
+        // Check overall timeout
+        if (Date.now() - streamStartTime > MAX_STREAM_DURATION) {
+          console.warn(`[JarvisSocket] Stream exceeded max duration of ${MAX_STREAM_DURATION}ms`);
+          timedOut = true;
+          break;
+        }
+
         // Check if we have buffered tokens
         if (tokenBuffer.length > 0) {
           yield tokenBuffer.shift()!;
           continue;
         }
 
-        // Wait for next token or completion
-        const nextToken = await new Promise<string | null>((resolve) => {
-          resolveNextToken = resolve;
+        // Wait for next token or completion (with shorter timeout to check overall duration)
+        const nextToken = await Promise.race([
+          new Promise<string | null>((resolve) => {
+            resolveNextToken = resolve;
 
-          // Check again in case token arrived between check and promise
-          if (tokenBuffer.length > 0) {
-            resolve(tokenBuffer.shift()!);
-            resolveNextToken = null;
-          } else if (completed) {
-            resolve(null);
-            resolveNextToken = null;
+            // Check again in case token arrived between check and promise
+            if (tokenBuffer.length > 0) {
+              resolve(tokenBuffer.shift()!);
+              resolveNextToken = null;
+            } else if (completed) {
+              resolve(null);
+              resolveNextToken = null;
+            }
+          }),
+          // 5 second timeout to periodically check overall duration
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('TOKEN_TIMEOUT')), 5000)
+          )
+        ]).catch((err) => {
+          if (err.message === 'TOKEN_TIMEOUT') {
+            return null; // Return null to continue loop and check overall timeout
           }
+          throw err;
         });
 
         if (nextToken === null) {
-          break;
+          continue; // Continue to check overall timeout
         }
 
         yield nextToken;
       }
 
       if (timedOut) {
-        throw new Error(`Streaming request timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`);
+        throw new Error(`Streaming request timed out after ${MAX_STREAM_DURATION}ms`);
       }
     } finally {
       const entry = this.streamManager.get(requestId);
@@ -1298,15 +1320,31 @@ class JarvisSocket {
   ): Promise<{ response: string; tokens_generated: number }> {
     let fullText = "";
     let tokenCount = 0;
+    const startTime = Date.now();
 
-    for await (const token of this.callStream(
-      "chat",
-      { message, history },
-      (t) => { if (onToken) onToken(t); }
-    )) {
-      fullText += token;
-      tokenCount++;
+    console.log("[JarvisSocket] Starting chatStream...");
+
+    try {
+      for await (const token of this.callStream(
+        "chat",
+        { message, history },
+        (t) => { if (onToken) onToken(t); }
+      )) {
+        fullText += token;
+        tokenCount++;
+        
+        // Safety: break if streaming takes too long (2 minutes)
+        if (Date.now() - startTime > 120000) {
+          console.warn("[JarvisSocket] chatStream timeout - breaking loop");
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("[JarvisSocket] chatStream error:", error);
+      throw error;
     }
+
+    console.log(`[JarvisSocket] chatStream completed: ${tokenCount} tokens`);
 
     return {
       response: fullText.trim(),

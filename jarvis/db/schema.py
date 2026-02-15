@@ -120,6 +120,27 @@ CREATE INDEX IF NOT EXISTS idx_facts_category ON contact_facts(category);
 CREATE INDEX IF NOT EXISTS idx_facts_linked_contact ON contact_facts(linked_contact_id);
 CREATE INDEX IF NOT EXISTS idx_facts_lookup ON contact_facts(contact_id, predicate, subject);
 
+-- Raw facts log (keeps every extracted candidate for auditing)
+CREATE TABLE IF NOT EXISTS fact_candidates_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_id TEXT,
+    chat_id TEXT,
+    message_id INTEGER,
+    subject TEXT,
+    predicate TEXT,
+    value TEXT,
+    category TEXT,
+    confidence REAL,
+    source_text TEXT,
+    attribution TEXT DEFAULT 'contact',
+    segment_id INTEGER,
+    log_stage TEXT DEFAULT 'extraction',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_fact_candidates_contact ON fact_candidates_log(contact_id);
+CREATE INDEX IF NOT EXISTS idx_fact_candidates_chat ON fact_candidates_log(chat_id);
+
 -- Conversation segments (v17+, simplified v19 - removed topic metadata)
 -- Stores message boundaries without low-quality topic labels/keywords
 CREATE TABLE IF NOT EXISTS conversation_segments (
@@ -158,6 +179,24 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_send_at ON scheduled_drafts(send_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_priority ON scheduled_drafts(priority, send_at);
 CREATE INDEX IF NOT EXISTS idx_send_queue_status ON send_queue(status);
 CREATE INDEX IF NOT EXISTS idx_send_queue_scheduled ON send_queue(scheduled_draft_id);
+
+-- Reply logs for full traceability (v20+)
+CREATE TABLE IF NOT EXISTS reply_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT,
+    contact_id TEXT,
+    incoming_text TEXT,
+    classification_json TEXT,         -- category, urgency, etc.
+    rag_context_json TEXT,           -- full content of retrieved documents
+    final_prompt TEXT,               -- the actual prompt sent to LLM
+    response_text TEXT,
+    confidence REAL,
+    metadata_json TEXT,              -- latency, model info, etc.
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_reply_logs_chat ON reply_logs(chat_id);
+CREATE INDEX IF NOT EXISTS idx_reply_logs_created ON reply_logs(created_at);
 """
 
 # Expected indices for verification
@@ -182,9 +221,13 @@ EXPECTED_INDICES = {
     "idx_segments_segment_id",
     "idx_segments_contact",
     "idx_segmsg_message",
+    "idx_fact_candidates_contact",
+    "idx_fact_candidates_chat",
+    "idx_reply_logs_chat",
+    "idx_reply_logs_created",
 }
 
-CURRENT_SCHEMA_VERSION = 18  # contacts.last_extracted_rowid tracking
+CURRENT_SCHEMA_VERSION = 20  # added reply_logs for full traceability
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {

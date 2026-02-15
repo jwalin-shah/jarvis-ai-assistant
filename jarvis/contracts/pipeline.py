@@ -32,7 +32,7 @@ class UrgencyLevel(str, Enum):
 # --- Data Structures ---
 
 
-@dataclass
+@dataclass(slots=True)
 class MessageContext:
     """Raw input context for the pipeline."""
 
@@ -45,7 +45,7 @@ class MessageContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(slots=True)
 class ClassificationResult:
     """Result of the intent/category classification step."""
 
@@ -57,7 +57,7 @@ class ClassificationResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(slots=True)
 class Entity:
     """A named entity extracted from text."""
 
@@ -68,7 +68,7 @@ class Entity:
     end_char: int
 
 
-@dataclass
+@dataclass(slots=True)
 class Fact:
     """An atomic fact extracted from text."""
 
@@ -79,7 +79,7 @@ class Fact:
     source_text: str
 
 
-@dataclass
+@dataclass(slots=True)
 class Relationship:
     """A relationship between two entities."""
 
@@ -89,7 +89,7 @@ class Relationship:
     confidence: float
 
 
-@dataclass
+@dataclass(slots=True)
 class ExtractionResult:
     """Consolidated knowledge extraction result."""
 
@@ -99,7 +99,7 @@ class ExtractionResult:
     topics: list[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class RAGDocument:
     """A retrieved document/chunk for context."""
 
@@ -109,7 +109,7 @@ class RAGDocument:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(slots=True)
 class GenerationRequest:
     """The full packet sent to the generator service."""
 
@@ -120,7 +120,7 @@ class GenerationRequest:
     few_shot_examples: list[dict[str, str]] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class GenerationResponse:
     """The final output from the pipeline."""
 

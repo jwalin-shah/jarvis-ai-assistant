@@ -1,8 +1,8 @@
-from integrations.imessage import ChatDBReader
-from jarvis.contacts.instruction_extractor import get_instruction_extractor
 import logging
 import os
-import json
+
+from integrations.imessage import ChatDBReader
+from jarvis.contacts.instruction_extractor import get_instruction_extractor
 
 # Ensure we stay offline for local model
 os.environ["HF_HUB_OFFLINE"] = "1"

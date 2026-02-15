@@ -134,7 +134,7 @@ class TestCategoryClassifierStatistical:
 
         # Update validator to be more lenient for model behavior changes
         validator = StatisticalValidator(min_samples=5, max_variance=0.05)
-        
+
         accuracy, failures = validator.validate_distribution(
             classify_category,
             test_cases,
@@ -143,7 +143,7 @@ class TestCategoryClassifierStatistical:
 
         # Allow expected ambiguities - model now classifies most as statement
         acceptable_categories = {"question", "statement", "request"}
-        
+
         # Just verify all results are valid categories
         for text, expected in test_cases:
             result = classify_category(text)

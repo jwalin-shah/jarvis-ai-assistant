@@ -22,8 +22,10 @@ Shell Completion:
 """
 
 import argparse
+import json
 import logging
 import sys
+from datetime import datetime
 from typing import NoReturn
 
 # Optional argcomplete support for shell completion
@@ -42,6 +44,7 @@ from rich.text import Text
 from contracts.health import FeatureState
 from core.health import get_degradation_controller, reset_degradation_controller
 from core.memory import get_memory_controller, reset_memory_controller
+from jarvis.analytics.engine import get_analytics_engine
 from jarvis.db import get_db
 from jarvis.errors import JarvisError
 from jarvis.system import (
@@ -271,7 +274,7 @@ def cmd_db(args: argparse.Namespace) -> int:
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
         console.print(
-            "Available: init, extract, stats, build-profiles, feedback"
+            "Available: init, extract, stats, build-profiles, feedback, optimize"
         )
         return 1
 
@@ -285,6 +288,8 @@ def cmd_db(args: argparse.Namespace) -> int:
         return _cmd_db_build_profiles(args)
     elif subcommand == "feedback":
         return _cmd_feedback(args)
+    elif subcommand == "optimize":
+        return _cmd_db_optimize(args)
     else:
         console.print(f"[red]Unknown db subcommand: {subcommand}[/red]")
         return 1
@@ -502,10 +507,10 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
         console.print(f"[dim]Initialized database at {db.db_path}[/dim]")
 
     from integrations.imessage import ChatDBReader
-    from jarvis.search.segment_ingest import extract_segments
+    from jarvis.search.segment_ingest import ingest_and_extract_segments
     from jarvis.search.vec_search import get_vec_searcher
-    from jarvis.topics.topic_segmenter import reset_segmenter
     from jarvis.topics.segment_labeler import reset_labeler
+    from jarvis.topics.topic_segmenter import reset_segmenter
 
     # Reset singletons to force reload of refined logic/config
     reset_segmenter()
@@ -529,7 +534,9 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
                     description=f"Processing {current}/{total}: {chat_id[:30]}...",
                 )
 
-            stats = extract_segments(reader, db, vec_searcher, progress_cb, limit=args.limit)
+            stats = ingest_and_extract_segments(
+                reader, db, vec_searcher, progress_cb, limit=args.limit, force=args.force
+            )
 
     console.print("\n[bold green]Extraction complete![/bold green]")
     console.print(f"  Messages scanned: {stats['total_messages_scanned']}")
@@ -542,6 +549,19 @@ def _cmd_db_extract(args: argparse.Namespace) -> int:
     if stats.get("errors"):
         console.print(f"\n[yellow]Errors: {len(stats['errors'])}[/yellow]")
 
+    # Optimize after bulk extraction
+    db.optimize()
+    console.print("[dim]Database optimized.[/dim]")
+
+    return 0
+
+
+def _cmd_db_optimize(args: argparse.Namespace) -> int:
+    """Optimize the JARVIS database."""
+    console.print("[bold]Optimizing JARVIS database...[/bold]")
+    db = get_db()
+    db.optimize()
+    console.print("[green]Optimization complete (REINDEX, VACUUM).[/green]")
     return 0
 
 
@@ -561,6 +581,7 @@ def _cmd_db_build_profiles(args: argparse.Namespace) -> int:
         ContactProfileBuilder,
         load_profile,
         save_profile,
+        update_preference_tables,
     )
 
     builder = ContactProfileBuilder()
@@ -606,7 +627,14 @@ def _cmd_db_build_profiles(args: argparse.Namespace) -> int:
                         contact_name=conv.display_name,
                     )
                     save_profile(profile)
+
+                    # Update SQL preference tables
+                    update_preference_tables(profile, messages)
+
                     built += 1
+                except Exception as e:
+                    logger.warning("Error building profile for %s: %s", conv.chat_id, e)
+                    errors += 1
                 except Exception as e:
                     logger.warning("Error building profile for %s: %s", conv.chat_id, e)
                     errors += 1
@@ -764,6 +792,9 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="<n>",
         help="max conversations to process",
     )
+    db_extract_parser.add_argument(
+        "--force", action="store_true", help="clear existing data and re-extract everything"
+    )
 
     # db stats
     db_stats_parser = db_subparsers.add_parser("stats", help="show database statistics")
@@ -789,6 +820,9 @@ def create_parser() -> argparse.ArgumentParser:
     db_feedback_parser.add_argument(
         "-l", "--limit", type=int, default=5, help="number of recent entries to show"
     )
+
+    # db optimize
+    db_subparsers.add_parser("optimize", help="optimize the database (REINDEX, VACUUM)")
 
     db_parser.set_defaults(func=cmd_db)
 

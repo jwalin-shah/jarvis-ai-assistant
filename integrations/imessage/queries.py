@@ -57,7 +57,7 @@ _BASE_QUERIES = {
             LIMIT ?
         ),
         chat_stats AS (
-            SELECT 
+            SELECT
                 cmj.chat_id,
                 MAX(cmj.message_date) as last_date,
                 COUNT(*) as message_count
@@ -98,7 +98,7 @@ _BASE_QUERIES = {
         ORDER BY cs.last_date DESC
     """,
     "conversations_light": """
-        SELECT 
+        SELECT
             chat.ROWID as chat_id,
             chat.guid as chat_guid,
             chat.display_name,

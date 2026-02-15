@@ -24,7 +24,6 @@ from __future__ import annotations
 #     ToneProfileResponse,
 #     TopicDistributionResponse,
 # )
-
 # Attachment models
 from api.schemas.attachments import (
     AttachmentStatsResponse,

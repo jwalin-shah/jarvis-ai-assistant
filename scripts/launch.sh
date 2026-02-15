@@ -7,6 +7,9 @@ set -e
 
 # Configuration
 API_PORT=8742
+SOCKET_PORT=8743
+FRONTEND_PORT=1420
+SOCKET_PORT=8743
 SOCKET_PATH="$HOME/.jarvis/jarvis.sock"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DESKTOP_DIR="$PROJECT_ROOT/desktop"
@@ -147,24 +150,12 @@ wait_for_api() {
 is_socket_healthy() {
     # Check if process is running
     if [ -z "$SOCKET_PID" ] || ! kill -0 "$SOCKET_PID" 2>/dev/null; then
+        log_warn "Socket health: process ${SOCKET_PID:-<unknown>} is not running"
         return 1
     fi
     # Check if socket file exists
-    if [ ! -e "$SOCKET_PATH" ]; then
-        return 1
-    fi
-    # Try to connect
-    if ! python3 -c "
-import socket, os, sys
-try:
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(2)
-    sock.connect(os.path.expanduser('$SOCKET_PATH'))
-    sock.close()
-    sys.exit(0)
-except:
-    sys.exit(1)
-" 2>/dev/null; then
+    if [ ! -S "$SOCKET_PATH" ]; then
+        log_warn "Socket health: socket file $SOCKET_PATH is missing"
         return 1
     fi
     return 0
@@ -173,6 +164,11 @@ except:
 # Start socket server
 start_socket_server() {
     log_info "Starting socket server (models load on-demand)..."
+    log_info "Ensuring socket port $SOCKET_PORT is free..."
+    if ! check_port "$SOCKET_PORT"; then
+        log_warn "Socket port $SOCKET_PORT already in use, killing existing listener..."
+        kill_port_process "$SOCKET_PORT"
+    fi
     cd "$PROJECT_ROOT"
     uv run python -m jarvis.socket_server --no-preload &
     SOCKET_PID=$!
@@ -286,6 +282,11 @@ main() {
 
     # Step 6: Start the Tauri desktop app
     log_info "Starting JARVIS desktop app..."
+    log_info "Ensuring frontend port $FRONTEND_PORT is free..."
+    if ! check_port "$FRONTEND_PORT"; then
+        log_warn "Frontend port $FRONTEND_PORT already in use, killing existing listener..."
+        kill_port_process "$FRONTEND_PORT"
+    fi
     cd "$DESKTOP_DIR"
 
     # Check if node_modules exists

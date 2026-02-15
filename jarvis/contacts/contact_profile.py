@@ -483,7 +483,7 @@ class ContactProfileBuilder:
     ) -> ContactProfile:
         """Build a complete profile for a contact."""
         now = datetime.now().isoformat()
-        
+
         # IMPROVED: Resolve name if missing
         if not contact_name or contact_name in ["None", "Unknown", "Contact"]:
             from integrations.imessage.reader import ChatDBReader
@@ -493,7 +493,7 @@ class ContactProfileBuilder:
                     conv = reader.get_conversation(contact_id)
                     if conv and conv.display_name:
                         contact_name = conv.display_name
-            except:
+            except Exception:
                 pass
 
         if len(messages) < self.min_messages:
@@ -513,7 +513,7 @@ class ContactProfileBuilder:
         relationship, rel_confidence = self._classify_relationship(
             contact_id, messages, contact_name
         )
-        
+
         # LLM Refinement
         relationship_reasoning = None
         if len(messages) >= 5:
@@ -594,8 +594,8 @@ class ContactProfileBuilder:
     # --- Relationship ---
 
     def _refine_relationship_with_llm(
-        self, 
-        messages: list[Message], 
+        self,
+        messages: list[Message],
         contact_name: str,
         base_rel: str,
         base_conf: float
@@ -604,7 +604,7 @@ class ContactProfileBuilder:
         try:
             from models.loader import get_model
             loader = get_model()
-            
+
             if not loader.is_loaded():
                 return base_rel, base_conf, "Rule-based analysis."
 
@@ -618,10 +618,12 @@ class ContactProfileBuilder:
                 if sender == curr_sender:
                     curr_msgs.append(m.text or "")
                 else:
-                    if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                    if curr_msgs:
+                        turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
                     curr_sender = sender
                     curr_msgs = [m.text or ""]
-            if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+            if curr_msgs:
+                turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
             chat_text = "\n".join(turns)
 
             prompt = f"""Analyze this chat and determine the relationship between User and {contact_name}.
@@ -636,10 +638,10 @@ Rules:
 3. Output format: Category | Confidence (0-1) | Reasoning
 
 Result:"""
-            
+
             res = loader.generate_sync(prompt=prompt, max_tokens=60, temperature=0.0)
             text = res.text.strip()
-            
+
             if "|" in text:
                 parts = text.split("|")
                 if len(parts) >= 3:
@@ -649,10 +651,10 @@ Result:"""
                     conf = float(conf_str.group()) if conf_str else base_conf
                     reason = parts[2].strip()
                     return rel, conf, reason
-                
+
         except Exception as e:
             logger.debug("LLM relationship refinement failed: %s", e)
-            
+
         return base_rel, base_conf, "Rule-based analysis."
 
     def _classify_relationship(
@@ -989,12 +991,19 @@ def _get_profile_path(contact_id: str) -> Path:
     return _ensure_profiles_dir() / f"{hashed}.json"
 
 
+def _json_serial(obj):
+    """JSON serializer for objects not serializable by default json code."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
 def save_profile(profile: ContactProfile) -> bool:
     """Save profile to disk."""
     path = _get_profile_path(profile.contact_id)
     try:
         with open(path, "w") as f:
-            json.dump(profile.to_dict(), f, indent=2)
+            json.dump(profile.to_dict(), f, indent=2, default=_json_serial)
         logger.debug("Saved profile for %s", profile.contact_id[:16])
         return True
     except Exception as e:
@@ -1037,3 +1046,77 @@ def invalidate_profile_cache() -> None:
     so this always clears the entire cache.
     """
     _cached_load.cache_clear()
+
+
+def update_preference_tables(profile: ContactProfile, messages: list[Message]) -> None:
+    """Update contact_style_targets and contact_timing_prefs tables.
+
+    Computes derived style and timing preferences from the profile and message
+    history, then persists them to the SQL preference tables.
+    """
+    from jarvis.analytics.engine import get_analytics_engine
+    from jarvis.db import get_db
+
+    db = get_db()
+    now = datetime.now()
+
+    # 1. Update contact_style_targets
+    # Compute greeting rate as (unique greetings found) / (total messages)
+    greeting_rate = (
+        len(profile.greeting_style) / profile.message_count
+        if profile.message_count > 0 and profile.greeting_style
+        else 0.0
+    )
+
+    with db.connection() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO contact_style_targets
+            (contact_id, median_reply_length, emoji_rate, greeting_rate, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                profile.contact_id,
+                profile.avg_message_length,  # Use avg as proxy for median
+                profile.emoji_frequency,
+                greeting_rate,
+                now,
+            ),
+        )
+
+    # 2. Update contact_timing_prefs
+    engine = get_analytics_engine()
+    contact_analytics = engine.compute_contact_analytics(
+        messages, profile.contact_id, profile.contact_name
+    )
+    hourly, daily, _, _ = engine.compute_time_distributions(messages)
+
+    # Infer preferred hours (top 5 by volume)
+    pref_hours = sorted(hourly.keys(), key=lambda h: hourly[h], reverse=True)[:5]
+    # Infer quiet hours (bottom 6 by volume - usually late night/early morning)
+    q_hours = sorted(hourly.keys(), key=lambda h: hourly[h])[:6]
+    # Infer optimal weekdays (above average volume)
+    avg_daily = sum(daily.values()) / len(daily) if daily else 0
+    opt_days = [d for d, count in daily.items() if count > avg_daily]
+
+    last_interaction = messages[-1].date if messages else None
+
+    with db.connection() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO contact_timing_prefs
+            (contact_id, timezone, quiet_hours_json, preferred_hours_json,
+             optimal_weekdays_json, avg_response_time_mins, last_interaction, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                profile.contact_id,
+                None,  # Timezone inference requires more logic
+                json.dumps(q_hours),
+                json.dumps(pref_hours),
+                json.dumps(opt_days),
+                contact_analytics.avg_response_time_minutes,
+                last_interaction,
+                now,
+            ),
+        )

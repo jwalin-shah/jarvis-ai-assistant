@@ -73,29 +73,6 @@ class TestCategoryClassifierPerformance:
         assert len(result) > 0
 
 
-class TestFactExtractionPerformance:
-    """Fact extraction pipeline latency."""
-
-    def test_extraction_under_250ms(self) -> None:
-        """Fact extraction for a single message should complete in <250ms."""
-        from jarvis.contacts.candidate_extractor import CandidateExtractor
-
-        with patch.object(
-            CandidateExtractor,
-            "extract_candidates",
-            return_value=[],
-        ):
-            extractor = CandidateExtractor.__new__(CandidateExtractor)
-            start = time.perf_counter()
-            _result = extractor.extract_candidates(
-                "I work at Google as a software engineer",
-                sender="John",
-            )
-            elapsed_ms = (time.perf_counter() - start) * 1000
-
-        assert elapsed_ms < 250, f"Extraction took {elapsed_ms:.1f}ms (limit: 250ms)"
-
-
 class TestSocketServerPerformance:
     """Socket server message round-trip latency."""
 

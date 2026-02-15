@@ -1,5 +1,6 @@
-from mlx_lm import load
 import os
+
+from mlx_lm import load
 
 MODELS = [
     "mlx-community/LFM2-350M-4bit",

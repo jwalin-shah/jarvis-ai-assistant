@@ -192,7 +192,7 @@ make eval-rag-relevance
 |---|----------|-------|--------|
 | 4.1.1 | README.md | Updated for new features | ⬜ |
 | 4.1.2 | CHANGELOG.md | Version entry with changes | ⬜ |
-| 4.1.3 | docs/CLI_GUIDE.md | CLI changes documented | ⬜ |
+| 4.1.3 | docs/DOCUMENTATION_INDEX.md | Documentation updated | ⬜ |
 | 4.1.4 | docs/API_REFERENCE.md | API changes documented | ⬜ |
 | 4.1.5 | desktop/README.md | Desktop changes documented | ⬜ |
 | 4.1.6 | Migration Guide | Breaking changes have migration steps | ⬜ |

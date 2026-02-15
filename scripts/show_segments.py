@@ -1,9 +1,9 @@
-from jarvis.db import get_db
-from jarvis.topics.segment_storage import get_segments_for_chat
-import json
 import sqlite3
 from pathlib import Path
+
 from integrations.imessage.parser import extract_text_from_row
+from jarvis.db import get_db
+from jarvis.topics.segment_storage import get_segments_for_chat
 
 db = get_db()
 chat_id = 'iMessage;-;+17204963920' # Sangati Shah
@@ -16,7 +16,7 @@ def get_message_text(mid):
         cursor = conn.execute("SELECT text, attributedBody, is_from_me FROM message WHERE ROWID = ?", (mid,))
         row = cursor.fetchone()
         conn.close()
-        if not row: 
+        if not row:
             return "[MISSING ROW]", None
         txt = extract_text_from_row(row)
         return txt if txt else "[EMPTY TEXT]", row['is_from_me']
@@ -34,7 +34,7 @@ for i, seg in enumerate(segments):
     print(f"\nSEGMENT {i+1}: {seg['topic_label']}")
     print(f"Keywords: {seg['keywords_json']}")
     print(f"Messages ({seg['message_count']}):")
-    
+
     # Sort by position
     msg_details = sorted(seg['messages'], key=lambda x: x['position'])
     for m in msg_details[:5]: # Show first 5

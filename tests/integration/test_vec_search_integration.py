@@ -268,17 +268,21 @@ class TestSearchWithPairs:
         contact_id,
         chat_id,
         context_text,
+        reply_text=None,
         source_timestamp=1000.0,
         message_count=2,
     ):
         """Low-level insert into vec_chunks (simplified schema)."""
         int8_blob = (embedding * 127).astype(np.int8).tobytes()
+        # Default reply_text if not provided
+        if reply_text is None:
+            reply_text = "Default reply"
         with db.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO vec_chunks(
-                    embedding, contact_id, chat_id, source_timestamp, context_text, message_count
-                ) VALUES (vec_int8(?), ?, ?, ?, ?, ?)
+                    embedding, contact_id, chat_id, source_timestamp, context_text, reply_text, topic_label, message_count
+                ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int8_blob,
@@ -286,6 +290,8 @@ class TestSearchWithPairs:
                     chat_id,
                     source_timestamp,
                     context_text,
+                    reply_text,
+                    "general",
                     message_count,
                 ),
             )
@@ -298,7 +304,8 @@ class TestSearchWithPairs:
             emb,
             contact_id=1,
             chat_id="chat_1",
-            context_text="Want to grab lunch? Sure, how about noon?",
+            context_text="Want to grab lunch?",
+            reply_text="Sure, how about noon?",
         )
 
         searcher._embedder = FakeEmbedder(emb)
@@ -317,6 +324,7 @@ class TestSearchWithPairs:
             contact_id=1,
             chat_id="c1",
             context_text="hi",
+            reply_text="hello back",
         )
         self._insert_chunk(
             db,
@@ -324,6 +332,7 @@ class TestSearchWithPairs:
             contact_id=2,
             chat_id="c2",
             context_text="yo",
+            reply_text="yo back",
         )
 
         searcher._embedder = FakeEmbedder(emb)
@@ -347,6 +356,7 @@ class TestSearchWithPairs:
             contact_id=0,
             chat_id="c",
             context_text="close",
+            reply_text="close reply",
         )
         self._insert_chunk(
             db,
@@ -354,6 +364,7 @@ class TestSearchWithPairs:
             contact_id=0,
             chat_id="c",
             context_text="far",
+            reply_text="far reply",
         )
 
         searcher._embedder = FakeEmbedder(close_emb)
@@ -376,6 +387,7 @@ class TestSearchWithPairs:
             contact_id=0,
             chat_id="c",
             context_text="test",
+            reply_text="test reply",
         )
 
         # Default embedder points elsewhere
@@ -507,23 +519,24 @@ class TestGetStats:
 
 
 class TestDeleteChunksForChat:
-    def _insert_chunk(self, db, embedding, chat_id, context_text="test"):
+    def _insert_chunk_simple(self, db, embedding, chat_id, context_text="test"):
+        """Simple chunk insert for delete tests."""
         int8_blob = (embedding * 127).astype(np.int8).tobytes()
         with db.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO vec_chunks(
-                    embedding, contact_id, chat_id, source_timestamp, context_text, message_count
-                ) VALUES (vec_int8(?), 0, ?, 1000.0, ?, 1)
+                    embedding, contact_id, chat_id, source_timestamp, context_text, reply_text, topic_label, message_count
+                ) VALUES (vec_int8(?), 0, ?, 1000.0, ?, ?, ?, 1)
                 """,
-                (int8_blob, chat_id, context_text),
+                (int8_blob, chat_id, context_text, "reply", "general"),
             )
 
     def test_delete_specific_chat(self, db, searcher):
         emb = _make_normalized(1)
-        self._insert_chunk(db, emb, "chat_A", context_text="a1")
-        self._insert_chunk(db, emb, "chat_A", context_text="a2")
-        self._insert_chunk(db, emb, "chat_B", context_text="b1")
+        self._insert_chunk_simple(db, emb, "chat_A", context_text="a1")
+        self._insert_chunk_simple(db, emb, "chat_A", context_text="a2")
+        self._insert_chunk_simple(db, emb, "chat_B", context_text="b1")
 
         deleted = searcher.delete_chunks_for_chat("chat_A")
         assert deleted == 2

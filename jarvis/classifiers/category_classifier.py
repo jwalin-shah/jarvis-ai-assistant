@@ -272,7 +272,7 @@ class CategoryClassifier(EmbedderMixin):
             # Pass chat_id to extractor for relationship features (if we decide to use them)
             # For now, keep 147 features to avoid dimension mismatch with existing model
             non_bert_features = extractor.extract_all(text, context, mob_pressure, mob_type)
-            
+
             # Model trained with 915 features: BERT(384) + context_BERT(384) + handcrafted(147)
             features = np.concatenate([embedding, context_embedding, non_bert_features])
             features = features.reshape(1, -1)

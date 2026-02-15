@@ -738,8 +738,8 @@ def main() -> int:
         try:
             import dspy
 
-            from evals.dspy_reply import ReplyModule
             from evals.dspy_client import DSPYMLXClient
+            from evals.dspy_reply import ReplyModule
 
             student_lm = DSPYMLXClient(max_tokens=50, temperature=0.1)
             dspy.configure(lm=student_lm)

@@ -6,8 +6,8 @@ Rule-based, zero ML, zero memory footprint.
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class AttributionResolver:
                  # This is a bit complex for a regex resolver, but let's keep it simple:
                  # If the subject is a person name and not 'I/me', it's third party.
                  pass
-            
+
             # Simple rule: if I said it, and it's not a clear 'my sister' etc, it's about ME.
             return "user"
 

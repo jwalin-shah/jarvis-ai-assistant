@@ -7,12 +7,48 @@ previously-separate segmentation and extraction flows in the watcher.
 from __future__ import annotations
 
 import logging
+import os
+from hashlib import sha1
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from jarvis.topics.topic_segmenter import TopicSegment
 
 logger = logging.getLogger(__name__)
+
+
+_LOW_INFO_VALUES = {
+    "me",
+    "you",
+    "that",
+    "this",
+    "it",
+    "they",
+    "them",
+    "him",
+    "her",
+}
+
+
+def _should_verify_fact_value(value: str) -> bool:
+    """Fast gate before NLI verification to avoid low-signal checks."""
+    normalized = " ".join((value or "").strip().lower().split())
+    if not normalized or normalized in _LOW_INFO_VALUES:
+        return False
+    if len(normalized) < 3:
+        return False
+    # Skip values with no letters (often timestamps/noise).
+    if not any(ch.isalpha() for ch in normalized):
+        return False
+    return True
+
+
+def _segment_fingerprint(segment: TopicSegment) -> str:
+    text = getattr(segment, "text", "") or ""
+    if not text:
+        text = "\n".join((m.text or "") for m in getattr(segment, "messages", []))
+    normalized = " ".join(text.lower().split())
+    return sha1(normalized.encode("utf-8")).hexdigest()
 
 
 def process_segments(
@@ -84,13 +120,45 @@ def process_segments(
 
     # 4. Extract facts per segment (outside transaction - can be slow)
     if extract_facts:
-        facts_count = _extract_facts_from_segments(segments, segment_db_ids, contact_id or chat_id)
+        extract_segments: list[TopicSegment] = []
+        extract_segment_db_ids: list[int] = []
+        with db.connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS segment_fact_fingerprints (
+                    chat_id TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (chat_id, fingerprint)
+                )
+                """
+            )
+            for segment, segment_db_id in zip(segments, segment_db_ids):
+                fingerprint = _segment_fingerprint(segment)
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO segment_fact_fingerprints (chat_id, fingerprint)
+                    VALUES (?, ?)
+                    """,
+                    (chat_id, fingerprint),
+                )
+                inserted = conn.execute("SELECT changes()").fetchone()[0]
+                if inserted:
+                    extract_segments.append(segment)
+                    extract_segment_db_ids.append(segment_db_id)
+            conn.commit()
+
+        facts_count = _extract_facts_from_segments(
+            extract_segments,
+            extract_segment_db_ids,
+            contact_id or chat_id,
+        )
         stats["facts_extracted"] = facts_count
 
-        if facts_count > 0:
-            with db.connection() as conn:
-                mark_facts_extracted(conn, segment_db_ids)
-                conn.commit()
+        # Mark extraction attempt complete for these segments even when dedup inserts 0.
+        with db.connection() as conn:
+            mark_facts_extracted(conn, segment_db_ids)
+            conn.commit()
 
     logger.info(
         "Segment pipeline for %s: persisted=%d, indexed=%d, facts=%d",
@@ -107,7 +175,7 @@ def _extract_facts_from_segments(
     segment_db_ids: list[int],
     contact_id: str,
 ) -> int:
-    """Run fact extraction on segments using the existing SegmentExtractor.
+    """Run fact extraction on segments using the V4 InstructionFactExtractor.
 
     Args:
         segments: TopicSegment objects.
@@ -118,21 +186,107 @@ def _extract_facts_from_segments(
         Total number of facts extracted.
     """
     try:
-        from jarvis.contacts.candidate_extractor import CandidateExtractor
-        from jarvis.contacts.fact_storage import save_candidate_facts
-        from jarvis.contacts.segment_extractor import extract_facts_from_segments
+        from integrations.imessage import ChatDBReader
+        from jarvis.contacts.fact_verifier import FactVerifier
+        from jarvis.contacts.fact_storage import log_pass1_claims, save_facts
+        from jarvis.contacts.instruction_extractor import get_instruction_extractor
+        from jarvis.db import get_db
 
-        extractor = CandidateExtractor(label_profile="balanced", use_entailment=True)
-        candidates = extract_facts_from_segments(segments, extractor)
+        db = get_db()
+        reader = ChatDBReader()
+        user_name = reader.get_user_name()
 
-        if not candidates:
-            return 0
+        # Resolve contact name
+        contact_name = "Contact"
+        with db.connection() as conn:
+            row = conn.execute(
+                "SELECT display_name FROM contacts WHERE chat_id = ?",
+                (contact_id,)
+            ).fetchone()
+            if row and row[0]:
+                contact_name = row[0]
 
-        # Associate segment_db_ids with candidates based on message_id membership
-        _link_candidates_to_segments(candidates, segments, segment_db_ids)
+        tier = os.getenv("FACT_EXTRACT_TIER", "0.7b")
+        extractor = get_instruction_extractor(tier=tier)
+        if not extractor.is_loaded():
+            extractor.load()
 
-        inserted = save_candidate_facts(candidates, contact_id)
-        return inserted
+        total_rejected = 0
+        total_raw = 0
+        total_prefilter_rejected = 0
+        all_verified_facts = []
+        batch_size = max(1, int(os.getenv("FACT_EXTRACT_BATCH_SIZE", "2")))
+        verifier = FactVerifier(threshold=0.05)
+        
+        for i in range(0, len(segments), batch_size):
+            batch_segments = segments[i : i + batch_size]
+            batch_db_ids = segment_db_ids[i : i + batch_size]
+            
+            print(f"    - Extracting facts for segments {i+1} to {min(i+batch_size, len(segments))} of {len(segments)}...")
+            
+            # Extract facts for the whole batch in one LLM call
+            batch_results = extractor.extract_facts_from_batch(
+                batch_segments,
+                contact_id=contact_id,
+                contact_name=contact_name,
+                user_name=user_name
+            )
+            batch_extract_stats = extractor.get_last_batch_stats()
+            total_raw += batch_extract_stats.get("raw_triples", 0)
+            total_prefilter_rejected += batch_extract_stats.get("prefilter_rejected", 0)
+            claims_by_segment = extractor.get_last_batch_pass1_claims()
+            log_pass1_claims(
+                contact_id=contact_id,
+                chat_id=contact_id,
+                segment_db_ids=batch_db_ids,
+                claims_by_segment=claims_by_segment,
+                stage="segment_pipeline",
+            )
+
+            # Save facts for each segment in the batch
+            batched_verified_facts = []
+            for segment_obj, segment_facts, db_id in zip(batch_segments, batch_results, batch_db_ids):
+                if segment_facts:
+                    fast_gated_facts = [
+                        f for f in segment_facts if _should_verify_fact_value(getattr(f, "value", ""))
+                    ]
+                    if not fast_gated_facts:
+                        continue
+                    segment_text = getattr(segment_obj, "text", "") or ""
+                    if not segment_text:
+                        segment_text = "\n".join((m.text or "") for m in getattr(segment_obj, "messages", []))
+                    verified_facts, rejected = verifier.verify_facts(fast_gated_facts, segment_text)
+                    total_rejected += rejected
+                    if not verified_facts:
+                        continue
+
+                    # Set segment_id for traceability
+                    for f in verified_facts:
+                        setattr(f, "_segment_db_id", db_id)
+                    batched_verified_facts.extend(verified_facts)
+            all_verified_facts.extend(batched_verified_facts)
+
+        total_inserted = save_facts(
+            all_verified_facts,
+            contact_id,
+            segment_id=None,
+            log_raw_facts=True,
+            log_chat_id=contact_id,
+            log_stage="segment_pipeline",
+            raw_count=total_raw,
+            prefilter_rejected=total_prefilter_rejected,
+            verifier_rejected=total_rejected,
+            )
+
+        if total_rejected:
+            logger.info(
+                "NLI verification rejected %d facts in segment pipeline for %s",
+                total_rejected,
+                contact_id[:20],
+            )
+
+        return total_inserted
+
 
     except Exception as e:
         logger.warning("Fact extraction in segment pipeline failed: %s", e)
@@ -140,7 +294,7 @@ def _extract_facts_from_segments(
 
 
 def _link_candidates_to_segments(
-    candidates: list,
+    candidates: list[Any],
     segments: list[TopicSegment],
     segment_db_ids: list[int],
 ) -> None:

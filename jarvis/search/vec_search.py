@@ -378,13 +378,16 @@ class VecSearcher:
             int8_blob = self._quantize_embedding(segment.centroid)
             binary_blob = self._binarize_embedding(segment.centroid)
 
+            # Handle None start_time gracefully
+            start_ts = segment.start_time.timestamp() if segment.start_time else 0.0
+            
             vec_chunks_batch.append(
                 (
                     int8_blob,
                     contact_id or 0,
                     chat_id or "",
-                    segment.start_time.timestamp(),
-                    context_text[:1000],
+                    start_ts,
+                    (context_text or "")[:1000],
                     reply_text[:1000],
                     segment.topic_label,
                     segment.message_count,
@@ -397,27 +400,55 @@ class VecSearcher:
 
         try:
             with self.db.connection() as conn:
-                # OPTIMIZED: Use single transaction with RETURNING for reliable rowids
+                # OPTIMIZED: Use executemany for bulk insert, then fetch rowids
                 insert_sql = """
                     INSERT INTO vec_chunks(
                         embedding, contact_id, chat_id, source_timestamp,
                         context_text, reply_text, topic_label, message_count
                     ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?)
-                    RETURNING rowid
                 """
 
                 chunk_rowids: list[int] = []
                 # Use single transaction for all inserts
                 try:
-                    for row in vec_chunks_batch:
-                        cursor = conn.execute(insert_sql, row[:8])
-                        result = cursor.fetchone()
-                        if result:
-                            chunk_rowids.append(result["rowid"])
+                    # Bulk insert all chunks at once (much faster than row-by-row)
+                    conn.executemany(insert_sql, [row[:8] for row in vec_chunks_batch])
 
-                    # Commit once after all inserts
+                    # Fetch rowids using unique key (contact_id, chat_id, source_timestamp)
+                    # Build placeholders for the query
+                    placeholders = []
+                    params = []
+                    for row in vec_chunks_batch:
+                        placeholders.append("(contact_id = ? AND chat_id = ? AND source_timestamp = ?)")
+                        params.extend([row[1], row[2], row[3]])
+                    
+                    # Fetch rowids in insertion order
+                    where_clause = " OR ".join(placeholders)
+                    cursor = conn.execute(
+                        f"""
+                        SELECT rowid, contact_id, chat_id, source_timestamp 
+                        FROM vec_chunks 
+                        WHERE {where_clause}
+                        ORDER BY rowid ASC
+                        """,
+                        params,
+                    )
+                    
+                    # Build a lookup map
+                    rowid_map = {}
+                    for row in cursor:
+                        key = (row["contact_id"], row["chat_id"], row["source_timestamp"])
+                        rowid_map[key] = row["rowid"]
+                    
+                    # Get rowids in the same order as input
+                    for row in vec_chunks_batch:
+                        key = (row[1], row[2], row[3])
+                        if key in rowid_map:
+                            chunk_rowids.append(rowid_map[key])
+
+                    # Commit once after all operations
                     conn.commit()
-                except Exception as e:
+                except Exception:
                     conn.rollback()
                     raise
 

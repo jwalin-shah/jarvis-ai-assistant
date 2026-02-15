@@ -677,7 +677,7 @@ class MLXModelLoader:
         top_k = top_k if top_k is not None else 50
         repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
 
-        DEFAULT_NEGATIVE_CONSTRAINTS = [
+        default_negative_constraints = [
             "as an ai",
             "i'm an ai",
             "i am an ai",
@@ -697,7 +697,7 @@ class MLXModelLoader:
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
-            
+
             formatted_prompt = self._tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
@@ -710,7 +710,7 @@ class MLXModelLoader:
             logits_processors.append(make_repetition_penalty(repetition_penalty))
 
         # Add negative constraints to reduce AI-sounding output
-        constraints = negative_constraints or DEFAULT_NEGATIVE_CONSTRAINTS
+        constraints = negative_constraints or default_negative_constraints
         if constraints:
             logits_processors.append(
                 NegativeConstraintLogitsProcessor(self._tokenizer, constraints)
@@ -1059,10 +1059,9 @@ class MLXModelLoader:
                         logger.debug("Streaming generation cancelled via stop_event")
                         break
 
-                    # response.text contains the full text so far
-                    # Extract just the new part
-                    new_text = response.text[len(accumulated_text) :]
-                    accumulated_text = response.text
+                    # response.text contains just the current token's text (not accumulated)
+                    new_text = response.text
+                    accumulated_text += new_text
 
                     # Check for stop sequences
                     should_stop = False
@@ -1071,9 +1070,11 @@ class MLXModelLoader:
                             if stop_seq in accumulated_text:
                                 # Trim to stop sequence
                                 stop_idx = accumulated_text.index(stop_seq)
-                                new_text = accumulated_text[
-                                    len(accumulated_text) - len(new_text) : stop_idx
-                                ]
+                                # Calculate how much of new_text to keep
+                                text_before_new = accumulated_text[:-len(new_text)]
+                                stop_idx_in_new = stop_idx - len(text_before_new)
+                                if stop_idx_in_new >= 0:
+                                    new_text = new_text[:stop_idx_in_new]
                                 should_stop = True
                                 break
 

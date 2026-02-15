@@ -38,6 +38,18 @@
     // Reset textarea height
     if (inputRef) inputRef.style.height = "auto";
 
+    // Safety timeout to prevent stuck input (30 seconds)
+    const safetyTimeout = setTimeout(() => {
+      if (isGenerating) {
+        console.warn("[Chat] Safety timeout triggered - resetting input state");
+        isGenerating = false;
+        messages.push({
+          role: "assistant",
+          content: "Response timed out. Please try again.",
+        });
+      }
+    }, 30000);
+
     try {
       // Build history from prior messages (exclude current)
       const history = messages.slice(0, -1).map((m) => ({
@@ -45,6 +57,8 @@
         content: m.content,
       }));
 
+      console.log("[Chat] Starting chatStream with history length:", history.length);
+      
       await jarvis.chatStream(text, history, (token) => {
         streamingContent += token;
         // Auto-scroll during streaming
@@ -53,16 +67,19 @@
         }
       });
 
+      console.log("[Chat] chatStream completed successfully");
+      
       // Finalize assistant message
       messages.push({ role: "assistant", content: streamingContent.trim() });
       streamingContent = "";
     } catch (error) {
-      console.error("Chat error:", error);
+      console.error("[Chat] Error in chatStream:", error);
       messages.push({
         role: "assistant",
         content: "Sorry, something went wrong. Please try again.",
       });
     } finally {
+      clearTimeout(safetyTimeout);
       isGenerating = false;
       await scrollToBottom();
       inputRef?.focus();

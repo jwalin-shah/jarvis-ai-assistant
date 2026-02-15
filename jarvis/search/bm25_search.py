@@ -14,6 +14,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 from rank_bm25 import BM25Okapi
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,3 @@ class BM25Searcher:
                     )
 
             return results
-
-
-import numpy as np  # Required for argsort

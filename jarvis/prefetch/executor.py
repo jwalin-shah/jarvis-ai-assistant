@@ -736,21 +736,21 @@ class PrefetchExecutor:
 
             confidence = float(result.get("confidence_score", 0.6))
 
-            # Gate low-confidence drafts
-            from jarvis.socket_server import DRAFT_CONFIDENCE_THRESHOLD
-
-            if confidence < DRAFT_CONFIDENCE_THRESHOLD:
-                logger.debug(
-                    f"Prefetch draft gated for {chat_id}: "
-                    f"confidence {confidence:.2f} < {DRAFT_CONFIDENCE_THRESHOLD}"
-                )
-                return {
-                    "suggestions": [],
-                    "gated": True,
-                    "gated_confidence": confidence,
-                    "prefetched": True,
-                    "prefetch_time": time.time(),
-                }
+            # GATING DISABLED for testing - always show prefetch drafts
+            # from jarvis.socket_server import DRAFT_CONFIDENCE_THRESHOLD
+            #
+            # if confidence < DRAFT_CONFIDENCE_THRESHOLD:
+            #     logger.debug(
+            #         f"Prefetch draft gated for {chat_id}: "
+            #         f"confidence {confidence:.2f} < {DRAFT_CONFIDENCE_THRESHOLD}"
+            #     )
+            #     return {
+            #         "suggestions": [],
+            #         "gated": True,
+            #         "gated_confidence": confidence,
+            #         "prefetched": True,
+            #         "prefetch_time": time.time(),
+            #     }
 
             return {
                 "suggestions": [

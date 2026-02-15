@@ -902,7 +902,7 @@ class CategoryFeatureExtractor:
         mob_type: str = "answer",
         chat_id: str | None = None,
     ) -> NDArray[np.float32]:
-        """Extract all 148 non-BERT features.
+        """Extract all 147 non-BERT features.
 
         Parse spaCy doc ONCE, reuse for all extraction methods.
 
@@ -911,7 +911,6 @@ class CategoryFeatureExtractor:
         - 94 spaCy (POS, tags, deps, NER, tokens, morphology)
         - 19 new hand-crafted (error analysis + high-value additions)
         - 8 hard-class (closing/request specific)
-        - 1 relationship formality
 
         Args:
             text: Message text
@@ -921,7 +920,7 @@ class CategoryFeatureExtractor:
             chat_id: Optional chat_id for relationship features
 
         Returns:
-            148-dim feature array (26 + 94 + 19 + 8 + 1)
+            147-dim feature array (26 + 94 + 19 + 8)
         """
         # Parse once, reuse
         doc = self.nlp(text)
@@ -931,10 +930,9 @@ class CategoryFeatureExtractor:
         spacy_feats = self.extract_spacy_features(text, doc)
         new_hand_crafted = self.extract_new_hand_crafted(text, doc, context)
         hard_class_feats = self.extract_hard_class_features(text, doc)
-        rel_feats = self.extract_relationship_features(chat_id)
 
         # Concatenate
-        return np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats, rel_feats])
+        return np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats])
 
     def extract_all_batch(
         self,
@@ -944,7 +942,7 @@ class CategoryFeatureExtractor:
         mob_types: list[str] | None = None,
         chat_ids: list[str | None] | None = None,
     ) -> list[NDArray[np.float32]]:
-        """Extract all 148 non-BERT features for a batch of texts.
+        """Extract all 147 non-BERT features for a batch of texts.
 
         Uses nlp.pipe() for 5-10x faster spaCy processing vs individual nlp() calls.
 
@@ -956,7 +954,7 @@ class CategoryFeatureExtractor:
             chat_ids: Optional list of chat_ids for relationship features.
 
         Returns:
-            List of 148-dim feature arrays.
+            List of 147-dim feature arrays.
         """
         if not texts:
             return []
@@ -985,9 +983,8 @@ class CategoryFeatureExtractor:
             spacy_feats = self.extract_spacy_features(text, doc)
             new_hand_crafted = self.extract_new_hand_crafted(text, doc, contexts[i])
             hard_class_feats = self.extract_hard_class_features(text, doc)
-            rel_feats = self.extract_relationship_features(chat_ids[i])
             results.append(
-                np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats, rel_feats])
+                np.concatenate([hand_crafted, spacy_feats, new_hand_crafted, hard_class_feats])
             )
 
         return results

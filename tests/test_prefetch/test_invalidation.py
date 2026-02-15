@@ -49,7 +49,7 @@ class TestCacheInvalidator:
         """Test that embed:ctx: keys are also invalidated."""
         cache.set("embed:ctx:chat789", {"embeddings": [1, 2, 3]})
 
-        count = invalidator.on_new_message("chat789", "test")
+        _ = invalidator.on_new_message("chat789", "test")
         assert cache.get("embed:ctx:chat789") is None
 
     def test_manual_invalidate_keys(

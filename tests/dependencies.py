@@ -187,20 +187,11 @@ DEPENDENCIES: dict[str, Dependency] = {
     "memory_16gb": Dependency("memory_16gb", DependencyTier.HARDWARE, _check_memory_gb(16)),
     "memory_8gb": Dependency("memory_8gb", DependencyTier.HARDWARE, _check_memory_gb(8)),
     # Model artifacts
-    "svm_trigger_classifier": Dependency(
-        "svm_trigger_classifier",
-        DependencyTier.STANDARD,
-        _check_model_files(["trigger_classifier_model"]),
-    ),
-    "svm_response_classifier": Dependency(
-        "svm_response_classifier",
-        DependencyTier.STANDARD,
-        _check_model_files(["response_classifier_model"]),
-    ),
+    # Note: svm_trigger_classifier and svm_response_classifier removed - deprecated
     "lfm_model": Dependency(
         "lfm_model",
         DependencyTier.HARDWARE,
-        _check_model_files(["lfm-1.2b-soc-fused"]),
+        _check_model_files(["lfm-0.7b-4bit"]),  # Use 0.7B model which is available
     ),
 }
 

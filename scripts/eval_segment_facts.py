@@ -276,10 +276,10 @@ def main() -> None:
             flush=True,
         )
         print(
-            f"\nNote: Substring mode measures recall only (does the output mention the fact?).",
+            "\nNote: Substring mode measures recall only (does the output mention the fact?).",
             flush=True,
         )
-        print(f"Precision is not measured since the model produces freeform text.", flush=True)
+        print("Precision is not measured since the model produces freeform text.", flush=True)
 
         # Per-type recall from gold facts
         type_hits: dict[str, list[bool]] = defaultdict(list)

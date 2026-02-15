@@ -1,6 +1,6 @@
 # Documentation Index
 
-> **Last Updated:** 2026-02-10
+> **Last Updated:** 2026-02-13
 
 ## Core
 
@@ -47,7 +47,7 @@
 | Doc | Purpose |
 |-----|---------|
 | [REPOSITORY_MODERNIZATION_ROADMAP.md](./REPOSITORY_MODERNIZATION_ROADMAP.md) | 90-day complexity reduction plan |
-| [SCRIPTS_MIGRATION_PLAN.md](./SCRIPTS_MIGRATION_PLAN.md) | Migrate 64 scripts to `jarvis.tools` package |
+| [DEV_PRODUCTIVITY_PLAN.md](./DEV_PRODUCTIVITY_PLAN.md) | Developer experience improvements |
 | [DEV_PRODUCTIVITY_PLAN.md](./DEV_PRODUCTIVITY_PLAN.md) | Developer experience improvements |
 | [FACT_KG_ROADMAP.md](./FACT_KG_ROADMAP.md) | Fact extraction & knowledge graph roadmap |
 
