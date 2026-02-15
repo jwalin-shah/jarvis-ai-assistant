@@ -98,6 +98,7 @@ async def lifespan(app_instance: FastAPI):
     # Stop model warmer
     get_model_warmer().stop()
 
+
 API_TAGS_METADATA = [
     {
         "name": "health",
@@ -213,7 +214,6 @@ API_TAGS_METADATA = [
         "Build and manage profiles that capture communication patterns with each contact "
         "for personalized reply generation.",
     },
-
 ]
 
 API_CONTACT = {

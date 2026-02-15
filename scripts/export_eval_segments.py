@@ -16,6 +16,7 @@ Usage:
     uv run python scripts/export_eval_segments.py
     uv run python scripts/export_eval_segments.py --per-chat 5 --min-messages 3
 """
+
 import argparse
 import json
 import random
@@ -175,14 +176,16 @@ def main() -> None:
                 stats["unresolved_filtered"] += 1
                 continue
 
-            exported.append({
-                "segment_id": seg["segment_id"],
-                "chat_id": chat_id,
-                "contact_name": resolved_name,
-                "topic_label": seg["topic_label"],
-                "message_count": len(lines),
-                "formatted_text": "\n".join(lines),
-            })
+            exported.append(
+                {
+                    "segment_id": seg["segment_id"],
+                    "chat_id": chat_id,
+                    "contact_name": resolved_name,
+                    "topic_label": seg["topic_label"],
+                    "message_count": len(lines),
+                    "formatted_text": "\n".join(lines),
+                }
+            )
 
         print(
             f"  {chat_id[:30]}: {len(sampled)} segments sampled",

@@ -77,13 +77,13 @@ def _ensure_vec_facts_table(conn: sqlite3.Connection) -> None:
 
 
 def index_facts(
-    facts: list[Fact], 
+    facts: list[Fact],
     contact_id: str,
     embeddings: np.ndarray | None = None,
 ) -> int:
     """Embed and store facts in vec_facts table.
 
-    Batch-encodes all fact texts (unless embeddings provided), quantizes to int8, 
+    Batch-encodes all fact texts (unless embeddings provided), quantizes to int8,
     and inserts into the sqlite-vec virtual table. Skips facts already indexed.
 
     Args:
@@ -108,6 +108,7 @@ def index_facts(
     # Use provided embeddings or encode fresh
     if embeddings is None:
         from jarvis.embedding_adapter import get_embedder
+
         embedder = get_embedder()
         # Batch encode all facts at once (GPU lock handled inside encode())
         embeddings = embedder.encode(fact_texts, normalize=True)

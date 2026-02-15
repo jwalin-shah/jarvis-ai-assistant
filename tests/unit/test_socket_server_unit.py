@@ -196,6 +196,7 @@ class TestSocketServerMethods:
         """Create a server instance."""
         return JarvisSocketServer(enable_watcher=False, preload_models=False)
 
+
 class TestRotateWsToken:
     """Tests for WebSocket token rotation."""
 

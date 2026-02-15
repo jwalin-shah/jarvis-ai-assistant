@@ -26,7 +26,6 @@ from integrations.imessage import ChatDBReader
 from jarvis.contacts.instruction_extractor import (
     NEGATIVE_CONSTRAINTS,
     _is_transactional_message,
-    _parse_pass1_json_lines,
 )
 from jarvis.contacts.junk_filters import is_junk_message
 from jarvis.text_normalizer import normalize_text
@@ -42,7 +41,7 @@ OUTPUT_DIR = Path("results/prompt_bakeoff_v3")
 
 def _prompt_current_baseline(user_name: str, contact_name: str, seg_count: int) -> str:
     """Variant 1: Current production prompt — unchanged control."""
-    base = f"""You extract durable personal facts from chat turns.
+    base = """You extract durable personal facts from chat turns.
 
 Task:
 - Return ONLY stable personal claims that are useful for a long-lived profile.
@@ -64,9 +63,9 @@ Do NOT extract:
 Output format:
 - Output JSONL only: one JSON object per line, no markdown.
 - If multiple [Segment N] blocks are provided, each line MUST use this schema:
-  {{"segment_id": <int>, "subject": "<person>", "speaker": "<speaker>", "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}}
+  {"segment_id": <int>, "subject": "<person>", "speaker": "<speaker>", "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}
 - If only one segment is provided, `segment_id` is optional:
-  {{"subject": "<person>", "speaker": "<speaker>", "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}}
+  {"subject": "<person>", "speaker": "<speaker>", "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}
 - Max 3 claims per segment.
 - If no claims at all, output exactly: NONE
 
@@ -84,7 +83,7 @@ Hard rules:
 
 def _prompt_extractive_grounded(user_name: str, contact_name: str, seg_count: int) -> str:
     """Variant 2: Forces verbatim grounding — kills hallucinated quotes."""
-    base = f"""You extract durable personal facts from chat messages.
+    base = """You extract durable personal facts from chat messages.
 
 CRITICAL RULE — VERBATIM ONLY:
 - The "verbatim_quote" field MUST be an EXACT copy-paste from the conversation text.
@@ -95,7 +94,7 @@ Allowed claims: identity, relationship, work, school, location, durable preferen
 Do NOT extract: logistics, jokes, reactions, greetings, speculative claims.
 
 Output JSONL — one JSON object per line, no markdown:
-{{"segment_id": <int>, "subject": "<person>", "claim": "<durable fact in 3rd person>", "verbatim_quote": "<EXACT text from conversation>"}}
+{"segment_id": <int>, "subject": "<person>", "claim": "<durable fact in 3rd person>", "verbatim_quote": "<EXACT text from conversation>"}
 
 Max 3 claims per segment. If no durable facts exist, output exactly: NONE"""
     if seg_count > 1:
@@ -105,7 +104,7 @@ Max 3 claims per segment. If no durable facts exist, output exactly: NONE"""
 
 def _prompt_empty_safe(user_name: str, contact_name: str, seg_count: int) -> str:
     """Variant 3: Hardened against empty/trivial inputs."""
-    base = f"""You extract durable personal facts from chat turns.
+    base = """You extract durable personal facts from chat turns.
 
 FIRST RULE — EMPTY INPUT HANDLING:
 - If the conversation text is empty, blank, or contains only greetings/reactions with no personal facts, output EXACTLY the word: NONE
@@ -115,7 +114,7 @@ Allowed claims: identity, relationship, work, school, location, durable preferen
 Do NOT extract: logistics, meetups, jokes, reactions, tapbacks, news, speculative claims.
 
 Output format — JSONL only (one JSON object per line, no markdown):
-{{"segment_id": <int>, "subject": "<person>", "speaker": "<who said it>", "claim": "<durable fact>", "evidence_quote": "<exact quote>"}}
+{"segment_id": <int>, "subject": "<person>", "speaker": "<who said it>", "claim": "<durable fact>", "evidence_quote": "<exact quote>"}
 
 Max 3 claims per segment. Subject must be a person's name, never a group.
 Only extract facts EXPLICITLY stated. No inference. Use 3rd-person wording.
@@ -255,9 +254,17 @@ HARD RULES:
 
 # Expanded negative constraints: original + hallucination patterns from v3/v3.1
 EXPANDED_NEGATIVE_CONSTRAINTS = NEGATIVE_CONSTRAINTS + [
-    "Alice", "Bob", "Charlie", "example", "Durable",
-    "[Subject", "[name", "[phone", "[preference",
-    "placeholder", "fictional",
+    "Alice",
+    "Bob",
+    "Charlie",
+    "example",
+    "Durable",
+    "[Subject",
+    "[name",
+    "[phone",
+    "[preference",
+    "placeholder",
+    "fictional",
 ]
 
 # Strategy registry. "format" controls parsing, priming, and user prompt.
@@ -293,13 +300,14 @@ def is_grounded(quote: str, source_text: str) -> bool:
 @dataclass
 class StrategyMetrics:
     """Aggregate metrics for one prompt strategy."""
+
     name: str
     total_claims: int = 0
     grounded_claims: int = 0
     ungrounded_claims: int = 0
-    empty_correct: int = 0     # correctly output NONE on empty input
+    empty_correct: int = 0  # correctly output NONE on empty input
     empty_hallucinated: int = 0  # hallucinated on empty input
-    empty_total: int = 0       # total empty-input examples
+    empty_total: int = 0  # total empty-input examples
     parse_success: int = 0
     parse_fail: int = 0
     total_examples: int = 0
@@ -336,7 +344,8 @@ def _build_segments(reader: ChatDBReader, limit: int, window: int):
     convos = reader.get_conversations(limit=max(50, min(1000, limit * 10)))
     user_name = reader.get_user_name()
     active = [
-        c for c in convos
+        c
+        for c in convos
         if c.message_count >= 5
         and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
     ][:limit]
@@ -351,7 +360,7 @@ def _build_segments(reader: ChatDBReader, limit: int, window: int):
             continue
         segments = []
         for j in range(0, len(messages), 20):
-            window_msgs = messages[j:j + 25]
+            window_msgs = messages[j : j + 25]
             if not window_msgs:
                 break
             segments.append(
@@ -384,7 +393,9 @@ def _build_batch_text(segments, contact_id: str, contact_name: str, user_name: s
             raw = " ".join((m.text or "").splitlines()).strip()
             if not raw:
                 continue
-            clean = normalize_text(raw, filter_garbage=True, filter_attributed_artifacts=True, strip_signatures=True)
+            clean = normalize_text(
+                raw, filter_garbage=True, filter_attributed_artifacts=True, strip_signatures=True
+            )
             if not clean:
                 continue
             if is_junk_message(clean, contact_id):
@@ -463,6 +474,7 @@ def main() -> None:
 
     # Load model
     from jarvis.contacts.instruction_extractor import MODELS
+
     model_path = MODELS.get(args.tier, MODELS.get("0.7b"))
     config = ModelConfig(model_path=model_path, default_temperature=0.1)
     loader = MLXModelLoader(config)
@@ -482,7 +494,9 @@ def main() -> None:
     }
 
     comparison_lines: list[str] = []
-    comparison_lines.append(f"PROMPT BAKEOFF V3.2 — {len(datasets)} conversations, tier={args.tier}")
+    comparison_lines.append(
+        f"PROMPT BAKEOFF V3.2 — {len(datasets)} conversations, tier={args.tier}"
+    )
     comparison_lines.append(f"{'=' * 100}\n")
 
     for idx, (chat_id, contact_name, segments) in enumerate(datasets, 1):
@@ -495,7 +509,9 @@ def main() -> None:
         is_empty = not batch_text.strip()
 
         comparison_lines.append(f"\n{'=' * 100}")
-        comparison_lines.append(f"CHAT {idx}/{len(datasets)} | {contact_name} | segments={seg_count} | empty={is_empty}")
+        comparison_lines.append(
+            f"CHAT {idx}/{len(datasets)} | {contact_name} | segments={seg_count} | empty={is_empty}"
+        )
         comparison_lines.append(f"{'=' * 100}")
         if is_empty:
             comparison_lines.append("INPUT: <EMPTY_AFTER_FILTERS>")
@@ -512,7 +528,9 @@ def main() -> None:
             metrics.total_examples += 1
 
             system_prompt = strat_fn(user_name, contact_name, seg_count)
-            user_prompt = f"Conversation:\n{batch_text}\n\nReturn JSONL durable claims now (or NONE):\n"
+            user_prompt = (
+                f"Conversation:\n{batch_text}\n\nReturn JSONL durable claims now (or NONE):\n"
+            )
 
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -524,7 +542,7 @@ def main() -> None:
 
             # Output priming: append '{' for json_primed to force JSON start
             if strat_format == "json_primed":
-                formatted = formatted.rstrip() + '\n{'
+                formatted = formatted.rstrip() + "\n{"
             else:
                 if not formatted.endswith("\n"):
                     formatted += "\n"
@@ -590,24 +608,30 @@ def main() -> None:
                     metrics.grounded_claims += 1
                 else:
                     metrics.ungrounded_claims += 1
-                example_claims.append({
-                    "subject": subject,
-                    "claim": claim,
-                    "quote": quote[:80],
-                    "grounded": grounded,
-                })
+                example_claims.append(
+                    {
+                        "subject": subject,
+                        "claim": claim,
+                        "quote": quote[:80],
+                        "grounded": grounded,
+                    }
+                )
 
             # Write comparison
-            comparison_lines.append(f"  >> {strat_name} ({elapsed_ms:.0f}ms) — {len(parsed_items)} claims")
+            comparison_lines.append(
+                f"  >> {strat_name} ({elapsed_ms:.0f}ms) — {len(parsed_items)} claims"
+            )
             if is_none and is_empty:
-                comparison_lines.append(f"     ✅ Correctly output NONE for empty input")
+                comparison_lines.append("     ✅ Correctly output NONE for empty input")
             elif is_empty and parsed_items:
-                comparison_lines.append(f"     ❌ HALLUCINATED {len(parsed_items)} claims on empty input!")
+                comparison_lines.append(
+                    f"     ❌ HALLUCINATED {len(parsed_items)} claims on empty input!"
+                )
             for c in example_claims:
                 icon = "✅" if c["grounded"] else "❌"
                 comparison_lines.append(f"     {icon} [{c['subject']}] {c['claim'][:60]}")
                 if not c["grounded"] and c["quote"]:
-                    comparison_lines.append(f"        ungrounded quote: \"{c['quote']}\"")
+                    comparison_lines.append(f'        ungrounded quote: "{c["quote"]}"')
             comparison_lines.append("")
 
         # Progress

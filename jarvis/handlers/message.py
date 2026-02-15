@@ -15,7 +15,7 @@ from jarvis.handlers.base import (
 from jarvis.utils.latency_tracker import track_latency
 
 if TYPE_CHECKING:
-    from jarvis.socket_server import JarvisSocketServer
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,7 @@ class MessageHandler(BaseHandler):
             raise JsonRpcError(INVALID_PARAMS, "Message cannot be empty")
 
         from jarvis.model_warmer import get_model_warmer
+
         get_model_warmer().touch()
 
         system = system_prompt or "You are a helpful assistant."
@@ -123,6 +124,7 @@ class MessageHandler(BaseHandler):
         prompt = "".join(prompt_parts)
 
         from contracts.models import GenerationRequest
+
         request = GenerationRequest(
             prompt=prompt,
             context_documents=[],
@@ -138,6 +140,7 @@ class MessageHandler(BaseHandler):
             return await self._chat_streaming(request, _writer, _request_id)
 
         from models import get_generator
+
         generator = get_generator()
         response_tokens: list[str] = []
         async for token_data in generator.generate_stream(request):
@@ -156,6 +159,7 @@ class MessageHandler(BaseHandler):
     ) -> dict[str, Any]:
         """Stream chat tokens."""
         from models import get_generator
+
         generator = get_generator()
         response_tokens: list[str] = []
 
@@ -197,9 +201,11 @@ class MessageHandler(BaseHandler):
                 return cached_draft
 
         from jarvis.model_warmer import get_model_warmer
+
         get_model_warmer().touch()
 
         from integrations.imessage import ChatDBReader
+
         with track_latency("socket_get_messages", chat_id=chat_id, limit=context_messages):
             with ChatDBReader() as reader:
                 messages = reader.get_messages(chat_id, limit=context_messages)
@@ -236,6 +242,7 @@ class MessageHandler(BaseHandler):
             )
 
         from jarvis.router import get_reply_router
+
         router = get_reply_router()
         if self.server._prefetch_manager:
             self.server._prefetch_manager.pause()
@@ -264,6 +271,7 @@ class MessageHandler(BaseHandler):
     ) -> dict[str, Any]:
         """Stream draft tokens."""
         from jarvis.reply_service import get_reply_service
+
         reply_service = get_reply_service()
 
         if self.server._prefetch_manager:
@@ -294,7 +302,7 @@ class MessageHandler(BaseHandler):
                     await self._send_stream_token(
                         writer, token_text, token_index, is_final, request_id=request_id
                     )
-            except Exception as e:
+            except Exception:
                 logger.exception("Streaming generation failed")
                 raise JsonRpcError(INTERNAL_ERROR, "Streaming failed")
         finally:
@@ -321,6 +329,7 @@ class MessageHandler(BaseHandler):
     ) -> dict[str, Any]:
         """Summarize a conversation."""
         from integrations.imessage import ChatDBReader
+
         with ChatDBReader() as reader:
             messages = reader.get_messages(chat_id, limit=num_messages)
 
@@ -328,6 +337,7 @@ class MessageHandler(BaseHandler):
             raise JsonRpcError(INVALID_PARAMS, "No messages found")
 
         from jarvis.model_warmer import get_model_warmer
+
         get_model_warmer().touch()
 
         conversation, _ = self._build_message_context(messages)
@@ -339,6 +349,7 @@ class MessageHandler(BaseHandler):
             }
 
         from models.loader import get_model
+
         model = get_model()
         if not model:
             raise JsonRpcError(INTERNAL_ERROR, "Model not available")
@@ -386,17 +397,19 @@ class MessageHandler(BaseHandler):
         request_id: Any,
     ) -> dict[str, Any]:
         """Stream summary tokens."""
-        # This one is tricky because _summarize_streaming in socket_server.py 
+        # This one is tricky because _summarize_streaming in socket_server.py
         # uses a thread-based generation for models that don't support async stream natively?
         # Let's check socket_server.py implementation again for _summarize_streaming.
-        
+
         # Actually I'll just copy it for now.
         from models import get_generator
+
         generator = get_generator()
-        
+
         from contracts.models import GenerationRequest
+
         request = GenerationRequest(prompt=prompt, max_tokens=300)
-        
+
         response_tokens: list[str] = []
         try:
             async for token_data in generator.generate_stream(request):
@@ -408,7 +421,7 @@ class MessageHandler(BaseHandler):
                 await self._send_stream_token(
                     writer, token_text, token_index, is_final, request_id=request_id
                 )
-        except Exception as e:
+        except Exception:
             logger.exception("Streaming summarization failed")
             raise JsonRpcError(INTERNAL_ERROR, "Streaming failed")
 
@@ -439,6 +452,7 @@ class MessageHandler(BaseHandler):
     ) -> dict[str, Any]:
         """Get smart reply suggestions."""
         from jarvis.router import get_reply_router
+
         router = get_reply_router()
         result = await asyncio.to_thread(router.route, incoming=last_message)
         return result
@@ -451,6 +465,7 @@ class MessageHandler(BaseHandler):
     ) -> dict[str, Any]:
         """List recent iMessage conversations."""
         from integrations.imessage import ChatDBReader
+
         with ChatDBReader() as reader:
             chats = reader.get_recent_chats(limit=limit, offset=offset)
 
@@ -460,7 +475,9 @@ class MessageHandler(BaseHandler):
                     "chat_id": c.chat_id,
                     "display_name": c.display_name,
                     "last_message": c.last_message_text,
-                    "last_message_date": c.last_message_date.isoformat() if c.last_message_date else None,
+                    "last_message_date": c.last_message_date.isoformat()
+                    if c.last_message_date
+                    else None,
                     "is_group": c.is_group,
                 }
                 for c in chats

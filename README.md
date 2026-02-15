@@ -138,6 +138,13 @@ cd desktop && npm run tauri dev
 
 See [desktop/README.md](desktop/README.md) for detailed setup and E2E testing.
 
+## Documentation
+
+- **[How it works](docs/HOW_IT_WORKS.md)** – End-to-end architecture and message flow
+- **[Architecture](docs/ARCHITECTURE.md)** – Socket server, direct SQLite, V2 design
+- **[Schema](docs/SCHEMA.md)** – Database schema and migrations
+- **[CLAUDE.md](CLAUDE.md)** – Guidelines for AI assistants working in this repo
+
 ## Development Commands
 
 ```bash

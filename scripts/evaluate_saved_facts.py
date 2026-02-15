@@ -77,7 +77,9 @@ def classify(subject: str, predicate: str, value: str) -> tuple[str, str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate saved fact quality (heuristic)")
     parser.add_argument("--hours", type=int, default=24, help="Only facts saved in last N hours")
-    parser.add_argument("--per-chat", type=int, default=3, help="Show up to N sample facts per chat")
+    parser.add_argument(
+        "--per-chat", type=int, default=3, help="Show up to N sample facts per chat"
+    )
     args = parser.parse_args()
 
     db = get_db()

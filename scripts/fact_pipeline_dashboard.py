@@ -93,7 +93,9 @@ def main() -> None:
         kept_after_quality = max(0, raw - prefilter - verifier)
         saved_precision = (saved / kept_after_quality) if kept_after_quality else 0.0
         save_rate = (saved / raw) if raw else 0.0
-        print(f"raw={raw} saved={saved} save_rate={save_rate:.3f} saved_precision={saved_precision:.3f}")
+        print(
+            f"raw={raw} saved={saved} save_rate={save_rate:.3f} saved_precision={saved_precision:.3f}"
+        )
         print(
             f"reject_reason: prefilter={prefilter} verifier={verifier} "
             f"semantic_dedup={semantic} unique_conflict={unique}"
@@ -145,4 +147,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

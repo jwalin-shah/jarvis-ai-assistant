@@ -75,9 +75,7 @@ class StatsMixin:
             stats: dict[str, Any] = {}
 
             # Total chunks with embeddings
-            row = conn.execute(
-                "SELECT COUNT(*) as total FROM vec_chunks"
-            ).fetchone()
+            row = conn.execute("SELECT COUNT(*) as total FROM vec_chunks").fetchone()
             stats["total_vectors"] = row["total"] if row else 0
 
             # Chunks per contact

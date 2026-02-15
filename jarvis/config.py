@@ -371,6 +371,34 @@ class NormalizationProfile(BaseModel):
     max_length: int = Field(default=500, ge=1, le=5000)
 
 
+def _normalization_profile(
+    *,
+    normalize_emojis: bool = False,
+    ner_enabled: bool = False,
+    spell_check: bool = False,
+    min_length: int = 1,
+    max_length: int = 1000,
+    **kwargs: Any,
+) -> NormalizationProfile:
+    """Build a NormalizationProfile with shared defaults for pipeline use."""
+    return NormalizationProfile(
+        filter_garbage=True,
+        filter_attributed_artifacts=True,
+        drop_url_only=True,
+        mask_entities=False,
+        preserve_url_domain=True,
+        replace_codes=True,
+        expand_slang=True,
+        filter_non_english=False,
+        normalize_emojis=normalize_emojis,
+        ner_enabled=ner_enabled,
+        spell_check=spell_check,
+        min_length=min_length,
+        max_length=max_length,
+        **kwargs,
+    )
+
+
 class SegmentationConfig(BaseModel):
     """Configuration for semantic topic segmentation.
 
@@ -422,68 +450,37 @@ class NormalizationConfig(BaseModel):
     """Normalization profiles for different tasks."""
 
     extraction: NormalizationProfile = Field(
-        default_factory=lambda: NormalizationProfile(
-            filter_garbage=True,
-            filter_attributed_artifacts=True,
-            drop_url_only=True,
-            mask_entities=False,  # Not needed - running locally
+        default_factory=lambda: _normalization_profile(
             normalize_emojis=False,  # Keep original emojis (LLM understands them)
-            preserve_url_domain=True,
-            replace_codes=True,
-            ner_enabled=False,  # Don't need NER for storage
-            expand_slang=True,  # Expand slang for better entity extraction
+            ner_enabled=False,
             spell_check=False,  # Disabled: mangles entity names (mom→mon, Xbox→box)
-            filter_non_english=False,
             min_length=1,
             max_length=2000,
         )
     )
     classification: NormalizationProfile = Field(
-        default_factory=lambda: NormalizationProfile(
-            filter_garbage=True,
-            filter_attributed_artifacts=True,
-            drop_url_only=True,
-            mask_entities=False,  # Not needed - running locally
+        default_factory=lambda: _normalization_profile(
             normalize_emojis=True,
-            preserve_url_domain=True,
-            replace_codes=True,
-            ner_enabled=True,  # For entity extraction, not masking
-            expand_slang=True,
-            spell_check=True,  # Correct typos (runs after slang expansion)
-            filter_non_english=False,  # Breaks slang detection
+            ner_enabled=True,
+            spell_check=True,
             min_length=1,
             max_length=1000,
         )
     )
     chunk_embedding: NormalizationProfile = Field(
-        default_factory=lambda: NormalizationProfile(
-            filter_garbage=True,
-            filter_attributed_artifacts=True,
-            drop_url_only=True,
-            mask_entities=False,  # Not needed - running locally
+        default_factory=lambda: _normalization_profile(
             normalize_emojis=True,
-            preserve_url_domain=True,
-            replace_codes=True,
-            ner_enabled=False,  # Slows down bulk processing, not needed for matching
-            expand_slang=True,  # "tmrw" → "tomorrow" for better embedding match
+            ner_enabled=False,
             spell_check=True,
-            filter_non_english=False,  # Breaks slang detection
             min_length=1,
-            max_length=2000,  # Chunks can be longer than single messages
+            max_length=2000,
         )
     )
     topic_modeling: NormalizationProfile = Field(
-        default_factory=lambda: NormalizationProfile(
-            filter_garbage=True,
-            filter_attributed_artifacts=True,
-            drop_url_only=True,
-            mask_entities=False,  # Not needed - running locally
+        default_factory=lambda: _normalization_profile(
             normalize_emojis=True,
-            preserve_url_domain=True,
-            replace_codes=True,
             ner_enabled=True,
-            expand_slang=True,
-            filter_non_english=False,  # Breaks slang detection
+            spell_check=False,
             min_length=3,
             max_length=1000,
         )

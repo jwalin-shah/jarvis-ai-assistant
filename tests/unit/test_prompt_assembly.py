@@ -10,9 +10,10 @@ methods were called. A malformed prompt silently degrades generation quality.
 
 from __future__ import annotations
 
-import pytest
 import re
 from datetime import datetime
+
+import pytest
 
 from contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.contracts.pipeline import (
@@ -798,9 +799,7 @@ class TestTemplateVariables:
         assert unresolved == [], f"Unresolved: {unresolved}"
 
     def test_search_template_all_vars_filled(self):
-        result = build_search_prompt(
-            context="Test messages", query="Where is the meeting?"
-        )
+        result = build_search_prompt(context="Test messages", query="Where is the meeting?")
         unresolved = re.findall(r"\{[a-z_]+\}", result)
         assert unresolved == [], f"Unresolved: {unresolved}"
 
@@ -1104,9 +1103,7 @@ class TestSearchPromptAssembly:
             assert section in result, f"Missing section: {section}"
 
     def test_question_in_prompt(self):
-        result = build_search_prompt(
-            context="Messages", query="What time is the meeting?"
-        )
+        result = build_search_prompt(context="Messages", query="What time is the meeting?")
         assert "What time is the meeting?" in result
 
     def test_search_ends_with_marker(self):

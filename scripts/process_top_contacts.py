@@ -10,14 +10,16 @@ logger = logging.getLogger("jarvis")
 
 TARGET_CHATS = [
     {"chat_id": "iMessage;-;+14087867207", "default_name": "Mateo"},
-    {"chat_id": "iMessage;-;+14084643141", "default_name": "Friend"}
+    {"chat_id": "iMessage;-;+14084643141", "default_name": "Friend"},
 ]
+
 
 class MockSegment:
     def __init__(self, messages):
         self.messages = messages
         # Safer join to avoid syntax issues in prompt rendering
         self.text = "\n".join([" ".join((m.text or "").splitlines()) for m in messages])
+
 
 def process_top_contacts():
     reader = ChatDBReader()
@@ -33,9 +35,9 @@ def process_top_contacts():
         if conv and conv.display_name:
             contact_name = conv.display_name.split()[0]
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(f"PROCESSING: {contact_name} (Chat ID: {chat_id})")
-        print("="*60)
+        print("=" * 60)
 
         # 2. Fetch messages
         messages = reader.get_messages(chat_id, limit=300)
@@ -49,8 +51,9 @@ def process_top_contacts():
         overlap = 5
         windows = []
         for i in range(0, len(messages), window_size - overlap):
-            window = messages[i:i + window_size]
-            if len(window) < 5: break
+            window = messages[i : i + window_size]
+            if len(window) < 5:
+                break
             windows.append(MockSegment(window))
 
         print(f"Created {len(windows)} windows from {len(messages)} messages.")
@@ -58,12 +61,9 @@ def process_top_contacts():
         # 4. Extract
         all_facts = []
         for i, seg in enumerate(windows[:5]):
-            print(f"\nProcessing window {i+1}/5...")
+            print(f"\nProcessing window {i + 1}/5...")
             facts = extractor.extract_facts_from_segment(
-                seg,
-                contact_id=chat_id,
-                contact_name=contact_name,
-                user_name=user_name
+                seg, contact_id=chat_id, contact_name=contact_name, user_name=user_name
             )
             if facts:
                 print(f"  Verified {len(facts)} facts.")
@@ -79,6 +79,7 @@ def process_top_contacts():
                 )
 
         print(f"\nCompleted {contact_name}. Total verified facts: {len(all_facts)}")
+
 
 if __name__ == "__main__":
     process_top_contacts()

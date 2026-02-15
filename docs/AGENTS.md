@@ -26,7 +26,7 @@
 - Line length is 100 characters; target Python version is 3.11.
 - Lint rules include `E,F,I,N,W,UP` with `E741` ignored; ML scripts have specific per-file ignores.
 - Type checking uses strict `mypy` (`make typecheck`).
-- All LLM prompts must live in `jarvis/prompts.py`.
+- All LLM prompts must live in `jarvis/prompts/`.
 
 ## Testing Guidelines
 - Tests run with `pytest` via `make test`; coverage includes `jarvis/`, `api/`, `models/`, `core/`, `integrations/`, `contracts/`, `benchmarks/`.
@@ -232,7 +232,7 @@ Skill definitions live in `.claude/skills/` and provide domain-specific context 
 | Domain | Skill | Key Files |
 |--------|-------|-----------|
 | Backend/Server | backend-expert | `jarvis/socket_server.py`, `jarvis/prefetch/`, `jarvis/watcher.py` |
-| LLM/Generation | ai-llm-expert | `jarvis/reply_service.py`, `models/`, `jarvis/prompts.py` |
+| LLM/Generation | ai-llm-expert | `jarvis/reply_service.py`, `models/`, `jarvis/prompts/` |
 | Data/Search | data-expert | `jarvis/search/`, `jarvis/contacts/`, `jarvis/db/` |
 | ML/Classifiers | ml-expert | `jarvis/classifiers/`, `jarvis/features/`, `scripts/train_*` |
 | Frontend | frontend-expert | `desktop/src/**/*.svelte`, `desktop/src/**/*.ts` |

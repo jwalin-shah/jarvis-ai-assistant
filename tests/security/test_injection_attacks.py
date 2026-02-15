@@ -269,4 +269,3 @@ class TestRateLimiter:
 
         # client2 should still be allowed
         assert limiter.is_allowed("client2") is True
-

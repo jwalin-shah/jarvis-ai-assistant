@@ -16,5 +16,6 @@ def find_shanay_messages():
         for r in rows:
             print(dict(r))
 
+
 if __name__ == "__main__":
     find_shanay_messages()

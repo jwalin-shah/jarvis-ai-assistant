@@ -24,6 +24,7 @@ Verified Facts about Radhika:
 
 Character Profile for Radhika:"""
 
+
 def generate_bio():
     # 1. Fetch Verified Facts from DB
     print(f"Fetching verified facts for {CHAT_ID}...")
@@ -58,17 +59,15 @@ def generate_bio():
     prompt = BIO_PROMPT_TEMPLATE.format(fact_list=fact_blob)
 
     result = loader.generate_sync(
-        prompt=prompt,
-        max_tokens=800,
-        temperature=0.3,
-        stop_sequences=["###", "Verified Facts:"]
+        prompt=prompt, max_tokens=800, temperature=0.3, stop_sequences=["###", "Verified Facts:"]
     )
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("RADHIKA SHAH - FINAL CHARACTER BIOGRAPHY")
-    print("="*60)
+    print("=" * 60)
     print(result.text.strip())
-    print("="*60)
+    print("=" * 60)
+
 
 if __name__ == "__main__":
     generate_bio()

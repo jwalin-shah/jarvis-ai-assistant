@@ -581,8 +581,8 @@ class TaskWorker:
                 if row and row[0]:
                     contact_name = row[0].split()[0]
 
-            # Create sliding windows with overlap for better NLI
-            windows = []
+            # Create extraction windows (not topic segments) with overlap for better NLI.
+            extraction_windows = []
             for i in range(0, len(messages), window_size - overlap):
                 window = messages[i : i + window_size]
                 if len(window) < 5:
@@ -615,10 +615,10 @@ class TaskWorker:
                         seg_lines.append(f"{curr_sender}: {' '.join(curr_msgs)}")
 
                 seg_text = "\n".join(seg_lines)
-                windows.append(MockSeg(messages=window, text=seg_text))
+                extraction_windows.append(MockSeg(messages=window, text=seg_text))
 
-            total_segments = len(windows)
-            if not total_segments:
+            total_windows = len(extraction_windows)
+            if not total_windows:
                 return TaskResult(success=True, items_processed=0)
 
             extractor = get_instruction_extractor(tier="0.7b")
@@ -628,17 +628,23 @@ class TaskWorker:
                     max_rowid_processed = msg.id
 
             update_progress(
-                0, total_segments, f"Extracting from {total_segments} windows ({mode})"
-            )
-            batch_results = extractor.extract_facts_from_batch(
-                windows,
-                contact_id=chat_id,
-                contact_name=contact_name,
-                user_name=user_name,
+                0, total_windows, f"Extracting from {total_windows} extraction windows ({mode})"
             )
             all_facts: list[Any] = []
-            for seg_facts in batch_results:
-                all_facts.extend(seg_facts)
+            for window_idx, extraction_window in enumerate(extraction_windows, start=1):
+                window_results = extractor.extract_facts_from_batch(
+                    [extraction_window],
+                    contact_id=chat_id,
+                    contact_name=contact_name,
+                    user_name=user_name,
+                )
+                if window_results:
+                    all_facts.extend(window_results[0])
+                update_progress(
+                    window_idx,
+                    total_windows,
+                    f"Extracting from window {window_idx}/{total_windows} ({mode})",
+                )
             if all_facts:
                 save_facts(
                     all_facts,
@@ -648,7 +654,7 @@ class TaskWorker:
                     log_stage="task_worker",
                 )
             total_extracted = len(all_facts)
-            update_progress(total_segments, total_segments, "Extraction complete")
+            update_progress(total_windows, total_windows, "Extraction complete")
 
             # Update tracking after successful extraction
             if max_rowid_processed > (last_extracted_rowid or 0):

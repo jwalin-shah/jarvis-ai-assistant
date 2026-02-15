@@ -63,9 +63,7 @@ def sqlite_retry(
 
             # If we exhausted attempts
             if last_error:
-                logger.error(
-                    f"SQLite operation failed after {max_attempts} attempts: {last_error}"
-                )
+                logger.error(f"SQLite operation failed after {max_attempts} attempts: {last_error}")
                 raise last_error
             return None  # Should not be reached
 

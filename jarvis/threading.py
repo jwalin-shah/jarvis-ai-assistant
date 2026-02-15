@@ -368,7 +368,8 @@ QUESTION_PATTERNS = [
 # Patterns indicating thread conclusion
 CONCLUSION_PATTERNS = [
     re.compile(
-        r"\b(sounds good|perfect|great|thanks|bye|later|ttyl|see you|talk soon|cya)\b", re.I,
+        r"\b(sounds good|perfect|great|thanks|bye|later|ttyl|see you|talk soon|cya)\b",
+        re.I,
     ),
     re.compile(r"\b(got it|understood|will do|on it)\b", re.I),
     re.compile(r"^(ok|okay|k|kk)$", re.I),

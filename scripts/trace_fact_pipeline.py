@@ -43,7 +43,9 @@ def _print_metrics(chat_id: str, stage: str, limit: int) -> None:
         )
 
 
-def _load_stage_rows(chat_id: str, stage: str, segment_id: int | None, limit: int) -> dict[int, list[str]]:
+def _load_stage_rows(
+    chat_id: str, stage: str, segment_id: int | None, limit: int
+) -> dict[int, list[str]]:
     db = get_db()
     out: dict[int, list[str]] = defaultdict(list)
     with db.connection() as conn:
@@ -168,11 +170,17 @@ def main() -> None:
     if "metrics" in stage_set:
         _print_metrics(args.chat_id, "segment_pipeline", args.limit)
     if "pass1" in stage_set:
-        _print_stage("PASS1 CLAIMS", _load_stage_rows(args.chat_id, "pass1", args.segment_id, args.limit))
+        _print_stage(
+            "PASS1 CLAIMS", _load_stage_rows(args.chat_id, "pass1", args.segment_id, args.limit)
+        )
     if "raw" in stage_set:
-        _print_stage("RAW TRIPLES", _load_stage_rows(args.chat_id, "raw", args.segment_id, args.limit))
+        _print_stage(
+            "RAW TRIPLES", _load_stage_rows(args.chat_id, "raw", args.segment_id, args.limit)
+        )
     if "saved" in stage_set:
-        _print_stage("SAVED FACTS", _load_stage_rows(args.chat_id, "saved", args.segment_id, args.limit))
+        _print_stage(
+            "SAVED FACTS", _load_stage_rows(args.chat_id, "saved", args.segment_id, args.limit)
+        )
 
 
 if __name__ == "__main__":

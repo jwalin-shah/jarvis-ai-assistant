@@ -487,6 +487,7 @@ class ContactProfileBuilder:
         # IMPROVED: Resolve name if missing
         if not contact_name or contact_name in ["None", "Unknown", "Contact"]:
             from integrations.imessage.reader import ChatDBReader
+
             try:
                 # Use cached reader logic
                 with ChatDBReader() as reader:
@@ -517,8 +518,10 @@ class ContactProfileBuilder:
         # LLM Refinement
         relationship_reasoning = None
         if len(messages) >= 5:
-            relationship, rel_confidence, relationship_reasoning = self._refine_relationship_with_llm(
-                messages, contact_name or "Contact", relationship, rel_confidence
+            relationship, rel_confidence, relationship_reasoning = (
+                self._refine_relationship_with_llm(
+                    messages, contact_name or "Contact", relationship, rel_confidence
+                )
             )
 
         # Formality (Laplace-smoothed)
@@ -580,11 +583,12 @@ class ContactProfileBuilder:
         """Fetch facts for this contact from the database."""
         try:
             from jarvis.db import get_db
+
             db = get_db()
             with db.connection() as conn:
                 rows = conn.execute(
                     "SELECT category, subject, predicate, value, confidence, extracted_at FROM contact_facts WHERE contact_id = ? ORDER BY extracted_at DESC",
-                    (contact_id,)
+                    (contact_id,),
                 ).fetchall()
                 return [dict(row) for row in rows]
         except Exception as e:
@@ -594,22 +598,19 @@ class ContactProfileBuilder:
     # --- Relationship ---
 
     def _refine_relationship_with_llm(
-        self,
-        messages: list[Message],
-        contact_name: str,
-        base_rel: str,
-        base_conf: float
+        self, messages: list[Message], contact_name: str, base_rel: str, base_conf: float
     ) -> tuple[str, float, str]:
         """Use LLM to refine the relationship type and provide reasoning."""
         try:
             from models.loader import get_model
+
             loader = get_model()
 
             if not loader.is_loaded():
                 return base_rel, base_conf, "Rule-based analysis."
 
             # Format a small sample of the chat
-            sample = messages[-15:] # Last 15 messages
+            sample = messages[-15:]  # Last 15 messages
             turns = []
             curr_sender = "User" if sample[0].is_from_me else contact_name
             curr_msgs = []

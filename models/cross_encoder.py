@@ -143,7 +143,6 @@ class InProcessCrossEncoder:
             )
 
         with gpu_context():
-
             if self.model_name == model_name:
                 return
 
@@ -288,10 +287,7 @@ class InProcessCrossEncoder:
                     dtype=np.int32,
                 )
                 token_type_ids = np.array(
-                    [
-                        e.type_ids + [0] * (max_len - len(e.type_ids))
-                        for e in batch_encodings
-                    ],
+                    [e.type_ids + [0] * (max_len - len(e.type_ids)) for e in batch_encodings],
                     dtype=np.int32,
                 )
 

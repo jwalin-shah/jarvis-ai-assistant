@@ -20,13 +20,11 @@ Features speculative prefetching for near-instant responses:
 from __future__ import annotations
 
 import asyncio
-import functools
 import hmac
 import json
 import logging
 import os
 import secrets
-import signal
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
@@ -38,7 +36,6 @@ from websockets.server import ServerConnection
 
 from jarvis.config import get_config
 from jarvis.observability.logging import log_event, timed_operation
-from jarvis.utils.latency_tracker import track_latency
 
 if TYPE_CHECKING:
     from jarvis.prefetch import PrefetchManager
@@ -131,7 +128,6 @@ from jarvis.handlers.base import (
     METHOD_NOT_FOUND,
     PARSE_ERROR,
     JsonRpcError,
-    rpc_handler,
 )
 
 # Confidence gating: drafts below this threshold are not shown to the user
@@ -1055,4 +1051,3 @@ class JarvisSocketServer:
         )
         writer.write(response.encode() + b"\n")
         await writer.drain()
-

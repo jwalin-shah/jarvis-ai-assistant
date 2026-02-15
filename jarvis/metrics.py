@@ -933,7 +933,7 @@ class DraftMetrics:
                     round(self._gated / self._total * 100, 2) if self._total > 0 else 0.0
                 ),
                 "confidence_histogram": {
-                    f"{i/10:.1f}-{(i+1)/10:.1f}": count
+                    f"{i / 10:.1f}-{(i + 1) / 10:.1f}": count
                     for i, count in enumerate(self._confidence_histogram)
                 },
             }

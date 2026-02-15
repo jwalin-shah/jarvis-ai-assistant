@@ -37,13 +37,13 @@ Audit of segmentation, extraction, prompt building, and model lifecycle.
 | Caller | Extractor | API used |
 |--------|-----------|----------|
 | **segment_pipeline** (watcher, backfill with facts) | `InstructionFactExtractor` (singleton `get_instruction_extractor`) | `extract_facts_from_batch()` |
-| **tasks/worker** (FACT_EXTRACTION) | `InstructionFactExtractor` (same singleton) | `extract_facts_from_segment()` in a loop (no batch) |
+| **tasks/worker** (FACT_EXTRACTION) | `InstructionFactExtractor` (same singleton) | `extract_facts_from_batch()` called one window at a time |
 | **segment_ingest** | `BatchedInstructionFactExtractor` (separate class) | `extract_facts_from_segments_batch()` |
 
 ### Inconsistencies
 
 - **Two extractor implementations:** `InstructionFactExtractor` (JSONL, two-pass, in `instruction_extractor.py`) vs `BatchedInstructionFactExtractor` (bullet format “[Segment N] - [Name] Fact”, different prompts, in `batched_extractor.py`). Same tier names (0.7b, 1.2b, 350m) but different prompt/output formats.
-- **Worker does not batch:** Task worker calls `extract_facts_from_segment()` in a loop instead of `extract_facts_from_batch()`, so it does more LLM calls than necessary.
+- **Worker semantics:** Task worker now iterates extraction windows and calls `extract_facts_from_batch([window], ...)` per window for stability.
 - **Different pipelines:** segment_pipeline uses InstructionFactExtractor + `save_facts` + pass1 logging. segment_ingest uses BatchedInstructionFactExtractor + its own verification/save loop. Behavior and quality can differ.
 
 ### Recommendation
@@ -102,7 +102,7 @@ Audit of segmentation, extraction, prompt building, and model lifecycle.
 | Area | Reused? | Consistent? | Load/Unload |
 |------|---------|-------------|--------------|
 | Segmentation | Partially (process_segments shared; two segmenters, duplicated filtering/boundary logic) | No (basic vs topic, two types) | N/A (no model in segmenters; embedder used) |
-| Extraction | No (two extractors, two pipelines; worker doesn’t batch) | No (different prompts and output formats) | Broken (extraction not in ModelManager; InstructionFactExtractor doesn’t call it) |
+| Extraction | No (two extractors, two pipelines; worker/window path differs) | No (different prompts and output formats) | Improved (InstructionFactExtractor + generator now coordinate via ModelManager) |
 | Reply/summary/search prompts | Yes (jarvis/prompts) | Yes | N/A |
 | Extraction prompts | No (in each extractor file) | No | — |
 | ModelManager | — | — | Incomplete (extractor not unloaded with LLM) |

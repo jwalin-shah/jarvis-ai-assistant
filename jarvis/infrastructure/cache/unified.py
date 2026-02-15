@@ -41,7 +41,9 @@ class UnifiedCache(CacheBackend):
         self._misses += 1
         return None
 
-    def set(self, key: str, value: Any, ttl: float | None = None, tags: list[str] | None = None) -> None:
+    def set(
+        self, key: str, value: Any, ttl: float | None = None, tags: list[str] | None = None
+    ) -> None:
         if self.l1:
             self.l1.set(key, value, ttl, tags)
         if self.l2:

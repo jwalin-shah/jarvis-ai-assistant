@@ -49,4 +49,17 @@ for _mod in (_tone, _reply, _summary, _search, _rag, _contact, _classify, _utils
         __all__.append(_name)
 
 # Clean up private vars
-del _tone, _reply, _summary, _search, _rag, _contact, _classify, _utils, _mod, _name, _obj, _import_all
+del (
+    _tone,
+    _reply,
+    _summary,
+    _search,
+    _rag,
+    _contact,
+    _classify,
+    _utils,
+    _mod,
+    _name,
+    _obj,
+    _import_all,
+)

@@ -17,7 +17,6 @@ from jarvis.prompts.builders import (  # noqa: F401
     build_rag_reply_prompt,
     build_rag_reply_prompt_from_embeddings,
     build_reply_prompt,
-    build_search_prompt as build_search_answer_prompt,
     build_style_instructions,
     build_summary_prompt,
     build_threaded_reply_prompt,
@@ -33,14 +32,9 @@ from jarvis.prompts.builders import (  # noqa: F401
     resolve_category,
     truncate_context,
 )
-from jarvis.prompts.rag import _format_relationship_context, _format_similar_exchanges
-from jarvis.prompts.reply import (
-    _format_thread_context,
-    _get_additional_instructions,
-    _get_length_guidance,
-    _get_thread_examples,
+from jarvis.prompts.builders import (
+    build_search_prompt as build_search_answer_prompt,
 )
-from jarvis.prompts.search import build_search_prompt as build_search_answer_prompt
 from jarvis.prompts.constants import (
     ACKNOWLEDGE_TEMPLATES,
     CASUAL_INDICATORS,
@@ -90,6 +84,7 @@ from jarvis.prompts.examples import (
     SUMMARY_EXAMPLES,
     THREAD_EXAMPLES,
 )
+from jarvis.prompts.rag import _format_relationship_context, _format_similar_exchanges
 
 # --- registry.py ---
 from jarvis.prompts.registry import (
@@ -102,6 +97,13 @@ from jarvis.prompts.registry import (
     reset_optimized_programs,
     reset_prompt_registry,
 )
+from jarvis.prompts.reply import (
+    _format_thread_context,
+    _get_additional_instructions,
+    _get_length_guidance,
+    _get_thread_examples,
+)
+from jarvis.prompts.search import build_search_prompt as build_search_answer_prompt
 
 __all__ = [
     # Constants

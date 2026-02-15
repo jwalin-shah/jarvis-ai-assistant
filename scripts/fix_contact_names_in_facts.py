@@ -2,7 +2,7 @@
 """Fix 'Contact' fallback names in existing facts.
 
 This script:
-1. Finds all facts with subject='Contact' 
+1. Finds all facts with subject='Contact'
 2. Resolves the proper display name from the contacts table
 3. Updates the facts with proper names
 
@@ -10,39 +10,40 @@ Usage:
     uv run python scripts/fix_contact_names_in_facts.py
     uv run python scripts/fix_contact_names_in_facts.py --dry-run
 """
+
 import argparse
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from jarvis.contacts.fact_storage import get_all_facts, save_facts, delete_facts_for_contact
+from jarvis.contacts.fact_storage import get_all_facts
 from jarvis.db import get_db
 
 
 def resolve_contact_name(contact_id: str) -> str | None:
     """Get display name for a contact from the database."""
     from jarvis.db import get_db
+
     db = get_db()
-    
+
     with db.connection() as conn:
         # Try exact match
         row = conn.execute(
-            "SELECT display_name FROM contacts WHERE chat_id = ?",
-            (contact_id,)
+            "SELECT display_name FROM contacts WHERE chat_id = ?", (contact_id,)
         ).fetchone()
         if row and row[0] and row[0] not in ["Contact", "None", "Unknown", None]:
             return row[0]
-        
+
         # Try partial match on phone/email
-        clean_id = contact_id.split(';')[-1] if ';' in contact_id else contact_id
+        clean_id = contact_id.split(";")[-1] if ";" in contact_id else contact_id
         row = conn.execute(
             "SELECT display_name FROM contacts WHERE phone_or_email LIKE ? OR chat_id LIKE ?",
-            (f"%{clean_id}%", f"%{clean_id}%")
+            (f"%{clean_id}%", f"%{clean_id}%"),
         ).fetchone()
         if row and row[0] and row[0] not in ["Contact", "None", "Unknown", None]:
             return row[0]
-    
+
     return None
 
 
@@ -95,25 +96,25 @@ def main():
 
     # Apply fixes
     print("\n3. Applying fixes...")
-    
+
     # We need to delete and re-insert because subject is part of unique constraint
     fixed_count = 0
     db = get_db()
-    
+
     with db.connection() as conn:
         for contact_id, proper_name, count in fixes:
             # Get all facts for this contact
             contact_all_facts = [f for f in facts if f.contact_id == contact_id]
-            
+
             # Delete old facts
             conn.execute("DELETE FROM contact_facts WHERE contact_id = ?", (contact_id,))
-            
+
             # Re-insert all with updated names
             for f in contact_all_facts:
                 # Update subject if it was 'Contact'
                 if f.subject in ["Contact", "them", "they"]:
                     f.subject = proper_name
-            
+
             # Batch insert
             fact_data = [
                 (
@@ -134,7 +135,7 @@ def main():
                 )
                 for f in contact_all_facts
             ]
-            
+
             conn.executemany(
                 """
                 INSERT OR IGNORE INTO contact_facts
@@ -150,7 +151,7 @@ def main():
         conn.commit()
 
     print(f"   ✅ Fixed {fixed_count} facts across {len(fixes)} contacts")
-    
+
     # Verify
     print("\n4. Verification:")
     final_facts = get_all_facts()

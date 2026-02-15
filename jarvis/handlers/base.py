@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import functools
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from jarvis.socket_server import JarvisSocketServer
@@ -18,19 +19,27 @@ METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 
+# Type var for async RPC handler functions
+_AsyncRpcHandler = TypeVar("_AsyncRpcHandler", bound=Callable[..., Coroutine[Any, Any, Any]])
+
 
 class JsonRpcError(JarvisError):
     """JSON-RPC error with code and data."""
 
-    def __init__(self, code: int, message: str, data: Any = None):
+    def __init__(
+        self,
+        code: int,
+        message: str,
+        data: Any | None = None,
+    ) -> None:
         # We store the JSON-RPC integer code in self.code to keep tests passing
-        # and use self.jarvis_code for the JarvisError enum code.
+        # and use JarvisError's code for the ErrorCode enum (set to UNKNOWN here).
         super().__init__(message, code=ErrorCode.UNKNOWN)
-        self.code = code
-        self.data = data
+        self.code: int = code
+        self.data: Any | None = data
 
 
-def rpc_handler(error_msg: str) -> Callable:
+def rpc_handler(error_msg: str) -> Callable[[_AsyncRpcHandler], _AsyncRpcHandler]:
     """Decorator that wraps async RPC handlers with standard error handling.
 
     Catches exceptions and converts them to JsonRpcError with a consistent
@@ -40,7 +49,7 @@ def rpc_handler(error_msg: str) -> Callable:
         error_msg: User-facing error message for unexpected exceptions.
     """
 
-    def decorator(fn: Callable) -> Callable:
+    def decorator(fn: _AsyncRpcHandler) -> _AsyncRpcHandler:
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
@@ -51,7 +60,7 @@ def rpc_handler(error_msg: str) -> Callable:
                 logger.exception("Error in %s", fn.__name__)
                 raise JsonRpcError(INTERNAL_ERROR, error_msg) from e
 
-        return wrapper
+        return wrapper  # type: ignore[return-value]
 
     return decorator
 

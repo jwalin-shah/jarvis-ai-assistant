@@ -258,16 +258,10 @@ class ContactMixin:
             chat_id = row["chat_id"] if row else None
 
             # Delete conversation segments and related data
-            conn.execute(
-                "DELETE FROM conversation_segments WHERE contact_id = ?", (contact_id,)
-            )
+            conn.execute("DELETE FROM conversation_segments WHERE contact_id = ?", (contact_id,))
             # Delete dependent tables that reference contacts directly
-            conn.execute(
-                "DELETE FROM contact_style_targets WHERE contact_id = ?", (contact_id,)
-            )
-            conn.execute(
-                "DELETE FROM contact_timing_prefs WHERE contact_id = ?", (contact_id,)
-            )
+            conn.execute("DELETE FROM contact_style_targets WHERE contact_id = ?", (contact_id,))
+            conn.execute("DELETE FROM contact_timing_prefs WHERE contact_id = ?", (contact_id,))
             conn.execute("DELETE FROM scheduled_drafts WHERE contact_id = ?", (contact_id,))
             conn.execute("DELETE FROM contact_facts WHERE contact_id = ?", (str(contact_id),))
             # Finally delete the contact

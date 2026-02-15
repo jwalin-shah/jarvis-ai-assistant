@@ -18,8 +18,8 @@ def get_unified_cache() -> UnifiedCache:
     """
     cache_dir = Path.home() / ".jarvis"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    
+
     l1 = MemoryBackend(ttl=300.0, maxsize=1000)
     l2 = SQLiteBackend(db_path=cache_dir / "cache.db", default_ttl=3600.0)
-    
+
     return UnifiedCache(l1=l1, l2=l2)

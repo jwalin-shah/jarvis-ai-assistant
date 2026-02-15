@@ -117,10 +117,16 @@ class ContactTimingPrefs:
             "contact_id": self.contact_id,
             "timezone": self.timezone,
             "quiet_hours": json.loads(self.quiet_hours_json) if self.quiet_hours_json else [],
-            "preferred_hours": json.loads(self.preferred_hours_json) if self.preferred_hours_json else [],
-            "optimal_weekdays": json.loads(self.optimal_weekdays_json) if self.optimal_weekdays_json else [],
+            "preferred_hours": json.loads(self.preferred_hours_json)
+            if self.preferred_hours_json
+            else [],
+            "optimal_weekdays": json.loads(self.optimal_weekdays_json)
+            if self.optimal_weekdays_json
+            else [],
             "avg_response_time_mins": self.avg_response_time_mins,
-            "last_interaction": self.last_interaction.isoformat() if self.last_interaction else None,
+            "last_interaction": self.last_interaction.isoformat()
+            if self.last_interaction
+            else None,
         }
 
 
@@ -136,4 +142,3 @@ class IndexVersion:
     index_path: str
     is_active: bool
     created_at: datetime | None = None
-

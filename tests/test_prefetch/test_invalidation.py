@@ -94,9 +94,7 @@ class TestCacheInvalidator:
         assert cache.get("prefix:key2") is None
         assert cache.get("other:key3") == "value3"
 
-    def test_cleanup_expired(
-        self, invalidator: CacheInvalidator, cache: PrefetchCache
-    ) -> None:
+    def test_cleanup_expired(self, invalidator: CacheInvalidator, cache: PrefetchCache) -> None:
         """Test cleanup of expired entries."""
         cache.set("expire1", "value1", ttl_seconds=0.01)
         cache.set("expire2", "value2", ttl_seconds=0.01)

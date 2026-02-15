@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from jarvis.prompts.constants import SUMMARY_PROMPT
-from jarvis.prompts.examples import SUMMARIZATION_EXAMPLES
 from jarvis.prompts.utils import truncate_context
 
 
@@ -16,7 +15,7 @@ def build_summary_prompt(
 
     # Select a subset of examples
     # (In builders.py it was SUMMARIZATION_EXAMPLES[:2])
-    
+
     truncated_context = truncate_context(context)
 
     prompt = SUMMARY_PROMPT.template.format(

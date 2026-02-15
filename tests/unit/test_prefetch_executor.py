@@ -308,7 +308,7 @@ class TestCacheEviction:
 
         # Set entries with different TTLs so we know which gets evicted
         small_cache.set("key0", "val0", ttl_seconds=100)
-        small_cache.set("key1", "val1", ttl_seconds=10)   # shortest TTL -> evicted first
+        small_cache.set("key1", "val1", ttl_seconds=10)  # shortest TTL -> evicted first
         small_cache.set("key2", "val2", ttl_seconds=200)
 
         # Adding a 4th triggers eviction of key1 (soonest expiry)

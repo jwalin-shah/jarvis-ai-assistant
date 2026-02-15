@@ -11,7 +11,7 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("jarvis.contacts.instruction_extractor")
 
-chat_id = 'iMessage;-;+17204963920' # Sangati Shah
+chat_id = "iMessage;-;+17204963920"  # Sangati Shah
 with ChatDBReader() as reader:
     messages = reader.get_messages(chat_id, limit=10)
 

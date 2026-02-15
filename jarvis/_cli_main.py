@@ -22,10 +22,8 @@ Shell Completion:
 """
 
 import argparse
-import json
 import logging
 import sys
-from datetime import datetime
 from typing import NoReturn
 
 # Optional argcomplete support for shell completion
@@ -44,7 +42,6 @@ from rich.text import Text
 from contracts.health import FeatureState
 from core.health import get_degradation_controller, reset_degradation_controller
 from core.memory import get_memory_controller, reset_memory_controller
-from jarvis.analytics.engine import get_analytics_engine
 from jarvis.db import get_db
 from jarvis.errors import JarvisError
 from jarvis.system import (
@@ -273,9 +270,7 @@ def cmd_db(args: argparse.Namespace) -> int:
     subcommand = args.db_command
     if subcommand is None:
         console.print("[red]Error: Please specify a db subcommand[/red]")
-        console.print(
-            "Available: init, extract, stats, build-profiles, feedback, optimize"
-        )
+        console.print("Available: init, extract, stats, build-profiles, feedback, optimize")
         return 1
 
     if subcommand == "init":
@@ -784,7 +779,9 @@ def create_parser() -> argparse.ArgumentParser:
     db_init_parser.add_argument("--force", action="store_true", help="force reinitialization")
 
     # db extract
-    db_extract_parser = db_subparsers.add_parser("extract", help="segment conversations and index chunks")
+    db_extract_parser = db_subparsers.add_parser(
+        "extract", help="segment conversations and index chunks"
+    )
     db_extract_parser.add_argument(
         "--limit",
         type=int,

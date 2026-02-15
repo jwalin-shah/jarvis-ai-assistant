@@ -48,7 +48,9 @@ class AttributionResolver:
             return "contact"
 
         res = self._do_resolve(source_text, subject, is_from_me, category)
-        logger.debug(f"Attribution: '{subject}' from '{source_text[:30]}...' (me={is_from_me}) -> {res}")
+        logger.debug(
+            f"Attribution: '{subject}' from '{source_text[:30]}...' (me={is_from_me}) -> {res}"
+        )
         return res
 
     def _do_resolve(
@@ -71,10 +73,13 @@ class AttributionResolver:
         if is_from_me:
             # Re-check: if they say "I love Alex", and subject is Alex, it's third_party
             # But "I love reading", subject is reading, it's user.
-            if category in ("relationship", "person") and subject.lower() not in source_text.lower():
-                 # This is a bit complex for a regex resolver, but let's keep it simple:
-                 # If the subject is a person name and not 'I/me', it's third party.
-                 pass
+            if (
+                category in ("relationship", "person")
+                and subject.lower() not in source_text.lower()
+            ):
+                # This is a bit complex for a regex resolver, but let's keep it simple:
+                # If the subject is a person name and not 'I/me', it's third party.
+                pass
 
             # Simple rule: if I said it, and it's not a clear 'my sister' etc, it's about ME.
             return "user"

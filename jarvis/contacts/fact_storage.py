@@ -11,7 +11,7 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
@@ -81,7 +81,9 @@ def _log_raw_fact_candidates(
     if not facts:
         return
 
-    entries: list[tuple[str, str, int | None, str, str, str, str, float, str, str, int | None, str]] = []
+    entries: list[
+        tuple[str, str, int | None, str, str, str, str, float, str, str, int | None, str]
+    ] = []
     chat_hint = log_chat_id or contact_id
     for fact in facts:
         resolved_segment_id = getattr(fact, "_segment_db_id", segment_id)
@@ -181,7 +183,9 @@ def log_pass1_claims(
 
     normalized_claims = claims_by_segment or []
     if len(normalized_claims) < len(segment_db_ids):
-        normalized_claims = normalized_claims + [[] for _ in range(len(segment_db_ids) - len(normalized_claims))]
+        normalized_claims = normalized_claims + [
+            [] for _ in range(len(segment_db_ids) - len(normalized_claims))
+        ]
 
     rows: list[tuple[str, str, int, str, str]] = []
     for seg_id, seg_claims in zip(segment_db_ids, normalized_claims):
@@ -303,13 +307,16 @@ def save_facts(
             # For small batches where we need embeddings, compute them directly
             if return_embeddings and final_new_facts:
                 from jarvis.embedding_adapter import get_embedder
+
                 texts = [f.value or "" for f in final_new_facts]
                 fact_embeddings = get_embedder().encode(texts, normalize=True)
         else:
             deduper = _get_semantic_deduper()
             # Pass empty list for existing_facts - deduper uses vec_facts index.
             # Request embeddings back for indexing to avoid re-computation.
-            dedup_result = deduper.deduplicate(incoming_list, [], return_embeddings=return_embeddings)
+            dedup_result = deduper.deduplicate(
+                incoming_list, [], return_embeddings=return_embeddings
+            )
             if return_embeddings:
                 final_new_facts, fact_embeddings = dedup_result
             else:
@@ -432,7 +439,7 @@ def save_and_index_facts(
         log_stage=log_stage,
         return_embeddings=True,
     )
-    
+
     if isinstance(result, tuple):
         inserted, embeddings = result
     else:
@@ -491,13 +498,13 @@ def get_facts_for_contact(contact_id: str) -> list[Fact]:
 
 def get_facts_for_contacts(contact_ids: list[str]) -> dict[str, list[Fact]]:
     """Batch load facts for multiple contacts.
-    
+
     More efficient than calling get_facts_for_contact() N times.
     Uses a single query with IN clause.
-    
+
     Args:
         contact_ids: List of contact IDs to fetch facts for.
-        
+
     Returns:
         Dict mapping contact_id -> list of Facts.
     """
@@ -506,18 +513,18 @@ def get_facts_for_contacts(contact_ids: list[str]) -> dict[str, list[Fact]]:
 
     if not contact_ids:
         return {}
-    
+
     db = get_db()
-    
+
     # Build chunked IN clause for safety
     results: dict[str, list[Fact]] = {cid: [] for cid in contact_ids}
-    
+
     with db.connection() as conn:
         # Process in chunks to stay within SQLite parameter limits
         for chunk_start in range(0, len(contact_ids), 900):
-            chunk = contact_ids[chunk_start:chunk_start + 900]
+            chunk = contact_ids[chunk_start : chunk_start + 900]
             placeholders, params = QueryBuilder.in_clause(chunk)
-            
+
             rows = conn.execute(
                 f"""
                 SELECT contact_id, category, subject, predicate, value, confidence,
@@ -529,7 +536,7 @@ def get_facts_for_contacts(contact_ids: list[str]) -> dict[str, list[Fact]]:
                 """,
                 params,
             ).fetchall()
-            
+
             for row in rows:
                 cid = row["contact_id"]
                 results[cid].append(
@@ -548,7 +555,7 @@ def get_facts_for_contacts(contact_ids: list[str]) -> dict[str, list[Fact]]:
                         attribution=row["attribution"] or "contact",
                     )
                 )
-    
+
     return results
 
 

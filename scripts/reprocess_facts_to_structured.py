@@ -11,6 +11,7 @@ Usage:
     uv run python scripts/reprocess_facts_to_structured.py
     uv run python scripts/reprocess_facts_to_structured.py --dry-run
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -19,8 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from collections import Counter
 
-from jarvis.contacts.contact_profile import Fact
-from jarvis.contacts.fact_storage import delete_facts_for_contact, get_all_facts, save_facts
+from jarvis.contacts.fact_storage import get_all_facts
 from jarvis.contacts.structured_extractor import restructure_existing_fact
 from jarvis.db import get_db
 
@@ -57,11 +57,11 @@ def main():
             continue
 
         new_facts = restructure_existing_fact(fact)
-        
+
         # Track stats
         if len(new_facts) > 1:
             stats["compound_split"] += 1
-        
+
         for nf in new_facts:
             if nf.predicate and nf.predicate != "note":
                 stats["parsed"] += 1
@@ -83,7 +83,7 @@ def main():
         if key not in seen:
             seen.add(key)
             unique_facts.append(f)
-    
+
     duplicates = len(restructured) - len(unique_facts)
     print(f"   Removed {duplicates} duplicates")
     print(f"   Final fact count: {len(unique_facts)}")
@@ -115,7 +115,7 @@ def main():
         return
 
     print("\n7. Applying changes to database...")
-    
+
     # Group by contact for batch processing
     facts_by_contact = {}
     for f in unique_facts:
@@ -127,19 +127,19 @@ def main():
     with db.connection() as conn:
         # Disable foreign key constraints for speed
         conn.execute("PRAGMA foreign_keys = OFF")
-        
+
         try:
             # Clear existing facts
             print("   Clearing old facts...")
             conn.execute("DELETE FROM contact_facts")
-            
+
             # Insert restructured facts
             print(f"   Inserting {len(unique_facts)} restructured facts...")
-            
+
             batch_size = 100
             for i in range(0, len(unique_facts), batch_size):
-                batch = unique_facts[i:i + batch_size]
-                
+                batch = unique_facts[i : i + batch_size]
+
                 fact_data = [
                     (
                         f.contact_id,
@@ -159,7 +159,7 @@ def main():
                     )
                     for f in batch
                 ]
-                
+
                 conn.executemany(
                     """
                     INSERT OR IGNORE INTO contact_facts
@@ -171,13 +171,13 @@ def main():
                     fact_data,
                 )
                 total_inserted += len(batch)
-                
+
                 if (i // batch_size) % 10 == 0:
                     print(f"      ... {total_inserted}/{len(unique_facts)}")
-            
+
             conn.execute("PRAGMA foreign_keys = ON")
             conn.commit()
-            
+
         except Exception as e:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.rollback()
@@ -186,12 +186,14 @@ def main():
 
     print(f"\n✅ Successfully inserted {total_inserted} structured facts")
     print(f"   Improvement: {len(existing_facts)} → {total_inserted} facts")
-    
+
     # Verify
     print("\n8. Verification:")
     final_facts = get_all_facts()
     with_predicates = sum(1 for f in final_facts if f.predicate)
-    print(f"   Facts with predicates: {with_predicates}/{len(final_facts)} ({100*with_predicates//len(final_facts)}%)")
+    print(
+        f"   Facts with predicates: {with_predicates}/{len(final_facts)} ({100 * with_predicates // len(final_facts)}%)"
+    )
 
 
 if __name__ == "__main__":

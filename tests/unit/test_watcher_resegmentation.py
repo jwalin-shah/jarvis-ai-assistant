@@ -71,7 +71,6 @@ class TestResegmentationLocking:
 
         execution_log: list[tuple[str, str]] = []
 
-
         def mock_resegment(chat_id):
             execution_log.append(("enter", chat_id))
             # Simulate work

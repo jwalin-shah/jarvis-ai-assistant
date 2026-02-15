@@ -8,29 +8,32 @@ from __future__ import annotations
 import re
 
 # Pre-compiled bot detection patterns (avoid re-compiling on every call)
-_BOT_HIGH_CONF = [re.compile(p, re.IGNORECASE) for p in [
-    r"CVS Pharmacy",
-    r"Rx Ready",
-    r"Check out this job at",
-    r"this is .+ from .+ (?:team|hiring)",
-    r"recruiter from",
-    r"currently hiring",
-    r"we have reviewed your profile",
-    r"perfect (?:position|fit)",
-    r"exclusive offer",
-    r"valued .+ customer",
-    r"mail system at host",
-    r"review and sign",
-    r"invited to participate",
-    r"ready to schedule your .+ visit at",
-    r"your .+ appointment is",
-    r"my name.+with .+\.\s*we have .+ open",
-    r"just matched you with",
-    r"your package has arrived",
-    r"your order has been",
-    r"decided not to move forward with your .+ application",
-    r"our team is reviewing your matter",
-]]
+_BOT_HIGH_CONF = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"CVS Pharmacy",
+        r"Rx Ready",
+        r"Check out this job at",
+        r"this is .+ from .+ (?:team|hiring)",
+        r"recruiter from",
+        r"currently hiring",
+        r"we have reviewed your profile",
+        r"perfect (?:position|fit)",
+        r"exclusive offer",
+        r"valued .+ customer",
+        r"mail system at host",
+        r"review and sign",
+        r"invited to participate",
+        r"ready to schedule your .+ visit at",
+        r"your .+ appointment is",
+        r"my name.+with .+\.\s*we have .+ open",
+        r"just matched you with",
+        r"your package has arrived",
+        r"your order has been",
+        r"decided not to move forward with your .+ application",
+        r"our team is reviewing your matter",
+    ]
+]
 _BOT_SHORT_CODE_RE = re.compile(r"SMS;-;\d{5,6}$")
 _BOT_BARE_SHORT_CODE_RE = re.compile(r"\d{5,6}$")
 _BOT_URL_RE = re.compile(r"https?://")
@@ -82,17 +85,20 @@ def is_bot_message(text: str, chat_id: str = "") -> bool:
     return medium_factors >= 3
 
 
-_PROF_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
-    r"\bdear\s",
-    r"hello from",
-    r"reminder:\s",
-    r"\bregards\b",
-    r"\bsincerely\b",
-    r"\bbest regards\b",
-    r"i appreciate",
-    r"opportunity",
-    r"from\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Inc|LLC|Ltd|Corp|Hyundai|Recruiting|Marketing|Healthcare|Hospital)",
-]]
+_PROF_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"\bdear\s",
+        r"hello from",
+        r"reminder:\s",
+        r"\bregards\b",
+        r"\bsincerely\b",
+        r"\bbest regards\b",
+        r"i appreciate",
+        r"opportunity",
+        r"from\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Inc|LLC|Ltd|Corp|Hyundai|Recruiting|Marketing|Healthcare|Hospital)",
+    ]
+]
 
 
 def is_professional_message(text: str) -> bool:

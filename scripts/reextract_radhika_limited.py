@@ -12,6 +12,7 @@ logger = logging.getLogger("jarvis")
 
 CHAT_ID = "iMessage;-;+15629643639"
 
+
 def reextract_limited():
     _ = get_db()  # Ensure DB initialized
 
@@ -39,17 +40,20 @@ def reextract_limited():
 
     all_facts = []
     for i, seg in enumerate(target_segments):
-        print(f"Processing segment {i+1}/{len(target_segments)} [Topic: {seg.topic_label}]...")
+        print(f"Processing segment {i + 1}/{len(target_segments)} [Topic: {seg.topic_label}]...")
         # Every fact here will pass through NLI verification inside this call
         facts = extractor.extract_facts_from_segment(seg, contact_id=CHAT_ID)
         if facts:
             print(f"  Verified {len(facts)} facts.")
             for f in facts:
-                print(f"    - {f.category}: {f.subject} {f.predicate} {f.value} (NLI Score: {f.confidence:.2f})")
+                print(
+                    f"    - {f.category}: {f.subject} {f.predicate} {f.value} (NLI Score: {f.confidence:.2f})"
+                )
             all_facts.extend(facts)
             save_facts(facts, CHAT_ID)
 
     print(f"\nTotal verified facts saved: {len(all_facts)}")
+
 
 if __name__ == "__main__":
     reextract_limited()

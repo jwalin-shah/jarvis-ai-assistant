@@ -380,7 +380,7 @@ class VecSearcher:
 
             # Handle None start_time gracefully
             start_ts = segment.start_time.timestamp() if segment.start_time else 0.0
-            
+
             vec_chunks_batch.append(
                 (
                     int8_blob,
@@ -419,9 +419,11 @@ class VecSearcher:
                     placeholders = []
                     params = []
                     for row in vec_chunks_batch:
-                        placeholders.append("(contact_id = ? AND chat_id = ? AND source_timestamp = ?)")
+                        placeholders.append(
+                            "(contact_id = ? AND chat_id = ? AND source_timestamp = ?)"
+                        )
                         params.extend([row[1], row[2], row[3]])
-                    
+
                     # Fetch rowids in insertion order
                     where_clause = " OR ".join(placeholders)
                     cursor = conn.execute(
@@ -433,13 +435,13 @@ class VecSearcher:
                         """,
                         params,
                     )
-                    
+
                     # Build a lookup map
                     rowid_map = {}
                     for row in cursor:
                         key = (row["contact_id"], row["chat_id"], row["source_timestamp"])
                         rowid_map[key] = row["rowid"]
-                    
+
                     # Get rowids in the same order as input
                     for row in vec_chunks_batch:
                         key = (row[1], row[2], row[3])

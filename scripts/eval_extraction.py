@@ -176,6 +176,7 @@ def _get_spacy_model():
     global _spacy_nlp
     if _spacy_nlp is None:
         import spacy
+
         _spacy_nlp = spacy.load("en_core_web_sm")
     return _spacy_nlp
 
@@ -199,6 +200,7 @@ def extract_llm(
     # Call the LLM
     try:
         from models.generator import get_generator
+
         gen = get_generator()
         response = gen.generate(
             prompt=user_prompt,
@@ -240,7 +242,9 @@ Rules:
 
 
 def _build_llm_user_prompt(
-    text: str, context_prev: str = "", context_next: str = "",
+    text: str,
+    context_prev: str = "",
+    context_next: str = "",
 ) -> str:
     """Build LLM user prompt for a single message."""
     parts = []
@@ -251,7 +255,7 @@ def _build_llm_user_prompt(
         parts.append(f"Next messages: {context_next}")
     parts.append(
         "\nExtract lasting personal facts as JSON array of "
-        '{span_text, span_label} objects. Output [] if none.'
+        "{span_text, span_label} objects. Output [] if none."
     )
     return "\n".join(parts)
 
@@ -315,7 +319,11 @@ def extract_hybrid(
     """Hybrid extraction: union of spaCy + LLM, deduplicated."""
     spacy_candidates = extract_spacy(text, message_id)
     llm_candidates = extract_llm(
-        text, message_id, context_prev, context_next, few_shot_examples,
+        text,
+        message_id,
+        context_prev,
+        context_next,
+        few_shot_examples,
     )
 
     # Merge: LLM takes priority on overlap
@@ -329,6 +337,7 @@ def extract_hybrid(
             overlaps = False
             for lc in llm_candidates:
                 from eval_shared import jaccard_tokens
+
                 if (
                     c["span_label"] == lc["span_label"]
                     and jaccard_tokens(c["span_text"], lc["span_text"]) > 0.5
@@ -478,9 +487,7 @@ def evaluate(
     total_fn = sum(fn_count.values())
     micro_p = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
     micro_r = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
-    micro_f1 = (
-        2 * micro_p * micro_r / (micro_p + micro_r) if (micro_p + micro_r) > 0 else 0.0
-    )
+    micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r) if (micro_p + micro_r) > 0 else 0.0
 
     return {
         "extractor": extractor,
@@ -504,8 +511,7 @@ def print_results(results: dict[str, Any]) -> None:
     print(f"{'=' * 70}", flush=True)
 
     print(
-        f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} "
-        f"{'TP':>5} {'FP':>5} {'FN':>5} {'Sup':>5}",
+        f"\n{'Label':<20} {'P':>6} {'R':>6} {'F1':>6} {'TP':>5} {'FP':>5} {'FN':>5} {'Sup':>5}",
         flush=True,
     )
     print("-" * 70, flush=True)
@@ -582,9 +588,7 @@ def main() -> None:
         with open(args.train_set) as f:
             train_data = json.load(f)
         # Select examples that have candidates (positive examples)
-        few_shot = [
-            ex for ex in train_data if ex.get("expected_candidates")
-        ][:5]
+        few_shot = [ex for ex in train_data if ex.get("expected_candidates")][:5]
         print(f"Using {len(few_shot)} few-shot examples", flush=True)
 
     # Run evaluation

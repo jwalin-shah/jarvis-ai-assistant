@@ -1087,7 +1087,7 @@ class ChatDBReader:
                     return []
 
             conversations = []
-            
+
             # --- OPTIMIZATION: Bulk Name Resolution ---
             # Collect all unique handles that need name resolution
             handles_to_resolve = set()
@@ -1098,13 +1098,13 @@ class ChatDBReader:
                         normalized = normalize_phone_number(p.strip())
                         if normalized:
                             handles_to_resolve.add(normalized)
-            
+
             # Warm the cache for all handles in one go
             if handles_to_resolve:
                 # _resolve_contact_name handles lazy loading of the full AddressBook cache
                 # so calling it once for any handle ensures the cache is hot.
                 self._resolve_contact_name(next(iter(handles_to_resolve)))
-            
+
             for row in rows:
                 # Parse participants
                 participants_str = row["participants"] or ""
@@ -1133,7 +1133,7 @@ class ChatDBReader:
                         for p in participants[:3]:  # Try first 3
                             name = self._resolve_contact_name(p)
                             if name:
-                                resolved_names.append(name.split()[0]) # Just first names
+                                resolved_names.append(name.split()[0])  # Just first names
 
                         if resolved_names:
                             suffix = "..." if len(participants) > len(resolved_names) else ""
@@ -1306,7 +1306,7 @@ class ChatDBReader:
 
         result: dict[str, list[Message]] = {cid: [] for cid in chat_ids}
         chunk_size = 900  # SQLite max variable limit is 999
-        
+
         # If no limit, use a very large number effectively meaning "all"
         effective_limit = limit_per_chat if limit_per_chat is not None else 1_000_000_000
 

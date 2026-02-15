@@ -10,7 +10,6 @@ import logging
 from typing import Any
 
 from jarvis.infrastructure.cache import get_unified_cache
-from jarvis.infrastructure.cache.base import CacheBackend
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class PrefetchCache:
         self._cache.clear()
 
     def cleanup_expired(self) -> int:
-        # Expired entries are cleaned up automatically on get() 
+        # Expired entries are cleaned up automatically on get()
         # or by the backend's internal cleanup mechanism.
         return 0
 
@@ -85,9 +84,25 @@ def reset_cache() -> None:
 
 
 # Stubs for compatibility
-class CacheError(Exception): pass
-class CacheStats: pass
-class CacheEntry: pass
-class L1Cache: pass
-class L2Cache: pass
-class L3Cache: pass
+class CacheError(Exception):
+    pass
+
+
+class CacheStats:
+    pass
+
+
+class CacheEntry:
+    pass
+
+
+class L1Cache:
+    pass
+
+
+class L2Cache:
+    pass
+
+
+class L3Cache:
+    pass

@@ -31,6 +31,6 @@ Since the model generates free-text predicates (e.g., `is_planning_to_visit`), w
 - **0.7 (Default)**: Generic facts (`has_fact`, `mentioned`)
 
 ## Future Improvements
-- **Adaptive Batching**: Currently we hard-slice 25 messages. We should implement sliding windows that don't break mid-turn or mid-sentence.
+- **Adaptive Batching**: We currently use fixed-size sliding windows (default size=25, overlap=5 in backfill). We should make windows turn-aware so they don't split mid-turn or mid-sentence.
 - **Entity Context**: Injecting known contact details (from profile) into the prompt would help resolve pronouns ("she", "they") and relationships.
 - **Embedding-Based Confidence**: Replace keyword heuristics with a lightweight classifier or embedding similarity check for more accurate confidence scoring.

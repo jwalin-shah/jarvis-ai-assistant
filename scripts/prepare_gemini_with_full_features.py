@@ -162,7 +162,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     save_training_data(
-        args.output_dir, X_train, X_test, y_train, y_test, logger,
+        args.output_dir,
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+        logger,
         source="gemini_labeled_full_features",
     )
 

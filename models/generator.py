@@ -170,6 +170,9 @@ class MLXGenerator:
                         error="memory_pressure: skipping model load",
                     )
                 with timed_operation(logger, "model.load", model_id=self.config.model_path):
+                    from jarvis.model_manager import get_model_manager
+
+                    get_model_manager().prepare_for("llm")
                     load_ok = self._loader.load()
                 if not load_ok:
                     logger.warning("Model load failed, returning fallback response")

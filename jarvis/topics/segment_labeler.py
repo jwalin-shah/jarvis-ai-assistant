@@ -39,6 +39,7 @@ class SegmentLabeler:
         # Strategy: Use LLM to describe the conversation in 2-4 words
         try:
             from models.loader import get_model
+
             loader = get_model()
 
             # Use Turn-Based formatting
@@ -63,10 +64,7 @@ class SegmentLabeler:
             prompt = f"Chat:\n{chat_text}\n\nWhat is the main topic of this chat? (2-4 words maximum). Examples: 'Weekend Plans', 'Job Interview', 'Moving to SF'.\nTopic:"
 
             res = loader.generate_sync(
-                prompt=prompt,
-                max_tokens=15,
-                temperature=0.0,
-                stop_sequences=["\n", ".", "Chat:"]
+                prompt=prompt, max_tokens=15, temperature=0.0, stop_sequences=["\n", ".", "Chat:"]
             )
 
             label = res.text.strip().strip('"').strip("'")
@@ -117,6 +115,7 @@ class SegmentLabeler:
                 return entities_by_type[label][0]
 
         return "General Chat"
+
     def summarize_segment(self, segment: TopicSegment) -> str:
         """Generate a 1-sentence summary of the segment text."""
         if not segment.text or len(segment.text.split()) < 5:
@@ -124,6 +123,7 @@ class SegmentLabeler:
 
         try:
             from models.loader import get_model
+
             loader = get_model()
 
             # Use same turn-based logic
@@ -136,20 +136,19 @@ class SegmentLabeler:
                     if sender == curr_sender:
                         curr_msgs.append(m.text or "")
                     else:
-                        if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                        if curr_msgs:
+                            turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
                         curr_sender = sender
                         curr_msgs = [m.text or ""]
-                if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                if curr_msgs:
+                    turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
 
             chat_text = "\n".join(turns)
 
             prompt = f"Chat:\n{chat_text}\n\nSummarize this chat in exactly one sentence:\nSummary:"
 
             res = loader.generate_sync(
-                prompt=prompt,
-                max_tokens=60,
-                temperature=0.0,
-                stop_sequences=["\n", "Chat:"]
+                prompt=prompt, max_tokens=60, temperature=0.0, stop_sequences=["\n", "Chat:"]
             )
 
             summary = res.text.strip().strip('"').strip("'")

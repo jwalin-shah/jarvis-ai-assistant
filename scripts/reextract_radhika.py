@@ -12,6 +12,7 @@ logger = logging.getLogger("jarvis")
 
 CHAT_ID = "iMessage;-;+15629643639"
 
+
 def reextract():
     _ = get_db()  # Ensure DB initialized
 
@@ -36,7 +37,7 @@ def reextract():
 
     all_facts = []
     for i, seg in enumerate(segments):
-        print(f"Processing segment {i+1}/{len(segments)}...")
+        print(f"Processing segment {i + 1}/{len(segments)}...")
         facts = extractor.extract_facts_from_segment(seg, contact_id=CHAT_ID)
         if facts:
             print(f"  Found {len(facts)} facts.")
@@ -46,6 +47,7 @@ def reextract():
             save_facts(facts, CHAT_ID)
 
     print(f"\nTotal facts saved: {len(all_facts)}")
+
 
 if __name__ == "__main__":
     reextract()

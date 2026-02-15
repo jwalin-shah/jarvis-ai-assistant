@@ -38,6 +38,7 @@ def _is_mlx_available() -> bool:
     if _mlx_available is None:
         try:
             import mlx.core as mx  # noqa: F401
+
             _mlx_available = True
         except ImportError:
             _mlx_available = False
@@ -47,33 +48,33 @@ def _is_mlx_available() -> bool:
 @lru_cache(maxsize=1)
 def get_mlx_memory_info() -> dict[str, Any] | None:
     """Get MLX GPU memory information using native MLX APIs.
-    
+
     This is more accurate than psutil for Apple Silicon unified memory
     as it tracks the actual GPU/MLX memory pool usage.
-    
+
     Returns:
         Dict with memory info or None if MLX unavailable.
         Keys: active_mb, peak_mb, cache_mb, limit_mb
     """
     if not _is_mlx_available():
         return None
-    
+
     try:
         import mlx.core as mx
-        
+
         # Get current memory stats from MLX
         active_bytes = mx.metal.get_active_memory()
         peak_bytes = mx.metal.get_peak_memory()
         cache_bytes = mx.metal.get_cache_memory()
-        
+
         # Get the memory limit if available (MLX 0.18+)
         try:
             limit_bytes = mx.metal.get_memory_limit()
         except (AttributeError, TypeError):
             limit_bytes = None
-        
+
         BYTES_PER_MB = 1024 * 1024
-        
+
         result = {
             "active_mb": active_bytes / BYTES_PER_MB,
             "peak_mb": peak_bytes / BYTES_PER_MB,
@@ -82,12 +83,12 @@ def get_mlx_memory_info() -> dict[str, Any] | None:
             "peak_gb": peak_bytes / (1024**3),
             "cache_gb": cache_bytes / (1024**3),
         }
-        
+
         if limit_bytes is not None:
             result["limit_mb"] = limit_bytes / BYTES_PER_MB
             result["limit_gb"] = limit_bytes / (1024**3)
             result["utilization_percent"] = (active_bytes / limit_bytes) * 100
-        
+
         return result
     except Exception as e:
         logger.debug(f"Failed to get MLX memory info: {e}")
@@ -96,24 +97,24 @@ def get_mlx_memory_info() -> dict[str, Any] | None:
 
 def clear_mlx_cache() -> bool:
     """Clear MLX GPU cache to free memory.
-    
+
     Returns:
         True if cache was cleared, False if MLX unavailable.
     """
     if not _is_mlx_available():
         return False
-    
+
     try:
         import mlx.core as mx
-        
+
         before = mx.metal.get_cache_memory()
         mx.clear_cache()
         after = mx.metal.get_cache_memory()
-        
+
         freed_mb = (before - after) / (1024 * 1024)
         if freed_mb > 1:
             logger.debug(f"Cleared {freed_mb:.1f}MB from MLX cache")
-        
+
         return True
     except Exception as e:
         logger.debug(f"Failed to clear MLX cache: {e}")
@@ -178,8 +179,8 @@ class MemoryInfo:
         if self.macos_pressure:
             base += f" | {self.macos_pressure}"
         if self.mlx_memory:
-            mlx_active = self.mlx_memory.get('active_mb', 0)
-            mlx_peak = self.mlx_memory.get('peak_mb', 0)
+            mlx_active = self.mlx_memory.get("active_mb", 0)
+            mlx_peak = self.mlx_memory.get("peak_mb", 0)
             base += f" | MLX: {mlx_active:.1f}MB active, {mlx_peak:.1f}MB peak"
         return base
 

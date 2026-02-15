@@ -13,6 +13,7 @@ import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -58,6 +59,16 @@ if TYPE_CHECKING:
     from models import MLXGenerator
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PrecomputedContext:
+    """Optional precomputed inputs to avoid redundant work in generate_reply / prepare_streaming_context."""
+
+    classification_result: ClassificationResult | None = None
+    search_results: list[dict[str, Any]] | None = None
+    contact: Contact | None = None
+    cached_embedder: CachedEmbedder | None = None
 
 
 class ReplyServiceError(JarvisError):
@@ -200,21 +211,20 @@ class ReplyService:
         contact: Contact | None = None,
         search_results: list[dict[str, Any]] | None = None,
         cached_embedder: CachedEmbedder | None = None,
+        *,
+        precomputed: PrecomputedContext | None = None,
     ) -> tuple[ModelGenerationRequest, dict[str, Any]]:
         """Prepare a model GenerationRequest through the typed pipeline for streaming.
 
         Runs all the same steps as the non-streaming path (health check, contact
         lookup, classification, RAG search, prompt assembly) but returns the
-        model request instead of generating. Designed to be called via
-        asyncio.to_thread() before streaming tokens.
-
-        Pre-computed results can be passed to skip redundant work:
-            classification_result: Skip re-running classification cascade.
-            contact: Skip re-running contact lookup.
-            search_results: Skip re-running RAG search.
-            cached_embedder: Reuse pre-computed embeddings to avoid
-                re-encoding the query text.
+        model request instead of generating. Pass precomputed to reuse results.
         """
+        if precomputed:
+            classification_result = precomputed.classification_result or classification_result
+            contact = precomputed.contact if precomputed.contact is not None else contact
+            search_results = precomputed.search_results if precomputed.search_results is not None else search_results
+            cached_embedder = precomputed.cached_embedder or cached_embedder
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
             raise ReplyServiceError(f"LLM unavailable: {health_reason}")
@@ -239,11 +249,7 @@ class ReplyService:
         if search_results is None:
             # Hybrid search for better retrieval precision
             hybrid_searcher = get_hybrid_searcher()
-            search_results = hybrid_searcher.search(
-                query=normalized_incoming,
-                limit=5,
-                rerank=True
-            )
+            search_results = hybrid_searcher.search(query=normalized_incoming, limit=5, rerank=True)
 
         message_context = MessageContext(
             chat_id=chat_id or "",
@@ -306,11 +312,19 @@ class ReplyService:
         thread: list[str] | None = None,
         contact: Contact | None = None,
         cached_embedder: CachedEmbedder | None = None,
+        instruction: str | None = None,
+        *,
+        precomputed: PrecomputedContext | None = None,
     ) -> GenerationResponse:
         """Generate a reply from contract types.
 
         Orchestrates: validation -> template shortcut -> context search -> LLM gen -> metrics.
+        Pass precomputed to reuse classification, search, contact, or embedder and skip redundant work.
         """
+        if precomputed:
+            search_results = precomputed.search_results if precomputed.search_results is not None else search_results
+            contact = precomputed.contact if precomputed.contact is not None else contact
+            cached_embedder = precomputed.cached_embedder or cached_embedder
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
         log_event(
@@ -338,13 +352,7 @@ class ReplyService:
         if category_config.skip_slm:
             result = self._template_response(category_name, routing_start)
             latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-            self._persist_reply_log(
-                context,
-                classification,
-                None,
-                result,
-                latency_ms
-            )
+            self._persist_reply_log(context, classification, None, result, latency_ms)
             return result
 
         search_results, latency_ms = self._search_context(
@@ -370,13 +378,7 @@ class ReplyService:
                 },
             )
             latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-            self._persist_reply_log(
-                context,
-                classification,
-                search_results,
-                result,
-                latency_ms
-            )
+            self._persist_reply_log(context, classification, search_results, result, latency_ms)
             return result
 
         result, latency_ms = self._generate_response(
@@ -387,6 +389,7 @@ class ReplyService:
             thread_messages,
             cached_embedder,
             latency_ms,
+            instruction=instruction,
         )
 
         latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
@@ -398,15 +401,9 @@ class ReplyService:
             latency_ms,
             cached_embedder,
         )
-        
+
         # Persist full generation log for traceability
-        self._persist_reply_log(
-            context,
-            classification,
-            search_results,
-            result,
-            latency_ms
-        )
+        self._persist_reply_log(context, classification, search_results, result, latency_ms)
 
         return result
 
@@ -428,22 +425,24 @@ class ReplyService:
                 "category": classification.category.value,
                 "urgency": classification.urgency.value,
                 "confidence": classification.confidence,
-                "metadata": classification.metadata
+                "metadata": classification.metadata,
             }
-            
+
             # RAG context: extract content and scores
             rag_docs = []
             if search_results:
                 for res in search_results:
-                    rag_docs.append({
-                        "content": res.get("context_text", ""),
-                        "response": res.get("reply_text", ""),
-                        "similarity": self._safe_float(res.get("similarity")),
-                        "source": res.get("chat_id", "")
-                    })
-            
+                    rag_docs.append(
+                        {
+                            "content": res.get("context_text", ""),
+                            "response": res.get("reply_text", ""),
+                            "similarity": self._safe_float(res.get("similarity")),
+                            "source": res.get("chat_id", ""),
+                        }
+                    )
+
             final_prompt = result.metadata.get("final_prompt", "")
-            
+
             self.db.save_reply_log(
                 chat_id=chat_id,
                 contact_id=contact_id,
@@ -453,10 +452,7 @@ class ReplyService:
                 final_prompt=final_prompt,
                 response_text=result.response,
                 confidence=result.confidence,
-                metadata_json=json.dumps({
-                    "latency_ms": latency_ms,
-                    "metadata": result.metadata
-                })
+                metadata_json=json.dumps({"latency_ms": latency_ms, "metadata": result.metadata}),
             )
         except Exception as e:
             logger.debug(f"Failed to persist reply log: {e}")
@@ -474,12 +470,14 @@ class ReplyService:
     ) -> None:
         """Log a generation event from outside the standard reply pipeline."""
         try:
-            classification_json = json.dumps({
-                "category": category,
-                "urgency": "medium",
-                "confidence": confidence,
-                "metadata": {}
-            })
+            classification_json = json.dumps(
+                {
+                    "category": category,
+                    "urgency": "medium",
+                    "confidence": confidence,
+                    "metadata": {},
+                }
+            )
 
             rag_context_json = json.dumps(rag_docs or [])
 
@@ -492,7 +490,7 @@ class ReplyService:
                 final_prompt=final_prompt,
                 response_text=response_text,
                 confidence=confidence,
-                metadata_json=json.dumps(metadata or {})
+                metadata_json=json.dumps(metadata or {}),
             )
         except Exception as e:
             logger.debug(f"Failed to log custom generation: {e}")
@@ -561,11 +559,7 @@ class ReplyService:
             search_start = time.perf_counter()
             hybrid_searcher = get_hybrid_searcher()
             # Hybrid search already uses vec_searcher internally
-            search_results = hybrid_searcher.search(
-                query=incoming,
-                limit=5,
-                rerank=True
-            )
+            search_results = hybrid_searcher.search(query=incoming, limit=5, rerank=True)
             latency_ms["context_search"] = (time.perf_counter() - search_start) * 1000
         return search_results, latency_ms
 
@@ -578,6 +572,7 @@ class ReplyService:
         thread_messages: list[str],
         cached_embedder: CachedEmbedder,
         latency_ms: dict[str, float],
+        instruction: str | None = None,
     ) -> tuple[GenerationResponse, dict[str, float]]:
         """Build generation request and run LLM inference."""
         gen_start = time.perf_counter()
@@ -587,6 +582,7 @@ class ReplyService:
             search_results=search_results,
             contact=contact,
             thread=thread_messages,
+            instruction=instruction,
             cached_embedder=cached_embedder,
         )
         result = self._generate_llm_reply(request, search_results, thread_messages)
@@ -926,7 +922,7 @@ class ReplyService:
         """
         if len(examples) <= 1:
             return examples
-        
+
         # Skip expensive embedding-based dedup for small example sets
         # Small sets are unlikely to have problematic duplicates
         if len(examples) <= 6:

@@ -42,9 +42,18 @@ METRICS_PATH = RESULTS_DIR / "lfm2-extract_metrics.json"
 
 # The canonical label set matching the goldset
 VALID_LABELS = {
-    "family_member", "activity", "health_condition", "job_role", "org",
-    "place", "food_item", "current_location", "future_location",
-    "past_location", "friend_name", "person_name",
+    "family_member",
+    "activity",
+    "health_condition",
+    "job_role",
+    "org",
+    "place",
+    "food_item",
+    "current_location",
+    "future_location",
+    "past_location",
+    "friend_name",
+    "person_name",
 }
 
 # Fact type hierarchy
@@ -87,37 +96,37 @@ Return {"facts": []} if no lasting personal facts."""
 
 # Few-shot examples: positive + hard negatives
 FEW_SHOT_TURNS = [
-    ("my brother bakes and I just eat whatever he makes",
-     '{"facts": [{"text": "brother", "label": "family_member"}, '
-     '{"text": "bakes", "label": "activity"}]}'),
-    ("I work at Google as an engineer",
-     '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}'),
-    ("allergic to peanuts and it sucks",
-     '{"facts": [{"text": "peanuts", "label": "health_condition"}]}'),
-    ("Also my dad leaves the 22nd for India",
-     '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}'),
-    ("My mom actually texted me this morning saying my acceptance letter went to the house",
-     '{"facts": [{"text": "mom", "label": "family_member"}]}'),
-    ("I love reading",
-     '{"facts": [{"text": "reading", "label": "activity"}]}'),
-    ("i hate utd",
-     '{"facts": [{"text": "utd", "label": "org"}]}'),
-    ("been hella depressed",
-     '{"facts": [{"text": "depressed", "label": "health_condition"}]}'),
-    ("I work at lending tree",
-     '{"facts": [{"text": "lending tree", "label": "org"}]}'),
-    ("Also i liked the dolmas",
-     '{"facts": [{"text": "dolmas", "label": "food_item"}]}'),
-    ("I like the raiders",
-     '{"facts": [{"text": "raiders", "label": "org"}]}'),
-    ("helloooo",
-     '{"facts": []}'),
-    ("and they'll do an ultrasound and stuff",
-     '{"facts": []}'),
-    ("Yeah that's fine I'll leave as soon as my mom gets home at 4",
-     '{"facts": []}'),
-    ("cause my mom tried doin my bros arms",
-     '{"facts": []}'),
+    (
+        "my brother bakes and I just eat whatever he makes",
+        '{"facts": [{"text": "brother", "label": "family_member"}, '
+        '{"text": "bakes", "label": "activity"}]}',
+    ),
+    (
+        "I work at Google as an engineer",
+        '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}',
+    ),
+    (
+        "allergic to peanuts and it sucks",
+        '{"facts": [{"text": "peanuts", "label": "health_condition"}]}',
+    ),
+    (
+        "Also my dad leaves the 22nd for India",
+        '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}',
+    ),
+    (
+        "My mom actually texted me this morning saying my acceptance letter went to the house",
+        '{"facts": [{"text": "mom", "label": "family_member"}]}',
+    ),
+    ("I love reading", '{"facts": [{"text": "reading", "label": "activity"}]}'),
+    ("i hate utd", '{"facts": [{"text": "utd", "label": "org"}]}'),
+    ("been hella depressed", '{"facts": [{"text": "depressed", "label": "health_condition"}]}'),
+    ("I work at lending tree", '{"facts": [{"text": "lending tree", "label": "org"}]}'),
+    ("Also i liked the dolmas", '{"facts": [{"text": "dolmas", "label": "food_item"}]}'),
+    ("I like the raiders", '{"facts": [{"text": "raiders", "label": "org"}]}'),
+    ("helloooo", '{"facts": []}'),
+    ("and they'll do an ultrasound and stuff", '{"facts": []}'),
+    ("Yeah that's fine I'll leave as soon as my mom gets home at 4", '{"facts": []}'),
+    ("cause my mom tried doin my bros arms", '{"facts": []}'),
 ]
 
 INSTRUCT_USER_PROMPT = """Message: "{message}"
@@ -137,12 +146,22 @@ LLM_LABEL_ALIASES: dict[str, set[str]] = {
     "friend_name": {"friend_name", "friend"},
     "person_name": {"person_name", "name", "person"},
     "org": {
-        "org", "organization", "company", "employer", "school",
-        "university", "personal.school",
+        "org",
+        "organization",
+        "company",
+        "employer",
+        "school",
+        "university",
+        "personal.school",
     },
     "place": {
-        "place", "location", "venue", "landmark",
-        "current_location", "future_location", "past_location",
+        "place",
+        "location",
+        "venue",
+        "landmark",
+        "current_location",
+        "future_location",
+        "past_location",
     },
     "health_condition": {"health_condition", "health", "allergy", "condition", "medical"},
 }
@@ -204,7 +223,7 @@ def parse_llm_json(raw_text: str) -> list[dict]:
             pass
 
     # Try to find a JSON array
-    arr_match = re.search(r'\[\s*\{.*?\}\s*(?:,\s*\{.*?\}\s*)*\]', text, re.DOTALL)
+    arr_match = re.search(r"\[\s*\{.*?\}\s*(?:,\s*\{.*?\}\s*)*\]", text, re.DOTALL)
     if arr_match:
         try:
             return json.loads(arr_match.group())
@@ -237,10 +256,28 @@ def _trim_span(text: str, label: str) -> str:
     # For family_member, extract just the relationship word
     if label == "family_member":
         family_words = {
-            "brother", "sister", "mom", "mother", "dad", "father",
-            "wife", "husband", "girlfriend", "boyfriend", "partner",
-            "daughter", "son", "cousin", "aunt", "uncle", "grandma",
-            "grandmother", "grandpa", "grandfather", "fiancee", "fiancé",
+            "brother",
+            "sister",
+            "mom",
+            "mother",
+            "dad",
+            "father",
+            "wife",
+            "husband",
+            "girlfriend",
+            "boyfriend",
+            "partner",
+            "daughter",
+            "son",
+            "cousin",
+            "aunt",
+            "uncle",
+            "grandma",
+            "grandmother",
+            "grandpa",
+            "grandfather",
+            "fiancee",
+            "fiancé",
         }
         for w in words:
             if w.lower().rstrip("'s") in family_words:
@@ -265,34 +302,100 @@ def _trim_span(text: str, label: str) -> str:
 
 # Known entity patterns for label correction
 _FAMILY_WORDS = {
-    "brother", "sister", "mom", "mother", "dad", "father",
-    "wife", "husband", "girlfriend", "boyfriend", "partner",
-    "daughter", "son", "cousin", "aunt", "uncle", "grandma",
-    "grandmother", "grandpa", "grandfather", "fiancee", "fiancé",
-    "stepmom", "stepdad", "niece", "nephew", "bros",
+    "brother",
+    "sister",
+    "mom",
+    "mother",
+    "dad",
+    "father",
+    "wife",
+    "husband",
+    "girlfriend",
+    "boyfriend",
+    "partner",
+    "daughter",
+    "son",
+    "cousin",
+    "aunt",
+    "uncle",
+    "grandma",
+    "grandmother",
+    "grandpa",
+    "grandfather",
+    "fiancee",
+    "fiancé",
+    "stepmom",
+    "stepdad",
+    "niece",
+    "nephew",
+    "bros",
 }
 
 _HEALTH_KEYWORDS = {
-    "allergic", "allergy", "asthma", "diabetes", "depression", "depressed",
-    "anxiety", "adhd", "migraine", "migraines", "vestibular",
-    "surgery", "injury", "cancer", "arthritis", "insomnia",
-    "emergency room", "hospital", "therapy", "ptsd",
+    "allergic",
+    "allergy",
+    "asthma",
+    "diabetes",
+    "depression",
+    "depressed",
+    "anxiety",
+    "adhd",
+    "migraine",
+    "migraines",
+    "vestibular",
+    "surgery",
+    "injury",
+    "cancer",
+    "arthritis",
+    "insomnia",
+    "emergency room",
+    "hospital",
+    "therapy",
+    "ptsd",
     "sleeps horrible",
 }
 
 _KNOWN_ORGS = {
-    "facebook", "google", "intuit", "apple", "amazon", "microsoft",
-    "netflix", "uber", "lyft", "airbnb", "twitter", "meta",
-    "lending tree", "lendingtree", "walmart", "target",
-    "starbucks", "chipotle", "costco",
-    "ihs", "karya", "swadhyay",
-    "raiders", "49ers", "warriors", "giants",
+    "facebook",
+    "google",
+    "intuit",
+    "apple",
+    "amazon",
+    "microsoft",
+    "netflix",
+    "uber",
+    "lyft",
+    "airbnb",
+    "twitter",
+    "meta",
+    "lending tree",
+    "lendingtree",
+    "walmart",
+    "target",
+    "starbucks",
+    "chipotle",
+    "costco",
+    "ihs",
+    "karya",
+    "swadhyay",
+    "raiders",
+    "49ers",
+    "warriors",
+    "giants",
     "district",
 }
 
 _KNOWN_SCHOOLS = {
-    "utd", "ucd", "ucla", "usc", "sjsu", "stanford", "berkeley",
-    "culinary school", "community college", "sb",
+    "utd",
+    "ucd",
+    "ucla",
+    "usc",
+    "sjsu",
+    "stanford",
+    "berkeley",
+    "culinary school",
+    "community college",
+    "sb",
 }
 
 
@@ -319,9 +422,20 @@ def _correct_label(text: str, label: str, msg_lower: str) -> str:
     # If span looks like a job title and was labeled activity
     if label == "activity":
         job_indicators = {
-            "manager", "engineer", "developer", "nurse", "doctor",
-            "teacher", "analyst", "designer", "consultant", "director",
-            "intern", "coordinator", "specialist", "product management",
+            "manager",
+            "engineer",
+            "developer",
+            "nurse",
+            "doctor",
+            "teacher",
+            "analyst",
+            "designer",
+            "consultant",
+            "director",
+            "intern",
+            "coordinator",
+            "specialist",
+            "product management",
             "realtor",
         }
         if text_lower in job_indicators:
@@ -330,11 +444,29 @@ def _correct_label(text: str, label: str, msg_lower: str) -> str:
     # If labeled job_role but looks like a company name (proper noun, not a role word)
     if label == "job_role" and len(text) > 0 and text[0].isupper():
         job_role_words = {
-            "manager", "engineer", "developer", "nurse", "doctor",
-            "teacher", "analyst", "designer", "consultant", "director",
-            "engineering", "nursing", "teaching",
-            "intern", "coordinator", "specialist", "ceo", "cto", "cfo",
-            "vp", "president", "founder", "product management",
+            "manager",
+            "engineer",
+            "developer",
+            "nurse",
+            "doctor",
+            "teacher",
+            "analyst",
+            "designer",
+            "consultant",
+            "director",
+            "engineering",
+            "nursing",
+            "teaching",
+            "intern",
+            "coordinator",
+            "specialist",
+            "ceo",
+            "cto",
+            "cfo",
+            "vp",
+            "president",
+            "founder",
+            "product management",
         }
         if text_lower not in job_role_words and "management" not in text_lower:
             return "org"
@@ -350,26 +482,26 @@ def _is_transient_family_mention(msg_lower: str) -> bool:
     """
     _transient_indicators = [
         # Logistics/scheduling
-        r'\bnever\s+ended\s+up\b',
-        r'\bworking\s+from\s+home\b',
-        r'\b(?:call|calling|called)\s+my\b',
+        r"\bnever\s+ended\s+up\b",
+        r"\bworking\s+from\s+home\b",
+        r"\b(?:call|calling|called)\s+my\b",
         # "my mom gets/comes/leaves home/up" but NOT "comes back from X" (location fact)
-        r'\bmy\s+\w+\s+(?:gets?|leaves?|picks?)\s+(?:home|up|back)\b',
-        r'\bmy\s+\w+\s+comes?\s+(?:home|up)\b',
-        r'\b(?:leave|leaving|left)\s+(?:as\s+soon\s+as|when|after)\s+my\b',
-        r'\b(?:ask|asking|asked)\s+my\s+(?:dad|mom)\b',
-        r'\bjust\s+(?:call|come)\b.*\bmy\s+(?:dad|mom)\b',
-        r'\bmy\s+(?:phone|car|house|room)\s+is\b',
-        r'\blike\s+my\s+(?:mom|dad)s\b',
-        r'\bexcept\s+(?:for\s+)?(?:me\s+and\s+)?my\b',
-        r'\bthey\s+know\s+my\b',
+        r"\bmy\s+\w+\s+(?:gets?|leaves?|picks?)\s+(?:home|up|back)\b",
+        r"\bmy\s+\w+\s+comes?\s+(?:home|up)\b",
+        r"\b(?:leave|leaving|left)\s+(?:as\s+soon\s+as|when|after)\s+my\b",
+        r"\b(?:ask|asking|asked)\s+my\s+(?:dad|mom)\b",
+        r"\bjust\s+(?:call|come)\b.*\bmy\s+(?:dad|mom)\b",
+        r"\bmy\s+(?:phone|car|house|room)\s+is\b",
+        r"\blike\s+my\s+(?:mom|dad)s\b",
+        r"\bexcept\s+(?:for\s+)?(?:me\s+and\s+)?my\b",
+        r"\bthey\s+know\s+my\b",
         # Passing references (not about the relationship)
-        r'\bthe\s+one\s+who\s+sends?\b',
-        r'\btried\s+doin\b',
-        r'\bmade\s+me\s+pack\b',
-        r'\bfigure\s+the\s+rest\b',
+        r"\bthe\s+one\s+who\s+sends?\b",
+        r"\btried\s+doin\b",
+        r"\bmade\s+me\s+pack\b",
+        r"\bfigure\s+the\s+rest\b",
         # Greeting/well-wishes with family word
-        r'\bhappy\s+\w+\s+my\s+(?:brother|sister|bro|sis)\b',
+        r"\bhappy\s+\w+\s+my\s+(?:brother|sister|bro|sis)\b",
     ]
     return any(re.search(p, msg_lower) for p in _transient_indicators)
 
@@ -390,7 +522,7 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
 
     # Skip iMessage reaction messages (Loved/Liked/Laughed at/Emphasized "...")
     # These quote other people's messages and shouldn't have facts extracted
-    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
+    if re.match(r"^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c", message_text):
         return []
 
     for fact in facts:
@@ -425,13 +557,49 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
         # Reject common non-fact words/phrases (pronouns, fillers, greetings)
         text_lower = text.lower().strip()
         reject_phrases = {
-            "i", "me", "my", "you", "he", "she", "it", "we", "they",
-            "her", "him", "his", "their", "our", "us",
-            "like", "i like", "i like it", "yeah", "yes", "no", "ok",
-            "lol", "haha", "omg", "bruh", "dude",
-            "good", "bad", "cool", "nice", "great", "sure", "fine",
-            "thing", "stuff", "something", "nothing", "everything",
-            "now", "thank", "thanks", "aight",
+            "i",
+            "me",
+            "my",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "her",
+            "him",
+            "his",
+            "their",
+            "our",
+            "us",
+            "like",
+            "i like",
+            "i like it",
+            "yeah",
+            "yes",
+            "no",
+            "ok",
+            "lol",
+            "haha",
+            "omg",
+            "bruh",
+            "dude",
+            "good",
+            "bad",
+            "cool",
+            "nice",
+            "great",
+            "sure",
+            "fine",
+            "thing",
+            "stuff",
+            "something",
+            "nothing",
+            "everything",
+            "now",
+            "thank",
+            "thanks",
+            "aight",
         }
         if text_lower in reject_phrases:
             continue
@@ -440,27 +608,78 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
         if label in ("current_location", "future_location", "past_location", "place"):
             # Reject only obvious non-locations (very common words)
             location_rejects = {
-                "here", "there", "home", "somewhere", "anywhere", "nowhere",
-                "place", "area", "spot", "well", "last fall", "22nd",
-                "diwali", "christmas", "thanksgiving",
-                "doctor's appointment", "appointment", "bart",
+                "here",
+                "there",
+                "home",
+                "somewhere",
+                "anywhere",
+                "nowhere",
+                "place",
+                "area",
+                "spot",
+                "well",
+                "last fall",
+                "22nd",
+                "diwali",
+                "christmas",
+                "thanksgiving",
+                "doctor's appointment",
+                "appointment",
+                "bart",
             }
             if text_lower in location_rejects:
                 continue
         if label == "food_item":
             # Food items should be recognizable food words, not random nouns
             reject_foods = {
-                "eat", "eating", "ate", "food", "cooking", "cook", "phone",
-                "whatever", "everything", "anything", "something", "stuff",
-                "it", "that", "this", "one", "all", "car", "arms", "tie",
-                "theory", "utilities", "read", "xbox", "realtor", "raiders",
-                "acceptance letter", "bag", "never", "whatever he makes",
-                "jeans", "coupon", "email", "her neck", "neck",
-                "i.cvs.com", "diwali",
-                "process", "ship that bag", "take the bart", "bart",
-                "live instruction", "instruction", "schedule",
-                "bell schedule", "regular bell schedule",
-                "per period", "period",
+                "eat",
+                "eating",
+                "ate",
+                "food",
+                "cooking",
+                "cook",
+                "phone",
+                "whatever",
+                "everything",
+                "anything",
+                "something",
+                "stuff",
+                "it",
+                "that",
+                "this",
+                "one",
+                "all",
+                "car",
+                "arms",
+                "tie",
+                "theory",
+                "utilities",
+                "read",
+                "xbox",
+                "realtor",
+                "raiders",
+                "acceptance letter",
+                "bag",
+                "never",
+                "whatever he makes",
+                "jeans",
+                "coupon",
+                "email",
+                "her neck",
+                "neck",
+                "i.cvs.com",
+                "diwali",
+                "process",
+                "ship that bag",
+                "take the bart",
+                "bart",
+                "live instruction",
+                "instruction",
+                "schedule",
+                "bell schedule",
+                "regular bell schedule",
+                "per period",
+                "period",
             }
             if text_lower in reject_foods:
                 continue
@@ -478,55 +697,165 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 continue
             # Reject if it's a holiday/event name (capitalize check)
             if text[0].isupper() and text_lower not in {
-                "thai", "indian", "chinese", "japanese", "mexican", "italian",
-                "korean", "greek", "french",
+                "thai",
+                "indian",
+                "chinese",
+                "japanese",
+                "mexican",
+                "italian",
+                "korean",
+                "greek",
+                "french",
             }:
                 # Proper nouns that aren't cuisine types are likely not food
                 # But allow multi-word food items like "palak paneer"
                 food_words = {
-                    "curry", "paneer", "naan", "sushi", "pizza", "pasta",
-                    "chicken", "steak", "burger", "taco", "rice", "soup",
-                    "salad", "sandwich", "cake", "pie", "bread", "fish",
-                    "boba", "tea", "coffee", "juice", "smoothie",
-                    "dolma", "dolmas", "biryani", "samosa", "roti",
-                    "tikka", "masala", "chutney", "dal", "dhal",
-                    "pho", "ramen", "udon", "tempura", "tofu",
+                    "curry",
+                    "paneer",
+                    "naan",
+                    "sushi",
+                    "pizza",
+                    "pasta",
+                    "chicken",
+                    "steak",
+                    "burger",
+                    "taco",
+                    "rice",
+                    "soup",
+                    "salad",
+                    "sandwich",
+                    "cake",
+                    "pie",
+                    "bread",
+                    "fish",
+                    "boba",
+                    "tea",
+                    "coffee",
+                    "juice",
+                    "smoothie",
+                    "dolma",
+                    "dolmas",
+                    "biryani",
+                    "samosa",
+                    "roti",
+                    "tikka",
+                    "masala",
+                    "chutney",
+                    "dal",
+                    "dhal",
+                    "pho",
+                    "ramen",
+                    "udon",
+                    "tempura",
+                    "tofu",
                 }
                 if not any(fw in text_lower for fw in food_words):
                     continue
         if label == "activity":
             # Reject generic/filler words and common verbs
             reject_activities = {
-                "go", "going", "get", "getting",
-                "come", "coming", "do", "doing",
-                "see", "seeing", "take", "taking",
-                "want", "wanting", "need", "needing",
-                "think", "thinking", "know", "knowing",
-                "try", "trying", "make", "making",
-                "contact", "slow process", "ask", "call",
-                "leave", "send", "sends", "talk", "talk to others",
-                "fly", "flew", "ship", "pack", "packed",
-                "hear", "hear stories", "rest", "rest of it",
-                "like it", "love it", "doing wtv",
-                "don't wanna", "im free", "go back home",
-                "email", "mind", "control", "assumed",
-                "yea", "em", "a lot of", "classes", "working",
-                "get along", "increase time", "matchups",
-                "30-40", "22nd", "icing", "made", "stories",
-                "ultrasound", "kind", "later", "don't",
-                "talk to some", "points of view",
-                "packed everything up", "shit 1",
-                "7 days", "28th", "externship", "arms",
-                "don\u2019t wanna", "don\u2019t", "dgaf",
-                "hella bad", "awesome", "figure the rest",
-                "looking at matchups", "live instruction",
-                "summer chauffeur", "bros arms", "rest a bit",
-                "not comin", "shelter in place",
-                "never ended up", "working from home", "free",
-                "regular bell schedule", "bell schedule",
-                "per period", "take the bart",
-                "talk to other", "talk to others", "talk to some",
-                "talk to some other", "driving",
+                "go",
+                "going",
+                "get",
+                "getting",
+                "come",
+                "coming",
+                "do",
+                "doing",
+                "see",
+                "seeing",
+                "take",
+                "taking",
+                "want",
+                "wanting",
+                "need",
+                "needing",
+                "think",
+                "thinking",
+                "know",
+                "knowing",
+                "try",
+                "trying",
+                "make",
+                "making",
+                "contact",
+                "slow process",
+                "ask",
+                "call",
+                "leave",
+                "send",
+                "sends",
+                "talk",
+                "talk to others",
+                "fly",
+                "flew",
+                "ship",
+                "pack",
+                "packed",
+                "hear",
+                "hear stories",
+                "rest",
+                "rest of it",
+                "like it",
+                "love it",
+                "doing wtv",
+                "don't wanna",
+                "im free",
+                "go back home",
+                "email",
+                "mind",
+                "control",
+                "assumed",
+                "yea",
+                "em",
+                "a lot of",
+                "classes",
+                "working",
+                "get along",
+                "increase time",
+                "matchups",
+                "30-40",
+                "22nd",
+                "icing",
+                "made",
+                "stories",
+                "ultrasound",
+                "kind",
+                "later",
+                "don't",
+                "talk to some",
+                "points of view",
+                "packed everything up",
+                "shit 1",
+                "7 days",
+                "28th",
+                "externship",
+                "arms",
+                "don\u2019t wanna",
+                "don\u2019t",
+                "dgaf",
+                "hella bad",
+                "awesome",
+                "figure the rest",
+                "looking at matchups",
+                "live instruction",
+                "summer chauffeur",
+                "bros arms",
+                "rest a bit",
+                "not comin",
+                "shelter in place",
+                "never ended up",
+                "working from home",
+                "free",
+                "regular bell schedule",
+                "bell schedule",
+                "per period",
+                "take the bart",
+                "talk to other",
+                "talk to others",
+                "talk to some",
+                "talk to some other",
+                "driving",
             }
             if text_lower in reject_activities:
                 continue
@@ -540,25 +869,56 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 continue
         if label == "health_condition":
             reject_health = {
-                "whatever", "slow", "slow process", "points of view",
-                "insanely big", "bad", "feel", "feeling",
-                "dgaf", "don't fuck", "either", "not comin",
-                "ihs", "4am", "rationalize", "willpower",
-                "take responsibility", "rest", "never ended",
-                "increase time", "never", "free", "not fun",
-                "tight", "annoying", "ready to just", "love it",
-                "shelter in place", "fuck", "doctor's appointment",
-                "rest a bit", "hella bad", "barring anything",
-                "daily 5k", "5k", "10k",
+                "whatever",
+                "slow",
+                "slow process",
+                "points of view",
+                "insanely big",
+                "bad",
+                "feel",
+                "feeling",
+                "dgaf",
+                "don't fuck",
+                "either",
+                "not comin",
+                "ihs",
+                "4am",
+                "rationalize",
+                "willpower",
+                "take responsibility",
+                "rest",
+                "never ended",
+                "increase time",
+                "never",
+                "free",
+                "not fun",
+                "tight",
+                "annoying",
+                "ready to just",
+                "love it",
+                "shelter in place",
+                "fuck",
+                "doctor's appointment",
+                "rest a bit",
+                "hella bad",
+                "barring anything",
+                "daily 5k",
+                "5k",
+                "10k",
             }
             if text_lower in reject_health:
                 continue
         if label == "job_role":
             reject_jobs = {
-                "translation for", "comin", "ser",
-                "working from home", "shelter in place",
-                "ready to get", "slow process",
-                "ready to slowly", "externship",
+                "translation for",
+                "comin",
+                "ser",
+                "working from home",
+                "shelter in place",
+                "ready to get",
+                "slow process",
+                "ready to slowly",
+                "externship",
             }
             if text_lower in reject_jobs:
                 continue
@@ -587,10 +947,26 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
                 continue
             # Reject common words that aren't names
             person_rejects = {
-                "prof", "professor", "teacher", "coach", "doctor",
-                "prolly", "probably", "someone", "somebody", "everyone",
-                "nobody", "anyone", "people", "person", "dude", "bro",
-                "bruh", "homie", "fam", "dawg",
+                "prof",
+                "professor",
+                "teacher",
+                "coach",
+                "doctor",
+                "prolly",
+                "probably",
+                "someone",
+                "somebody",
+                "everyone",
+                "nobody",
+                "anyone",
+                "people",
+                "person",
+                "dude",
+                "bro",
+                "bruh",
+                "homie",
+                "fam",
+                "dawg",
             }
             if text_lower in person_rejects:
                 continue
@@ -612,11 +988,13 @@ def json_to_spans(facts: list[dict], message_text: str) -> list[dict]:
 
         fact_type = LABEL_TO_FACT_TYPE.get(label, "unknown")
 
-        spans.append({
-            "span_text": text,
-            "span_label": label,
-            "fact_type": fact_type,
-        })
+        spans.append(
+            {
+                "span_text": text,
+                "span_label": label,
+                "fact_type": fact_type,
+            }
+        )
 
     # Deduplicate
     seen = set()
@@ -684,10 +1062,11 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
     msg_lower = message_text.lower()
 
     # Skip ALL boosts for iMessage reactions (Loved/Liked/Laughed at/etc.)
-    if re.match(r'^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c', message_text):
+    if re.match(r"^(Loved|Liked|Laughed at|Emphasized|Disliked)\s+\u201c", message_text):
         return spans
 
     existing = {(s["span_text"].lower(), s["span_label"]) for s in spans}
+
     def _add(text: str, label: str, fact_type: str):
         key = (text.lower(), label)
         if key not in existing:
@@ -736,8 +1115,8 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
 
     # 4. "I work at <X>" pattern - extract the org
     work_match = re.search(
-        r'\b(?:work|working) at ([A-Z][a-zA-Z\s]{1,20}?)'
-        r'(?:\s*[.!?,]|\s+(?:as|and|but|so|for)|\s*$)',
+        r"\b(?:work|working) at ([A-Z][a-zA-Z\s]{1,20}?)"
+        r"(?:\s*[.!?,]|\s+(?:as|and|but|so|for)|\s*$)",
         message_text,
     )
     if work_match:
@@ -747,13 +1126,28 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
 
     # 5. Known activity keywords (word-boundary)
     _known_activities = {
-        "meditate", "meditation", "yoga", "chess", "climbing",
-        "biking", "hiking", "swimming", "cooking",
-        "baking", "gaming", "coding", "exercises",
-        "diwali", "xbox", "reading", "sanskrit", "5k", "theory",
+        "meditate",
+        "meditation",
+        "yoga",
+        "chess",
+        "climbing",
+        "biking",
+        "hiking",
+        "swimming",
+        "cooking",
+        "baking",
+        "gaming",
+        "coding",
+        "exercises",
+        "diwali",
+        "xbox",
+        "reading",
+        "sanskrit",
+        "5k",
+        "theory",
     }
     for act in _known_activities:
-        match = re.search(rf'\b{re.escape(act)}\b', msg_lower)
+        match = re.search(rf"\b{re.escape(act)}\b", msg_lower)
         if match and (act, "activity") not in existing:
             idx = match.start()
             actual = message_text[idx : idx + len(act)]
@@ -761,12 +1155,22 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
 
     # 6. Known food items (word-boundary match)
     _known_foods = {
-        "palak paneer", "biryani", "samosa", "roti", "naan",
-        "tikka masala", "dolmas", "ramen", "sushi", "boba",
-        "curry", "dal", "paneer",
+        "palak paneer",
+        "biryani",
+        "samosa",
+        "roti",
+        "naan",
+        "tikka masala",
+        "dolmas",
+        "ramen",
+        "sushi",
+        "boba",
+        "curry",
+        "dal",
+        "paneer",
     }
     for food in _known_foods:
-        match = re.search(rf'\b{re.escape(food)}\b', msg_lower)
+        match = re.search(rf"\b{re.escape(food)}\b", msg_lower)
         if match and (food, "food_item") not in existing:
             idx = match.start()
             actual = message_text[idx : idx + len(food)]
@@ -775,18 +1179,21 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
     # 7. Location patterns: "live in X", "move to X", "from X", "back to X"
     _location_patterns = [
         (
-            r'\b(?:live|living|moved?|moving|relocat\w*)\s+(?:in|to)\s+'
-            r'([A-Z][a-zA-Z]+)',
-            "future_location", "location.future",
+            r"\b(?:live|living|moved?|moving|relocat\w*)\s+(?:in|to)\s+"
+            r"([A-Z][a-zA-Z]+)",
+            "future_location",
+            "location.future",
         ),
         (
-            r'\bback\s+(?:to|from)\s+([A-Z][a-zA-Z]+)',
-            "past_location", "location.past",
+            r"\bback\s+(?:to|from)\s+([A-Z][a-zA-Z]+)",
+            "past_location",
+            "location.past",
         ),
         (
-            r'\b(?:from|grew up in|born in|still in|was in)\s+'
-            r'([A-Z][a-zA-Z]+)',
-            "past_location", "location.past",
+            r"\b(?:from|grew up in|born in|still in|was in)\s+"
+            r"([A-Z][a-zA-Z]+)",
+            "past_location",
+            "location.past",
         ),
     ]
     for pat, label, fact_type in _location_patterns:
@@ -804,13 +1211,13 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
         "sf": "place",
     }
     for loc, label in _known_locations.items():
-        match = re.search(rf'\b{re.escape(loc)}\b', msg_lower)
+        match = re.search(rf"\b{re.escape(loc)}\b", msg_lower)
         if match and (loc, label) not in existing:
             # Only boost if context suggests a location fact (not just mentioning it)
             # e.g. "live in cali", "from india", "go to sf"
             loc_context = [
-                r'\b(?:live|living|move|moving|go|going|from|in|to|back)\b.*\b' + re.escape(loc),
-                re.escape(loc) + r'.*\b(?:is|born|grew|raised|live|living)\b',
+                r"\b(?:live|living|move|moving|go|going|from|in|to|back)\b.*\b" + re.escape(loc),
+                re.escape(loc) + r".*\b(?:is|born|grew|raised|live|living)\b",
             ]
             if any(re.search(p, msg_lower) for p in loc_context):
                 idx = match.start()
@@ -819,7 +1226,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
                 _add(actual, label, fact_type)
 
     # 8. Friend/roommate patterns
-    roommate_match = re.search(r'\b(roommate|roomie)\b', msg_lower)
+    roommate_match = re.search(r"\b(roommate|roomie)\b", msg_lower)
     if roommate_match and ("roommate", "friend_name") not in existing:
         idx = roommate_match.start()
         actual = message_text[idx : idx + len(roommate_match.group())]
@@ -827,24 +1234,28 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
 
     # 9. Job role keyword boost (word-boundary)
     _known_jobs = {
-        "engineering", "nursing", "teaching", "product management",
-        "data analyst", "internship",
+        "engineering",
+        "nursing",
+        "teaching",
+        "product management",
+        "data analyst",
+        "internship",
     }
     for job in _known_jobs:
-        match = re.search(rf'\b{re.escape(job)}\b', msg_lower)
+        match = re.search(rf"\b{re.escape(job)}\b", msg_lower)
         if match and (job, "job_role") not in existing:
             idx = match.start()
             actual = message_text[idx : idx + len(job)]
             _add(actual, "job_role", "work.job_title")
 
     # 10. "I got the job" / "get a job" / "interning as X" patterns
-    job_pattern = re.search(r'\b(?:got the|get a|love|love my)\s+(job|work)\b', msg_lower)
+    job_pattern = re.search(r"\b(?:got the|get a|love|love my)\s+(job|work)\b", msg_lower)
     if job_pattern:
         span_text = job_pattern.group(1)
         _add(span_text, "job_role", "work.job_title")
 
     interning_match = re.search(
-        r'\binterning\s+as\s+(?:a\s+)?([A-Z][a-zA-Z\s]+?)(?:\s+(?:this|next|last|at|for|in)\b|$)',
+        r"\binterning\s+as\s+(?:a\s+)?([A-Z][a-zA-Z\s]+?)(?:\s+(?:this|next|last|at|for|in)\b|$)",
         message_text,
     )
     if interning_match:
@@ -853,7 +1264,7 @@ def _rule_based_boost(spans: list[dict], message_text: str) -> list[dict]:
             _add(role, "job_role", "work.job_title")
 
     # "My prof" / "My professor" patterns
-    prof_match = re.search(r'\b(my\s+(?:prof|professor))\b', msg_lower)
+    prof_match = re.search(r"\b(my\s+(?:prof|professor))\b", msg_lower)
     if prof_match:
         idx = prof_match.start()
         actual = message_text[idx : idx + len(prof_match.group())]
@@ -866,18 +1277,18 @@ def _strip_emojis(text: str) -> str:
     """Strip emoji characters that confuse the model."""
     # Remove emoji unicode ranges
     emoji_pattern = re.compile(
-        "[\U0001F600-\U0001F64F"  # emoticons
-        "\U0001F300-\U0001F5FF"  # symbols & pictographs
-        "\U0001F680-\U0001F6FF"  # transport & map
-        "\U0001F1E0-\U0001F1FF"  # flags
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\U0001F900-\U0001F9FF"  # supplemental symbols
-        "\U0001FA00-\U0001FA6F"  # chess symbols
-        "\U0001FA70-\U0001FAFF"  # symbols extended
-        "\U00002600-\U000026FF"  # misc symbols
-        "\U0000FE00-\U0000FE0F"  # variation selectors
-        "\U0000200D"  # zero-width joiner
+        "[\U0001f600-\U0001f64f"  # emoticons
+        "\U0001f300-\U0001f5ff"  # symbols & pictographs
+        "\U0001f680-\U0001f6ff"  # transport & map
+        "\U0001f1e0-\U0001f1ff"  # flags
+        "\U00002702-\U000027b0"
+        "\U000024c2-\U0001f251"
+        "\U0001f900-\U0001f9ff"  # supplemental symbols
+        "\U0001fa00-\U0001fa6f"  # chess symbols
+        "\U0001fa70-\U0001faff"  # symbols extended
+        "\U00002600-\U000026ff"  # misc symbols
+        "\U0000fe00-\U0000fe0f"  # variation selectors
+        "\U0000200d"  # zero-width joiner
         "]+",
         flags=re.UNICODE,
     )
@@ -930,7 +1341,8 @@ def _strategy_constrained_categories(loader, message_text: str) -> list[dict]:
     elif facts and not spans:
         log.debug(
             "All %d facts filtered for '%s': %s",
-            len(facts), message_text[:40],
+            len(facts),
+            message_text[:40],
             [(f.get("text"), f.get("label")) for f in facts],
         )
 
@@ -970,23 +1382,16 @@ food_item, current_location, future_location, past_location, place, \
 friend_name, person_name"""
 
 PIPE_EXAMPLES = [
-    ("my brother bakes and I just eat whatever he makes",
-     "brother|family_member\nbakes|activity"),
-    ("I work at Google as an engineer",
-     "Google|org\nengineer|job_role"),
+    ("my brother bakes and I just eat whatever he makes", "brother|family_member\nbakes|activity"),
+    ("I work at Google as an engineer", "Google|org\nengineer|job_role"),
     ("helloooo", "NONE"),
     ("My phone is being like my moms", "NONE"),
-    ("allergic to peanuts and it sucks",
-     "peanuts|health_condition"),
+    ("allergic to peanuts and it sucks", "peanuts|health_condition"),
     ("i like it", "NONE"),
-    ("moving to Austin next month",
-     "Austin|future_location"),
-    ("And my dad flew in",
-     "dad|family_member"),
-    ("I work at lending tree",
-     "lending tree|org"),
-    ("My friend Sarah is a nurse",
-     "Sarah|friend_name\nnurse|job_role"),
+    ("moving to Austin next month", "Austin|future_location"),
+    ("And my dad flew in", "dad|family_member"),
+    ("I work at lending tree", "lending tree|org"),
+    ("My friend Sarah is a nurse", "Sarah|friend_name\nnurse|job_role"),
     ("Like 10:15ish", "NONE"),
 ]
 
@@ -1093,14 +1498,16 @@ def compute_metrics(
                 fn += 1
                 per_label[gc["span_label"]]["fn"] += 1
                 per_slice[slc]["fn"] += 1
-                errors.append({
-                    "type": "fn",
-                    "sample_id": sid,
-                    "slice": slc,
-                    "message_text": rec["message_text"][:100],
-                    "gold_span": gc["span_text"],
-                    "gold_label": gc["span_label"],
-                })
+                errors.append(
+                    {
+                        "type": "fn",
+                        "sample_id": sid,
+                        "slice": slc,
+                        "message_text": rec["message_text"][:100],
+                        "gold_span": gc["span_text"],
+                        "gold_label": gc["span_label"],
+                    }
+                )
 
         # FP
         for pi, pc in enumerate(pred_cands):
@@ -1109,14 +1516,16 @@ def compute_metrics(
                 label = pc.get("span_label", "unknown")
                 per_label[label]["fp"] += 1
                 per_slice[slc]["fp"] += 1
-                errors.append({
-                    "type": "fp",
-                    "sample_id": sid,
-                    "slice": slc,
-                    "message_text": rec["message_text"][:100],
-                    "pred_span": pc.get("span_text", ""),
-                    "pred_label": label,
-                })
+                errors.append(
+                    {
+                        "type": "fp",
+                        "sample_id": sid,
+                        "slice": slc,
+                        "message_text": rec["message_text"][:100],
+                        "pred_span": pc.get("span_text", ""),
+                        "pred_label": label,
+                    }
+                )
 
     def _metrics(tp_: int, fp_: int, fn_: int) -> dict:
         p = tp_ / (tp_ + fp_) if (tp_ + fp_) > 0 else 0.0
@@ -1132,14 +1541,8 @@ def compute_metrics(
         }
 
     overall = _metrics(tp, fp, fn)
-    label_metrics = {
-        k: _metrics(v["tp"], v["fp"], v["fn"])
-        for k, v in sorted(per_label.items())
-    }
-    slice_metrics = {
-        k: _metrics(v["tp"], v["fp"], v["fn"])
-        for k, v in sorted(per_slice.items())
-    }
+    label_metrics = {k: _metrics(v["tp"], v["fp"], v["fn"]) for k, v in sorted(per_label.items())}
+    slice_metrics = {k: _metrics(v["tp"], v["fp"], v["fn"]) for k, v in sorted(per_slice.items())}
 
     return {
         "overall": overall,
@@ -1202,7 +1605,7 @@ def print_report(metrics: dict, strategy: str, elapsed: float, num_records: int)
         for e in fns:
             print(
                 f'  [{e["slice"]}] "{e["message_text"][:60]}..." '
-                f'-> missed {e["gold_span"]} ({e["gold_label"]})',
+                f"-> missed {e['gold_span']} ({e['gold_label']})",
                 flush=True,
             )
 
@@ -1211,7 +1614,7 @@ def print_report(metrics: dict, strategy: str, elapsed: float, num_records: int)
         for e in fps:
             print(
                 f'  [{e["slice"]}] "{e["message_text"][:60]}..." '
-                f'-> {e["pred_span"]} ({e["pred_label"]})',
+                f"-> {e['pred_span']} ({e['pred_label']})",
                 flush=True,
             )
 

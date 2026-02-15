@@ -258,7 +258,9 @@ class CategoryClassifier(EmbedderMixin):
 
             try:
                 # Encode both text and context
-                embeddings = self.embedder.encode([text] + (context[-1:] if context else []), normalize=True)
+                embeddings = self.embedder.encode(
+                    [text] + (context[-1:] if context else []), normalize=True
+                )
                 embedding = embeddings[0]
                 # Use real context embedding if available, otherwise zeroed
                 if len(embeddings) > 1:

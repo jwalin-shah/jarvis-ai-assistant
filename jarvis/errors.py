@@ -14,8 +14,8 @@ Exception Hierarchy:
     │   └── iMessageQueryError - Database query failure
     ├── ValidationError - Input validation failures
     └── ResourceError - System resource issues
-        ├── MemoryError - Insufficient memory
-        └── DiskError - Disk space/access issues
+        ├── MemoryResourceError - Insufficient memory
+        └── DiskResourceError - Disk space/access issues
 
 Usage:
     from jarvis.errors import ModelError, iMessageError
@@ -1247,6 +1247,30 @@ def model_generation_timeout(
     )
 
 
+def jarvis_error(
+    code: ErrorCode,
+    message: str,
+    *,
+    cause: Exception | None = None,
+    **details: Any,
+) -> JarvisError:
+    """Create a JarvisError by code with optional details.
+
+    Use this for error codes that do not have a dedicated exception class,
+    or when you want a single call site instead of a specific subclass.
+
+    Args:
+        code: Error code (e.g. ErrorCode.CAL_CREATE_FAILED).
+        message: Human-readable message.
+        cause: Optional chained exception.
+        **details: Key-value pairs added to error details.
+
+    Returns:
+        JarvisError with the given code and details.
+    """
+    return JarvisError(message, code=code, details=details or {}, cause=cause)
+
+
 # Export all public symbols
 __all__ = [
     # Error codes
@@ -1302,4 +1326,5 @@ __all__ = [
     "imessage_db_not_found",
     "validation_required",
     "validation_type_error",
+    "jarvis_error",
 ]
