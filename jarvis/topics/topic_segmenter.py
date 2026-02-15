@@ -81,38 +81,14 @@ def segment_conversation(
     if not messages:
         return []
 
-    # Ensure oldest-first ordering (messages may come newest-first from DB)
-    messages = sorted(messages, key=lambda m: m.date)
+    # Use shared preparation logic (sorting, junk filtering)
+    from jarvis.topics.utils import get_embeddings_for_segmentation, prepare_messages_for_segmentation
 
-    # Pre-filter junk/system/spam messages before embedding and boundary scoring.
-    from jarvis.contacts.junk_filters import is_junk_message
-    from jarvis.text_normalizer import normalize_text
+    messages, norm_texts = prepare_messages_for_segmentation(messages)
 
-    filtered_messages: list[Message] = []
-    filtered_norm_texts: list[str] = []
-    for m in messages:
-        raw_text = m.text or ""
-        norm_text = normalize_text(
-            raw_text,
-            expand_slang=True,
-            filter_garbage=True,
-            filter_attributed_artifacts=True,
-            strip_signatures=True,
-        )
-        if not norm_text:
-            continue
-        if is_junk_message(norm_text, m.chat_id):
-            continue
-        filtered_messages.append(m)
-        filtered_norm_texts.append(norm_text)
-
-    # If everything is filtered, preserve behavior by returning one segment on original messages.
-    if not filtered_messages:
-        if messages:
-            return [_create_segment(messages, contact_id)]
+    # If everything is filtered, preserve behavior by returning one segment.
+    if not messages:
         return []
-
-    messages = filtered_messages
 
     n = len(messages)
     if n < 2:
@@ -120,41 +96,8 @@ def segment_conversation(
         seg = _create_segment(messages, contact_id)
         return [seg]
 
-    # Signal 1: Get BGE Embeddings (on normalized text)
-    from jarvis.embedding_adapter import get_embedder
-
-    embedder = get_embedder()
-
-    # Normalize text before embedding (expands slang, cleans text)
-    msg_texts = filtered_norm_texts
-
-    # Use pre-fetched if available, otherwise batch encode
-    embeddings: list[NDArray[np.float32]] = []
-    to_encode_indices = []
-    to_encode_texts = []
-
-    # Initialize list
-    embeddings = [None] * n
-
-    if pre_fetched_embeddings:
-        for i, m in enumerate(messages):
-            if m.id in pre_fetched_embeddings:
-                embeddings[i] = pre_fetched_embeddings[m.id]
-
-    for i, emb in enumerate(embeddings):
-        if emb is None:
-            to_encode_indices.append(i)
-            to_encode_texts.append(msg_texts[i])
-
-    if to_encode_texts:
-        # Filter out empty texts after normalization
-        valid_pairs = [(idx, text) for idx, text in zip(to_encode_indices, to_encode_texts) if text]
-        if valid_pairs:
-            valid_indices = [p[0] for p in valid_pairs]
-            valid_texts = [p[1] for p in valid_pairs]
-            new_embs = embedder.embed_batch(valid_texts)
-            for idx, emb in zip(valid_indices, new_embs):
-                embeddings[idx] = emb
+    # Use shared embedding logic
+    embeddings = get_embeddings_for_segmentation(messages, norm_texts, pre_fetched_embeddings)
 
     # Signal 2: Entity Anchor Continuity (Contact-Aware spaCy)
     from jarvis.text_normalizer import TOPIC_SHIFT_MARKERS

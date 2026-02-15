@@ -327,6 +327,7 @@ class TaskWorker:
 
                     # Log for traceability
                     from jarvis.reply_service import get_reply_service
+
                     reply_service = get_reply_service()
                     reply_service.log_custom_generation(
                         chat_id=chat_id,
@@ -334,7 +335,7 @@ class TaskWorker:
                         final_prompt=formatted_prompt,
                         response_text=response.text,
                         category="batch_summary",
-                        metadata={"num_messages": len(context.messages), "task_id": task.id}
+                        metadata={"num_messages": len(context.messages), "task_id": task.id},
                     )
 
                     start_date = context.date_range[0].strftime("%Y-%m-%d")
@@ -414,11 +415,12 @@ class TaskWorker:
                     contact_name = display_name or "them"
 
                     from jarvis.prompts.builders import build_rag_reply_prompt
+
                     formatted_prompt = build_rag_reply_prompt(
                         context=context.formatted_context,
                         last_message=last_msg.text,
                         contact_name=contact_name,
-                        similar_exchanges=[], # Vector search for similar exchanges would go here
+                        similar_exchanges=[],  # Vector search for similar exchanges would go here
                         relationship_profile=context.contact_profile,
                         contact_facts=context.contact_facts,
                         relationship_graph=context.relationship_graph,
@@ -426,20 +428,21 @@ class TaskWorker:
                     )
 
                     from jarvis.reply_service import get_reply_service
+
                     reply_service = get_reply_service()
-                    
+
                     suggestions: list[str] = []
                     for j in range(num_suggestions):
                         request = GenerationRequest(
                             prompt=formatted_prompt,
-                            context_documents=[], # Already in prompt
-                            few_shot_examples=[], # V4 favors zero-shot/RAG anchors
+                            context_documents=[],  # Already in prompt
+                            few_shot_examples=[],  # V4 favors zero-shot/RAG anchors
                             max_tokens=150,
                             temperature=0.7 + (j * 0.1),
                         )
                         response = generator.generate(request)
                         suggestions.append(response.text)
-                        
+
                         # Log for traceability
                         reply_service.log_custom_generation(
                             chat_id=chat_id,
@@ -447,7 +450,7 @@ class TaskWorker:
                             final_prompt=formatted_prompt,
                             response_text=response.text,
                             category="batch_reply",
-                            metadata={"suggestion_index": j, "task_id": task.id}
+                            metadata={"suggestion_index": j, "task_id": task.id},
                         )
 
                     results.append(
@@ -619,29 +622,33 @@ class TaskWorker:
                 return TaskResult(success=True, items_processed=0)
 
             extractor = get_instruction_extractor(tier="0.7b")
-            total_extracted = 0
             max_rowid_processed = last_extracted_rowid or 0
             for msg in messages:
                 if msg.id and msg.id > max_rowid_processed:
                     max_rowid_processed = msg.id
 
-            for i, seg in enumerate(windows):
-                update_progress(
-                    i, total_segments, f"Extracting from window {i + 1}/{total_segments} ({mode})"
+            update_progress(
+                0, total_segments, f"Extracting from {total_segments} windows ({mode})"
+            )
+            batch_results = extractor.extract_facts_from_batch(
+                windows,
+                contact_id=chat_id,
+                contact_name=contact_name,
+                user_name=user_name,
+            )
+            all_facts: list[Any] = []
+            for seg_facts in batch_results:
+                all_facts.extend(seg_facts)
+            if all_facts:
+                save_facts(
+                    all_facts,
+                    chat_id,
+                    log_raw_facts=True,
+                    log_chat_id=chat_id,
+                    log_stage="task_worker",
                 )
-
-                facts = extractor.extract_facts_from_segment(
-                    seg, contact_id=chat_id, contact_name=contact_name, user_name=user_name
-                )
-                if facts:
-                    total_extracted += len(facts)
-                    save_facts(
-                        facts,
-                        chat_id,
-                        log_raw_facts=True,
-                        log_chat_id=chat_id,
-                        log_stage="task_worker",
-                    )
+            total_extracted = len(all_facts)
+            update_progress(total_segments, total_segments, "Extraction complete")
 
             # Update tracking after successful extraction
             if max_rowid_processed > (last_extracted_rowid or 0):

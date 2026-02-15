@@ -1,6 +1,6 @@
 """Instruction-based Fact Extraction - Using fine-tuned LFM-350M/1.2B.
 
-Optimized for 8GB RAM: Phase-based batch processing with Natural Language extraction and NLI verification.
+Optimized for 8GB RAM: phase-based batch processing with NL extraction and NLI verification.
 """
 
 from __future__ import annotations
@@ -13,90 +13,17 @@ from typing import Any
 from jarvis.contacts.attribution import AttributionResolver
 from jarvis.contacts.contact_profile import Fact
 from jarvis.contacts.junk_filters import is_junk_message
+from jarvis.prompts.extraction import (
+    EXTRACTION_MODELS,
+    EXTRACTION_SYSTEM_PROMPT,
+    NEGATIVE_CONSTRAINTS,
+    VERIFY_SYSTEM_PROMPT,
+    VERIFY_USER_PROMPT,
+)
 from jarvis.text_normalizer import normalize_text
 from models.loader import MLXModelLoader, ModelConfig
 
 logger = logging.getLogger(__name__)
-
-# Model options
-MODELS = {
-    "1.2b": "models/lfm2-1.2b-extract-mlx-4bit",
-    "0.7b": "models/lfm-0.7b-4bit",
-    "350m": "models/lfm2-350m-extract-mlx-4bit",
-}
-
-# --- V5 STRUCTURED PROMPTS (Sentence-to-Triple Pipeline) ---
-
-_EXTRACTION_SYSTEM_PROMPT = """You extract durable personal facts from chat turns.
-
-Task:
-- Return ONLY stable personal claims that are useful for a long-lived profile.
-
-Allowed claim types:
-- identity/relationship (family, partner, close friend)
-- work/school/role/company
-- home/current location (not temporary travel)
-- durable preferences (likes/dislikes/habits)
-- stable schedule preference (e.g., "usually free after 6")
-
-Do NOT extract:
-- one-off logistics (meetups, ETAs, "on my way", "can we call", orders, deliveries)
-- sports/news chatter, jokes, reactions, tapbacks
-- meta speech ("X said", "X asked", "X mentioned")
-- facts about group chats/platforms/companies unless clearly about a person
-- speculative/uncertain claims
-
-Output format:
-- Output JSONL only: one JSON object per line, no markdown.
-- Schema:
-  {{"subject": "<person>", "speaker": "<speaker>", "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}}
-- Max 3 claims per segment.
-- If no claims at all, output exactly: NONE
-
-Hard rules:
-- Only explicit claims from text (no inference).
-- Use 3rd-person wording.
-- Subject must be a person, never a group/chat.
-- `evidence_quote` must be verbatim text copied from the conversation.
-- Do not use placeholders, brackets, or variables (no "[City]", "[Job Title]", "<unknown>").
-- No headings, markdown, commentary, or extra labels."""
-
-_EXTRACTION_USER_PROMPT = """Chat Turns:
-{text}
-
-Return JSONL durable claims now (or NONE):
-"""
-
-_VERIFY_SYSTEM_PROMPT = """You are a precise fact-structurer.
-Convert natural language claims into structured [Subject] | [Predicate] | [Object] triples.
-
-RULES:
-1. Output ONLY the triples in format: - [Subject] | [Predicate] | [Object]
-2. Subject must be a SPECIFIC PERSON'S NAME or "{user_name}".
-   - NEVER use group names (e.g., "{contact_name}", "The Chat") as the Subject.
-3. Predicate: Short verb phrase (1-3 words). e.g., "lives in", "likes", "works at".
-   - NO long sentences. NO snake_case.
-4. Object: Capture the essential detail (1-4 words). NO MARKDOWN.
-5. DO NOT output any other text or commentary."""
-
-
-
-_VERIFY_USER_PROMPT = """Chat for Context:
-{text}
-
-Claims to Structure:
-{facts}
-
-Structured Personal Facts (Subject | Predicate | Object):
-- """
-
-# Steer the model away from "talking" or hedging
-NEGATIVE_CONSTRAINTS = [
-    "Note:", "Commentary:", "Unverified:", "The fact", "supported by",
-    "appears to", "suggests", "likely", "possibly", "maybe",
-    "No mention", "Not specified", "Unknown", "Doesn't say",
-    "The user", "The contact", "According to", "Group", "Chat"
-]
 
 # Post-LLM hard gates for low-information and reaction artifacts.
 _LOW_INFO_VALUES = {
@@ -212,15 +139,18 @@ def _is_transactional_message(text: str) -> bool:
     return bool(_TRANSACTIONAL_MSG_RE.search(text))
 
 
-
-def _build_extraction_system_prompt(user_name: str, contact_name: str) -> str:
+def _build_extraction_system_prompt(
+    user_name: str, contact_name: str, **kwargs: Any
+) -> str:
     """Build pass-1 prompt for single-segment extraction."""
-    return _EXTRACTION_SYSTEM_PROMPT.format(user_name=user_name, contact_name=contact_name)
+    return EXTRACTION_SYSTEM_PROMPT
 
 
-def _parse_pass1_json_lines(raw_output: str) -> tuple[list[list[str]], str]:
+def _parse_pass1_json_lines(
+    raw_output: str, segment_count: int | None = None
+) -> tuple[list[list[str]], str]:
     """Parse pass-1 output for single-segment extraction."""
-    # Always returning 1 segment list
+    # Always returning 1 segment list (segment_count accepted for API compatibility)
     claims: list[str] = []
     canonical_lines: list[str] = []
 
@@ -261,7 +191,9 @@ def _parse_pass1_json_lines(raw_output: str) -> tuple[list[list[str]], str]:
             return False
         if _PASS1_META_LINE_RE.search(claim) or _PASS1_PLACEHOLDER_RE.search(claim):
             return False
-        if _PASS1_META_LINE_RE.search(evidence_quote) or _PASS1_PLACEHOLDER_RE.search(evidence_quote):
+        if _PASS1_META_LINE_RE.search(evidence_quote) or _PASS1_PLACEHOLDER_RE.search(
+            evidence_quote
+        ):
             return False
 
         claims.append(f"{subject} | {claim}")
@@ -288,7 +220,12 @@ def _parse_pass1_json_lines(raw_output: str) -> tuple[list[list[str]], str]:
         if len(parts) >= 2:
             subject = parts[0].strip()
             claim = parts[1].strip()
-            if subject and claim and not _PASS1_META_LINE_RE.search(claim) and not _PASS1_PLACEHOLDER_RE.search(claim):
+            if (
+                subject
+                and claim
+                and not _PASS1_META_LINE_RE.search(claim)
+                and not _PASS1_PLACEHOLDER_RE.search(claim)
+            ):
                 claims.append(f"{subject} | {claim}")
                 canonical_lines.append(f"- {subject} | {claim}")
 
@@ -301,7 +238,9 @@ class InstructionFactExtractor:
     """Fact extractor using fine-tuned LFM models with Two-Pass Self-Correction."""
 
     def __init__(self, model_tier: str = "1.2b") -> None:
-        model_path = MODELS.get(model_tier, MODELS.get(model_tier, MODELS["1.2b"]))
+        model_path = EXTRACTION_MODELS.get(
+            model_tier, EXTRACTION_MODELS.get(model_tier, EXTRACTION_MODELS["1.2b"])
+        )
         # Use LFM-optimal defaults
         self._config = ModelConfig(
             model_path=model_path,
@@ -320,6 +259,9 @@ class InstructionFactExtractor:
 
     def load(self) -> bool:
         try:
+            from jarvis.model_manager import get_model_manager
+
+            get_model_manager().prepare_for("llm")
             return self._loader.load()
         except Exception as e:
             logger.error(f"Failed to load {self._tier} extract model: {e}")
@@ -348,10 +290,7 @@ class InstructionFactExtractor:
     ) -> list[Fact]:
         """Process a single segment using two-pass extraction."""
         results = self.extract_facts_from_batch(
-            [segment],
-            contact_id=contact_id,
-            contact_name=contact_name,
-            user_name=user_name
+            [segment], contact_id=contact_id, contact_name=contact_name, user_name=user_name
         )
         return results[0] if results else []
 
@@ -434,10 +373,7 @@ class InstructionFactExtractor:
                 contact_name=contact_name,
                 segment_count=len(segments),
             )
-            p1_user = (
-                f"Conversation:\n{batch_text}\n\n"
-                "Return JSONL durable claims now (or NONE):\n"
-            )
+            p1_user = f"Conversation:\n{batch_text}\n\nReturn JSONL durable claims now (or NONE):\n"
             messages_p1 = [
                 {"role": "system", "content": p1_system},
                 {"role": "user", "content": p1_user},
@@ -472,7 +408,7 @@ class InstructionFactExtractor:
         user_name: str = "Me",
     ) -> list[list[Fact]]:
         """Two-pass extraction on a BATCH of segments.
-        
+
         Concatenates segments into a single prompt using [Segment N] markers
         for high-throughput processing without losing attribution.
         """
@@ -485,8 +421,7 @@ class InstructionFactExtractor:
 
         if len(segments) > 1:
             logger.warning(
-                "extract_facts_from_batch received %d segments but only supports single-segment processing. "
-                "Processing first segment only.",
+                "extract_facts_from_batch got %d segments; single-segment only, using first.",
                 len(segments),
             )
             segments = segments[:1]
@@ -504,8 +439,7 @@ class InstructionFactExtractor:
             messages = getattr(segment, "messages", [])
             prompt_lines = []
             if messages:
-                # Use first message to determine flow start, but don't hardcode 'current_sender' label
-                # We need dynamic labels for group chats
+                # Use first message for flow start; dynamic labels for group chats
                 current_label = None
                 current_block = []
 
@@ -516,7 +450,7 @@ class InstructionFactExtractor:
                     else:
                         # Use sender_name if available (group chat member), else contact_name
                         label = getattr(m, "sender_name", None) or contact_name
-                    
+
                     raw_msg = " ".join((m.text or "").splitlines()).strip()
                     if not raw_msg:
                         continue
@@ -543,11 +477,11 @@ class InstructionFactExtractor:
                             prompt_lines.append(f"{current_label}: {' '.join(current_block)}")
                         current_label = label
                         current_block = [clean_msg]
-                
+
                 # Flush final block
                 if current_block and current_label:
                     prompt_lines.append(f"{current_label}: {' '.join(current_block)}")
-            
+
             seg_text = "\n".join(prompt_lines)
             if len(segments) == 1:
                 segment_texts.append(seg_text)
@@ -568,14 +502,11 @@ class InstructionFactExtractor:
                 user_name=user_name,
                 contact_name=contact_name,
             )
-            p1_user = (
-                f"Conversation:\n{batch_text}\n\n"
-                "Return JSONL durable claims now (or NONE):\n"
-            )
+            p1_user = f"Conversation:\n{batch_text}\n\nReturn JSONL durable claims now (or NONE):\n"
 
             messages_p1 = [
                 {"role": "system", "content": p1_system},
-                {"role": "user", "content": p1_user}
+                {"role": "user", "content": p1_user},
             ]
             formatted_p1 = self._loader._tokenizer.apply_chat_template(
                 messages_p1, tokenize=False, add_generation_prompt=True
@@ -589,11 +520,9 @@ class InstructionFactExtractor:
                 temperature=0.0,
                 stop_sequences=["<|im_end|>", "###"],
                 pre_formatted=True,
-                negative_constraints=NEGATIVE_CONSTRAINTS
+                negative_constraints=NEGATIVE_CONSTRAINTS,
             )
-            self._last_batch_pass1_claims, raw_facts = _parse_pass1_json_lines(
-                res1.text.strip()
-            )
+            self._last_batch_pass1_claims, raw_facts = _parse_pass1_json_lines(res1.text.strip())
             logger.debug(f"Batch Pass 1: {raw_facts}")
 
             # SHORT-CIRCUIT: skip pass-2 if pass-1 produced no claims
@@ -602,14 +531,14 @@ class InstructionFactExtractor:
                 return [[] for _ in segments]
 
             # PASS 2: Structuring - Convert sentences to triples
-            p2_system = _VERIFY_SYSTEM_PROMPT.format(
+            p2_system = VERIFY_SYSTEM_PROMPT.format(
                 user_name=user_name, contact_name=contact_name
             )
-            p2_user = _VERIFY_USER_PROMPT.format(text=batch_text, facts=raw_facts)
+            p2_user = VERIFY_USER_PROMPT.format(text=batch_text, facts=raw_facts)
 
             messages_p2 = [
                 {"role": "system", "content": p2_system},
-                {"role": "user", "content": p2_user}
+                {"role": "user", "content": p2_user},
             ]
             formatted_p2 = self._loader._tokenizer.apply_chat_template(
                 messages_p2, tokenize=False, add_generation_prompt=True
@@ -623,7 +552,7 @@ class InstructionFactExtractor:
                 temperature=0.0,
                 stop_sequences=["<|im_end|>"],
                 pre_formatted=True,
-                negative_constraints=NEGATIVE_CONSTRAINTS
+                negative_constraints=NEGATIVE_CONSTRAINTS,
             )
 
             verified_output = "- " + res2.text.strip()
@@ -632,23 +561,26 @@ class InstructionFactExtractor:
             # 3. ROBUST PARSING WITH SEGMENT ATTRIBUTION
             batch_facts: list[list[Fact]] = [[] for _ in segments]
             commentary_markers = ["removing", "keeping", "verified", "here are", "revised"]
-            
+
             for line in verified_output.split("\n"):
                 line = line.strip()
-                if not line or len(line) < 5: continue
-                
+                if not line or len(line) < 5:
+                    continue
+
                 # Identify segment
                 seg_idx = 0
                 seg_match = re.search(r"\[Segment\s*(\d+)\]", line, re.IGNORECASE)
                 if seg_match:
                     seg_idx = int(seg_match.group(1))
                     line = line.replace(seg_match.group(0), "").strip()
-                
-                if seg_idx >= len(segments): continue
+
+                if seg_idx >= len(segments):
+                    continue
 
                 # Triple parsing
                 clean_line = re.sub(r"^[\s\-\*\d\.]+\s*", "", line).strip()
-                if any(m in clean_line.lower() for m in commentary_markers): continue
+                if any(m in clean_line.lower() for m in commentary_markers):
+                    continue
 
                 parts = [p.strip() for p in clean_line.split("|")]
                 subject_name, predicate, fact_value = "", "has_fact", ""
@@ -659,27 +591,31 @@ class InstructionFactExtractor:
                     subject_name, fact_value = contact_name, parts[0]
                 elif len(parts) == 2:
                     subject_name, fact_value = parts[0], parts[1]
-                else: continue
+                else:
+                    continue
                 self._last_batch_stats["raw_triples"] += 1
 
                 # CLEANUP PREFIXES (Model hallucination fix)
                 for prefix in ["Subject:", "Predicate:", "Object:", "Value:", "Factor:", "Claim:"]:
                     if subject_name.lower().startswith(prefix.lower()):
-                        subject_name = subject_name[len(prefix):].strip()
+                        subject_name = subject_name[len(prefix) :].strip()
                     if predicate.lower().startswith(prefix.lower()):
-                        predicate = predicate[len(prefix):].strip()
+                        predicate = predicate[len(prefix) :].strip()
                     if fact_value.lower().startswith(prefix.lower()):
-                        fact_value = fact_value[len(prefix):].strip()
+                        fact_value = fact_value[len(prefix) :].strip()
 
                 # --- VALIDATION GATES ---
-                
+
                 # 1. Subject Validation
                 # Reject if subject is the group/chat name itself
                 if contact_name.lower() in subject_name.lower() and len(contact_name) > 15:
                     # Likely a group chat name being used as subject
                     self._last_batch_stats["prefilter_rejected"] += 1
                     continue
-                if any(x in subject_name.lower() for x in ["chat", "group", "conversation", "participants"]):
+                if any(
+                    x in subject_name.lower()
+                    for x in ["chat", "group", "conversation", "participants"]
+                ):
                     self._last_batch_stats["prefilter_rejected"] += 1
                     continue
                 if any(c in subject_name for c in ["*", "_", "[", "]"]):
@@ -707,11 +643,15 @@ class InstructionFactExtractor:
                 if norm_value in _LOW_INFO_VALUES:
                     self._last_batch_stats["prefilter_rejected"] += 1
                     continue
-                if norm_value.startswith(_REACTION_PREFIXES) or any(m in norm_value for m in _REACTION_MARKERS):
+                if norm_value.startswith(_REACTION_PREFIXES) or any(
+                    m in norm_value for m in _REACTION_MARKERS
+                ):
                     self._last_batch_stats["prefilter_rejected"] += 1
                     continue
                 # 5. Keep stable schedule/preference signals, drop one-off timestamp chatter.
-                if _EPHEMERAL_TIME_RE.search(norm_value) and not _STABLE_SCHEDULE_HINT_RE.search(norm_value):
+                if _EPHEMERAL_TIME_RE.search(norm_value) and not _STABLE_SCHEDULE_HINT_RE.search(
+                    norm_value
+                ):
                     self._last_batch_stats["prefilter_rejected"] += 1
                     continue
                 # 6. Generic has_fact should be specific; drop meta/logistics paraphrases.
@@ -724,15 +664,23 @@ class InstructionFactExtractor:
                     ):
                         self._last_batch_stats["prefilter_rejected"] += 1
                         continue
-                
+
                 # Subject resolution (Me/User/Contact)
-                if len(subject_name.split()) > 3 or any(v in subject_name.lower() for v in [" is ", " has ", " works "]):
+                if len(subject_name.split()) > 3 or any(
+                    v in subject_name.lower() for v in [" is ", " has ", " works "]
+                ):
                     old_sub = subject_name
-                    subject_name = user_name if (user_name.lower() in old_sub.lower() or "jwalin" in old_sub.lower()) else contact_name
+                    subject_name = (
+                        user_name
+                        if (user_name.lower() in old_sub.lower() or "jwalin" in old_sub.lower())
+                        else contact_name
+                    )
                     fact_value, predicate = old_sub, "has_fact"
 
-                is_about_user = any(u in subject_name.lower() for u in [user_name.lower(), "jwalin", "me", "i "])
-                
+                is_about_user = any(
+                    u in subject_name.lower() for u in [user_name.lower(), "jwalin", "me", "i "]
+                )
+
                 # Traceability (find best msg in specific segment)
                 segment = segments[seg_idx]
                 msgs = getattr(segment, "messages", [])
@@ -749,32 +697,54 @@ class InstructionFactExtractor:
                 # Map predicate types to confidence based on "information value"
                 p_lower = predicate.lower()
                 base_confidence = 0.7  # Default for generic facts
-                
-                if any(k in p_lower for k in ["is", "works", "lives", "family", "partner", "spouse", "child", "school", "degree"]):
+
+                if any(
+                    k in p_lower
+                    for k in [
+                        "is",
+                        "works",
+                        "lives",
+                        "family",
+                        "partner",
+                        "spouse",
+                        "child",
+                        "school",
+                        "degree",
+                    ]
+                ):
                     base_confidence = 1.0  # Strong identity/demographic facts
-                elif any(k in p_lower for k in ["likes", "loves", "hates", "prefers", "hobby", "skill", "speaks"]):
+                elif any(
+                    k in p_lower
+                    for k in ["likes", "loves", "hates", "prefers", "hobby", "skill", "speaks"]
+                ):
                     base_confidence = 0.8  # Preferences and skills
                 elif any(k in p_lower for k in ["schedule", "availability", "free", "busy"]):
                     base_confidence = 0.6  # Scheduling is often ephemeral
                 elif p_lower == "has_fact":
                     base_confidence = 0.7  # Generic bucket
 
-                batch_facts[seg_idx].append(Fact(
-                    category="other", # Storage layer re-categorizes
-                    subject=user_name if is_about_user else contact_name if not is_about_user and subject_name == contact_name else subject_name,
-                    predicate=predicate,
-                    value=fact_value,
-                    source_text=(best_msg.text or "")[:300] if best_msg else "",
-                    source_message_id=getattr(best_msg, "id", None) if best_msg else None,
-                    contact_id=contact_id,
-                    confidence=base_confidence,
-                    attribution=self._attribution_resolver.resolve(
-                        source_text=best_msg.text or "",
-                        subject=subject_name,
-                        is_from_me=best_msg.is_from_me if best_msg else False,
-                        category="other",  # category is determined later
-                    ),
-                ))
+                batch_facts[seg_idx].append(
+                    Fact(
+                        category="other",  # Storage layer re-categorizes
+                        subject=user_name
+                        if is_about_user
+                        else contact_name
+                        if not is_about_user and subject_name == contact_name
+                        else subject_name,
+                        predicate=predicate,
+                        value=fact_value,
+                        source_text=(best_msg.text or "")[:300] if best_msg else "",
+                        source_message_id=getattr(best_msg, "id", None) if best_msg else None,
+                        contact_id=contact_id,
+                        confidence=base_confidence,
+                        attribution=self._attribution_resolver.resolve(
+                            source_text=best_msg.text or "",
+                            subject=subject_name,
+                            is_from_me=best_msg.is_from_me if best_msg else False,
+                            category="other",  # category is determined later
+                        ),
+                    )
+                )
                 self._last_batch_stats["accepted"] += 1
 
             # POST-PROCESSING GROUNDING FILTER
@@ -812,6 +782,7 @@ class InstructionFactExtractor:
 
         except Exception as e:
             import traceback
+
             logger.error(f"Batch extraction failed: {e}\n{traceback.format_exc()}")
             return [[] for _ in segments]
 
@@ -826,3 +797,11 @@ def get_instruction_extractor(tier: str = "1.2b") -> InstructionFactExtractor:
             _extractor.unload()
         _extractor = InstructionFactExtractor(model_tier=tier)
     return _extractor
+
+
+def reset_instruction_extractor() -> None:
+    """Unload the singleton extractor so reply LLM or others can use memory."""
+    global _extractor
+    if _extractor is not None:
+        _extractor.unload()
+        _extractor = None

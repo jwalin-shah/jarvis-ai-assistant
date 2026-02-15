@@ -28,16 +28,16 @@ from jarvis.contacts.fact_filter import (
 class TestFeatureVectorShape:
     """transform_single returns correct shape and dtype."""
 
-    def test_shape_is_1x18(self):
+    def test_shape_is_1x20(self):
         feats = MessageGateFeatures()
         vec = feats.transform_single("hello world")
-        assert vec.shape == (1, 18)
+        assert vec.shape == (1, 20)
         assert vec.dtype == np.float32
 
     def test_empty_text_produces_valid_vector(self):
         feats = MessageGateFeatures()
         vec = feats.transform_single("")
-        assert vec.shape == (1, 18)
+        assert vec.shape == (1, 20)
         # char_len and word_len should be 0
         assert vec[0, 0] == 0.0  # char_len
         assert vec[0, 1] == 0.0  # word_len
@@ -45,7 +45,7 @@ class TestFeatureVectorShape:
     def test_none_text_treated_as_empty(self):
         feats = MessageGateFeatures()
         vec = feats.transform_single(None)
-        assert vec.shape == (1, 18)
+        assert vec.shape == (1, 20)
         assert vec[0, 0] == 0.0
 
 
@@ -111,23 +111,23 @@ class TestFeatureExtraction:
 
     def test_bot_pattern_detection(self):
         vec = self.feats.transform_single("Your CVS Pharmacy prescription is ready")
-        assert vec[0, 11] == 1.0  # likely_bot
+        assert vec[0, 13] == 1.0  # likely_bot
 
     def test_normal_message_not_bot(self):
         vec = self.feats.transform_single("Hey want to grab dinner tonight?")
-        assert vec[0, 11] == 0.0
+        assert vec[0, 13] == 0.0
 
     def test_short_message_flag(self):
         vec_short = self.feats.transform_single("ok sure")  # 2 words
         vec_long = self.feats.transform_single("this is a longer message")  # 5 words
-        assert vec_short[0, 12] == 1.0
-        assert vec_long[0, 12] == 0.0
+        assert vec_short[0, 14] == 1.0
+        assert vec_long[0, 14] == 0.0
 
     def test_is_from_me_flag(self):
         vec_me = self.feats.transform_single("hello", is_from_me=True)
         vec_other = self.feats.transform_single("hello", is_from_me=False)
-        assert vec_me[0, 13] == 1.0
-        assert vec_other[0, 13] == 0.0
+        assert vec_me[0, 15] == 1.0
+        assert vec_other[0, 15] == 0.0
 
 
 class TestBucketEncoding:
@@ -138,35 +138,35 @@ class TestBucketEncoding:
 
     def test_random_bucket(self):
         vec = self.feats.transform_single("text", bucket="random")
-        assert vec[0, 14] == 1.0  # bucket_random
-        assert vec[0, 15] == 0.0
-        assert vec[0, 16] == 0.0
+        assert vec[0, 16] == 1.0  # bucket_random
         assert vec[0, 17] == 0.0
+        assert vec[0, 18] == 0.0
+        assert vec[0, 19] == 0.0
 
     def test_likely_bucket(self):
         vec = self.feats.transform_single("text", bucket="likely")
-        assert vec[0, 14] == 0.0
-        assert vec[0, 15] == 1.0  # bucket_likely
         assert vec[0, 16] == 0.0
-        assert vec[0, 17] == 0.0
+        assert vec[0, 17] == 1.0  # bucket_likely
+        assert vec[0, 18] == 0.0
+        assert vec[0, 19] == 0.0
 
     def test_negative_bucket(self):
         vec = self.feats.transform_single("text", bucket="negative")
-        assert vec[0, 14] == 0.0
-        assert vec[0, 15] == 0.0
-        assert vec[0, 16] == 1.0  # bucket_negative
+        assert vec[0, 16] == 0.0
         assert vec[0, 17] == 0.0
+        assert vec[0, 18] == 1.0  # bucket_negative
+        assert vec[0, 19] == 0.0
 
     def test_other_bucket_default(self):
         vec = self.feats.transform_single("text", bucket="other")
-        assert vec[0, 14] == 0.0
-        assert vec[0, 15] == 0.0
         assert vec[0, 16] == 0.0
-        assert vec[0, 17] == 1.0  # bucket_other
+        assert vec[0, 17] == 0.0
+        assert vec[0, 18] == 0.0
+        assert vec[0, 19] == 1.0  # bucket_other
 
     def test_unknown_bucket_maps_to_other(self):
         vec = self.feats.transform_single("text", bucket="xyz_unknown")
-        assert vec[0, 17] == 1.0  # bucket_other
+        assert vec[0, 19] == 1.0  # bucket_other
 
 
 # ---------------------------------------------------------------------------
@@ -205,14 +205,14 @@ class TestMessageGateLoadValid:
         vectorizer.fit(["hello world", "I love sushi"])
 
         scaler = StandardScaler()
-        scaler.fit(np.zeros((2, 18)))
+        scaler.fit(np.zeros((2, 20)))
 
         model = SGDClassifier(loss="log_loss")
         # Fit with dummy data matching vectorizer + scaler output dims
         from scipy.sparse import csr_matrix, hstack
 
         x_text = vectorizer.transform(["hello", "sushi"])
-        x_num = csr_matrix(scaler.transform(np.zeros((2, 18))))
+        x_num = csr_matrix(scaler.transform(np.zeros((2, 20))))
         x = hstack([x_text, x_num], format="csr")
         model.fit(x, [0, 1])
 
@@ -261,7 +261,7 @@ class TestMessageGatePrediction:
         gate.vectorizer.transform.return_value = csr_matrix(np.zeros((1, 5)))
 
         gate.scaler = MagicMock()
-        gate.scaler.transform.return_value = np.zeros((1, 18))
+        gate.scaler.transform.return_value = np.zeros((1, 20))
 
         return gate
 
@@ -290,7 +290,7 @@ class TestMessageGatePrediction:
         gate.vectorizer = MagicMock()
         gate.vectorizer.transform.return_value = csr_matrix(np.zeros((1, 5)))
         gate.scaler = MagicMock()
-        gate.scaler.transform.return_value = np.zeros((1, 18))
+        gate.scaler.transform.return_value = np.zeros((1, 20))
 
         score = gate.predict_score("test")
         # sigmoid(0) = 0.5

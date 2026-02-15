@@ -12,6 +12,7 @@ from typing import Any
 
 from jarvis.contacts.attribution import AttributionResolver
 from jarvis.contacts.contact_profile import Fact
+from jarvis.prompts.extraction import EXTRACTION_MODELS
 from models.loader import MLXModelLoader, ModelConfig
 
 logger = logging.getLogger(__name__)
@@ -29,44 +30,78 @@ _CLEAN_FACT_PATTERNS = [
     (re.compile(r"^[,\.\-:]+"), ""),
 ]
 
-# Model options
-MODELS = {
-    "1.2b": "models/lfm2-1.2b-extract-mlx-4bit",
-    "0.7b": "models/lfm-0.7b-4bit",  # NEW: 0.7B model (default for extraction)
-    "350m": "models/lfm2-350m-extract-mlx-4bit",
-}
+# --- BATCHED EXTRACTION PROMPTS (Aligned with instruction_extractor.py) ---
 
-# --- BATCHED EXTRACTION PROMPT ---
+_BATCH_EXTRACTION_SYSTEM_PROMPT = """You extract durable personal facts from chat turns.
 
-_BATCH_USER_PROMPT_TEMPLATE = """Extract personal facts from these conversation segments between {user_name} and {contact_name}.
-Format: [Segment N] - [Name] Fact
+Task:
+- Return ONLY stable personal claims that are useful for a long-lived profile.
 
+Allowed claim types:
+- identity/relationship (family, partner, close friend)
+- work/school/role/company
+- home/current location (not temporary travel)
+- durable preferences (likes/dislikes/habits)
+- stable schedule preference (e.g., "usually free after 6")
+
+Do NOT extract:
+- one-off logistics (meetups, ETAs, "on my way", "can we call", orders, deliveries)
+- sports/news chatter, jokes, reactions, tapbacks
+- meta speech ("X said", "X asked", "X mentioned")
+- facts about group chats/platforms/companies unless clearly about a person
+- speculative/uncertain claims
+
+Output format:
+- Output JSONL only: one JSON object per line, no markdown.
+- Schema:
+  {"segment_id": <int>, "subject": "<person>", "speaker": "<speaker>",
+   "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}
+- Max 3 claims per segment.
+- If no claims at all, output exactly: NONE
+
+Hard rules:
+- Only explicit claims from text (no inference).
+- Use 3rd-person wording.
+- Subject must be a person, never a group/chat.
+- `evidence_quote` must be verbatim text copied from the conversation.
+- Do not use placeholders, brackets, or variables.
+- No headings, markdown, commentary, or extra labels."""
+
+_BATCH_EXTRACTION_USER_PROMPT = """Conversation Segments:
 {segments_text}
 
-Bullet Points:"""
+Return JSONL durable claims now (or NONE):
+"""
 
-_BATCH_VERIFY_PROMPT_TEMPLATE = """You are a precise fact-checker. Review these extracted facts against the conversation segments.
-Rules:
-1. Correct nuances (e.g. change "is moving" to "is open to moving" if that's what was said).
-2. Ensure labels [Name] are correct.
-3. Remove conversational filler or duplicates.
-4. Keep the [Segment N] prefix to identify which segment each fact came from.
+_BATCH_VERIFY_SYSTEM_PROMPT = """You are a precise fact-checker and structurer.
+Review these extracted claims against the conversation segments and convert them into triples.
 
-Conversation Segments:
+RULES:
+1. Output format: [Segment N] - [Subject] | [Predicate] | [Object]
+2. Subject must be a SPECIFIC PERSON'S NAME or "{user_name}".
+3. Predicate: Short verb phrase (1-3 words).
+4. Object: Capture the essential detail (1-4 words).
+5. Ensure the [Segment N] prefix matches the source segment exactly.
+6. Remove conversational filler, duplicates, or ungrounded claims.
+7. DO NOT output any other text or commentary."""
+
+_BATCH_VERIFY_USER_PROMPT = """Conversation Segments for Context:
 {segments_text}
 
-Original Facts:
+Claims to Verify and Structure:
 {facts}
 
-Nuanced & Verified Facts:
--"""
+Verified Structured Facts ([Segment N] - Subject | Predicate | Object):
+- """
 
 
 class BatchedInstructionFactExtractor:
     """Fact extractor that processes multiple segments in single LLM call."""
 
     def __init__(self, model_tier: str = "1.2b", batch_size: int = 5) -> None:
-        model_path = MODELS.get(model_tier, MODELS.get(model_tier, MODELS["1.2b"]))
+        model_path = EXTRACTION_MODELS.get(
+            model_tier, EXTRACTION_MODELS.get(model_tier, EXTRACTION_MODELS["1.2b"])
+        )
         self._config = ModelConfig(
             model_path=model_path,
             default_temperature=0.1,
@@ -80,8 +115,9 @@ class BatchedInstructionFactExtractor:
         try:
             # Ensure memory is ready for LLM
             from jarvis.model_manager import get_model_manager
+
             get_model_manager().prepare_for("llm")
-            
+
             return self._loader.load()
         except Exception as e:
             logger.error(f"Failed to load {self._tier} extract model: {e}")
@@ -141,7 +177,7 @@ class BatchedInstructionFactExtractor:
         user_name: str,
     ) -> tuple[list[tuple[int, list[Fact]]], int]:
         """Extract facts from a single batch of segments."""
-        # Format all segments
+        # Format all segments with index for prompt
         segment_texts = []
         for i, segment in enumerate(segments):
             messages = getattr(segment, "messages", [])
@@ -163,24 +199,49 @@ class BatchedInstructionFactExtractor:
         segments_text = "\n\n".join(segment_texts)
 
         try:
-            # PASS 1: Extraction
-            p1_prompt = _BATCH_USER_PROMPT_TEMPLATE.format(
-                segments_text=segments_text, user_name=user_name, contact_name=contact_name
+            # PASS 1: JSONL Extraction
+            messages = [
+                {"role": "system", "content": _BATCH_EXTRACTION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _BATCH_EXTRACTION_USER_PROMPT.format(segments_text=segments_text),
+                },
+            ]
+            formatted1 = self._loader._tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
             )
             res1 = self._loader.generate_sync(
-                prompt=p1_prompt,
-                max_tokens=800,  # More tokens for batch
+                prompt=formatted1,
+                max_tokens=1000,
                 temperature=0.0,
-                stop_sequences=["###"],
+                pre_formatted=True,
             )
-            raw_facts = "- " + res1.text.strip()
+            raw_jsonl = res1.text.strip()
 
-            # PASS 2: Self-Correction (LLM-based verification for better casual chat handling)
-            p2_prompt = _BATCH_VERIFY_PROMPT_TEMPLATE.format(
-                segments_text=segments_text, facts=raw_facts
+            if not raw_jsonl or raw_jsonl.upper() == "NONE":
+                return [], 0
+
+            # PASS 2: Verification and Triple Structuring
+            messages2 = [
+                {
+                    "role": "system",
+                    "content": _BATCH_VERIFY_SYSTEM_PROMPT.format(user_name=user_name),
+                },
+                {
+                    "role": "user",
+                    "content": _BATCH_VERIFY_USER_PROMPT.format(
+                        segments_text=segments_text, facts=raw_jsonl
+                    ),
+                },
+            ]
+            formatted2 = self._loader._tokenizer.apply_chat_template(
+                messages2, tokenize=False, add_generation_prompt=True
             )
             res2 = self._loader.generate_sync(
-                prompt=p2_prompt, max_tokens=800, temperature=0.0, stop_sequences=["###"]
+                prompt=formatted2,
+                max_tokens=800,
+                temperature=0.0,
+                pre_formatted=True,
             )
 
             verified_output = "- " + res2.text.strip()
@@ -190,9 +251,6 @@ class BatchedInstructionFactExtractor:
                 verified_output, segments, segment_offset, contact_id, user_name, contact_name
             )
 
-            # Rejection count is implicit in the LLM's removal of facts between Pass 1 and 2
-            # For monitoring purposes, we can estimate this by comparing lengths, 
-            # but for now we'll report 0 as it's handled internally by the LLM.
             return verified_batch, 0
 
         except Exception as e:
@@ -208,222 +266,79 @@ class BatchedInstructionFactExtractor:
         user_name: str,
         contact_name: str,
     ) -> list[tuple[int, list[Fact]]]:
-        """Parse facts and attribute them to correct segments."""
+        """Parse verified triple facts and attribute them to correct segments.
+
+        Format: [Segment N] - Subject | Predicate | Object
+        """
         # Initialize results for each segment
         results = [(segment_offset + i, []) for i in range(len(segments))]
 
-        # Clean output using pre-compiled patterns
-        clean_output = output
-        for pattern, replacement in _CLEAN_OUTPUT_PATTERNS:
-            clean_output = pattern.sub(replacement, clean_output)
+        # Triple pattern: [Segment N] - Subject | Predicate | Object
+        triple_re = re.compile(
+            r"\[Segment\s*(\d+)\]\s*-\s*([^|]+)\|\s*([^|]+)\|\s*(.*)", re.IGNORECASE
+        )
 
-        # Parse each line
-        for line in clean_output.split("\n"):
-            line = line.strip()
-            if not line or len(line) < 10:
+        for line in output.split("\n"):
+            line = line.strip().lstrip("- ")
+            if not line:
                 continue
 
-            # Extract segment indicator
-            segment_match = _SEGMENT_PATTERN.match(line)
-            if not segment_match:
+            match = triple_re.match(line)
+            if not match:
                 continue
 
-            segment_idx = int(segment_match.group(1))
-            fact_text = segment_match.group(2).strip()
+            seg_idx = int(match.group(1))
+            subject = match.group(2).strip()
+            predicate = match.group(3).strip()
+            obj = match.group(4).strip()
 
             # Validate segment index
-            if segment_idx < 0 or segment_idx >= len(segments):
+            if seg_idx < 0 or seg_idx >= len(segments):
                 continue
 
-            # Apply filters
-            junk_indicators = {
-                "loved",
-                "liked",
-                "emphasized",
-                "laughed at",
-                "questioned",
-                "reacted",
-                "lol",
-                "lmfao",
-                "omg",
-                "thanks",
-                "yessir",
-            }
-
-            fact_lower = fact_text.lower()
-            if any(w in fact_lower for w in junk_indicators) and len(fact_lower) < 60:
-                continue
-            if fact_text.endswith("?"):
+            # Basic hallucination check: subject/object should not be placeholders
+            if any(p in obj.lower() for p in ["[subject", "[name", "[phone", "placeholder"]):
                 continue
 
-            # Clean fact text using pre-compiled patterns
-            fact_claim = fact_text
-            for pattern, replacement in _CLEAN_FACT_PATTERNS:
-                fact_claim = pattern.sub(replacement, fact_claim)
+            # Determine attribution (is it about the user or the contact?)
+            is_about_user = False
+            if user_name.lower() in subject.lower() or subject.lower() == "me":
+                is_about_user = True
+            elif contact_name.lower() in subject.lower():
+                is_about_user = False
+            else:
+                # Default to contact if not user
+                is_about_user = False
 
-            for n in [user_name, contact_name, "[Me]", "[Contact]", "Me", "Contact"]:
-                # Compile patterns once per name and cache
-                _name_patterns = getattr(_parse_batched_facts, "_name_patterns", {})
-                if n not in _name_patterns:
-                    _name_patterns[n] = (
-                        re.compile(rf"\[{re.escape(n)}\]", re.IGNORECASE),
-                        re.compile(rf"\b{re.escape(n)}\b", re.IGNORECASE),
-                    )
-                    _parse_batched_facts._name_patterns = _name_patterns
-                bracket_pat, word_pat = _name_patterns[n]
-                fact_claim = bracket_pat.sub("", fact_claim)
-                fact_claim = word_pat.sub("", fact_claim)
-            fact_claim = fact_claim.strip(": ").strip()
-
-            if not fact_claim:
-                continue
-
-            # Determine attribution
-            segment = segments[segment_idx]
-            messages = getattr(segment, "messages", [])
-
-            claim_words = set(w for w in fact_claim.lower().split() if len(w) > 3)
-            actual_is_from_me = None
-            best_match_count = 0
-
-            if claim_words and messages:
-                for msg in messages:
-                    msg_text = (msg.text or "").lower()
-                    if not msg_text:
-                        continue
-                    match_count = sum(1 for w in claim_words if w in msg_text)
-                    if match_count > best_match_count:
-                        best_match_count = match_count
-                        actual_is_from_me = msg.is_from_me
-
-                if best_match_count == 0:
-                    continue  # Hallucination
-
-            # Fallback attribution
-            if actual_is_from_me is None and messages:
-                from collections import Counter
-
-                sender_counts = Counter()
-                for msg in messages:
-                    sender_counts[msg.is_from_me] += 1
-                if sender_counts:
-                    actual_is_from_me = sender_counts.most_common(1)[0][0]
-
-            is_about_user = actual_is_from_me if actual_is_from_me is not None else False
-
-            # Categorize
+            # Categorize based on predicate and object
             category = "other"
-            val_lower = fact_claim.lower()
-            if any(
-                w in val_lower
-                for w in ["job", "work", "employed", "agent", "admin", "manage", "hiring"]
-            ):
+            combined = (predicate + " " + obj).lower()
+
+            if any(w in combined for w in ["job", "work", "employ", "role", "title", "office"]):
                 category = "work"
-            elif any(
-                w in val_lower
-                for w in [
-                    "live",
-                    "location",
-                    "moving",
-                    "from",
-                    "staying",
-                    "dallas",
-                    "austin",
-                    "city",
-                    "apartment",
-                    "house",
-                ]
-            ):
+            elif any(w in combined for w in ["live", "home", "city", "state", "from", "stay"]):
                 category = "location"
-            elif any(
-                w in val_lower
-                for w in [
-                    "brother",
-                    "sister",
-                    "mom",
-                    "dad",
-                    "father",
-                    "mother",
-                    "family",
-                    "wife",
-                    "husband",
-                    "married",
-                    "girlfriend",
-                    "boyfriend",
-                    "dating",
-                    "sibling",
-                    "parent",
-                ]
-            ):
+            elif any(w in combined for w in ["mom", "dad", "wife", "husband", "son", "sister"]):
                 category = "relationship"
-            elif any(
-                w in val_lower
-                for w in [
-                    "like",
-                    "love",
-                    "enjoy",
-                    "hate",
-                    "prefer",
-                    "favorite",
-                    "want",
-                    "interested",
-                    "care about",
-                    "dislike",
-                ]
-            ):
+            elif any(w in combined for w in ["like", "love", "prefer", "hate", "favorite"]):
                 category = "preference"
-            elif any(
-                w in val_lower
-                for w in [
-                    "birthday",
-                    "born",
-                    "graduated",
-                    "school",
-                    "college",
-                    "degree",
-                    "education",
-                    "studied",
-                    "university",
-                ]
-            ):
+            elif any(w in combined for w in ["born", "study", "degree", "college", "school"]):
                 category = "background"
-            elif any(
-                w in val_lower
-                for w in [
-                    "meet",
-                    "available",
-                    "schedule",
-                    "weekend",
-                    "friday",
-                    "saturday",
-                    "sunday",
-                    "going",
-                    "plan",
-                    "event",
-                    "party",
-                    "dinner",
-                    "lunch",
-                    "trip",
-                    "travel",
-                    "vacation",
-                    "holiday",
-                ]
-            ):
-                category = "event"
 
             # Create fact
+            segment = segments[seg_idx]
             fact = Fact(
                 category=category,
-                subject=contact_name if not is_about_user else user_name,
-                predicate="has_fact",
-                value=fact_claim,
+                subject=subject,
+                predicate=predicate,
+                value=obj,
                 source_text=getattr(segment, "text", "")[:500],
-                confidence=0.8,
+                confidence=0.85,  # Higher confidence for verified triples
                 contact_id=contact_id,
                 attribution="user" if is_about_user else "contact",
             )
 
-            results[segment_idx][1].append(fact)
+            results[seg_idx][1].append(fact)
 
         return results
 

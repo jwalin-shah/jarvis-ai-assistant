@@ -76,60 +76,22 @@ def segment_conversation_basic(
     if not messages:
         return []
 
-    # Sort by date
-    messages = sorted(messages, key=lambda m: m.date)
+    # Use shared preparation logic (sorting, junk filtering)
+    from jarvis.topics.utils import get_embeddings_for_segmentation, prepare_messages_for_segmentation
 
-    # Pre-filter junk/system/spam messages before embedding and boundary scoring.
-    from jarvis.contacts.junk_filters import is_junk_message
-    from jarvis.text_normalizer import normalize_text
-
-    filtered_messages: list[Message] = []
-    for m in messages:
-        raw_text = m.text or ""
-        norm_text = normalize_text(
-            raw_text,
-            expand_slang=True,
-            filter_garbage=True,
-            filter_attributed_artifacts=True,
-            strip_signatures=True,
-        )
-        if not norm_text:
-            continue
-        if is_junk_message(norm_text, m.chat_id):
-            continue
-        filtered_messages.append(m)
+    messages, norm_texts = prepare_messages_for_segmentation(messages)
 
     # If all messages are filtered, preserve fallback behavior.
-    if not filtered_messages:
-        if messages:
-            return [_create_basic_segment(messages, contact_id)]
+    if not messages:
         return []
-
-    messages = filtered_messages
 
     if len(messages) < 2:
         return [_create_basic_segment(messages, contact_id)]
 
-    # Get embeddings
-    from jarvis.embedding_adapter import get_embedder
-
-    embedder = get_embedder()
-    embeddings_list = []
-
-    for m in messages:
-        emb = None
-        if pre_fetched_embeddings and m.id in pre_fetched_embeddings:
-            emb = pre_fetched_embeddings[m.id]
-
-        if emb is None:
-            text = m.text or ""
-            if len(text.strip()) >= 3:
-                try:
-                    emb = embedder.encode(text, normalize=True)
-                except Exception:
-                    emb = None
-
-        embeddings_list.append(emb)
+    # Use shared embedding logic
+    embeddings_list = get_embeddings_for_segmentation(
+        messages, norm_texts, pre_fetched_embeddings
+    )
 
     # Detect boundaries
     boundaries = _detect_boundaries_basic(messages, embeddings_list, drift_threshold)
