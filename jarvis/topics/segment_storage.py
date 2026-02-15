@@ -61,33 +61,28 @@ def persist_segments(
             )
         )
 
-    # Batch insert segments with RETURNING to get IDs
-    db_ids = []
-    for row_data in segment_rows:
-        try:
-            cursor = conn.execute(
-                """
-                INSERT INTO conversation_segments
-                (segment_id, chat_id, contact_id, start_time, end_time, message_count, preview)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
-                """,
-                row_data,
-            )
-            row = cursor.fetchone()
-            if row:
-                db_ids.append(row[0])
-        except sqlite3.OperationalError:
-            # Fallback for older SQLite versions
-            cursor = conn.execute(
-                """
-                INSERT INTO conversation_segments
-                (segment_id, chat_id, contact_id, start_time, end_time, message_count, preview)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                row_data,
-            )
-            db_ids.append(cursor.lastrowid)
+    # Batch insert all segments in one round-trip, then fetch IDs in insert order
+    conn.executemany(
+        """
+        INSERT INTO conversation_segments
+        (segment_id, chat_id, contact_id, start_time, end_time, message_count, preview)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        segment_rows,
+    )
+    n = len(segment_rows)
+    cursor = conn.execute(
+        "SELECT id FROM conversation_segments WHERE chat_id = ? ORDER BY id DESC LIMIT ?",
+        (chat_id, n),
+    )
+    db_ids = list(reversed([row[0] for row in cursor.fetchall()]))
+    if len(db_ids) != n:
+        logger.warning(
+            "persist_segments: expected %d ids for chat_id %s, got %d",
+            n,
+            chat_id[:20],
+            len(db_ids),
+        )
 
     # Build message membership rows with the retrieved segment IDs
     msg_rows = []
