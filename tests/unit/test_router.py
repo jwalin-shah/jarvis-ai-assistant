@@ -426,7 +426,17 @@ class TestEdgeCases:
         mock_db.get_contact.return_value = None
         mock_db.get_contact_by_chat_id.return_value = sample_contact
 
-        result = router.route("hello there!", chat_id="chat123")
+        # Avoid blocking on real graph/facts fetch in build_generation_request
+        with patch.object(
+            router._reply_service,
+            "_fetch_graph_context",
+            return_value=None,
+        ), patch.object(
+            router._reply_service,
+            "_fetch_contact_facts",
+            return_value=None,
+        ):
+            result = router.route("hello there!", chat_id="chat123")
 
         # Verify chat_id-based contact lookup was used
         mock_db.get_contact_by_chat_id.assert_called_with("chat123")

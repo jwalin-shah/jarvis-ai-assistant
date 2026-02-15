@@ -7,7 +7,7 @@ Augmented Generation).
 These endpoints use the local MLX model to generate contextually appropriate
 responses without sending any data to external services.
 
-NOTE: All prompts and examples are imported from jarvis/prompts.py,
+NOTE: All prompts and examples are imported from jarvis.prompts (jarvis/prompts/),
 which is the single source of truth for all prompts in the JARVIS system.
 """
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -41,15 +42,19 @@ from api.schemas import (
 from contracts.imessage import Message
 from contracts.models import GenerationRequest
 from integrations.imessage import ChatDBReader
+from jarvis.classifiers.cascade import classify_with_cascade
+from jarvis.classifiers.classification_result import build_classification_result
+from jarvis.contracts.pipeline import ClassificationResult, MessageContext
 from jarvis.errors import ModelError, iMessageQueryError
 from jarvis.model_warmer import get_warm_generator
 from jarvis.prompts import API_REPLY_EXAMPLES, API_SUMMARY_EXAMPLES
+from jarvis.search.hybrid_search import get_hybrid_searcher
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/drafts", tags=["drafts"])
 
-# Use centralized prompts from jarvis/prompts.py
+# Use centralized prompts from jarvis.prompts
 REPLY_EXAMPLES = API_REPLY_EXAMPLES
 SUMMARY_EXAMPLES = API_SUMMARY_EXAMPLES
 
@@ -77,7 +82,7 @@ def _format_messages_for_context(messages: list[Message]) -> str:
 _ALLOWED_INSTRUCTION_PATTERN = re.compile(r"^[a-zA-Z0-9 ,.'!?;:\-/()]+$")
 
 
-def _sanitize_instruction(instruction: str | None) -> str:
+def _sanitize_instruction(instruction: str | None) -> str | None:
     """Sanitize user instruction to prevent prompt injection.
 
     Uses an allowlist approach: only alphanumeric characters and common
@@ -88,52 +93,22 @@ def _sanitize_instruction(instruction: str | None) -> str:
         instruction: Raw user instruction
 
     Returns:
-        Sanitized instruction string, or "None" if empty/invalid
+        Sanitized instruction string, or None if empty/invalid
     """
     if not instruction:
-        return "None"
+        return None
 
     # Limit length to prevent excessive prompts
     instruction = instruction[:200].strip()
 
     if not instruction:
-        return "None"
+        return None
 
     # Allowlist: only permit safe characters (letters, digits, common punctuation)
     if not _ALLOWED_INSTRUCTION_PATTERN.match(instruction):
-        return "None"
+        return None
 
     return instruction
-
-
-def _build_reply_prompt(
-    last_message: str,
-    instruction: str | None,
-    suggestion_num: int,
-) -> str:
-    """Build a prompt for generating a reply suggestion.
-
-    Args:
-        last_message: The last message in the conversation
-        instruction: Optional user instruction for reply tone/content (will be sanitized)
-        suggestion_num: Which suggestion number (1, 2, 3...) for variety
-
-    Returns:
-        Formatted prompt string
-    """
-    # Sanitize instruction to prevent prompt injection
-    safe_instruction = _sanitize_instruction(instruction)
-    base_prompt = f"Last message: '{last_message}'\nInstruction: {safe_instruction}"
-
-    # Add variety hints for different suggestions
-    variety_hints = [
-        "\nGenerate a natural, conversational reply.",
-        "\nGenerate a slightly more casual reply variant.",
-        "\nGenerate a concise reply variant.",
-    ]
-
-    hint_idx = (suggestion_num - 1) % len(variety_hints)
-    return base_prompt + variety_hints[hint_idx]
 
 
 def _build_summary_prompt(context: str, num_messages: int) -> str:
@@ -230,41 +205,6 @@ def _parse_summary_response(response_text: str) -> tuple[str, list[str]]:
         key_points = ["See summary for details"]
 
     return summary, key_points
-
-
-def _generate_single_suggestion(
-    generator: object,
-    prompt: str,
-    context_text: str,
-    temperature: float,
-) -> str | None:
-    """Generate a single reply suggestion synchronously.
-
-    This runs in a thread pool to avoid blocking the event loop.
-
-    Args:
-        generator: The MLX generator instance.
-        prompt: The prompt to generate from.
-        context_text: Conversation context.
-        temperature: Sampling temperature.
-
-    Returns:
-        Generated text or None if generation failed.
-    """
-    gen_request = GenerationRequest(
-        prompt=prompt,
-        context_documents=[context_text],
-        few_shot_examples=REPLY_EXAMPLES,
-        max_tokens=200,
-        temperature=temperature,
-    )
-    try:
-        response = generator.generate(gen_request)  # type: ignore[attr-defined]
-        text: str = str(response.text) if response.text else ""
-        return text.strip()
-    except Exception as e:
-        logger.warning("Generation failed: %s", e)
-        return None
 
 
 @router.post(
@@ -411,65 +351,101 @@ async def generate_draft_reply(
             detail=f"No messages found for chat_id: {draft_request.chat_id}",
         )
 
-    # Build context info
-    last_message = messages[0].text if messages else None
+    # Last incoming message and thread (chronological, for RAG)
+    last_message = None
+    for msg in messages:
+        if not msg.is_from_me and msg.text:
+            last_message = msg.text
+            break
+    if not last_message:
+        last_message = messages[0].text if messages else ""
     participants = list({m.sender_name or m.sender for m in messages if not m.is_from_me})
-    context_text = _format_messages_for_context(messages)
+    thread = [m.text for m in reversed(messages) if m.text][: draft_request.context_messages]
 
-    # Get the generator
+    from jarvis.reply_service import get_reply_service
+
+    reply_service = get_reply_service()
+
+    def _run_classification_and_search() -> tuple[ClassificationResult, list[dict[str, Any]]]:
+        mobilization = classify_with_cascade(last_message or "")
+        classification = build_classification_result(
+            last_message or "", thread, mobilization
+        )
+        searcher = get_hybrid_searcher()
+        search_results = searcher.search(
+            query=last_message or "", limit=5, rerank=True
+        )
+        return classification, search_results
+
     try:
-        generator = await run_in_threadpool(get_warm_generator)
+        classification, search_results = await run_in_threadpool(
+            _run_classification_and_search
+        )
     except Exception as e:
-        logger.error("Failed to get generator: %s", e)
-        raise ModelError(
-            "Model service unavailable",
-            cause=e,
+        logger.error("Classification/search failed: %s", e)
+        raise ModelError("Model service unavailable", cause=e) from e
+
+    context = MessageContext(
+        chat_id=draft_request.chat_id,
+        message_text=last_message or "",
+        is_from_me=False,
+        timestamp=datetime.now(UTC),
+        metadata={"thread": thread},
+    )
+
+    # Variety instructions for multiple suggestions
+    base_instruction = _sanitize_instruction(draft_request.instruction)
+    
+    variant_instructions: list[str | None] = [base_instruction]
+    if draft_request.num_suggestions > 1:
+        variant_instructions.append(
+            (base_instruction + " (slightly more casual)") if base_instruction else "be slightly more casual"
+        )
+    if draft_request.num_suggestions > 2:
+        variant_instructions.append(
+            (base_instruction + " (concise)") if base_instruction else "be concise"
         )
 
-    # Generate suggestions sequentially (MLX/Metal GPU is NOT thread-safe)
     suggestions: list[DraftSuggestion] = []
-
     try:
         async with asyncio.timeout(get_timeout_generation()):
-            from jarvis.reply_service import get_reply_service
-            reply_service = get_reply_service()
-            
             for i in range(draft_request.num_suggestions):
-                prompt = _build_reply_prompt(
-                    last_message=last_message or "",
-                    instruction=draft_request.instruction,
-                    suggestion_num=i + 1,
+                instruction = (
+                    variant_instructions[i]
+                    if i < len(variant_instructions)
+                    else variant_instructions[0]
                 )
                 try:
-                    result = await run_in_threadpool(
-                        _generate_single_suggestion,
-                        generator,
-                        prompt,
-                        context_text,
-                        0.7 + (i * 0.1),  # Vary temperature for diversity
+                    gen_response = await run_in_threadpool(
+                        reply_service.generate_reply,
+                        context,
+                        classification,
+                        search_results,
+                        thread,
+                        None,
+                        None,
+                        instruction,
                     )
                 except Exception as e:
                     logger.warning("Generation %d failed: %s", i, e)
                     continue
-                if result:
-                    confidence = max(0.5, 0.9 - (i * 0.1))
+                if gen_response.response:
+                    confidence = max(0.5, gen_response.confidence)
                     suggestions.append(
                         DraftSuggestion(
-                            text=result,
+                            text=gen_response.response,
                             confidence=confidence,
                         )
                     )
-                    
-                    # Log for traceability
                     await run_in_threadpool(
                         reply_service.log_custom_generation,
                         chat_id=draft_request.chat_id,
                         incoming_text=last_message or "",
-                        final_prompt=prompt,
-                        response_text=result,
+                        final_prompt=gen_response.metadata.get("final_prompt", ""),
+                        response_text=gen_response.response,
                         confidence=confidence,
                         category="draft_reply",
-                        metadata={"suggestion_index": i}
+                        metadata={"suggestion_index": i},
                     )
     except TimeoutError:
         logger.warning("Generation timed out after %s seconds", get_timeout_generation())
@@ -680,9 +656,10 @@ async def summarize_conversation(
                 prompt,
             )
             summary, key_points = _parse_summary_response(response_text)
-            
+
             # Log for traceability
             from jarvis.reply_service import get_reply_service
+
             reply_service = get_reply_service()
             await run_in_threadpool(
                 reply_service.log_custom_generation,
@@ -691,7 +668,7 @@ async def summarize_conversation(
                 final_prompt=prompt,
                 response_text=response_text,
                 category="summary",
-                metadata={"num_messages": len(messages)}
+                metadata={"num_messages": len(messages)},
             )
     except TimeoutError:
         logger.warning("Summary generation timed out after %s seconds", get_timeout_generation())

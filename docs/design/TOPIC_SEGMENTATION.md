@@ -147,13 +147,13 @@ for seg in segments:
 ### Extraction Pipeline Integration
 
 ```python
+from jarvis.topics.topic_segmenter import segment_conversation
 from jarvis.topics.segment_pipeline import process_segments
 
-# Full pipeline: persist segments, optionally extract facts
-results = process_segments(messages, contact_id="...", extract_facts=True)
-
-for seg in results.segments:
-    print(f"Segment {seg.segment_id}: {seg.message_count} messages")
+# First segment, then run full pipeline (persist, index, optional fact extraction)
+segments = segment_conversation(messages, contact_id=chat_id)
+stats = process_segments(segments, chat_id=chat_id, contact_id=chat_id, extract_facts=True)
+# stats: {"persisted": N, "indexed": N, "facts_extracted": N}
 ```
 
 ## Optional: Coreference Resolution
@@ -191,6 +191,5 @@ TOPIC_SHIFT_MARKERS = frozenset({
 - `jarvis/topics/segment_labeler.py` - Topic label generation
 - `jarvis/topics/segment_storage.py` - Database persistence
 - `jarvis/topics/segment_pipeline.py` - Full extraction pipeline orchestration
-- `jarvis/topics/segment_extractor.py` - Bridge to fact extraction
 - `jarvis/text_normalizer.py` - Text normalization, topic shift detection
 - `jarvis/embedding_adapter.py` - Embedding computation via get_embedder()

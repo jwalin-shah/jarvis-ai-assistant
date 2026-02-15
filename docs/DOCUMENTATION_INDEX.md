@@ -48,7 +48,6 @@
 |-----|---------|
 | [REPOSITORY_MODERNIZATION_ROADMAP.md](./REPOSITORY_MODERNIZATION_ROADMAP.md) | 90-day complexity reduction plan |
 | [DEV_PRODUCTIVITY_PLAN.md](./DEV_PRODUCTIVITY_PLAN.md) | Developer experience improvements |
-| [DEV_PRODUCTIVITY_PLAN.md](./DEV_PRODUCTIVITY_PLAN.md) | Developer experience improvements |
 | [FACT_KG_ROADMAP.md](./FACT_KG_ROADMAP.md) | Fact extraction & knowledge graph roadmap |
 
 ## Reference
@@ -59,6 +58,9 @@
 | [COMPONENT_CATALOG.md](./COMPONENT_CATALOG.md) | Svelte component reference (41 components) |
 | [EXTRACTOR_BAKEOFF.md](./EXTRACTOR_BAKEOFF.md) | Fact extraction approach comparison |
 | [SQL_OPTIMIZATION_REPORT.md](./SQL_OPTIMIZATION_REPORT.md) | SQL query optimization findings |
+| [DATABASE_QUERY_AUDIT.md](./DATABASE_QUERY_AUDIT.md) | File-by-file DB query audit and N+1 prevention checklist |
+| [REUSE_AND_LOAD_UNLOAD_AUDIT.md](./REUSE_AND_LOAD_UNLOAD_AUDIT.md) | Segmentation/extraction reuse, prompt consistency, model load/unload |
+| [PERFORMANCE_OPTIMIZATIONS.md](./PERFORMANCE_OPTIMIZATIONS.md) | Performance optimization notes |
 
 ## Runtime
 
