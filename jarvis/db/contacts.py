@@ -294,6 +294,9 @@ class ContactMixin:
             display_name=row["display_name"],
             phone_or_email=row["phone_or_email"],
             relationship=row["relationship"],
+            relationship_reasoning=row.get("relationship_reasoning")
+            if "relationship_reasoning" in row.keys()
+            else None,
             style_notes=row["style_notes"],
             handles_json=row["handles_json"] if "handles_json" in row.keys() else None,
             created_at=row["created_at"],

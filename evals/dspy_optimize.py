@@ -43,6 +43,7 @@ if _env_path.exists():
 
 import dspy  # noqa: E402
 
+from evals.dspy_client import DSPYMLXClient  # noqa: E402
 from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
     CategoryReplyModule,
@@ -52,7 +53,6 @@ from evals.dspy_reply import (  # noqa: E402
     get_category_examples,
     judge_metric,
 )
-from evals.dspy_client import DSPYMLXClient  # noqa: E402
 
 # Save paths
 SAVE_DIR = PROJECT_ROOT / "evals" / "optimized_reply.json"

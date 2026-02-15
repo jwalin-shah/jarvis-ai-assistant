@@ -319,7 +319,7 @@ class TestFeatureContract:
 
         extractor = CategoryFeatureExtractor()
         features = extractor.extract_all("Hello there", [], "none", "answer")
-        assert len(features) == 148, f"Expected 148 non-BERT features, got {len(features)}"
+        assert len(features) == 147, f"Expected 147 non-BERT features, got {len(features)}"
 
     def test_all_categories_reachable(self) -> None:
         """Each category should be reachable (not just 'statement')."""

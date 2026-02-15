@@ -6,7 +6,6 @@ All write operations use batch inserts (executemany) to avoid N+1 patterns.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING, Any
 

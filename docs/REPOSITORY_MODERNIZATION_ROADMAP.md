@@ -587,7 +587,18 @@ python scripts/memory_stress_test.py
 
 Security documentation: `docs/SECURITY.md`
 
-#### 12.2 Rollback Preparation (Days 88-89)
+### Phase 5: Pipeline Optimization & Resilience (Days 91-105) 🚧 IN PROGRESS
+
+| Milestone | Status | Description |
+|-----------|--------|-------------|
+| Streaming Delta Ingestion | ✅ Done | Per-chat incremental backfill |
+| Database Reliability | ✅ Done | SQLite retry logic for locked databases |
+| Model Resource Manager | ✅ Done | Coordinated model lifecycle (8GB RAM) |
+| Semantic Deduplication | ✅ Done | Embedding-based fact merging |
+| Pipeline Observability | ✅ Done | Real-time stage monitoring |
+| Timing Preferences | ✅ Done | Automatic quiet/preferred hours inference |
+
+#### 12.2 Rollback Preparation (Days 106-107)
 
 Create rollback procedures:
 

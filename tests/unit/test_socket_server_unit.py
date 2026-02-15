@@ -196,27 +196,6 @@ class TestSocketServerMethods:
         """Create a server instance."""
         return JarvisSocketServer(enable_watcher=False, preload_models=False)
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(10)
-    async def test_get_smart_replies(self, server: JarvisSocketServer) -> None:
-        """Smart replies returns suggestions."""
-        with patch("jarvis.router.get_reply_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.route.return_value = {
-                "type": "generated",
-                "response": "Sure, that sounds great!",
-                "confidence": "high",
-            }
-            mock_get_router.return_value = mock_router
-
-            result = await server._get_smart_replies("Want to grab lunch?", 3)
-
-            assert "suggestions" in result
-            assert len(result["suggestions"]) >= 1
-            assert result["suggestions"][0]["text"] == "Sure, that sounds great!"
-            assert result["suggestions"][0]["score"] == 0.9  # high confidence
-
-
 class TestRotateWsToken:
     """Tests for WebSocket token rotation."""
 

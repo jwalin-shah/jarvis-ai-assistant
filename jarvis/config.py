@@ -207,7 +207,7 @@ class ModelSettings(BaseModel):
         warm_on_startup: Pre-load model when warmer starts (increases startup time).
     """
 
-    model_id: str = "lfm-1.2b"
+    model_id: str = "lfm-0.7b"  # Using 0.7B model for both extraction and generation
     auto_select: bool = True
     max_tokens_reply: int = Field(default=150, ge=1, le=2048)
     max_tokens_summary: int = Field(default=500, ge=1, le=4096)
@@ -251,46 +251,15 @@ class ClassifierThresholds(BaseModel):
         intent_confidence: Minimum confidence to return a specific intent.
         intent_quick_reply: Higher threshold for quick reply intent detection.
 
-        response_centroid_verify: Minimum similarity to verify structural hints.
-        response_centroid_margin: Margin for centroid override decisions.
-        response_low_confidence: Below this, default to ANSWER for safety.
-        response_decline_confidence: Higher threshold for DECLINE (frequently misclassified).
-        response_defer_confidence: Higher threshold for DEFER predictions.
-        response_agree_confidence: Higher threshold for AGREE predictions.
-
-        trigger_svm_commitment: SVM threshold for COMMITMENT trigger type.
-        trigger_svm_question: SVM threshold for QUESTION trigger type.
-        trigger_svm_reaction: SVM threshold for REACTION trigger type.
-        trigger_svm_social: SVM threshold for SOCIAL trigger type.
-        trigger_svm_statement: SVM threshold for STATEMENT trigger type.
-        trigger_svm_default: Default SVM threshold for unknown trigger types.
-        trigger_centroid_verify: Minimum similarity to verify centroid match.
-        trigger_centroid_margin: Margin for centroid override decisions.
+        # Note: response_* and trigger_svm_* thresholds removed - classifiers deprecated
     """
 
     # Intent classifier thresholds (from intent.py)
     intent_confidence: float = Field(default=0.60, ge=0.0, le=1.0)
     intent_quick_reply: float = Field(default=0.80, ge=0.0, le=1.0)
 
-    # Response classifier thresholds (from response_classifier.py)
-    response_centroid_verify: float = Field(default=0.50, ge=0.0, le=1.0)
-    response_centroid_margin: float = Field(default=0.10, ge=0.0, le=1.0)
-    response_low_confidence: float = Field(default=0.50, ge=0.0, le=1.0)
-    response_decline_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
-    response_defer_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
-    response_agree_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
-
-    # Trigger classifier: per-class SVM thresholds
-    trigger_svm_commitment: float = Field(default=0.70, ge=0.0, le=1.0)
-    trigger_svm_question: float = Field(default=0.55, ge=0.0, le=1.0)
-    trigger_svm_reaction: float = Field(default=0.60, ge=0.0, le=1.0)
-    trigger_svm_social: float = Field(default=0.45, ge=0.0, le=1.0)
-    trigger_svm_statement: float = Field(default=0.50, ge=0.0, le=1.0)
-    trigger_svm_default: float = Field(default=0.55, ge=0.0, le=1.0)
-
-    # Trigger classifier: centroid thresholds
-    trigger_centroid_verify: float = Field(default=0.50, ge=0.0, le=1.0)
-    trigger_centroid_margin: float = Field(default=0.10, ge=0.0, le=1.0)
+    # Note: Response and trigger classifier thresholds removed - classifiers deprecated
+    # Current classifiers: intent, category, relationship, response_mobilization
 
 
 class MetricsConfig(BaseModel):
@@ -918,21 +887,6 @@ def get_embedding_artifacts_dir() -> Path:
     base_dir = Path.home() / ".jarvis" / "embeddings" / config.embedding.model_name
     base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir
-
-
-def get_response_classifier_path() -> Path:
-    """Get path to the response classifier model directory.
-
-    Returns:
-        Path to response_classifier_model/ for the current embedding model.
-    """
-    return get_embedding_artifacts_dir() / "response_classifier_model"
-
-
-def get_trigger_classifier_path() -> Path:
-    """Get path to the trigger classifier model directory."""
-
-    return get_embedding_artifacts_dir() / "trigger_classifier_model"
 
 
 def get_category_classifier_path() -> Path:

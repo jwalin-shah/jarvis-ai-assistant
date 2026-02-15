@@ -12,33 +12,35 @@ All public names are re-exported here for backward compatibility.
 # --- constants.py ---
 # --- builders.py ---
 from jarvis.prompts.builders import (  # noqa: F401
-    _format_examples,
-    _format_relationship_context,
-    _format_search_examples,
-    _format_similar_exchanges,
-    _format_summary_examples,
-    _format_thread_context,
-    _get_additional_instructions,
-    _get_length_guidance,
-    _get_thread_examples,
-    _truncate_context,
     analyze_user_style,
     build_prompt_from_request,
     build_rag_reply_prompt,
     build_rag_reply_prompt_from_embeddings,
     build_reply_prompt,
-    build_search_answer_prompt,
+    build_search_prompt as build_search_answer_prompt,
     build_style_instructions,
     build_summary_prompt,
     build_threaded_reply_prompt,
     detect_tone,
     estimate_tokens,
+    format_examples,
     format_facts_for_prompt,
+    format_search_examples,
+    format_summary_examples,
     get_category_config,
     get_thread_max_tokens,
     is_within_token_limit,
     resolve_category,
+    truncate_context,
 )
+from jarvis.prompts.rag import _format_relationship_context, _format_similar_exchanges
+from jarvis.prompts.reply import (
+    _format_thread_context,
+    _get_additional_instructions,
+    _get_length_guidance,
+    _get_thread_examples,
+)
+from jarvis.prompts.search import build_search_prompt as build_search_answer_prompt
 from jarvis.prompts.constants import (
     ACKNOWLEDGE_TEMPLATES,
     CASUAL_INDICATORS,

@@ -431,6 +431,7 @@ class InProcessEmbedder:
         texts: list[str],
         normalize: bool = True,
         batch_size: int = 64,
+        dtype: np.dtype = np.float32,
     ) -> np.ndarray:
         """Encode texts to embeddings with length-sorted batching.
 
@@ -438,6 +439,7 @@ class InProcessEmbedder:
             texts: List of texts to encode.
             normalize: Whether to L2-normalize embeddings.
             batch_size: Batch size for processing.
+            dtype: Output dtype (float32 or float16). Use float16 to save 50% memory.
 
         Returns:
             NumPy array of shape (n_texts, embedding_dim).
@@ -446,7 +448,7 @@ class InProcessEmbedder:
             self.load_model(self._default_model)
 
         if not texts:
-            return np.array([], dtype=np.float32)
+            return np.array([], dtype=dtype)
 
         # Single critical section: tokenization + GPU forward pass.
         # The GPU lock protects both the tokenizer state (padding config)
@@ -503,6 +505,9 @@ class InProcessEmbedder:
 
                 # Convert to numpy and free MLX arrays immediately
                 batch_emb_np = np.array(batch_emb)
+                # Convert to requested dtype (float16 saves 50% memory)
+                if dtype != np.float32:
+                    batch_emb_np = batch_emb_np.astype(dtype)
                 del input_ids_mx, attention_mask_mx, hidden_states, batch_emb
 
                 output_embeddings.append(batch_emb_np)
@@ -630,6 +635,7 @@ class MLXEmbedder:
         normalize: bool = True,
         convert_to_numpy: bool = True,
         normalize_embeddings: bool | None = None,
+        dtype: np.dtype = np.float32,
     ) -> NDArray[np.float32]:
         self._initialize()
         if normalize_embeddings is not None:
@@ -637,15 +643,15 @@ class MLXEmbedder:
         if isinstance(texts, str):
             texts = [texts]
         if not texts:
-            return np.array([], dtype=np.float32).reshape(0, MLX_EMBEDDING_DIM)
+            return np.array([], dtype=dtype).reshape(0, MLX_EMBEDDING_DIM)
 
         if len(texts) <= MLX_BATCH_SIZE:
-            return self._mlx_embedder.encode(texts, normalize=normalize)
+            return self._mlx_embedder.encode(texts, normalize=normalize, dtype=dtype)
 
         all_embeddings: list[np.ndarray] = []
         for i in range(0, len(texts), MLX_BATCH_SIZE):
             batch = texts[i : i + MLX_BATCH_SIZE]
-            all_embeddings.append(self._mlx_embedder.encode(batch, normalize=normalize))
+            all_embeddings.append(self._mlx_embedder.encode(batch, normalize=normalize, dtype=dtype))
         return np.vstack(all_embeddings)
 
     def unload(self) -> None:
@@ -721,6 +727,7 @@ class CachedEmbedder:
         normalize: bool = True,
         convert_to_numpy: bool = True,
         normalize_embeddings: bool | None = None,
+        dtype: np.dtype = np.float32,
     ) -> NDArray[np.float32]:
         if normalize_embeddings is not None:
             normalize = normalize_embeddings
@@ -729,13 +736,13 @@ class CachedEmbedder:
             cached = self._get(key)
             if cached is not None:
                 return cached
-            result = self.base.encode([texts], normalize=normalize)
+            result = self.base.encode([texts], normalize=normalize, dtype=dtype)
             vector = result.reshape(1, -1)
             self._set(key, vector)
             self._computations += 1
             return vector
         if not texts:
-            return np.array([], dtype=np.float32).reshape(0, MLX_EMBEDDING_DIM)
+            return np.array([], dtype=dtype).reshape(0, MLX_EMBEDDING_DIM)
 
         cached_vectors: list[np.ndarray | None] = [None] * len(texts)
         missing_texts: list[str] = []
@@ -753,9 +760,9 @@ class CachedEmbedder:
                 missing_keys.append(key)
 
         if missing_texts:
-            embeddings = self.base.encode(missing_texts, normalize=normalize)
+            embeddings = self.base.encode(missing_texts, normalize=normalize, dtype=dtype)
             for idx, emb, cache_key in zip(missing_indices, embeddings, missing_keys):
-                vector = np.asarray(emb, dtype=np.float32).reshape(1, -1)
+                vector = np.asarray(emb, dtype=dtype).reshape(1, -1)
                 cached_vectors[idx] = vector
                 self._set(cache_key, vector)
             self._computations += len(missing_texts)

@@ -7,6 +7,7 @@ Consolidates logic from:
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 import threading
@@ -82,7 +83,7 @@ class ReplyService:
         self._generator = generator
         self._imessage_reader = imessage_reader
         self._context_service: ContextService | None = None
-        self._reranker = None
+        self._reranker: Any | None = None
         self._lock = threading.RLock()
 
     @property
@@ -134,7 +135,7 @@ class ReplyService:
         return self._context_service
 
     @property
-    def reranker(self):
+    def reranker(self) -> Any | None:
         """Get or create the cross-encoder reranker (lazy-loaded)."""
         if self._reranker is None:
             with self._lock:
@@ -335,7 +336,16 @@ class ReplyService:
         category_config = get_category_config(category_name)
 
         if category_config.skip_slm:
-            return self._template_response(category_name, routing_start)
+            result = self._template_response(category_name, routing_start)
+            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+            self._persist_reply_log(
+                context,
+                classification,
+                None,
+                result,
+                latency_ms
+            )
+            return result
 
         search_results, latency_ms = self._search_context(
             search_results,
@@ -349,7 +359,7 @@ class ReplyService:
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
             log_event(logger, "reply.fallback", level=logging.WARNING, reason=health_reason)
-            return GenerationResponse(
+            result = GenerationResponse(
                 response="",
                 confidence=0.0,
                 metadata={
@@ -359,6 +369,15 @@ class ReplyService:
                     "vec_candidates": len(search_results),
                 },
             )
+            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+            self._persist_reply_log(
+                context,
+                classification,
+                search_results,
+                result,
+                latency_ms
+            )
+            return result
 
         result, latency_ms = self._generate_response(
             context,
@@ -379,8 +398,104 @@ class ReplyService:
             latency_ms,
             cached_embedder,
         )
+        
+        # Persist full generation log for traceability
+        self._persist_reply_log(
+            context,
+            classification,
+            search_results,
+            result,
+            latency_ms
+        )
 
         return result
+
+    def _persist_reply_log(
+        self,
+        context: MessageContext,
+        classification: ClassificationResult,
+        search_results: list[dict[str, Any]] | None,
+        result: GenerationResponse,
+        latency_ms: dict[str, float],
+    ) -> None:
+        """Persist a detailed log of the generation process for traceability."""
+        try:
+            chat_id = context.chat_id
+            contact_id = context.sender_id or chat_id
+            incoming_text = context.message_text
+
+            classification_dict = {
+                "category": classification.category.value,
+                "urgency": classification.urgency.value,
+                "confidence": classification.confidence,
+                "metadata": classification.metadata
+            }
+            
+            # RAG context: extract content and scores
+            rag_docs = []
+            if search_results:
+                for res in search_results:
+                    rag_docs.append({
+                        "content": res.get("context_text", ""),
+                        "response": res.get("reply_text", ""),
+                        "similarity": self._safe_float(res.get("similarity")),
+                        "source": res.get("chat_id", "")
+                    })
+            
+            final_prompt = result.metadata.get("final_prompt", "")
+            
+            self.db.save_reply_log(
+                chat_id=chat_id,
+                contact_id=contact_id,
+                incoming_text=incoming_text,
+                classification_json=json.dumps(classification_dict),
+                rag_context_json=json.dumps(rag_docs),
+                final_prompt=final_prompt,
+                response_text=result.response,
+                confidence=result.confidence,
+                metadata_json=json.dumps({
+                    "latency_ms": latency_ms,
+                    "metadata": result.metadata
+                })
+            )
+        except Exception as e:
+            logger.debug(f"Failed to persist reply log: {e}")
+
+    def log_custom_generation(
+        self,
+        chat_id: str | None,
+        incoming_text: str,
+        final_prompt: str,
+        response_text: str,
+        confidence: float = 0.5,
+        category: str = "custom",
+        rag_docs: list[dict[str, Any]] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Log a generation event from outside the standard reply pipeline."""
+        try:
+            classification_json = json.dumps({
+                "category": category,
+                "urgency": "medium",
+                "confidence": confidence,
+                "metadata": {}
+            })
+
+            rag_context_json = json.dumps(rag_docs or [])
+
+            self.db.save_reply_log(
+                chat_id=chat_id,
+                contact_id=chat_id,
+                incoming_text=incoming_text,
+                classification_json=classification_json,
+                rag_context_json=rag_context_json,
+                final_prompt=final_prompt,
+                response_text=response_text,
+                confidence=confidence,
+                metadata_json=json.dumps(metadata or {})
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log custom generation: {e}")
 
     def _empty_message_response(self) -> GenerationResponse:
         """Return a clarification response for empty messages."""
@@ -500,7 +615,7 @@ class ReplyService:
         similarity = self._safe_float(
             result.metadata.get(
                 "similarity_score",
-                search_results[0]["similarity"] if search_results else 0.0,
+                search_results[0].get("similarity", 0.0) if search_results else 0.0,
             ),
             default=0.0,
         )
@@ -517,7 +632,7 @@ class ReplyService:
 
     # --- Internal Helpers ---
 
-    def _fetch_contact_facts(self, context: MessageContext, chat_id):
+    def _fetch_contact_facts(self, context: MessageContext, chat_id: str) -> None:
         try:
             from jarvis.contacts.fact_index import search_relevant_facts
             from jarvis.prompts import format_facts_for_prompt
@@ -528,7 +643,7 @@ class ReplyService:
         except Exception as e:
             logger.debug(f"Optional fact fetch failed: {e}")
 
-    def _fetch_graph_context(self, context: MessageContext, chat_id):
+    def _fetch_graph_context(self, context: MessageContext, chat_id: str) -> None:
         try:
             from jarvis.graph.context import get_graph_context
 
@@ -538,7 +653,13 @@ class ReplyService:
         except Exception as e:
             logger.debug(f"Optional graph context fetch failed: {e}")
 
-    def _resolve_instruction(self, instruction, category_name, category_config, classification):
+    def _resolve_instruction(
+        self,
+        instruction: str | None,
+        category_name: str,
+        category_config: Any,
+        classification: ClassificationResult,
+    ) -> str | None:
         from jarvis.prompts import get_optimized_instruction
 
         if instruction is None:
@@ -620,7 +741,7 @@ class ReplyService:
         )
         context.metadata["instruction"] = instruction or ""
 
-        if len(search_results) > 3:
+        if len(search_results) > 3 and self.reranker:
             search_results = self.reranker.rerank(
                 query=incoming,
                 candidates=search_results,
@@ -805,6 +926,11 @@ class ReplyService:
         """
         if len(examples) <= 1:
             return examples
+        
+        # Skip expensive embedding-based dedup for small example sets
+        # Small sets are unlikely to have problematic duplicates
+        if len(examples) <= 6:
+            return examples
 
         texts = [f"{ctx} {out}" for ctx, out in examples]
         embeddings = embedder.encode(texts, normalize=True)
@@ -879,6 +1005,7 @@ class ReplyService:
 
         try:
             model_request = self._to_model_generation_request(request)
+            final_prompt = model_request.prompt
             response = self.generator.generate(model_request)
             text = response.text.strip()
 
@@ -891,6 +1018,7 @@ class ReplyService:
                         "reason": "model_uncertain",
                         "similarity_score": 0.0,
                         "vec_candidates": len(search_results),
+                        "final_prompt": final_prompt,
                     },
                 )
 
@@ -942,6 +1070,7 @@ class ReplyService:
                     "confidence_label": confidence_label,
                     "vec_candidates": len(search_results),
                     "similar_triggers": similar_triggers,
+                    "final_prompt": final_prompt,
                 },
             )
         except Exception as e:

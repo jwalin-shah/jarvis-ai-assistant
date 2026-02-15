@@ -7,14 +7,14 @@ imports with models/templates.py.
 from __future__ import annotations
 
 from models.bert_embedder import (
+    DEFAULT_MLX_EMBEDDING_MODEL,
     EMBEDDING_MODEL_REGISTRY,
     MLX_EMBEDDING_DIM,
-    DEFAULT_MLX_EMBEDDING_MODEL,
     CachedEmbedder,
     MLXEmbedder,
+    get_configured_model_name,
     get_embedder,
     get_model_info,
-    get_configured_model_name,
     is_embedder_available,
     reset_embedder,
 )

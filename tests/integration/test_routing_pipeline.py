@@ -176,11 +176,13 @@ class TestFullPipelineEndToEnd:
         assert result["response"] in CLOSING_TEMPLATES + ACKNOWLEDGE_TEMPLATES
         mock_generator.generate.assert_not_called()
 
-    def test_emoji_reaction_skips_llm(self, in_memory_db, mock_generator, mock_embedder):
+    def test_emoji_reaction_skip(self, in_memory_db, mock_generator, mock_embedder):
+        """Emoji reactions are classified as reactions and skipped (no LLM)."""
         router = _make_router(in_memory_db, mock_generator, mock_embedder)
         with patch("jarvis.embedding_adapter.get_embedder", return_value=mock_embedder):
             result = router.route('Loved "great news!"')
-        assert result["type"] in ("emotion", "acknowledge", "skip")
+        # Reactions are fast-pathed to skip (no reply needed)
+        assert result["type"] == "skip"
         mock_generator.generate.assert_not_called()
 
 
@@ -461,7 +463,7 @@ class TestMessageTypeVariety:
             ("thanks", {"acknowledge"}),
             ("", {"clarify"}),
             ('Liked "nice photo"', {"acknowledge"}),
-            ('Laughed at "that joke was hilarious"', {"emotion", "skip"}),
+            ('Laughed at "that joke was hilarious"', {"skip"}),  # reaction -> skip
         ],
     )
     def test_message_type_routing(

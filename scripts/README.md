@@ -6,7 +6,8 @@ Utility scripts for development, benchmarking, and automation.
 
 - `backfill_segments.py` - Migrates historical iMessage data to the new topic-based segment system.
 - `export_eval_segments.py` - Exports segmented conversation data for fact extraction evaluation.
-- `backfill_contact_facts.py` - Runs fact extraction on existing contacts to populate the knowledge graph.
+- `backfill_v4_final.py` - V4 fact backfill (instruction-based LFM-0.7b, turn-based). Recommended for populating the knowledge graph.
+- `backfill_contact_facts.py` - Alternative GLiNER-based batch extraction (faster, different quality tradeoffs).
 
 ## Evaluation & Benchmarking
 

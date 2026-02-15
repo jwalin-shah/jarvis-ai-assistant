@@ -246,6 +246,20 @@ class SystemStatusResponse(BaseModel):
     embedding_service: bool = Field(..., description="Whether embedding service is available")
 
 
+class GenerationLogResponse(BaseModel):
+    id: int
+    chat_id: str | None
+    contact_id: str | None
+    incoming_text: str | None
+    classification_json: str | None
+    rag_context_json: str | None
+    final_prompt: str | None
+    response_text: str | None
+    confidence: float | None
+    metadata_json: str | None
+    created_at: datetime
+
+
 @router.get(
     "/traces",
     response_model=list[TraceResponse],
@@ -259,6 +273,27 @@ async def get_traces(
     """Get the last N request traces with full step breakdowns."""
     store = get_trace_store()
     return await run_in_threadpool(store.get_traces, limit)
+
+
+@router.get(
+    "/generation-logs",
+    response_model=list[GenerationLogResponse],
+    summary="Get persistent generation logs",
+)
+@limiter.limit(RATE_LIMIT_READ)
+async def get_generation_logs(
+    request: Request,
+    limit: int = 20,
+    chat_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Get recent generation logs from the database for full traceability.
+
+    These logs include the original input, RAG context, final prompt, and response.
+    """
+    from jarvis.db import get_db
+
+    db = get_db()
+    return await run_in_threadpool(db.get_recent_reply_logs, limit, chat_id)
 
 
 @router.get(

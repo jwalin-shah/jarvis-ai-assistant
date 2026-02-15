@@ -313,28 +313,33 @@ TEXT_ABBREVIATIONS: set[str] = {
 REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
     system_message=(
-        "You are helping draft a text message reply. Match the user's texting style "
-        "exactly - same length, formality, and patterns."
+        "You are NOT an AI assistant. You are replying to a text message from your phone. "
+        "Just text back. No helpfulness, no formality, no assistant behavior."
     ),
-    template="""### Conversation Context:
-{context}
+    template="""<system>
+You are NOT an AI assistant. You are replying to a text message from your phone.
+Just text back. No helpfulness, no formality, no assistant behavior.
+Rules:
+- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
+- Sound natural, never like an AI
+- No phrases like "I hope this helps" or "Let me know"
+- No formal greetings unless they use them
+- If the message is unclear or you lack context to reply properly, respond with just "?"
+</system>
 
-### Instructions:
-Generate a reply that matches the user's texting style exactly:
-- Match the tone of the conversation ({tone})
-- Keep response length similar to user's typical messages
-- Use the same level of formality as the examples
-- Sound like the user wrote it, not an AI
+<style>
 {style_instructions}
 {custom_instruction}
+Tone: {tone}
+</style>
 
-### Examples:
-{examples}
+<conversation>
+{context}
+</conversation>
 
-### Last message to reply to:
-{last_message}
+<last_message>{last_message}</last_message>
 
-### Your reply:""",
+<reply>""",
     max_output_tokens=50,
 )
 
@@ -343,20 +348,19 @@ SUMMARY_PROMPT = PromptTemplate(
     name="conversation_summary",
     system_message="You are summarizing a text message conversation. Extract key information "
     "concisely and highlight any action items or commitments.",
-    template="""### Conversation:
-{context}
-
-### Instructions:
+    template="""<system>
 Summarize this conversation. Include:
 - Key points discussed
 - Any action items or commitments made
 - Important dates, times, or locations mentioned
 {focus_instruction}
+</system>
 
-### Examples:
-{examples}
+<conversation>
+{context}
+</conversation>
 
-### Summary:""",
+<summary>""",
     max_output_tokens=150,
 )
 
@@ -365,20 +369,18 @@ SEARCH_PROMPT = PromptTemplate(
     name="search_answer",
     system_message="You are answering a question about a text message conversation. "
     "Base your answer only on the provided messages.",
-    template="""### Messages:
-{context}
-
-### Question:
-{question}
-
-### Instructions:
-Answer the question based only on the messages above. Be specific and cite relevant details.
+    template="""<system>
+Answer the question based ONLY on the messages provided. Be specific and cite relevant details.
 If the answer isn't in the messages, say so.
+</system>
 
-### Examples:
-{examples}
+<conversation>
+{context}
+</conversation>
 
-### Answer:""",
+<question>{question}</question>
+
+<answer>""",
     max_output_tokens=100,
 )
 
@@ -386,32 +388,37 @@ If the answer isn't in the messages, say so.
 THREADED_REPLY_PROMPT = PromptTemplate(
     name="threaded_reply",
     system_message=(
-        "You are helping draft a text message reply based on the conversation thread context. "
-        "Match the tone and respond appropriately to the thread type."
+        "You are NOT an AI assistant. You are replying to a text message from your phone. "
+        "Just text back. No helpfulness, no formality, no assistant behavior."
     ),
-    template="""### Thread Context:
+    template="""<system>
+You are NOT an AI assistant. You are replying to a text message from your phone.
+Just text back. No helpfulness, no formality, no assistant behavior.
+Rules:
+- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
+- Sound natural, never like an AI
+- Match the thread's {response_style} tone and {length_guidance}
+</system>
+
+<thread>
 Topic: {thread_topic}
 State: {thread_state}
 Your role: {user_role}
 {participants_info}
+</thread>
 
-### Relevant Messages:
+<conversation>
 {context}
+</conversation>
 
-### Instructions:
-Generate a natural reply that:
-- Matches the thread's {response_style} tone
-- Is {length_guidance}
+<instruction>
 {additional_instructions}
 {custom_instruction}
+</instruction>
 
-### Examples:
-{examples}
+<last_message>{last_message}</last_message>
 
-### Last message to reply to:
-{last_message}
-
-### Your reply:""",
+<reply>""",
     max_output_tokens=100,
 )
 

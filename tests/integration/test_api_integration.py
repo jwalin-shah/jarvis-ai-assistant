@@ -107,8 +107,8 @@ class TestFastAPIAppStartup:
             "/feedback",
             "/experiments",
             "/templates",  # custom-templates
-            "/embeddings",
-            "/relationships",
+            # Note: /embeddings not implemented - use /search for semantic search
+            # Note: /relationships not implemented
             "/contacts",
         ]
 

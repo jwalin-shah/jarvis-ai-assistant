@@ -220,9 +220,11 @@ For parallel work, use git worktrees - see [CLAUDE.md](CLAUDE.md) for details.
 
 ## Documentation
 
-- [docs/GUIDE.md](docs/GUIDE.md) - Canonical documentation index
-- [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) - Complete CLI reference with examples
-- [docs/API_REFERENCE.md](docs/API_REFERENCE.md) - REST API documentation
+- [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) - Canonical documentation index
+- [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) - End-to-end system overview
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - V2 technical architecture
+- [docs/REPLY_PIPELINE_GUIDE.md](docs/REPLY_PIPELINE_GUIDE.md) - Reply generation pipeline
+- [API docs](http://localhost:8742/docs) - REST API documentation (when server is running)
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) - Performance tuning and metrics guide
 - [desktop/README.md](desktop/README.md) - Desktop app setup and E2E testing
 - [CLAUDE.md](CLAUDE.md) - Development workflow, architecture, and coding guidelines

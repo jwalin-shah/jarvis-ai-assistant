@@ -9,10 +9,7 @@ conversations to measure:
 
 from __future__ import annotations
 
-import json
-import logging
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -168,8 +165,9 @@ def main() -> int:
     ]
 
     segmenter = get_segmenter()
-    from contracts.imessage import Message
     from datetime import datetime
+
+    from contracts.imessage import Message
 
     results = []
 

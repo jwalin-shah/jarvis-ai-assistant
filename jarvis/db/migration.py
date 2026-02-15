@@ -24,12 +24,11 @@ import logging
 import sqlite3
 import tempfile
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from jarvis.db.schema import CURRENT_SCHEMA_VERSION, SCHEMA_SQL, VALID_MIGRATION_COLUMNS
+from jarvis.db.schema import CURRENT_SCHEMA_VERSION, SCHEMA_SQL
 
 if TYPE_CHECKING:
     pass

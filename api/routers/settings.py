@@ -44,7 +44,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 # Models to expose in the UI (subset of MODEL_REGISTRY)
 # Show LFM models for comparison
-ENABLED_MODEL_IDS = ["lfm-0.3b", "lfm-1.2b"]
+ENABLED_MODEL_IDS = ["lfm-0.3b", "lfm-0.7b", "lfm-1.2b"]
 
 
 def _get_enabled_models() -> list[ModelSpec]:

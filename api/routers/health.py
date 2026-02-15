@@ -365,10 +365,10 @@ async def get_diagnostic(request: Request) -> dict[str, Any]:
 
     # Check 2: Schema validation
     try:
-        from api.schemas import SendMessageRequest, DraftReplyRequest
+        from api.schemas import SendMessageRequest
 
         # Validate schemas can be instantiated
-        test_send = SendMessageRequest(text="test", recipient="+1234567890", is_group=False)
+        _ = SendMessageRequest(text="test", recipient="+1234567890", is_group=False)
         checks["schemas"] = {"status": "ok"}
     except Exception as e:
         checks["schemas"] = {"status": "error", "message": str(e)}
@@ -411,7 +411,7 @@ async def get_diagnostic(request: Request) -> dict[str, Any]:
         from integrations.imessage import ChatDBReader
 
         reader = ChatDBReader()
-        conv_count = len(reader.get_conversations(limit=1))
+        _ = len(reader.get_conversations(limit=1))
         reader.close()
         checks["database"] = {"status": "ok", "accessible": True}
     except Exception as e:

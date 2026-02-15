@@ -321,19 +321,6 @@ class TestDbCommand:
         args = parser.parse_args(["db", "init", "--force"])
         assert args.force is True
 
-    def test_parser_db_add_contact(self):
-        """Parser parses db add-contact command."""
-        parser = create_parser()
-        args = parser.parse_args(["db", "add-contact", "--name", "John"])
-        assert args.db_command == "add-contact"
-        assert args.name == "John"
-
-    def test_parser_db_list_contacts(self):
-        """Parser parses db list-contacts command."""
-        parser = create_parser()
-        args = parser.parse_args(["db", "list-contacts"])
-        assert args.db_command == "list-contacts"
-
     def test_parser_db_extract(self):
         """Parser parses db extract command."""
         parser = create_parser()

@@ -21,7 +21,7 @@ from tests.conftest import hardware_required, slow_test
 @hardware_required(
     min_ram_gb=8,
     requires_apple_silicon=True,
-    requires_model="lfm-1.2b-soc-fused",
+    requires_model="lfm-0.7b-4bit",  # Use 0.7B model which is available
 )
 @slow_test(timeout=30)
 def test_mlx_model_generation():

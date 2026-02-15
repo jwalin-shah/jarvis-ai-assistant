@@ -221,8 +221,7 @@ uv run pytest --skip-quarantined
 
 ### See Also
 
-- Full program: `docs/TEST_FLAKE_ERADICATION_PROGRAM.md`
-- Implementation guide: `docs/TEST_FLAKE_IMPLEMENTATION_GUIDE.md`
+- Testing guidelines: `docs/TESTING_GUIDELINES.md`
 
 ---
 

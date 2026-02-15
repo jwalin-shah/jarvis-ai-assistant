@@ -11,13 +11,11 @@ Validates:
 
 from __future__ import annotations
 
-import asyncio
 import importlib
 import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 
 class HealthCheckError(Exception):
@@ -68,7 +66,6 @@ def check_api_routers() -> list[HealthCheckError]:
 
     try:
         from api.main import create_app
-        from fastapi import FastAPI
 
         app = create_app()
 
@@ -92,7 +89,7 @@ def check_api_routers() -> list[HealthCheckError]:
                     HealthCheckError(
                         component="api.routers",
                         message=f"Critical endpoint {endpoint} not registered",
-                        fix=f"Check api/main.py - router may be commented out or missing",
+                        fix="Check api/main.py - router may be commented out or missing",
                     )
                 )
 
@@ -258,7 +255,6 @@ def check_schemas() -> list[HealthCheckError]:
 
     try:
         from api.schemas import SendMessageRequest
-        from pydantic import BaseModel
 
         # Check required fields exist
         fields = SendMessageRequest.model_fields

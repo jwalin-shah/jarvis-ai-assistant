@@ -90,15 +90,11 @@ class TestVecSearchResult:
             score=0.95,
             context_text="hello",
             reply_text="hi there",
-            response_type="AGREE",
-            response_da_conf=0.9,
-            quality_score=0.8,
         )
         assert r.rowid == 42
         assert r.score == 0.95
         assert r.context_text == "hello"
         assert r.reply_text == "hi there"
-        assert r.response_da_conf == 0.9
 
     def test_default_none_fields(self):
         """Optional fields default to None."""
@@ -106,5 +102,3 @@ class TestVecSearchResult:
         assert r.chat_id is None
         assert r.context_text is None
         assert r.reply_text is None
-        assert r.response_da_conf is None
-        assert r.quality_score is None

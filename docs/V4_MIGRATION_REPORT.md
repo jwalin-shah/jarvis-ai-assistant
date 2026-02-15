@@ -33,16 +33,18 @@ The previous extraction pipeline (GLiNER + Rule-Based) suffered from several key
     *   **User Identity**: "Me" is resolved to the user's actual name (e.g., "Jwalin Shah"), allowing for correct third-person attribution.
 *   **Impact**: Eliminates "Me" vs "You" ambiguity in extracted facts.
 
-### 2.4 NLI Verification (The "BS Filter")
+### 2.4 Two-Pass LLM Self-Correction (The "BS Filter")
 *   **Problem**: The LLM would sometimes hallucinate or extract conversational metaphors as facts (e.g., "I'm dead" -> "Health condition: dead").
-*   **Solution**: We implemented a **Natural Language Inference (NLI)** stage using a cross-encoder.
-    *   *Hypothesis*: "{Subject} {Predicate} {Value}"
-    *   *Premise*: The source message(s).
-*   **Thresholds**:
-    *   High confidence (>0.7): Accepted immediately.
-    *   Medium confidence (0.3-0.7): Verified against NLI.
-    *   Low confidence (<0.3): Rejected.
+*   **Solution**: We implemented **Two-Pass Self-Correction** using the same LFM-0.7b model:
+    *   *Pass 1*: Raw extraction with ChatML prompts
+    *   *Pass 2*: Self-correction pass that reviews and filters extracted facts
+*   **Filtering**:
+    *   Removes commentary markers ("removing", "keeping", "verified facts", etc.)
+    *   Strips conversational filler and metaphors
+    *   Only keeps facts in proper "- [Name]: [fact]" format
 *   **Success Story**: Accurately rejects "I love this era" (metaphor) while keeping "I love sushi" (preference).
+
+> **Note:** An earlier design used a separate NLI (Natural Language Inference) cross-encoder for verification. This was replaced with the two-pass LLM approach for better performance and simpler architecture while maintaining accuracy.
 
 ## 3. Failed Attempts & Lessons Learned
 
@@ -56,16 +58,40 @@ The previous extraction pipeline (GLiNER + Rule-Based) suffered from several key
 *   **Failure**: High recall but low precision. It generated too many noise candidates that clogged the downstream filters.
 *   **Pivot**: Using GLiNER only as a signal/feature, but relying on LFM-0.7b for the primary extraction logic.
 
+### 3.3 NLI Cross-Encoder Verification (Deprecated)
+*   **Attempt**: Using a separate DeBERTa-v3 cross-encoder for entailment verification.
+*   **Failure**: Added complexity and memory overhead without significant accuracy gains over two-pass LLM.
+*   **Pivot**: Replaced with two-pass LLM self-correction in the same model session.
+
 ## 4. Final Pipeline Flow
 
 1.  **Ingest**: `ChatDBWatcher` detects new messages.
 2.  **Group**: Messages are grouped into Turns (User/Contact).
 3.  **Resolve**: Identities are resolved via Address Book.
-4.  **Extract**: LFM-0.7b generates candidate facts (JSON/Bullets).
-5.  **Verify**: NLI model checks candidates against source text.
-6.  **Store**: Validated facts are saved to `contact_facts` with `relationship_reasoning`.
+4.  **Extract (Pass 1)**: LFM-0.7b generates candidate facts (JSON/Bullets).
+5.  **Verify (Pass 2)**: Same model reviews and filters candidates.
+6.  **Store**: Validated facts are saved to `contact_facts` with attribution.
 
-## 5. Future Work
+## 5. Active Components
+
+| Component | File | Purpose | Status |
+|-----------|------|---------|--------|
+| Instruction Extractor | `jarvis/contacts/instruction_extractor.py` | Two-pass LLM extraction | ✅ **Active/V4** |
+| Watcher | `jarvis/watcher.py` | Real-time extraction trigger | ✅ **Active** |
+| Worker | `jarvis/tasks/worker.py` | Background extraction tasks | ✅ **Active** |
+| Backfill Script | `scripts/backfill_v4_final.py` | Batch backfill with V4 | ✅ **Active** |
+
+## 6. Deprecated Components
+
+| Component | File | Purpose | Status |
+|-----------|------|---------|--------|
+| Candidate Extractor | `jarvis/contacts/candidate_extractor.py` | GLiNER + NLI pipeline | ⚠️ **Deprecated** |
+| Old Backfill | `scripts/backfill_contact_facts.py` | Uses candidate_extractor | ⚠️ **Deprecated** |
+| Segment Extractor | `jarvis/contacts/segment_extractor.py` | GLiNER bridge | ⚠️ **Deprecated** |
+
+> **Migration Note:** Use `scripts/backfill_v4_final.py` for new backfills. The old `backfill_contact_facts.py` uses the deprecated GLiNER+NLI pipeline.
+
+## 7. Future Work
 
 *   **Temporal Resolution**: Better handling of "used to" vs "currently".
 *   **Conflict Resolution**: improved logic for merging contradictory facts (e.g., "moved to NY" vs "lives in SF").

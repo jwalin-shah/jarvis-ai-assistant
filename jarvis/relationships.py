@@ -8,7 +8,6 @@ jarvis.contacts.contact_profile.ContactProfile instead.
 """
 
 from dataclasses import dataclass
-from typing import Literal
 
 MIN_MESSAGES_FOR_PROFILE = 20
 

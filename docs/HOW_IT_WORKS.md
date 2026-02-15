@@ -1,6 +1,6 @@
 # How JARVIS Works
 
-> **Last Updated:** 2026-02-12
+> **Last Updated:** 2026-02-13
 
 This document explains the JARVIS system architecture, services, and message flow.
 
@@ -94,55 +94,50 @@ Incoming: "Want to grab lunch tomorrow?"
 
 ---
 
-### Phase 3: Fact Extraction (Background)
+### Phase 3: Fact Extraction (Background) — V4 Pipeline
 
-When new messages arrive, the watcher extracts structured facts using a two-stage pipeline: high-recall candidate extraction followed by quality filtering.
+When new messages arrive, the watcher extracts structured facts using the **V4 instruction-based pipeline**: turn-based grouping, LFM extraction, and two-pass self-correction.
 
 ```
-Incoming: "My sister Sarah just started at Google in Austin"
+Incoming messages for a chat
     │
-    ├─→ 1. Candidate extraction (two paths, merged)
-    │      ├─→ GLiNER NER (zero-shot, urchade/gliner_medium-v2.1)
-    │      │      ├─→ person_name: "Sarah"
-    │      │      ├─→ org: "Google"
-    │      │      └─→ place: "Austin"
-    │      └─→ Rule-based regex patterns
-    │             ├─→ Relationship: "sister Sarah" (is_family_of)
-    │             ├─→ Work: "started at Google" (works_at)
-    │             └─→ Location: "in Austin" (lives_in)
+    ├─→ 1. Group into turns (consecutive messages from same sender)
+    │      └─→ "Jwalin: My sister Sarah just started at Google in Austin"
+    │          "Contact: That's awesome! When did she move?"
     │
-    ├─→ 2. Quality filtering (4-filter pipeline, precision 37%→80%+)
-    │      ├─→ Bot detection (CVS/Rx/LinkedIn/URL patterns)
-    │      ├─→ Vague subject rejection (pronouns: me, you, that, etc.)
-    │      ├─→ Short phrase filtering (min 3 words for prefs, 2 for others)
-    │      └─→ Confidence recalibration (threshold ≥0.5)
+    ├─→ 2. Resolve identities (Address Book + jarvis.db contacts)
+    │      ├─→ User: "Jwalin Shah" (from macOS Address Book)
+    │      └─→ Contact display name from contacts table
     │
-    ├─→ 3. NLI verification (optional, via MLX DeBERTa-v3)
-    │      ├─→ "Sarah is a family member" → entailment (0.94) ✓
-    │      ├─→ "Someone works at Google" → entailment (0.88) ✓
-    │      └─→ "Someone lives in Austin" → entailment (0.91) ✓
+    ├─→ 3. Instruction-based extraction (LFM-0.7b, ChatML prompts)
+    │      ├─→ System: "Extract 3-5 PERSONAL facts... ONLY about the PEOPLE."
+    │      ├─→ User: Chat turns with resolved names
+    │      └─→ Two-pass: raw extraction → self-correction / nuance check
     │
-    ├─→ 4. NER person linking (fuzzy Jaccard match to known contacts)
-    │      └─→ "Sarah" → linked_contact_id (if match ≥0.7)
+    ├─→ 4. Self-correction pass (same LFM-0.7b model)
+    │      ├─→ Reviews extracted facts against source
+    │      └─→ Rejects metaphors, filler, commentary; keeps verified facts
     │
-    └─→ 5. Persist to contact_facts table (dedup by UNIQUE constraint)
-           └─→ Knowledge graph queries now return these facts
+    └─→ 5. Persist to contact_facts (attribution, confidence, dedup by UNIQUE)
+           └─→ Contact profiles and reply context use these facts
 ```
 
-**GLiNER Model**: `urchade/gliner_medium-v2.1` (DeBERTa backbone, ~1.5GB). 9 span labels: person_name, family_member, place, org, date_ref, food_item, job_role, health_condition, activity. Requires `transformers<5`.
+**Extraction model**: LFM-0.7b (`models/lfm-0.7b-4bit`) — instruction-tuned for fact extraction with ChatML. Turn-based formatting gives the model coherent context (who said what).
 
-**NLI Model**: `cross-encoder/nli-deberta-v3-xsmall` (22M params, 87.77% MNLI accuracy, ~90MB in memory). Implemented as a pure MLX DeBERTa-v3 with disentangled attention. We chose this over using the LLM for entailment because:
-- Dedicated NLI models are more accurate for entailment tasks than zero-shot LLM prompting
-- 90MB memory footprint vs 1.2GB LLM (can run alongside other models)
-- Batch inference is fast (~5ms per pair on M-series chips)
-- No prompt engineering required; trained specifically on SNLI + MultiNLI
+**Two-Pass Architecture**:
+- **Pass 1**: Raw extraction with ChatML prompts (system + user)
+- **Pass 2**: Self-correction using the same model to filter noise and metaphors
+
+> **Note**: Earlier designs used a separate NLI cross-encoder. The current V4 pipeline uses two-pass LLM self-correction for better performance.
+
+See **docs/V4_MIGRATION_REPORT.md** for design decisions and lessons learned.
 
 ```bash
-# Backfill facts from historical messages
-uv run python scripts/backfill_contact_facts.py --max-contacts 50
+# V4 backfill (instruction-based, turn-based) — recommended
+uv run python scripts/backfill_v4_final.py
 
-# Without NLI verification (faster, less precise)
-uv run python scripts/backfill_contact_facts.py --no-nli
+# Alternative: GLiNER batch backfill (faster, different quality tradeoffs)
+uv run python scripts/backfill_contact_facts.py --max-contacts 50
 ```
 
 ---
@@ -178,11 +173,12 @@ Messages: [
 - **Memory**: ~1.2GB model + ~200MB embeddings
 - **Model Registry**: See `models/registry.py` for all available models (Qwen, Phi-3, Gemma-3, LFM variants)
 
-### Fact Extraction
+### Fact Extraction (V4)
 
-- **Extraction Model**: LFM-2.5-350M-extract-4bit (specialized fine-tuned variant)
-- **NER**: GLiNER (`urchade/gliner_medium-v2.1`) for named entity recognition
-- **Verification**: MLX NLI cross-encoder for entailment checking
+- **Extraction Model**: LFM-0.7b (`lfm-0.7b`, instruction-based, ChatML)
+- **Turn-based grouping**: Consecutive same-sender messages combined for context
+- **Identity**: User and contact names from Address Book / contacts table
+- **Verification**: Two-pass LLM self-correction (Pass 2 filters Pass 1 output)
 
 ---
 
@@ -214,7 +210,8 @@ JARVIS supports LFM models via `models/registry.py`:
 
 | Model ID | Display Name | Size | Quality | Best For |
 |----------|--------------|------|---------|----------|
-| **`lfm-350m`** | **LFM 2.5 350M (Base)** | **0.35GB** | **Basic** | **Fact extraction** |
+| **`lfm-0.7b`** | **LFM 0.7B (Extract)** | **~0.5GB** | **Good** | **Fact extraction (V4)** |
+| `lfm-350m` | LFM 2.5 350M (Base) | 0.35GB | Basic | Alternative extraction |
 | `lfm-1.2b-base` | LFM 2.5 1.2B (Base) | 1.2GB | Good | Few-shot, completion |
 | `lfm-1.2b-ft` | LFM 2.5 1.2B Fine-Tuned | 1.2GB | Excellent | **Default** - iMessage |
 | `lfm-1.2b-sft` | LFM 2.5 1.2B SFT Only | 1.2GB | Excellent | iMessage |
@@ -240,7 +237,7 @@ from jarvis.observability.logging import log_event, timed_operation
 log_event("fact_extraction", contact_id="chat123", facts_found=5)
 
 # Time an operation
-with timed_operation("model_inference", model_id="lfm-350m") as ctx:
+with timed_operation("model_inference", model_id="lfm-0.7b") as ctx:
     result = generate_reply(...)
     ctx["tokens_generated"] = len(result)
 ```

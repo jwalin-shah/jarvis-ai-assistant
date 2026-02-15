@@ -354,16 +354,8 @@ health:
 	fi
 	@echo ""
 	@echo "## ML Models Status"
-	@if [ -d "$$HOME/.jarvis/trigger_classifier_model" ]; then \
-		echo "Trigger classifier (SVM): present"; \
-	else \
-		echo "Trigger classifier (SVM): MISSING (~/.jarvis/trigger_classifier_model/)"; \
-	fi
-	@if [ -d "$$HOME/.jarvis/response_classifier_model" ]; then \
-		echo "Response classifier (SVM): present"; \
-	else \
-		echo "Response classifier (SVM): MISSING (~/.jarvis/response_classifier_model/)"; \
-	fi
+	@echo "Active classifiers: intent, category, relationship, response_mobilization"
+	@echo "(trigger/response SVM classifiers deprecated)"
 	@echo ""
 	@echo "## Dependencies"
 	@echo "Lock file: $$(if [ -f uv.lock ]; then echo 'present'; else echo 'MISSING - run uv sync'; fi)"

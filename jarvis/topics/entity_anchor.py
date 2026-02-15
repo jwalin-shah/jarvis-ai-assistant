@@ -1,6 +1,6 @@
 """Entity Anchor - Lightweight entity tracking for topic segmentation.
 
-Replaces GLiNER (1.5GB) with a hybrid approach:
+Uses a hybrid approach:
 1. Contact-Aware spaCy (EntityRuler seeded from DB)
 2. Noun-Phrase extraction (Syntactic anchors)
 3. BGE-Similarity matching (Semantic anchors)
@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+
 import spacy
-from spacy.pipeline import EntityRuler
-from typing import Any, Set
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ class EntityAnchorTracker:
 
         # 2. Add custom EntityRuler for high-precision local matching
         self.ruler = self.nlp.add_pipe("entity_ruler")
-        
+
         # 3. Seed ruler with contact names from DB
         if jarvis_db_path:
             self._seed_from_contacts(jarvis_db_path)
@@ -45,32 +44,32 @@ class EntityAnchorTracker:
                     # Match exact name and lowercase version
                     patterns.append({"label": "PERSON", "pattern": name})
                     patterns.append({"label": "PERSON", "pattern": name.lower()})
-            
+
             self.ruler.add_patterns(patterns)
             conn.close()
             logger.info(f"Seeded EntityAnchor with {len(patterns)} contact patterns")
         except Exception as e:
             logger.debug(f"Could not seed contacts: {e}")
 
-    def get_anchors(self, text: str) -> Set[str]:
+    def get_anchors(self, text: str) -> set[str]:
         """Extract set of entity anchors from text."""
         if not text:
             return set()
-            
+
         doc = self.nlp(text)
         anchors = set()
-        
+
         # 1. Add detected entities (Contacts, Orgs, etc.)
         for ent in doc.ents:
             anchors.add(ent.text.lower())
-            
+
         # 2. Add Noun Chunks (Span-based keywords)
         # Filters out simple pronouns like "it", "me", "you"
         for chunk in doc.noun_chunks:
             chunk_text = chunk.root.text.lower()
             if len(chunk_text) > 2 and chunk.root.pos_ != "PRON":
                 anchors.add(chunk_text)
-                
+
         return anchors
 
 _tracker = None

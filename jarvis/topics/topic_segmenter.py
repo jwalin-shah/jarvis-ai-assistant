@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Set
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,9 +17,9 @@ from numpy.typing import NDArray
 if TYPE_CHECKING:
     from jarvis.contracts.imessage import Message
 
-logger = logging.getLogger(__name__)
-
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class SegmentBoundaryReason(Enum):
@@ -84,6 +84,36 @@ def segment_conversation(
     # Ensure oldest-first ordering (messages may come newest-first from DB)
     messages = sorted(messages, key=lambda m: m.date)
 
+    # Pre-filter junk/system/spam messages before embedding and boundary scoring.
+    from jarvis.contacts.junk_filters import is_junk_message
+    from jarvis.text_normalizer import normalize_text
+
+    filtered_messages: list[Message] = []
+    filtered_norm_texts: list[str] = []
+    for m in messages:
+        raw_text = m.text or ""
+        norm_text = normalize_text(
+            raw_text,
+            expand_slang=True,
+            filter_garbage=True,
+            filter_attributed_artifacts=True,
+            strip_signatures=True,
+        )
+        if not norm_text:
+            continue
+        if is_junk_message(norm_text, m.chat_id):
+            continue
+        filtered_messages.append(m)
+        filtered_norm_texts.append(norm_text)
+
+    # If everything is filtered, preserve behavior by returning one segment on original messages.
+    if not filtered_messages:
+        if messages:
+            return [_create_segment(messages, contact_id)]
+        return []
+
+    messages = filtered_messages
+
     n = len(messages)
     if n < 2:
         # Create single segment for short conversations
@@ -92,12 +122,11 @@ def segment_conversation(
 
     # Signal 1: Get BGE Embeddings (on normalized text)
     from jarvis.embedding_adapter import get_embedder
-    from jarvis.text_normalizer import normalize_text
 
     embedder = get_embedder()
 
     # Normalize text before embedding (expands slang, cleans text)
-    msg_texts = [normalize_text(m.text or "", expand_slang=True) for m in messages]
+    msg_texts = filtered_norm_texts
 
     # Use pre-fetched if available, otherwise batch encode
     embeddings: list[NDArray[np.float32]] = []
@@ -128,15 +157,13 @@ def segment_conversation(
                 embeddings[idx] = emb
 
     # Signal 2: Entity Anchor Continuity (Contact-Aware spaCy)
-    from jarvis.topics.entity_anchor import get_tracker
     from jarvis.text_normalizer import TOPIC_SHIFT_MARKERS
+    from jarvis.topics.entity_anchor import get_tracker
 
     anchor_tracker = get_tracker()
 
     # Load config with defaults
     cfg = _get_segmentation_config()
-    similarity_threshold = cfg.similarity_threshold
-    entity_weight = cfg.entity_weight
     topic_shift_weight = cfg.topic_shift_weight
     boundary_threshold = cfg.boundary_threshold
     use_topic_shift = cfg.use_topic_shift_markers
@@ -160,7 +187,7 @@ def segment_conversation(
 
     segments: list[TopicSegment] = []
     current_chunk: list[Message] = [messages[0]]
-    current_segment_anchors: Set[str] = anchor_tracker.get_anchors(messages[0].text or "")
+    current_segment_anchors: set[str] = anchor_tracker.get_anchors(messages[0].text or "")
 
     for i in range(1, n):
         prev_msg = messages[i - 1]
@@ -194,8 +221,6 @@ def segment_conversation(
             entity_jaccard = intersection / union if union > 0 else 0.0
         else:
             entity_jaccard = 0.0
-
-        has_anchor_overlap = entity_jaccard > cfg.entity_jaccard_threshold
 
         # Signal 3: Topic Shift Markers - explicit "btw", "anyway", etc.
         has_topic_shift = False
@@ -292,6 +317,7 @@ def _get_segmentation_config():
 def _compute_segment_metadata(segment: TopicSegment):
     """Generate labels, keywords and summary for a segment."""
     from sklearn.feature_extraction.text import TfidfVectorizer
+
     from jarvis.text_normalizer import normalize_text
 
     if not segment.text:
@@ -307,7 +333,7 @@ def _compute_segment_metadata(segment: TopicSegment):
         if normalized_text and len(normalized_text.split()) > 3:
             vectorizer.fit([normalized_text])
             segment.keywords = list(vectorizer.get_feature_names_out())
-    except:
+    except Exception:
         pass
 
     # 2. Label and Summary via SegmentLabeler

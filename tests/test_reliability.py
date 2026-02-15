@@ -451,8 +451,7 @@ class TestTaskQueue:
     def _isolate_queue(self, tmp_path):
         """Use temp persistence path to avoid stale data from previous runs."""
         from unittest.mock import patch
-        from jarvis.tasks.queue import DEFAULT_QUEUE_PATH
-        
+
         queue_path = tmp_path / "test_queue.json"
         with patch("jarvis.tasks.queue.DEFAULT_QUEUE_PATH", queue_path):
             reset_task_queue()

@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -29,15 +29,14 @@ def _convert_timestamp(val: bytes) -> datetime:
     # datetimes in local time throughout, consistent with iMessage's storage.
 
     # Handle microseconds
+    ms = 0
     if b"." in timepart:
-        timepart, microseconds = timepart.split(b".")
-        microseconds = int(microseconds)
-    else:
-        microseconds = 0
+        timepart, ms_part = timepart.split(b".")
+        ms = int(ms_part)
 
     hours, minutes, seconds = (int(x) for x in timepart.split(b":"))
 
-    return datetime(year, month, day, hours, minutes, seconds, microseconds)
+    return datetime(year, month, day, hours, minutes, seconds, ms)
 
 
 # Register the custom converter
@@ -57,7 +56,8 @@ class Contact:
     display_name: str
     phone_or_email: str | None
     relationship: str | None
-    style_notes: str | None
+    relationship_reasoning: str | None = None  # LLM-derived justification (v18+)
+    style_notes: str | None = None
     handles_json: str | None = None  # JSON array of handles ["phone", "email"]
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -67,7 +67,10 @@ class Contact:
         """Get list of handles from JSON."""
         if self.handles_json:
             try:
-                return json.loads(self.handles_json)
+                res = json.loads(self.handles_json)
+                if isinstance(res, list):
+                    return [str(item) for item in res]
+                return []
             except json.JSONDecodeError:
                 return []
         return []
@@ -92,6 +95,32 @@ class ContactStyleTargets:
             "punctuation_rate": self.punctuation_rate,
             "emoji_rate": self.emoji_rate,
             "greeting_rate": self.greeting_rate,
+        }
+
+
+@dataclass
+class ContactTimingPrefs:
+    """Timing preferences for a contact (computed from conversation history)."""
+
+    contact_id: int
+    timezone: str | None = None
+    quiet_hours_json: str | None = None
+    preferred_hours_json: str | None = None
+    optimal_weekdays_json: str | None = None
+    avg_response_time_mins: float | None = None
+    last_interaction: datetime | None = None
+    updated_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "contact_id": self.contact_id,
+            "timezone": self.timezone,
+            "quiet_hours": json.loads(self.quiet_hours_json) if self.quiet_hours_json else [],
+            "preferred_hours": json.loads(self.preferred_hours_json) if self.preferred_hours_json else [],
+            "optimal_weekdays": json.loads(self.optimal_weekdays_json) if self.optimal_weekdays_json else [],
+            "avg_response_time_mins": self.avg_response_time_mins,
+            "last_interaction": self.last_interaction.isoformat() if self.last_interaction else None,
         }
 
 

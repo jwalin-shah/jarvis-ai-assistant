@@ -23,6 +23,7 @@ from jarvis.errors import (
     iMessageQueryError,
 )
 from jarvis.utils.latency_tracker import track_latency
+from jarvis.utils.sqlite_retry import sqlite_retry
 
 from .avatar import ContactAvatarData, get_contact_avatar
 from .parser import (
@@ -154,6 +155,7 @@ class ConnectionPool:
         self._contacts_cache: dict[str, str] | None = None
         self._guid_to_rowid_cache: LRUCache[str, int] = LRUCache(maxsize=10000)
 
+    @sqlite_retry()
     def _create_connection(self) -> sqlite3.Connection:
         """Create a new read-only database connection.
 
@@ -741,13 +743,13 @@ class ChatDBReader:
         """Attempt to find the system user's name from AddressBook."""
         if self._contacts_cache is None:
             self._load_contacts_cache()
-        
+
         # Look for common user name patterns in cache
-        # Usually, the user is in their own contacts
-        for name in self._contacts_cache.values():
-            if "Jwalin" in name:
-                return name.split()[0] # Just first name for the prompt
-        
+        if self._contacts_cache is not None:
+            for name in self._contacts_cache.values():
+                if "Jwalin" in name:
+                    return name.split()[0]  # Just first name for the prompt
+
         return "Me"
 
     def _resolve_contact_name(self, identifier: str) -> str | None:
@@ -1085,6 +1087,24 @@ class ChatDBReader:
                     return []
 
             conversations = []
+            
+            # --- OPTIMIZATION: Bulk Name Resolution ---
+            # Collect all unique handles that need name resolution
+            handles_to_resolve = set()
+            for row in rows:
+                p_str = row["participants"] or ""
+                for p in p_str.split(","):
+                    if p.strip():
+                        normalized = normalize_phone_number(p.strip())
+                        if normalized:
+                            handles_to_resolve.add(normalized)
+            
+            # Warm the cache for all handles in one go
+            if handles_to_resolve:
+                # _resolve_contact_name handles lazy loading of the full AddressBook cache
+                # so calling it once for any handle ensures the cache is hot.
+                self._resolve_contact_name(next(iter(handles_to_resolve)))
+            
             for row in rows:
                 # Parse participants
                 participants_str = row["participants"] or ""
@@ -1103,7 +1123,7 @@ class ChatDBReader:
                 # Resolve display name from database or contacts
                 display_name = row["display_name"] or None
 
-                # IMPROVED: For chats without a display name, try to resolve from contacts
+                # IMPROVED: Resolve from hot cache (no AddressBook overhead inside loop)
                 if not display_name:
                     if not is_group and len(participants) == 1:
                         display_name = self._resolve_contact_name(participants[0])
@@ -1114,7 +1134,7 @@ class ChatDBReader:
                             name = self._resolve_contact_name(p)
                             if name:
                                 resolved_names.append(name.split()[0]) # Just first names
-                        
+
                         if resolved_names:
                             suffix = "..." if len(participants) > len(resolved_names) else ""
                             display_name = ", ".join(resolved_names) + suffix
@@ -1262,10 +1282,11 @@ class ChatDBReader:
 
             return self._rows_to_messages(rows, chat_id)
 
+    @sqlite_retry()
     def get_messages_batch(
         self,
         chat_ids: list[str],
-        limit_per_chat: int = 10000,
+        limit_per_chat: int | None = 10000,
     ) -> dict[str, list[Message]]:
         """Batch-fetch messages for multiple conversations in fewer queries.
 
@@ -1285,6 +1306,9 @@ class ChatDBReader:
 
         result: dict[str, list[Message]] = {cid: [] for cid in chat_ids}
         chunk_size = 900  # SQLite max variable limit is 999
+        
+        # If no limit, use a very large number effectively meaning "all"
+        effective_limit = limit_per_chat if limit_per_chat is not None else 1_000_000_000
 
         with self._connection_context() as conn:
             cursor = conn.cursor()
@@ -1333,7 +1357,7 @@ class ChatDBReader:
                 chunk = chat_ids[i : i + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 query = base_query.format(placeholders=placeholders)
-                params: list[Any] = list(chunk) + [limit_per_chat]
+                params: list[Any] = list(chunk) + [effective_limit]
 
                 try:
                     rows = self._execute_with_fallback(cursor, query, params)
@@ -1341,7 +1365,7 @@ class ChatDBReader:
                     logger.warning(f"Batch message fetch failed for chunk: {e}")
                     # Fall back to individual queries for this chunk
                     for cid in chunk:
-                        result[cid] = self.get_messages(cid, limit=limit_per_chat)
+                        result[cid] = self.get_messages(cid, limit=limit_per_chat or 10000)
                     continue
 
                 # Group rows by chat_id
@@ -1559,6 +1583,7 @@ class ChatDBReader:
 
         return messages
 
+    @sqlite_retry()
     def _execute_with_fallback(
         self,
         cursor: sqlite3.Cursor,

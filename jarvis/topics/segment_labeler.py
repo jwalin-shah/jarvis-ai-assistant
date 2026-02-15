@@ -14,7 +14,8 @@ These are filtered out so labels reflect actual content, not speech patterns.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+import re
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from jarvis.topics.topic_segmenter import TopicSegment
@@ -39,7 +40,7 @@ class SegmentLabeler:
         try:
             from models.loader import get_model
             loader = get_model()
-            
+
             # Use Turn-Based formatting
             turns = []
             if segment.messages:
@@ -50,26 +51,28 @@ class SegmentLabeler:
                     if sender == curr_sender:
                         curr_msgs.append(m.text or "")
                     else:
-                        if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+                        if curr_msgs:
+                            turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
                         curr_sender = sender
                         curr_msgs = [m.text or ""]
-                if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
-            
+                if curr_msgs:
+                    turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
+
             chat_text = "\n".join(turns)
-            
+
             prompt = f"Chat:\n{chat_text}\n\nWhat is the main topic of this chat? (2-4 words maximum). Examples: 'Weekend Plans', 'Job Interview', 'Moving to SF'.\nTopic:"
-            
+
             res = loader.generate_sync(
-                prompt=prompt, 
-                max_tokens=15, 
+                prompt=prompt,
+                max_tokens=15,
                 temperature=0.0,
                 stop_sequences=["\n", ".", "Chat:"]
             )
-            
+
             label = res.text.strip().strip('"').strip("'")
             # Cleanup common model output junk
             label = re.sub(r"^(The topic is|Topic:)\s*", "", label, flags=re.IGNORECASE)
-            
+
             if len(label) > 3 and len(label) < 40:
                 return label.title()
         except Exception as e:
@@ -122,7 +125,7 @@ class SegmentLabeler:
         try:
             from models.loader import get_model
             loader = get_model()
-            
+
             # Use same turn-based logic
             turns = []
             if segment.messages:
@@ -137,18 +140,18 @@ class SegmentLabeler:
                         curr_sender = sender
                         curr_msgs = [m.text or ""]
                 if curr_msgs: turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
-            
+
             chat_text = "\n".join(turns)
-            
+
             prompt = f"Chat:\n{chat_text}\n\nSummarize this chat in exactly one sentence:\nSummary:"
-            
+
             res = loader.generate_sync(
-                prompt=prompt, 
-                max_tokens=60, 
+                prompt=prompt,
+                max_tokens=60,
                 temperature=0.0,
                 stop_sequences=["\n", "Chat:"]
             )
-            
+
             summary = res.text.strip().strip('"').strip("'")
             if len(summary) > 10:
                 return summary

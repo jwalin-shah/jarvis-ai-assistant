@@ -35,9 +35,9 @@ from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, runtime_check
 
 import numpy as np
 
-from models.bert_embedder import get_embedder, reset_embedder
 from jarvis.errors import ErrorCode, JarvisError
 from jarvis.metrics import get_template_analytics
+from models.bert_embedder import get_embedder, reset_embedder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

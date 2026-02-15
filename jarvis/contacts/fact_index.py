@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import sqlite3
 
 import numpy as np
 
@@ -58,7 +59,7 @@ def _distance_to_similarity(distance: float) -> float:
     return max(0.0, min(1.0, cos_sim))
 
 
-def _ensure_vec_facts_table(conn) -> None:  # noqa: ANN001
+def _ensure_vec_facts_table(conn: sqlite3.Connection) -> None:
     """Create vec_facts table if it doesn't exist."""
     try:
         conn.execute("SELECT 1 FROM vec_facts LIMIT 0")
@@ -75,15 +76,21 @@ def _ensure_vec_facts_table(conn) -> None:  # noqa: ANN001
         )
 
 
-def index_facts(facts: list[Fact], contact_id: str) -> int:
+def index_facts(
+    facts: list[Fact], 
+    contact_id: str,
+    embeddings: np.ndarray | None = None,
+) -> int:
     """Embed and store facts in vec_facts table.
 
-    Batch-encodes all fact texts, quantizes to int8, and inserts into
-    the sqlite-vec virtual table. Skips facts already indexed.
+    Batch-encodes all fact texts (unless embeddings provided), quantizes to int8, 
+    and inserts into the sqlite-vec virtual table. Skips facts already indexed.
 
     Args:
         facts: Facts to index.
         contact_id: Contact these facts belong to.
+        embeddings: Optional pre-computed embeddings from deduplication phase.
+            If provided, skips re-encoding to avoid double computation.
 
     Returns:
         Number of facts indexed.
@@ -92,16 +99,18 @@ def index_facts(facts: list[Fact], contact_id: str) -> int:
         return 0
 
     from jarvis.db import get_db
-    from jarvis.embedding_adapter import get_embedder
 
     db = get_db()
-    embedder = get_embedder()
 
     # Build searchable text for each fact
     fact_texts = [_fact_to_text(f) for f in facts]
 
-    # Batch encode all facts at once (GPU lock handled inside encode())
-    embeddings = embedder.encode(fact_texts, normalize=True)
+    # Use provided embeddings or encode fresh
+    if embeddings is None:
+        from jarvis.embedding_adapter import get_embedder
+        embedder = get_embedder()
+        # Batch encode all facts at once (GPU lock handled inside encode())
+        embeddings = embedder.encode(fact_texts, normalize=True)
 
     indexed = 0
     with db.connection() as conn:

@@ -123,13 +123,13 @@ class TestFactIndexConsistency:
         mock_db.connection.return_value = mock_conn
         mock_get_db.return_value = mock_db
 
-        deleted = delete_facts_by_predicate_prefix("gliner_")
+        deleted = delete_facts_by_predicate_prefix("legacy_")
         assert deleted == 10
 
         # Verify the LIKE clause is used
         call_args = mock_conn.execute.call_args
         assert "LIKE" in call_args[0][0]
-        assert call_args[0][1] == ("gliner_%",)
+        assert call_args[0][1] == ("legacy_%",)
 
     @patch("jarvis.db.get_db")
     def test_get_fact_count(self, mock_get_db):

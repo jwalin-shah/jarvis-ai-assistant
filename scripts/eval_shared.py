@@ -1,13 +1,12 @@
 """Shared evaluation utilities for entity span matching.
 
-Common functions used across evaluation and dataset-building scripts
-(run_extractor_bakeoff, eval_gliner_candidates, build_fact_filter_dataset).
+Common functions used across evaluation and dataset-building scripts.
 """
 
 from __future__ import annotations
 
-# Label aliasing: generic GLiNER predictions -> fine-grained gold labels.
-# E.g. GLiNER predicts "place" but goldset has "current_location".
+# Label aliasing: generic predictions -> fine-grained gold labels.
+# E.g. model predicts "place" but goldset has "current_location".
 DEFAULT_LABEL_ALIASES: dict[str, set[str]] = {
     "place": {"current_location", "future_location", "past_location", "place", "hometown"},
     "org": {"employer", "org", "school"},

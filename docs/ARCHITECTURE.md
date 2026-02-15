@@ -648,8 +648,16 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 - **Turn-Based Extraction**: Switched from segment-based to Turn-Based grouping. Consecutive messages from the same sender are combined into single turns, providing coherent context for the LLM.
 - **Dynamic Identity Anchor**: Automatically resolves the user's name (e.g., "Jwalin Shah") from the Address Book, eliminating hardcoded identity references.
 - **AddressBook Integration**: Generalizable name resolution for all contacts (including group chats) by resolving participant numbers against macOS AddressBook.
-- **Targeted NLI Verification**: Each candidate fact is verified against the specific source message turn it originated from, using full-sentence hypotheses for maximum accuracy.
+- **Targeted NLI Verification**: Each candidate fact is verified against the specific source message turn it originated from, using full-sentence hypotheses for maximum accuracy. (Note: Restored 2-pass LLM verification for superior casual chat handling).
 - **Enriched Contact Profiles**: `ContactProfile` now stores `extracted_facts` and `relationship_reasoning` (LLM-derived justification for relationship labels).
+
+### Phase 5: Pipeline Optimization & Resilience (2026-02-14)
+- **Streaming Delta Ingestion**: Replaced bulk message loading with a memory-efficient per-chat streaming approach. Uses end-time checkpoints to fetch only new messages (deltas), making updates near-instant.
+- **Automatic Preference Population**: Integrated computation of `contact_style_targets` and `contact_timing_prefs` (including quiet hours and optimal weekdays) directly into the ingestion loop.
+- **Resource Management (`ModelManager`)**: Centralized model lifecycle management to coordinate transitions between Embedding and LLM phases within strict memory constraints.
+- **Observability (`PipelineMonitor`)**: Real-time tracking of throughput, success/failure rates, and rejection metrics across all ingestion stages.
+- **Database Resilience (`SafeChatReader`)**: Implemented exponential backoff and retries for SQLite "Database Locked" errors using a specialized `sqlite_retry` decorator.
+- **Semantic Deduplication**: Added `FactDeduplicator` using BERT embeddings to prevent redundant facts from cluttering the Knowledge Graph.
 
 ---
 

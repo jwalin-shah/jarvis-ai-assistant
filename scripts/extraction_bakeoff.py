@@ -1,22 +1,22 @@
 import sys
 import time
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Any, List
+from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models.loader import MLXModelLoader, ModelConfig
 from integrations.imessage import ChatDBReader
 from jarvis.nlp.entailment import verify_entailment_batch
-from jarvis.contacts.attribution import AttributionResolver
+from models.loader import MLXModelLoader, ModelConfig
+
 
 @dataclass
 class BakeoffResult:
     strategy: str
     raw_output: str
-    parsed_facts: List[str]
-    verified_facts: List[str]
+    parsed_facts: list[str]
+    verified_facts: list[str]
     latency: float
 
 def parse_raw(raw: str):
@@ -47,41 +47,41 @@ STRATEGIES = {
 
 def run_bakeoff(chat_text: str, loader: Any, user_name: str, contact_name: str):
     results = []
-    
+
     for name, prompts in STRATEGIES.items():
         print(f"\nRunning Strategy: {name}...")
-        
+
         sys_prompt = prompts["system"].format(user_name=user_name, contact_name=contact_name)
         usr_prompt = prompts["user"].format(text=chat_text)
-        
+
         # Use ChatML
         messages = [
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": usr_prompt}
         ]
-        
+
         formatted = loader._tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         # NUDGE: Force start with bullet
         formatted += "- "
-        
+
         t0 = time.time()
         res = loader.generate_sync(prompt=formatted, max_tokens=200, temperature=0.0, pre_formatted=True)
         latency = time.time() - t0
-        
+
         raw = "- " + res.text.strip()
-        
+
         # New robust parse
         parsed = parse_raw(raw)
-        
+
         # NLI Verify
         verified = []
         if parsed:
             pairs = [(chat_text, p) for p in parsed]
             nli_res = verify_entailment_batch(pairs, threshold=0.15)
             verified = [p for p, (ok, score) in zip(parsed, nli_res) if ok]
-            
+
         results.append(BakeoffResult(name, raw, parsed, verified, latency))
-        
+
     return results
 
 def main():
@@ -89,7 +89,7 @@ def main():
     config = ModelConfig(model_path="models/lfm-0.7b-4bit", default_temperature=0.1)
     loader = MLXModelLoader(config)
     loader.load()
-    
+
     # Get a real chat with content
     convs = reader.get_conversations(limit=100)
     targets = [c for c in convs if c.message_count > 10 and c.display_name]
@@ -97,10 +97,10 @@ def main():
         print("No suitable chats found!")
         return
     target = targets[0]
-    
+
     messages = reader.get_messages(target.chat_id, limit=20)
     messages.reverse()
-    
+
     # Group messages
     turns = []
     curr_sender = "Me" if messages[0].is_from_me else target.display_name
@@ -115,14 +115,14 @@ def main():
             curr_msgs = [m.text or ""]
     turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
     chat_text = "\n".join(turns)
-    
+
     print("="*80)
     print(f"BAKEOFF: {target.display_name}")
     print("="*80)
     print(f"Chat Context:\n{chat_text[:500]}...\n")
-    
+
     results = run_bakeoff(chat_text, loader, "Jwalin", target.display_name)
-    
+
     print("\n" + "="*80)
     print("FINAL COMPARISON")
     print("="*80)

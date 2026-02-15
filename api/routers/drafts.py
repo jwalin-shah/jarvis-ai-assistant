@@ -431,6 +431,9 @@ async def generate_draft_reply(
 
     try:
         async with asyncio.timeout(get_timeout_generation()):
+            from jarvis.reply_service import get_reply_service
+            reply_service = get_reply_service()
+            
             for i in range(draft_request.num_suggestions):
                 prompt = _build_reply_prompt(
                     last_message=last_message or "",
@@ -455,6 +458,18 @@ async def generate_draft_reply(
                             text=result,
                             confidence=confidence,
                         )
+                    )
+                    
+                    # Log for traceability
+                    await run_in_threadpool(
+                        reply_service.log_custom_generation,
+                        chat_id=draft_request.chat_id,
+                        incoming_text=last_message or "",
+                        final_prompt=prompt,
+                        response_text=result,
+                        confidence=confidence,
+                        category="draft_reply",
+                        metadata={"suggestion_index": i}
                     )
     except TimeoutError:
         logger.warning("Generation timed out after %s seconds", get_timeout_generation())
@@ -665,6 +680,19 @@ async def summarize_conversation(
                 prompt,
             )
             summary, key_points = _parse_summary_response(response_text)
+            
+            # Log for traceability
+            from jarvis.reply_service import get_reply_service
+            reply_service = get_reply_service()
+            await run_in_threadpool(
+                reply_service.log_custom_generation,
+                chat_id=summary_request.chat_id,
+                incoming_text=f"Summarize {len(messages)} messages",
+                final_prompt=prompt,
+                response_text=response_text,
+                category="summary",
+                metadata={"num_messages": len(messages)}
+            )
     except TimeoutError:
         logger.warning("Summary generation timed out after %s seconds", get_timeout_generation())
         raise HTTPException(
