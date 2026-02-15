@@ -16,12 +16,13 @@ def test_subset():
     targets = ["RCS;-;+17252177891", "iMessage;+;chat497445309743717804"]
 
     for chat_id in targets:
-        print(f"\n{'='*80}\nTESTING CHAT: {chat_id}\n{'='*80}")
+        print(f"\n{'=' * 80}\nTESTING CHAT: {chat_id}\n{'=' * 80}")
         messages = reader.get_messages(chat_id, limit=30)
         messages.reverse()
 
         # Turn grouping
         from dataclasses import dataclass
+
         @dataclass
         class Seg:
             def __init__(self, msgs, text):
@@ -31,10 +32,7 @@ def test_subset():
         seg = Seg(messages, "\n".join([m.text or "" for m in messages]))
 
         facts = extractor.extract_facts_from_segment(
-            seg,
-            contact_id=chat_id,
-            contact_name="Contact",
-            user_name="Jwalin"
+            seg, contact_id=chat_id, contact_name="Contact", user_name="Jwalin"
         )
 
         print(f"\nFINAL VERIFIED FACTS FOR {chat_id}:")
@@ -42,6 +40,7 @@ def test_subset():
             print("  (None found - Correct behavior for noisy/logistical chats)")
         for f in facts:
             print(f"  ✓ [{f.subject}] {f.value} (Conf: {f.confidence:.2f})")
+
 
 if __name__ == "__main__":
     test_subset()

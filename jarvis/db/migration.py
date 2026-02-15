@@ -442,9 +442,7 @@ class MigrationTester:
                     )
 
                 # Verify core columns still work
-                cursor = conn.execute(
-                    "SELECT id, chat_id, display_name FROM contacts LIMIT 1"
-                )
+                cursor = conn.execute("SELECT id, chat_id, display_name FROM contacts LIMIT 1")
                 row = cursor.fetchone()
                 if row is None and pre_rollback_count > 0:
                     result.errors.append("Cannot read data after rollback")

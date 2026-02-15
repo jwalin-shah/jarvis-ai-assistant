@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 SOCKET_PATH = Path(os.getenv("JARVIS_NER_SOCKET", str(Path.home() / ".jarvis" / "jarvis-ner.sock")))
 PID_FILE = Path.home() / ".jarvis" / "ner_server.pid"
 
+
 # Connection timeouts (from config, with fallback defaults)
 def _get_connect_timeout() -> float:
     return get_config().ner.connect_timeout

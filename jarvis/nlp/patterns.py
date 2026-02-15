@@ -44,13 +44,37 @@ GREETING_PATTERNS = [
 # === IMPERATIVE VERBS ===
 # Core set shared by both modules (intersection of both usages)
 IMPERATIVE_VERBS_CORE = {
-    "send", "give", "take", "get", "call", "help", "come", "tell", "show", "make", "let",
+    "send",
+    "give",
+    "take",
+    "get",
+    "call",
+    "help",
+    "come",
+    "tell",
+    "show",
+    "make",
+    "let",
 }
 
 # Extended set for response_mobilization (includes domain-specific verbs)
 IMPERATIVE_VERBS_EXTENDED = IMPERATIVE_VERBS_CORE | {
-    "bring", "grab", "pick", "text", "email", "check", "look", "go",
-    "put", "find", "buy", "read", "watch", "meet", "try", "open",
+    "bring",
+    "grab",
+    "pick",
+    "text",
+    "email",
+    "check",
+    "look",
+    "go",
+    "put",
+    "find",
+    "buy",
+    "read",
+    "watch",
+    "meet",
+    "try",
+    "open",
 }
 
 # === QUESTION WORDS ===
@@ -59,8 +83,20 @@ WH_WORDS = {"what", "where", "when", "who", "why", "how", "which", "whose"}
 
 # Question starters include WH-words + auxiliary verbs used as question openers
 QUESTION_STARTERS = {
-    "what", "why", "how", "when", "where", "who",
-    "did", "do", "does", "can", "could", "would", "will", "should",
+    "what",
+    "why",
+    "how",
+    "when",
+    "where",
+    "who",
+    "did",
+    "do",
+    "does",
+    "can",
+    "could",
+    "would",
+    "will",
+    "should",
 }
 
 # === EMOTIONAL MARKERS ===
@@ -68,9 +104,28 @@ EMOTIONAL_MARKERS = ["lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao",
 
 # === AGREEMENT / BACKCHANNEL ===
 AGREEMENT_WORDS = {
-    "sure", "okay", "ok", "yes", "yeah", "yep", "yup", "sounds good", "bet", "fs",
+    "sure",
+    "okay",
+    "ok",
+    "yes",
+    "yeah",
+    "yep",
+    "yup",
+    "sounds good",
+    "bet",
+    "fs",
 }
 
 BRIEF_AGREEMENTS = {
-    "ok", "okay", "k", "yeah", "yep", "yup", "sure", "cool", "bet", "fs", "aight",
+    "ok",
+    "okay",
+    "k",
+    "yeah",
+    "yep",
+    "yup",
+    "sure",
+    "cool",
+    "bet",
+    "fs",
+    "aight",
 }

@@ -33,7 +33,9 @@ class WindowStat:
     nonjunk_messages: int = 0
 
 
-def _build_segment(chat_id: str, messages: list[Any], start_idx: int, size: int) -> TopicSegment | None:
+def _build_segment(
+    chat_id: str, messages: list[Any], start_idx: int, size: int
+) -> TopicSegment | None:
     window_msgs = messages[start_idx : start_idx + size]
     if not window_msgs:
         return None
@@ -115,7 +117,8 @@ def main() -> None:
         active = [
             c
             for c in convos
-            if c.message_count >= 5 and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
+            if c.message_count >= 5
+            and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
         ][: args.limit]
         totals["chats"] = len(active)
 

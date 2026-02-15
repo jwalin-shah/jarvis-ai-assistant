@@ -84,7 +84,7 @@ jarvis/router.py @backend-lead @frontend-lead
 # ============================================================================
 # Core generation logic
 jarvis/generation.py @ml-lead @backend-lead
-jarvis/prompts.py @ml-lead @backend-lead
+jarvis/prompts/ @ml-lead @backend-lead
 jarvis/reply_service.py @ml-lead @backend-lead
 
 # Model templates and building

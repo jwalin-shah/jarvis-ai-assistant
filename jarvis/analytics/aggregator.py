@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 # Optional pandas import for vectorized operations
 try:
     import pandas as pd
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
@@ -87,31 +88,34 @@ class MonthlyAggregate:
 def _aggregate_by_hour_vectorized(messages: list[Message]) -> list[HourlyAggregate]:
     """Vectorized implementation using pandas (10-50x faster)."""
     import pandas as pd
-    import numpy as np
-    
+
     # Build DataFrame from messages
-    df = pd.DataFrame([
-        {
-            "hour": msg.date.hour,
-            "is_from_me": msg.is_from_me,
-            "length": len(msg.text) if msg.text else 0,
-        }
-        for msg in messages
-    ])
-    
+    df = pd.DataFrame(
+        [
+            {
+                "hour": msg.date.hour,
+                "is_from_me": msg.is_from_me,
+                "length": len(msg.text) if msg.text else 0,
+            }
+            for msg in messages
+        ]
+    )
+
     if df.empty:
         return [HourlyAggregate(hour=h) for h in range(24)]
-    
+
     # Vectorized aggregation using groupby
-    grouped = df.groupby("hour").agg({
-        "is_from_me": ["count", "sum"],
-        "length": "sum",
-    })
-    
+    grouped = df.groupby("hour").agg(
+        {
+            "is_from_me": ["count", "sum"],
+            "length": "sum",
+        }
+    )
+
     # Flatten column names
     grouped.columns = ["count", "sent", "total_length"]
     grouped["received"] = grouped["count"] - grouped["sent"]
-    
+
     # Build results for all 24 hours
     result: list[HourlyAggregate] = []
     for hour in range(24):
@@ -130,7 +134,7 @@ def _aggregate_by_hour_vectorized(messages: list[Message]) -> list[HourlyAggrega
             )
         else:
             result.append(HourlyAggregate(hour=hour))
-    
+
     return result
 
 
@@ -146,7 +150,7 @@ def aggregate_by_hour(messages: list[Message]) -> list[HourlyAggregate]:
     # Use vectorized implementation if pandas available and enough messages
     if PANDAS_AVAILABLE and len(messages) > 100:
         return _aggregate_by_hour_vectorized(messages)
-    
+
     # Fallback to pure Python for small datasets
     hourly_data: dict[int, dict[str, int | float]] = defaultdict(
         lambda: {"count": 0, "sent": 0, "received": 0, "total_length": 0}
@@ -186,41 +190,45 @@ def _aggregate_by_day_vectorized(
 ) -> list[DailyAggregate]:
     """Vectorized implementation using pandas (10-50x faster)."""
     import pandas as pd
-    
+
     # Build DataFrame from messages
-    df = pd.DataFrame([
-        {
-            "date": msg.date.strftime("%Y-%m-%d"),
-            "is_from_me": msg.is_from_me,
-            "sender": msg.sender,
-            "hour": msg.date.hour,
-            "attachments": len(msg.attachments) if msg.attachments else 0,
-            "text": msg.text,
-        }
-        for msg in messages
-    ])
-    
+    df = pd.DataFrame(
+        [
+            {
+                "date": msg.date.strftime("%Y-%m-%d"),
+                "is_from_me": msg.is_from_me,
+                "sender": msg.sender,
+                "hour": msg.date.hour,
+                "attachments": len(msg.attachments) if msg.attachments else 0,
+                "text": msg.text,
+            }
+            for msg in messages
+        ]
+    )
+
     if df.empty:
         return []
-    
+
     # Vectorized aggregation
-    grouped = df.groupby("date").agg({
-        "is_from_me": ["count", "sum"],
-        "sender": lambda x: x[~df.loc[x.index, "is_from_me"]].nunique(),
-        "attachments": "sum",
-    })
+    grouped = df.groupby("date").agg(
+        {
+            "is_from_me": ["count", "sum"],
+            "sender": lambda x: x[~df.loc[x.index, "is_from_me"]].nunique(),
+            "attachments": "sum",
+        }
+    )
     grouped.columns = ["total", "sent", "unique_contacts", "attachments"]
     grouped["received"] = grouped["total"] - grouped["sent"]
-    
+
     # Calculate hourly breakdown per day
     hourly_pivot = df.groupby(["date", "hour"]).size().unstack(fill_value=0)
-    
+
     # Build results
     result: list[DailyAggregate] = []
     for date_key in sorted(grouped.index):
         row = grouped.loc[date_key]
         hourly = hourly_pivot.loc[date_key].to_dict() if date_key in hourly_pivot.index else {}
-        
+
         # Sentiment (still expensive, but we batch it)
         avg_sentiment = 0.0
         if include_sentiment:
@@ -228,7 +236,7 @@ def _aggregate_by_day_vectorized(
             if not day_texts.empty:
                 sentiments = [analyze_sentiment(t).score for t in day_texts]
                 avg_sentiment = sum(sentiments) / len(sentiments)
-        
+
         result.append(
             DailyAggregate(
                 date=date_key,
@@ -242,7 +250,7 @@ def _aggregate_by_day_vectorized(
                 attachment_count=int(row["attachments"]),
             )
         )
-    
+
     return result
 
 
@@ -262,7 +270,7 @@ def aggregate_by_day(
     # Use vectorized implementation if pandas available and enough messages
     if PANDAS_AVAILABLE and len(messages) > 100:
         return _aggregate_by_day_vectorized(messages, include_sentiment)
-    
+
     # Fallback to pure Python
     daily_data: dict[str, dict[str, object]] = defaultdict(
         lambda: {

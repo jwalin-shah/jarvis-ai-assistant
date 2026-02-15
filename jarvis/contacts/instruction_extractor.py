@@ -278,7 +278,7 @@ class InstructionFactExtractor:
         return dict(self._last_batch_stats)
 
     def get_last_batch_pass1_claims(self) -> list[list[str]]:
-        """Return pass-1 natural-language claims grouped by segment index."""
+        """Return pass-1 natural-language claims grouped by extraction-window index."""
         return [list(claims) for claims in self._last_batch_pass1_claims]
 
     def extract_facts_from_segment(
@@ -288,7 +288,11 @@ class InstructionFactExtractor:
         contact_name: str = "Contact",
         user_name: str = "Me",
     ) -> list[Fact]:
-        """Process a single segment using two-pass extraction."""
+        """Process a single extraction window using two-pass extraction.
+
+        Note: `segment` here is an extraction window payload, not a topic
+        segmentation result.
+        """
         results = self.extract_facts_from_batch(
             [segment], contact_id=contact_id, contact_name=contact_name, user_name=user_name
         )
@@ -407,9 +411,9 @@ class InstructionFactExtractor:
         contact_name: str = "Contact",
         user_name: str = "Me",
     ) -> list[list[Fact]]:
-        """Two-pass extraction on a BATCH of segments.
+        """Two-pass extraction on a batch of extraction windows.
 
-        Concatenates segments into a single prompt using [Segment N] markers
+        Concatenates windows into a single prompt using [Segment N] markers
         for high-throughput processing without losing attribution.
         """
         if not self._loader.is_loaded():
@@ -420,11 +424,18 @@ class InstructionFactExtractor:
             return []
 
         if len(segments) > 1:
-            logger.warning(
-                "extract_facts_from_batch got %d segments; single-segment only, using first.",
-                len(segments),
-            )
-            segments = segments[:1]
+            # Process one extraction window per model call to keep memory usage stable,
+            # while still covering every requested window.
+            all_results: list[list[Fact]] = []
+            for window in segments:
+                single_result = self.extract_facts_from_batch(
+                    [window],
+                    contact_id=contact_id,
+                    contact_name=contact_name,
+                    user_name=user_name,
+                )
+                all_results.append(single_result[0] if single_result else [])
+            return all_results
 
         self._last_batch_stats = {
             "raw_triples": 0,

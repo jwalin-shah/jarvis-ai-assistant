@@ -1,6 +1,6 @@
 from integrations.imessage import ChatDBReader
 
-target_chat_id = 'iMessage;-;+15629643639'
+target_chat_id = "iMessage;-;+15629643639"
 
 with ChatDBReader() as reader:
     messages = reader.get_messages(target_chat_id, limit=500)

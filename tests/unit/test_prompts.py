@@ -1,7 +1,7 @@
 """Unit tests for iMessage reply prompt templates and builders.
 
 Tests cover prompt building, tone detection, and token limit checking
-for the jarvis/prompts.py module.
+for the jarvis.prompts module.
 """
 
 import pytest

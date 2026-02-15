@@ -603,9 +603,7 @@ class BackupManager:
             size /= 1024
         return f"{size:.1f} TB"
 
-    def _validate_table_names(
-        self, conn: sqlite3.Connection, table_names: list[str]
-    ) -> list[str]:
+    def _validate_table_names(self, conn: sqlite3.Connection, table_names: list[str]) -> list[str]:
         """Validate table names against sqlite_master allowlist.
 
         Prevents SQL injection by ensuring only real table names from the
@@ -621,16 +619,12 @@ class BackupManager:
         Raises:
             ValueError: If any table name is not found in sqlite_master.
         """
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         valid_tables = {row[0] for row in cursor}
 
         invalid = [t for t in table_names if t not in valid_tables]
         if invalid:
-            raise ValueError(
-                f"Invalid table names (not in sqlite_master): {invalid}"
-            )
+            raise ValueError(f"Invalid table names (not in sqlite_master): {invalid}")
 
         return table_names
 

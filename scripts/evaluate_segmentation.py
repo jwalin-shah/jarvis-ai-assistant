@@ -19,7 +19,9 @@ def evaluate_segmentation():
         return
 
     for chat in target_chats[:3]:
-        print(f"\n{'='*80}\nSEGMENTATION CHECK: {chat.display_name} ({chat.message_count} msgs)\n{'='*80}")
+        print(
+            f"\n{'=' * 80}\nSEGMENTATION CHECK: {chat.display_name} ({chat.message_count} msgs)\n{'=' * 80}"
+        )
 
         messages = reader.get_messages(chat.chat_id, limit=100)
         # segment_conversation expects sorted oldest-first
@@ -39,7 +41,8 @@ def evaluate_segmentation():
                 sender = "Me" if m.is_from_me else chat.display_name
                 print(f"  [{m.date.strftime('%H:%M')}] {sender}: {m.text[:100]}...")
             if len(seg.messages) > 4:
-                print(f"  ... (+{len(seg.messages)-4} more)")
+                print(f"  ... (+{len(seg.messages) - 4} more)")
+
 
 if __name__ == "__main__":
     evaluate_segmentation()

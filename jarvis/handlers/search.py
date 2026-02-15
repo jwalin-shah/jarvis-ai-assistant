@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from jarvis.handlers.base import BaseHandler, rpc_handler
 
 if TYPE_CHECKING:
-    from jarvis.socket_server import JarvisSocketServer
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class SearchHandler(BaseHandler):
     ) -> dict[str, Any]:
         """Semantic search across messages."""
         from datetime import datetime
+
         from jarvis.search.vec_search import get_vec_searcher
 
         chat_id = filters.get("chat_id") if filters else None
@@ -52,9 +53,7 @@ class SearchHandler(BaseHandler):
                         "text": r.text,
                         "sender": r.sender or "",
                         "date": (
-                            datetime.fromtimestamp(r.timestamp).isoformat()
-                            if r.timestamp
-                            else ""
+                            datetime.fromtimestamp(r.timestamp).isoformat() if r.timestamp else ""
                         ),
                     },
                     "similarity": round(r.score, 4),

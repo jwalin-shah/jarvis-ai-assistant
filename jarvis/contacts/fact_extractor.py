@@ -102,7 +102,8 @@ _BARE_PREPOSITION_RE = re.compile(
 _CAMELCASE_RE = re.compile(r"[a-z]{2,}[A-Z][a-z]+")
 _TRAILING_WORD_PATTERNS = [
     re.compile(
-        r"\s+(and|but|or|because|when|if|since|unless|while|though|although)$", re.IGNORECASE,
+        r"\s+(and|but|or|because|when|if|since|unless|while|though|although)$",
+        re.IGNORECASE,
     ),
     re.compile(r"\s+(is|are|was|were|be|been)$", re.IGNORECASE),
 ]
@@ -233,10 +234,7 @@ def _get_cached_contacts() -> list[tuple[str, str, set[str]]]:
     with _contacts_cache_lock:
         # Double-check after acquiring lock
         now = time.monotonic()
-        if (
-            _contacts_cache_data is not None
-            and (now - _contacts_cache_time) < _CONTACTS_CACHE_TTL
-        ):
+        if _contacts_cache_data is not None and (now - _contacts_cache_time) < _CONTACTS_CACHE_TTL:
             return _contacts_cache_data
 
         try:
@@ -396,8 +394,18 @@ class FactExtractor:
     def _is_vague_pronoun(self, subject_lower: str) -> bool:
         """Check if subject is a vague pronoun or pronoun+preposition fragment."""
         vague_words = {
-            "it", "that", "this", "them", "there",
-            "those", "these", "what", "when", "where", "why", "how",
+            "it",
+            "that",
+            "this",
+            "them",
+            "there",
+            "those",
+            "these",
+            "what",
+            "when",
+            "where",
+            "why",
+            "how",
         }
         if subject_lower in vague_words:
             return True
@@ -639,7 +647,10 @@ class FactExtractor:
         return subject.strip()
 
     def _extract_relationships(
-        self, text: str, contact_id: str, timestamp: str,
+        self,
+        text: str,
+        contact_id: str,
+        timestamp: str,
     ) -> list[Fact]:
         """Extract relationship facts from possessive patterns (e.g. 'my sister Sarah')."""
         facts: list[Fact] = []

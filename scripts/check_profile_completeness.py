@@ -17,11 +17,11 @@ def check_profiles():
     targets = [
         ("iMessage;-;+14084643141", "Lavanya"),
         ("iMessage;-;+14087867207", "Mateo"),
-        ("iMessage;-;+16505397073", "Clera")
+        ("iMessage;-;+16505397073", "Clera"),
     ]
 
     for chat_id, name in targets:
-        print(f"\n{'='*80}\nPROFILE CHECK: {name} ({chat_id})\n{'='*80}")
+        print(f"\n{'=' * 80}\nPROFILE CHECK: {name} ({chat_id})\n{'=' * 80}")
 
         # Build profile (this now includes DB fact fetching)
         messages = reader.get_messages(chat_id, limit=100)
@@ -34,11 +34,14 @@ def check_profiles():
         if not profile.extracted_facts:
             print("  (No facts found in DB yet - run backfill script first)")
         for f in profile.extracted_facts[:10]:
-            print(f"  ✓ [{f['category']}] {f['subject']} {f['predicate']} {f['value']} (Conf: {f['confidence']:.2f})")
+            print(
+                f"  ✓ [{f['category']}] {f['subject']} {f['predicate']} {f['value']} (Conf: {f['confidence']:.2f})"
+            )
 
         # Check topic labels
         if profile.top_topics:
             print(f"\nTop Topics: {', '.join(profile.top_topics)}")
+
 
 if __name__ == "__main__":
     check_profiles()

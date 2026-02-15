@@ -34,7 +34,11 @@ OUTPUT_PATH = Path("results/dspy_optimized_prompt.json")
 # Same aliases as bakeoff_v2
 LLM_LABEL_ALIASES: dict[str, set[str]] = {
     "location": {
-        "current_location", "past_location", "future_location", "place", "hometown",
+        "current_location",
+        "past_location",
+        "future_location",
+        "place",
+        "hometown",
     },
     "person": {"friend_name", "partner_name", "person_name", "family_member"},
     "job": {"employer", "job_role", "job_title"},
@@ -71,14 +75,12 @@ def build_training_examples(gold_path: Path, n_train: int = 20, n_val: int = 20)
     # Validation from remaining
     n_val_pos = n_val // 2
     n_val_neg = n_val - n_val_pos
-    val_records = positive[n_pos:n_pos + n_val_pos] + negative[n_neg:n_neg + n_val_neg]
+    val_records = positive[n_pos : n_pos + n_val_pos] + negative[n_neg : n_neg + n_val_neg]
 
     def record_to_example(rec: dict) -> "dspy.Example":
         cands = rec.get("expected_candidates", [])
         if cands:
-            facts_str = "; ".join(
-                f"{c['span_label']}: {c['span_text']}" for c in cands
-            )
+            facts_str = "; ".join(f"{c['span_label']}: {c['span_text']}" for c in cands)
         else:
             facts_str = "none"
 
@@ -132,8 +134,10 @@ def build_metric_fn(gold_path: Path, n_val: int = 20):
                 if pred_matched[pi]:
                     continue
                 if spans_match(
-                    pred_val, pred_cat,
-                    gc.get("span_text", ""), gc.get("span_label", ""),
+                    pred_val,
+                    pred_cat,
+                    gc.get("span_text", ""),
+                    gc.get("span_label", ""),
                     label_aliases=LLM_LABEL_ALIASES,
                 ):
                     gold_matched[gi] = True
@@ -198,6 +202,7 @@ def create_extraction_module():
         Only extract facts explicitly stated in the message.
         Output format: category: value (semicolon-separated if multiple). Output 'none' if no facts.
         """
+
         message: str = dspy.InputField(desc="The text message to extract facts from")
         facts: str = dspy.OutputField(
             desc="Extracted facts as 'category: value; category: value' or 'none'"
@@ -246,9 +251,7 @@ def run_optimizer(
 
     # Build examples
     print("\nBuilding training examples...", flush=True)
-    train_examples, val_examples = build_training_examples(
-        gold_path, n_train=n_train, n_val=n_val
-    )
+    train_examples, val_examples = build_training_examples(gold_path, n_train=n_train, n_val=n_val)
 
     # Build metric
     metric_fn = build_metric_fn(gold_path, n_val=n_val)
@@ -306,12 +309,14 @@ def run_optimizer(
     # Extract the optimized prompt
     # DSPy stores the demos in the module's predictors
     demos = []
-    if hasattr(optimized, 'extract') and hasattr(optimized.extract, 'demos'):
+    if hasattr(optimized, "extract") and hasattr(optimized.extract, "demos"):
         for demo in optimized.extract.demos:
-            demos.append({
-                "message": getattr(demo, "message", ""),
-                "facts": getattr(demo, "facts", ""),
-            })
+            demos.append(
+                {
+                    "message": getattr(demo, "message", ""),
+                    "facts": getattr(demo, "facts", ""),
+                }
+            )
 
     # Build a prompt template from the optimized module
     prompt_data = {
@@ -322,7 +327,7 @@ def run_optimizer(
             "Only extract facts explicitly stated. "
             "Output format: category: value (semicolon-separated). Output 'none' if no facts."
         ),
-        "user_prompt_template": "Message: \"{text}\"\n\nFacts:",
+        "user_prompt_template": 'Message: "{text}"\n\nFacts:',
         "parse_mode": "kv",
         "demos": demos,
         "metadata": {
@@ -341,12 +346,10 @@ def run_optimizer(
         few_shot_lines = []
         for d in demos:
             few_shot_lines.append(f'Message: "{d["message"]}"')
-            few_shot_lines.append(f'Facts: {d["facts"]}')
+            few_shot_lines.append(f"Facts: {d['facts']}")
             few_shot_lines.append("")
         few_shot_prefix = "\n".join(few_shot_lines)
-        prompt_data["user_prompt_template"] = (
-            few_shot_prefix + 'Message: "{text}"\nFacts:'
-        )
+        prompt_data["user_prompt_template"] = few_shot_prefix + 'Message: "{text}"\nFacts:'
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -364,8 +367,7 @@ def run_optimizer(
     print(f"  Output:       {output_path}", flush=True)
     print("\nTo use in bakeoff:", flush=True)
     print(
-        f"  uv run python scripts/extraction_bakeoff_v2.py"
-        f" --dspy-prompt {output_path}",
+        f"  uv run python scripts/extraction_bakeoff_v2.py --dspy-prompt {output_path}",
         flush=True,
     )
 
@@ -378,14 +380,21 @@ def main():
     parser.add_argument("--n-train", type=int, default=20, help="Number of training examples")
     parser.add_argument("--n-val", type=int, default=20, help="Number of validation examples")
     parser.add_argument(
-        "--max-bootstrapped", type=int, default=4,
+        "--max-bootstrapped",
+        type=int,
+        default=4,
         help="Max bootstrapped demos for BootstrapFewShot",
     )
     parser.add_argument(
-        "--gold", type=str, default=str(GOLD_PATH), help="Path to goldset JSON",
+        "--gold",
+        type=str,
+        default=str(GOLD_PATH),
+        help="Path to goldset JSON",
     )
     parser.add_argument(
-        "--output", type=str, default=str(OUTPUT_PATH),
+        "--output",
+        type=str,
+        default=str(OUTPUT_PATH),
         help="Output path for optimized prompt JSON",
     )
     args = parser.parse_args()

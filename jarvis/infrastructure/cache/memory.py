@@ -11,6 +11,7 @@ from jarvis.infrastructure.cache.base import CacheBackend
 @dataclass
 class _Entry:
     """Internal cache entry with TTL."""
+
     value: Any
     expires_at: float
     tags: list[str] = field(default_factory=list)
@@ -41,7 +42,9 @@ class MemoryBackend(CacheBackend):
             self._hits += 1
             return entry.value
 
-    def set(self, key: str, value: Any, ttl: float | None = None, tags: list[str] | None = None) -> None:
+    def set(
+        self, key: str, value: Any, ttl: float | None = None, tags: list[str] | None = None
+    ) -> None:
         ttl = ttl if ttl is not None else self._default_ttl
         with self._lock:
             self._data[key] = _Entry(

@@ -23,7 +23,20 @@ class MessageGateFeatures:
     """Extract lightweight numeric features from messages for the gate model."""
 
     PREF_WORDS = {"love", "like", "hate", "prefer", "obsessed", "favorite", "enjoy", "allergic"}
-    LOCATION_WORDS = {"live", "living", "moving", "moved", "from", "to", "based", "relocating", "sf", "dallas", "nyc", "austin"}
+    LOCATION_WORDS = {
+        "live",
+        "living",
+        "moving",
+        "moved",
+        "from",
+        "to",
+        "based",
+        "relocating",
+        "sf",
+        "dallas",
+        "nyc",
+        "austin",
+    }
     REL_WORDS = {
         "my",
         "mom",
@@ -38,9 +51,42 @@ class MessageGateFeatures:
         "friend",
         "neighbor",
     }
-    HEALTH_WORDS = {"pain", "hospital", "injury", "allergic", "anxious", "depressed", "headache", "surgery", "therapy", "dental"}
-    WORK_WORDS = {"work", "job", "hired", "fired", "interview", "company", "office", "career", "salary", "raise"}
-    PERSONAL_WORDS = {"jacket", "car", "tesla", "dog", "zodiac", "gemini", "bday", "birthday", "gift", "bought"}
+    HEALTH_WORDS = {
+        "pain",
+        "hospital",
+        "injury",
+        "allergic",
+        "anxious",
+        "depressed",
+        "headache",
+        "surgery",
+        "therapy",
+        "dental",
+    }
+    WORK_WORDS = {
+        "work",
+        "job",
+        "hired",
+        "fired",
+        "interview",
+        "company",
+        "office",
+        "career",
+        "salary",
+        "raise",
+    }
+    PERSONAL_WORDS = {
+        "jacket",
+        "car",
+        "tesla",
+        "dog",
+        "zodiac",
+        "gemini",
+        "bday",
+        "birthday",
+        "gift",
+        "bought",
+    }
     BOT_PATTERNS = {
         "cvs pharmacy",
         "prescription is ready",

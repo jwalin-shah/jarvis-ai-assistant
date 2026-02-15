@@ -51,12 +51,14 @@ class SQLiteBackend(CacheBackend):
                     return None
             return None
 
-    def set(self, key: str, value: Any, ttl: float | None = None, tags: list[str] | None = None) -> None:
+    def set(
+        self, key: str, value: Any, ttl: float | None = None, tags: list[str] | None = None
+    ) -> None:
         ttl = ttl if ttl is not None else self.default_ttl
         expires_at = time.time() + ttl
         created_at = time.time()
         tags_json = json.dumps(tags or [])
-        
+
         try:
             value_json = json.dumps(value)
         except (TypeError, ValueError):
@@ -91,7 +93,7 @@ class SQLiteBackend(CacheBackend):
                         to_delete.append(key)
                 except json.JSONDecodeError:
                     continue
-            
+
             if to_delete:
                 conn.executemany("DELETE FROM cache WHERE key = ?", [(k,) for k in to_delete])
                 count = len(to_delete)

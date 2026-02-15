@@ -8,9 +8,9 @@ Usage:
     uv run python scripts/sync_contacts.py
     uv run python scripts/sync_contacts.py --dry-run  # Preview changes
 """
+
 import argparse
 import sys
-from pathlib import Path
 
 sys.path.insert(0, ".")
 
@@ -27,34 +27,33 @@ def main():
     db.init_schema()
 
     print("Loading contacts from AddressBook...")
-    
+
     # Get all conversations from iMessage
     with ChatDBReader() as reader:
         convos = reader.get_conversations(limit=1000)
         user_name = reader.get_user_name()
-    
+
     print(f"Found {len(convos)} conversations")
     print(f"User name resolved as: {user_name}")
-    
+
     synced = 0
     skipped = 0
     errors = 0
-    
+
     for conv in convos:
         chat_id = conv.chat_id
         display_name = conv.display_name or "Contact"
-        
+
         # Extract phone/email from chat_id
-        phone_or_email = chat_id.split(';')[-1] if ';' in chat_id else chat_id
-        
+        phone_or_email = chat_id.split(";")[-1] if ";" in chat_id else chat_id
+
         try:
             # Check if contact already exists
             with db.connection() as conn:
                 row = conn.execute(
-                    "SELECT id, display_name FROM contacts WHERE chat_id = ?",
-                    (chat_id,)
+                    "SELECT id, display_name FROM contacts WHERE chat_id = ?", (chat_id,)
                 ).fetchone()
-                
+
                 if row:
                     # Contact exists - check if name needs update
                     existing_name = row["display_name"]
@@ -63,7 +62,7 @@ def main():
                             """UPDATE contacts 
                                SET display_name = ?, phone_or_email = ?, updated_at = CURRENT_TIMESTAMP
                                WHERE chat_id = ?""",
-                            (display_name, phone_or_email, chat_id)
+                            (display_name, phone_or_email, chat_id),
                         )
                         conn.commit()
                         print(f"  Updated: {existing_name} -> {display_name}")
@@ -77,25 +76,25 @@ def main():
                             """INSERT INTO contacts 
                                (chat_id, display_name, phone_or_email, created_at, updated_at)
                                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-                            (chat_id, display_name, phone_or_email)
+                            (chat_id, display_name, phone_or_email),
                         )
                         conn.commit()
                         print(f"  Added: {display_name}")
                         synced += 1
                     else:
                         print(f"  Would add: {display_name}")
-                        
+
         except Exception as e:
             print(f"  Error with {chat_id}: {e}")
             errors += 1
-    
-    print(f"\n{'='*50}")
-    print(f"Contact sync complete:")
+
+    print(f"\n{'=' * 50}")
+    print("Contact sync complete:")
     print(f"  Synced/Updated: {synced}")
     print(f"  Skipped (no change): {skipped}")
     print(f"  Errors: {errors}")
-    print(f"{'='*50}")
-    
+    print(f"{'=' * 50}")
+
     if args.dry_run:
         print("\nThis was a dry run. Run without --dry-run to apply changes.")
 

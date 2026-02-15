@@ -53,10 +53,10 @@ class JarvisDBBase:
 
     Thread-safe connection management with context manager support.
     Includes TTL-based caching for frequently accessed data.
-    
+
     Connection pooling limits prevent unbounded growth with thread creation.
     """
-    
+
     # Maximum number of concurrent connections to prevent unbounded growth
     _MAX_CONNECTIONS = 20
 
@@ -89,7 +89,7 @@ class JarvisDBBase:
 
         Connections are reused per-thread for efficiency. SQLite pragmas are
         set for optimal read performance while maintaining data integrity.
-        
+
         Uses semaphore to limit total connections and prevent unbounded growth.
 
         Returns:
@@ -98,7 +98,7 @@ class JarvisDBBase:
         if not hasattr(self._local, "connection") or self._local.connection is None:
             # Acquire semaphore to limit total connections (blocks if at max)
             self._connection_semaphore.acquire()
-            
+
             # Clean up stale connections before creating a new one
             self._cleanup_stale_connections()
 

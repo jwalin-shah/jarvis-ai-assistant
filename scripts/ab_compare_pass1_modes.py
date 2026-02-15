@@ -21,9 +21,9 @@ sys.path.insert(0, ".")
 
 from integrations.imessage import ChatDBReader
 from jarvis.contacts.instruction_extractor import (
-    NEGATIVE_CONSTRAINTS,
     _PASS1_META_LINE_RE,
     _PASS1_PLACEHOLDER_RE,
+    NEGATIVE_CONSTRAINTS,
     get_instruction_extractor,
 )
 from jarvis.contacts.junk_filters import is_junk_message
@@ -93,13 +93,16 @@ def _is_suspicious_claim(text: str) -> bool:
     return False
 
 
-def _build_segments(reader: ChatDBReader, limit: int, window: int) -> tuple[list[tuple[str, str, list[TopicSegment]]], str]:
+def _build_segments(
+    reader: ChatDBReader, limit: int, window: int
+) -> tuple[list[tuple[str, str, list[TopicSegment]]], str]:
     convos = reader.get_conversations(limit=max(50, min(1000, limit * 10)))
     user_name = reader.get_user_name()
     active = [
         c
         for c in convos
-        if c.message_count >= 5 and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
+        if c.message_count >= 5
+        and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
     ][:limit]
 
     out: list[tuple[str, str, list[TopicSegment]]] = []
@@ -132,7 +135,9 @@ def _build_segments(reader: ChatDBReader, limit: int, window: int) -> tuple[list
     return out, user_name
 
 
-def _format_batch_text(segments: list[TopicSegment], contact_id: str, contact_name: str, user_name: str) -> tuple[str, int]:
+def _format_batch_text(
+    segments: list[TopicSegment], contact_id: str, contact_name: str, user_name: str
+) -> tuple[str, int]:
     segment_texts = []
     skipped = 0
     for i, segment in enumerate(segments):
@@ -142,7 +147,9 @@ def _format_batch_text(segments: list[TopicSegment], contact_id: str, contact_na
             current_label = None
             current_block: list[str] = []
             for m in messages:
-                label = user_name if m.is_from_me else (getattr(m, "sender_name", None) or contact_name)
+                label = (
+                    user_name if m.is_from_me else (getattr(m, "sender_name", None) or contact_name)
+                )
                 raw_msg = " ".join((m.text or "").splitlines()).strip()
                 if not raw_msg:
                     continue
@@ -171,7 +178,9 @@ def _format_batch_text(segments: list[TopicSegment], contact_id: str, contact_na
     return "\n\n".join(segment_texts), skipped
 
 
-def _legacy_extract(extractor, segments: list[TopicSegment], contact_id: str, contact_name: str, user_name: str) -> tuple[list[list[str]], int]:
+def _legacy_extract(
+    extractor, segments: list[TopicSegment], contact_id: str, contact_name: str, user_name: str
+) -> tuple[list[list[str]], int]:
     claims_by_segment: list[list[str]] = [[] for _ in segments]
     batch_text, skipped = _format_batch_text(segments, contact_id, contact_name, user_name)
     p1_user = f"Conversation:\n{batch_text}\n\nFactual Claims (prefix with [Segment N]):\n- "
@@ -179,7 +188,9 @@ def _legacy_extract(extractor, segments: list[TopicSegment], contact_id: str, co
         {"role": "system", "content": LEGACY_SYSTEM_PROMPT},
         {"role": "user", "content": p1_user},
     ]
-    formatted = extractor._loader._tokenizer.apply_chat_template(messages_p1, tokenize=False, add_generation_prompt=True)
+    formatted = extractor._loader._tokenizer.apply_chat_template(
+        messages_p1, tokenize=False, add_generation_prompt=True
+    )
     if not formatted.endswith("- "):
         formatted += "- "
 
@@ -207,7 +218,11 @@ def _legacy_extract(extractor, segments: list[TopicSegment], contact_id: str, co
         claim = re.sub(r"^[\s\-\*\d\.]+\s*", "", clean).strip()
         claim = re.sub(r"\[Segment\s*\d+\]\s*", "", claim, flags=re.IGNORECASE).strip()
         claim = re.sub(r"^[\)\]\:\-]+\s*", "", claim).strip()
-        if claim and not _PASS1_META_LINE_RE.search(claim) and not _PASS1_PLACEHOLDER_RE.search(claim):
+        if (
+            claim
+            and not _PASS1_META_LINE_RE.search(claim)
+            and not _PASS1_PLACEHOLDER_RE.search(claim)
+        ):
             claims_by_segment[seg_idx].append(claim)
 
     if not saw_segment_tags and claims_by_segment:
@@ -261,7 +276,11 @@ def _run_compare(limit: int, window: int, tier: str) -> None:
             _accumulate(strict, strict_claims, strict_skipped)
 
             legacy_claims, legacy_skipped = _legacy_extract(
-                extractor, segments, contact_id=chat_id, contact_name=contact_name, user_name=user_name
+                extractor,
+                segments,
+                contact_id=chat_id,
+                contact_name=contact_name,
+                user_name=user_name,
             )
             _accumulate(legacy, legacy_claims, legacy_skipped)
 
@@ -291,7 +310,9 @@ def _run_compare(limit: int, window: int, tier: str) -> None:
         f"{pct(legacy.inferred, legacy.claims):21.2f}% "
         f"{pct(strict.inferred, strict.claims):21.2f}%"
     )
-    print(f"{'prefilter msgs skipped':28} {legacy.prefilter_messages_skipped:22d} {strict.prefilter_messages_skipped:22d}")
+    print(
+        f"{'prefilter msgs skipped':28} {legacy.prefilter_messages_skipped:22d} {strict.prefilter_messages_skipped:22d}"
+    )
 
 
 def main() -> None:

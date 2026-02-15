@@ -9,6 +9,9 @@
 - Model kept warm during batch processing (load once, process all, unload once)
 - Includes segment attribution in prompts
 
+Note: the `InstructionFactExtractor` path now processes extraction windows
+one-at-a-time for grounding stability while still covering all windows.
+
 **Updated**: `jarvis/search/segment_ingest.py`
 - Uses batched extractor for Phase 2
 - Changed default tier from "350m" to "0.7b"

@@ -13,7 +13,7 @@
 This document establishes the governance framework for managing prompts, model configurations, and ML artifacts in the JARVIS AI Assistant. It ensures controlled, traceable, and reversible changes to all AI/ML components that affect user-facing behavior.
 
 **Scope:**
-- All prompt templates in `jarvis/prompts.py`
+- All prompt templates in `jarvis/prompts/`
 - Few-shot examples and style configurations
 - Model weights and configurations in `models/`
 - Classification thresholds and calibration parameters
@@ -41,7 +41,7 @@ Prompts follow **Semantic Versioning** (MAJOR.MINOR.PATCH):
 ### 2.2 Source of Truth
 
 ```python
-# jarvis/prompts.py - Single source of truth
+# jarvis/prompts/ - Single source of truth
 PROMPT_VERSION = "1.0.0"
 PROMPT_LAST_UPDATED = "2026-01-26"
 ```
@@ -187,7 +187,7 @@ AB_TEST_CONFIG = {
 |---------|----------|------------------|----------|
 | Gold eval set | `evals/eval_dataset.jsonl` | Per release | Eng Lead |
 | Regression tests | `evals/regression_tests.jsonl` | Continuous | 2 reviewers |
-| Few-shot examples | `jarvis/prompts.py` | As needed | 1 reviewer |
+| Few-shot examples | `jarvis/prompts/` | As needed | 1 reviewer |
 | A/B test results | `evals/ab_tests/` | Per experiment | Product + Eng |
 
 ### 3.4 Evaluation Pipeline
@@ -319,7 +319,7 @@ git revert HEAD  # Single commit
 git revert HEAD~3..HEAD  # Range of commits
 
 # Or checkout previous version
-git checkout v1.0.0 -- jarvis/prompts.py
+git checkout v1.0.0 -- jarvis/prompts/
 
 # Update version constant
 git commit -m "rollback: Revert prompts to v1.0.0 due to regression"
@@ -346,7 +346,7 @@ For critical issues requiring immediate fix:
 git checkout -b hotfix/prompt-v1.0.1 v1.0.0
 
 # 2. Apply minimal fix
-# Edit jarvis/prompts.py
+# Edit jarvis/prompts/
 
 # 3. Fast-track review (1 approver for critical fixes)
 git commit -m "hotfix: [EMERGENCY] Fix anti-AI regression in v1.1.0"
@@ -361,7 +361,7 @@ After any rollback, verify:
 
 | Check | Command | Threshold |
 |-------|---------|-----------|
-| Version correct | `grep PROMPT_VERSION jarvis/prompts.py` | Matches target |
+| Version correct | `grep PROMPT_VERSION jarvis/prompts/` | Matches target |
 | Tests pass | `make test` | 100% of regression tests |
 | Baseline restored | `evals/eval_pipeline.py` | Within 2% of baseline |
 | No data loss | Check user feedback DB | No missing records |
@@ -423,7 +423,7 @@ Issue Detected
 git checkout -b feat/prompt-category-coverage
 
 # 2. Make changes with version bump
-# Edit jarvis/prompts.py
+# Edit jarvis/prompts/
 # Update PROMPT_VERSION and PROMPT_LAST_UPDATED
 
 # 3. Run local validation

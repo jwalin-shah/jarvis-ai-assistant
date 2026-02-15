@@ -10,6 +10,7 @@ Usage:
     uv run python scripts/setup_profiles_and_kg.py
     uv run python scripts/setup_profiles_and_kg.py --skip-groups
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -55,7 +56,9 @@ def main():
 
     # Step 2: Build Profiles
     if not args.skip_profiles:
-        success = run_script("build_all_profiles", [f"--min-messages={args.min_messages}"]) and success
+        success = (
+            run_script("build_all_profiles", [f"--min-messages={args.min_messages}"]) and success
+        )
     else:
         print("\n⏭️  Skipping profile building")
 

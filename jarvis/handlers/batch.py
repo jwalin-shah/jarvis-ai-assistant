@@ -13,7 +13,7 @@ from jarvis.handlers.base import (
 )
 
 if TYPE_CHECKING:
-    from jarvis.socket_server import JarvisSocketServer
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -77,5 +77,6 @@ class BatchHandler(BaseHandler):
                 }
 
         import asyncio
+
         results = await asyncio.gather(*[execute_single(r) for r in requests])
         return {"results": list(results)}

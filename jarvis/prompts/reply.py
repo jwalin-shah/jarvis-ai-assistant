@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, Sequence
+from typing import TYPE_CHECKING, Any, Literal
 
 from jarvis.prompts.constants import (
     REPLY_PROMPT,
@@ -14,7 +15,11 @@ from jarvis.prompts.examples import (
     THREAD_EXAMPLES,
     FewShotExample,
 )
-from jarvis.prompts.tone import analyze_user_style, build_style_instructions, determine_effective_tone
+from jarvis.prompts.tone import (
+    analyze_user_style,
+    build_style_instructions,
+    determine_effective_tone,
+)
 from jarvis.prompts.utils import truncate_context
 
 if TYPE_CHECKING:
@@ -185,6 +190,7 @@ def _get_additional_instructions(
 @dataclass
 class ThreadedPromptComponents:
     """Holds the resolved pieces needed to build a threaded reply prompt."""
+
     topic_name: str
     state_name: str
     user_role: str

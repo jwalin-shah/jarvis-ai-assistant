@@ -257,7 +257,7 @@ class ContextFetcher:
 
         # TRUNCATE: Only include messages up to the last received one
         if last_received_idx != -1:
-            context_messages = messages[:last_received_idx + 1]
+            context_messages = messages[: last_received_idx + 1]
         else:
             context_messages = messages
 
@@ -275,6 +275,7 @@ class ContextFetcher:
         try:
             from jarvis.contacts.fact_storage import get_facts_for_contact
             from jarvis.prompts.builders import format_facts_for_prompt
+
             facts = get_facts_for_contact(chat_id)
             contact_facts = format_facts_for_prompt(facts)
         except Exception:
@@ -282,6 +283,7 @@ class ContextFetcher:
 
         try:
             from jarvis.contacts.contact_profile import get_contact_profile
+
             profile = get_contact_profile(chat_id)
             if profile:
                 contact_profile = profile.to_dict()

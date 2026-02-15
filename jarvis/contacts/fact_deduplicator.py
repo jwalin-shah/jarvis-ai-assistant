@@ -34,18 +34,19 @@ class FactDeduplicator:
         """Lazy-load the embedding model."""
         if self._embedder is None:
             from models.bert_embedder import get_embedder
+
             self._embedder = get_embedder()
         return self._embedder
 
     def deduplicate(
-        self, 
-        new_facts: list[Fact], 
+        self,
+        new_facts: list[Fact],
         existing_facts: list[Fact],
         return_embeddings: bool = False,
     ) -> list[Fact] | tuple[list[Fact], np.ndarray]:
         """Filter out new facts that are semantically covered by existing ones.
-        
-        Optimized to use vec_facts (sqlite-vec) if available, falling back to 
+
+        Optimized to use vec_facts (sqlite-vec) if available, falling back to
         in-memory check only if necessary.
 
         Args:
@@ -61,8 +62,6 @@ class FactDeduplicator:
             return []
 
         import numpy as np
-        from jarvis.contacts.fact_index import _quantize, _distance_to_similarity
-        from jarvis.db import get_db
 
         # Fast pass: exact normalized dedup before embedding/vector search.
         compact_facts: list[Fact] = []
@@ -86,6 +85,7 @@ class FactDeduplicator:
         # Only do semantic dedup within same (subject, predicate) pairs
         # Facts about different subjects are never duplicates, even if values are similar
         from collections import defaultdict
+
         facts_by_key: dict[tuple[str, str], list[tuple[Fact, int]]] = defaultdict(list)
         for i, fact in enumerate(compact_facts):
             key = (fact.subject or "", fact.predicate or "")
@@ -126,5 +126,8 @@ class FactDeduplicator:
 
         if return_embeddings:
             import numpy as np
-            return unique_new_facts, np.vstack(unique_embeddings) if unique_embeddings else np.array([])
+
+            return unique_new_facts, np.vstack(
+                unique_embeddings
+            ) if unique_embeddings else np.array([])
         return unique_new_facts

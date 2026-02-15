@@ -63,13 +63,21 @@ class ModelManager:
     def _unload_llm(self) -> None:
         try:
             from models.loader import reset_model
+
             reset_model()
+        except ImportError:
+            pass
+        try:
+            from jarvis.contacts.instruction_extractor import reset_instruction_extractor
+
+            reset_instruction_extractor()
         except ImportError:
             pass
 
     def _unload_embedder(self) -> None:
         try:
             from jarvis.embedding_adapter import reset_embedder
+
             reset_embedder()
         except ImportError:
             pass
@@ -77,6 +85,7 @@ class ModelManager:
     def _unload_nli(self) -> None:
         try:
             from models.nli_cross_encoder import reset_nli_cross_encoder
+
             reset_nli_cross_encoder()
         except ImportError:
             pass

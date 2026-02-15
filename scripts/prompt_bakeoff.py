@@ -10,12 +10,11 @@ Usage:
 
 import sys
 import time
-from dataclasses import dataclass
 
 sys.path.insert(0, ".")
 
-from models.loader import MLXModelLoader, ModelConfig
 from jarvis.contacts.instruction_extractor import _EXTRACTION_SYSTEM_PROMPT
+from models.loader import MLXModelLoader, ModelConfig
 
 # --- TEST CASES ---
 # A mix of 1-on-1, group chats, slang, and complex nuance.
@@ -57,7 +56,7 @@ Contact: Oh nice, is she staying with you?
 Jwalin: Yeah, my apartment is tiny but we'll make it work.
         """,
         "context": "1-on-1 chat. Infer sister's location and Jwalin's living situation.",
-    }
+    },
 ]
 
 # --- PROMPT VARIANTS ---
@@ -82,6 +81,7 @@ VARIANTS = {
     "Biographer (Experimental)": PROMPT_BIOGRAPHER,
 }
 
+
 def main() -> None:
     print("Loading Model (LFM-0.7b)...")
     config = ModelConfig(model_id="lfm-0.7b")
@@ -90,20 +90,20 @@ def main() -> None:
     print("Model Loaded.\n")
 
     for case in TEST_CASES:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"TEST CASE: {case['id']}")
         print(f"Context: {case['context']}")
         print("-" * 60)
-        print(case['chat_text'].strip())
+        print(case["chat_text"].strip())
         print("-" * 60)
 
         for name, system_prompt in VARIANTS.items():
             print(f"\n>> Variant: {name}")
-            
+
             # Simple ChatML format
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Chat:\n{case['chat_text']}\n\nFacts:"}
+                {"role": "user", "content": f"Chat:\n{case['chat_text']}\n\nFacts:"},
             ]
             prompt = loader._tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
@@ -111,14 +111,12 @@ def main() -> None:
 
             start = time.perf_counter()
             res = loader.generate_sync(
-                prompt=prompt, 
-                max_tokens=150, 
-                temperature=0.0,
-                stop_sequences=["<|im_end|>"]
+                prompt=prompt, max_tokens=150, temperature=0.0, stop_sequences=["<|im_end|>"]
             )
             elapsed = (time.perf_counter() - start) * 1000
-            
+
             print(f"Output ({elapsed:.0f}ms):\n{res.text.strip()}")
+
 
 if __name__ == "__main__":
     main()

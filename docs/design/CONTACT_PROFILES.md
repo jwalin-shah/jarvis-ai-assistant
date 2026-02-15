@@ -266,7 +266,7 @@ profile = build_contact_profile(
 )
 ```
 
-### jarvis/prompts.py
+### jarvis/prompts/
 
 ```python
 # OLD

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from jarvis.handlers.base import BaseHandler, rpc_handler
 
 if TYPE_CHECKING:
-    from jarvis.socket_server import JarvisSocketServer
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class ContactHandler(BaseHandler):
     async def _resolve_contacts(self, identifiers: list[str]) -> dict[str, str | None]:
         """Resolve contact identifiers to names."""
         from jarvis.contacts.resolver import get_contact_resolver
+
         resolver = get_contact_resolver()
         return resolver.resolve_batch(identifiers)
 
@@ -30,6 +31,7 @@ class ContactHandler(BaseHandler):
     async def _get_contacts(self, limit: int = 100, offset: int = 0) -> dict[str, Any]:
         """Get list of contacts."""
         from jarvis.contacts.resolver import get_contact_resolver
+
         resolver = get_contact_resolver()
         # This is a placeholder as the actual implementation might vary
         # based on what's available in the resolver

@@ -75,7 +75,8 @@ def main() -> None:
         active = [
             c
             for c in convos
-            if c.message_count >= 5 and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
+            if c.message_count >= 5
+            and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
         ][: args.limit]
 
         for idx, conv in enumerate(active, 1):

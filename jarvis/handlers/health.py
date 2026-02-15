@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from jarvis.handlers.base import BaseHandler, rpc_handler
 
 if TYPE_CHECKING:
-    from jarvis.socket_server import JarvisSocketServer
+    pass
 
 
 class HealthHandler(BaseHandler):

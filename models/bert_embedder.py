@@ -351,7 +351,6 @@ class InProcessEmbedder:
             )
 
         with gpu_context():
-
             # Double-check after acquiring lock
             if self.model_name == model_name:
                 return
@@ -651,7 +650,9 @@ class MLXEmbedder:
         all_embeddings: list[np.ndarray] = []
         for i in range(0, len(texts), MLX_BATCH_SIZE):
             batch = texts[i : i + MLX_BATCH_SIZE]
-            all_embeddings.append(self._mlx_embedder.encode(batch, normalize=normalize, dtype=dtype))
+            all_embeddings.append(
+                self._mlx_embedder.encode(batch, normalize=normalize, dtype=dtype)
+            )
         return np.vstack(all_embeddings)
 
     def unload(self) -> None:

@@ -11,6 +11,7 @@ Usage:
     uv run python scripts/build_all_profiles.py
     uv run python scripts/build_all_profiles.py --min-messages 10
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -20,10 +21,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import time
 from collections import Counter
 
+from integrations.imessage import ChatDBReader
 from jarvis.contacts.contact_profile import ContactProfileBuilder, save_profile
 from jarvis.contacts.fact_storage import count_facts_for_contact
 from jarvis.db import get_db
-from integrations.imessage import ChatDBReader
 
 
 def main():

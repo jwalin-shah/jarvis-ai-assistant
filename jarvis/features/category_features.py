@@ -284,13 +284,13 @@ NEUTRAL_EMOJIS = {"🤔", "🙃", "😐", "😑", "🤨", "🧐", "😶", "👀"
 # Pre-compiled word-boundary patterns to avoid substring false positives
 # (e.g. 'now' in 'knowledge', 'ty' in 'city', 'soon' in 'bassoon')
 _THANKS_RE = re.compile(
-    r'(?:' + '|'.join(re.escape(m) for m in THANKS_MARKERS) + r')', re.IGNORECASE
+    r"(?:" + "|".join(re.escape(m) for m in THANKS_MARKERS) + r")", re.IGNORECASE
 )
 _URGENCY_RE = re.compile(
-    r'(?:' + '|'.join(re.escape(m) for m in URGENCY_MARKERS) + r')', re.IGNORECASE
+    r"(?:" + "|".join(re.escape(m) for m in URGENCY_MARKERS) + r")", re.IGNORECASE
 )
 _FUTURE_TIME_RE = re.compile(
-    r'(?:' + '|'.join(re.escape(m) for m in FUTURE_TIME_MARKERS) + r')', re.IGNORECASE
+    r"(?:" + "|".join(re.escape(m) for m in FUTURE_TIME_MARKERS) + r")", re.IGNORECASE
 )
 
 
@@ -886,6 +886,7 @@ class CategoryFeatureExtractor:
 
         try:
             from jarvis.contacts.contact_profile import get_contact_profile
+
             profile = get_contact_profile(chat_id)
             if profile:
                 return np.array([profile.formality_score], dtype=np.float32)

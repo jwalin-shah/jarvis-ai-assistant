@@ -5,6 +5,7 @@
 .PHONY: help install hooks setup \
         test test-fast test-verbose test-coverage test-file \
         lint format format-check typecheck check \
+        ci-fast backfill-smoke \
         verify review health \
         clean clean-all \
         launch api-dev desktop-setup desktop-dev desktop-build frontend-dev \
@@ -49,6 +50,8 @@ help:
 	@echo "  make format-check  Check formatting without changes"
 	@echo "  make typecheck     Run type checker (mypy)"
 	@echo "  make check         Run all static checks (lint + format-check + typecheck)"
+	@echo "  make ci-fast       Fast CI gate (lint + mypy + compile + focused tests + backfill smoke)"
+	@echo "  make backfill-smoke  Run backfill entrypoint smoke checks"
 	@echo ""
 	@echo "Verification:"
 	@echo "  make verify        Full verification (check + test)"
@@ -230,6 +233,21 @@ format-check:
 
 typecheck:
 	uv run mypy jarvis/ core/ models/ integrations/ api/ --ignore-missing-imports
+
+backfill-smoke:
+	@echo "Running backfill entrypoint smoke checks..."
+	uv run python scripts/backfill_complete.py --help
+	uv run python scripts/backfill_complete.py --limit 1 --window 50 --skip-facts --workers 1 --extract-slots 1 --force
+	uv run python scripts/backfill_complete.py --limit 1 --window 50 --skip-segments --workers 1 --extract-slots 1 --force
+
+ci-fast:
+	@echo "Running fast CI gate..."
+	uv run ruff check .
+	uv run mypy jarvis/ core/ models/ integrations/ api/ --ignore-missing-imports
+	uv run python -m compileall -q jarvis scripts api models core integrations contracts
+	uv run pytest --override-ini addopts='' tests/unit/test_tasks.py tests/unit/test_fact_extractor.py tests/unit/test_watcher_resegmentation.py -q
+	$(MAKE) backfill-smoke
+	@echo "✅ ci-fast passed"
 
 check: lint format-check typecheck svelte-check
 	@echo ""

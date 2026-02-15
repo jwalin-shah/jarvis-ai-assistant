@@ -15,14 +15,18 @@ import spacy
 
 logger = logging.getLogger(__name__)
 
+
 class EntityAnchorTracker:
     def __init__(self, jarvis_db_path: str = None) -> None:
         # 1. Load tiny spaCy model (12MB)
         try:
-            self.nlp = spacy.load("en_core_web_sm", disable=["ner"]) # Disable default NER, we'll build a better one
+            self.nlp = spacy.load(
+                "en_core_web_sm", disable=["ner"]
+            )  # Disable default NER, we'll build a better one
         except OSError:
             # Fallback if not installed
             import subprocess
+
             subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
             self.nlp = spacy.load("en_core_web_sm", disable=["ner"])
 
@@ -37,7 +41,9 @@ class EntityAnchorTracker:
         """Load all contact names into the ruler so spaCy always finds them."""
         try:
             conn = sqlite3.connect(db_path)
-            cursor = conn.execute("SELECT display_name FROM contacts WHERE display_name IS NOT NULL")
+            cursor = conn.execute(
+                "SELECT display_name FROM contacts WHERE display_name IS NOT NULL"
+            )
             patterns = []
             for (name,) in cursor.fetchall():
                 if len(name) > 2:
@@ -72,13 +78,16 @@ class EntityAnchorTracker:
 
         return anchors
 
+
 _tracker = None
+
 
 def get_tracker(db_path: str = None) -> EntityAnchorTracker:
     global _tracker
     if _tracker is None:
         # Default path
         import os
+
         if not db_path:
             db_path = os.path.expanduser("~/.jarvis/jarvis.db")
         _tracker = EntityAnchorTracker(db_path)

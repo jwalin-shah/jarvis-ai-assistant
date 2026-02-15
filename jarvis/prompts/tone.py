@@ -119,9 +119,13 @@ def build_style_instructions(style: UserStyleAnalysis) -> str:
     instructions = []
 
     if style.avg_length < 15:
-        instructions.append(f"Keep response VERY short (1-{max(5, int(style.avg_length * 1.5))} words)")
+        instructions.append(
+            f"Keep response VERY short (1-{max(5, int(style.avg_length * 1.5))} words)"
+        )
     elif style.avg_length < 30:
-        instructions.append(f"Keep response brief ({int(style.min_length)}-{int(style.avg_length * 1.2)} chars)")
+        instructions.append(
+            f"Keep response brief ({int(style.min_length)}-{int(style.avg_length * 1.2)} chars)"
+        )
     elif style.avg_length < 60:
         instructions.append("Keep response concise (1 short sentence)")
     else:

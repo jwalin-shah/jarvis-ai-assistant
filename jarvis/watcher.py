@@ -376,7 +376,7 @@ class ChatDBWatcher:
                         TaskType.FACT_EXTRACTION,
                         # TODO: Implement adaptive sliding window that respects sentence/turn boundaries
                         # instead of hard 25-msg slice. See docs/design/fact_extraction_strategy.md
-                        {"chat_id": chat_id, "limit": 25} # Process small window for real-time
+                        {"chat_id": chat_id, "limit": 25},  # Process small window for real-time
                     )
 
             # Track per-chat message counts for incremental re-segmentation
@@ -526,9 +526,10 @@ class ChatDBWatcher:
     async def _extract_facts(self, messages: list[dict[str, Any]]) -> None:
         """Extract and persist facts from new messages using the Unified V4 Pipeline."""
         try:
+            import uuid
+
             from jarvis.topics.segment_pipeline import process_segments
             from jarvis.topics.topic_segmenter import TopicSegment
-            import uuid
 
             # Group by chat_id
             by_chat: dict[str, list[dict[str, Any]]] = {}
@@ -539,25 +540,27 @@ class ChatDBWatcher:
 
             for chat_id, chat_msgs in by_chat.items():
                 # 1. Create a "Live Segment" for these new messages
-                from integrations.imessage.parser import parse_apple_timestamp
-                
                 # Convert dict messages to Message objects for the segmenter
                 from contracts.imessage import Message
+                from integrations.imessage.parser import parse_apple_timestamp
+
                 message_objs = []
                 for m in chat_msgs:
-                    message_objs.append(Message(
-                        id=m.get("id", 0),
-                        chat_id=chat_id,
-                        sender=m.get("sender", ""),
-                        sender_name=m.get("sender_name"),
-                        text=m.get("text", ""),
-                        date=parse_apple_timestamp(m.get("date", 0)),
-                        is_from_me=m.get("is_from_me", False),
-                        attachments=[],
-                        reply_to_id=None,
-                        reactions=[],
-                        is_system_message=False
-                    ))
+                    message_objs.append(
+                        Message(
+                            id=m.get("id", 0),
+                            chat_id=chat_id,
+                            sender=m.get("sender", ""),
+                            sender_name=m.get("sender_name"),
+                            text=m.get("text", ""),
+                            date=parse_apple_timestamp(m.get("date", 0)),
+                            is_from_me=m.get("is_from_me", False),
+                            attachments=[],
+                            reply_to_id=None,
+                            reactions=[],
+                            is_system_message=False,
+                        )
+                    )
 
                 if not message_objs:
                     continue
@@ -570,7 +573,7 @@ class ChatDBWatcher:
                     end_time=message_objs[-1].date,
                     message_count=len(message_objs),
                     segment_id=str(uuid.uuid4()),
-                    text="\n".join([m.text or "" for m in message_objs])
+                    text="\n".join([m.text or "" for m in message_objs]),
                 )
 
                 # 2. Run through Unified Pipeline (Persist -> Index -> Extract)
@@ -580,19 +583,20 @@ class ChatDBWatcher:
                     [live_segment],
                     chat_id,
                     contact_id=chat_id,
-                    extract_facts=True
+                    extract_facts=True,
                 )
 
                 if stats.get("facts_extracted", 0) > 0:
                     logger.info(
                         "Live Fact Extraction for %s: %d facts linked to new segment",
                         chat_id[:20],
-                        stats["facts_extracted"]
+                        stats["facts_extracted"],
                     )
-                    
+
                     # Invalidate contact profile cache for chats with significant updates
                     try:
                         from jarvis.contacts.contact_profile import invalidate_profile_cache
+
                         await asyncio.to_thread(invalidate_profile_cache)
                         logger.info("Invalidated contact profile cache for %s", chat_id[:20])
                     except Exception as e:
@@ -641,7 +645,7 @@ class ChatDBWatcher:
 
     def _do_resegment_one(self, chat_id: str) -> None:
         """Sync worker: incrementally segment new messages for a single chat.
-        
+
         Instead of deleting all segments and rebuilding, this appends new segments
         for messages that arrived since the last segmentation.
         """
@@ -659,6 +663,7 @@ class ChatDBWatcher:
         db = None
         try:
             from jarvis.db import get_db
+
             db = get_db()
         except Exception as e:
             logger.debug("Cannot get db for segment persistence: %s", e)
@@ -673,10 +678,11 @@ class ChatDBWatcher:
                         """SELECT MAX(end_time) as last_time 
                            FROM conversation_segments 
                            WHERE chat_id = ?""",
-                        (chat_id,)
+                        (chat_id,),
                     ).fetchone()
                     if row and row["last_time"]:
                         from datetime import datetime
+
                         try:
                             last_segmented_time = datetime.fromisoformat(row["last_time"])
                         except (ValueError, TypeError):
@@ -687,33 +693,36 @@ class ChatDBWatcher:
                 # Get recent messages and filter to only new ones
                 messages = reader.get_messages(chat_id, limit=self._segment_window * 2)
                 messages.reverse()  # chronological
-                
+
                 # Filter to only messages after last segmentation
-                new_messages = [
-                    m for m in messages 
-                    if m.date and m.date > last_segmented_time
-                ]
-                
+                new_messages = [m for m in messages if m.date and m.date > last_segmented_time]
+
                 if not new_messages:
                     logger.debug("No new messages to segment for %s", chat_id[:20])
                     return
-                    
+
                 # Include last few messages from previous segment for context
                 context_messages = [
-                    m for m in messages 
-                    if m.date and m.date <= last_segmented_time
+                    m for m in messages if m.date and m.date <= last_segmented_time
                 ][-5:]  # Last 5 messages for continuity
-                
+
                 messages_to_segment = context_messages + new_messages
-                logger.debug("Segmenting %d new messages (+ %d context) for %s", 
-                           len(new_messages), len(context_messages), chat_id[:20])
+                logger.debug(
+                    "Segmenting %d new messages (+ %d context) for %s",
+                    len(new_messages),
+                    len(context_messages),
+                    chat_id[:20],
+                )
             else:
                 # First time segmenting this chat - get recent window
                 messages = reader.get_messages(chat_id, limit=self._segment_window)
                 messages.reverse()  # chronological
                 messages_to_segment = messages
-                logger.debug("First-time segmentation for %s: %d messages", 
-                           chat_id[:20], len(messages_to_segment))
+                logger.debug(
+                    "First-time segmentation for %s: %d messages",
+                    chat_id[:20],
+                    len(messages_to_segment),
+                )
 
             if not messages_to_segment:
                 return
@@ -734,13 +743,13 @@ class ChatDBWatcher:
                            FROM conversation_segments 
                            WHERE chat_id = ? 
                            ORDER BY end_time DESC LIMIT 1""",
-                        (chat_id,)
+                        (chat_id,),
                     ).fetchone()
-                    
+
                     if last_seg_row:
                         # Check if first new segment should be merged (same topic)
                         first_new_seg = segments[0]
-                        # Simple heuristic: if first new segment has few messages, 
+                        # Simple heuristic: if first new segment has few messages,
                         # it might be a continuation
                         if len(first_new_seg.messages) <= 3:
                             # Delete and re-segment with more context
@@ -748,16 +757,14 @@ class ChatDBWatcher:
                             pass
 
             # Unified persist + index (only new segments)
-            stats = process_segments(
-                segments, chat_id, contact_id=chat_id, extract_facts=False
-            )
+            stats = process_segments(segments, chat_id, contact_id=chat_id, extract_facts=False)
 
             logger.info(
                 "Incremental segment %s: persisted=%d, indexed=%d (new: %s)",
                 chat_id[:20],
                 stats["persisted"],
                 stats["indexed"],
-                "yes" if last_segmented_time else "first-run"
+                "yes" if last_segmented_time else "first-run",
             )
 
     def _validate_schema(self) -> bool:

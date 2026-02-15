@@ -26,7 +26,6 @@ from jarvis.contacts.instruction_extractor import (
 )
 from jarvis.contacts.junk_filters import is_junk_message
 from jarvis.text_normalizer import normalize_text
-from jarvis.topics.topic_segmenter import TopicSegment
 
 
 def main():
@@ -47,10 +46,11 @@ def main():
     convos = reader.get_conversations(limit=max(50, args.limit * 10))
     user_name = reader.get_user_name()
     active = [
-        c for c in convos
+        c
+        for c in convos
         if c.message_count >= 5
         and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
-    ][:args.limit]
+    ][: args.limit]
 
     for idx, conv in enumerate(active, 1):
         chat_id = conv.chat_id
@@ -72,7 +72,9 @@ def main():
             raw = " ".join((m.text or "").splitlines()).strip()
             if not raw:
                 continue
-            clean = normalize_text(raw, filter_garbage=True, filter_attributed_artifacts=True, strip_signatures=True)
+            clean = normalize_text(
+                raw, filter_garbage=True, filter_attributed_artifacts=True, strip_signatures=True
+            )
             if not clean:
                 continue
             if is_junk_message(clean, chat_id):
@@ -130,15 +132,17 @@ def main():
 
         turns = len(prompt_lines)
 
-        print(f"{'='*80}")
-        print(f"[{idx}/{args.limit}] {contact_name} | {turns} turns | {claim_count} parsed claims | {elapsed_ms:.0f}ms")
-        print(f"{'='*80}")
+        print(f"{'=' * 80}")
+        print(
+            f"[{idx}/{args.limit}] {contact_name} | {turns} turns | {claim_count} parsed claims | {elapsed_ms:.0f}ms"
+        )
+        print(f"{'=' * 80}")
         print(f"INPUT ({turns} turns):")
         for line in prompt_lines[:5]:
             print(f"  {line[:100]}")
         if turns > 5:
             print(f"  ... ({turns - 5} more turns)")
-        print(f"\nRAW OUTPUT:")
+        print("\nRAW OUTPUT:")
         for line in raw_output.splitlines():
             print(f"  > {line}")
         print(f"\nPARSED: {canonical}")

@@ -21,15 +21,15 @@ def format_facts_for_prompt(facts: list[Fact], max_facts: int = 10) -> str:
             continue
         if "maximizing shareholder value" in fact.value.lower():
             continue
-            
+
         pred = fact.predicate.replace("_", " ")
         subject = fact.subject
-        
+
         if subject == "Contact":
             subject = "They"
         elif subject == "Jwalin":
             subject = "You"
-            
+
         if fact.predicate == "note":
             entry = f"- {fact.value}"
         elif fact.predicate in ["lives_in", "lived_in", "from"]:
@@ -64,7 +64,7 @@ def format_facts_for_prompt(facts: list[Fact], max_facts: int = 10) -> str:
             entry = f"- {subject} has a {fact.value}"
         else:
             entry = f"- {subject} {pred} {fact.value}"
-            
+
         parts.append(entry)
 
     return "\n".join(parts) if parts else ""

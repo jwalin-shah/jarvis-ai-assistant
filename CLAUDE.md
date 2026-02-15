@@ -239,7 +239,7 @@ This system has **8GB RAM**. Large data processing MUST account for this:
   - One model loaded at a time, unload before loading next
 - **Read-Only DB**: iMessage chat.db uses `file:...?mode=ro`
 - **No Fine-Tuning**: Use RAG + few-shot instead
-- **Prompts**: All in `jarvis/prompts.py` - nowhere else
+- **Prompts**: All in `jarvis/prompts/` - nowhere else
 - **Errors**: Inherit from `JarvisError` in `jarvis/errors.py`
 - **Batching**: Use `classify_batch()`, `embedder.encode(list)` - never loop
 - **Parallelization**: `n_jobs=1` for large datasets (>100MB), `n_jobs=2` only for small datasets (memory-constrained)
@@ -376,7 +376,7 @@ Skills in `.claude/skills/` provide domain expertise. Load the right skill based
 | File Pattern | Skill | When |
 |---|---|---|
 | `jarvis/socket_server.py`, `jarvis/prefetch/`, `jarvis/watcher.py` | backend-expert | Server, IPC, background tasks |
-| `jarvis/reply_service.py`, `models/`, `jarvis/prompts.py` | ai-llm-expert | LLM generation, prompts, inference |
+| `jarvis/reply_service.py`, `models/`, `jarvis/prompts/` | ai-llm-expert | LLM generation, prompts, inference |
 | `jarvis/search/`, `jarvis/contacts/`, `jarvis/graph/`, `jarvis/db/` | data-expert | Embeddings, RAG, knowledge graph, DB |
 | `jarvis/classifiers/`, `jarvis/features/`, `scripts/train_*` | ml-expert | Classifiers, training, feature engineering |
 | `desktop/src/**/*.svelte`, `desktop/src/**/*.ts` | frontend-expert | Svelte components, TypeScript, stores |

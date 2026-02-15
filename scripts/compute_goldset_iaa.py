@@ -28,6 +28,7 @@ from eval_shared import DEFAULT_LABEL_ALIASES, spans_match
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 def load_annotator_file(path: str) -> list[dict]:
     """Load an annotator JSON file and return list of samples."""
     with open(path) as f:
@@ -45,6 +46,7 @@ def index_by_sample_id(data: list[dict]) -> dict[str, dict]:
 # Span matching between annotators
 # ---------------------------------------------------------------------------
 
+
 def find_matching_span(
     span: dict,
     candidate_spans: list[dict],
@@ -53,8 +55,10 @@ def find_matching_span(
     """Find a matching span in candidate_spans for the given span."""
     for cand in candidate_spans:
         if spans_match(
-            span["span_text"], span["span_label"],
-            cand["span_text"], cand["span_label"],
+            span["span_text"],
+            span["span_label"],
+            cand["span_text"],
+            cand["span_label"],
             label_aliases=label_aliases,
         ):
             return cand
@@ -81,8 +85,10 @@ def build_span_universe(
         # Track which B spans are matched to A
         for i, sb in enumerate(spans_b):
             if i not in matched_b_indices and spans_match(
-                sa["span_text"], sa["span_label"],
-                sb["span_text"], sb["span_label"],
+                sa["span_text"],
+                sa["span_label"],
+                sb["span_text"],
+                sb["span_label"],
                 label_aliases=label_aliases,
             ):
                 matched_b_indices.add(i)
@@ -125,8 +131,10 @@ def build_span_universe_three(
             if j in assigned:
                 continue
             if spans_match(
-                si["span_text"], si["span_label"],
-                sj["span_text"], sj["span_label"],
+                si["span_text"],
+                si["span_label"],
+                sj["span_text"],
+                sj["span_label"],
                 label_aliases=label_aliases,
             ):
                 cluster.append((sj, aj))
@@ -153,6 +161,7 @@ def build_span_universe_three(
 # ---------------------------------------------------------------------------
 # Cohen's kappa (pairwise, binary per-span)
 # ---------------------------------------------------------------------------
+
 
 def cohens_kappa_binary(ratings_a: list[int], ratings_b: list[int]) -> float:
     """Compute Cohen's kappa for two raters with binary labels (0/1).
@@ -218,14 +227,24 @@ def compute_pairwise_kappa(
 
             for text, label in universe:
                 # Did annotator A mark this span?
-                present_a = 1 if find_matching_span(
-                    {"span_text": text, "span_label": label},
-                    spans_a, label_aliases,
-                ) else 0
-                present_b = 1 if find_matching_span(
-                    {"span_text": text, "span_label": label},
-                    spans_b, label_aliases,
-                ) else 0
+                present_a = (
+                    1
+                    if find_matching_span(
+                        {"span_text": text, "span_label": label},
+                        spans_a,
+                        label_aliases,
+                    )
+                    else 0
+                )
+                present_b = (
+                    1
+                    if find_matching_span(
+                        {"span_text": text, "span_label": label},
+                        spans_b,
+                        label_aliases,
+                    )
+                    else 0
+                )
                 all_ratings_a.append(present_a)
                 all_ratings_b.append(present_b)
 
@@ -243,6 +262,7 @@ def compute_pairwise_kappa(
 # ---------------------------------------------------------------------------
 # Fleiss' kappa (all 3 annotators)
 # ---------------------------------------------------------------------------
+
 
 def fleiss_kappa(
     ann_data: list[dict[str, dict]],
@@ -268,10 +288,7 @@ def fleiss_kappa(
     common_ids = set(ann_data[0].keys()) & set(ann_data[1].keys()) & set(ann_data[2].keys())
 
     for sid in sorted(common_ids):
-        spans_list = [
-            ann_data[a][sid].get("expected_candidates", [])
-            for a in range(3)
-        ]
+        spans_list = [ann_data[a][sid].get("expected_candidates", []) for a in range(3)]
         universe = build_span_universe_three(spans_list, label_aliases)
 
         for _text, _label, per_annotator in universe:
@@ -298,7 +315,7 @@ def fleiss_kappa(
     total_ratings = n_items * n_raters
     p_present = sum(row[0] for row in rating_matrix) / total_ratings
     p_absent = sum(row[1] for row in rating_matrix) / total_ratings
-    p_e_bar = p_present ** 2 + p_absent ** 2
+    p_e_bar = p_present**2 + p_absent**2
 
     if p_e_bar == 1.0:
         return 1.0
@@ -310,6 +327,7 @@ def fleiss_kappa(
 # ---------------------------------------------------------------------------
 # Majority-vote merging
 # ---------------------------------------------------------------------------
+
 
 def merge_annotations(
     ann_data: list[dict[str, dict]],
@@ -367,38 +385,46 @@ def merge_annotations(
                     confidence = "high"
                 else:
                     confidence = "medium"
-                merged_candidates.append({
-                    "span_text": text,
-                    "span_label": label,
-                    "agreement": agreement,
-                    "confidence": confidence,
-                })
+                merged_candidates.append(
+                    {
+                        "span_text": text,
+                        "span_label": label,
+                        "agreement": agreement,
+                        "confidence": confidence,
+                    }
+                )
             else:
                 # Only 1 annotator marked this span
                 if n_annotators >= 3:
                     # All 3 had a chance, only 1 marked it: flag for review
                     any_review_needed = True
-                    merged_candidates.append({
-                        "span_text": text,
-                        "span_label": label,
-                        "agreement": agreement,
-                        "confidence": "low",
-                    })
+                    merged_candidates.append(
+                        {
+                            "span_text": text,
+                            "span_label": label,
+                            "agreement": agreement,
+                            "confidence": "low",
+                        }
+                    )
                 else:
                     # Fewer than 3 annotators had this sample; still include
-                    merged_candidates.append({
-                        "span_text": text,
-                        "span_label": label,
-                        "agreement": agreement,
-                        "confidence": "low",
-                    })
+                    merged_candidates.append(
+                        {
+                            "span_text": text,
+                            "span_label": label,
+                            "agreement": agreement,
+                            "confidence": "low",
+                        }
+                    )
                     any_review_needed = True
 
         # Check for complete disagreement: each annotator has different spans,
         # none overlap. This is the "all 3 disagree" case.
-        if n_annotators >= 3 and all(
-            c["agreement"] == 1 for c in merged_candidates
-        ) and len(merged_candidates) > 0:
+        if (
+            n_annotators >= 3
+            and all(c["agreement"] == 1 for c in merged_candidates)
+            and len(merged_candidates) > 0
+        ):
             any_review_needed = True
 
         # Filter to only majority-accepted spans for the final expected_candidates,
@@ -427,6 +453,7 @@ def merge_annotations(
 # Stratified train/dev/test split
 # ---------------------------------------------------------------------------
 
+
 def stratified_split(
     samples: list[dict],
     train_frac: float = 0.6,
@@ -445,10 +472,9 @@ def stratified_split(
     # Build stratification key
     strata: dict[tuple[str, bool], list[dict]] = defaultdict(list)
     for s in samples:
-        has_cands = len([
-            c for c in s.get("expected_candidates", [])
-            if c.get("agreement", 0) >= 2
-        ]) > 0
+        has_cands = (
+            len([c for c in s.get("expected_candidates", []) if c.get("agreement", 0) >= 2]) > 0
+        )
         key = (s.get("slice", "unknown"), has_cands)
         strata[key].append(s)
 
@@ -465,12 +491,11 @@ def stratified_split(
         n_test = n - n_train - n_dev
 
         train.extend(group[:n_train])
-        dev.extend(group[n_train:n_train + n_dev])
-        test.extend(group[n_train + n_dev:])
+        dev.extend(group[n_train : n_train + n_dev])
+        test.extend(group[n_train + n_dev :])
 
         print(
-            f"  Stratum {key}: {n} samples -> "
-            f"train={n_train}, dev={n_dev}, test={n_test}",
+            f"  Stratum {key}: {n} samples -> train={n_train}, dev={n_dev}, test={n_test}",
             flush=True,
         )
 
@@ -486,6 +511,7 @@ def stratified_split(
 # Reporting
 # ---------------------------------------------------------------------------
 
+
 def print_summary(merged: list[dict], kappas: list[tuple[str, str, float]], fk: float) -> None:
     """Print a summary report of IAA metrics and merged dataset stats."""
     print("\n" + "=" * 60, flush=True)
@@ -495,12 +521,17 @@ def print_summary(merged: list[dict], kappas: list[tuple[str, str, float]], fk: 
     print("\nPairwise Cohen's Kappa:", flush=True)
     for name_a, name_b, k in kappas:
         interpretation = (
-            "almost perfect" if k > 0.8 else
-            "substantial" if k > 0.6 else
-            "moderate" if k > 0.4 else
-            "fair" if k > 0.2 else
-            "slight" if k > 0.0 else
-            "poor"
+            "almost perfect"
+            if k > 0.8
+            else "substantial"
+            if k > 0.6
+            else "moderate"
+            if k > 0.4
+            else "fair"
+            if k > 0.2
+            else "slight"
+            if k > 0.0
+            else "poor"
         )
         print(f"  {name_a} vs {name_b}: {k:.4f} ({interpretation})", flush=True)
 
@@ -508,12 +539,17 @@ def print_summary(merged: list[dict], kappas: list[tuple[str, str, float]], fk: 
     print(f"  Average pairwise: {avg_kappa:.4f}", flush=True)
 
     interpretation = (
-        "almost perfect" if fk > 0.8 else
-        "substantial" if fk > 0.6 else
-        "moderate" if fk > 0.4 else
-        "fair" if fk > 0.2 else
-        "slight" if fk > 0.0 else
-        "poor"
+        "almost perfect"
+        if fk > 0.8
+        else "substantial"
+        if fk > 0.6
+        else "moderate"
+        if fk > 0.4
+        else "fair"
+        if fk > 0.2
+        else "slight"
+        if fk > 0.0
+        else "poor"
     )
     print(f"\nFleiss' Kappa (all 3): {fk:.4f} ({interpretation})", flush=True)
 
@@ -521,21 +557,11 @@ def print_summary(merged: list[dict], kappas: list[tuple[str, str, float]], fk: 
     total = len(merged)
     n_review = sum(1 for s in merged if s["review_needed"])
     total_spans = sum(len(s["expected_candidates"]) for s in merged)
-    high = sum(
-        1 for s in merged
-        for c in s["expected_candidates"]
-        if c.get("confidence") == "high"
-    )
+    high = sum(1 for s in merged for c in s["expected_candidates"] if c.get("confidence") == "high")
     medium = sum(
-        1 for s in merged
-        for c in s["expected_candidates"]
-        if c.get("confidence") == "medium"
+        1 for s in merged for c in s["expected_candidates"] if c.get("confidence") == "medium"
     )
-    low = sum(
-        1 for s in merged
-        for c in s["expected_candidates"]
-        if c.get("confidence") == "low"
-    )
+    low = sum(1 for s in merged for c in s["expected_candidates"] if c.get("confidence") == "low")
 
     print("\nMerged Dataset:", flush=True)
     print(f"  Total samples: {total}", flush=True)
@@ -562,32 +588,40 @@ def print_summary(merged: list[dict], kappas: list[tuple[str, str, float]], fk: 
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Compute IAA and merge 3 annotator label files into a goldset.",
     )
     parser.add_argument(
-        "--annotator1", required=True,
+        "--annotator1",
+        required=True,
         help="Path to annotator 1 JSON file",
     )
     parser.add_argument(
-        "--annotator2", required=True,
+        "--annotator2",
+        required=True,
         help="Path to annotator 2 JSON file",
     )
     parser.add_argument(
-        "--annotator3", required=True,
+        "--annotator3",
+        required=True,
         help="Path to annotator 3 JSON file",
     )
     parser.add_argument(
-        "--output-dir", default="training_data/goldset_v6",
+        "--output-dir",
+        default="training_data/goldset_v6",
         help="Output directory for merged goldset and splits (default: training_data/goldset_v6)",
     )
     parser.add_argument(
-        "--no-aliases", action="store_true",
+        "--no-aliases",
+        action="store_true",
         help="Disable label aliasing (require exact label match)",
     )
     parser.add_argument(
-        "--seed", type=int, default=42,
+        "--seed",
+        type=int,
+        default=42,
         help="Random seed for train/dev/test split",
     )
     args = parser.parse_args()

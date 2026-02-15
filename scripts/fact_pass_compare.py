@@ -9,9 +9,13 @@ import sqlite3
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare pass-1 claims with final facts")
-    parser.add_argument("--db", default="/Users/jwalinshah/.jarvis/jarvis.db", help="Path to jarvis.db")
+    parser.add_argument(
+        "--db", default="/Users/jwalinshah/.jarvis/jarvis.db", help="Path to jarvis.db"
+    )
     parser.add_argument("--chat-id", required=True, help="chat_id/contact_id to inspect")
-    parser.add_argument("--limit-segments", type=int, default=20, help="How many recent segments to show")
+    parser.add_argument(
+        "--limit-segments", type=int, default=20, help="How many recent segments to show"
+    )
     args = parser.parse_args()
 
     conn = sqlite3.connect(args.db)
@@ -92,4 +96,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

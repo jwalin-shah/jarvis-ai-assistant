@@ -8,6 +8,7 @@ logging.basicConfig(level=logging.INFO)
 TARGET_MODEL = "models/lfm2-1.2b-extract-mlx-4bit"
 DRAFT_MODEL = "lfm-350m"
 
+
 def benchmark_speculative():
     # 1. Setup Loader
     loader = MLXModelLoader(ModelConfig(model_path=TARGET_MODEL))
@@ -36,6 +37,7 @@ def benchmark_speculative():
 
     speedup = (res2.tokens_per_second / res1.tokens_per_second) if res1.tokens_per_second > 0 else 0
     print(f"\n--- Total Speedup: {speedup:.2f}x ---")
+
 
 if __name__ == "__main__":
     benchmark_speculative()

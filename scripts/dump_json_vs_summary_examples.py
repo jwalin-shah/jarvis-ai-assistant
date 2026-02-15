@@ -73,7 +73,9 @@ def main() -> None:
         default="/Users/jwalinshah/projects/jarvis-ai-assistant/results/json_vs_summary_dump.txt",
         help="Output file path",
     )
-    parser.add_argument("--summary-max-tokens", type=int, default=240, help="Summary generation max tokens")
+    parser.add_argument(
+        "--summary-max-tokens", type=int, default=240, help="Summary generation max tokens"
+    )
     args = parser.parse_args()
 
     extractor = get_instruction_extractor(args.tier)

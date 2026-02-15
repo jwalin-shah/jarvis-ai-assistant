@@ -1071,7 +1071,7 @@ class MLXModelLoader:
                                 # Trim to stop sequence
                                 stop_idx = accumulated_text.index(stop_seq)
                                 # Calculate how much of new_text to keep
-                                text_before_new = accumulated_text[:-len(new_text)]
+                                text_before_new = accumulated_text[: -len(new_text)]
                                 stop_idx_in_new = stop_idx - len(text_before_new)
                                 if stop_idx_in_new >= 0:
                                     new_text = new_text[:stop_idx_in_new]
@@ -1195,15 +1195,12 @@ def get_model() -> MLXModelLoader:
 
 
 def reset_model() -> None:
-    """Reset the singleton model loader and unload any loaded model.
+    """Unload the singleton model loader so memory is free for another LLM (e.g. extractor).
 
-    Use this to:
-    - Clear state between tests
-    - Switch to a different model configuration
-    - Force complete reinitialization
+    Keeps the singleton reference so callers (e.g. generator) holding that loader
+    can call load() again without creating a second loader instance.
     """
     global _model_loader
     with _model_loader_lock:
         if _model_loader is not None:
             _model_loader.unload()
-        _model_loader = None

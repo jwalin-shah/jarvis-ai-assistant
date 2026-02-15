@@ -21,7 +21,6 @@ from jarvis.cache import TTLCache
 from jarvis.db.contacts import ContactMixin
 from jarvis.db.core import JarvisDBBase
 from jarvis.db.index_versions import IndexVersionMixin
-from jarvis.db.reply_logs import ReplyLogMixin
 from jarvis.db.models import (
     INDEXES_DIR,
     JARVIS_DB_PATH,
@@ -30,6 +29,7 @@ from jarvis.db.models import (
     IndexVersion,
     _convert_timestamp,
 )
+from jarvis.db.reply_logs import ReplyLogMixin
 from jarvis.db.schema import (
     CURRENT_SCHEMA_VERSION,
     EXPECTED_INDICES,

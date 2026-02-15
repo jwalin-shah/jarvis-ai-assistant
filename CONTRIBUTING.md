@@ -90,7 +90,7 @@ class MyCustomError(JarvisError):
 
 ### Prompts
 
-All LLM prompts must be defined in `jarvis/prompts.py` - nowhere else.
+All LLM prompts must be defined in `jarvis/prompts/` - nowhere else.
 
 ## Architecture Overview
 

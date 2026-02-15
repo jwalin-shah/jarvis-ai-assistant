@@ -62,7 +62,6 @@ class NLICrossEncoder:
             return
 
         with gpu_context():
-
             if self._loaded:
                 return
 
@@ -231,9 +230,7 @@ class NLICrossEncoder:
 
         all_results: list[dict[str, float]] = []
         for row in all_probs_arr:
-            all_results.append(
-                {label: float(row[i]) for i, label in enumerate(NLI_LABELS)}
-            )
+            all_results.append({label: float(row[i]) for i, label in enumerate(NLI_LABELS)})
 
         return all_results
 

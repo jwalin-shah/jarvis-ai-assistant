@@ -16,13 +16,21 @@ print(f"{'Type':<15} {'Display Name':<30} {'Message Count':<15} {'Chat ID (first
 print("-" * 110)
 
 for c in conversations[:30]:  # Show first 30
-    chat_type = "SMS" if "SMS" in c.chat_id else "iMessage" if "iMessage" in c.chat_id else "RCS" if "RCS" in c.chat_id else "Other"
+    chat_type = (
+        "SMS"
+        if "SMS" in c.chat_id
+        else "iMessage"
+        if "iMessage" in c.chat_id
+        else "RCS"
+        if "RCS" in c.chat_id
+        else "Other"
+    )
     name = (c.display_name or "Unknown")[:28]
     msg_count = c.message_count
     chat_id = c.chat_id[:50] if c.chat_id else ""
     print(f"{chat_type:<15} {name:<30} {msg_count:<15} {chat_id}")
 
-print(f"\n{'='*60}")
+print(f"\n{'=' * 60}")
 print("Top 10 by message count:")
 conversations.sort(key=lambda x: x.message_count, reverse=True)
 for c in conversations[:10]:

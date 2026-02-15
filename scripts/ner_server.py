@@ -89,7 +89,11 @@ def extract_syntactic_features(text: str) -> list[float]:
     lower_tokens = [t.text.lower() for t in tokens]
 
     # Directive indicators
-    imperative = 1.0 if tokens and tokens[0].pos_ == "VERB" and tokens[0].morph.get("Mood") == ["Imp"] else 0.0
+    imperative = (
+        1.0
+        if tokens and tokens[0].pos_ == "VERB" and tokens[0].morph.get("Mood") == ["Imp"]
+        else 0.0
+    )
     if not imperative and tokens and tokens[0].pos_ == "VERB" and tokens[0].tag_ == "VB":
         imperative = 0.5  # Base form verb at start is soft imperative signal
 
@@ -117,22 +121,47 @@ def extract_syntactic_features(text: str) -> list[float]:
 
     promise_verb = 1.0 if any(t in PROMISE_VERBS for t in lower_tokens) else 0.0
 
-    first_person_count = sum(1 for t in lower_tokens if t in ("i", "me", "my", "mine", "myself")) / max(len(lower_tokens), 1)
+    first_person_count = sum(
+        1 for t in lower_tokens if t in ("i", "me", "my", "mine", "myself")
+    ) / max(len(lower_tokens), 1)
 
-    agreement_words = {"yes", "yeah", "yep", "sure", "ok", "okay", "agreed", "definitely", "absolutely"}
+    agreement_words = {
+        "yes",
+        "yeah",
+        "yep",
+        "sure",
+        "ok",
+        "okay",
+        "agreed",
+        "definitely",
+        "absolutely",
+    }
     agreement = 1.0 if any(t in agreement_words for t in lower_tokens) else 0.0
 
     # General syntactic
     modal_count = sum(1 for t in lower_tokens if t in MODAL_VERBS) / max(len(lower_tokens), 1)
     verb_count = sum(1 for t in tokens if t.pos_ == "VERB") / max(len(tokens), 1)
-    second_person_count = sum(1 for t in lower_tokens if t in ("you", "your", "yours", "yourself")) / max(len(lower_tokens), 1)
+    second_person_count = sum(
+        1 for t in lower_tokens if t in ("you", "your", "yours", "yourself")
+    ) / max(len(lower_tokens), 1)
     has_negation = 1.0 if any(t in NEGATION_WORDS for t in lower_tokens) else 0.0
     is_interrogative = 1.0 if text.strip().endswith("?") else 0.0
 
     return [
-        imperative, you_modal, request_verb, starts_modal, directive_question,
-        i_will, promise_verb, first_person_count, agreement,
-        modal_count, verb_count, second_person_count, has_negation, is_interrogative,
+        imperative,
+        you_modal,
+        request_verb,
+        starts_modal,
+        directive_question,
+        i_will,
+        promise_verb,
+        first_person_count,
+        agreement,
+        modal_count,
+        verb_count,
+        second_person_count,
+        has_negation,
+        is_interrogative,
     ]
 
 

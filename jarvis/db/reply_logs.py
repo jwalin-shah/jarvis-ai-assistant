@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -64,9 +63,7 @@ class ReplyLogMixin:
             return cursor.lastrowid
 
     def get_recent_reply_logs(
-        self: JarvisDBBase,
-        limit: int = 20,
-        chat_id: str | None = None
+        self: JarvisDBBase, limit: int = 20, chat_id: str | None = None
     ) -> list[dict[str, Any]]:
         """Retrieve recent reply logs for inspection."""
         with self.connection() as conn:
@@ -77,6 +74,6 @@ class ReplyLogMixin:
                 params.append(chat_id)
             query += " ORDER BY created_at DESC LIMIT ?"
             params.append(limit)
-            
+
             cursor = conn.execute(query, params)
             return [dict(row) for row in cursor]

@@ -7,10 +7,10 @@ from jarvis.tasks.worker import start_worker, stop_worker
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("jarvis.worker")
+
 
 def main():
     logger.info("Starting JARVIS background task worker...")
@@ -35,6 +35,7 @@ def main():
         pass
     finally:
         stop_worker()
+
 
 if __name__ == "__main__":
     main()

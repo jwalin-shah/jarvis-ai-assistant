@@ -9,6 +9,7 @@ from jarvis.contacts.fact_filter import is_fact_likely
 
 logging.basicConfig(level=logging.INFO)
 
+
 def test_gate():
     print("\n--- Testing Message Gate ---")
     messages = [
@@ -23,6 +24,7 @@ def test_gate():
         likely = is_fact_likely(msg)
         status = "KEEP" if likely else "SKIP"
         print(f"[{status}] {msg}")
+
 
 if __name__ == "__main__":
     test_gate()
