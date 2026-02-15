@@ -88,7 +88,7 @@ def ingest_and_extract_segments(
 
     monitor = PipelineMonitor()
     manager = get_model_manager()
-    
+
     # Ensure memory is ready for embeddings
     manager.prepare_for("embedder")
 
@@ -111,6 +111,24 @@ def ingest_and_extract_segments(
                 if contact:
                     contact_by_chat_id[contact.chat_id] = contact
 
+    # Batch-load last processed timestamp per chat (avoids N+1 in loop)
+    last_processed_by_chat: dict[str, str | None] = {}
+    if chat_ids and not force:
+        with jarvis_db.connection() as conn:
+            placeholders = ",".join("?" * len(chat_ids))
+            cursor = conn.execute(
+                f"""
+                SELECT chat_id, MAX(end_time) AS last_time
+                FROM conversation_segments
+                WHERE chat_id IN ({placeholders})
+                GROUP BY chat_id
+                """,
+                chat_ids,
+            )
+            for row in cursor.fetchall():
+                # Row supports column name access (sqlite3.Row)
+                last_processed_by_chat[row["chat_id"]] = row["last_time"]
+
     # --- Phase 1: Segmentation (Streaming) ---
     monitor.start_stage("segmentation")
     all_created_segments: list[tuple[int, Any, str]] = []  # (db_id, segment_obj, chat_id)
@@ -129,26 +147,21 @@ def ingest_and_extract_segments(
                 contact_by_chat_id[conv.chat_id] = contact
 
             contact_id = contact.id
-            
-            # --- DELTA CHECK: Find last processed timestamp for this chat ---
+
+            # --- DELTA CHECK: use pre-fetched last processed timestamp ---
             last_processed_at = None
             if not force:
-                with jarvis_db.connection() as conn:
-                    row = conn.execute(
-                        "SELECT MAX(end_time) FROM conversation_segments WHERE chat_id = ?",
-                        (conv.chat_id,),
-                    ).fetchone()
-                    if row and row[0]:
-                        from datetime import datetime
-                        last_processed_at = datetime.fromisoformat(row[0])
+                last_time = last_processed_by_chat.get(conv.chat_id)
+                if last_time:
+                    from datetime import datetime
+
+                    last_processed_at = datetime.fromisoformat(last_time)
 
             # Fetch messages for THIS chat only (Streaming)
             messages = chat_db_reader.get_messages(
-                conv.chat_id, 
-                limit=None, 
-                after_date=last_processed_at if not force else None
+                conv.chat_id, limit=None, after_date=last_processed_at if not force else None
             )
-            
+
             if not messages or len(messages) < 2:
                 continue
 
@@ -192,7 +205,7 @@ def ingest_and_extract_segments(
             segments = segment_conversation_basic(
                 messages, contact_id=str(contact_id), pre_fetched_embeddings=pre_fetched_embeddings
             )
-            
+
             # Filter for indexing
             eligible = [s for s in segments if s.message_count >= 1]
 
@@ -211,17 +224,17 @@ def ingest_and_extract_segments(
 
                     for db_id, seg_obj in zip(db_ids, eligible):
                         all_created_segments.append((db_id, seg_obj, conv.chat_id))
-                
+
                 stats.segments_created += len(eligible)
                 monitor.stages["segmentation"].items_processed += len(eligible)
                 monitor.stages["segmentation"].success_count += 1
 
             stats.conversations_processed += 1
-            
+
             # Clear memory for next chat
             del messages
             del pre_fetched_embeddings
-            
+
         except Exception as e:
             logger.warning("Error segmenting %s: %s", conv.chat_id, e)
             stats.errors.append({"chat_id": conv.chat_id, "error": str(e)})
@@ -236,8 +249,8 @@ def ingest_and_extract_segments(
         logger.info("Phase 1 complete. Preparing memory for Phase 2...")
 
         from jarvis.contacts.batched_extractor import get_batched_instruction_extractor
-        from jarvis.contacts.fact_verifier import FactVerifier
         from jarvis.contacts.fact_storage import save_facts
+        from jarvis.contacts.fact_verifier import FactVerifier
 
         # Use batched extractor (ModelManager handled inside extractor.load)
         batch_size = max(1, int(os.getenv("FACT_EXTRACT_BATCH_SIZE", "2")))
@@ -260,7 +273,7 @@ def ingest_and_extract_segments(
                 # Extract facts in batches
                 batch_results, rejection_count = extractor.extract_facts_from_segments_batch(
                     all_segments,
-                    contact_id="", 
+                    contact_id="",
                     contact_name="Contact",
                     user_name="Me",
                 )
@@ -290,14 +303,16 @@ def ingest_and_extract_segments(
                         ]
                         if not fast_gated_facts:
                             continue
-                        verified_facts, rejected = verifier.verify_facts(fast_gated_facts, segment_text)
+                        verified_facts, rejected = verifier.verify_facts(
+                            fast_gated_facts, segment_text
+                        )
                         total_rejected_by_nli += rejected
                         if not verified_facts:
                             continue
                         for fact in verified_facts:
                             setattr(fact, "_segment_db_id", seg_db_id)
                         facts_by_chat.setdefault(chat_id, []).extend(verified_facts)
-                        
+
                     monitor.stages["extraction"].items_processed += 1
                     monitor.stages["extraction"].success_count += 1
 
@@ -337,7 +352,7 @@ def ingest_and_extract_segments(
 
     # Clean up and report
     manager.unload_all()
-    
+
     final_stats = stats.to_dict()
     final_stats["pipeline_summary"] = monitor.get_summary()
     return final_stats
