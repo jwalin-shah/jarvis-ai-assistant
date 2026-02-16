@@ -7,8 +7,8 @@ to run on non-macOS platforms.
 import platform
 import sys
 import types
-from unittest.mock import MagicMock
 from functools import lru_cache
+from unittest.mock import MagicMock
 
 import numpy as np
 import psutil

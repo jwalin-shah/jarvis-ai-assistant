@@ -15,10 +15,9 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 
 /// Get socket path for JARVIS daemon (~/.jarvis/jarvis.sock)
 fn get_socket_path() -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|_| {
-        "HOME environment variable not set - cannot determine socket path".to_string()
-    })?;
-    Ok(format!("{home}/.jarvis/jarvis.sock"))
+    const ENV_HOME: &str = "HOME";
+    let home = std::env::var(ENV_HOME).map(std::path::PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
+    Ok(home.join(".jarvis").join("jarvis.sock").to_string_lossy().to_string())
 }
 
 /// Request ID counter
@@ -48,12 +47,12 @@ pub struct SocketState {
 impl Default for SocketState {
     fn default() -> Self {
         Self {
-            writer: Arc::new(Mutex::new(None)),
-            pending: Arc::new(RwLock::new(HashMap::new())),
-            connected: Arc::new(RwLock::new(false)),
-            reader_task: Arc::new(Mutex::new(None)),
-            processor_task: Arc::new(Mutex::new(None)),
-            writer_dead: Arc::new(RwLock::new(false)),
+            writer: Arc::default(),
+            pending: Arc::default(),
+            connected: Arc::default(),
+            reader_task: Arc::default(),
+            processor_task: Arc::default(),
+            writer_dead: Arc::default(),
         }
     }
 }
@@ -732,7 +731,7 @@ async fn connect_socket_internal(app: &AppHandle, state: &SocketState) -> Result
     let pending_for_reader = pending_arc.clone();
     let reader_handle = tokio::spawn(async move {
         let mut buf_reader = BufReader::new(reader);
-        let mut line = String::new();
+        let mut line = String::default();
 
         loop {
             line.clear();
