@@ -1,8 +1,8 @@
-
 import sqlite3
 from unittest.mock import create_autospec
 
 from jarvis.watcher_db import query_new_messages
+
 
 class TestWatcherDBQuery:
     @staticmethod
@@ -31,9 +31,9 @@ class TestWatcherDBQuery:
         query_normalized = " ".join(query.split())
 
         # It should contain ORDER BY message.ROWID ASC
-        assert "ORDER BY message.ROWID ASC" in query_normalized, \
+        assert "ORDER BY message.ROWID ASC" in query_normalized, (
             f"Query should order by ROWID, but got: {query}"
+        )
 
         # It should NOT order by date
-        assert "ORDER BY message.date" not in query_normalized, \
-            "Query should not order by date"
+        assert "ORDER BY message.date" not in query_normalized, "Query should not order by date"

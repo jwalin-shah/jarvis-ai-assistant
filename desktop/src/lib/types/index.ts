@@ -1,6 +1,6 @@
 /**
  * Core Type Definitions for JARVIS
- * 
+ *
  * Strictly typed domain models with proper type guards
  */
 
@@ -17,15 +17,15 @@ export type ToastType = 'success' | 'error' | 'warning' | 'info';
 // Theme Types
 export type ThemeMode = 'dark' | 'light' | 'system';
 
-export type AccentColorKey = 
-  | 'blue' 
-  | 'purple' 
-  | 'pink' 
-  | 'red' 
-  | 'orange' 
-  | 'yellow' 
-  | 'green' 
-  | 'teal' 
+export type AccentColorKey =
+  | 'blue'
+  | 'purple'
+  | 'pink'
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'teal'
   | 'indigo';
 
 // Priority Types
@@ -82,7 +82,9 @@ export interface OptimisticMessage extends Message {
 }
 
 // Type guard for optimistic messages
-export function isOptimisticMessage(message: Message | OptimisticMessage): message is OptimisticMessage {
+export function isOptimisticMessage(
+  message: Message | OptimisticMessage
+): message is OptimisticMessage {
   return '_optimistic' in message && message._optimistic === true;
 }
 

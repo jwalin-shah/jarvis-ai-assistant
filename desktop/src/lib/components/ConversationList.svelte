@@ -66,16 +66,16 @@
     if (name.includes(q)) return true;
     const preview = (conv.last_message_text || '').toLowerCase();
     if (preview.includes(q)) return true;
-    return conv.participants.some(p => p.toLowerCase().includes(q));
+    return conv.participants.some((p) => p.toLowerCase().includes(q));
   }
 
   // Sort conversations: pinned first, then by last_message_date, archived filtered
   let sortedConversations = $derived.by(() => {
     let convs = conversationsStore.conversations.filter(
-      c => !conversationsStore.archivedChats.has(c.chat_id)
+      (c) => !conversationsStore.archivedChats.has(c.chat_id)
     );
     if (searchQuery.trim()) {
-      convs = convs.filter(c => matchesSearch(c, searchQuery.trim()));
+      convs = convs.filter((c) => matchesSearch(c, searchQuery.trim()));
     }
     return convs.sort((a, b) => {
       const aPinned = conversationsStore.pinnedChats.has(a.chat_id);
@@ -87,18 +87,20 @@
   });
 
   let archivedConversations = $derived(
-    conversationsStore.conversations.filter(c => conversationsStore.archivedChats.has(c.chat_id))
+    conversationsStore.conversations.filter((c) => conversationsStore.archivedChats.has(c.chat_id))
   );
 
   // Avatar state with LRU cache to prevent unbounded memory growth
   // Max 50 avatars (~5-10MB) - enough for visible + scroll buffer
   const MAX_CACHED_AVATARS = 50;
   let avatarStates = $state<Map<string, 'loading' | 'loaded' | 'error'>>(new Map());
-  let avatarUrls = $state<LRUCache<string, string>>(new LRUCache(MAX_CACHED_AVATARS, (_key, url) => {
-    if (url.startsWith('blob:')) {
-      URL.revokeObjectURL(url);
-    }
-  }));
+  let avatarUrls = $state<LRUCache<string, string>>(
+    new LRUCache(MAX_CACHED_AVATARS, (_key, url) => {
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    })
+  );
 
   // Intersection Observer for lazy loading avatars
   let observer = $state<IntersectionObserver | null>(null);
@@ -108,7 +110,9 @@
   let cleanup: (() => void) | null = null;
 
   onMount(() => {
-    initializePolling().then((fn) => { cleanup = fn; });
+    initializePolling().then((fn) => {
+      cleanup = fn;
+    });
     window.addEventListener('keydown', handleKeydown);
 
     // Subscribe to connection info changes (UX-01)
@@ -151,7 +155,7 @@
   let avatarQueue: string[] = [];
   let avatarQueueSet = new Set<string>();
   let avatarLoadTimestamps: number[] = []; // Track load times for rate limiting
-  
+
   // Avatar cache metrics
   let avatarCacheMetrics = $state({
     hits: 0,
@@ -163,7 +167,7 @@
   function checkRateLimit(): boolean {
     const now = Date.now();
     // Remove timestamps older than 1 second
-    avatarLoadTimestamps = avatarLoadTimestamps.filter(ts => now - ts < 1000);
+    avatarLoadTimestamps = avatarLoadTimestamps.filter((ts) => now - ts < 1000);
     return avatarLoadTimestamps.length < AVATAR_LOAD_RATE_LIMIT;
   }
 
@@ -270,7 +274,11 @@
     const maxIndex = conversations.length - 1;
 
     // Enter/Space: select conversation (component-specific)
-    if ((event.key === 'Enter' || event.key === ' ') && focusedIndex >= 0 && focusedIndex <= maxIndex) {
+    if (
+      (event.key === 'Enter' || event.key === ' ') &&
+      focusedIndex >= 0 &&
+      focusedIndex <= maxIndex
+    ) {
       event.preventDefault();
       const conv = conversations[focusedIndex]!;
       selectConversation(conv.chat_id);
@@ -296,17 +304,19 @@
     setConversationIndex(newIndex);
     focusedIndex = newIndex;
     scrollToItem(newIndex);
-    announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
+    announce(
+      `${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`
+    );
   }
 
   function scrollToItem(index: number) {
     tick().then(() => {
       // For virtual scrolling, calculate position based on estimated height
       if (!listContainerRef) return;
-      
+
       const itemTop = index * ESTIMATED_CONVERSATION_HEIGHT;
       const containerHeight = listContainerRef.clientHeight;
-      
+
       // Update virtual scroll to include this item
       visibleStartIndex = Math.max(0, index - CONVERSATION_BUFFER_SIZE);
       visibleEndIndex = Math.min(
@@ -314,11 +324,11 @@
         index + MIN_VISIBLE_CONVERSATIONS + CONVERSATION_BUFFER_SIZE
       );
       updateVirtualPadding();
-      
+
       // Scroll to position
       listContainerRef.scrollTo({
         top: itemTop - containerHeight / 2 + ESTIMATED_CONVERSATION_HEIGHT / 2,
-        behavior: 'smooth'
+        behavior: 'smooth',
       });
     });
   }
@@ -332,10 +342,10 @@
 
   function calculateVisibleRange() {
     if (!listContainerRef) return;
-    
+
     const { scrollTop, clientHeight } = listContainerRef;
     const totalConversations = sortedConversations.length;
-    
+
     if (totalConversations === 0) {
       visibleStartIndex = 0;
       visibleEndIndex = 0;
@@ -345,7 +355,10 @@
     }
 
     // Calculate which items should be visible
-    const startIdx = Math.max(0, Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - CONVERSATION_BUFFER_SIZE);
+    const startIdx = Math.max(
+      0,
+      Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - CONVERSATION_BUFFER_SIZE
+    );
     const visibleCount = Math.ceil(clientHeight / ESTIMATED_CONVERSATION_HEIGHT);
     const endIdx = Math.min(
       totalConversations,
@@ -387,7 +400,7 @@
       return formatParticipant(conv.participants[0]!);
     }
     // For group chats, format participant names
-    const formatted = conv.participants.slice(0, 2).map(p => formatParticipant(p));
+    const formatted = conv.participants.slice(0, 2).map((p) => formatParticipant(p));
     return (
       formatted.join(', ') +
       (conv.participants.length > 2 ? ` +${conv.participants.length - 2}` : '')
@@ -445,7 +458,10 @@
         <span class="connection-dot"></span>
       </span>
     {:else if connectionInfo.isFallback}
-      <span class="connection-badge fallback" title="Using WebSocket fallback (Unix socket unavailable)">
+      <span
+        class="connection-badge fallback"
+        title="Using WebSocket fallback (Unix socket unavailable)"
+      >
         <span class="connection-dot"></span>
       </span>
     {/if}
@@ -462,10 +478,16 @@
   {:else if conversationsStore.conversations.length === 0}
     <div class="empty">No conversations found</div>
   {:else}
-    <div class="list" role="listbox" aria-label="Conversations" bind:this={listContainerRef} onscroll={handleScroll}>
+    <div
+      class="list"
+      role="listbox"
+      aria-label="Conversations"
+      bind:this={listContainerRef}
+      onscroll={handleScroll}
+    >
       <!-- Virtual scroll spacer for conversations above viewport -->
       <div class="virtual-spacer-top" style="height: {virtualTopPadding}px;"></div>
-      
+
       {#each visibleConversations as conv, visibleIdx (conv.chat_id)}
         {@const index = visibleStartIndex + visibleIdx}
         {@const identifier = getPrimaryIdentifier(conv)}
@@ -511,7 +533,10 @@
               {/if}
             </div>
             {#if getUnreadCount(conv.chat_id) > 0}
-              <span class="unread-badge" aria-label="{getUnreadCount(conv.chat_id)} unread messages">
+              <span
+                class="unread-badge"
+                aria-label="{getUnreadCount(conv.chat_id)} unread messages"
+              >
                 {getUnreadCount(conv.chat_id) > 99 ? '99+' : getUnreadCount(conv.chat_id)}
               </span>
             {/if}
@@ -520,7 +545,13 @@
             <div class="name-row">
               <span class="name" class:has-new={hasNewMessages(conv.chat_id)}>
                 {#if conversationsStore.pinnedChats.has(conv.chat_id)}
-                  <svg class="pin-icon" viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                  <svg
+                    class="pin-icon"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    width="12"
+                    height="12"
+                  >
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
                 {/if}
@@ -536,14 +567,21 @@
           </div>
         </button>
       {/each}
-      
+
       <!-- Virtual scroll spacer for conversations below viewport -->
       <div class="virtual-spacer-bottom" style="height: {virtualBottomPadding}px;"></div>
 
       {#if archivedConversations.length > 0}
-        <button class="archived-toggle" onclick={() => showArchived = !showArchived}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <polyline points={showArchived ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}></polyline>
+        <button class="archived-toggle" onclick={() => (showArchived = !showArchived)}>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            width="14"
+            height="14"
+          >
+            <polyline points={showArchived ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}></polyline>
           </svg>
           Archived ({archivedConversations.length})
         </button>
@@ -559,9 +597,18 @@
               oncontextmenu={(e) => handleContextMenu(e, conv.chat_id)}
             >
               <div class="avatar-container">
-                <div class="avatar" class:group={conv.is_group} class:has-image={avatarState === 'loaded' && avatarUrl} use:observeAvatar={identifier || ''}>
+                <div
+                  class="avatar"
+                  class:group={conv.is_group}
+                  class:has-image={avatarState === 'loaded' && avatarUrl}
+                  use:observeAvatar={identifier || ''}
+                >
                   {#if conv.is_group}
-                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6z" /></svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor"
+                      ><path
+                        d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6z"
+                      /></svg
+                    >
                   {:else if avatarState === 'loaded' && avatarUrl}
                     <img src={avatarUrl} alt="" class="avatar-image" />
                   {:else}
@@ -767,7 +814,6 @@
     }
   }
 
-
   .info {
     flex: 1;
     min-width: 0;
@@ -902,8 +948,14 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 
   .context-menu-item {

@@ -5,6 +5,7 @@ You are working in a **multi-agent worktree** for Lane A (App + Orchestration).
 ## Your Ownership
 
 YOU OWN (can modify freely):
+
 - `desktop/` - Tauri desktop app (Rust + Svelte)
 - `api/` - API layer
 - `jarvis/router.py` - Message routing
@@ -15,6 +16,7 @@ YOU OWN (can modify freely):
 ## Restrictions
 
 YOU MUST NOT MODIFY (owned by other lanes):
+
 - `jarvis/classifiers/` - Lane B (ML)
 - `jarvis/extractors/` - Lane B (ML)
 - `jarvis/contacts/` - Lane B (ML)
@@ -27,11 +29,13 @@ YOU MUST NOT MODIFY (owned by other lanes):
 - `evals/` - Lane C (QA)
 
 SHARED (requires all-lane approval):
+
 - `jarvis/contracts/pipeline.py` - Modify only if necessary, document changes
 
 ## Key Files to Read First
 
 Before making changes, read these to understand the current architecture:
+
 - `jarvis/contracts/pipeline.py` - Shared type definitions
 - `jarvis/router.py` - Current routing logic
 - `jarvis/reply_service.py` - Current reply generation
@@ -48,6 +52,7 @@ Before making changes, read these to understand the current architecture:
 ## Completion Protocol
 
 When your work is done:
+
 1. Run `make format` to fix style
 2. Run `make test` and verify tests pass (read `test_results.txt`)
 3. Commit all changes: `git add <your files> && git commit -m "descriptive message"`

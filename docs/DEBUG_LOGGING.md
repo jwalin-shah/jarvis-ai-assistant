@@ -94,6 +94,7 @@ extractor.load()
 ## Production Use
 
 **Don't use DEBUG in production!** It:
+
 - Logs PII (message content, contact names)
 - Creates huge log files
 - Degrades performance
@@ -127,9 +128,9 @@ logger.exception("Error with traceback")  # Includes stack trace
 
 ## Performance Impact
 
-| Level | Performance Impact | Use Case |
-|-------|-------------------|----------|
-| DEBUG | High (10-30% slower) | Development, debugging |
-| INFO | Low (1-5% slower) | Production, monitoring |
-| WARNING | Minimal (\u003c1%) | Production (quiet) |
-| ERROR | None | Production (silent unless errors) |
+| Level   | Performance Impact   | Use Case                          |
+| ------- | -------------------- | --------------------------------- |
+| DEBUG   | High (10-30% slower) | Development, debugging            |
+| INFO    | Low (1-5% slower)    | Production, monitoring            |
+| WARNING | Minimal (\u003c1%)   | Production (quiet)                |
+| ERROR   | None                 | Production (silent unless errors) |
