@@ -122,10 +122,8 @@ def run_bakeoff() -> None:
 
     # Force load config model_id
 
-    config_path = Path.home() / ".jarvis" / "config.json"
-    with open(config_path) as f:
-        config = json.load(f)
-    model_id = config.get("model_id", "models/lfm2-1.2b-extract-mlx-4bit")
+    # HARDCODED FOR FINAL VERIFICATION
+    model_id = "/Users/jwalinshah/.cache/huggingface/hub/models--mlx-community--Qwen2.5-1.5B-Instruct-4bit/snapshots/8b403126fc14f14cfc99bb4cfa72ecbc129ea677"
 
     # Initialize fresh service with explicit model
     from jarvis.reply_service import ReplyService

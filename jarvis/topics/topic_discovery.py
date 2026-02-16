@@ -14,7 +14,7 @@ Usage:
         texts=texts,
     )
     for topic in result.topics:
-        print(topic.keywords, topic.message_count)
+        # Example: print(topic.keywords, topic.message_count)
 """
 
 from __future__ import annotations

@@ -104,9 +104,9 @@ def _extract_facts_from_segments(
             batch_segments = segments[start:end]
             batch_db_ids = segment_db_ids[start:end]
 
-            print(
-                f"    - Extracting facts segments {start + 1}-{end}/{len(segments)}...",
-                flush=True,
+            logger.info(
+                "Extracting facts from segments %d-%d/%d",
+                start + 1, end, len(segments)
             )
 
             batch_results = extractor.extract_facts_from_batch(
@@ -133,9 +133,9 @@ def _extract_facts_from_segments(
 
         verified_facts: list[Any] = []
         if candidates_to_verify:
-            print(
-                f"    - Verifying {len(candidates_to_verify)} candidate facts via NLI...",
-                flush=True,
+            logger.info(
+                "Verifying %d candidate facts via NLI",
+                len(candidates_to_verify)
             )
             verified_facts, total_rejected = verify_fact_candidates(candidates_to_verify)
 

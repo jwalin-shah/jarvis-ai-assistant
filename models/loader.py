@@ -661,9 +661,43 @@ class MLXModelLoader:
         self._draft_model = None
         self._draft_config = None
 
-    def prefill_prompt_cache(self, prefix_text: str) -> None:
-        """Pre-compute KV cache for a static prompt prefix."""
-        return  # TEMPORARILY DISABLED FOR DIAGNOSIS
+        def prefill_prompt_cache(self, prefix_text: str) -> None:
+
+            """Pre-compute KV cache for a static prompt prefix.
+
+    
+
+            The cached KV state can be reused across generation calls that share
+
+            the same prefix, saving ~50-100ms of prefill per call for a ~130 token
+
+            system prompt on a 1.2B model.
+
+    
+
+            Must be called after load() and while holding _mlx_load_lock (or from
+
+            a context where no concurrent GPU ops are possible).
+
+    
+
+            Args:
+
+                prefix_text: The static prompt text to cache (e.g. system prompt).
+
+            """
+
+            if not self.is_loaded():
+
+                logger.warning("Cannot prefill cache: model not loaded")
+
+                return
+
+    
+
+            from mlx_lm.models.cache import make_prompt_cache
+
+    
 
         try:
             # Tokenize the prefix once and store for reuse (avoids redundant
@@ -812,11 +846,11 @@ class MLXModelLoader:
             logits_processors.append(make_repetition_penalty(repetition_penalty))
 
         # Add negative constraints to reduce AI-sounding output
-        # constraints = negative_constraints or default_negative_constraints
-        # if constraints:
-        #     logits_processors.append(
-        #         NegativeConstraintLogitsProcessor(self._tokenizer, constraints)
-        #     )
+        constraints = negative_constraints or default_negative_constraints
+        if constraints:
+            logits_processors.append(
+                NegativeConstraintLogitsProcessor(self._tokenizer, constraints)
+            )
 
         return formatted_prompt, max_tokens, sampler, logits_processors
 
@@ -831,38 +865,41 @@ class MLXModelLoader:
     ) -> GenerationResult:
         """Post-process generation output into a GenerationResult."""
         generation_time = (time.perf_counter() - start_time) * 1000
+        original_raw = response
 
-        # Strip the prompt from response
+        # Strip the prompt ONLY if MLX returned it (some versions/wrappers do)
         if response.startswith(formatted_prompt):
             response = response[len(formatted_prompt) :].strip()
 
         # Apply stop sequences
         if stop_sequences:
             for stop_seq in stop_sequences:
+                if not stop_seq: continue
                 if stop_seq in response:
                     response = response[: response.index(stop_seq)]
-                # Also check for trimmed versions (sometimes tokenization adds a space)
                 elif stop_seq.strip() in response:
                     trimmed_seq = stop_seq.strip()
                     response = response[: response.index(trimmed_seq)]
 
         # Extra safety: strip any common trailing tags if they leak through
-        # (happens if model generates them but they weren't in explicit stop_sequences)
-        trailing_tags = ["</reply>", "</summary>", "</answer>", "</html>", "</div>"]
+        trailing_tags = ["<|im_end|>", "<|endoftext|>", "</reply>", "</summary>"]
         for tag in trailing_tags:
             if tag in response:
                 response = response[: response.index(tag)]
 
-        # Final cleanup of any partial trailing tags or artifacts
         response = response.strip()
 
-        # If the model ONLY output the prefix or nothing, we need to know
-        original_response = response
-        prefixes = ["Reply: ", "Result: ", "- ", "JARVIS: ", "Reply:", "Result:"]
+        # If post-processing killed a non-empty response, fall back to original
+        if not response and original_raw.strip():
+            logger.warning("Post-processing emptied a non-empty response, using raw output")
+            response = original_raw.strip()
+
+        # Handle common prefixes
+        prefixes = ["Reply: ", "Result: ", "JARVIS: ", "Me: "]
         for prefix in prefixes:
             if response.startswith(prefix):
                 response = response[len(prefix) :].strip()
-                break  # Only strip one level
+                break
 
         # If we stripped everything, keep original for visibility in debug/bakeoff
         if not response and original_response:
@@ -911,192 +948,37 @@ class MLXModelLoader:
         negative_constraints: list[str] | None = None,
         system_prompt: str | None = None,
     ) -> GenerationResult:
-        """Generate text synchronously.
-
-        Args:
-            prompt: Input prompt text
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (LFM optimal: 0.3)
-            top_p: Nucleus sampling threshold (LFM optimal: 0.1)
-            min_p: Minimum probability threshold (LFM optimal: 0.15)
-            top_k: Top-k sampling limit (LFM optimal: 50)
-            repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
-            stop_sequences: Strings that stop generation
-            timeout_seconds: Timeout for generation (overrides config if provided).
-                WARNING: Timeout cannot stop running MLX computation. If timeout
-                is reached, the generation thread may continue running in background
-                until completion. This is a limitation of MLX's synchronous API.
-            prompt_cache: Optional pre-computed KV cache from prefill_prompt_cache().
-                If provided, passed through to mlx_lm.generate() for prefix reuse.
-            negative_constraints: Optional list of phrases to penalize (logit bias).
-            system_prompt: Optional system prompt to include in chat template.
-
-        Returns:
-            GenerationResult with text, token count, and timing
-
-        Raises:
-            ModelGenerationError: If model is not loaded, prompt is invalid,
-                generation fails, or timeout is exceeded.
-
-        Note:
-            Due to MLX's synchronous generation API, timeouts are best-effort only.
-            The generation thread cannot be forcefully stopped and may continue
-            consuming GPU resources until the model completes or hits max_tokens.
-        """
-        if not prompt or not prompt.strip():
-            raise ModelGenerationError(
-                "Prompt cannot be empty",
-                model_name=self.config.display_name,
-                code=ErrorCode.MDL_INVALID_REQUEST,
-            )
-
         if not self.is_loaded():
-            raise ModelGenerationError(
-                "Model not loaded. Call load() first.",
-                model_name=self.config.display_name,
-                code=ErrorCode.MDL_LOAD_FAILED,
-            )
+            raise ModelLoadError("Model not loaded")
 
-        # Use provided timeout, fall back to config, then None (no timeout)
-        effective_timeout: float | None
-        if timeout_seconds is not None:
-            effective_timeout = timeout_seconds
-        else:
-            effective_timeout = self.config.generation_timeout_seconds
+        formatted_prompt, max_tokens, sampler, logits_processors = (
+            self._prepare_generation_params(
+                prompt, max_tokens, temperature, top_p, min_p, top_k,
+                repetition_penalty, pre_formatted, negative_constraints, system_prompt
+            )
+        )
 
         try:
-            formatted_prompt, max_tokens, sampler, logits_processors = (
-                self._prepare_generation_params(
-                    prompt,
-                    max_tokens,
-                    temperature,
-                    top_p,
-                    min_p,
-                    top_k,
-                    repetition_penalty,
-                    pre_formatted,
-                    negative_constraints=negative_constraints,
-                    system_prompt=system_prompt,
-                )
-            )
-
-            # Generate with timeout handling
             start_time = time.perf_counter()
-
-            # Track speculative decoding stats
-            draft_accepted = 0
-            using_speculative = self._draft_model is not None
-
-            # Cancellation flag: set on timeout so streaming generation exits early
-            cancel_event = threading.Event()
-
-            def _do_generate() -> tuple[str, int]:
-                """Inner function for generation to run in executor.
-
-                Holds the shared GPU lock to prevent concurrent Metal access
-                with embedding encode() or other generation calls.
-
-                Returns:
-                    Tuple of (response_text, draft_accepted_count).
-                """
-                kwargs: dict[str, Any] = {}
-                if prompt_cache is not None:
-                    kwargs["prompt_cache"] = prompt_cache
-                if self.config.kv_cache_bits and self.config.kv_cache_bits != 16:
-                    kwargs["kv_bits"] = self.config.kv_cache_bits
-
-                with MLXModelLoader._mlx_load_lock:
-                    # Restore LLM memory limits in case embedder lowered them
-                    apply_llm_limits()
-
-                    if self._draft_model is not None:
-                        # Speculative decoding: use stream_generate with draft_model
-                        # to track per-token acceptance
-                        text = ""
-                        total = 0
-                        draft_tokens_verified = 0
-                        for resp in stream_generate(
-                            model=self._model,
-                            tokenizer=self._tokenizer,
-                            prompt=formatted_prompt,
-                            max_tokens=max_tokens,
-                            sampler=sampler,
-                            logits_processors=logits_processors,
-                            draft_model=self._draft_model,
-                            num_draft_tokens=num_draft_tokens or 3,
-                            **kwargs,
-                        ):
-                            # Check cancellation flag each token to exit early on timeout
-                            if cancel_event.is_set():
-                                logger.info(
-                                    "Generation cancelled via timeout after %d tokens", total
-                                )
-                                break
-                            text = resp.text
-                            total += 1
-                            if getattr(resp, "from_draft", False):
-                                draft_tokens_verified += 1
-                        return text, draft_tokens_verified
-                    else:
-                        # Standard generation (mlx_lm.generate is a single blocking
-                        # call with no per-token hook, so cancellation is not possible)
-                        result = generate(
-                            model=self._model,
-                            tokenizer=self._tokenizer,
-                            prompt=formatted_prompt,
-                            max_tokens=max_tokens,
-                            sampler=sampler,
-                            logits_processors=logits_processors,
-                            verbose=False,
-                            **kwargs,
-                        )
-                        return result, 0
-
-            if effective_timeout is not None and effective_timeout > 0:
-                # Use ThreadPoolExecutor for timeout handling
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_do_generate)
-                    try:
-                        response, draft_accepted = future.result(timeout=effective_timeout)
-                    except FuturesTimeoutError:
-                        # Signal the generation thread to stop (works for streaming path)
-                        cancel_event.set()
-                        future.cancel()
-                        logger.warning(
-                            "Generation timed out after %.1f seconds for model %s. "
-                            "Cancellation signal sent to generation thread.",
-                            effective_timeout,
-                            self.config.display_name,
-                        )
-                        raise model_generation_timeout(
-                            self.config.display_name,
-                            effective_timeout,
-                            prompt=prompt,
-                        )
-            else:
-                # No timeout - run directly
-                response, draft_accepted = _do_generate()
+            with MLXModelLoader._mlx_load_lock:
+                apply_llm_limits()
+                # Direct MLX call
+                response = generate(
+                    model=self._model,
+                    tokenizer=self._tokenizer,
+                    prompt=formatted_prompt,
+                    max_tokens=max_tokens,
+                    sampler=sampler,
+                    verbose=False
+                )
 
             return self._process_generation_result(
-                response,
-                formatted_prompt,
-                stop_sequences,
-                start_time,
-                draft_accepted,
-                using_speculative,
+                response, formatted_prompt, stop_sequences, start_time, 0, False
             )
 
-        except ModelGenerationError:
-            # Re-raise JARVIS errors as-is
-            raise
         except Exception as e:
             logger.exception("Generation failed")
-            raise ModelGenerationError(
-                f"Generation failed: {e}",
-                prompt=prompt,
-                model_name=self.config.display_name,
-                cause=e,
-            ) from e
+            raise ModelGenerationError(f"Generation failed: {e}", prompt=prompt) from e
 
     def generate_stream(
         self,
@@ -1165,6 +1047,9 @@ class MLXModelLoader:
                     system_prompt=system_prompt,
                 )
             )
+            
+            # DEBUG PRINT FOR MODEL COLLAPSE DIAGNOSIS
+            print(f"\n[DEBUG] PROMPT SENT TO MODEL:\n{formatted_prompt}\n[DEBUG] END PROMPT\n")
 
             # Use real streaming with mlx_lm.stream_generate
             # Hold the shared GPU lock for the entire generation to prevent
