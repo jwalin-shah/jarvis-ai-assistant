@@ -10,7 +10,7 @@ jarvis.contacts.contact_profile.ContactProfile instead.
 from dataclasses import dataclass
 from typing import Any
 
-MIN_MESSAGES_FOR_PROFILE = 20
+MIN_MESSAGES_FOR_PROFILE = 5
 
 
 @dataclass
