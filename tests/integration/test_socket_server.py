@@ -20,8 +20,8 @@ from jarvis.handlers.base import (
     PARSE_ERROR,
     JsonRpcError,
 )
-from jarvis.interfaces.desktop.protocol import WebSocketWriter
 from jarvis.interfaces.desktop.server import JarvisSocketServer
+from jarvis.interfaces.desktop.websocket_writer import WebSocketWriter
 
 
 class TestJsonRpcProtocol:
