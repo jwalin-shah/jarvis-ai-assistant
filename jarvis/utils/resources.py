@@ -46,7 +46,7 @@ def managed_resource(
             except Exception as e:
                 logger.warning(f"Error closing {name}: {e}")
         elif hasattr(resource, "aclose"):
-            # Note: This sync CM can't await aclose. 
+            # Note: This sync CM can't await aclose.
             # Use managed_async_resource for async resources.
             logger.warning(f"{name} has aclose() but managed_resource is sync")
 
@@ -77,10 +77,10 @@ def multi_resource_manager() -> Generator[list[Callable[[], Any]], None, None]:
         with multi_resource_manager() as cleanups:
             conn = connect()
             cleanups.append(conn.close)
-            
+
             file = open('log.txt')
             cleanups.append(file.close)
-            
+
             # work with resources
     """
     cleanups: list[Callable[[], Any]] = []

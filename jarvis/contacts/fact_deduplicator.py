@@ -6,10 +6,10 @@ Ensures that semantically identical facts (e.g., "lives in Austin" vs
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import sqlite3
-import hashlib
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -143,11 +143,11 @@ class FactDeduplicator:
         # --- CACHE-AWARE EMBEDDING ---
         texts = [f.to_searchable_text() for f in compact_facts]
         cached_map = self._get_cached_embeddings(texts)
-        
+
         embeddings = [None] * len(texts)
         missing_indices = []
         missing_texts = []
-        
+
         # 1. Fill from cache
         for i, text in enumerate(texts):
             h = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -156,20 +156,24 @@ class FactDeduplicator:
             else:
                 missing_indices.append(i)
                 missing_texts.append(text)
-        
+
         # 2. Encode missing only
         if missing_texts:
             embedder = self._get_embedder()
             new_embs = embedder.encode(missing_texts)
-            
+
             new_cache_data = {}
             for idx, emb in zip(missing_indices, new_embs):
                 embeddings[idx] = emb
                 new_cache_data[texts[idx]] = emb
-            
+
             # 3. Persist new embs
             self._save_to_cache(new_cache_data)
-            logger.debug("Encoded %d new facts, %d pulled from cache", len(missing_texts), len(texts) - len(missing_texts))
+            logger.debug(
+                "Encoded %d new facts, %d pulled from cache",
+                len(missing_texts),
+                len(texts) - len(missing_texts),
+            )
 
         # Convert back to array for math
         embeddings_arr = np.array(embeddings)

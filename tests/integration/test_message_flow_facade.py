@@ -50,6 +50,10 @@ def test_reply_router_accepts_conversation_message_objects(monkeypatch) -> None:
         {"text": "ping", "is_from_me": False, "sender_name": "Alex"},
         {"text": "pong", "is_from_me": True, "sender_name": "Me"},
     ]
-    result = router.route(incoming="next?", chat_id="chat-2", conversation_messages=conversation_messages)
+    result = router.route(
+        incoming="next?",
+        chat_id="chat-2",
+        conversation_messages=conversation_messages,
+    )
 
     assert result["type"] == "generated"

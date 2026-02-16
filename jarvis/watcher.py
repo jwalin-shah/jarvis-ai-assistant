@@ -10,16 +10,14 @@ import asyncio
 import logging
 import sqlite3
 import threading
-from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
-from jarvis.utils.backoff import AsyncConsecutiveErrorTracker
-from jarvis.utils.datetime_utils import APPLE_EPOCH_OFFSET, parse_apple_timestamp
 from jarvis.utils.async_utils import log_task_exception
+from jarvis.utils.backoff import AsyncConsecutiveErrorTracker
+from jarvis.utils.datetime_utils import parse_apple_timestamp
 from jarvis.utils.locks import PerKeyLockManager
-from jarvis.utils.resources import safe_close
 
 logger = logging.getLogger(__name__)
 

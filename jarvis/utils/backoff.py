@@ -10,7 +10,7 @@ import functools
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
@@ -208,7 +208,7 @@ class CircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=5, timeout=30.0)
 
         with breaker:
-            # If breaker is OPEN, raises CircuitBreakerOpen immediately
+            # If breaker is OPEN, raises CircuitBreakerOpenError immediately
             call_external_service()
     """
 
@@ -268,9 +268,9 @@ class CircuitBreaker:
                 )
                 self._state = "OPEN"
 
-    def __enter__(self) -> "CircuitBreaker":
+    def __enter__(self) -> CircuitBreaker:
         if self.state == "OPEN":
-            raise CircuitBreakerOpen(f"Circuit {self.name} is OPEN")
+            raise CircuitBreakerOpenError(f"Circuit {self.name} is OPEN")
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
@@ -281,10 +281,14 @@ class CircuitBreaker:
         return False
 
 
-class CircuitBreakerOpen(Exception):
+class CircuitBreakerOpenError(Exception):
     """Raised when attempting to use an open circuit breaker."""
 
     pass
+
+
+# Backward-compatible alias
+CircuitBreakerOpen = CircuitBreakerOpenError
 
 
 @dataclass
@@ -318,7 +322,7 @@ def with_retry(
         exceptions: Exception types to retry on.
         config: Backoff configuration.
         on_retry: Callback(attempt_number, exception) called on each retry.
-        predicate: Optional function that takes an exception and returns True if it should be retried.
+        predicate: Optional function that returns True for retryable exceptions.
 
     Example:
         @with_retry(max_attempts=3, exceptions=(ConnectionError, TimeoutError))
@@ -347,7 +351,7 @@ def with_retry(
                 except exceptions as e:
                     if predicate and not predicate(e):
                         raise
-                        
+
                     last_error = e
                     if attempt < max_attempts - 1:
                         if on_retry:

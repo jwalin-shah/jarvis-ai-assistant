@@ -22,7 +22,11 @@ router = APIRouter(tags=["debug"])
 BYTES_PER_MB = 1024 * 1024
 
 
-@router.get("/debug/traces", response_model=list[TraceResponse], summary="Get recent request traces")
+@router.get(
+    "/debug/traces",
+    response_model=list[TraceResponse],
+    summary="Get recent request traces",
+)
 @limiter.limit(RATE_LIMIT_READ)
 async def get_traces(request: Request, limit: int = 20) -> list[dict[str, Any]]:
     store = get_trace_store()
@@ -40,7 +44,11 @@ async def get_trace_summary(request: Request) -> dict[str, Any]:
     return await run_in_threadpool(store.get_summary)
 
 
-@router.get("/debug/status", response_model=SystemStatusResponse, summary="Get current system status")
+@router.get(
+    "/debug/status",
+    response_model=SystemStatusResponse,
+    summary="Get current system status",
+)
 @limiter.limit(RATE_LIMIT_READ)
 async def get_system_status(request: Request) -> dict[str, Any]:
     process = psutil.Process(os.getpid())

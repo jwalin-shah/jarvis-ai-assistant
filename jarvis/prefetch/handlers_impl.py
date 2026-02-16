@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 import logging
 from typing import Any
 
@@ -17,14 +16,14 @@ class DraftReplyHandler(PrefetchHandler):
 
     def execute(self, params: dict[str, Any]) -> dict[str, Any] | None:
         chat_id = params["chat_id"]
-        
+
         # Import router lazily to avoid circular imports
-        from jarvis.router import get_reply_router
         from jarvis.prefetch.executor import get_executor
+        from jarvis.router import get_reply_router
 
         router = get_reply_router()
         executor = get_executor()
-        
+
         # Get recent messages using shared reader
         reader = executor._get_reader()
         messages = reader.get_messages(chat_id, limit=10)

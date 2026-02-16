@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from jarvis.utils.resources import safe_close
 from jarvis.cache import TTLCache
 from jarvis.db.models import JARVIS_DB_PATH
 from jarvis.db.schema import (
@@ -16,6 +15,7 @@ from jarvis.db.schema import (
     EXPECTED_INDICES,
     SCHEMA_SQL,
 )
+from jarvis.utils.resources import safe_close
 
 logger = logging.getLogger(__name__)
 
