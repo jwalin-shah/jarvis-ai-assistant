@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GraphNode, KnowledgeNode } from "../../api/types";
+  import type { GraphNode, KnowledgeNode } from '../../api/types';
 
   interface Props {
     node: GraphNode | KnowledgeNode;
@@ -8,56 +8,60 @@
   }
 
   let { node, x, y }: Props = $props();
-  
+
   // Check if this is a knowledge graph entity node
   let isEntity = $derived('node_type' in node && node.node_type === 'entity');
 
   let tooltipEl = $state<HTMLDivElement | null>(null);
 
-  let tooltipStyle = $derived((() => {
-    let left = x + 15;
-    let top = y - 10;
-    if (tooltipEl) {
-      const rect = tooltipEl.getBoundingClientRect();
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      if (left + rect.width > vw - 8) left = x - rect.width - 15;
-      if (top + rect.height > vh - 8) top = vh - rect.height - 8;
-      if (top < 8) top = 8;
-      if (left < 8) left = 8;
-    }
-    return `left: ${left}px; top: ${top}px;`;
-  })());
+  let tooltipStyle = $derived(
+    (() => {
+      let left = x + 15;
+      let top = y - 10;
+      if (tooltipEl) {
+        const rect = tooltipEl.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        if (left + rect.width > vw - 8) left = x - rect.width - 15;
+        if (top + rect.height > vh - 8) top = vh - rect.height - 8;
+        if (top < 8) top = 8;
+        if (left < 8) left = 8;
+      }
+      return `left: ${left}px; top: ${top}px;`;
+    })()
+  );
 
   function formatDate(dateStr: string | null): string {
-    if (!dateStr) return "N/A";
+    if (!dateStr) return 'N/A';
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
       });
     } catch {
-      return "N/A";
+      return 'N/A';
     }
   }
 
   function formatSentiment(score: number): { text: string; color: string } {
-    if (score >= 0.3) return { text: "Positive", color: "#34c759" };
-    if (score <= -0.3) return { text: "Negative", color: "#ff3b30" };
-    return { text: "Neutral", color: "#ff9f0a" };
+    if (score >= 0.3) return { text: 'Positive', color: '#34c759' };
+    if (score <= -0.3) return { text: 'Negative', color: '#ff3b30' };
+    return { text: 'Neutral', color: '#ff9f0a' };
   }
 
   function formatResponseTime(minutes: number | null): string {
-    if (minutes === null) return "N/A";
+    if (minutes === null) return 'N/A';
     if (minutes < 60) return `${Math.round(minutes)} min`;
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   }
 
-  let sentiment = $derived(!isEntity ? formatSentiment((node as GraphNode).sentiment_score) : { text: "", color: "" });
+  let sentiment = $derived(
+    !isEntity ? formatSentiment((node as GraphNode).sentiment_score) : { text: '', color: '' }
+  );
 </script>
 
 <div class="tooltip" style={tooltipStyle} bind:this={tooltipEl}>
@@ -71,12 +75,16 @@
       <!-- Entity node (knowledge graph) -->
       <div class="stat-row">
         <span class="stat-label">Type</span>
-        <span class="stat-value capitalize">{('category' in node && node.category) || 'Entity'}</span>
+        <span class="stat-value capitalize"
+          >{('category' in node && node.category) || 'Entity'}</span
+        >
       </div>
       {#if 'metadata' in node && node.metadata.edge_type}
         <div class="stat-row">
           <span class="stat-label">Relationship</span>
-          <span class="stat-value capitalize">{String(node.metadata.edge_type).replace(/_/g, ' ')}</span>
+          <span class="stat-value capitalize"
+            >{String(node.metadata.edge_type).replace(/_/g, ' ')}</span
+          >
         </div>
       {/if}
     {:else}
@@ -229,10 +237,10 @@
   }
 
   .sent {
-    color: #4ECDC4;
+    color: #4ecdc4;
   }
 
   .received {
-    color: #96CEB4;
+    color: #96ceb4;
   }
 </style>

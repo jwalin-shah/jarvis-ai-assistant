@@ -6,6 +6,7 @@ retrieving feedback, statistics, analytics, and error handling.
 
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -107,6 +108,20 @@ class TestFeedbackStoreInitialization:
             row = cursor.fetchone()
             assert row is not None
             assert row["version"] == 2  # Current schema version
+
+    @patch("jarvis.eval.feedback.get_config")
+    def test_init_uses_configured_path(self, mock_get_config: MagicMock, tmp_path: Path) -> None:
+        """Test that init uses path from config when db_path is None."""
+        # Setup mock config
+        expected_path = tmp_path / "config_db.db"
+        mock_config = MagicMock()
+        mock_config.database.feedback_path = str(expected_path)
+        mock_get_config.return_value = mock_config
+
+        store = FeedbackStore(db_path=None)
+
+        assert store.db_path == expected_path
+        mock_get_config.assert_called_once()
 
 
 class TestFeedbackAction:

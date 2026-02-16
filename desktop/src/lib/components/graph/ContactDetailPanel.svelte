@@ -1,6 +1,11 @@
 <script lang="ts">
-  import { api } from "../../api/client";
-  import type { ContactProfileDetail, ContactFact, GraphNode, KnowledgeNode } from "../../api/types";
+  import { api } from '../../api/client';
+  import type {
+    ContactProfileDetail,
+    ContactFact,
+    GraphNode,
+    KnowledgeNode,
+  } from '../../api/types';
 
   interface Props {
     node: GraphNode | KnowledgeNode | null;
@@ -16,11 +21,11 @@
 
   // Fact category icons
   const categoryIcons: Record<string, string> = {
-    relationship: "👥",
-    location: "📍",
-    work: "💼",
-    preference: "⭐",
-    event: "📅",
+    relationship: '👥',
+    location: '📍',
+    work: '💼',
+    preference: '⭐',
+    event: '📅',
   };
 
   // Group facts by category
@@ -41,7 +46,7 @@
     try {
       profile = await api.getContactProfile(contactId);
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to load profile";
+      error = e instanceof Error ? e.message : 'Failed to load profile';
       profile = null;
     } finally {
       loading = false;
@@ -63,15 +68,21 @@
 </script>
 
 {#if visible && node}
-  <div class="panel-overlay" onclick={handleClose} onkeydown={(e) => e.key === "Escape" && handleClose()} role="button" tabindex="-1">
+  <div
+    class="panel-overlay"
+    onclick={handleClose}
+    onkeydown={(e) => e.key === 'Escape' && handleClose()}
+    role="button"
+    tabindex="-1"
+  >
     <div class="detail-panel" onclick={(e) => e.stopPropagation()} role="presentation">
       <div class="panel-header">
         <div class="contact-info">
           <div class="contact-avatar" style="background-color: {node.color}">
-            {[...node.label][0]?.toUpperCase() ?? "?"}
+            {[...node.label][0]?.toUpperCase() ?? '?'}
           </div>
           <div>
-            <h2>{node.label || "Unknown"}</h2>
+            <h2>{node.label || 'Unknown'}</h2>
             {#if profile}
               <span class="relationship-badge">{profile.relationship}</span>
               <span class="formality-badge">{profile.formality}</span>
@@ -121,16 +132,19 @@
               <h3>Knowledge</h3>
               {#each Object.entries(groupedFacts) as [category, facts]}
                 <div class="fact-group">
-                  <h4>{categoryIcons[category] || "📌"} {category}</h4>
+                  <h4>{categoryIcons[category] || '📌'} {category}</h4>
                   {#each facts as fact}
                     <div class="fact-item">
                       <span class="fact-subject">{fact.subject}</span>
-                      <span class="fact-predicate">{fact.predicate.replace(/_/g, " ")}</span>
+                      <span class="fact-predicate">{fact.predicate.replace(/_/g, ' ')}</span>
                       {#if fact.value}
                         <span class="fact-value">({fact.value})</span>
                       {/if}
-                      <span class="fact-confidence" title="Confidence: {(fact.confidence * 100).toFixed(0)}%">
-                        {fact.confidence >= 0.8 ? "●" : fact.confidence >= 0.5 ? "◐" : "○"}
+                      <span
+                        class="fact-confidence"
+                        title="Confidence: {(fact.confidence * 100).toFixed(0)}%"
+                      >
+                        {fact.confidence >= 0.8 ? '●' : fact.confidence >= 0.5 ? '◐' : '○'}
                       </span>
                     </div>
                   {/each}
@@ -201,7 +215,8 @@
     color: var(--text-primary, #fff);
   }
 
-  .relationship-badge, .formality-badge {
+  .relationship-badge,
+  .formality-badge {
     display: inline-block;
     padding: 2px 8px;
     border-radius: 12px;
@@ -332,7 +347,8 @@
     font-size: 10px;
   }
 
-  .loading, .error {
+  .loading,
+  .error {
     padding: 32px 16px;
     text-align: center;
     color: var(--text-secondary, #aaa);

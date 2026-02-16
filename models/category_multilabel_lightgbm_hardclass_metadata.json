@@ -16,14 +16,7 @@
     "max_depth": 6,
     "class_weight": "balanced"
   },
-  "categories": [
-    "acknowledge",
-    "closing",
-    "emotion",
-    "question",
-    "request",
-    "statement"
-  ],
+  "categories": ["acknowledge", "closing", "emotion", "question", "request", "statement"],
   "n_train": 11345,
   "n_test": 2837,
   "test_f1_samples": 0.7831864645752555,

@@ -28,6 +28,13 @@ impl BackendProcess {
     }
 }
 
+const ENV_HOME: &str = "HOME";
+const ENV_PROJECT_ROOT: &str = "JARVIS_PROJECT_ROOT";
+
+fn get_home_dir() -> PathBuf {
+    std::env::var(ENV_HOME).map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir())
+}
+
 /// Check if the backend is already running by probing the socket file.
 fn is_backend_running() -> bool {
     let sock = socket_path();
@@ -40,13 +47,12 @@ fn is_backend_running() -> bool {
 
 /// Return the socket path (`~/.jarvis/jarvis.sock`).
 fn socket_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(home).join(".jarvis").join("jarvis.sock")
+    get_home_dir().join(".jarvis").join("jarvis.sock")
 }
 
 /// Locate the `uv` binary by searching common paths then falling back to `which`.
 fn find_uv() -> Option<PathBuf> {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = std::env::var(ENV_HOME).unwrap_or_default();
     let candidates = [
         format!("{home}/.local/bin/uv"),
         format!("{home}/.cargo/bin/uv"),
@@ -80,7 +86,7 @@ fn find_uv() -> Option<PathBuf> {
 /// executable's directory.
 fn project_root() -> Option<PathBuf> {
     // Env var override
-    if let Ok(root) = std::env::var("JARVIS_PROJECT_ROOT") {
+    if let Ok(root) = std::env::var(ENV_PROJECT_ROOT) {
         let p = PathBuf::from(&root);
         if p.join("pyproject.toml").exists() {
             return Some(p);
@@ -99,7 +105,7 @@ fn project_root() -> Option<PathBuf> {
     }
 
     // Common dev location fallback
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = std::env::var(ENV_HOME).unwrap_or_default();
     let dev_path = PathBuf::from(&home).join("projects").join("jarvis-ai-assistant");
     if dev_path.join("pyproject.toml").exists() {
         return Some(dev_path);
@@ -114,8 +120,7 @@ fn spawn_backend() -> Result<Child, String> {
     let root = project_root().ok_or("Could not find JARVIS project root (pyproject.toml)")?;
 
     // Ensure log directory exists
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let log_dir = PathBuf::from(&home).join(".jarvis");
+    let log_dir = get_home_dir().join(".jarvis");
     let _ = std::fs::create_dir_all(&log_dir);
     let log_path = log_dir.join("backend.log");
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Skeleton from "./Skeleton.svelte";
+  import Skeleton from './Skeleton.svelte';
 
   const items = 8;
 </script>
@@ -12,10 +12,10 @@
       </div>
       <div class="info-skeleton">
         <div class="name-row-skeleton">
-          <Skeleton width={i % 2 === 0 ? "60%" : "45%"} height="14px" borderRadius="4px" />
+          <Skeleton width={i % 2 === 0 ? '60%' : '45%'} height="14px" borderRadius="4px" />
           <Skeleton width="40px" height="12px" borderRadius="4px" />
         </div>
-        <Skeleton width={i % 3 === 0 ? "90%" : "75%"} height="12px" borderRadius="4px" />
+        <Skeleton width={i % 3 === 0 ? '90%' : '75%'} height="12px" borderRadius="4px" />
       </div>
     </div>
   {/each}

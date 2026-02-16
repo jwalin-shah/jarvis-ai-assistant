@@ -11,6 +11,7 @@ This document captures key architectural decisions, their rationale, and lessons
 ### 1. Local-First Architecture
 
 **Options considered:**
+
 1. Cloud API (GPT-4, Claude) - Best quality, privacy concerns
 2. Local small model (1-3B) - Good privacy, acceptable quality
 3. Hybrid - Complex, still has privacy issues
@@ -18,6 +19,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Decision:** Local-only with MLX on Apple Silicon
 
 **Rationale:**
+
 - Messages are deeply personal - privacy is non-negotiable
 - Apple Silicon has excellent ML performance via MLX
 - 1-3B models are good enough for short messages
@@ -30,6 +32,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Decision:** Use LFM-2.5-1.2B-Instruct-4bit as default model.
 
 **Rationale:**
+
 - Small footprint (~1GB) works on 8GB RAM
 - 4-bit quantization balances quality vs memory
 - Sufficient quality for reply suggestions
@@ -81,6 +84,7 @@ This document captures key architectural decisions, their rationale, and lessons
 ### 7. FAISS for Similarity Search
 
 **Options considered:**
+
 1. FAISS flat - Simple, exact search
 2. FAISS IVF - Faster, approximate
 3. Hnswlib - Very fast, approximate
@@ -89,6 +93,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Decision:** FAISS flat index (upgraded to IVFPQ for compression)
 
 **Rationale:**
+
 - Dataset (10K-50K pairs) small enough for exact search
 - No approximation error
 - No external dependencies
@@ -99,6 +104,7 @@ This document captures key architectural decisions, their rationale, and lessons
 ### 8. Three-Layer Hybrid Classifiers
 
 **Options considered:**
+
 1. Pure ML (embeddings + kNN)
 2. Pure rules (regex)
 3. Hybrid (rules first, ML fallback)
@@ -106,6 +112,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Decision:** Structural patterns → Centroid verification → SVM fallback
 
 **Rationale:**
+
 - Structural patterns (regex) catch high-confidence cases instantly (~11%)
 - Centroid verification adds semantic check without full classification
 - SVM handles ambiguous cases with 82% accuracy
@@ -117,6 +124,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Decision:** Use SVM classifiers instead of k-NN for both trigger and response classification.
 
 **Rationale:**
+
 - SVM achieves 82% macro F1 vs ~70% for k-NN
 - Faster inference (single model forward pass vs k-nearest search)
 - Per-class thresholds enable precision/recall tuning
@@ -138,6 +146,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Decision:** Unix socket with JSON-RPC for desktop, keep HTTP for CLI.
 
 **Rationale:**
+
 - HTTP overhead significant for frequent local calls
 - Unix sockets 10-50x faster for local IPC
 - JSON-RPC is simple and well-understood
@@ -159,6 +168,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Decision:** Use K-means for topic clustering, remove HDBSCAN from core dependencies.
 
 **Rationale:**
+
 - Topics are informational only (not critical to reply generation)
 - K-means is simpler and faster
 - HDBSCAN adds heavy dependency for minimal benefit
@@ -218,6 +228,7 @@ This document captures key architectural decisions, their rationale, and lessons
 **Hypothesis:** LoRA fine-tune on user's history.
 
 **Why abandoned:**
+
 - Expensive compute per user
 - Risk of overfitting to old patterns
 - Hard to update as style evolves
@@ -232,10 +243,10 @@ This document captures key architectural decisions, their rationale, and lessons
 
 **Context:** Apple's AppleScript restrictions make it fragile.
 
-| Option | Pros | Cons |
-|--------|------|------|
-| Remove entirely | Clean codebase | Lose write capability |
-| Keep but hidden | Available if needed | Technical debt |
+| Option          | Pros                | Cons                  |
+| --------------- | ------------------- | --------------------- |
+| Remove entirely | Clean codebase      | Lose write capability |
+| Keep but hidden | Available if needed | Technical debt        |
 
 **Recommendation:** Keep but mark deprecated, remove in v2.
 

@@ -130,6 +130,7 @@ cd desktop && npm run tauri dev
 ```
 
 **Features:**
+
 - Menu bar icon with quick access
 - Conversation browser with real-time updates
 - AI Draft panel (Cmd+D) for reply suggestions
@@ -178,12 +179,12 @@ uv run python scripts/check_gates.py results/latest/
 
 ### Validation Gates
 
-| Gate | Metric | Pass | Conditional | Fail |
-|------|--------|------|-------------|------|
-| G1 | Model stack memory | <5.5GB | 5.5-6.5GB | >6.5GB |
-| G2 | Mean HHEM score | >=0.5 | 0.4-0.5 | <0.4 |
-| G3 | Warm-start latency | <3s | 3-5s | >5s |
-| G4 | Cold-start latency | <15s | 15-20s | >20s |
+| Gate | Metric             | Pass   | Conditional | Fail   |
+| ---- | ------------------ | ------ | ----------- | ------ |
+| G1   | Model stack memory | <5.5GB | 5.5-6.5GB   | >6.5GB |
+| G2   | Mean HHEM score    | >=0.5  | 0.4-0.5     | <0.4   |
+| G3   | Warm-start latency | <3s    | 3-5s        | >5s    |
+| G4   | Cold-start latency | <15s   | 15-20s      | >20s   |
 
 ## Project Structure
 
