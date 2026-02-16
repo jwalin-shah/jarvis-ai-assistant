@@ -1,12 +1,12 @@
 
 import sqlite3
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import create_autospec
 
-import pytest
 from jarvis.watcher_db import query_new_messages
 
 class TestWatcherDBQuery:
-    def test_query_new_messages_orders_by_rowid(self):
+    @staticmethod
+    def test_query_new_messages_orders_by_rowid():
         """Verify that query_new_messages orders results by ROWID for performance and consistency."""
         # Mock connection and cursor
         mock_conn = create_autospec(sqlite3.Connection)
