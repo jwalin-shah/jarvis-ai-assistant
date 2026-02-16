@@ -128,18 +128,21 @@ export async function fetchHealth(): Promise<void> {
     try {
       const connected = await jarvis.connect();
       if (connected) {
-        const result = await jarvis.ping();
+        const result = await jarvis.request<any>("get_health", {});
         const data: HealthResponse = {
           status: (result.status as HealthResponse["status"]) ?? "degraded",
           imessage_access: (result.imessage_access as boolean) ?? null,
           memory_available_gb: (result.memory_available_gb as number) ?? null,
           memory_used_gb: (result.memory_used_gb as number) ?? null,
           memory_mode: (result.memory_mode as HealthResponse["memory_mode"]) ?? null,
-          model_loaded: (result.model_loaded as boolean) ?? (result.models_ready as boolean) ?? null,
+          model_loaded: (result.model_loaded as boolean) ?? null,
           permissions_ok: (result.permissions_ok as boolean) ?? null,
           details: (result.details as HealthResponse["details"]) ?? null,
           jarvis_rss_mb: (result.jarvis_rss_mb as number) ?? null,
           jarvis_vms_mb: (result.jarvis_vms_mb as number) ?? null,
+          model: result.model ?? null,
+          recommended_model: result.recommended_model ?? null,
+          system_ram_gb: (result.system_ram_gb as number) ?? null,
         };
         healthStore.update((state) => ({
           ...state,
@@ -150,7 +153,8 @@ export async function fetchHealth(): Promise<void> {
         }));
         return;
       }
-    } catch {
+    } catch (e) {
+      console.warn("Socket fetchHealth failed:", e);
       // Fall through to HTTP
     }
   }
