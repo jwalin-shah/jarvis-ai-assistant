@@ -1,11 +1,6 @@
 {
   "source": "gemini_mobilization",
-  "labels": [
-    "HIGH",
-    "LOW",
-    "MEDIUM",
-    "NONE"
-  ],
+  "labels": ["HIGH", "LOW", "MEDIUM", "NONE"],
   "label_map": {
     "HIGH": 0,
     "LOW": 1,

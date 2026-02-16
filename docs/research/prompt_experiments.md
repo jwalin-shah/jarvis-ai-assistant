@@ -1,9 +1,11 @@
 # Research: Fact Extraction Prompt Experiments (v3 Bakeoff)
 
 ## Summary
+
 We conducted a rigorous "bakeoff" (A/B test) of 10+ prompt variants for the 0.7b model to determine the optimal strategy for fact extraction.
 
 ## ❌ What Failed (Do Not Repeat)
+
 1. **Plaintext Templates**:
    - prompts asking for bulleted lists (`- Subject | Predicate`) failed consistently.
    - The model often hallucinated extra fields or ignored the separator.
@@ -24,13 +26,14 @@ We conducted a rigorous "bakeoff" (A/B test) of 10+ prompt variants for the 0.7b
    - **Fix**: We now strip fences in post-processing rather than fighting the model in the prompt.
 
 ## ✅ What Worked (The Solution)
+
 1. **Strict JSONL Prompt (`combined_v3`)**:
-   - Explicit instructions to output *only* JSON lines.
+   - Explicit instructions to output _only_ JSON lines.
    - Negative constraints ("Do NOT use pronouns", "Do NOT mention the chat itself").
    - **Result**: 75% grounding (vs 53% baseline).
 
 2. **Heuristic Confidence Scoring**:
-   - Instead of asking the model for a confidence score (which it hallucinates as highly confident), we map the *type* of fact to a score.
+   - Instead of asking the model for a confidence score (which it hallucinates as highly confident), we map the _type_ of fact to a score.
    - `works_at` = 1.0, `likes` = 0.8, `schedule` = 0.6.
 
 3. **Post-Processing Guards**:

@@ -1,28 +1,24 @@
 <script lang="ts">
-  import { toasts, dismissToast, type ToastType } from "../stores/toast";
-  import Icon from "./Icon.svelte";
+  import { toasts, dismissToast, type ToastType } from '../stores/toast';
+  import Icon from './Icon.svelte';
 
-  function getIcon(type: ToastType): "check" | "x-circle" | "alert-circle" | "message-circle" {
+  function getIcon(type: ToastType): 'check' | 'x-circle' | 'alert-circle' | 'message-circle' {
     switch (type) {
-      case "success":
-        return "check";
-      case "error":
-        return "x-circle";
-      case "warning":
-        return "alert-circle";
+      case 'success':
+        return 'check';
+      case 'error':
+        return 'x-circle';
+      case 'warning':
+        return 'alert-circle';
       default:
-        return "message-circle";
+        return 'message-circle';
     }
   }
 </script>
 
 <div class="toast-container" role="region" aria-label="Notifications">
   {#each $toasts as toast, i (toast.id)}
-    <div
-      class="toast toast-{toast.type}"
-      role="alert"
-      style="--index: {i}"
-    >
+    <div class="toast toast-{toast.type}" role="alert" style="--index: {i}">
       <div class="toast-icon">
         <Icon name={getIcon(toast.type)} size={18} />
       </div>
@@ -38,11 +34,7 @@
         </button>
       {/if}
       {#if toast.dismissible}
-        <button
-          class="toast-dismiss"
-          onclick={() => dismissToast(toast.id)}
-          aria-label="Dismiss"
-        >
+        <button class="toast-dismiss" onclick={() => dismissToast(toast.id)} aria-label="Dismiss">
           <Icon name="x-circle" size={16} />
         </button>
       {/if}
@@ -177,9 +169,15 @@
   }
 
   /* Stagger animation for multiple toasts */
-  .toast:nth-child(1) { animation-delay: 0ms; }
-  .toast:nth-child(2) { animation-delay: 50ms; }
-  .toast:nth-child(3) { animation-delay: 100ms; }
+  .toast:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .toast:nth-child(2) {
+    animation-delay: 50ms;
+  }
+  .toast:nth-child(3) {
+    animation-delay: 100ms;
+  }
 
   /* Reduced motion */
   @media (prefers-reduced-motion: reduce) {

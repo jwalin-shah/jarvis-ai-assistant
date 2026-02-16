@@ -10,11 +10,11 @@ All text is normalized before embedding to ensure consistency between training a
 
 **Problem:** Training data and inference data can have subtle differences:
 
-| Issue | Training Data | Inference Data |
-|-------|--------------|----------------|
-| Multi-message turns | Single messages (mostly) | Grouped with `\n` separators |
-| Unicode variants | Mixed (smart quotes, etc.) | iOS smart quotes `"` `'` |
-| Whitespace | Clean | May have extra spaces/newlines |
+| Issue               | Training Data              | Inference Data                 |
+| ------------------- | -------------------------- | ------------------------------ |
+| Multi-message turns | Single messages (mostly)   | Grouped with `\n` separators   |
+| Unicode variants    | Mixed (smart quotes, etc.) | iOS smart quotes `"` `'`       |
+| Whitespace          | Clean                      | May have extra spaces/newlines |
 
 **Result:** Same semantic text embeds differently, hurting classifier accuracy.
 
@@ -37,22 +37,22 @@ def normalize_text(text: str) -> str:
 
 ## What It Does
 
-| Before | After | Why |
-|--------|-------|-----|
-| `"hey\nwant lunch?"` | `"hey want lunch?"` | Multi-message turns → single line |
-| `"don't"` (smart apostrophe) | `"don't"` (ASCII) | Unicode consistency |
-| `"hello"` (smart quotes) | `"hello"` (ASCII) | Unicode consistency |
-| `"hello   world"` | `"hello world"` | Collapse extra spaces |
-| `"  trimmed  "` | `"trimmed"` | Strip leading/trailing |
+| Before                       | After               | Why                               |
+| ---------------------------- | ------------------- | --------------------------------- |
+| `"hey\nwant lunch?"`         | `"hey want lunch?"` | Multi-message turns → single line |
+| `"don't"` (smart apostrophe) | `"don't"` (ASCII)   | Unicode consistency               |
+| `"hello"` (smart quotes)     | `"hello"` (ASCII)   | Unicode consistency               |
+| `"hello   world"`            | `"hello world"`     | Collapse extra spaces             |
+| `"  trimmed  "`              | `"trimmed"`         | Strip leading/trailing            |
 
 ## What It Preserves
 
-| Feature | Preserved? | Why |
-|---------|------------|-----|
-| Case | Yes | "YES" vs "yes" carries meaning |
-| Punctuation | Yes | "lunch?" vs "lunch" is different |
-| Emoji | Yes | Emoji carry sentiment |
-| URLs | Yes | Context about link sharing |
+| Feature     | Preserved? | Why                              |
+| ----------- | ---------- | -------------------------------- |
+| Case        | Yes        | "YES" vs "yes" carries meaning   |
+| Punctuation | Yes        | "lunch?" vs "lunch" is different |
+| Emoji       | Yes        | Emoji carry sentiment            |
+| URLs        | Yes        | Context about link sharing       |
 
 ## Where Applied
 
@@ -87,6 +87,7 @@ normalized = "hey want lunch? thinking sushi"
 ## Training Data
 
 Current training data is mostly single messages:
+
 - `data/trigger_labeling.jsonl`: ~4,865 examples, only 8 have `\n`
 - `data/response_labeling.jsonl`: ~4,865 examples
 

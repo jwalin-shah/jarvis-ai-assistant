@@ -6,7 +6,7 @@
  * Mock invoke function - throws to indicate Tauri is not available
  */
 export async function invoke(_cmd: string, _args?: unknown): Promise<unknown> {
-  throw new Error("Tauri invoke not available in browser context");
+  throw new Error('Tauri invoke not available in browser context');
 }
 
 /**
@@ -19,10 +19,7 @@ export function convertFileSrc(filePath: string, _protocol?: string): string {
 /**
  * Mock transformCallback function
  */
-export function transformCallback(
-  callback: (response: unknown) => void,
-  _once?: boolean
-): number {
+export function transformCallback(callback: (response: unknown) => void, _once?: boolean): number {
   // Return a fake callback id
   return Math.random();
 }

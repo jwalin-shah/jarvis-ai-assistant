@@ -19,15 +19,15 @@ A comprehensive guide to all Svelte components in the JARVIS desktop application
 
 The JARVIS desktop app contains **41 Svelte components** organized into the following categories:
 
-| Category | Count | Purpose |
-|----------|-------|---------|
-| **Core UI** | 8 | Layout, navigation, and fundamental UI elements |
-| **Message Views** | 4 | Conversation display and message composition |
-| **Graph Visualization** | 5 | Relationship network D3.js visualization |
-| **Tag Management** | 5 | Tagging system and smart folders |
-| **Icons** | 5 + 1 | SVG icon components and icon library |
-| **Utility** | 6 | Skeleton loaders, error boundaries, etc. |
-| **Overlays** | 7 | Modals, search, command palette, etc. |
+| Category                | Count | Purpose                                         |
+| ----------------------- | ----- | ----------------------------------------------- |
+| **Core UI**             | 8     | Layout, navigation, and fundamental UI elements |
+| **Message Views**       | 4     | Conversation display and message composition    |
+| **Graph Visualization** | 5     | Relationship network D3.js visualization        |
+| **Tag Management**      | 5     | Tagging system and smart folders                |
+| **Icons**               | 5 + 1 | SVG icon components and icon library            |
+| **Utility**             | 6     | Skeleton loaders, error boundaries, etc.        |
+| **Overlays**            | 7     | Modals, search, command palette, etc.           |
 
 ---
 
@@ -36,6 +36,7 @@ The JARVIS desktop app contains **41 Svelte components** organized into the foll
 ### Core UI Components
 
 #### App.svelte
+
 **File:** `desktop/src/App.svelte`
 
 The root application component that manages global state and view routing.
@@ -50,9 +51,11 @@ The root application component that manages global state and view routing.
 | `sidebarCollapsed` | `$state<boolean>` | Sidebar collapse state |
 
 **Dependencies:**
+
 - `Sidebar`, `ConversationList`, `MessageView`, `GlobalSearch`, `ErrorBoundary`, `KeyboardShortcuts`, `CommandPalette`, `Toast`
 
 **Store Dependencies:**
+
 - `healthStore` (checkApiConnection)
 - `conversationsStore` (clearSelection)
 - `theme` (initializeTheme)
@@ -64,6 +67,7 @@ Full-screen layout with a collapsible sidebar on the left, main content area (ch
 ---
 
 #### Sidebar.svelte
+
 **File:** `desktop/src/lib/components/Sidebar.svelte`
 
 Navigation sidebar with collapsible state and view switching.
@@ -88,6 +92,7 @@ Navigation sidebar with collapsible state and view switching.
 ---
 
 #### Button.svelte (Root)
+
 **File:** `desktop/src/lib/components/Button.svelte`
 
 Reusable button component with multiple variants.
@@ -109,6 +114,7 @@ Rounded rectangle buttons with hover lift effect. Primary=blue, Secondary=elevat
 ---
 
 #### Button.svelte (UI)
+
 **File:** `desktop/src/lib/components/ui/Button.svelte`
 
 Same API as root Button.svelte - unified button component.
@@ -116,6 +122,7 @@ Same API as root Button.svelte - unified button component.
 ---
 
 #### EmptyState.svelte
+
 **File:** `desktop/src/lib/components/ui/EmptyState.svelte`
 
 Empty state placeholder for empty lists/views.
@@ -136,6 +143,7 @@ Centered layout with 64px circular icon container, title, description text, and 
 ---
 
 #### Icon.svelte
+
 **File:** `desktop/src/lib/components/Icon.svelte`
 
 Lucide-style SVG icon component with built-in icons.
@@ -154,6 +162,7 @@ Lucide-style SVG icon component with built-in icons.
 ---
 
 #### Skeleton.svelte
+
 **File:** `desktop/src/lib/components/Skeleton.svelte`
 
 Loading placeholder with shimmer animation.
@@ -169,6 +178,7 @@ Loading placeholder with shimmer animation.
 ---
 
 #### ErrorBoundary.svelte
+
 **File:** `desktop/src/lib/components/ErrorBoundary.svelte`
 
 Catches JavaScript errors and displays fallback UI.
@@ -192,16 +202,19 @@ Full-screen overlay with centered error card containing alert icon, "Something w
 ### Message View Components
 
 #### MessageView.svelte
+
 **File:** `desktop/src/lib/components/MessageView.svelte`
 
 Main conversation display with message list, compose area, and AI suggestions.
 
 **Props/Exports:** None (uses stores)
 
-**Dependencies:** 
+**Dependencies:**
+
 - `SuggestionBar`, `MessageSkeleton`, `MessageItem`, `DateHeader`, `ComposeArea`, `EmptyState`, `MessageIcon`
 
 **Store Dependencies:**
+
 - `conversationsStore` (messages, loading states, optimistic messages)
 - `keyboard` (activeZone, messageIndex)
 - `selectedConversation` (current conversation)
@@ -213,6 +226,7 @@ Three-panel layout: header with avatar/contact info and AI Draft button, scrolla
 ---
 
 #### MessageItem.svelte (message-view)
+
 **File:** `desktop/src/lib/components/message-view/MessageItem.svelte`
 
 Individual message bubble with optimistic UI support.
@@ -236,6 +250,7 @@ Chat bubble with rounded corners, different styling for "from me" (blue gradient
 ---
 
 #### ComposeArea.svelte
+
 **File:** `desktop/src/lib/components/message-view/ComposeArea.svelte`
 
 Message input with auto-resize and send functionality.
@@ -251,6 +266,7 @@ Message input with auto-resize and send functionality.
 | `onFocus` | `() => void` | Focus callback |
 
 **Methods:**
+
 - `focus()` - Focus the textarea
 - `setValue(text)` - Set value and resize
 
@@ -262,6 +278,7 @@ Rounded input bar with auto-expanding textarea (max 120px), placeholder "iMessag
 ---
 
 #### DateHeader.svelte
+
 **File:** `desktop/src/lib/components/message-view/DateHeader.svelte`
 
 Date separator in message lists.
@@ -279,6 +296,7 @@ Centered pill-shaped label showing "Today", "Yesterday", or full date. Gray back
 ### Conversation Components
 
 #### ConversationList.svelte
+
 **File:** `desktop/src/lib/components/ConversationList.svelte`
 
 Sidebar list of conversations with topic tags and avatars.
@@ -288,6 +306,7 @@ Sidebar list of conversations with topic tags and avatars.
 **Dependencies:** `ConversationSkeleton`
 
 **Store Dependencies:**
+
 - `conversationsStore` (conversation list, loading, selected)
 - `keyboard` (activeZone, conversationIndex, announce)
 
@@ -297,6 +316,7 @@ Sidebar list of conversations with topic tags and avatars.
 ---
 
 #### ConversationSkeleton.svelte
+
 **File:** `desktop/src/lib/components/ConversationSkeleton.svelte`
 
 Loading placeholder for conversation list.
@@ -311,6 +331,7 @@ Loading placeholder for conversation list.
 ---
 
 #### MessageItem.svelte (root)
+
 **File:** `desktop/src/lib/components/MessageItem.svelte`
 
 Legacy message component (deprecated in favor of message-view/MessageItem).
@@ -318,6 +339,7 @@ Legacy message component (deprecated in favor of message-view/MessageItem).
 ---
 
 #### MessageSkeleton.svelte
+
 **File:** `desktop/src/lib/components/MessageSkeleton.svelte`
 
 Loading placeholder for message list.
@@ -334,6 +356,7 @@ Loading placeholder for message list.
 ### Overlay Components
 
 #### GlobalSearch.svelte
+
 **File:** `desktop/src/lib/components/GlobalSearch.svelte`
 
 Modal search with text and semantic (AI) search modes.
@@ -353,6 +376,7 @@ Centered modal with search input, mode toggle (keyword/semantic), filter panel (
 ---
 
 #### CommandPalette.svelte
+
 **File:** `desktop/src/lib/components/CommandPalette.svelte`
 
 Quick command launcher with keyboard navigation.
@@ -375,6 +399,7 @@ Centered glass-morphism modal with search input, categorized command list with i
 ---
 
 #### KeyboardShortcuts.svelte
+
 **File:** `desktop/src/lib/components/KeyboardShortcuts.svelte`
 
 Keyboard shortcuts reference modal.
@@ -392,6 +417,7 @@ Centered modal with 2-column grid of shortcut categories (Navigation, List Navig
 ---
 
 #### SuggestionBar.svelte
+
 **File:** `desktop/src/lib/components/SuggestionBar.svelte`
 
 AI reply suggestions with streaming text support.
@@ -414,6 +440,7 @@ Horizontal bar with sparkles icon, streaming text (when loading), or chip button
 ---
 
 #### Toast.svelte
+
 **File:** `desktop/src/lib/components/Toast.svelte`
 
 Notification toast container.
@@ -432,6 +459,7 @@ Fixed position stack in bottom-right corner. Each toast has icon (check/x/alert)
 ### View Components
 
 #### Dashboard.svelte
+
 **File:** `desktop/src/lib/components/Dashboard.svelte`
 
 System overview with metrics and analytics.
@@ -451,6 +479,7 @@ System overview with metrics and analytics.
 ---
 
 #### HealthStatus.svelte
+
 **File:** `desktop/src/lib/components/HealthStatus.svelte`
 
 Detailed system health monitoring.
@@ -467,6 +496,7 @@ Status banner with icon (changes based on health), 4 metric cards (Memory, Proce
 ---
 
 #### Settings.svelte
+
 **File:** `desktop/src/lib/components/Settings.svelte`
 
 Application settings with model management.
@@ -483,6 +513,7 @@ Vertical sections: Model selection (cards with download/activate buttons), Gener
 ---
 
 #### TemplateBuilder.svelte
+
 **File:** `desktop/src/lib/components/TemplateBuilder.svelte`
 
 Custom response template management.
@@ -497,6 +528,7 @@ Two-tab interface (Templates/Stats). Template list with filter dropdowns, cards 
 ---
 
 #### AttachmentGallery.svelte
+
 **File:** `desktop/src/lib/components/AttachmentGallery.svelte`
 
 Media and file browser for conversations.
@@ -516,6 +548,7 @@ Tabbed interface (Gallery/Storage) with type filters, date range pickers. Grid v
 ### Graph Visualization Components
 
 #### RelationshipGraph.svelte
+
 **File:** `desktop/src/lib/components/graph/RelationshipGraph.svelte`
 
 D3.js force-directed relationship network.
@@ -536,6 +569,7 @@ Interactive SVG network with draggable nodes, zoom/pan controls, colored by rela
 ---
 
 #### GraphControls.svelte
+
 **File:** `desktop/src/lib/components/graph/GraphControls.svelte`
 
 Toolbar for graph interaction.
@@ -547,6 +581,7 @@ Toolbar for graph interaction.
 | `currentLayout` | `LayoutType` | Current layout algorithm |
 
 **Events:**
+
 - `resetZoom`, `toggleLabels`, `reheat`, `changeLayout`, `search`, `filterRelationships`, `export`
 
 **Screenshot Description:**
@@ -555,6 +590,7 @@ Horizontal toolbar with search input, layout dropdown, relationship filter chips
 ---
 
 #### NodeTooltip.svelte
+
 **File:** `desktop/src/lib/components/graph/NodeTooltip.svelte`
 
 Hover tooltip for graph nodes.
@@ -572,6 +608,7 @@ Floating card following cursor showing contact name, relationship type, message 
 ---
 
 #### ClusterLegend.svelte
+
 **File:** `desktop/src/lib/components/graph/ClusterLegend.svelte`
 
 Legend and filter for relationship types.
@@ -589,6 +626,7 @@ Collapsible panel at bottom-left showing colored dots for each relationship type
 ---
 
 #### TimeSlider.svelte
+
 **File:** `desktop/src/lib/components/graph/TimeSlider.svelte`
 
 Temporal navigation for graph evolution.
@@ -611,6 +649,7 @@ Card with date range labels, progress slider with fill bar, playback controls (s
 ### Tag Management Components
 
 #### TagSidebar.svelte
+
 **File:** `desktop/src/lib/components/tags/TagSidebar.svelte`
 
 Navigation sidebar for tags and smart folders.
@@ -634,6 +673,7 @@ Navigation sidebar for tags and smart folders.
 ---
 
 #### TagBadge.svelte
+
 **File:** `desktop/src/lib/components/tags/TagBadge.svelte`
 
 Colored tag pill component.
@@ -655,6 +695,7 @@ Rounded pill with icon (star, heart, flag, etc.), tag name, and optional X butto
 ---
 
 #### TagPicker.svelte
+
 **File:** `desktop/src/lib/components/tags/TagPicker.svelte`
 
 Multi-select dropdown for tags.
@@ -679,6 +720,7 @@ Input field with selected tag badges inline, dropdown showing available tags wit
 ---
 
 #### BulkTagger.svelte
+
 **File:** `desktop/src/lib/components/tags/BulkTagger.svelte`
 
 Modal for bulk tag operations on conversations.
@@ -700,6 +742,7 @@ Modal with selected conversation preview chips, radio buttons for Add/Remove act
 ---
 
 #### SmartFolderEditor.svelte
+
 **File:** `desktop/src/lib/components/tags/SmartFolderEditor.svelte`
 
 Modal for creating/editing smart folders with rules.
@@ -722,15 +765,16 @@ Complex modal with name/icon inputs, color picker, match type radio (all/any), d
 
 All icon components in `desktop/src/lib/components/icons/`:
 
-| Component | Props | Description |
-|-----------|-------|-------------|
-| `HealthIcon` | `size`, `class`, `strokeWidth` | Activity/health icon |
-| `MessageIcon` | `size`, `class`, `strokeWidth` | Speech bubble icon |
-| `SearchIcon` | `size`, `class`, `strokeWidth` | Magnifying glass |
-| `SendIcon` | `size`, `class` | Paper airplane |
-| `SettingsIcon` | `size`, `class`, `strokeWidth` | Gear/cog icon |
+| Component      | Props                          | Description          |
+| -------------- | ------------------------------ | -------------------- |
+| `HealthIcon`   | `size`, `class`, `strokeWidth` | Activity/health icon |
+| `MessageIcon`  | `size`, `class`, `strokeWidth` | Speech bubble icon   |
+| `SearchIcon`   | `size`, `class`, `strokeWidth` | Magnifying glass     |
+| `SendIcon`     | `size`, `class`                | Paper airplane       |
+| `SettingsIcon` | `size`, `class`, `strokeWidth` | Gear/cog icon        |
 
 **IconProps interface:**
+
 ```typescript
 interface IconProps {
   size?: number;
@@ -794,16 +838,16 @@ App
 
 ### Store to Component Mapping
 
-| Store | Components | Data Flow |
-|-------|------------|-----------|
-| **conversationsStore** | `App`, `ConversationList`, `MessageView`, `GlobalSearch`, `Dashboard` | Selected conversation, message lists, loading states, optimistic messages |
-| **healthStore** | `App`, `Sidebar`, `Dashboard`, `HealthStatus`, `Settings` | Connection status, system health metrics |
-| **theme** | `App`, `Settings`, `CommandPalette` | Theme mode, accent color, reduced motion |
-| **keyboard** | `ConversationList`, `MessageView` | Focus zones, navigation indices, announcements |
-| **metricsStore** | `Dashboard` | Routing metrics, latency data |
-| **templateAnalyticsStore** | `HealthStatus` | Template usage statistics |
-| **toast** | `Toast`, `ErrorBoundary` | Notification queue |
-| **websocket** | (background service) | Real-time message updates |
+| Store                      | Components                                                            | Data Flow                                                                 |
+| -------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **conversationsStore**     | `App`, `ConversationList`, `MessageView`, `GlobalSearch`, `Dashboard` | Selected conversation, message lists, loading states, optimistic messages |
+| **healthStore**            | `App`, `Sidebar`, `Dashboard`, `HealthStatus`, `Settings`             | Connection status, system health metrics                                  |
+| **theme**                  | `App`, `Settings`, `CommandPalette`                                   | Theme mode, accent color, reduced motion                                  |
+| **keyboard**               | `ConversationList`, `MessageView`                                     | Focus zones, navigation indices, announcements                            |
+| **metricsStore**           | `Dashboard`                                                           | Routing metrics, latency data                                             |
+| **templateAnalyticsStore** | `HealthStatus`                                                        | Template usage statistics                                                 |
+| **toast**                  | `Toast`, `ErrorBoundary`                                              | Notification queue                                                        |
+| **websocket**              | (background service)                                                  | Real-time message updates                                                 |
 
 ### Store Interface Summary
 
@@ -851,156 +895,79 @@ All design tokens are defined in `desktop/src/lib/styles/tokens.css`.
 
 ```css
 /* Primitive Colors */
---color-blue: #007AFF
---color-green: #34C759
---color-orange: #FF9500
---color-red: #FF3B30
---color-purple: #5856D6
---color-pink: #FF2D55
---color-yellow: #FFCC00
---color-teal: #5AC8FA
---color-indigo: #5E5CE6
-
-/* Semantic Colors */
---color-primary: var(--color-blue)
---color-success: var(--color-green)
---color-warning: var(--color-orange)
---color-error: var(--color-red)
---color-info: var(--color-teal)
-
-/* Surface Colors (Dark Default) */
---surface-base: #0A0A0A
---surface-elevated: #141414
---surface-surface: #1C1C1E
---surface-hover: #2C2C2E
---surface-active: #3A3A3C
-
-/* Text Colors */
---text-primary: #FFFFFF
---text-secondary: rgba(255, 255, 255, 0.6)
---text-tertiary: rgba(255, 255, 255, 0.4)
---text-disabled: rgba(255, 255, 255, 0.3)
-
-/* Border Colors */
---border-subtle: rgba(255, 255, 255, 0.08)
---border-default: rgba(255, 255, 255, 0.12)
---border-focus: rgba(0, 122, 255, 0.5)
-
-/* Message Bubbles */
---bubble-me: var(--color-primary)
---bubble-me-gradient: linear-gradient(135deg, var(--color-primary) 0%, #0056b3 100%)
---bubble-other: var(--surface-surface)
-
-/* Group Accent */
---group-color: var(--color-purple)
+--color-blue: #007aff --color-green: #34c759 --color-orange: #ff9500 --color-red: #ff3b30
+  --color-purple: #5856d6 --color-pink: #ff2d55 --color-yellow: #ffcc00 --color-teal: #5ac8fa
+  --color-indigo: #5e5ce6 /* Semantic Colors */ --color-primary: var(--color-blue)
+  --color-success: var(--color-green) --color-warning: var(--color-orange)
+  --color-error: var(--color-red) --color-info: var(--color-teal)
+  /* Surface Colors (Dark Default) */ --surface-base: #0a0a0a --surface-elevated: #141414
+  --surface-surface: #1c1c1e --surface-hover: #2c2c2e --surface-active: #3a3a3c /* Text Colors */
+  --text-primary: #ffffff --text-secondary: rgba(255, 255, 255, 0.6)
+  --text-tertiary: rgba(255, 255, 255, 0.4) --text-disabled: rgba(255, 255, 255, 0.3)
+  /* Border Colors */ --border-subtle: rgba(255, 255, 255, 0.08)
+  --border-default: rgba(255, 255, 255, 0.12) --border-focus: rgba(0, 122, 255, 0.5)
+  /* Message Bubbles */ --bubble-me: var(--color-primary)
+  --bubble-me-gradient: linear-gradient(135deg, var(--color-primary) 0%, #0056b3 100%)
+  --bubble-other: var(--surface-surface) /* Group Accent */ --group-color: var(--color-purple);
 ```
 
 ### Spacing Scale
 
 ```css
---space-0: 0
---space-1: 4px
---space-2: 8px
---space-3: 12px
---space-4: 16px
---space-5: 20px
---space-6: 24px
---space-7: 28px
---space-8: 32px
---space-9: 36px
---space-10: 40px
---space-12: 48px
---space-16: 64px
+--space-0: 0 --space-1: 4px --space-2: 8px --space-3: 12px --space-4: 16px --space-5: 20px
+  --space-6: 24px --space-7: 28px --space-8: 32px --space-9: 36px --space-10: 40px --space-12: 48px
+  --space-16: 64px;
 ```
 
 ### Typography
 
 ```css
---font-family-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif
---font-family-mono: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace
-
-/* Font Sizes */
---text-xs: 11px
---text-sm: 13px
---text-base: 15px
---text-lg: 17px
---text-xl: 20px
---text-2xl: 24px
---text-3xl: 32px
-
-/* Font Weights */
---font-weight-normal: 400
---font-weight-medium: 500
---font-weight-semibold: 600
---font-weight-bold: 700
-
-/* Line Heights */
---line-height-tight: 1.25
---line-height-normal: 1.5
---line-height-relaxed: 1.75
-
-/* Letter Spacing */
---letter-spacing-tight: -0.02em
---letter-spacing-normal: 0
---letter-spacing-wide: 0.02em
+--font-family-sans:
+  -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial,
+  sans-serif --font-family-mono: 'SF Mono', 'Menlo', 'Monaco', 'Courier New',
+  monospace /* Font Sizes */ --text-xs: 11px --text-sm: 13px --text-base: 15px --text-lg: 17px
+    --text-xl: 20px --text-2xl: 24px --text-3xl: 32px /* Font Weights */ --font-weight-normal: 400
+    --font-weight-medium: 500 --font-weight-semibold: 600 --font-weight-bold: 700 /* Line Heights */
+    --line-height-tight: 1.25 --line-height-normal: 1.5 --line-height-relaxed: 1.75
+    /* Letter Spacing */ --letter-spacing-tight: -0.02em --letter-spacing-normal: 0
+    --letter-spacing-wide: 0.02em;
 ```
 
 ### Border Radius
 
 ```css
---radius-sm: 6px
---radius-md: 8px
---radius-lg: 12px
---radius-xl: 16px
---radius-2xl: 20px
---radius-full: 9999px
+--radius-sm: 6px --radius-md: 8px --radius-lg: 12px --radius-xl: 16px --radius-2xl: 20px
+  --radius-full: 9999px;
 ```
 
 ### Animation
 
 ```css
 /* Durations */
---duration-instant: 0ms
---duration-fast: 150ms
---duration-normal: 200ms
---duration-slow: 300ms
---duration-slower: 500ms
-
-/* Easings */
---ease-linear: linear
---ease-out: cubic-bezier(0.33, 1, 0.68, 1)
---ease-in-out: cubic-bezier(0.65, 0, 0.35, 1)
---ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1)
+--duration-instant: 0ms --duration-fast: 150ms --duration-normal: 200ms --duration-slow: 300ms
+  --duration-slower: 500ms /* Easings */ --ease-linear: linear
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1) --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1)
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 ```
 
 ### Shadows
 
 ```css
---shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1)
---shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15)
---shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2)
---shadow-focus: 0 0 0 3px var(--border-focus)
+--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1) --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15) --shadow-lg: 0
+  8px 24px rgba(0, 0, 0, 0.2) --shadow-focus: 0 0 0 3px var(--border-focus);
 ```
 
 ### Z-Index Scale
 
 ```css
---z-base: 0
---z-dropdown: 100
---z-sticky: 200
---z-modal-backdrop: 300
---z-modal: 400
---z-popover: 500
---z-tooltip: 600
---z-toast: 700
+--z-base: 0 --z-dropdown: 100 --z-sticky: 200 --z-modal-backdrop: 300 --z-modal: 400
+  --z-popover: 500 --z-tooltip: 600 --z-toast: 700;
 ```
 
 ### Utility Classes
 
 ```css
-.focus-ring:focus-visible  /* Focus outline */
-.sr-only                   /* Screen reader only */
-.glass                     /* Backdrop blur effect */
+.focus-ring: focus-visible /* Focus outline */ .sr-only /* Screen reader only */ .glass; /* Backdrop blur effect */
 ```
 
 ---
@@ -1010,9 +977,11 @@ All design tokens are defined in `desktop/src/lib/styles/tokens.css`.
 Based on the current app structure, the following components could be extracted for better reusability:
 
 ### 1. **Modal/Dialog Component**
+
 **Current State:** Each modal (CommandPalette, KeyboardShortcuts, GlobalSearch, BulkTagger, SmartFolderEditor, TemplateBuilder modals) implements its own backdrop, positioning, and animation.
 
 **Suggested API:**
+
 ```svelte
 <Modal bind:open title="Modal Title" on:close>
   <ModalBody>Content</ModalBody>
@@ -1024,9 +993,11 @@ Based on the current app structure, the following components could be extracted 
 ```
 
 ### 2. **Input Component**
+
 **Current State:** Raw `<input>` and `<textarea>` elements styled individually across components.
 
 **Suggested API:**
+
 ```svelte
 <Input label="Name" bind:value error={errorMessage} />
 <Textarea label="Description" bind:value rows={4} />
@@ -1034,9 +1005,11 @@ Based on the current app structure, the following components could be extracted 
 ```
 
 ### 3. **Card Component**
+
 **Current State:** Dashboard cards, metric cards, and template cards each have their own styles.
 
 **Suggested API:**
+
 ```svelte
 <Card title="Title" icon={IconComponent}>
   <CardContent>Value</CardContent>
@@ -1045,18 +1018,22 @@ Based on the current app structure, the following components could be extracted 
 ```
 
 ### 4. **Badge Component**
+
 **Current State:** Topic tags, decision chips, and status indicators are similar but separate.
 
 **Suggested API:**
+
 ```svelte
 <Badge variant="primary|success|warning|error|info">Label</Badge>
 <Badge dot color="green">Status</Badge>
 ```
 
 ### 5. **Tooltip Component**
+
 **Current State:** Only NodeTooltip exists; other hover tooltips could use a generic version.
 
 **Suggested API:**
+
 ```svelte
 <Tooltip text="Helpful hint">
   <Button>Hover me</Button>
@@ -1064,9 +1041,11 @@ Based on the current app structure, the following components could be extracted 
 ```
 
 ### 6. **Dropdown/Menu Component**
+
 **Current State:** CommandPalette and filter dropdowns could share a common menu base.
 
 **Suggested API:**
+
 ```svelte
 <Dropdown bind:open>
   <DropdownTrigger>Open Menu</DropdownTrigger>
@@ -1080,18 +1059,22 @@ Based on the current app structure, the following components could be extracted 
 ```
 
 ### 7. **Avatar Component**
+
 **Current State:** Avatar rendering logic is duplicated in ConversationList, MessageView, and ContactDetailPanel.
 
 **Suggested API:**
+
 ```svelte
 <Avatar src={url} fallback="JD" size="sm|md|lg" />
 <AvatarGroup avatars={users} max={3} />
 ```
 
 ### 8. **Tabs Component**
+
 **Current State:** TemplateBuilder and Settings implement tabs inline.
 
 **Suggested API:**
+
 ```svelte
 <Tabs bind:activeTab>
   <Tab id="list" title="List">Content</Tab>
@@ -1100,21 +1083,25 @@ Based on the current app structure, the following components could be extracted 
 ```
 
 ### 9. **Toggle/Switch Component**
+
 **Current State:** Custom toggle implementation in Settings.
 
 **Suggested API:**
+
 ```svelte
 <Toggle bind:checked label="Enable feature" />
 ```
 
 ### 10. **Slider/Range Component**
+
 **Current State:** Range inputs styled individually in Settings.
 
 **Suggested API:**
+
 ```svelte
 <Slider bind:value min={0} max={100} label="Temperature" showValue />
 ```
 
 ---
 
-*Document generated from source analysis of JARVIS desktop components.*
+_Document generated from source analysis of JARVIS desktop components._

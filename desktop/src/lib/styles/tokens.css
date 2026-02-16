@@ -13,17 +13,17 @@
 
 :root {
   /* Primitive Colors */
-  --color-blue: #007AFF;
+  --color-blue: #007aff;
   --color-blue-hover: #0056b3;
-  --color-green: #34C759;
+  --color-green: #34c759;
   --color-green-hover: #2db14d;
-  --color-orange: #FF9500;
-  --color-red: #FF3B30;
-  --color-purple: #5856D6;
-  --color-pink: #FF2D55;
-  --color-yellow: #FFCC00;
-  --color-teal: #5AC8FA;
-  --color-indigo: #5E5CE6;
+  --color-orange: #ff9500;
+  --color-red: #ff3b30;
+  --color-purple: #5856d6;
+  --color-pink: #ff2d55;
+  --color-yellow: #ffcc00;
+  --color-teal: #5ac8fa;
+  --color-indigo: #5e5ce6;
 
   /* Semantic Colors - Dark Theme (Default) */
   --color-primary: var(--color-blue);
@@ -34,14 +34,14 @@
   --color-info: var(--color-teal);
 
   /* Surface Colors */
-  --surface-base: #0A0A0A;
+  --surface-base: #0a0a0a;
   --surface-elevated: #141414;
-  --surface-surface: #1C1C1E;
-  --surface-hover: #2C2C2E;
-  --surface-active: #3A3A3C;
+  --surface-surface: #1c1c1e;
+  --surface-hover: #2c2c2e;
+  --surface-active: #3a3a3c;
 
   /* Text Colors */
-  --text-primary: #FFFFFF;
+  --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.6);
   --text-tertiary: rgba(255, 255, 255, 0.4);
   --text-disabled: rgba(255, 255, 255, 0.3);
@@ -75,8 +75,9 @@
   --space-16: 64px;
 
   /* Typography */
-  --font-family-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
-    Helvetica, Arial, sans-serif;
+  --font-family-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
   --font-family-mono: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
 
   --text-xs: 11px;
@@ -155,13 +156,13 @@
 
 /* Light Theme */
 :root.light {
-  --surface-base: #FFFFFF;
-  --surface-elevated: #F5F5F7;
-  --surface-surface: #E5E5EA;
-  --surface-hover: #D1D1D6;
-  --surface-active: #C7C7CC;
+  --surface-base: #ffffff;
+  --surface-elevated: #f5f5f7;
+  --surface-surface: #e5e5ea;
+  --surface-hover: #d1d1d6;
+  --surface-active: #c7c7cc;
 
-  --text-primary: #1D1D1F;
+  --text-primary: #1d1d1f;
   --text-secondary: rgba(0, 0, 0, 0.55);
   --text-tertiary: rgba(0, 0, 0, 0.35);
   --text-disabled: rgba(0, 0, 0, 0.25);

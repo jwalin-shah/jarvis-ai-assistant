@@ -44,10 +44,10 @@ class FailureReason(str, Enum):
 
 **Current state:** Feedback API exists but desktop app doesn't call it.
 
-| Type | How It Works | Status |
-|------|--------------|--------|
-| **Explicit** | User clicks Send/Edit/Dismiss | API ready, UI not wired |
-| **Implicit** | Detect what user actually sent | Not implemented |
+| Type         | How It Works                   | Status                  |
+| ------------ | ------------------------------ | ----------------------- |
+| **Explicit** | User clicks Send/Edit/Dismiss  | API ready, UI not wired |
+| **Implicit** | Detect what user actually sent | Not implemented         |
 
 ## Proposed: Passive Feedback Detection
 
@@ -98,11 +98,11 @@ class TriggerAnalysis:
 
 ## Implementation Roadmap
 
-| Priority | Task | Effort |
-|----------|------|--------|
-| 1 | Wire desktop Send/Edit/Dismiss to feedback API | Easy |
-| 2 | Add passive detection in watcher.py | Medium |
-| 3 | Add trigger complexity analysis | Medium |
-| 4 | CLI: `jarvis feedback stats` | Easy |
-| 5 | Real-time style learning per contact | Medium |
-| 6 | Classifier retraining pipeline | Hard |
+| Priority | Task                                           | Effort |
+| -------- | ---------------------------------------------- | ------ |
+| 1        | Wire desktop Send/Edit/Dismiss to feedback API | Easy   |
+| 2        | Add passive detection in watcher.py            | Medium |
+| 3        | Add trigger complexity analysis                | Medium |
+| 4        | CLI: `jarvis feedback stats`                   | Easy   |
+| 5        | Real-time style learning per contact           | Medium |
+| 6        | Classifier retraining pipeline                 | Hard   |

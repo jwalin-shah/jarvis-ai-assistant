@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from "svelte";
+  import { createEventDispatcher, onMount } from 'svelte';
 
   export let fromDate: Date = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 90 days ago
   export let toDate: Date = new Date();
@@ -21,14 +21,14 @@
   $: {
     const dayOffset = Math.floor((sliderValue / 100) * totalDays);
     currentDate = new Date(fromDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
-    dispatch("dateChange", currentDate);
+    dispatch('dateChange', currentDate);
   }
 
   function formatDate(date: Date): string {
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
     });
   }
 
@@ -47,7 +47,7 @@
 
   function play() {
     isPlaying = true;
-    dispatch("play");
+    dispatch('play');
 
     // Reset to beginning if at end
     if (sliderValue >= 100) {
@@ -65,7 +65,7 @@
 
   function pause() {
     isPlaying = false;
-    dispatch("pause");
+    dispatch('pause');
 
     if (playInterval) {
       clearInterval(playInterval);
@@ -76,7 +76,7 @@
   function reset() {
     pause();
     sliderValue = 100;
-    dispatch("reset");
+    dispatch('reset');
   }
 
   function stepBackward() {
@@ -119,25 +119,25 @@
   <div class="controls">
     <button class="control-btn" on:click={stepBackward} title="Step Backward">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
       </svg>
     </button>
 
-    <button class="control-btn play-btn" on:click={togglePlay} title={isPlaying ? "Pause" : "Play"}>
+    <button class="control-btn play-btn" on:click={togglePlay} title={isPlaying ? 'Pause' : 'Play'}>
       {#if isPlaying}
         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
         </svg>
       {:else}
         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-          <path d="M8 5v14l11-7z"/>
+          <path d="M8 5v14l11-7z" />
         </svg>
       {/if}
     </button>
 
     <button class="control-btn" on:click={stepForward} title="Step Forward">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
       </svg>
     </button>
 
@@ -145,7 +145,9 @@
 
     <button class="control-btn" on:click={reset} title="Reset to Present">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-        <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+        <path
+          d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"
+        />
       </svg>
     </button>
   </div>
@@ -224,7 +226,7 @@
     top: 0;
     left: 0;
     height: 100%;
-    background: var(--accent-color, #007AFF);
+    background: var(--accent-color, #007aff);
     border-radius: 3px;
     pointer-events: none;
     z-index: 1;
@@ -259,7 +261,7 @@
   .control-btn.play-btn {
     width: 40px;
     height: 40px;
-    background: var(--accent-color, #007AFF);
+    background: var(--accent-color, #007aff);
     color: #fff;
   }
 
