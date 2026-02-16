@@ -60,6 +60,9 @@ def _mock_mlx_modules():
     mock_mx.metal = MagicMock()
     mock_mx.metal.clear_cache = MagicMock()
 
+    # Create mock for mlx.nn
+    mock_nn = MagicMock()
+
     mock_mlx_lm = MagicMock()
     mock_mlx_lm.load = MagicMock(return_value=(MagicMock(), MagicMock()))
     mock_mlx_lm.generate = MagicMock(return_value="Generated text")
@@ -71,6 +74,7 @@ def _mock_mlx_modules():
     # Need to mock 'mlx' top-level for 'mlx.core' to be importable
     sys.modules["mlx"] = mock_mlx
     sys.modules["mlx.core"] = mock_mx
+    sys.modules["mlx.nn"] = mock_nn
     sys.modules["mlx_lm"] = mock_mlx_lm
     sys.modules["mlx_lm.sample_utils"] = mock_sample_utils
 

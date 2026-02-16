@@ -92,7 +92,7 @@ def query_new_messages(
         JOIN chat ON chat_message_join.chat_id = chat.ROWID
         LEFT JOIN handle ON message.handle_id = handle.ROWID
         WHERE message.ROWID > ?
-        ORDER BY message.date ASC
+        ORDER BY message.ROWID ASC
         LIMIT ?
         """,
         (since_rowid, limit),
