@@ -173,17 +173,7 @@ def build_generation_request(
         cname = str(context.metadata.get("contact_name"))
 
     # Bot/Service detection: skip irrelevant context for automated messages
-    is_bot = False
-    if chat_id:
-        # Check for shortcodes or service-like identifiers
-        identifier = chat_id.rsplit(";", 1)[-1] if ";" in chat_id else chat_id
-        if identifier.isdigit() and len(identifier) <= 6:
-            is_bot = True
-        elif any(
-            s in cname.lower()
-            for s in ["airline", "bank", "cvs", "uber", "doordash", "verification"]
-        ):
-            is_bot = True
+    is_bot = service.context_service.is_bot_chat(chat_id, cname)
 
     if chat_id and not is_bot:
         logger.debug("[build] Fetching context for %s...", chat_id[:12])
@@ -225,17 +215,6 @@ def build_generation_request(
 
     context.metadata["instruction"] = instruction or ""
     context.metadata.setdefault("contact_name", cname)
-
-    if len(search_results) > 3 and service.reranker:
-        logger.debug("[build] Reranking %d results...", len(search_results))
-        t_rerank_start = time.perf_counter()
-        search_results = service.reranker.rerank(
-            query=incoming,
-            candidates=search_results,
-            text_key="context_text",
-            top_k=5,
-        )
-        logger.debug("[build] Rerank took %.1fms", (time.perf_counter() - t_rerank_start) * 1000)
 
     optimized_examples = get_optimized_examples(category_name)
     category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
