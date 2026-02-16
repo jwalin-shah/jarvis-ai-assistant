@@ -28,15 +28,27 @@ if _env_path.exists():
 # Judge configuration (change here to switch providers)
 # ---------------------------------------------------------------------------
 
-# Groq Llama 3.3 70B (FREE, ultra-fast, 30 req/min, 6k req/day)
-JUDGE_MODEL = "llama-3.3-70b-versatile"
-JUDGE_BASE_URL = "https://api.groq.com/openai/v1"
-JUDGE_API_KEY_ENV = "GROQ_API_KEY"
+# Cerebras Model Options (FREE tier: 30 req/min, 14.4k req/day)
+# Change JUDGE_MODEL to switch between them
 
-# Alternative: Cerebras Llama 3.3 70B (FREE, 30 req/min, 14.4k req/day)
+# Option 1: Llama 3.3 70B - Reliable, well-tested
 # JUDGE_MODEL = "llama-3.3-70b"
-# JUDGE_BASE_URL = "https://api.cerebras.ai/v1"
-# JUDGE_API_KEY_ENV = "CEREBRAS_API_KEY"
+
+# Option 2: Llama 3.3 70B - Reliable, well-tested (RECOMMENDED)
+JUDGE_MODEL = "llama-3.3-70b"
+
+# Option 3: Qwen 2.5 72B - Strong multilingual, good for complex reasoning
+# JUDGE_MODEL = "qwen-2.5-72b"
+
+# Option 4: QwQ 32B Preview - Good at reasoning through problems
+# JUDGE_MODEL = "qwq-32b-preview"
+
+JUDGE_BASE_URL = "https://api.cerebras.ai/v1"
+JUDGE_API_KEY_ENV = "CEREBRAS_API_KEY"
+
+# Alternative Providers:
+# Groq: JUDGE_MODEL = "llama-3.3-70b-versatile", JUDGE_BASE_URL = "https://api.groq.com/openai/v1"
+# DeepInfra: Various models available
 
 
 def get_judge_api_key() -> str | None:

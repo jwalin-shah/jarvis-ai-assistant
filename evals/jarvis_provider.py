@@ -27,6 +27,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
@@ -223,7 +225,10 @@ def generate_reply(prompt: str, config: dict) -> dict:
             max_tokens=config.get("max_tokens", 50),
             top_p=config.get("top_p", 0.1),
             top_k=config.get("top_k", 50),
-            repetition_penalty=config.get("repetition_penalty", 1.05),
+            repetition_penalty=config.get(
+                "repetition_penalty",
+                DEFAULT_REPETITION_PENALTY,  # From generation_config
+            ),
         )
         return {
             "output": result.text.strip(),

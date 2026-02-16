@@ -5,7 +5,7 @@
  * set up API mocking and provide helper utilities.
  */
 
-import { test as base, expect, Page } from '@playwright/test';
+import { test as base, expect, Page } from "@playwright/test";
 import {
   setupApiMocks,
   setupApiMocksWithErrors,
@@ -13,7 +13,7 @@ import {
   setupSocketMocks,
   setupSlowApiMocks,
   setupLargeDataMocks,
-} from '../mocks';
+} from "../mocks";
 
 /**
  * Performance metrics collected during tests
@@ -83,10 +83,10 @@ export { expect };
  */
 export async function waitForAppLoad(page: Page): Promise<void> {
   // Wait for sidebar to be visible
-  await page.waitForSelector('.sidebar', { state: 'visible' });
+  await page.waitForSelector(".sidebar", { state: "visible" });
 
   // Wait for the JARVIS logo
-  await page.waitForSelector('.logo-text', { state: 'visible' });
+  await page.waitForSelector(".logo-text", { state: "visible" });
 }
 
 /**
@@ -94,22 +94,22 @@ export async function waitForAppLoad(page: Page): Promise<void> {
  */
 export async function navigateToView(
   page: Page,
-  view: 'dashboard' | 'messages' | 'health' | 'settings' | 'templates' | 'network'
+  view: "dashboard" | "messages" | "health" | "settings" | "templates" | "network"
 ): Promise<void> {
   // Click the nav button with the matching title
   const navButton = page.locator(`.nav-item[title="${capitalizeFirst(view)}"]`);
 
   // For "health", the title is "Health Status"
-  if (view === 'health') {
+  if (view === "health") {
     await page.locator('.nav-item[title="Health Status"]').click();
-  } else if (view === 'templates') {
+  } else if (view === "templates") {
     await page.locator('.nav-item[title="Templates"]').click();
   } else {
     await navButton.click();
   }
 
   // Wait for view to be active
-  const expectedTitle = view === 'health' ? 'Health Status' : capitalizeFirst(view);
+  const expectedTitle = view === "health" ? "Health Status" : capitalizeFirst(view);
   await page.waitForSelector(`.nav-item.active[title="${expectedTitle}"]`);
 }
 
@@ -120,15 +120,18 @@ function capitalizeFirst(str: string): string {
 /**
  * Helper to select a conversation from the list.
  */
-export async function selectConversation(page: Page, displayName: string): Promise<void> {
+export async function selectConversation(
+  page: Page,
+  displayName: string
+): Promise<void> {
   // Find the conversation by name and click it
-  const conversation = page.locator('.conversation', {
-    has: page.locator('.name', { hasText: displayName }),
+  const conversation = page.locator(".conversation", {
+    has: page.locator(".name", { hasText: displayName }),
   });
   await conversation.click();
 
   // Wait for it to become active
-  await page.waitForSelector('.conversation.active');
+  await page.waitForSelector(".conversation.active");
 }
 
 /**
@@ -136,34 +139,38 @@ export async function selectConversation(page: Page, displayName: string): Promi
  */
 export async function waitForMessagesLoad(page: Page): Promise<void> {
   // Wait for either messages to appear or the "Select a conversation" placeholder
-  await page.waitForSelector('.messages, .message-view .empty', {
-    state: 'visible',
+  await page.waitForSelector(".messages, .message-view .empty", {
+    state: "visible",
   });
 }
 
 /**
  * Helper to get the connection status indicator (from sidebar).
  */
-export async function getConnectionStatus(page: Page): Promise<'connected' | 'disconnected'> {
-  const dot = page.locator('.sidebar .status-dot');
-  const hasConnectedClass = await dot.evaluate((el) => el.classList.contains('connected'));
-  return hasConnectedClass ? 'connected' : 'disconnected';
+export async function getConnectionStatus(
+  page: Page
+): Promise<"connected" | "disconnected"> {
+  const dot = page.locator(".sidebar .status-dot");
+  const hasConnectedClass = await dot.evaluate((el) =>
+    el.classList.contains("connected")
+  );
+  return hasConnectedClass ? "connected" : "disconnected";
 }
 
 /**
  * Helper to open global search (Cmd+K).
  */
 export async function openGlobalSearch(page: Page): Promise<void> {
-  await page.keyboard.press('Meta+k');
-  await page.waitForSelector('.search-modal, .global-search', { state: 'visible' });
+  await page.keyboard.press("Meta+k");
+  await page.waitForSelector(".search-modal, .global-search", { state: "visible" });
 }
 
 /**
  * Helper to close global search.
  */
 export async function closeGlobalSearch(page: Page): Promise<void> {
-  await page.keyboard.press('Escape');
-  await page.waitForSelector('.search-modal, .global-search', { state: 'hidden' });
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".search-modal, .global-search", { state: "hidden" });
 }
 
 /**
@@ -174,14 +181,14 @@ export async function searchAndWait(
   query: string,
   expectResults: boolean = true
 ): Promise<void> {
-  const searchInput = page.locator('.search-input, .search input');
+  const searchInput = page.locator(".search-input, .search input");
   await searchInput.fill(query);
 
   // Wait for debounce and results
   await page.waitForTimeout(500);
 
   if (expectResults) {
-    await page.waitForSelector('.result-item, .search-result');
+    await page.waitForSelector(".result-item, .search-result");
   }
 }
 
@@ -195,14 +202,16 @@ export async function measureRenderTime(
 ): Promise<number> {
   const startTime = Date.now();
   await action();
-  await page.waitForSelector(selector, { state: 'visible' });
+  await page.waitForSelector(selector, { state: "visible" });
   return Date.now() - startTime;
 }
 
 /**
  * Helper to collect performance metrics from the page.
  */
-export async function collectPerformanceMetrics(page: Page): Promise<PerformanceMetrics> {
+export async function collectPerformanceMetrics(
+  page: Page
+): Promise<PerformanceMetrics> {
   const metrics = await page.evaluate(() => {
     const perf = performance as Performance & {
       memory?: { usedJSHeapSize: number; totalJSHeapSize: number };
@@ -217,7 +226,7 @@ export async function collectPerformanceMetrics(page: Page): Promise<Performance
       }
     });
     try {
-      observer.observe({ type: 'layout-shift', buffered: true });
+      observer.observe({ type: "layout-shift", buffered: true });
     } catch {
       // Layout shift not supported
     }
@@ -226,7 +235,7 @@ export async function collectPerformanceMetrics(page: Page): Promise<Performance
       renderTime: performance.now(),
       heapUsed: perf.memory?.usedJSHeapSize || 0,
       heapTotal: perf.memory?.totalJSHeapSize || 0,
-      domNodes: document.querySelectorAll('*').length,
+      domNodes: document.querySelectorAll("*").length,
       layoutShifts,
     };
   });
@@ -248,11 +257,18 @@ export async function checkAccessibility(
 }> {
   const element = page.locator(selector).first();
 
-  const role = await element.getAttribute('role');
-  const ariaLabel = await element.getAttribute('aria-label');
-  const tabIndex = await element.getAttribute('tabindex');
+  const role = await element.getAttribute("role");
+  const ariaLabel = await element.getAttribute("aria-label");
+  const tabIndex = await element.getAttribute("tabindex");
   const isFocusable = await element.evaluate((el) => {
-    const focusableSelectors = ['a[href]', 'button', 'input', 'select', 'textarea', '[tabindex]'];
+    const focusableSelectors = [
+      "a[href]",
+      "button",
+      "input",
+      "select",
+      "textarea",
+      "[tabindex]",
+    ];
     return focusableSelectors.some((s) => el.matches(s));
   });
 
@@ -271,7 +287,7 @@ export async function testKeyboardNavigation(
   page: Page,
   containerSelector: string,
   itemSelector: string,
-  key: 'ArrowDown' | 'ArrowUp' | 'Tab' = 'ArrowDown'
+  key: "ArrowDown" | "ArrowUp" | "Tab" = "ArrowDown"
 ): Promise<number> {
   const container = page.locator(containerSelector);
   const items = container.locator(itemSelector);
@@ -289,7 +305,7 @@ export async function testKeyboardNavigation(
     navigatedCount++;
 
     // Verify focus moved
-    const focusedElement = page.locator(':focus');
+    const focusedElement = page.locator(":focus");
     const isFocused = await focusedElement.count();
     if (isFocused === 0) break;
   }
@@ -302,7 +318,7 @@ export async function testKeyboardNavigation(
  */
 export async function simulateSlowNetwork(page: Page): Promise<void> {
   const client = await page.context().newCDPSession(page);
-  await client.send('Network.emulateNetworkConditions', {
+  await client.send("Network.emulateNetworkConditions", {
     offline: false,
     downloadThroughput: (500 * 1024) / 8, // 500 kbps
     uploadThroughput: (500 * 1024) / 8,
@@ -328,7 +344,7 @@ export async function simulateOnline(page: Page): Promise<void> {
  * Helper to wait for network idle (no pending requests).
  */
 export async function waitForNetworkIdle(page: Page, timeout = 5000): Promise<void> {
-  await page.waitForLoadState('networkidle', { timeout });
+  await page.waitForLoadState("networkidle", { timeout });
 }
 
 /**
@@ -340,8 +356,8 @@ export async function collectConsoleErrors(
 ): Promise<string[]> {
   const errors: string[] = [];
 
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') {
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
       errors.push(msg.text());
     }
   });
@@ -354,9 +370,12 @@ export async function collectConsoleErrors(
 /**
  * Helper to test theme switching.
  */
-export async function switchTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
+export async function switchTheme(
+  page: Page,
+  theme: "light" | "dark"
+): Promise<void> {
   // Navigate to settings
-  await navigateToView(page, 'settings');
+  await navigateToView(page, "settings");
 
   // Find and click the theme toggle
   const themeToggle = page.locator(
@@ -411,7 +430,10 @@ export async function isInViewport(page: Page, selector: string): Promise<boolea
 /**
  * Helper to count visible elements (used for virtual scroll testing).
  */
-export async function countVisibleElements(page: Page, selector: string): Promise<number> {
+export async function countVisibleElements(
+  page: Page,
+  selector: string
+): Promise<number> {
   const elements = page.locator(selector);
   const count = await elements.count();
   let visibleCount = 0;

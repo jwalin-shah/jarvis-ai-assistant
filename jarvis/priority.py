@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
+from jarvis.config import get_config
+
 if TYPE_CHECKING:
     from contracts.imessage import Message
 
@@ -384,7 +386,8 @@ class MessagePriorityScorer:
         if self._intent_embeddings and "question" in self._intent_embeddings:
             if embedding is not None:
                 similarity = float(np.dot(embedding, self._intent_embeddings["question"]))
-                if similarity > 0.6:
+                config = get_config()
+                if similarity > config.similarity_thresholds.priority_similarity:
                     return True, similarity
 
         return False, 0.0
@@ -413,7 +416,8 @@ class MessagePriorityScorer:
         if self._intent_embeddings and "action" in self._intent_embeddings:
             if embedding is not None:
                 similarity = float(np.dot(embedding, self._intent_embeddings["action"]))
-                if similarity > 0.6:
+                config = get_config()
+                if similarity > config.similarity_thresholds.priority_similarity:
                     return True, similarity
 
         return False, 0.0
@@ -449,7 +453,8 @@ class MessagePriorityScorer:
         if self._intent_embeddings and "urgent" in self._intent_embeddings:
             if embedding is not None:
                 similarity = float(np.dot(embedding, self._intent_embeddings["urgent"]))
-                if similarity > 0.65:
+                config = get_config()
+                if similarity > config.similarity_thresholds.priority_similarity_high:
                     return True, similarity
 
         return False, 0.0
@@ -467,8 +472,9 @@ class MessagePriorityScorer:
         score = 0.0
 
         # Check if contact is marked as important
+        config = get_config()
         if sender in self._important_contacts:
-            score += 0.5
+            score += config.scoring_weights.context_match_bonus
             reasons.append(PriorityReason.IMPORTANT_CONTACT)
 
         # Check contact stats
@@ -476,10 +482,10 @@ class MessagePriorityScorer:
         if stats:
             # Frequent contacts get higher priority
             if stats.message_count > 50:
-                score += 0.3
+                score += config.scoring_weights.urgency_bonus
                 reasons.append(PriorityReason.FREQUENT_CONTACT)
             elif stats.message_count > 20:
-                score += 0.2
+                score += config.scoring_weights.recent_bonus
                 reasons.append(PriorityReason.FREQUENT_CONTACT)
 
         return min(score, 1.0), reasons
@@ -548,10 +554,11 @@ class MessagePriorityScorer:
         context_score = 0.0
         if recent_messages:
             # Check for multiple unanswered messages from same sender
+            config = get_config()
             sender_messages = [m for m in recent_messages if m.sender == message.sender]
             unanswered = [m for m in sender_messages if not m.is_from_me]
             if len(unanswered) >= 3:
-                context_score += 0.5
+                context_score += config.scoring_weights.context_match_bonus
                 reasons.append(PriorityReason.MULTIPLE_MESSAGES)
 
             # Check if we haven't responded in a while
@@ -564,7 +571,7 @@ class MessagePriorityScorer:
                     delta = datetime.now(tz=UTC) - last_my_msg.date
                     hours_since = delta.total_seconds() / 3600
                     if hours_since > 4:
-                        context_score += 0.3
+                        context_score += config.scoring_weights.urgency_bonus
                         reasons.append(PriorityReason.AWAITING_RESPONSE)
 
         if context_score > 0:

@@ -202,6 +202,10 @@ class ModelSettings(BaseModel):
         max_tokens_reply: Maximum tokens for reply generation.
         max_tokens_summary: Maximum tokens for summarization.
         temperature: Sampling temperature for generation (0.0-2.0).
+        top_p: Nucleus sampling threshold (0.0-1.0).
+        repetition_penalty: Penalty for repeated tokens (1.0 = no penalty).
+            Higher values (1.15-1.2) prevent echoing and encourage brevity.
+        context_depth: Number of conversation turns to include in context.
         generation_timeout_seconds: Timeout for model generation in seconds.
         idle_timeout_seconds: Unload model after this many seconds of inactivity.
             Set to 0 to disable automatic unloading.
@@ -212,7 +216,10 @@ class ModelSettings(BaseModel):
     auto_select: bool = True
     max_tokens_reply: int = Field(default=150, ge=1, le=2048)
     max_tokens_summary: int = Field(default=500, ge=1, le=4096)
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    temperature: float = Field(default=0.15, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
+    repetition_penalty: float = Field(default=1.15, ge=1.0, le=2.0)
+    context_depth: int = Field(default=15, ge=0, le=50)
     generation_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0)
     idle_timeout_seconds: float = Field(default=300.0, ge=0.0, le=3600.0)
     warm_on_startup: bool = False
@@ -347,12 +354,35 @@ class RetrievalConfig(BaseModel):
         reranker_model: Cross-encoder model name from the registry.
         reranker_top_k: Number of results to return after reranking.
         reranker_candidates: Number of candidates to retrieve before reranking.
+        top_k_rag: Number of RAG documents to retrieve.
+        top_k_examples: Number of few-shot examples to include.
+        context_results: Number of context search results.
+        bm25_limit: BM25 search result limit.
     """
 
     reranker_enabled: bool = False
     reranker_model: str = "ms-marco-MiniLM-L-6-v2"
     reranker_top_k: int = Field(default=3, ge=1, le=20)
     reranker_candidates: int = Field(default=10, ge=1, le=100)
+
+    # Retrieval limits (centralized from hardcoded values)
+    top_k_rag: int = Field(default=3, ge=1, le=20)
+    """Number of RAG documents to retrieve for context."""
+
+    top_k_examples: int = Field(default=5, ge=1, le=20)
+    """Number of few-shot examples to include in prompts."""
+
+    context_results: int = Field(default=20, ge=5, le=100)
+    """Number of context search results."""
+
+    bm25_limit: int = Field(default=5, ge=1, le=50)
+    """BM25 search result limit."""
+
+    hybrid_search_limit: int = Field(default=5, ge=1, le=50)
+    """Hybrid search result limit."""
+
+    fact_index_limit: int = Field(default=5, ge=1, le=20)
+    """Fact index search limit."""
 
 
 class NormalizationProfile(BaseModel):
@@ -447,6 +477,250 @@ class SegmentationConfig(BaseModel):
     boundary_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     forward_context_window: int = Field(default=2, ge=1, le=10)
     forward_continuity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+
+
+class SimilarityThresholds(BaseModel):
+    """Similarity and confidence thresholds used across the system.
+
+    These thresholds determine when to use RAG context, when responses are
+    high confidence, and when messages are considered similar.
+    """
+
+    # RAG/Retrieval thresholds
+    rag_min_similarity: float = Field(default=0.5, ge=0.0, le=1.0)
+    """Minimum similarity for RAG context to be included."""
+
+    priority_similarity: float = Field(default=0.6, ge=0.0, le=1.0)
+    """Similarity threshold for priority scoring."""
+
+    priority_similarity_high: float = Field(default=0.65, ge=0.0, le=1.0)
+    """Higher similarity threshold for priority bonus."""
+
+    # Confidence thresholds for reply quality
+    high_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
+    """High confidence threshold for generated replies."""
+
+    medium_confidence: float = Field(default=0.45, ge=0.0, le=1.0)
+    """Medium confidence threshold for generated replies."""
+
+    # Feedback/watcher thresholds
+    exact_match_similarity: float = Field(default=0.98, ge=0.0, le=1.0)
+    """Similarity for exact match (used in feedback detection)."""
+
+    edited_similarity_low: float = Field(default=0.55, ge=0.0, le=1.0)
+    """Lower bound for edited message similarity."""
+
+    # Confidence multipliers
+    low_similarity_penalty: float = Field(default=0.8, ge=0.0, le=1.0)
+    """Multiplier for confidence when similarity is below threshold."""
+
+    medium_similarity_factor: float = Field(default=0.9, ge=0.0, le=1.0)
+    """Multiplier for confidence when similarity is above threshold."""
+
+    # Fact deduplication threshold
+    fact_dedup_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    """Similarity threshold for fact deduplication (0.85 = high similarity)."""
+
+
+class ScoringWeights(BaseModel):
+    """Scoring weights for reply quality and priority calculation."""
+
+    # Reply quality scoring
+    short_reply_bonus: float = Field(default=0.5, ge=-1.0, le=1.0)
+    """Bonus for short replies (brevity)."""
+
+    emoji_penalty: float = Field(default=0.5, ge=-1.0, le=1.0)
+    """Penalty for excessive emoji use."""
+
+    # Priority scoring
+    context_match_bonus: float = Field(default=0.5, ge=-1.0, le=1.0)
+    """Bonus for context match in priority."""
+
+    urgency_bonus: float = Field(default=0.3, ge=-1.0, le=1.0)
+    """Bonus for urgency signals."""
+
+    recent_bonus: float = Field(default=0.2, ge=-1.0, le=1.0)
+    """Bonus for recent messages."""
+
+    context_keyword_bonus: float = Field(default=0.3, ge=-1.0, le=1.0)
+    """Bonus for context keyword matches."""
+
+
+class TextProcessingConfig(BaseModel):
+    """Text processing constants and thresholds."""
+
+    # Language detection
+    english_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    """Minimum probability for English text detection."""
+
+    # Abbreviation detection
+    min_abbrev_count: int = Field(default=2, ge=1, le=10)
+    """Minimum count to consider something an abbreviation pattern."""
+
+    max_abbrev_output: int = Field(default=5, ge=1, le=20)
+    """Maximum abbreviations to return."""
+
+    # First words extraction
+    first_words_count: int = Field(default=3, ge=1, le=10)
+    """Number of first words to extract."""
+
+    # Label/topic extraction
+    min_label_length: int = Field(default=20, ge=5, le=100)
+    """Minimum message length for label extraction."""
+
+    max_labels_input: int = Field(default=10, ge=1, le=50)
+    """Maximum messages to consider for labels."""
+
+    max_label_length: int = Field(default=30, ge=10, le=100)
+    """Maximum length of extracted label."""
+
+    max_unique_labels: int = Field(default=3, ge=1, le=10)
+    """Maximum unique labels to return."""
+
+    # Reply scoring
+    short_reply_word_threshold: int = Field(default=3, ge=1, le=10)
+    """Word count below which a reply is considered short."""
+
+    emoji_penalty_word_threshold: int = Field(default=5, ge=1, le=20)
+    """Word count above which emoji penalty applies."""
+
+    # Formality scoring
+    formality_casual_bonus: float = Field(default=0.5, ge=0.0, le=1.0)
+    """Score bonus for casual indicators."""
+
+    formality_formal_bonus: float = Field(default=0.5, ge=0.0, le=1.0)
+    """Score bonus for formal indicators."""
+
+    formality_casual_indicator_bonus: float = Field(default=0.3, ge=0.0, le=1.0)
+    """Bonus for specific casual indicators."""
+
+    formality_formal_indicator_bonus: float = Field(default=0.2, ge=0.0, le=1.0)
+    """Bonus for specific formal indicators."""
+
+
+class RetryConfig(BaseModel):
+    """Retry configuration for database and network operations."""
+
+    # SQLite retry
+    sqlite_max_attempts: int = Field(default=5, ge=1, le=20)
+    """Maximum SQLite retry attempts."""
+
+    sqlite_base_delay: float = Field(default=0.1, ge=0.01, le=1.0)
+    """Base delay between SQLite retries (seconds)."""
+
+    sqlite_max_delay: float = Field(default=5.0, ge=0.1, le=30.0)
+    """Maximum delay between SQLite retries (seconds)."""
+
+    # Fact storage retry
+    fact_storage_max_attempts: int = Field(default=10, ge=1, le=50)
+    """Maximum retry attempts for fact storage."""
+
+    # General retry defaults
+    default_max_attempts: int = Field(default=3, ge=1, le=10)
+    """Default max retry attempts."""
+
+
+class CacheConfig(BaseModel):
+    """Cache size and management configuration."""
+
+    # Response cache
+    response_cache_trim_size: int = Field(default=500, ge=100, le=5000)
+    """Number of entries to keep when trimming response cache."""
+
+    # Task queue
+    max_completed_tasks: int = Field(default=100, ge=10, le=1000)
+    """Maximum completed tasks to keep in memory."""
+
+    # Metrics cache
+    top_templates_limit: int = Field(default=20, ge=5, le=100)
+    """Limit for top templates metric."""
+
+    missed_queries_limit: int = Field(default=50, ge=10, le=200)
+    """Limit for missed queries metric."""
+
+
+class BatchConfig(BaseModel):
+    """Batch size configuration for processing operations."""
+
+    # Contact/fact extraction
+    extraction_batch_size: int = Field(default=5, ge=1, le=50)
+    """Batch size for fact extraction."""
+
+    # Embedding generation
+    embedding_batch_size: int = Field(default=32, ge=1, le=128)
+    """Batch size for embedding generation."""
+
+    # Memory reporting
+    memory_processes_limit: int = Field(default=5, ge=1, le=20)
+    """Limit for top memory processes."""
+
+
+class TimeoutConfig(BaseModel):
+    """Timeout configuration for various operations."""
+
+    # Service timeouts
+    health_check_timeout: float = Field(default=5.0, ge=1.0, le=30.0)
+    """Health check timeout (seconds)."""
+
+    service_startup_timeout: float = Field(default=30.0, ge=5.0, le=120.0)
+    """Service startup timeout (seconds)."""
+
+    service_stop_timeout: float = Field(default=10.0, ge=1.0, le=60.0)
+    """Service stop timeout (seconds)."""
+
+    # Generation timeouts
+    fact_fetch_timeout: float = Field(default=2.0, ge=0.5, le=10.0)
+    """Timeout for fetching facts during generation."""
+
+    graph_fetch_timeout: float = Field(default=2.0, ge=0.5, le=10.0)
+    """Timeout for fetching graph data during generation."""
+
+    # Server timeouts
+    websocket_read_timeout: float = Field(default=300.0, ge=60.0, le=600.0)
+    """WebSocket read timeout (seconds)."""
+
+    server_preload_timeout: float = Field(default=30.0, ge=5.0, le=120.0)
+    """Server preload timeout (seconds)."""
+
+    # Database timeouts
+    db_connect_timeout: float = Field(default=30.0, ge=5.0, le=300.0)
+    """Database connection timeout (seconds)."""
+
+    db_recovery_timeout: float = Field(default=300.0, ge=60.0, le=600.0)
+    """Database recovery timeout (seconds)."""
+
+    # Integration timeouts
+    imessage_read_timeout: float = Field(default=5.0, ge=1.0, le=30.0)
+    """iMessage read timeout (seconds)."""
+
+    calendar_write_timeout: float = Field(default=10.0, ge=1.0, le=60.0)
+    """Calendar write timeout (seconds)."""
+
+    calendar_read_timeout: float = Field(default=10.0, ge=1.0, le=60.0)
+    """Calendar read timeout (seconds)."""
+
+    # Token queue timeout
+    token_queue_timeout: float = Field(default=60.0, ge=10.0, le=300.0)
+    """Token queue get timeout (seconds)."""
+
+    generation_thread_timeout: float = Field(default=5.0, ge=1.0, le=30.0)
+    """Generation thread join timeout (seconds)."""
+
+
+class PathConfig(BaseModel):
+    """File path configuration."""
+
+    chat_db: str = Field(default=str(Path.home() / "Library" / "Messages" / "chat.db"))
+    """Path to iMessage chat.db."""
+
+    jarvis_config_dir: str = Field(default=str(Path.home() / ".jarvis"))
+    """Path to JARVIS config directory."""
+
+    jarvis_config_file: str = Field(default=str(Path.home() / ".jarvis" / "config.json"))
+    """Path to JARVIS config file."""
+
+    jarvis_db: str = Field(default=str(Path.home() / ".jarvis" / "jarvis.db"))
+    """Path to JARVIS database."""
 
 
 class NormalizationConfig(BaseModel):
@@ -572,6 +846,31 @@ class JarvisConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     ner: NERConfig = Field(default_factory=NERConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+
+    # New centralized configs for hardcoded values
+    similarity_thresholds: SimilarityThresholds = Field(default_factory=SimilarityThresholds)
+    """Similarity and confidence thresholds."""
+
+    scoring_weights: ScoringWeights = Field(default_factory=ScoringWeights)
+    """Scoring weights for reply quality and priority."""
+
+    text_processing: TextProcessingConfig = Field(default_factory=TextProcessingConfig)
+    """Text processing constants and thresholds."""
+
+    retry: RetryConfig = Field(default_factory=RetryConfig)
+    """Retry configuration for database and network operations."""
+
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+    """Cache size and management configuration."""
+
+    batch: BatchConfig = Field(default_factory=BatchConfig)
+    """Batch size configuration for processing operations."""
+
+    timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
+    """Timeout configuration for various operations."""
+
+    paths: PathConfig = Field(default_factory=PathConfig)
+    """File path configuration."""
 
 
 # Module-level singleton with thread safety

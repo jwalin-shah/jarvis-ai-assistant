@@ -1,5 +1,15 @@
 # Repository Guidelines
 
+## Secrets and Environment Variables
+
+**CRITICAL**: The `.env` file contains API keys and must NEVER be committed.
+
+- `.env` is gitignored (see root `.gitignore` line 81)
+- `.env.example` contains template values for reference
+- **Required for DSPy/Evals:** set `CEREBRAS_API_KEY` in local `.env` before running judge-backed evals.
+
+---
+
 ## Project Structure
 
 - `jarvis/`: Core Python library (CLI, prompts, retrieval, response generation).

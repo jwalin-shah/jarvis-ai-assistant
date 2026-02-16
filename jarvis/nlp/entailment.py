@@ -16,14 +16,16 @@ logger = logging.getLogger(__name__)
 
 def verify_entailment(
     premise: str,
-    hypothesis: str,
+    hypothesis: str | list[str],
     threshold: float = 0.6,
 ) -> tuple[bool, float]:
     """Check if hypothesis is entailed by premise using NLI cross-encoder.
 
+    If multiple hypotheses are provided, returns True if ANY are entailed.
+
     Args:
         premise: The source text (message).
-        hypothesis: The fact statement to verify.
+        hypothesis: The fact statement(s) to verify.
         threshold: Minimum entailment probability to accept.
 
     Returns:
@@ -32,9 +34,17 @@ def verify_entailment(
     from models.nli_cross_encoder import get_nli_cross_encoder
 
     nli = get_nli_cross_encoder()
-    scores = nli.predict_entailment(premise, hypothesis)
-    entailment_score = scores["entailment"]
-    return entailment_score > threshold, entailment_score
+
+    hypotheses = [hypothesis] if isinstance(hypothesis, str) else hypothesis
+    pairs = [(premise, h) for h in hypotheses]
+
+    if not pairs:
+        return False, 0.0
+
+    all_scores = nli.predict_batch(pairs)
+    max_score = max(s["entailment"] for s in all_scores)
+
+    return max_score > threshold, max_score
 
 
 def verify_entailment_batch(
@@ -61,26 +71,47 @@ def verify_entailment_batch(
     return [(scores["entailment"] > threshold, scores["entailment"]) for scores in all_scores]
 
 
-def fact_to_hypothesis(category: str, subject: str, predicate: str, value: str = "") -> str:
+def fact_to_hypothesis(category: str, subject: str, predicate: str, value: str = "") -> list[str]:
     """Convert a structured fact to a natural language hypothesis for NLI.
 
-    Examples:
-        ("relationship", "Sarah", "is_family_of", "sister") -> "Sarah is the user's sister"
-        ("location", "Austin", "lives_in", "") -> "The person lives in Austin"
-        ("work", "Google", "works_at", "") -> "The person works at Google"
+    Uses varied templates (casual/formal) to improve recall against chat premises.
     """
+    p_clean = predicate.lower().replace("_", " ")
+
     if category == "relationship":
         if value:
-            return f"{subject} is the user's {value}"
-        return f"{subject} is related to the user"
+            # Varied templates to match different chat styles
+            return [
+                f"{subject} is my {value}",
+                f"{subject} is the user's {value}",
+                f"{subject} is my {value}",
+            ]
+        return [f"{subject} and I are related", f"{subject} is related to the user"]
+
     elif category == "location":
-        verb = predicate.replace("_", " ")
-        return f"The person {verb} {subject}"
+        return [
+            f"I {p_clean} in {subject}",
+            f"The person {p_clean} in {subject}",
+            f"I live in {subject}",
+        ]
+
     elif category == "work":
-        return f"The person works at {subject}"
+        return [
+            f"I work at {subject}",
+            f"The person works at {subject}",
+            f"My job is at {subject}",
+        ]
+
     elif category == "preference":
-        verb = predicate.replace("_", " ")
-        return f"The person {verb} {subject}"
+        return [
+            f"I {p_clean} {subject}",
+            f"The person {p_clean} {subject}",
+            f"I really {p_clean} {subject}",
+        ]
+
     else:
-        verb = predicate.replace("_", " ")
-        return f"{subject} {verb}"
+        return [
+            f"{subject} {p_clean}",
+            f"{subject} {p_clean} {value}",
+            f"I mentioned that {subject} {p_clean}",
+        ]

@@ -13,6 +13,7 @@ from typing import Any
 from jarvis.contacts.attribution import AttributionResolver
 from jarvis.contacts.contact_profile import Fact
 from jarvis.contacts.junk_filters import is_junk_message
+from jarvis.nlp.entailment import fact_to_hypothesis, verify_entailment_batch
 from jarvis.prompts.extraction import (
     EXTRACTION_MODELS,
     EXTRACTION_SYSTEM_PROMPT,
@@ -756,6 +757,60 @@ class InstructionFactExtractor:
                     )
                 )
                 self._last_batch_stats["accepted"] += 1
+
+            # --- NLI VERIFICATION & SOFT-FILTERING ---
+            for seg_idx, seg_facts in enumerate(batch_facts):
+                if not seg_facts:
+                    continue
+
+                # Prepare NLI pairs (premise = source message, hypothesis = fact)
+                nli_pairs: list[tuple[str, str]] = []
+                fact_to_hyp_map: list[tuple[int, int]] = []  # (fact_idx, hyp_count)
+
+                for f_idx, f in enumerate(seg_facts):
+                    hyps_result = fact_to_hypothesis(f.category, f.subject, f.predicate, f.value)
+                    if isinstance(hyps_result, str):
+                        hyps: list[str] = [hyps_result]
+                    else:
+                        hyps = hyps_result
+                    for h in hyps:
+                        nli_pairs.append((f.source_text, h))
+                    fact_to_hyp_map.append((f_idx, len(hyps)))
+
+                if not nli_pairs:
+                    continue
+
+                try:
+                    # Batch NLI for efficiency
+                    nli_results = verify_entailment_batch(nli_pairs, threshold=0.0)
+                    verified_facts = []
+
+                    curr_nli_idx = 0
+                    for f_idx, hyp_count in fact_to_hyp_map:
+                        f = seg_facts[f_idx]
+                        # Get max score across all hypothesis variations for this fact
+                        hyp_scores = [
+                            res[1] for res in nli_results[curr_nli_idx : curr_nli_idx + hyp_count]
+                        ]
+                        max_entailment = max(hyp_scores) if hyp_scores else 0.0
+                        curr_nli_idx += hyp_count
+
+                        # HARD REJECTION: Drop if NLI score is extremely low (< 0.2)
+                        # This catches hallucinated facts that have NO semantic basis.
+                        if max_entailment < 0.2:
+                            self._last_batch_stats["prefilter_rejected"] += 1
+                            self._last_batch_stats["accepted"] -= 1
+                            continue
+
+                        # SOFT MULTIPLIER: Scale confidence by NLI result
+                        # Score of 0.3-0.6 = penalty; 0.6+ = reward/stable
+                        multiplier = 0.4 + (0.6 * max_entailment)
+                        f.confidence = min(1.0, f.confidence * multiplier)
+                        verified_facts.append(f)
+
+                    batch_facts[seg_idx] = verified_facts
+                except Exception as e:
+                    logger.debug("NLI verification failed, skipping: %s", e)
 
             # POST-PROCESSING GROUNDING FILTER
             # Reject facts whose value is not grounded in source text

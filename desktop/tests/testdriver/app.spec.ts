@@ -11,38 +11,38 @@
  * Docs: https://docs.testdriver.ai/v6/apps/tauri-apps
  */
 
-import { expect, test } from '@testdriver.ai/playwright';
+import { expect, test } from "@testdriver.ai/playwright";
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('http://localhost:1420');
+  await page.goto("http://localhost:1420");
   // Wait for app to initialize
   await page.waitForTimeout(2000);
 });
 
-test.describe('JARVIS App Launch', () => {
-  test('should show the JARVIS logo and sidebar', async ({ page }) => {
+test.describe("JARVIS App Launch", () => {
+  test("should show the JARVIS logo and sidebar", async ({ page }) => {
     // Vision AI assertion - no selectors needed
-    await expect(page).toMatchPrompt('JARVIS logo is visible in the sidebar');
+    await expect(page).toMatchPrompt("JARVIS logo is visible in the sidebar");
   });
 
-  test('should show navigation items', async ({ page }) => {
+  test("should show navigation items", async ({ page }) => {
     await expect(page).toMatchPrompt(
-      'Navigation sidebar shows Dashboard, Messages, Health Status, and Settings options'
+      "Navigation sidebar shows Dashboard, Messages, Health Status, and Settings options"
     );
   });
 });
 
-test.describe('Backend Connection', () => {
-  test('should show connection status', async ({ page }) => {
+test.describe("Backend Connection", () => {
+  test("should show connection status", async ({ page }) => {
     // Wait for connection attempt
     await page.waitForTimeout(3000);
     await expect(page).toMatchPrompt(
-      'Connection status indicator is visible showing either Connected or Disconnected'
+      "Connection status indicator is visible showing either Connected or Disconnected"
     );
   });
 });
 
-test.describe('Messages View', () => {
+test.describe("Messages View", () => {
   test.agent(`
     - Click on "Messages" in the sidebar navigation
     - Wait for conversations to load
@@ -52,7 +52,7 @@ test.describe('Messages View', () => {
   `);
 });
 
-test.describe('Health Status', () => {
+test.describe("Health Status", () => {
   test.agent(`
     - Click on "Health Status" in the sidebar
     - Verify that memory usage information is displayed
@@ -60,7 +60,7 @@ test.describe('Health Status', () => {
   `);
 });
 
-test.describe('Settings', () => {
+test.describe("Settings", () => {
   test.agent(`
     - Click on "Settings" in the sidebar
     - Verify that Model selection section is visible
@@ -68,7 +68,7 @@ test.describe('Settings', () => {
   `);
 });
 
-test.describe('Smart Replies', () => {
+test.describe("Smart Replies", () => {
   test.agent(`
     - Click on "Messages" in the sidebar
     - Wait for conversations to load
@@ -78,14 +78,14 @@ test.describe('Smart Replies', () => {
   `);
 });
 
-test.describe('Socket Streaming', () => {
-  test('should stream AI responses', async ({ page, ai }) => {
+test.describe("Socket Streaming", () => {
+  test("should stream AI responses", async ({ page, ai }) => {
     // Navigate to messages
-    await ai('Click on Messages in the sidebar');
+    await ai("Click on Messages in the sidebar");
     await page.waitForTimeout(2000);
 
     // Select a conversation
-    await ai('Click on the first conversation in the list');
+    await ai("Click on the first conversation in the list");
     await page.waitForTimeout(2000);
 
     // Check for AI draft functionality (if available)
@@ -95,10 +95,12 @@ test.describe('Socket Streaming', () => {
       .catch(() => false);
 
     if (hasDraftButton) {
-      await ai('Click the AI Draft or Draft button');
+      await ai("Click the AI Draft or Draft button");
       // Wait for streaming to complete
       await page.waitForTimeout(10000);
-      await expect(page).toMatchPrompt('AI generated draft text is visible in the interface');
+      await expect(page).toMatchPrompt(
+        "AI generated draft text is visible in the interface"
+      );
     }
   });
 });

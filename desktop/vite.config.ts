@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { resolve } from 'path';
+import { defineConfig } from "vite";
+import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { resolve } from "path";
 
 // Check if running in Tauri context (TAURI_ENV_PLATFORM is set during tauri dev/build)
 const isTauri = !!process.env.TAURI_ENV_PLATFORM;
@@ -16,27 +16,27 @@ export default defineConfig({
     strictPort: true,
     watch: {
       // Tell vite to ignore watching `src-tauri`
-      ignored: ['**/src-tauri/**'],
+      ignored: ["**/src-tauri/**"],
     },
   },
   resolve: {
     alias: isTauri
       ? {
-          '@': resolve(__dirname, './src'),
+          "@": resolve(__dirname, "./src"),
         }
       : {
-          '@': resolve(__dirname, './src'),
+          "@": resolve(__dirname, "./src"),
           // Stub Tauri APIs when not running in Tauri context (for E2E tests)
-          '@tauri-apps/api/event': resolve(__dirname, 'tests/mocks/tauri-event.ts'),
-          '@tauri-apps/api/core': resolve(__dirname, 'tests/mocks/tauri-core.ts'),
-          '@tauri-apps/plugin-sql': resolve(__dirname, 'tests/mocks/tauri-sql.ts'),
+          "@tauri-apps/api/event": resolve(__dirname, "tests/mocks/tauri-event.ts"),
+          "@tauri-apps/api/core": resolve(__dirname, "tests/mocks/tauri-core.ts"),
+          "@tauri-apps/plugin-sql": resolve(__dirname, "tests/mocks/tauri-sql.ts"),
         },
   },
   build: {
-    target: 'esnext',
-    minify: 'esbuild',
+    target: "esnext",
+    minify: "esbuild",
     esbuild: {
-      drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
+      drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
     },
     rollupOptions: {
       output: {
@@ -53,11 +53,8 @@ export default defineConfig({
         },
         // Chunk naming strategy
         chunkFileNames: (chunkInfo) => {
-          const prefix = chunkInfo.name?.startsWith('vendor-')
-            ? 'vendor'
-            : chunkInfo.name?.startsWith('feature-')
-              ? 'feature'
-              : 'chunk';
+          const prefix = chunkInfo.name?.startsWith('vendor-') ? 'vendor' : 
+                        chunkInfo.name?.startsWith('feature-') ? 'feature' : 'chunk';
           return `assets/${prefix}-[name]-[hash].js`;
         },
         // Ensure CSS is extracted for better caching

@@ -6,7 +6,7 @@
     animated?: boolean;
   }
 
-  let { width = '100%', height = '16px', borderRadius = '4px', animated = true }: Props = $props();
+  let { width = "100%", height = "16px", borderRadius = "4px", animated = true }: Props = $props();
 </script>
 
 <div
@@ -24,7 +24,7 @@
   }
 
   .skeleton.animated::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 0;

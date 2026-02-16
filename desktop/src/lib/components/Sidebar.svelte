@@ -1,16 +1,9 @@
 <script lang="ts">
-  import { healthStore } from '../stores/health';
+  import { healthStore } from "../stores/health";
 
-  type ViewType =
-    | 'messages'
-    | 'dashboard'
-    | 'health'
-    | 'settings'
-    | 'templates'
-    | 'network'
-    | 'chat';
+  type ViewType = "messages" | "dashboard" | "health" | "settings" | "templates" | "network" | "chat";
 
-  let { currentView = $bindable<ViewType>('messages'), collapsed = $bindable(false) } = $props<{
+  let { currentView = $bindable<ViewType>("messages"), collapsed = $bindable(false) } = $props<{
     currentView?: ViewType;
     collapsed?: boolean;
   }>();
@@ -30,11 +23,7 @@
     {#if !collapsed}
       <span class="logo-text">JARVIS</span>
     {/if}
-    <button
-      class="collapse-btn"
-      onclick={toggleCollapse}
-      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-    >
+    <button class="collapse-btn" onclick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         {#if collapsed}
           <polyline points="9 18 15 12 9 6"></polyline>
@@ -48,8 +37,8 @@
   <nav class="nav">
     <button
       class="nav-item"
-      class:active={currentView === 'dashboard'}
-      onclick={() => navigate('dashboard')}
+      class:active={currentView === "dashboard"}
+      onclick={() => navigate("dashboard")}
       title="Dashboard"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -63,20 +52,22 @@
 
     <button
       class="nav-item"
-      class:active={currentView === 'messages'}
-      onclick={() => navigate('messages')}
+      class:active={currentView === "messages"}
+      onclick={() => navigate("messages")}
       title="Messages"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <path
+          d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+        />
       </svg>
       {#if !collapsed}<span>Messages</span>{/if}
     </button>
 
     <button
       class="nav-item"
-      class:active={currentView === 'chat'}
-      onclick={() => navigate('chat')}
+      class:active={currentView === "chat"}
+      onclick={() => navigate("chat")}
       title="Chat"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -90,8 +81,8 @@
 
     <button
       class="nav-item"
-      class:active={currentView === 'templates'}
-      onclick={() => navigate('templates')}
+      class:active={currentView === "templates"}
+      onclick={() => navigate("templates")}
       title="Template Builder"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -106,8 +97,8 @@
 
     <button
       class="nav-item"
-      class:active={currentView === 'network'}
-      onclick={() => navigate('network')}
+      class:active={currentView === "network"}
+      onclick={() => navigate("network")}
       title="Network"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -123,20 +114,22 @@
 
     <button
       class="nav-item"
-      class:active={currentView === 'health'}
-      onclick={() => navigate('health')}
+      class:active={currentView === "health"}
+      onclick={() => navigate("health")}
       title="Health Status"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        <path
+          d="M22 12h-4l-3 9L9 3l-3 9H2"
+        />
       </svg>
       {#if !collapsed}<span>Health</span>{/if}
     </button>
 
     <button
       class="nav-item"
-      class:active={currentView === 'settings'}
-      onclick={() => navigate('settings')}
+      class:active={currentView === "settings"}
+      onclick={() => navigate("settings")}
       title="Settings"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -169,9 +162,7 @@
     display: flex;
     flex-direction: column;
     padding: 16px 0;
-    transition:
-      width 0.2s ease,
-      min-width 0.2s ease;
+    transition: width 0.2s ease, min-width 0.2s ease;
   }
 
   .sidebar.collapsed {

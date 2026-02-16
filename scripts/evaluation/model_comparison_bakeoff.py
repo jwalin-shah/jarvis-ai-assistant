@@ -22,7 +22,7 @@ from models.loader import ModelConfig
 
 
 def run_bakeoff():
-    db = get_db()
+    _db = get_db()  # noqa: F841
     reader = ChatDBReader()
 
     model_path = "models/lfm-0.7b-4bit"

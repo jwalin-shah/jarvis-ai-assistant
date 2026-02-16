@@ -51,6 +51,7 @@ dependencies = [
     "typer>=0.21.1",
     "gliner>=0.2.24",
     "symspellpy>=6.9.0",
+    "pyobjc>=12.1",
 ]
 
 [project.optional-dependencies]
@@ -129,6 +130,9 @@ ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
 "scripts/train_*.py" = ["N803", "N806"]
 "scripts/label_*.py" = ["N803", "N806"]
 "scripts/eval_*.py" = ["N806"]
+# Evaluation scripts have intentional sys.path.insert and long lines
+"evals/**/*.py" = ["E402", "E501", "W291", "W293"]
+"scripts/**/*.py" = ["E402", "E501"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -162,7 +166,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --doctest-modules --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing -m 'not benchmark'"
+addopts = "-v --doctest-modules --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing -m 'not benchmark and not hardware and not real_model'"
 timeout = 30
 timeout_method = "thread"
 markers = [

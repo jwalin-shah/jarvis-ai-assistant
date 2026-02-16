@@ -26,6 +26,7 @@ class ReplyContext:
     contact_facts: str = ""  # Formatted facts for prompt
     relationship_graph: str = ""  # Formatted graph context
     contact_profile: dict[str, Any] | None = None  # Profile for style matching
+    auto_context: str = ""  # Auto-detected context (calendar, facts, etc.)
 
 
 @dataclass

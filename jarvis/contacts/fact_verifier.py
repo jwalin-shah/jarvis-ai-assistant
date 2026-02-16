@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class FactVerifier:
     """Verifies logical consistency of extracted facts against source text."""
 
-    def __init__(self, threshold: float = 0.05) -> None:
+    def __init__(self, threshold: float | None = None) -> None:
         """Initialize verifier.
 
         Args:
@@ -28,6 +28,8 @@ class FactVerifier:
                        Defaults to 0.05 to catch obvious hallucinations while
                        being permissive of natural language variations.
         """
+        if threshold is None:
+            threshold = 0.05  # Keep as is - this one is not in config
         self.threshold = threshold
 
     def verify_facts_batch(

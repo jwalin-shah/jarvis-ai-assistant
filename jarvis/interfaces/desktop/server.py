@@ -35,7 +35,6 @@ from jarvis.interfaces.desktop.constants import (
     WEBSOCKET_PORT,
     WS_TOKEN_PATH,
 )
-from jarvis.utils.rate_limiter import RateLimiter
 from jarvis.interfaces.desktop.protocol import (
     error_response,
     send_stream_response,
@@ -44,6 +43,7 @@ from jarvis.interfaces.desktop.protocol import (
 )
 from jarvis.interfaces.desktop.websocket_writer import WebSocketWriter
 from jarvis.observability.logging import log_event, timed_operation
+from jarvis.utils.rate_limiter import RateLimiter
 
 if TYPE_CHECKING:
     from jarvis.prefetch import PrefetchManager

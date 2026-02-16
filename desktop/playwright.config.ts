@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Playwright configuration for JARVIS Desktop E2E tests.
@@ -14,7 +14,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   // Test directory
-  testDir: './tests/e2e',
+  testDir: "./tests/e2e",
 
   // Run tests in parallel for speed
   fullyParallel: true,
@@ -30,10 +30,10 @@ export default defineConfig({
 
   // Reporter configuration
   reporter: [
-    ['html', { outputFolder: 'test-results/html-report' }],
-    ['list'],
+    ["html", { outputFolder: "test-results/html-report" }],
+    ["list"],
     // JSON reporter for CI integration
-    ...(process.env.CI ? [['json', { outputFile: 'test-results/results.json' }] as const] : []),
+    ...(process.env.CI ? [["json", { outputFile: "test-results/results.json" }] as const] : []),
   ],
 
   // Global setup for common test utilities
@@ -43,16 +43,16 @@ export default defineConfig({
   // Shared settings for all projects
   use: {
     // Base URL for navigation
-    baseURL: 'http://localhost:1420',
+    baseURL: "http://localhost:1420",
 
     // Collect trace on first retry
-    trace: 'on-first-retry',
+    trace: "on-first-retry",
 
     // Screenshot on failure
-    screenshot: 'only-on-failure',
+    screenshot: "only-on-failure",
 
     // Video on failure
-    video: 'retain-on-failure',
+    video: "retain-on-failure",
 
     // Enable accessibility testing attributes
     bypassCSP: true,
@@ -61,10 +61,10 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
 
     // Locale for consistent date/time formatting
-    locale: 'en-US',
+    locale: "en-US",
 
     // Timezone for consistent testing
-    timezoneId: 'America/Los_Angeles',
+    timezoneId: "America/Los_Angeles",
   },
 
   // Test timeout
@@ -83,40 +83,40 @@ export default defineConfig({
   projects: [
     // Default browser tests
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
     },
     {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
     },
     // Accessibility-focused project with extra settings
     {
-      name: 'a11y',
+      name: "a11y",
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
         // Reduced motion for accessibility testing
-        reducedMotion: 'reduce',
+        reducedMotion: "reduce",
       },
       testMatch: /accessibility|a11y/,
     },
     // Performance testing project
     {
-      name: 'performance',
+      name: "performance",
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
         // Enable performance metrics collection
         launchOptions: {
-          args: ['--enable-precise-memory-info'],
+          args: ["--enable-precise-memory-info"],
         },
       },
       testMatch: /performance/,
     },
     // Mobile viewport testing
     {
-      name: 'mobile',
+      name: "mobile",
       use: {
-        ...devices['iPhone 14'],
+        ...devices["iPhone 14"],
       },
       testMatch: /responsive|mobile/,
     },
@@ -124,14 +124,14 @@ export default defineConfig({
 
   // Start the Vite dev server before running tests
   webServer: {
-    command: 'pnpm run dev',
-    url: 'http://localhost:1420',
+    command: "pnpm run dev",
+    url: "http://localhost:1420",
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdout: "pipe",
+    stderr: "pipe",
   },
 
   // Output directory for test artifacts
-  outputDir: 'test-results/artifacts',
+  outputDir: "test-results/artifacts",
 });

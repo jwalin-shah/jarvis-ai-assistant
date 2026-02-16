@@ -1,22 +1,17 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { getApiBaseUrl } from '../config/runtime';
   import { formatParticipant } from '../db';
-  import type { ContactProfile } from '../types';
+  import type { ContactProfileDetail } from '../api/types';
 
-  let {
-    identifier,
-    visible = $bindable(false),
-    x = 0,
-    y = 0,
-  } = $props<{
+  let { identifier, visible = $bindable(false), x = 0, y = 0 } = $props<{
     identifier: string;
     visible: boolean;
     x: number;
     y: number;
   }>();
 
-  let profile = $state<ContactProfile | null>(null);
+  let profile = $state<ContactProfileDetail | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
 
@@ -126,19 +121,11 @@
   }
 
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(5px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
-  .loading,
-  .error,
-  .empty {
+  .loading, .error, .empty {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -159,9 +146,7 @@
   }
 
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
   }
 
   .header {

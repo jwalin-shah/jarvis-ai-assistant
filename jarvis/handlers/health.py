@@ -45,12 +45,12 @@ class HealthHandler(BaseHandler):
             _get_recommended_model,
         )
 
-        BYTES_PER_GB = 1024**3
+        bytes_per_gb = 1024**3
 
         memory = psutil.virtual_memory()
-        available_gb = memory.available / BYTES_PER_GB
-        used_gb = memory.used / BYTES_PER_GB
-        total_gb = memory.total / BYTES_PER_GB
+        available_gb = memory.available / bytes_per_gb
+        used_gb = memory.used / bytes_per_gb
+        total_gb = memory.total / bytes_per_gb
 
         jarvis_rss_mb, jarvis_vms_mb = _get_process_memory()
         imessage_access = await run_in_threadpool(_check_imessage_access)

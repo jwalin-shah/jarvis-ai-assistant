@@ -183,7 +183,9 @@ def test_format_style_guide():
 
 
 def test_format_style_guide_low_history():
-    profile = ContactProfile(contact_id="c1", message_count=5)
+    profile = ContactProfile(
+        contact_id="c1", message_count=4
+    )  # Must be < MIN_MESSAGES_FOR_PROFILE (5)
     guide = format_style_guide(profile)
     assert "Limited message history" in guide
 

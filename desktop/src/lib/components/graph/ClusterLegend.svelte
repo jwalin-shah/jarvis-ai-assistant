@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GraphNode } from '../../api/types';
+  import type { GraphNode } from "../../api/types";
 
   interface Props {
     nodes: GraphNode[];
@@ -13,22 +13,15 @@
   let selectedTypes: Set<string> = $state(new Set());
 
   // Calculate relationship type distribution
-  let relationshipCounts = $derived(
-    nodes.reduce(
-      (acc, node) => {
-        const type = node.relationship_type;
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>
-    )
-  );
+  let relationshipCounts = $derived(nodes.reduce((acc, node) => {
+    const type = node.relationship_type;
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>));
 
-  let sortedTypes = $derived(
-    Object.entries(relationshipCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([type, count]) => ({ type, count, color: colors[type] || colors.unknown }))
-  );
+  let sortedTypes = $derived(Object.entries(relationshipCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => ({ type, count, color: colors[type] || colors.unknown })));
 
   function toggleType(type: string) {
     if (selectedTypes.has(type)) {
@@ -41,7 +34,7 @@
   }
 
   function selectAll() {
-    selectedTypes = new Set(sortedTypes.map((t) => t.type));
+    selectedTypes = new Set(sortedTypes.map(t => t.type));
     onfilter?.(Array.from(selectedTypes));
   }
 
@@ -52,8 +45,8 @@
 </script>
 
 <div class="legend" class:collapsed={!expanded}>
-  <button class="legend-toggle" onclick={() => (expanded = !expanded)}>
-    <span class="toggle-icon">{expanded ? 'v' : '>'}</span>
+  <button class="legend-toggle" onclick={() => expanded = !expanded}>
+    <span class="toggle-icon">{expanded ? "v" : ">"}</span>
     <span class="toggle-text">Legend</span>
   </button>
 

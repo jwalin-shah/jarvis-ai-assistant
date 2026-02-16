@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Icon from './Icon.svelte';
+  import Icon from "./Icon.svelte";
 
   interface Props {
     onClose: () => void;
@@ -9,51 +9,51 @@
 
   const shortcuts = [
     {
-      category: 'Navigation',
+      category: "Navigation",
       items: [
-        { keys: ['⌘', '⇧', 'P'], description: 'Command Palette' },
-        { keys: ['⌘', 'K'], description: 'Open search' },
-        { keys: ['⌘', '1'], description: 'Go to Dashboard' },
-        { keys: ['⌘', '2'], description: 'Go to Messages' },
-        { keys: ['⌘', '3'], description: 'Go to Templates' },
-        { keys: ['⌘', ','], description: 'Open Settings' },
-        { keys: ['⌘', '⇧', ']'], description: 'Next unread conversation' },
+        { keys: ["⌘", "⇧", "P"], description: "Command Palette" },
+        { keys: ["⌘", "K"], description: "Open search" },
+        { keys: ["⌘", "1"], description: "Go to Dashboard" },
+        { keys: ["⌘", "2"], description: "Go to Messages" },
+        { keys: ["⌘", "3"], description: "Go to Templates" },
+        { keys: ["⌘", ","], description: "Open Settings" },
+        { keys: ["⌘", "⇧", "]"], description: "Next unread conversation" },
       ],
     },
     {
-      category: 'List Navigation',
+      category: "List Navigation",
       items: [
-        { keys: ['j', '/', '↓'], description: 'Next item' },
-        { keys: ['k', '/', '↑'], description: 'Previous item' },
-        { keys: ['g'], description: 'Go to first item' },
-        { keys: ['G'], description: 'Go to last item' },
-        { keys: ['↵'], description: 'Select item' },
-        { keys: ['h', '/', '←'], description: 'Go back' },
+        { keys: ["j", "/", "↓"], description: "Next item" },
+        { keys: ["k", "/", "↑"], description: "Previous item" },
+        { keys: ["g"], description: "Go to first item" },
+        { keys: ["G"], description: "Go to last item" },
+        { keys: ["↵"], description: "Select item" },
+        { keys: ["h", "/", "←"], description: "Go back" },
       ],
     },
     {
-      category: 'Messages',
+      category: "Messages",
       items: [
-        { keys: ['r'], description: 'Reply to message' },
-        { keys: ['⌘', 'D'], description: 'Open AI Draft' },
-        { keys: ['⌘', 'S'], description: 'Show Summary' },
-        { keys: ['⌘', 'E'], description: 'Export to PDF' },
-        { keys: ['↵'], description: 'Send message' },
-        { keys: ['⇧', '↵'], description: 'New line' },
+        { keys: ["r"], description: "Reply to message" },
+        { keys: ["⌘", "D"], description: "Open AI Draft" },
+        { keys: ["⌘", "S"], description: "Show Summary" },
+        { keys: ["⌘", "E"], description: "Export to PDF" },
+        { keys: ["↵"], description: "Send message" },
+        { keys: ["⇧", "↵"], description: "New line" },
       ],
     },
     {
-      category: 'General',
+      category: "General",
       items: [
-        { keys: ['⌘', '/'], description: 'Show shortcuts' },
-        { keys: ['⌘', 'R'], description: 'Refresh' },
-        { keys: ['Esc'], description: 'Close / Clear selection' },
+        { keys: ["⌘", "/"], description: "Show shortcuts" },
+        { keys: ["⌘", "R"], description: "Refresh" },
+        { keys: ["Esc"], description: "Close / Clear selection" },
       ],
     },
   ];
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       onClose();
     }
   }
@@ -65,7 +65,7 @@
   }
 
   function handleOverlayKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+    if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onClose();
     }
@@ -82,13 +82,7 @@
   aria-label="Close keyboard shortcuts"
   tabindex="0"
 >
-  <div
-    class="shortcuts-panel glass"
-    role="dialog"
-    aria-label="Keyboard Shortcuts"
-    aria-modal="true"
-    tabindex="-1"
-  >
+  <div class="shortcuts-panel glass" role="dialog" aria-label="Keyboard Shortcuts" aria-modal="true" tabindex="-1">
     <header class="shortcuts-header">
       <div class="shortcuts-title">
         <Icon name="settings" size={20} />
@@ -146,12 +140,8 @@
   }
 
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   .shortcuts-panel {

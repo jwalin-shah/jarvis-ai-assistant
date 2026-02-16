@@ -587,15 +587,25 @@ class PrefetchExecutor:
                     time.sleep(self._tick_interval)
                     continue
 
-                # Check resources
-                if not self._resource_manager.can_prefetch():
-                    time.sleep(self._tick_interval * 5)  # Back off
-                    continue
-
                 # Get task from queue
                 try:
                     task = self._queue.get(timeout=self._tick_interval)
                 except Exception:  # nosec B112
+                    continue
+
+                # Resource guard:
+                # - high-priority tasks are allowed through even under pressure
+                #   to avoid starvation/timeouts in latency-sensitive flows.
+                # - lower-priority tasks are requeued with a small backoff.
+                if (
+                    task.prediction.priority < PredictionPriority.HIGH
+                    and not self._resource_manager.can_prefetch()
+                ):
+                    try:
+                        self._queue.put_nowait(task)
+                    except Exception:  # nosec B110
+                        self._stats.predictions_skipped += 1
+                    time.sleep(self._tick_interval * 2)
                     continue
 
                 # Check if prediction is still valid

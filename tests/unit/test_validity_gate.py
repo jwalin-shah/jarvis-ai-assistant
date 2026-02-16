@@ -94,8 +94,8 @@ def test_validity_gate_valid_text():
     assert passed
     assert reason == "passed"
 
-    # Acknowledgment with more content should pass (depending on is_acknowledgment_only implementation)
-    # is_acknowledgment_only returns True if the text IS ONLY an acknowledgment.
+    # Acknowledgment with more content should pass
+    # (depends on is_acknowledgment_only implementation)
     passed, reason = gate.validate("Ok, I will do that.")
     assert passed
     assert reason == "passed"
@@ -109,7 +109,7 @@ def test_validity_gate_config_disable():
         reject_acknowledgments=False,
         reject_garbage=False,
         reject_spam=False,
-        reject_emojis=False
+        reject_emojis=False,
     )
     gate = ValidityGate(config=config)
 

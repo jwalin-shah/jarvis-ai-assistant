@@ -6,7 +6,7 @@
  * malformed messages, and visibility-aware reconnect deferral.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // MockWebSocket - simulates the browser WebSocket API
@@ -62,25 +62,25 @@ class MockWebSocket {
 // Stubs
 // ---------------------------------------------------------------------------
 
-vi.stubGlobal('WebSocket', MockWebSocket);
+vi.stubGlobal("WebSocket", MockWebSocket);
 
-vi.mock('../../src/lib/config/runtime', () => ({
-  getApiWebSocketBaseUrl: () => 'ws://localhost:8001',
+vi.mock("../../src/lib/config/runtime", () => ({
+  getApiWebSocketBaseUrl: () => "ws://localhost:8001",
 }));
 
 // Suppress console output during tests
-vi.spyOn(console, 'log').mockImplementation(() => {});
-vi.spyOn(console, 'warn').mockImplementation(() => {});
-vi.spyOn(console, 'error').mockImplementation(() => {});
+vi.spyOn(console, "log").mockImplementation(() => {});
+vi.spyOn(console, "warn").mockImplementation(() => {});
+vi.spyOn(console, "error").mockImplementation(() => {});
 
 // Type alias for the class
-type JarvisWebSocketClass = typeof import('../../src/lib/api/websocket').JarvisWebSocket;
+type JarvisWebSocketClass = typeof import("../../src/lib/api/websocket").JarvisWebSocket;
 
 // ==========================================================================
 // JarvisWebSocket Tests
 // ==========================================================================
 
-describe('JarvisWebSocket', () => {
+describe("JarvisWebSocket", () => {
   let JarvisWebSocket: JarvisWebSocketClass;
 
   beforeEach(async () => {
@@ -88,7 +88,7 @@ describe('JarvisWebSocket', () => {
     vi.resetModules();
     MockWebSocket.reset();
 
-    const mod = await import('../../src/lib/api/websocket');
+    const mod = await import("../../src/lib/api/websocket");
     JarvisWebSocket = mod.JarvisWebSocket;
   });
 
@@ -96,20 +96,20 @@ describe('JarvisWebSocket', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     // Re-stub for next test
-    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal("WebSocket", MockWebSocket);
   });
 
   // Helper: create a connected client with handlers
   function createConnectedClient(handlers = {}) {
-    const client = new JarvisWebSocket('ws://localhost:8001');
+    const client = new JarvisWebSocket("ws://localhost:8001");
     client.setHandlers(handlers);
     client.connect();
 
     const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
     ws.simulateOpen();
     ws.simulateMessage({
-      type: 'connected',
-      data: { client_id: 'test-client', timestamp: 1000 },
+      type: "connected",
+      data: { client_id: "test-client", timestamp: 1000 },
     });
 
     return { client, ws };
@@ -119,19 +119,19 @@ describe('JarvisWebSocket', () => {
   // 1. Constructor / initial state
   // ========================================================================
 
-  describe('constructor / initial state', () => {
-    it('state is disconnected', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
-      expect(client.state).toBe('disconnected');
+  describe("constructor / initial state", () => {
+    it("state is disconnected", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
+      expect(client.state).toBe("disconnected");
     });
 
-    it('clientId is null', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
+    it("clientId is null", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
       expect(client.clientId).toBeNull();
     });
 
-    it('isConnected is false', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
+    it("isConnected is false", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
       expect(client.isConnected).toBe(false);
     });
   });
@@ -140,9 +140,9 @@ describe('JarvisWebSocket', () => {
   // 2. setHandlers
   // ========================================================================
 
-  describe('setHandlers', () => {
-    it('merges new handlers with existing', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
+  describe("setHandlers", () => {
+    it("merges new handlers with existing", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
       const onConnect = vi.fn();
       const onError = vi.fn();
 
@@ -156,21 +156,21 @@ describe('JarvisWebSocket', () => {
 
       // onConnect should fire via "connected" message
       ws.simulateMessage({
-        type: 'connected',
-        data: { client_id: 'c1', timestamp: 1 },
+        type: "connected",
+        data: { client_id: "c1", timestamp: 1 },
       });
       expect(onConnect).toHaveBeenCalledOnce();
 
       // onError should fire via "error" message
       ws.simulateMessage({
-        type: 'error',
-        data: { error: 'bad request' },
+        type: "error",
+        data: { error: "bad request" },
       });
-      expect(onError).toHaveBeenCalledWith('bad request');
+      expect(onError).toHaveBeenCalledWith("bad request");
     });
 
-    it('does not override handlers not in the new object', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
+    it("does not override handlers not in the new object", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
       const onToken = vi.fn();
       const onError = vi.fn();
 
@@ -185,21 +185,21 @@ describe('JarvisWebSocket', () => {
       const ws = MockWebSocket.instances[0];
       ws.simulateOpen();
       ws.simulateMessage({
-        type: 'connected',
-        data: { client_id: 'c1', timestamp: 1 },
+        type: "connected",
+        data: { client_id: "c1", timestamp: 1 },
       });
 
       // onToken should still be the original
       ws.simulateMessage({
-        type: 'token',
-        data: { generation_id: 'g1', token: 'hi', token_index: 0 },
+        type: "token",
+        data: { generation_id: "g1", token: "hi", token_index: 0 },
       });
       expect(onToken).toHaveBeenCalledOnce();
 
       // Old onError should NOT fire; new one should
-      ws.simulateMessage({ type: 'error', data: { error: 'oops' } });
+      ws.simulateMessage({ type: "error", data: { error: "oops" } });
       expect(onError).not.toHaveBeenCalled();
-      expect(newOnError).toHaveBeenCalledWith('oops');
+      expect(newOnError).toHaveBeenCalledWith("oops");
     });
   });
 
@@ -207,27 +207,27 @@ describe('JarvisWebSocket', () => {
   // 3. connect
   // ========================================================================
 
-  describe('connect', () => {
-    it('creates WebSocket with correct URL (baseUrl + /ws)', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
+  describe("connect", () => {
+    it("creates WebSocket with correct URL (baseUrl + /ws)", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.connect();
 
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('ws://localhost:8001/ws');
+      expect(MockWebSocket.instances[0].url).toBe("ws://localhost:8001/ws");
     });
 
-    it('sets state to connecting', () => {
+    it("sets state to connecting", () => {
       const onStateChange = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onStateChange });
       client.connect();
 
-      expect(client.state).toBe('connecting');
-      expect(onStateChange).toHaveBeenCalledWith('connecting');
+      expect(client.state).toBe("connecting");
+      expect(onStateChange).toHaveBeenCalledWith("connecting");
     });
 
-    it('no-op if already connected (readyState OPEN)', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
+    it("no-op if already connected (readyState OPEN)", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.connect();
 
       const ws = MockWebSocket.instances[0];
@@ -238,9 +238,9 @@ describe('JarvisWebSocket', () => {
       expect(MockWebSocket.instances).toHaveLength(1); // No new WebSocket created
     });
 
-    it('resets reconnectAttempts on successful open', () => {
+    it("resets reconnectAttempts on successful open", () => {
       const onStateChange = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onStateChange });
       client.connect();
 
@@ -249,10 +249,10 @@ describe('JarvisWebSocket', () => {
 
       // After open, a "connected" message sets state to "connected"
       ws.simulateMessage({
-        type: 'connected',
-        data: { client_id: 'c1', timestamp: 1 },
+        type: "connected",
+        data: { client_id: "c1", timestamp: 1 },
       });
-      expect(client.state).toBe('connected');
+      expect(client.state).toBe("connected");
 
       // Close and let it reconnect once
       ws.simulateClose();
@@ -265,10 +265,10 @@ describe('JarvisWebSocket', () => {
       // Open the new one - reconnectAttempts should be reset to 0 internally
       ws2.simulateOpen();
       ws2.simulateMessage({
-        type: 'connected',
-        data: { client_id: 'c2', timestamp: 2 },
+        type: "connected",
+        data: { client_id: "c2", timestamp: 2 },
       });
-      expect(client.state).toBe('connected');
+      expect(client.state).toBe("connected");
     });
   });
 
@@ -276,8 +276,8 @@ describe('JarvisWebSocket', () => {
   // 4. disconnect
   // ========================================================================
 
-  describe('disconnect', () => {
-    it('sets shouldReconnect=false (verified by no reconnect on close)', () => {
+  describe("disconnect", () => {
+    it("sets shouldReconnect=false (verified by no reconnect on close)", () => {
       const { client, ws } = createConnectedClient();
       const instanceCount = MockWebSocket.instances.length;
 
@@ -292,21 +292,21 @@ describe('JarvisWebSocket', () => {
       expect(MockWebSocket.instances.length).toBe(instanceCount);
     });
 
-    it('closes the WebSocket', () => {
+    it("closes the WebSocket", () => {
       const { client, ws } = createConnectedClient();
       client.disconnect();
       expect(ws.close).toHaveBeenCalledOnce();
     });
 
-    it('sets state to disconnected', () => {
+    it("sets state to disconnected", () => {
       const { client } = createConnectedClient();
       client.disconnect();
-      expect(client.state).toBe('disconnected');
+      expect(client.state).toBe("disconnected");
     });
 
-    it('clears clientId', () => {
+    it("clears clientId", () => {
       const { client } = createConnectedClient();
-      expect(client.clientId).toBe('test-client');
+      expect(client.clientId).toBe("test-client");
 
       client.disconnect();
       expect(client.clientId).toBeNull();
@@ -317,122 +317,122 @@ describe('JarvisWebSocket', () => {
   // 5. Message routing
   // ========================================================================
 
-  describe('message routing', () => {
-    it('connected message calls onConnect, sets clientId, state=connected', () => {
+  describe("message routing", () => {
+    it("connected message calls onConnect, sets clientId, state=connected", () => {
       const onConnect = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onConnect });
       client.connect();
 
       const ws = MockWebSocket.instances[0];
       ws.simulateOpen();
       ws.simulateMessage({
-        type: 'connected',
-        data: { client_id: 'my-id', timestamp: 42 },
+        type: "connected",
+        data: { client_id: "my-id", timestamp: 42 },
       });
 
-      expect(onConnect).toHaveBeenCalledWith({ client_id: 'my-id', timestamp: 42 });
-      expect(client.clientId).toBe('my-id');
-      expect(client.state).toBe('connected');
+      expect(onConnect).toHaveBeenCalledWith({ client_id: "my-id", timestamp: 42 });
+      expect(client.clientId).toBe("my-id");
+      expect(client.state).toBe("connected");
     });
 
-    it('token message calls onToken', () => {
+    it("token message calls onToken", () => {
       const onToken = vi.fn();
       const { ws } = createConnectedClient({ onToken });
 
       ws.simulateMessage({
-        type: 'token',
-        data: { generation_id: 'g1', token: 'abc', token_index: 0 },
+        type: "token",
+        data: { generation_id: "g1", token: "abc", token_index: 0 },
       });
 
       expect(onToken).toHaveBeenCalledWith({
-        generation_id: 'g1',
-        token: 'abc',
+        generation_id: "g1",
+        token: "abc",
         token_index: 0,
       });
     });
 
-    it('generation_start calls onGenerationStart', () => {
+    it("generation_start calls onGenerationStart", () => {
       const onGenerationStart = vi.fn();
       const { ws } = createConnectedClient({ onGenerationStart });
 
       ws.simulateMessage({
-        type: 'generation_start',
-        data: { generation_id: 'g1', streaming: true },
+        type: "generation_start",
+        data: { generation_id: "g1", streaming: true },
       });
 
       expect(onGenerationStart).toHaveBeenCalledWith({
-        generation_id: 'g1',
+        generation_id: "g1",
         streaming: true,
       });
     });
 
-    it('generation_complete calls onGenerationComplete', () => {
+    it("generation_complete calls onGenerationComplete", () => {
       const onGenerationComplete = vi.fn();
       const { ws } = createConnectedClient({ onGenerationComplete });
 
       const completeData = {
-        generation_id: 'g1',
-        text: 'Full response',
+        generation_id: "g1",
+        text: "Full response",
         tokens_used: 15,
         generation_time_ms: 200,
-        model_name: 'test-model',
+        model_name: "test-model",
         used_template: false,
         template_name: null,
-        finish_reason: 'stop',
+        finish_reason: "stop",
       };
 
-      ws.simulateMessage({ type: 'generation_complete', data: completeData });
+      ws.simulateMessage({ type: "generation_complete", data: completeData });
       expect(onGenerationComplete).toHaveBeenCalledWith(completeData);
     });
 
-    it('generation_error calls onGenerationError', () => {
+    it("generation_error calls onGenerationError", () => {
       const onGenerationError = vi.fn();
       const { ws } = createConnectedClient({ onGenerationError });
 
       ws.simulateMessage({
-        type: 'generation_error',
-        data: { generation_id: 'g1', error: 'OOM' },
+        type: "generation_error",
+        data: { generation_id: "g1", error: "OOM" },
       });
 
       expect(onGenerationError).toHaveBeenCalledWith({
-        generation_id: 'g1',
-        error: 'OOM',
+        generation_id: "g1",
+        error: "OOM",
       });
     });
 
-    it('health_update calls onHealthUpdate', () => {
+    it("health_update calls onHealthUpdate", () => {
       const onHealthUpdate = vi.fn();
       const { ws } = createConnectedClient({ onHealthUpdate });
 
-      const healthData = { status: 'healthy', model_loaded: true };
-      ws.simulateMessage({ type: 'health_update', data: healthData });
+      const healthData = { status: "healthy", model_loaded: true };
+      ws.simulateMessage({ type: "health_update", data: healthData });
 
       expect(onHealthUpdate).toHaveBeenCalledWith(healthData);
     });
 
-    it('pong is silently accepted (no handler call)', () => {
+    it("pong is silently accepted (no handler call)", () => {
       const onToken = vi.fn();
       const onError = vi.fn();
       const { ws } = createConnectedClient({ onToken, onError });
 
       // pong should not throw or call any handler
-      ws.simulateMessage({ type: 'pong', data: {} });
+      ws.simulateMessage({ type: "pong", data: {} });
 
       expect(onToken).not.toHaveBeenCalled();
       expect(onError).not.toHaveBeenCalled();
     });
 
-    it('error message calls onError with error string', () => {
+    it("error message calls onError with error string", () => {
       const onError = vi.fn();
       const { ws } = createConnectedClient({ onError });
 
       ws.simulateMessage({
-        type: 'error',
-        data: { error: 'Invalid request format' },
+        type: "error",
+        data: { error: "Invalid request format" },
       });
 
-      expect(onError).toHaveBeenCalledWith('Invalid request format');
+      expect(onError).toHaveBeenCalledWith("Invalid request format");
     });
   });
 
@@ -440,39 +440,39 @@ describe('JarvisWebSocket', () => {
   // 6. send
   // ========================================================================
 
-  describe('send', () => {
-    it('returns false when not connected', () => {
-      const client = new JarvisWebSocket('ws://localhost:8001');
-      const result = client.generate({ prompt: 'test' });
+  describe("send", () => {
+    it("returns false when not connected", () => {
+      const client = new JarvisWebSocket("ws://localhost:8001");
+      const result = client.generate({ prompt: "test" });
       expect(result).toBe(false);
     });
 
-    it('sends JSON-stringified message with type and data', () => {
+    it("sends JSON-stringified message with type and data", () => {
       const { client, ws } = createConnectedClient();
 
-      client.generateStream({ prompt: 'Hello', max_tokens: 50 });
+      client.generateStream({ prompt: "Hello", max_tokens: 50 });
 
       expect(ws.send).toHaveBeenCalledWith(
         JSON.stringify({
-          type: 'generate_stream',
-          data: { prompt: 'Hello', max_tokens: 50 },
+          type: "generate_stream",
+          data: { prompt: "Hello", max_tokens: 50 },
         })
       );
     });
 
-    it('returns true on success', () => {
+    it("returns true on success", () => {
       const { client } = createConnectedClient();
-      const result = client.generateStream({ prompt: 'test' });
+      const result = client.generateStream({ prompt: "test" });
       expect(result).toBe(true);
     });
 
-    it('returns false on send exception', () => {
+    it("returns false on send exception", () => {
       const { client, ws } = createConnectedClient();
       ws.send.mockImplementation(() => {
-        throw new Error('Connection reset');
+        throw new Error("Connection reset");
       });
 
-      const result = client.generate({ prompt: 'test' });
+      const result = client.generate({ prompt: "test" });
       expect(result).toBe(false);
     });
   });
@@ -481,8 +481,8 @@ describe('JarvisWebSocket', () => {
   // 7. Reconnection
   // ========================================================================
 
-  describe('reconnection', () => {
-    it('schedules reconnect on close when shouldReconnect=true', () => {
+  describe("reconnection", () => {
+    it("schedules reconnect on close when shouldReconnect=true", () => {
       const onStateChange = vi.fn();
       const { ws } = createConnectedClient({ onStateChange });
 
@@ -490,7 +490,7 @@ describe('JarvisWebSocket', () => {
       ws.simulateClose();
 
       // Should schedule reconnect, setting state to "reconnecting"
-      expect(onStateChange).toHaveBeenCalledWith('reconnecting');
+      expect(onStateChange).toHaveBeenCalledWith("reconnecting");
 
       // Advance past the first reconnect delay (1000ms base + up to 1000ms jitter)
       vi.advanceTimersByTime(3000);
@@ -499,11 +499,11 @@ describe('JarvisWebSocket', () => {
       expect(MockWebSocket.instances.length).toBeGreaterThan(1);
     });
 
-    it('exponential backoff: delay doubles each attempt', () => {
+    it("exponential backoff: delay doubles each attempt", () => {
       // Seed Math.random to 0 so jitter is deterministic (0ms jitter)
-      vi.spyOn(Math, 'random').mockReturnValue(0);
+      vi.spyOn(Math, "random").mockReturnValue(0);
 
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.connect();
 
       // Close without simulateOpen so reconnectAttempts is NOT reset on each attempt.
@@ -548,16 +548,16 @@ describe('JarvisWebSocket', () => {
 
       vi.restoreAllMocks();
       // Re-suppress console
-      vi.spyOn(console, 'log').mockImplementation(() => {});
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
-    it('max delay is capped at 30000ms', () => {
+    it("max delay is capped at 30000ms", () => {
       // Seed Math.random to 0 so jitter is deterministic
-      vi.spyOn(Math, 'random').mockReturnValue(0);
+      vi.spyOn(Math, "random").mockReturnValue(0);
 
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.connect();
 
       // Each failed reconnect: the timer fires, increments reconnectAttempts,
@@ -586,15 +586,15 @@ describe('JarvisWebSocket', () => {
 
       vi.restoreAllMocks();
       // Re-suppress console
-      vi.spyOn(console, 'log').mockImplementation(() => {});
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
-    it('stops after maxReconnectAttempts (10)', () => {
+    it("stops after maxReconnectAttempts (10)", () => {
       const onError = vi.fn();
       const onStateChange = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onError, onStateChange });
       client.connect();
 
@@ -610,13 +610,13 @@ describe('JarvisWebSocket', () => {
       }
 
       // After 10 attempts, should stop and fire error
-      expect(onError).toHaveBeenCalledWith('Connection lost. Please refresh the page.');
-      expect(onStateChange).toHaveBeenCalledWith('disconnected');
+      expect(onError).toHaveBeenCalledWith("Connection lost. Please refresh the page.");
+      expect(onStateChange).toHaveBeenCalledWith("disconnected");
     });
 
     it("fires onError with 'Connection lost' at max attempts", () => {
       const onError = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onError });
       client.connect();
 
@@ -628,12 +628,12 @@ describe('JarvisWebSocket', () => {
       }
 
       const connectionLostCalls = onError.mock.calls.filter(
-        (call: unknown[]) => call[0] === 'Connection lost. Please refresh the page.'
+        (call: unknown[]) => call[0] === "Connection lost. Please refresh the page."
       );
       expect(connectionLostCalls.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('disconnect cancels pending reconnect', () => {
+    it("disconnect cancels pending reconnect", () => {
       const { client, ws } = createConnectedClient();
       const countBeforeDisconnect = MockWebSocket.instances.length;
 
@@ -648,7 +648,7 @@ describe('JarvisWebSocket', () => {
 
       // No new WebSocket created after disconnect (only the one from disconnect's close logic)
       // The key check: state should remain disconnected
-      expect(client.state).toBe('disconnected');
+      expect(client.state).toBe("disconnected");
     });
   });
 
@@ -656,8 +656,8 @@ describe('JarvisWebSocket', () => {
   // 8. Ping interval
   // ========================================================================
 
-  describe('ping interval', () => {
-    it('starts 60s ping interval after connection opens', () => {
+  describe("ping interval", () => {
+    it("starts 60s ping interval after connection opens", () => {
       const { client, ws } = createConnectedClient();
 
       // Clear send calls from the connected message handling
@@ -667,10 +667,12 @@ describe('JarvisWebSocket', () => {
       vi.advanceTimersByTime(60000);
 
       // Should have sent a ping
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'ping', data: {} }));
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: "ping", data: {} })
+      );
     });
 
-    it('stops ping interval on disconnect', () => {
+    it("stops ping interval on disconnect", () => {
       const { client, ws } = createConnectedClient();
       ws.send.mockClear();
 
@@ -691,7 +693,7 @@ describe('JarvisWebSocket', () => {
       vi.advanceTimersByTime(180000);
 
       const pingCalls = ws.send.mock.calls.filter(
-        (call: unknown[]) => call[0] === JSON.stringify({ type: 'ping', data: {} })
+        (call: unknown[]) => call[0] === JSON.stringify({ type: "ping", data: {} })
       );
       expect(pingCalls).toHaveLength(3);
     });
@@ -701,10 +703,10 @@ describe('JarvisWebSocket', () => {
   // 9. Malformed messages
   // ========================================================================
 
-  describe('malformed messages', () => {
-    it('invalid JSON does not throw', () => {
+  describe("malformed messages", () => {
+    it("invalid JSON does not throw", () => {
       const onError = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onError });
       client.connect();
 
@@ -713,7 +715,7 @@ describe('JarvisWebSocket', () => {
 
       // Send raw invalid JSON (bypass simulateMessage which stringifies)
       expect(() => {
-        ws.onmessage?.({ data: 'not valid json {{{' });
+        ws.onmessage?.({ data: "not valid json {{{" });
       }).not.toThrow();
 
       // onError should NOT be called for parse failures (only console.error)
@@ -725,7 +727,7 @@ describe('JarvisWebSocket', () => {
   // 10. Visibility-aware reconnection
   // ========================================================================
 
-  describe('visibility-aware reconnection', () => {
+  describe("visibility-aware reconnection", () => {
     let mockDocument: {
       hidden: boolean;
       addEventListener: ReturnType<typeof vi.fn>;
@@ -738,10 +740,10 @@ describe('JarvisWebSocket', () => {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
       };
-      vi.stubGlobal('document', mockDocument);
+      vi.stubGlobal("document", mockDocument);
     });
 
-    it('defers reconnect when document.hidden is true', () => {
+    it("defers reconnect when document.hidden is true", () => {
       mockDocument.hidden = true;
 
       const { ws } = createConnectedClient();
@@ -755,24 +757,24 @@ describe('JarvisWebSocket', () => {
 
       // Should have registered a visibilitychange listener
       expect(mockDocument.addEventListener).toHaveBeenCalledWith(
-        'visibilitychange',
+        "visibilitychange",
         expect.any(Function)
       );
     });
 
-    it('resumes reconnect when document becomes visible', () => {
+    it("resumes reconnect when document becomes visible", () => {
       // Use a fresh client (not createConnectedClient) so we control state precisely.
       // Connect, open, receive "connected", then make document hidden, then close.
       mockDocument.hidden = false;
 
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.connect();
 
       const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
       ws.simulateOpen();
       ws.simulateMessage({
-        type: 'connected',
-        data: { client_id: 'vis-client', timestamp: 1 },
+        type: "connected",
+        data: { client_id: "vis-client", timestamp: 1 },
       });
 
       // Now hide the document and close the socket.
@@ -805,7 +807,7 @@ describe('JarvisWebSocket', () => {
       mockDocument.hidden = false;
       ws.simulateClose();
       // State should now be "reconnecting"
-      expect(client.state).toBe('reconnecting');
+      expect(client.state).toBe("reconnecting");
 
       // Advance to trigger the reconnect timer
       vi.advanceTimersByTime(5000);
@@ -826,7 +828,7 @@ describe('JarvisWebSocket', () => {
 
       // Grab the visibilitychange callback
       const visibilityCallback = mockDocument.addEventListener.mock.calls.find(
-        (call: unknown[]) => call[0] === 'visibilitychange'
+        (call: unknown[]) => call[0] === "visibilitychange"
       )?.[1] as () => void;
       expect(visibilityCallback).toBeDefined();
 
@@ -843,7 +845,7 @@ describe('JarvisWebSocket', () => {
 
       // Should have removed the visibilitychange listener
       expect(mockDocument.removeEventListener).toHaveBeenCalledWith(
-        'visibilitychange',
+        "visibilitychange",
         visibilityCallback
       );
     });
@@ -853,17 +855,17 @@ describe('JarvisWebSocket', () => {
   // 11. WebSocket error handling
   // ========================================================================
 
-  describe('WebSocket error event', () => {
-    it('calls onError handler with connection error message', () => {
+  describe("WebSocket error event", () => {
+    it("calls onError handler with connection error message", () => {
       const onError = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onError });
       client.connect();
 
       const ws = MockWebSocket.instances[0];
-      ws.simulateError(new Error('ECONNREFUSED'));
+      ws.simulateError(new Error("ECONNREFUSED"));
 
-      expect(onError).toHaveBeenCalledWith('WebSocket connection error');
+      expect(onError).toHaveBeenCalledWith("WebSocket connection error");
     });
   });
 
@@ -871,65 +873,73 @@ describe('JarvisWebSocket', () => {
   // 12. Method-specific send calls
   // ========================================================================
 
-  describe('client method send calls', () => {
-    it('generate sends GENERATE type', () => {
+  describe("client method send calls", () => {
+    it("generate sends GENERATE type", () => {
       const { client, ws } = createConnectedClient();
       ws.send.mockClear();
 
-      const request = { prompt: 'test prompt' };
+      const request = { prompt: "test prompt" };
       client.generate(request);
 
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'generate', data: request }));
-    });
-
-    it('generateStream sends GENERATE_STREAM type', () => {
-      const { client, ws } = createConnectedClient();
-      ws.send.mockClear();
-
-      const request = { prompt: 'test', temperature: 0.7 };
-      client.generateStream(request);
-
       expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: 'generate_stream', data: request })
+        JSON.stringify({ type: "generate", data: request })
       );
     });
 
-    it('cancelGeneration sends CANCEL type', () => {
+    it("generateStream sends GENERATE_STREAM type", () => {
+      const { client, ws } = createConnectedClient();
+      ws.send.mockClear();
+
+      const request = { prompt: "test", temperature: 0.7 };
+      client.generateStream(request);
+
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: "generate_stream", data: request })
+      );
+    });
+
+    it("cancelGeneration sends CANCEL type", () => {
       const { client, ws } = createConnectedClient();
       ws.send.mockClear();
 
       client.cancelGeneration();
 
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'cancel', data: {} }));
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: "cancel", data: {} })
+      );
     });
 
-    it('subscribeHealth sends SUBSCRIBE_HEALTH type', () => {
+    it("subscribeHealth sends SUBSCRIBE_HEALTH type", () => {
       const { client, ws } = createConnectedClient();
       ws.send.mockClear();
 
       client.subscribeHealth();
 
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'subscribe_health', data: {} }));
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: "subscribe_health", data: {} })
+      );
     });
 
-    it('unsubscribeHealth sends UNSUBSCRIBE_HEALTH type', () => {
+    it("unsubscribeHealth sends UNSUBSCRIBE_HEALTH type", () => {
       const { client, ws } = createConnectedClient();
       ws.send.mockClear();
 
       client.unsubscribeHealth();
 
       expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: 'unsubscribe_health', data: {} })
+        JSON.stringify({ type: "unsubscribe_health", data: {} })
       );
     });
 
-    it('ping sends PING type', () => {
+    it("ping sends PING type", () => {
       const { client, ws } = createConnectedClient();
       ws.send.mockClear();
 
       client.ping();
 
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'ping', data: {} }));
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: "ping", data: {} })
+      );
     });
   });
 
@@ -937,12 +947,12 @@ describe('JarvisWebSocket', () => {
   // 13. onDisconnect handler
   // ========================================================================
 
-  describe('onDisconnect handler', () => {
-    it('calls onDisconnect and clears clientId on close', () => {
+  describe("onDisconnect handler", () => {
+    it("calls onDisconnect and clears clientId on close", () => {
       const onDisconnect = vi.fn();
       const { client, ws } = createConnectedClient({ onDisconnect });
 
-      expect(client.clientId).toBe('test-client');
+      expect(client.clientId).toBe("test-client");
 
       // Disconnect cleanly so no reconnect interferes
       client.disconnect();
@@ -959,10 +969,10 @@ describe('JarvisWebSocket', () => {
   // 14. State change notifications
   // ========================================================================
 
-  describe('state change notifications', () => {
-    it('does not fire onStateChange if state has not changed', () => {
+  describe("state change notifications", () => {
+    it("does not fire onStateChange if state has not changed", () => {
       const onStateChange = vi.fn();
-      const client = new JarvisWebSocket('ws://localhost:8001');
+      const client = new JarvisWebSocket("ws://localhost:8001");
       client.setHandlers({ onStateChange });
 
       // State starts as "disconnected". Setting again to "disconnected" should not fire.
@@ -971,7 +981,7 @@ describe('JarvisWebSocket', () => {
       // disconnect calls setState("disconnected") but state was already "disconnected"
       // so onStateChange should not be called for that transition
       const disconnectedCalls = onStateChange.mock.calls.filter(
-        (call: unknown[]) => call[0] === 'disconnected'
+        (call: unknown[]) => call[0] === "disconnected"
       );
       expect(disconnectedCalls).toHaveLength(0);
     });
@@ -981,16 +991,16 @@ describe('JarvisWebSocket', () => {
   // 15. Default URL from WS_BASE
   // ========================================================================
 
-  describe('default URL', () => {
-    it('uses WS_BASE when no baseUrl provided', async () => {
+  describe("default URL", () => {
+    it("uses WS_BASE when no baseUrl provided", async () => {
       // Need to test the module-level export
       vi.resetModules();
-      const mod = await import('../../src/lib/api/websocket');
+      const mod = await import("../../src/lib/api/websocket");
 
       // The singleton uses the default WS_BASE
       mod.jarvisWs.connect();
       const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
-      expect(ws.url).toBe('ws://localhost:8001/ws');
+      expect(ws.url).toBe("ws://localhost:8001/ws");
     });
   });
 });

@@ -311,13 +311,16 @@ TEXT_ABBREVIATIONS: set[str] = {
 # =============================================================================
 
 # Static system prefix for KV cache reuse.
-SYSTEM_PREFIX = "Respond as a person texting. Be brief, casual, and lowercase.\n"
+SYSTEM_PREFIX = (
+    "You are texting from your phone. Reply naturally, matching their style. "
+    "Be brief (1-2 sentences), casual, and sound like a real person.\n"
+)
 
 REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
     system_message="",
     template="{context}\nMe: ",
-    max_output_tokens=50,
+    max_output_tokens=25,
 )
 
 RAG_REPLY_PROMPT = PromptTemplate(
@@ -331,7 +334,7 @@ RAG_REPLY_PROMPT = PromptTemplate(
         "{last_message}<|im_end|>\n"
         "<|im_start|>assistant\n"
     ),
-    max_output_tokens=40,
+    max_output_tokens=25,
 )
 
 
@@ -453,41 +456,47 @@ CATEGORY_MAP: dict[str, str] = {
 
 # Category configurations (maps category -> routing behavior)
 CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
+    # Note: We use a UNIVERSAL system prompt for all categories.
+    # Research showed category-specific prompts hurt quality
+    # See docs/research/CATEGORIZATION_ABLATION_FINDINGS.md
+    # Category classification is kept for: context_depth, analytics, and routing (skip_slm)
+    # But NOT for selecting different system prompts.
     "closing": CategoryConfig(
-        skip_slm=True,
+        skip_slm=True,  # Use template responses, not LLM
         prompt=None,
         context_depth=0,
-        system_prompt=None,
+        system_prompt=None,  # Uses universal SYSTEM_PREFIX
     ),
     "acknowledge": CategoryConfig(
-        skip_slm=True,
+        skip_slm=True,  # Use template responses, not LLM
         prompt=None,
         context_depth=0,
-        system_prompt=None,
+        system_prompt=None,  # Uses universal SYSTEM_PREFIX
     ),
     "question": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=10,
-        system_prompt="They asked a question. Just answer it, keep it short.",
+        context_depth=15,
+        system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They asked a question...")
     ),
     "request": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=10,
-        system_prompt="They're asking you to do something. Say yes, no, or ask a follow-up.",
+        context_depth=15,
+        system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They're asking you...")
     ),
     "emotion": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=10,
-        system_prompt="They're sharing something emotional. Be a good friend, not a therapist.",
+        context_depth=15,
+        # Uses universal SYSTEM_PREFIX (was: "They're sharing something emotional...")
+        system_prompt=None,
     ),
     "statement": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=10,
-        system_prompt="They're sharing or chatting. React naturally like a friend would.",
+        context_depth=15,
+        system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They're sharing or chatting...")
     ),
 }
 

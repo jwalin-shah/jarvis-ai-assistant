@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from datetime import datetime
 
 import numpy as np
 
@@ -278,8 +279,18 @@ def search_relevant_facts(
 
             # Filter by similarity threshold and collect fact IDs
             relevant_ids = []
+
+            # Decay constants
+            one_year_s = 365 * 24 * 3600
+            two_years_s = 2 * one_year_s
+
             for row in results:
                 sim = _distance_to_similarity(row["distance"])
+
+                # Apply temporal decay to similarity
+                # We need the extraction time, but it's not in vec_facts.
+                # We'll fetch it in the next step, but for initial filtering,
+                # we use the raw similarity.
                 if sim >= _MIN_SIMILARITY:
                     relevant_ids.append(row["fact_id"])
                 if len(relevant_ids) >= limit:
@@ -302,13 +313,63 @@ def search_relevant_facts(
     except Exception:
         return _fallback_get_facts(contact_id, limit)
 
-    return [
-        Fact(
+    # Filter out expired facts and apply confidence decay
+    now = datetime.now()
+    now_iso = now.isoformat()
+    facts_with_scores: list[tuple[Fact, float]] = []
+
+    # Categories that are considered durable and do not decay over time
+    durable_categories = {"relationship", "personal", "health"}
+    # Predicates that are considered durable regardless of category
+    durable_predicates = {"born_on", "birthday_is", "from", "identity"}
+
+    for r in fact_rows:
+        valid_until = r["valid_until"]
+        if valid_until and valid_until < now_iso:
+            logger.debug(
+                "Skipping expired fact: %s %s %s", r["subject"], r["predicate"], r["value"]
+            )
+            continue
+
+        category = r["category"]
+        predicate = r["predicate"]
+
+        # Calculate decay factor
+        decay_factor = 1.0
+
+        # Only apply decay if category/predicate is not durable
+        is_durable = category in durable_categories or any(
+            p in predicate for p in durable_predicates
+        )
+
+        if not is_durable:
+            try:
+                if r["extracted_at"]:
+                    # Parse extracted_at (handling various formats)
+                    try:
+                        ext_at = datetime.fromisoformat(r["extracted_at"].replace("Z", "+00:00"))
+                    except ValueError:
+                        # Fallback for older sqlite formats
+                        ext_at = datetime.strptime(
+                            r["extracted_at"].split(".")[0], "%Y-%m-%d %H:%M:%S"
+                        )
+
+                    age_seconds = (now - ext_at).total_seconds()
+
+                    if age_seconds > two_years_s:
+                        decay_factor = 0.5  # Max decay
+                    elif age_seconds > one_year_s:
+                        # Linear decay from 1.0 to 0.5 between 1 and 2 years
+                        decay_factor = 1.0 - 0.5 * ((age_seconds - one_year_s) / one_year_s)
+            except Exception as e:
+                logger.debug("Failed to calculate decay for fact: %s", e)
+
+        fact = Fact(
             category=r["category"],
             subject=r["subject"],
             predicate=r["predicate"],
             value=r["value"],
-            confidence=r["confidence"],
+            confidence=r["confidence"] * decay_factor,
             source_text=r["source_text"] or "",
             source_message_id=r["source_message_id"],
             contact_id=contact_id,
@@ -317,8 +378,87 @@ def search_relevant_facts(
             valid_from=r["valid_from"],
             valid_until=r["valid_until"],
         )
-        for r in fact_rows
-    ]
+        # We'll use the final confidence to sort
+        facts_with_scores.append((fact, fact.confidence))
+
+    # Sort by confidence (which now includes decay)
+    facts_with_scores.sort(key=lambda x: x[1], reverse=True)
+    return [f for f, s in facts_with_scores[:limit]]
+
+
+def find_conflicting_facts(
+    fact: Fact,
+    contact_id: str,
+    threshold: float = 0.7,
+) -> list[int]:
+    """Find existing facts that semantically conflict with a new fact.
+
+    Used for active degradation: if a new fact is extracted that contradicts
+    an old one (e.g., different location for same person), the old one
+    should be updated or deprecated.
+
+    Args:
+        fact: The new fact to check.
+        contact_id: The contact it belongs to.
+        threshold: Similarity threshold for identifying related facts.
+
+    Returns:
+        List of fact_ids that might be contradicted.
+    """
+    from jarvis.db import get_db
+    from jarvis.embedding_adapter import get_embedder
+
+    db = get_db()
+    embedder = get_embedder()
+
+    # Search for related facts (same subject/predicate or semantically similar)
+    # We use a broad search first
+    search_text = fact.to_searchable_text()
+    query_emb = embedder.encode([search_text], normalize=True)[0]
+    query_blob = _quantize(query_emb)
+
+    try:
+        with db.connection() as conn:
+            # Find facts with same subject and predicate but DIFFERENT values
+            # This is a direct logical conflict check
+            rows = conn.execute(
+                """
+                SELECT id, value FROM contact_facts
+                WHERE contact_id = ? AND subject = ? AND predicate = ? AND attribution = ?
+                AND value != ?
+                """,
+                (contact_id, fact.subject, fact.predicate, fact.attribution, fact.value),
+            ).fetchall()
+
+            conflicts = [row["id"] for row in rows]
+
+            # Also do a semantic search for related facts that might conflict
+            # (handles "lives in Austin" vs "moved to Dallas")
+            results = conn.execute(
+                """
+                SELECT fact_id, distance FROM vec_facts
+                WHERE embedding MATCH vec_int8(?)
+                AND k = 10 AND contact_id = ?
+                """,
+                (query_blob, contact_id),
+            ).fetchall()
+
+            for row in results:
+                fid = row["fact_id"]
+                sim = _distance_to_similarity(row["distance"])
+                if sim >= threshold and fid not in conflicts:
+                    # Check if it's actually a conflict (different value)
+                    # We'll fetch the value to be sure
+                    f_row = conn.execute(
+                        "SELECT value FROM contact_facts WHERE id = ?", (fid,)
+                    ).fetchone()
+                    if f_row and f_row["value"] != fact.value:
+                        conflicts.append(fid)
+
+            return conflicts
+    except Exception as e:
+        logger.debug("Conflict detection failed: %s", e)
+        return []
 
 
 def _fallback_get_facts(contact_id: str, limit: int) -> list[Fact]:

@@ -186,7 +186,7 @@ async def generate_draft_reply(
     """
     messages = await fetch_messages(reader, draft_request.chat_id, draft_request.context_messages)
     ensure_messages_exist(draft_request.chat_id, messages)
-    last_message, participants, thread = build_reply_context(
+    last_message, participants, thread, last_is_from_me = build_reply_context(
         messages,
         draft_request.context_messages,
     )
@@ -197,6 +197,7 @@ async def generate_draft_reply(
         thread=thread,
         instruction=draft_request.instruction,
         num_suggestions=draft_request.num_suggestions,
+        last_is_from_me=last_is_from_me,
     )
 
     if not suggestions:

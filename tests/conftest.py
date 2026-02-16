@@ -10,26 +10,8 @@ import types
 from functools import lru_cache
 from unittest.mock import MagicMock
 
-try:
-    import numpy as np
-except ImportError:
-    # Create a dummy numpy for type hints and basic usage
-    # This allows tests to run without numpy installed
-    np = MagicMock()
-    np.ndarray = MagicMock
-    np.float32 = "float32"
-    np.array = MagicMock(return_value=[])
-    np.random = MagicMock()
-    np.linalg = MagicMock()
-    sys.modules["numpy"] = np
-
-try:
-    import psutil
-except ImportError:
-    psutil = MagicMock()
-    psutil.virtual_memory = MagicMock(return_value=MagicMock(total=16 * 1024**3))
-    sys.modules["psutil"] = psutil
-
+import numpy as np
+import psutil
 import pytest
 
 
@@ -355,3 +337,13 @@ def mock_spacy_model(monkeypatch):
         return mock_nlp
 
     monkeypatch.setattr(spacy, "load", mock_load)
+
+
+@pytest.fixture(autouse=True)
+def clean_imports():
+    """Ensure clean import state for numpy-dependent modules.
+
+    This fixes test pollution issues where vec_search tests fail when run
+    after other tests due to module state pollution affecting numpy behavior.
+    """
+    yield

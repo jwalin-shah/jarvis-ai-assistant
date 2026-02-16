@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from jarvis.config import get_config
 from jarvis.contacts.contact_utils import hash_contact_id
 
 if TYPE_CHECKING:
@@ -534,10 +535,14 @@ class ContactProfileBuilder:
         )
         relationship = self._normalize_relationship_label(relationship)
 
+        # LLM refinement is reserved for low-confidence classifications to avoid
+        # overriding reasonably confident deterministic classifier output.
+        relationship_refinement_threshold = 0.7
+
         # LLM Refinement
         relationship_reasoning = None
         # Keep high-confidence classifier output stable; only refine uncertain cases.
-        if len(messages) >= 3 and rel_confidence < 0.95:
+        if len(messages) >= 3 and rel_confidence < relationship_refinement_threshold:
             logger.info(
                 "Refining relationship for %s (current: %s, confidence: %.2f)",
                 contact_name or contact_id,
@@ -809,12 +814,13 @@ Result:"""
     def _detect_abbreviations(texts: list[str]) -> tuple[bool, list[str]]:
         if not texts:
             return False, []
+        config = get_config()
         word_counts: Counter[str] = Counter()
         for text in texts:
             word_counts.update(_WORD_RE.findall(text.lower()))
         found = {w: word_counts[w] for w in word_counts if w in TEXT_ABBREVIATIONS}
         sorted_abbrevs = sorted(found, key=found.get, reverse=True)  # type: ignore[arg-type]
-        return len(found) >= 2, sorted_abbrevs[:5]
+        return len(found) >= config.text_processing.min_abbrev_count, sorted_abbrevs[:5]
 
     @staticmethod
     def _compute_emoji_frequency(texts: list[str]) -> float:
@@ -835,10 +841,12 @@ Result:"""
     @staticmethod
     def _extract_greetings(messages: list[Message]) -> list[str]:
         greetings_found: Counter[str] = Counter()
+        config = get_config()
         for msg in messages:
             if not msg.text:
                 continue
-            first_words = " ".join(msg.text.lower().strip().split()[:3])
+            words = msg.text.lower().strip().split()
+            first_words = " ".join(words[: config.text_processing.first_words_count])
             for pattern in GREETING_PATTERNS:
                 if first_words.startswith(pattern):
                     greetings_found[pattern] += 1
@@ -906,9 +914,14 @@ Result:"""
                     (contact_id,),
                 ).fetchall()
 
+            config = get_config()
             if not rows or len(rows) < 3:
                 # Fall back to raw message labels if no segments found
-                labels = [m.text for m in messages if m.text and len(m.text) > 20][:10]
+                labels = [
+                    m.text
+                    for m in messages
+                    if m.text and len(m.text) > config.text_processing.min_label_length
+                ][:10]
                 return [l[:30] for l in labels] if labels else []
 
             # 2. Extract labels and fetch centroids from vector searcher

@@ -31,7 +31,10 @@
 
 [`docs/research/`](./research/) contains research findings:
 
-- [prompt_experiments.md](./research/prompt_experiments.md) — Prompt engineering learnings
+- [CATEGORIZATION_ABLATION_FINDINGS.md](./research/CATEGORIZATION_ABLATION_FINDINGS.md) — **Key Finding:** Categories hurt reply quality, universal prompt wins
+- [LLM_JUDGE_EVALUATION.md](./research/LLM_JUDGE_EVALUATION.md) — LLM-as-judge evaluation framework (Llama 3.3 70B)
+- [PROMPT_EXPERIMENT_ROADMAP.md](./research/PROMPT_EXPERIMENT_ROADMAP.md) — Current and planned prompt experiments
+- [prompt_experiments.md](./research/prompt_experiments.md) — Legacy prompt engineering learnings (fact extraction)
 
 ## Standards & Guidelines
 

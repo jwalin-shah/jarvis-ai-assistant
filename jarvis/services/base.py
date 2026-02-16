@@ -42,9 +42,10 @@ class ServiceConfig:
     env_vars: dict[str, str] = field(default_factory=dict)
     health_check_url: str | None = None
     health_check_socket: Path | None = None
-    health_check_timeout: float = 5.0
-    startup_timeout: float = 30.0
-    stop_timeout: float = 10.0
+    # These values are overridden from config at runtime
+    health_check_timeout: float = 5.0  # From timeouts.health_check_timeout
+    startup_timeout: float = 30.0  # From timeouts.service_startup_timeout
+    stop_timeout: float = 10.0  # From timeouts.service_stop_timeout
     restart_on_failure: bool = True
     optional: bool = False
     dependencies: list[str] = field(default_factory=list)

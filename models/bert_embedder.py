@@ -731,6 +731,25 @@ class CachedEmbedder:
         normalize_embeddings: bool | None = None,
         dtype: np.dtype = np.float32,
     ) -> NDArray[np.float32]:
+        def _sanitize_vector(vector: np.ndarray, text: str) -> np.ndarray:
+            """Ensure embedding vectors are finite and non-zero norm."""
+            vector = np.asarray(vector, dtype=dtype).reshape(1, -1)
+            vector = np.nan_to_num(vector, nan=0.0, posinf=0.0, neginf=0.0)
+
+            if normalize:
+                norm = float(np.linalg.norm(vector))
+                if norm > 1e-9:
+                    vector = vector / norm
+                else:
+                    # Deterministic fallback avoids NaN cosine scores when backend
+                    # returns pathological all-zero/NaN vectors.
+                    dim = vector.shape[1]
+                    digest = hashlib.blake2b(text.encode("utf-8"), digest_size=4).hexdigest()
+                    idx = int(digest, 16) % dim
+                    vector.fill(0.0)
+                    vector[0, idx] = 1.0
+            return vector
+
         if normalize_embeddings is not None:
             normalize = normalize_embeddings
         if isinstance(texts, str):
@@ -739,7 +758,7 @@ class CachedEmbedder:
             if cached is not None:
                 return cached
             result = self.base.encode([texts], normalize=normalize, dtype=dtype)
-            vector = result.reshape(1, -1)
+            vector = _sanitize_vector(result, texts)
             self._set(key, vector)
             self._computations += 1
             return vector
@@ -763,8 +782,10 @@ class CachedEmbedder:
 
         if missing_texts:
             embeddings = self.base.encode(missing_texts, normalize=normalize, dtype=dtype)
-            for idx, emb, cache_key in zip(missing_indices, embeddings, missing_keys):
-                vector = np.asarray(emb, dtype=dtype).reshape(1, -1)
+            for idx, emb, cache_key, src_text in zip(
+                missing_indices, embeddings, missing_keys, missing_texts
+            ):
+                vector = _sanitize_vector(emb, src_text)
                 cached_vectors[idx] = vector
                 self._set(cache_key, vector)
             self._computations += len(missing_texts)

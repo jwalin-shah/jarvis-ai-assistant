@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 
 from jarvis.classifiers.response_mobilization import MobilizationResult, ResponsePressure
 from jarvis.contracts.pipeline import CategoryType, ClassificationResult, UrgencyLevel
@@ -40,8 +40,20 @@ def pressure_from_classification(classification: ClassificationResult) -> Respon
 
 
 def max_tokens_for_pressure(pressure: ResponsePressure) -> int:
-    """Return max generation token budget for pressure level."""
-    return 20 if pressure == ResponsePressure.NONE else 40
+    """Return max generation token budget for pressure level.
+
+    Uses centralized config from jarvis.prompts.generation_config.
+    """
+    from jarvis.prompts.generation_config import get_max_tokens_for_pressure
+
+    pressure_map = {
+        ResponsePressure.NONE: "none",
+        ResponsePressure.LOW: "low",
+        ResponsePressure.MEDIUM: "medium",
+        ResponsePressure.HIGH: "high",
+    }
+    pressure_str = pressure_map.get(pressure, "medium")
+    return get_max_tokens_for_pressure(cast(Literal["none", "low", "medium", "high"], pressure_str))
 
 
 def build_thread_context(conversation_messages: list[Any]) -> list[str]:

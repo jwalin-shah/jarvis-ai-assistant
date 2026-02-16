@@ -95,7 +95,7 @@ REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
     system_message="...",
     template="...",
-    max_output_tokens=50,
+    max_output_tokens=25,  # Optimized for brief texting
 )
 
 # Metadata tracked separately

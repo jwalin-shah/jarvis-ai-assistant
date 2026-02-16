@@ -5,7 +5,6 @@ Comprehensive End-to-End testing suite for the JARVIS Desktop application using 
 ## Overview
 
 This test suite covers:
-
 - **Core User Flows**: App launch, navigation, conversation management, messaging
 - **Component Integration**: SmartReplyChipsV2, GlobalSearch, ConversationList
 - **Performance Testing**: Render times, scroll performance, memory usage
@@ -33,20 +32,20 @@ pnpm test:e2e:headed
 
 ## Test Commands
 
-| Command                     | Description                       |
-| --------------------------- | --------------------------------- |
-| `pnpm test:e2e`             | Run all E2E tests                 |
-| `pnpm test:e2e:ui`          | Run tests in Playwright UI mode   |
-| `pnpm test:e2e:headed`      | Run tests with visible browser    |
-| `pnpm test:e2e:debug`       | Run tests in debug mode           |
-| `pnpm test:e2e:chromium`    | Run tests only on Chromium        |
-| `pnpm test:e2e:webkit`      | Run tests only on WebKit (Safari) |
-| `pnpm test:e2e:a11y`        | Run accessibility tests           |
-| `pnpm test:e2e:performance` | Run performance tests             |
-| `pnpm test:e2e:mobile`      | Run tests with mobile viewport    |
-| `pnpm test:e2e:fast`        | Run tests with parallel workers   |
-| `pnpm test:e2e:ci`          | Run tests for CI environment      |
-| `pnpm test:e2e:report`      | View HTML test report             |
+| Command | Description |
+|---------|-------------|
+| `pnpm test:e2e` | Run all E2E tests |
+| `pnpm test:e2e:ui` | Run tests in Playwright UI mode |
+| `pnpm test:e2e:headed` | Run tests with visible browser |
+| `pnpm test:e2e:debug` | Run tests in debug mode |
+| `pnpm test:e2e:chromium` | Run tests only on Chromium |
+| `pnpm test:e2e:webkit` | Run tests only on WebKit (Safari) |
+| `pnpm test:e2e:a11y` | Run accessibility tests |
+| `pnpm test:e2e:performance` | Run performance tests |
+| `pnpm test:e2e:mobile` | Run tests with mobile viewport |
+| `pnpm test:e2e:fast` | Run tests with parallel workers |
+| `pnpm test:e2e:ci` | Run tests for CI environment |
+| `pnpm test:e2e:report` | View HTML test report |
 
 ## Test Structure
 
@@ -81,7 +80,6 @@ tests/
 ### Core User Flow Tests
 
 Tests that verify the main user journeys:
-
 - App opens without errors
 - Navigation between views works
 - Conversations load and display correctly
@@ -94,7 +92,6 @@ Tests that verify the main user journeys:
 Tests for specific components:
 
 **SmartReplyChipsV2** (`test_smart_reply_chips.spec.ts`)
-
 - Chip display and loading states
 - Keyboard shortcuts (1, 2, 3)
 - Click to copy functionality
@@ -102,7 +99,6 @@ Tests for specific components:
 - Error handling
 
 **GlobalSearch** (`test_global_search.spec.ts`)
-
 - Opening/closing behavior
 - Text vs semantic search modes
 - Filter functionality
@@ -112,7 +108,6 @@ Tests for specific components:
 ### Performance Tests
 
 Performance requirements (`test_performance.spec.ts`):
-
 - Initial render < 2s
 - View transitions < 500ms
 - Scroll remains smooth with 1000+ items
@@ -122,7 +117,6 @@ Performance requirements (`test_performance.spec.ts`):
 ### Accessibility Tests
 
 A11y compliance (`test_accessibility.spec.ts`):
-
 - ARIA labels on interactive elements
 - Keyboard-only navigation
 - Focus management
@@ -132,7 +126,6 @@ A11y compliance (`test_accessibility.spec.ts`):
 ### Error Recovery Tests
 
 Error handling (`test_error_recovery.spec.ts`):
-
 - API error display
 - Network disconnection handling
 - Retry functionality
@@ -145,33 +138,33 @@ The test suite provides custom fixtures:
 
 ```typescript
 // mockedPage - Page with all API endpoints mocked
-test('example', async ({ mockedPage: page }) => {
-  await page.goto('/');
+test("example", async ({ mockedPage: page }) => {
+  await page.goto("/");
   // All API calls are intercepted
 });
 
 // errorPage - Page with error responses
-test('error handling', async ({ errorPage: page }) => {
+test("error handling", async ({ errorPage: page }) => {
   // API calls return errors
 });
 
 // disconnectedPage - Simulates offline state
-test('offline mode', async ({ disconnectedPage: page }) => {
+test("offline mode", async ({ disconnectedPage: page }) => {
   // Network is unavailable
 });
 
 // socketMockedPage - Includes socket/WebSocket mocks
-test('real-time features', async ({ socketMockedPage: page }) => {
+test("real-time features", async ({ socketMockedPage: page }) => {
   // Socket endpoints are mocked
 });
 
 // slowPage - Simulates slow network
-test('loading states', async ({ slowPage: page }) => {
+test("loading states", async ({ slowPage: page }) => {
   // API responses are delayed
 });
 
 // largePage - Large dataset mocks
-test('performance with large data', async ({ largePage: page }) => {
+test("performance with large data", async ({ largePage: page }) => {
   // 1000+ conversations/messages
 });
 ```
@@ -183,13 +176,13 @@ Available helper functions in `fixtures.ts`:
 ```typescript
 // Navigation
 await waitForAppLoad(page);
-await navigateToView(page, 'messages');
-await selectConversation(page, 'John Doe');
+await navigateToView(page, "messages");
+await selectConversation(page, "John Doe");
 
 // Global Search
 await openGlobalSearch(page);
 await closeGlobalSearch(page);
-await searchAndWait(page, 'lunch');
+await searchAndWait(page, "lunch");
 
 // Performance
 const renderTime = await measureRenderTime(page, action, selector);
@@ -236,7 +229,6 @@ pnpm test:e2e:ci
 ```
 
 CI configuration in `playwright.config.ts`:
-
 - Single worker (to avoid flakiness)
 - 2 retries on failure
 - JSON reporter for CI integration
@@ -247,24 +239,24 @@ CI configuration in `playwright.config.ts`:
 ### Basic Test Structure
 
 ```typescript
-import { test, expect } from './fixtures';
-import { waitForAppLoad, navigateToView } from './fixtures';
+import { test, expect } from "./fixtures";
+import { waitForAppLoad, navigateToView } from "./fixtures";
 
-test.describe('Feature Name', () => {
+test.describe("Feature Name", () => {
   test.beforeEach(async ({ mockedPage: page }) => {
-    await page.goto('/');
+    await page.goto("/");
     await waitForAppLoad(page);
   });
 
-  test('should do something', async ({ mockedPage: page }) => {
+  test("should do something", async ({ mockedPage: page }) => {
     // Arrange
-    await navigateToView(page, 'messages');
+    await navigateToView(page, "messages");
 
     // Act
-    await page.locator('.button').click();
+    await page.locator(".button").click();
 
     // Assert
-    await expect(page.locator('.result')).toBeVisible();
+    await expect(page.locator(".result")).toBeVisible();
   });
 });
 ```
@@ -279,7 +271,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/your-endpoint`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(yourMockData),
     });
   });

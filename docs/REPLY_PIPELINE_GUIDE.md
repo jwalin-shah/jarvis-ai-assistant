@@ -1,45 +1,56 @@
 # Reply Pipeline Architecture Guide
 
-> **Last Updated:** 2026-02-10
+> **Last Updated:** 2026-02-16  
+> **Status:** Production - Universal Prompt System
+
+---
 
 ## Overview
 
 This guide covers the complete architecture for generating text message replies that match your personal style.
 
+**Key Design Decision:** We use a **universal prompt** for all generation, not category-specific prompts. See [Categorization Ablation Findings](./research/CATEGORIZATION_ABLATION_FINDINGS.md) for why categories hurt quality.
+
+---
+
 ## Architecture Components
 
-### 1. Classification Layer (Fast Path)
+### 1. Classification Layer (Decision Only)
 
-**Purpose**: Decide if/what to reply
+**Purpose:** Decide IF to reply, not HOW to reply
 
 ```python
-from jarvis.classifiers.category_classifier import classify_category
+from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.response_mobilization import classify_mobilization
 
 # Classify incoming message
-category = classify_category(incoming_text, context=recent_messages)
-mobilization = classify_mobilization(incoming_text)
+mobilization = classify_with_cascade(incoming_text)
 
 # Decision tree
-if category.category == "acknowledge":
-    # Brief acknowledgment - reply if mobilization is HIGH
-    return generate_brief_reply()
-elif mobilization.pressure == "none":
+if mobilization.pressure == "none":
     # No reply needed
     return None
+elif mobilization.pressure == "low" and category == "acknowledge":
+    # Use template (fast)
+    return random.choice(ACKNOWLEDGE_TEMPLATES)
 else:
     # Generate full reply
     return generate_reply()
 ```
 
-**Categories** (6):
+**Important:** Categories are used for:
+- Analytics and logging
+- Deciding whether to use templates (acknowledge/closing)
+- NOT for selecting prompts (proven to hurt quality)
 
-- `acknowledge` - "ok", "sure", "thanks"
-- `question` - "What time?", "Where are you?"
-- `request` - "Can you pick me up?"
-- `emotion` - "omg!", "so excited!"
-- `closing` - "bye", "talk later"
-- `statement` - "Running late", "Just got home"
+**Categories** (6 - for analytics only):
+
+- `acknowledge` - "ok", "sure", "thanks" → uses template
+- `closing` - "bye", "talk later" → uses template
+- `question` - "What time?", "Where are you?" → universal prompt
+- `request` - "Can you pick me up?" → universal prompt
+- `emotion` - "omg!", "so excited!" → universal prompt
+- `statement` - "Running late", "Just got home" → universal prompt
 
 **Mobilization** (4 levels):
 
@@ -48,9 +59,11 @@ else:
 - `LOW` - Statement, optional acknowledgment
 - `NONE` - No reply needed
 
+---
+
 ### 2. Context Assembly
 
-**What to include in the prompt**:
+**What to include in the prompt:**
 
 ```python
 context_parts = {
@@ -71,70 +84,79 @@ context_parts = {
 }
 ```
 
+---
+
 ### 3. Prompt Engineering
 
-**System Prompt Template**:
+**Universal System Prompt (Current):**
 
 ```
-<system>
-You are NOT an AI assistant. You are replying to a text message from your phone.
-Just text back. No helpfulness, no formality, no assistant behavior.
-
-Rules:
-- Keep it brief (1-2 sentences max)
-- Use casual language, abbreviations ok
-- Match the energy of the incoming message
-- Don't ask follow-up questions unless necessary
-
-Category: {category}
-Relationship: {relationship}
-{style_section}
-</system>
+You are NOT an AI assistant. You are texting from your phone.
+Reply naturally, matching the conversation style.
+Be brief (1-2 sentences), casual, and sound like a real person.
 ```
 
-**Style Section** (auto-generated from your history):
+**Why this works:**
+1. Clear identity (not AI)
+2. Simple constraints (brief, casual)
+3. No rigid category rules
+4. Allows model to adapt naturally
+
+See [Categorization Ablation Findings](./research/CATEGORIZATION_ABLATION_FINDINGS.md) for the study that proved categories hurt quality.
+
+**Full Prompt Template:**
 
 ```
-Style:
-- Very short messages (1-5 words)
-- Rarely uses emoji
-- Uses abbreviations: lol, idk, nvm, tbh
-- Mostly lowercase
+<|im_start|>system
+You are NOT an AI assistant. You are texting from your phone.
+Reply naturally, matching the conversation style.
+Be brief (1-2 sentences), casual, and sound like a real person.
+<|im_end|>
+<|im_start|>user
+{context_str}
+
+Reply to: {last_message}<|im_end|>
+<|im_start|>assistant
 ```
+
+---
 
 ### 4. LLM Selection
 
-| Model          | Recommendation                          |
-| -------------- | --------------------------------------- |
-| **Qwen 1.5B**  | Default - best speed/quality balance    |
-| **Gemma 3 4B** | Use if Qwen quality insufficient        |
-| **LFM 0.3B**   | Testing only - very fast, lower quality |
+| Model | Recommendation |
+|-------|----------------|
+| **LFM-1.2b-ft** | Default - best speed/quality balance |
+| **LFM-0.3b-ft** | Testing only - very fast, lower quality |
 
-**Configuration** (in `config.yaml`):
+**Configuration** (in model registry):
 
-```yaml
-model:
-  name: 'mlx-community/Qwen2.5-1.5B-Instruct-4bit'
-  max_tokens: 50 # Keep replies short
-  temperature: 0.7
-  top_p: 0.9
+```python
+{
+    "name": "lfm-1.2b-ft",
+    "max_tokens": 25,      # Keep replies brief (1-2 sentences)
+    "temperature": 0.15,   # Slight variety for naturalness
+    "top_p": 0.9,
+    "repetition_penalty": 1.15,  # Prevents echoing input
+}
 ```
+
+---
 
 ### 5. RAG Implementation
 
-**Setup**:
+**Setup:**
 
 ```python
-from jarvis.search.vec_search import get_vec_searcher
+from jarvis.search.hybrid_search import get_hybrid_searcher
 
-# Index your message history
-searcher = get_vec_searcher(db)
+# Get hybrid searcher (combines semantic + keyword)
+searcher = get_hybrid_searcher()
 
 # Search for similar conversations
-results = searcher.search_with_chunks(
+results = searcher.search(
     query=incoming_text,
-    k=3,
-    contact_id=current_chat_id  # Optional: same contact only
+    limit=5,
+    rerank=True  # Uses cross-encoder reranker
 )
 
 # Use as examples in prompt
@@ -146,154 +168,142 @@ for r in results:
     })
 ```
 
-**Quality Filtering for RAG**:
+**Quality Filtering for RAG:**
 
 Only index high-quality pairs:
 
 - Response length: 3-100 characters
 - Not acknowledgments only (avoid "ok" → "ok" training)
-- Quality score > 0.7 (from `filter_quality_pairs.py`)
+- Quality score > 0.7
 
-### 6. Training Data Preparation
+---
 
-**From iMessage**:
-
-```bash
-# 1. Extract pairs (already done)
-uv run python scripts/extract_personal_data.py
-
-# 2. Filter for quality
-uv run python scripts/filter_quality_pairs.py \
-    --input data/personal/raw_pairs.jsonl \
-    --output data/personal/quality_pairs.jsonl
-
-# 3. Prepare training format
-uv run python scripts/prepare_personal_data.py --both
-# Outputs:
-#   - data/personal/category_aware/{train,valid,test}.jsonl
-#   - data/personal/raw_style/{train,valid,test}.jsonl
-```
-
-**Training Data Format**:
-
-```json
-{
-  "messages": [
-    { "role": "system", "content": "You are NOT an AI assistant... Category: question" },
-    {
-      "role": "user",
-      "content": "<conversation>...\n<last_message>Friend: Want to grab lunch?</last_message>"
-    },
-    { "role": "assistant", "content": "sure what time?" }
-  ]
-}
-```
-
-### 7. Optional: LoRA Fine-tuning
-
-**When to fine-tune**:
-
-- You have 5,000+ high-quality pairs
-- RAG alone doesn't capture your style
-- You want to reduce latency (no retrieval step)
-
-**Fine-tuning command**:
-
-```bash
-mlx_lm.lora \
-    --model mlx-community/Qwen2.5-1.5B-Instruct-4bit \
-    --train data/personal/category_aware/train.jsonl \
-    --valid data/personal/category_aware/valid.jsonl \
-    --batch-size 4 \
-    --lora-layers 8 \
-    --iters 1000 \
-    --learning-rate 1e-5 \
-    --output-dir models/lora/personal
-```
-
-**Using fine-tuned model**:
-
-```python
-from mlx_lm import load
-
-model, tokenizer = load(
-    "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-    adapter_path="models/lora/personal"
-)
-```
-
-## Fact Extraction Improvements
-
-### Current Limitations
-
-1. **No temporal reasoning** - "moving to Austin" vs "moved to Austin 2 years ago"
-2. **No fact expiration** - old jobs, old relationships still treated as current
-3. **Limited relationship types** - only extracts "my X Y" patterns
-4. **No implicit facts** - misses "finally got that promotion" → works at X
-
-### Recommended Enhancements
-
-1. **Add temporal markers**:
-   - Pattern: "moving to", "just moved", "lived in", "grew up in"
-   - Store: `valid_from`, `valid_until` timestamps
-
-2. **Extract implicit relationships**:
-   - "Mom says hi" → relationship: family, subject: "my mom"
-   - "Working with Sarah" → relationship: coworker
-
-3. **Fact confidence decay**:
-   - Facts older than 2 years: reduce confidence
-   - Conflicting new fact: replace old one
-
-## End-to-End Example
+### 6. Generation Pipeline
 
 ```python
 from jarvis.reply_service import get_reply_service
 
 reply_service = get_reply_service()
 
-result = reply_service.route_legacy(
-    incoming="Want to grab lunch?",
-    thread=["You: hey", "Friend: want to grab lunch?"],
-    chat_id="chat123"
+result = reply_service.generate_reply(
+    context=MessageContext(
+        message_text="Want to grab lunch?",
+        chat_id="chat123",
+    )
 )
 
-print(result["response"])  # "sure what time?"
-print(result["confidence"])  # "high"
-print(result["category"])  # "request"
+print(result.response)      # "sure what time?"
+print(result.confidence)    # 0.85
+print(result.metadata)      # {similarity_score, category, ...}
 ```
+
+**Pipeline Steps:**
+
+1. **Check health** - Can we use LLM?
+2. **Classify** - Mobilization level (not for prompt selection)
+3. **Search** - Hybrid RAG for similar examples
+4. **Build prompt** - Universal system + context + examples
+5. **Generate** - MLX inference
+6. **Log** - Persist for analysis
+
+---
+
+### 7. Template Shortcuts (Fast Path)
+
+For `acknowledge` and `closing` categories, skip LLM entirely:
+
+```python
+ACKNOWLEDGE_TEMPLATES = [
+    "ok", "sounds good", "got it", "thanks", "np",
+    "👍", "for sure", "alright", "bet", "cool"
+]
+
+CLOSING_TEMPLATES = [
+    "bye!", "see ya", "later!", "talk soon",
+    "ttyl", "peace", "catch you later", "gn"
+]
+```
+
+**Why templates work for these categories:**
+- Acknowledgments are formulaic
+- Closings are ritualistic
+- LLM would produce similar results slower
+
+---
 
 ## Performance Targets
 
-- **Classification**: < 10ms (category + mobilization)
-- **Context assembly**: < 50ms (facts + RAG)
-- **Generation**: < 200ms (Qwen 1.5B, 20 tokens)
-- **Total**: < 300ms end-to-end
+| Operation | P50 | Target |
+|-----------|-----|--------|
+| Classification | 12ms | <50ms ✅ |
+| Context search | 3ms | <50ms ✅ |
+| LLM generation | 180ms/token | <2s total ✅ |
+| **Full pipeline** | **~300ms** | **<500ms** ✅ |
+
+---
+
+## Evaluation
+
+### LLM-as-Judge
+
+We use Llama 3.3 70B (Cerebras) to evaluate reply quality:
+
+```bash
+# Run evaluation with judge
+uv run python evals/batch_eval.py --judge --input data/eval/test.jsonl
+```
+
+**Metrics:**
+- Judge Score: 0-10 (target >6.0)
+- Anti-AI Rate: % with AI-sounding phrases (target <5%)
+
+See [LLM Judge Evaluation](./research/LLM_JUDGE_EVALUATION.md) for details.
+
+### Current Baseline
+
+| Metric | Value |
+|--------|-------|
+| Judge Score (avg) | 6.27/10 |
+| Anti-AI Rate | 0% |
+| Latency | ~300ms |
+
+---
+
+## Key Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `jarvis/reply_service.py` | Main reply generation service |
+| `jarvis/prompts/constants.py` | Universal prompt, templates |
+| `jarvis/prompts/builders.py` | Prompt assembly logic |
+| `jarvis/search/hybrid_search.py` | RAG search |
+| `evals/ablation_categorization.py` | Category ablation study |
+| `evals/optimize_universal_prompt.py` | Prompt optimization |
+
+---
 
 ## Next Steps
 
-1. **Validate your data quality**:
+### Immediate
 
-   ```bash
-   uv run python scripts/filter_quality_pairs.py
-   # Check quality_metrics.txt output
-   ```
+1. ✅ Removed category-specific prompts (done)
+2. ✅ Adopted universal baseline prompt (done)
+3. ✅ LLM judge operational (done)
 
-2. **Test RAG-only first**:
+### Planned Experiments
 
-   ```bash
-   # Don't fine-tune yet, just use RAG
-   # Test with 100 messages, see quality
-   ```
+See [Prompt Experiment Roadmap](./research/PROMPT_EXPERIMENT_ROADMAP.md):
 
-3. **Measure before optimizing**:
+1. **Context window optimization** - How much history is optimal?
+2. **Best-of-N enhancement** - Better candidate selection
+3. **Dynamic examples** - Retrieve similar exchanges
+4. **Temperature grid search** - Optimal sampling parameters
 
-   ```bash
-   uv run python evals/run_comparison.py
-   # Check if replies match your style
-   ```
+---
 
-4. **Consider fine-tuning only if**:
-   - RAG quality < 70% satisfaction
-   - You have 5k+ quality pairs
-   - Latency is critical (< 100ms target)
+## Related Documents
+
+- [Categorization Ablation Findings](./research/CATEGORIZATION_ABLATION_FINDINGS.md) - Why we removed categories
+- [LLM Judge Evaluation](./research/LLM_JUDGE_EVALUATION.md) - Evaluation framework
+- [Prompt Experiment Roadmap](./research/PROMPT_EXPERIMENT_ROADMAP.md) - Ongoing experiments
+- [HOW_IT_WORKS.md](./HOW_IT_WORKS.md) - Overall system architecture

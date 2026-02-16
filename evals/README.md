@@ -80,9 +80,9 @@ defaultTest:
 Set your API key:
 
 ```bash
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=<your_api_key>
 # or
-export ANTHROPIC_API_KEY=sk-...
+export ANTHROPIC_API_KEY=<your_api_key>
 ```
 
 ## Tips

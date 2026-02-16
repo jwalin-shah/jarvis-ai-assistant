@@ -5,7 +5,7 @@
  * mock data, allowing tests to run without the actual backend.
  */
 
-import { Page, Route } from '@playwright/test';
+import { Page, Route } from "@playwright/test";
 import {
   mockConversations,
   mockDraftReplyResponse,
@@ -24,9 +24,9 @@ import {
   mockPriorityInbox,
   generateLargeConversationList,
   generateLargeMessageList,
-} from './api-data';
+} from "./api-data";
 
-const API_BASE = 'http://localhost:8742';
+const API_BASE = "http://localhost:8742";
 
 /**
  * Setup all API mocks for a page.
@@ -37,7 +37,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/health`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockHealthResponse),
     });
   });
@@ -46,17 +46,17 @@ export async function setupApiMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockPingResponse),
     });
   });
 
   // Conversations list
   await page.route(`${API_BASE}/conversations`, async (route: Route) => {
-    if (route.request().method() === 'GET') {
+    if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({ conversations: mockConversations, total: mockConversations.length }),
       });
     } else {
@@ -65,55 +65,62 @@ export async function setupApiMocks(page: Page): Promise<void> {
   });
 
   // Individual conversation
-  await page.route(`${API_BASE}/conversations/chat-*`, async (route: Route) => {
-    const url = route.request().url();
+  await page.route(
+    `${API_BASE}/conversations/chat-*`,
+    async (route: Route) => {
+      const url = route.request().url();
 
-    // Check if it's a messages request
-    if (url.includes('/messages')) {
-      const chatId = url.split('/conversations/')[1].split('/')[0];
-      const messages =
-        chatId === 'chat-1' ? mockMessagesChat1 : chatId === 'chat-3' ? mockMessagesChat3 : [];
+      // Check if it's a messages request
+      if (url.includes("/messages")) {
+        const chatId = url.split("/conversations/")[1].split("/")[0];
+        const messages =
+          chatId === "chat-1"
+            ? mockMessagesChat1
+            : chatId === "chat-3"
+              ? mockMessagesChat3
+              : [];
 
-      // Return correct response format: { messages, chat_id, total }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          messages,
-          chat_id: chatId,
-          total: messages.length,
-        }),
-      });
-    } else {
-      // It's a conversation detail request
-      const chatId = url.split('/conversations/')[1].split('?')[0];
-      const conversation = mockConversations.find((c) => c.chat_id === chatId);
-
-      if (conversation) {
+        // Return correct response format: { messages, chat_id, total }
         await route.fulfill({
           status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(conversation),
+          contentType: "application/json",
+          body: JSON.stringify({
+            messages,
+            chat_id: chatId,
+            total: messages.length,
+          }),
         });
       } else {
-        await route.fulfill({
-          status: 404,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'Not found', detail: 'Conversation not found' }),
-        });
+        // It's a conversation detail request
+        const chatId = url.split("/conversations/")[1].split("?")[0];
+        const conversation = mockConversations.find((c) => c.chat_id === chatId);
+
+        if (conversation) {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(conversation),
+          });
+        } else {
+          await route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Not found", detail: "Conversation not found" }),
+          });
+        }
       }
     }
-  });
+  );
 
   // Settings endpoints
   await page.route(`${API_BASE}/settings`, async (route: Route) => {
-    if (route.request().method() === 'GET') {
+    if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify(mockSettingsResponse),
       });
-    } else if (route.request().method() === 'PUT') {
+    } else if (route.request().method() === "PUT") {
       // Return the updated settings (just echo back for tests)
       const body = route.request().postDataJSON();
       const updated = {
@@ -124,7 +131,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
       };
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify(updated),
       });
     } else {
@@ -136,52 +143,61 @@ export async function setupApiMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/settings/models`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockModels),
     });
   });
 
   // Model download
-  await page.route(`${API_BASE}/settings/models/*/download`, async (route: Route) => {
-    const url = route.request().url();
-    const modelId = url.split('/models/')[1].split('/download')[0];
+  await page.route(
+    `${API_BASE}/settings/models/*/download`,
+    async (route: Route) => {
+      const url = route.request().url();
+      const modelId = url.split("/models/")[1].split("/download")[0];
 
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        model_id: modelId,
-        status: 'completed',
-        progress: 100,
-        error: null,
-      }),
-    });
-  });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          model_id: modelId,
+          status: "completed",
+          progress: 100,
+          error: null,
+        }),
+      });
+    }
+  );
 
   // Model activate
-  await page.route(`${API_BASE}/settings/models/*/activate`, async (route: Route) => {
-    const url = route.request().url();
-    const modelId = url.split('/models/')[1].split('/activate')[0];
+  await page.route(
+    `${API_BASE}/settings/models/*/activate`,
+    async (route: Route) => {
+      const url = route.request().url();
+      const modelId = url.split("/models/")[1].split("/activate")[0];
 
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        success: true,
-        model_id: modelId,
-        error: null,
-      }),
-    });
-  });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          model_id: modelId,
+          error: null,
+        }),
+      });
+    }
+  );
 
   // Draft replies endpoint
-  await page.route(`${API_BASE}/conversations/*/drafts`, async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(mockDraftReplyResponse),
-    });
-  });
+  await page.route(
+    `${API_BASE}/conversations/*/drafts`,
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(mockDraftReplyResponse),
+      });
+    }
+  );
 }
 
 /**
@@ -193,27 +209,27 @@ export async function setupApiMocksWithErrors(page: Page): Promise<void> {
   await page.route(`${API_BASE}/health`, async (route: Route) => {
     await route.fulfill({
       status: 500,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify({
-        error: 'Internal Server Error',
-        detail: 'Failed to check system health',
+        error: "Internal Server Error",
+        detail: "Failed to check system health",
       }),
     });
   });
 
   // Ping endpoint returns error (simulates backend down)
   await page.route(`${API_BASE}/`, async (route: Route) => {
-    await route.abort('connectionrefused');
+    await route.abort("connectionrefused");
   });
 
   // Conversations list returns error
   await page.route(`${API_BASE}/conversations`, async (route: Route) => {
     await route.fulfill({
       status: 500,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify({
-        error: 'Database Error',
-        detail: 'Failed to fetch conversations',
+        error: "Database Error",
+        detail: "Failed to fetch conversations",
       }),
     });
   });
@@ -225,7 +241,7 @@ export async function setupApiMocksWithErrors(page: Page): Promise<void> {
 export async function setupDisconnectedMocks(page: Page): Promise<void> {
   // All requests fail with connection refused
   await page.route(`${API_BASE}/**`, async (route: Route) => {
-    await route.abort('connectionrefused');
+    await route.abort("connectionrefused");
   });
 }
 
@@ -238,7 +254,7 @@ export async function setupSocketMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/v2/conversations/*/replies`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockSmartReplies),
     });
   });
@@ -247,7 +263,7 @@ export async function setupSocketMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/suggestions`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockSmartReplies),
     });
   });
@@ -256,7 +272,7 @@ export async function setupSocketMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/drafts/summarize`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockSummaryResponse),
     });
   });
@@ -265,7 +281,7 @@ export async function setupSocketMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/conversations/search`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockSearchResults),
     });
   });
@@ -274,25 +290,25 @@ export async function setupSocketMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/search/semantic`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockSemanticSearchResults),
     });
   });
 
   // Templates endpoints
   await page.route(`${API_BASE}/templates`, async (route: Route) => {
-    if (route.request().method() === 'GET') {
+    if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify(mockTemplates),
       });
-    } else if (route.request().method() === 'POST') {
+    } else if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({ id: 'template-new', ...body }),
+        contentType: "application/json",
+        body: JSON.stringify({ id: "template-new", ...body }),
       });
     } else {
       await route.continue();
@@ -303,7 +319,7 @@ export async function setupSocketMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/priority`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockPriorityInbox),
     });
   });
@@ -312,7 +328,7 @@ export async function setupSocketMocks(page: Page): Promise<void> {
   await page.route(`${API_BASE}/digest/*`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockDigestResponse),
     });
   });
@@ -327,7 +343,7 @@ export async function setupSlowApiMocks(page: Page, delayMs: number = 500): Prom
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockHealthResponse),
     });
   });
@@ -337,18 +353,18 @@ export async function setupSlowApiMocks(page: Page, delayMs: number = 500): Prom
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockPingResponse),
     });
   });
 
   // Conversations list with delay
   await page.route(`${API_BASE}/conversations`, async (route: Route) => {
-    if (route.request().method() === 'GET') {
+    if (route.request().method() === "GET") {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify(mockConversations),
       });
     } else {
@@ -361,7 +377,7 @@ export async function setupSlowApiMocks(page: Page, delayMs: number = 500): Prom
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockMessagesChat1),
     });
   });
@@ -371,7 +387,7 @@ export async function setupSlowApiMocks(page: Page, delayMs: number = 500): Prom
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockSettingsResponse),
     });
   });
@@ -381,7 +397,7 @@ export async function setupSlowApiMocks(page: Page, delayMs: number = 500): Prom
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockModels),
     });
   });
@@ -397,7 +413,7 @@ export async function setupLargeDataMocks(page: Page, count: number = 1000): Pro
   await page.route(`${API_BASE}/health`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockHealthResponse),
     });
   });
@@ -406,17 +422,17 @@ export async function setupLargeDataMocks(page: Page, count: number = 1000): Pro
   await page.route(`${API_BASE}/`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockPingResponse),
     });
   });
 
   // Large conversations list
   await page.route(`${API_BASE}/conversations`, async (route: Route) => {
-    if (route.request().method() === 'GET') {
+    if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify(largeConversations),
       });
     } else {
@@ -429,7 +445,7 @@ export async function setupLargeDataMocks(page: Page, count: number = 1000): Pro
     const largeMessages = generateLargeMessageList(count);
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(largeMessages),
     });
   });
@@ -438,7 +454,7 @@ export async function setupLargeDataMocks(page: Page, count: number = 1000): Pro
   await page.route(`${API_BASE}/settings`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockSettingsResponse),
     });
   });
@@ -447,7 +463,7 @@ export async function setupLargeDataMocks(page: Page, count: number = 1000): Pro
   await page.route(`${API_BASE}/settings/models`, async (route: Route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify(mockModels),
     });
   });
@@ -469,10 +485,10 @@ export async function setupIntermittentFailureMocks(
     if (shouldFail) {
       await route.fulfill({
         status: 500,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({
-          error: 'Internal Server Error',
-          detail: 'Simulated intermittent failure',
+          error: "Internal Server Error",
+          detail: "Simulated intermittent failure",
         }),
       });
     } else {

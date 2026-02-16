@@ -250,11 +250,25 @@ class TestTemplateMatcher:
         """Mock _get_sentence_model to return a fake embedder."""
         mock = MagicMock()
 
-        # Default: return random normalized embeddings
+        # Default: return deterministic normalized embeddings based on text hash
+        # This ensures tests are reproducible and avoids MagicMock comparison issues
         def fake_encode(texts, normalize=True):
             if isinstance(texts, str):
                 texts = [texts]
-            return np.random.randn(len(texts), 384).astype(np.float32)
+
+            embeddings = []
+            for text in texts:
+                # Use hash for deterministic embeddings
+                seed = hash(text) % 2**32
+                rng = np.random.default_rng(seed)
+                emb = rng.standard_normal(384).astype(np.float32)
+                if normalize:
+                    norm = np.linalg.norm(emb)
+                    if norm > 0:
+                        emb = emb / norm
+                embeddings.append(emb)
+
+            return np.array(embeddings, dtype=np.float32)
 
         mock.encode.side_effect = fake_encode
         mock.is_available.return_value = True

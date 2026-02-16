@@ -4,9 +4,9 @@
  * Keeping these values in one place prevents browser/desktop drift.
  */
 
-const DEFAULT_API_HTTP = 'http://127.0.0.1:8742';
-const DEFAULT_API_WS = 'ws://127.0.0.1:8742';
-const DEFAULT_SOCKET_RPC_WS = 'ws://127.0.0.1:8743';
+const DEFAULT_API_HTTP = "http://127.0.0.1:8742";
+const DEFAULT_API_WS = "ws://127.0.0.1:8742";
+const DEFAULT_SOCKET_RPC_WS = "ws://127.0.0.1:8743";
 
 function normalizedOrigin(url: string, fallback: string): string {
   try {
@@ -25,8 +25,6 @@ export function getApiWebSocketBaseUrl(): string {
 }
 
 export function getSocketRpcWebSocketUrl(): string {
-  return normalizedOrigin(
-    import.meta.env.VITE_SOCKET_WS_URL || DEFAULT_SOCKET_RPC_WS,
-    DEFAULT_SOCKET_RPC_WS
-  );
+  return normalizedOrigin(import.meta.env.VITE_SOCKET_WS_URL || DEFAULT_SOCKET_RPC_WS, DEFAULT_SOCKET_RPC_WS);
 }
+

@@ -53,7 +53,7 @@ class TestQuantizeEmbedding:
     def test_normalized_range(self):
         """Normalized [-1, 1] embedding maps to int8 [-127, 127]."""
         emb = np.array([1.0, -1.0, 0.0, 0.5], dtype=np.float32)
-        result = VecSearcher._quantize_embedding(None, emb)  # type: ignore[arg-type]
+        result = VecSearcher._quantize_embedding(emb)
         arr = np.frombuffer(result, dtype=np.int8)
         assert arr[0] == 127
         assert arr[1] == -127

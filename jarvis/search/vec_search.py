@@ -26,6 +26,7 @@ import json
 import logging
 import threading
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -180,7 +181,7 @@ class VecSearcher:
             logger.error("Failed to index message %s: %s", message.id, e)
             return False
 
-    def index_messages(self, messages: list[Message], dtype: np.dtype = np.float32) -> int:
+    def index_messages(self, messages: list[Message], dtype: Any = np.float32) -> int:
         """Index multiple messages efficiently.
 
         Args:
@@ -255,7 +256,8 @@ class VecSearcher:
 
         return count
 
-    def _quantize_embedding(self, embedding: np.ndarray) -> bytes:
+    @staticmethod
+    def _quantize_embedding(embedding: np.ndarray) -> bytes:
         """Quantize float32 embedding to int8 for sqlite-vec storage.
 
         Args:

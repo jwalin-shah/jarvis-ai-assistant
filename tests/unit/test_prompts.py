@@ -93,10 +93,7 @@ class TestPromptTemplates:
         """Verify reply template is properly defined."""
         assert REPLY_PROMPT.name == "reply_generation"
         assert "{context}" in REPLY_PROMPT.template
-        assert "{last_message}" in REPLY_PROMPT.template
-        assert "{tone}" in REPLY_PROMPT.template
-        # REPLY_PROMPT uses {style_instructions}, {custom_instruction}, {context},
-        # {last_message}, {tone}
+        # REPLY_PROMPT uses a simple format: {context}\nMe:
 
     def test_summary_template_defined(self):
         """Verify summary template is properly defined."""
@@ -111,10 +108,11 @@ class TestPromptTemplates:
         # SEARCH_PROMPT uses {context}, {question}
 
     def test_templates_have_system_messages(self):
-        """Verify all templates have system messages."""
-        assert REPLY_PROMPT.system_message
+        """Verify templates that need system messages have them."""
+        # SUMMARY and SEARCH prompts use XML-style system messages
         assert SUMMARY_PROMPT.system_message
         assert SEARCH_PROMPT.system_message
+        # REPLY_PROMPT uses simple format without separate system message
 
     def test_templates_have_max_output_tokens(self):
         """Verify all templates have max output tokens defined."""
@@ -211,35 +209,41 @@ class TestBuildReplyPrompt:
 
         result = build_reply_prompt(context, last_message)
 
-        assert "<conversation>" in result
+        # Simple format: context + last_message + "\nMe: "
         assert context in result
-        assert "<last_message>" in result
         assert last_message in result
-        assert "<reply>" in result
+        assert result.endswith("\nMe: ")
 
     def test_build_reply_prompt_casual_tone(self):
-        """Test reply prompt with casual tone."""
+        """Test reply prompt with casual tone (tone is ignored in simple format)."""
         result = build_reply_prompt(context="Hey there", last_message="Hey there", tone="casual")
 
-        assert "casual/friendly" in result
+        # Simple format just includes context; tone parameter is accepted but not used
+        assert "Hey there" in result
+        assert result.endswith("\nMe: ")
 
     def test_build_reply_prompt_professional_tone(self):
-        """Test reply prompt with professional tone."""
+        """Test reply prompt with professional tone (tone is ignored in simple format)."""
         result = build_reply_prompt(
             context="Meeting request", last_message="Meeting request", tone="professional"
         )
 
-        assert "professional/formal" in result
+        # Simple format just includes context; tone parameter is accepted but not used
+        assert "Meeting request" in result
+        assert result.endswith("\nMe: ")
 
     def test_build_reply_prompt_with_instruction(self):
-        """Test reply prompt with custom instruction."""
+        """Test reply prompt with custom instruction (instruction is ignored in simple format)."""
         result = build_reply_prompt(
             context="Test context",
             last_message="Test message",
             instruction="Be brief and direct",
         )
 
-        assert "Be brief and direct" in result
+        # Simple format just includes context; instruction parameter is accepted but not used
+        assert "Test context" in result
+        assert "Test message" in result
+        assert result.endswith("\nMe: ")
 
     def test_build_reply_prompt_includes_examples(self):
         """Test that reply prompt includes few-shot examples."""
@@ -248,11 +252,12 @@ class TestBuildReplyPrompt:
         # Examples are included via the style section and conversation format
 
     def test_build_reply_prompt_mixed_tone_uses_casual(self):
-        """Test that mixed tone uses casual examples."""
+        """Test that mixed tone is accepted (tone is ignored in simple format)."""
         result = build_reply_prompt(context="Test", last_message="Test", tone="mixed")
 
-        # Mixed tone should use casual examples
-        assert "casual/friendly" in result
+        # Simple format just includes context; tone parameter is accepted but not used
+        assert "Test" in result
+        assert result.endswith("\nMe: ")
 
 
 class TestBuildSummaryPrompt:
@@ -480,10 +485,10 @@ class TestPromptQuality:
             last_message="Test message",
         )
 
-        # Should have distinct sections with XML tags
-        sections = ["<system>", "<style>", "<conversation>", "<last_message>", "<reply>"]
-        for section in sections:
-            assert section in result, f"Missing section: {section}"
+        # Simple format: context + last_message + "\nMe: "
+        assert "Test context" in result
+        assert "Test message" in result
+        assert result.endswith("\nMe: ")
 
     def test_summary_prompt_has_clear_structure(self):
         """Test that summary prompt has clear, parseable structure."""
@@ -510,7 +515,9 @@ class TestPromptQuality:
         summary = build_summary_prompt(context="Test")
         search = build_search_answer_prompt(context="Test", query="Test?")
 
-        assert reply.endswith("<reply>")
+        # Reply uses simple format ending with "Me: " for continuation
+        assert reply.endswith("\nMe: ")
+        # Summary and search use XML-style markers
         assert summary.endswith("<summary>")
         assert search.endswith("<answer>")
 
@@ -522,15 +529,15 @@ class TestEdgeCases:
         """Test handling of empty context."""
         result = build_reply_prompt(context="", last_message="Hello")
 
-        # Should still produce a valid prompt
-        assert "<reply>" in result
+        # Should still produce a valid prompt ending with "Me: "
+        assert result.endswith("\nMe: ")
 
     def test_empty_last_message(self):
         """Test handling of empty last message."""
         result = build_reply_prompt(context="Context", last_message="")
 
-        # Should still produce a valid prompt
-        assert "<reply>" in result
+        # Should still produce a valid prompt ending with "Me: "
+        assert result.endswith("\nMe: ")
 
     def test_special_characters_in_context(self):
         """Test handling of special characters in context."""
@@ -554,8 +561,8 @@ class TestEdgeCases:
         long_message = "A" * 10000
         result = build_reply_prompt(context=long_message, last_message=long_message)
 
-        # Should truncate and still produce valid prompt
-        assert "<reply>" in result
+        # Should truncate and still produce valid prompt ending with "Me: "
+        assert result.endswith("\nMe: ")
 
     def test_multiline_messages(self):
         """Test handling of multiline messages."""
@@ -978,7 +985,7 @@ class TestBuildReplyPromptWithStyle:
     """Tests for build_reply_prompt with user_messages parameter."""
 
     def test_build_reply_prompt_with_user_messages(self):
-        """Test that user_messages parameter adds style instructions."""
+        """Test that user_messages parameter is accepted (ignored in simple format)."""
         context = "[10:00] John: Hey, want to grab lunch?"
         last_message = "Hey, want to grab lunch?"
         user_messages = ["yeah", "k sounds good", "lol ok"]
@@ -989,10 +996,8 @@ class TestBuildReplyPromptWithStyle:
             user_messages=user_messages,
         )
 
-        # Should include style-matching instructions
-        assert "<reply>" in result
-        # Should have style guidance since user_messages provided
-        assert "short" in result.lower() or "brief" in result.lower()
+        # Simple format just includes context; user_messages parameter is accepted but not used
+        assert result.endswith("\nMe: ")
 
     def test_build_reply_prompt_without_user_messages(self):
         """Test that prompt works without user_messages."""
@@ -1004,12 +1009,12 @@ class TestBuildReplyPromptWithStyle:
             last_message=last_message,
         )
 
-        # Should still produce valid prompt
-        assert "<reply>" in result
-        assert "<conversation>" in result
+        # Should produce valid prompt with simple format
+        assert result.endswith("\nMe: ")
+        assert context in result
 
     def test_build_reply_prompt_style_includes_length_guidance(self):
-        """Test that style analysis includes length guidance."""
+        """Test that user_messages parameter is accepted (ignored in simple format)."""
         context = "Test context"
         last_message = "Test message"
         user_messages = ["ok", "k", "yes", "yep", "sure"]
@@ -1020,8 +1025,8 @@ class TestBuildReplyPromptWithStyle:
             user_messages=user_messages,
         )
 
-        # Should have length guidance for short messages
-        assert "short" in result.lower() or "brief" in result.lower()
+        # Simple format just includes context; user_messages parameter is accepted but not used
+        assert result.endswith("\nMe: ")
 
 
 class TestTextAbbreviations:

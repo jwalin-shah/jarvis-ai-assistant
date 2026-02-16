@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import type { LayoutType } from '../../api/types';
+  import { createEventDispatcher } from "svelte";
+  import type { LayoutType } from "../../api/types";
 
   export let showLabels: boolean = true;
-  export let currentLayout: LayoutType = 'force';
+  export let currentLayout: LayoutType = "force";
   export let showFacts: boolean = false;
 
   const dispatch = createEventDispatcher<{
@@ -14,56 +14,56 @@
     changeLayout: LayoutType;
     search: string;
     filterRelationships: string[];
-    export: 'png' | 'svg' | 'json' | 'html';
+    export: "png" | "svg" | "json" | "html";
   }>();
 
-  let searchQuery = '';
+  let searchQuery = "";
   let selectedRelationships: string[] = [];
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   const layouts: { value: LayoutType; label: string }[] = [
-    { value: 'force', label: 'Force' },
-    { value: 'hierarchical', label: 'Hierarchy' },
-    { value: 'radial', label: 'Radial' },
+    { value: "force", label: "Force" },
+    { value: "hierarchical", label: "Hierarchy" },
+    { value: "radial", label: "Radial" },
   ];
 
   const relationshipTypes = [
-    'family',
-    'friend',
-    'work',
-    'acquaintance',
-    'professional',
-    'romantic',
-    'unknown',
+    "family",
+    "friend",
+    "work",
+    "acquaintance",
+    "professional",
+    "romantic",
+    "unknown",
   ];
 
   function handleSearch() {
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
-      dispatch('search', searchQuery);
+      dispatch("search", searchQuery);
     }, 200);
   }
 
   function handleLayoutChange(event: Event) {
     const target = event.target as HTMLSelectElement;
-    dispatch('changeLayout', target.value as LayoutType);
+    dispatch("changeLayout", target.value as LayoutType);
   }
 
   function toggleRelationship(type: string) {
     if (selectedRelationships.includes(type)) {
-      selectedRelationships = selectedRelationships.filter((r) => r !== type);
+      selectedRelationships = selectedRelationships.filter(r => r !== type);
     } else {
       selectedRelationships = [...selectedRelationships, type];
     }
-    dispatch('filterRelationships', selectedRelationships);
+    dispatch("filterRelationships", selectedRelationships);
   }
 
   function clearFilters() {
     selectedRelationships = [];
-    searchQuery = '';
+    searchQuery = "";
     if (searchTimer) clearTimeout(searchTimer);
-    dispatch('filterRelationships', []);
-    dispatch('search', '');
+    dispatch("filterRelationships", []);
+    dispatch("search", "");
   }
 </script>
 
@@ -77,13 +77,7 @@
         on:input={handleSearch}
       />
       {#if searchQuery}
-        <button
-          class="clear-search"
-          on:click={() => {
-            searchQuery = '';
-            handleSearch();
-          }}
-        >
+        <button class="clear-search" on:click={() => { searchQuery = ""; handleSearch(); }}>
           &times;
         </button>
       {/if}
@@ -114,54 +108,46 @@
   </div>
 
   <div class="controls-right">
-    <button class="control-btn" on:click={() => dispatch('resetZoom')} title="Reset Zoom">
+    <button class="control-btn" on:click={() => dispatch("resetZoom")} title="Reset Zoom">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-        <path
-          d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-        />
-        <path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z" />
+        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        <path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/>
       </svg>
     </button>
 
     <button
       class="control-btn"
       class:active={showLabels}
-      on:click={() => dispatch('toggleLabels')}
+      on:click={() => dispatch("toggleLabels")}
       title="Toggle Labels"
     >
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-        <path d="M9 17v-2h4v2H9zm8-10H7v2h10V7zm-4 4H7v2h6v-2z" />
+        <path d="M9 17v-2h4v2H9zm8-10H7v2h10V7zm-4 4H7v2h6v-2z"/>
       </svg>
     </button>
 
     <button
       class="control-btn"
       class:active={showFacts}
-      on:click={() => dispatch('toggleFacts')}
+      on:click={() => dispatch("toggleFacts")}
       title="Show Facts (Knowledge Graph)"
     >
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-        <path
-          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
-        />
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
       </svg>
     </button>
 
-    <button class="control-btn" on:click={() => dispatch('reheat')} title="Reheat Simulation">
+    <button class="control-btn" on:click={() => dispatch("reheat")} title="Reheat Simulation">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-        <path
-          d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
-        />
+        <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
       </svg>
     </button>
 
     <div class="divider"></div>
 
-    <button class="control-btn export" on:click={() => dispatch('export', 'png')} title="Export">
+    <button class="control-btn export" on:click={() => dispatch("export", "png")} title="Export">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-        <path
-          d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"
-        />
+        <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/>
       </svg>
     </button>
   </div>

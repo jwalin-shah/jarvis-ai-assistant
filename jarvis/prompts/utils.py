@@ -12,7 +12,10 @@ import re
 
 
 def format_examples(examples: list[FewShotExample]) -> str:
-    """Format few-shot examples for prompt inclusion, normalizing labels and stripping timestamps."""
+    """Format few-shot examples for prompt inclusion.
+
+    Normalizes labels and strips timestamps.
+    """
     formatted = []
     timestamp_re = re.compile(r"\[\d{1,2}:\d{2}\]\s*")
 

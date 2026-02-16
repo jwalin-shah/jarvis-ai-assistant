@@ -18,14 +18,17 @@ try:
 except ImportError:
     # If not in path (e.g. running as script), assume we are in root
     import os
+
     if os.getcwd() not in sys.path:
         sys.path.append(os.getcwd())
     from jarvis.topics.topic_segmenter import segment_conversation
+
     # Mock Message protocol if not importable
     try:
         from jarvis.contracts.imessage import Message
     except ImportError:
         Message = Any
+
 
 @dataclass
 class MockMessage:
@@ -60,17 +63,16 @@ class MockMessage:
     message_action_type: int = 0
     message_source: int = 0
 
+
 def test_segment_conversation_drifts():
     # Setup messages
     n = 5
     messages = []
     start_date = datetime.now()
     for i in range(n):
-        messages.append(MockMessage(
-            id=i,
-            text=f"Message {i}",
-            date=start_date + timedelta(minutes=i)
-        ))
+        messages.append(
+            MockMessage(id=i, text=f"Message {i}", date=start_date + timedelta(minutes=i))
+        )
 
     # Setup embeddings
     # v0, v1, v2 are aligned (high sim)
@@ -78,9 +80,9 @@ def test_segment_conversation_drifts():
     # v4 is None
 
     v0 = np.array([1.0, 0.0], dtype=np.float32)
-    v1 = np.array([0.9, 0.1], dtype=np.float32) # Sim ~0.99
-    v2 = np.array([1.0, 0.0], dtype=np.float32) # Sim ~0.99
-    v3 = np.array([0.0, 1.0], dtype=np.float32) # Sim 0.0 vs v2
+    v1 = np.array([0.9, 0.1], dtype=np.float32)  # Sim ~0.99
+    v2 = np.array([1.0, 0.0], dtype=np.float32)  # Sim ~0.99
+    v3 = np.array([0.0, 1.0], dtype=np.float32)  # Sim 0.0 vs v2
     v4 = None
 
     embeddings = [v0, v1, v2, v3, v4]
@@ -91,12 +93,13 @@ def test_segment_conversation_drifts():
     # i=3 (v2, v3): Sim 0.0. Drift 1.0
     # i=4 (v3, v4): v4 is None. Skip.
 
-    with patch('jarvis.topics.utils.prepare_messages_for_segmentation') as mock_prep, \
-         patch('jarvis.topics.utils.get_embeddings_for_segmentation') as mock_get_embs, \
-         patch('jarvis.topics.entity_anchor.get_tracker') as mock_get_tracker, \
-         patch('jarvis.topics.topic_segmenter._compute_segment_metadata'), \
-         patch('jarvis.topics.topic_segmenter._get_segmentation_config') as mock_config:
-
+    with (
+        patch("jarvis.topics.utils.prepare_messages_for_segmentation") as mock_prep,
+        patch("jarvis.topics.utils.get_embeddings_for_segmentation") as mock_get_embs,
+        patch("jarvis.topics.entity_anchor.get_tracker") as mock_get_tracker,
+        patch("jarvis.topics.topic_segmenter._compute_segment_metadata"),
+        patch("jarvis.topics.topic_segmenter._get_segmentation_config") as mock_config,
+    ):
         mock_prep.return_value = (messages, ["text"] * n)
         mock_get_embs.return_value = embeddings
 
@@ -128,6 +131,7 @@ def test_segment_conversation_drifts():
         assert len(segments[1].messages) == 1
 
         print("Verification passed!")
+
 
 if __name__ == "__main__":
     test_segment_conversation_drifts()

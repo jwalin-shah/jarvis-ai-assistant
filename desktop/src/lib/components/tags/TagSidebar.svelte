@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Tag, SmartFolder } from '../../api/types';
-  import { createEventDispatcher } from 'svelte';
+  import type { Tag, SmartFolder } from "../../api/types";
+  import { createEventDispatcher } from "svelte";
 
   export let tags: Tag[] = [];
   export let smartFolders: SmartFolder[] = [];
@@ -17,7 +17,7 @@
     editFolder: SmartFolder;
   }>();
 
-  let searchQuery = '';
+  let searchQuery = "";
   let showAllTags = false;
 
   // Organize tags into hierarchy
@@ -29,8 +29,8 @@
           t.aliases.some((a: string) => a.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : showAllTags
-      ? tags
-      : rootTags.slice(0, 10);
+    ? tags
+    : rootTags.slice(0, 10);
 
   $: defaultFolders = smartFolders.filter((f) => f.is_default);
   $: customFolders = smartFolders.filter((f) => !f.is_default);
@@ -42,31 +42,28 @@
   function selectTag(tagId: number | null) {
     selectedTagId = tagId;
     selectedFolderId = null;
-    dispatch('selectTag', tagId);
+    dispatch("selectTag", tagId);
   }
 
   function selectFolder(folderId: number | null) {
     selectedFolderId = folderId;
     selectedTagId = null;
-    dispatch('selectFolder', folderId);
+    dispatch("selectFolder", folderId);
   }
 
   function getFolderIcon(icon: string | undefined): string {
     const icons: Record<string, string> = {
-      inbox:
-        'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
-      mail: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
-      flag: 'M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9',
-      clock: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
-      folder: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
+      inbox: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
+      mail: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+      flag: "M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9",
+      clock: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+      folder: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
     };
     return (icon && icons[icon]) || icons.folder!;
   }
 </script>
 
-<div
-  class="flex flex-col h-full bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 w-64"
->
+<div class="flex flex-col h-full bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 w-64">
   <!-- Search -->
   <div class="p-3 border-b border-gray-200 dark:border-gray-700">
     <div class="relative">
@@ -101,20 +98,11 @@
         <button
           type="button"
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          on:click={() => dispatch('createFolder')}
+          on:click={() => dispatch("createFolder")}
           title="Create folder"
         >
-          <svg
-            class="w-4 h-4"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-              clip-rule="evenodd"
-            />
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
           </svg>
         </button>
       </div>
@@ -179,19 +167,11 @@
               role="button"
               tabindex="0"
               class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              on:click|stopPropagation={() => dispatch('editFolder', folder)}
-              on:keydown|stopPropagation={(e) =>
-                (e.key === 'Enter' || e.key === ' ') && dispatch('editFolder', folder)}
+              on:click|stopPropagation={() => dispatch("editFolder", folder)}
+              on:keydown|stopPropagation={(e) => (e.key === "Enter" || e.key === " ") && dispatch("editFolder", folder)}
             >
-              <svg
-                class="w-3.5 h-3.5"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
-                />
+              <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
               </svg>
             </span>
           </button>
@@ -208,20 +188,11 @@
         <button
           type="button"
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          on:click={() => dispatch('createTag')}
+          on:click={() => dispatch("createTag")}
           title="Create tag"
         >
-          <svg
-            class="w-4 h-4"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-              clip-rule="evenodd"
-            />
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
           </svg>
         </button>
       </div>
@@ -240,17 +211,8 @@
         class:dark:hover:bg-gray-800={selectedTagId !== null || selectedFolderId !== null}
         on:click={() => selectTag(null)}
       >
-        <svg
-          class="w-4 h-4 text-gray-400"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z"
-            clip-rule="evenodd"
-          />
+        <svg class="w-4 h-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
         </svg>
         <span>All Tags</span>
       </button>
@@ -270,7 +232,9 @@
             class:dark:hover:bg-gray-800={selectedTagId !== tag.id}
             on:click={() => selectTag(tag.id)}
           >
-            <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: {tag.color};"
+            <span
+              class="w-3 h-3 rounded-full flex-shrink-0"
+              style="background-color: {tag.color};"
             ></span>
             <span class="truncate flex-1 text-left">{tag.name}</span>
             {#if tagCounts[tag.id]}
@@ -282,19 +246,11 @@
               role="button"
               tabindex="0"
               class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              on:click|stopPropagation={() => dispatch('editTag', tag)}
-              on:keydown|stopPropagation={(e) =>
-                (e.key === 'Enter' || e.key === ' ') && dispatch('editTag', tag)}
+              on:click|stopPropagation={() => dispatch("editTag", tag)}
+              on:keydown|stopPropagation={(e) => (e.key === "Enter" || e.key === " ") && dispatch("editTag", tag)}
             >
-              <svg
-                class="w-3.5 h-3.5"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
-                />
+              <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
               </svg>
             </span>
           </button>
@@ -342,9 +298,7 @@
   </div>
 
   <!-- Keyboard shortcuts hint -->
-  <div
-    class="p-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500"
-  >
+  <div class="p-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
     <span class="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">T</span> Quick tag
   </div>
 </div>

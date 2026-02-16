@@ -1,30 +1,9 @@
 # serializer version: 1
 # name: test_reply_prompt_snapshot
   '''
-  <system>
-  You are NOT an AI assistant. You are replying to a text message from your phone.
-  Just text back. No helpfulness, no formality, no assistant behavior.
-  Rules:
-  - Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
-  - Sound natural, never like an AI
-  - No phrases like "I hope this helps" or "Let me know"
-  - No formal greetings unless they use them
-  - If the message is unclear or you lack context to reply properly, respond with just "?"
-  </system>
-  
-  <style>
-  
-  be nice
-  Tone: casual/friendly
-  </style>
-  
-  <conversation>
   [10:00] John: Hello\n[10:01] Me: Hi
-  </conversation>
-  
-  <last_message>How are you?</last_message>
-  
-  <reply>
+  How are you?
+  Me: 
   '''
 # ---
 # name: test_threaded_reply_prompt_snapshot

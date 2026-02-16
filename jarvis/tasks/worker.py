@@ -206,19 +206,22 @@ class TaskWorker:
         if output_dir:
             try:
                 from pathlib import Path
+
                 # Security fix: Validate output_dir to prevent arbitrary file writes
                 # This prevents path traversal (e.g. "../") and ensures the path is valid
                 output_dir_path = validate_path(output_dir, "export output directory")
-                
+
                 # Ensure output_dir is within user home directory
                 home = Path.home().resolve()
                 try:
                     output_dir_path.relative_to(home)
                 except ValueError:
-                     # Allow /tmp in debug/test modes if needed, but for now strict
-                     # Check if we are in a test environment (optional, but good for local dev)
-                     # For security, we strictly enforce home directory.
-                     raise ValueError(f"Export directory must be within user home ({home}): {output_dir_path}")
+                    # Allow /tmp in debug/test modes if needed, but for now strict
+                    # Check if we are in a test environment (optional, but good for local dev)
+                    # For security, we strictly enforce home directory.
+                    raise ValueError(
+                        f"Export directory must be within user home ({home}): {output_dir_path}"
+                    )
 
                 # Create directory if it doesn't exist
                 output_dir_path.mkdir(parents=True, exist_ok=True)
@@ -446,6 +449,7 @@ class TaskWorker:
                         relationship_profile=context.contact_profile,
                         contact_facts=context.contact_facts,
                         relationship_graph=context.relationship_graph,
+                        auto_context=context.auto_context,
                         instruction=instruction,
                     )
 

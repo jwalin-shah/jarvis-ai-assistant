@@ -20,9 +20,10 @@ struct WindowState {
 }
 
 fn window_state_path() -> std::path::PathBuf {
-    const ENV_HOME: &str = "HOME";
-    let home = std::env::var(ENV_HOME).map(std::path::PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
-    home.join(".jarvis").join("window-state.json")
+    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+    std::path::PathBuf::from(home)
+        .join(".jarvis")
+        .join("window-state.json")
 }
 
 fn load_window_state() -> Option<WindowState> {
@@ -58,9 +59,8 @@ fn update_tray_badge(app: tauri::AppHandle, count: u32) {
 /// Returns paths to AddressBook-v22.abcddb files that exist.
 #[tauri::command]
 fn list_addressbook_sources() -> Vec<String> {
-    const ENV_HOME: &str = "HOME";
-    let home = std::env::var(ENV_HOME).map(std::path::PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
-    let sources_dir = home
+    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+    let sources_dir = std::path::PathBuf::from(&home)
         .join("Library")
         .join("Application Support")
         .join("AddressBook")
@@ -69,7 +69,7 @@ fn list_addressbook_sources() -> Vec<String> {
     let mut paths = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&sources_dir) {
         for entry in entries.flatten() {
-            if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                 let db_path = entry.path().join("AddressBook-v22.abcddb");
                 if db_path.exists() {
                     if let Some(path_str) = db_path.to_str() {
@@ -110,7 +110,8 @@ pub fn run() {
             tray::setup_tray(app)?;
 
             // Auto-launch backend socket server
-            tauri::async_runtime::spawn(backend::ensure_backend_running(app.handle().clone()));
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(backend::ensure_backend_running(handle));
 
             // Get the main window
             if let Some(window) = app.get_webview_window("main") {

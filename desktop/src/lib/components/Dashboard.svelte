@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { healthStore, fetchHealth } from '../stores/health';
-  import { conversationsStore } from '../stores/conversations.svelte';
+  import { onMount, onDestroy } from "svelte";
+  import { healthStore, fetchHealth } from "../stores/health";
+  import { conversationsStore } from "../stores/conversations.svelte";
   import {
     metricsStore,
     startMetricsPolling,
     stopMetricsPolling,
     type MetricsRequest,
-  } from '../stores/metrics';
+  } from "../stores/metrics";
 
-  type View = 'messages' | 'dashboard' | 'health' | 'settings' | 'templates' | 'network';
+  type View = "messages" | "dashboard" | "health" | "settings" | "templates" | "network";
   let { onNavigate = (_view: View) => {} }: { onNavigate?: (view: View) => void } = $props();
 
   onMount(() => {
@@ -22,19 +22,22 @@
   });
 
   let totalMessages = $derived(
-    conversationsStore.conversations.reduce((sum, c) => sum + c.message_count, 0)
+    conversationsStore.conversations.reduce(
+      (sum, c) => sum + c.message_count,
+      0
+    )
   );
 
   function formatTimestamp(ts: number): string {
     return new Date(ts * 1000).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
     });
   }
 
   function formatLatency(ms: number): string {
-    if (ms < 1) return '<1ms';
+    if (ms < 1) return "<1ms";
     if (ms < 1000) return `${Math.round(ms)}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
   }
@@ -52,16 +55,16 @@
 
   // Phase colors for latency breakdown bars
   const phaseColors: Record<string, string> = {
-    embedding: '#007aff',
-    search: '#5856d6',
-    generate: '#34c759',
-    total: '#ff9500',
-    route: '#ff3b30',
-    classify: '#af52de',
+    embedding: "#007aff",
+    search: "#5856d6",
+    generate: "#34c759",
+    total: "#ff9500",
+    route: "#ff3b30",
+    classify: "#af52de",
   };
 
   function getPhaseColor(phase: string): string {
-    return phaseColors[phase] || '#8e8e93';
+    return phaseColors[phase] || "#8e8e93";
   }
 </script>
 
@@ -70,7 +73,7 @@
 
   <!-- Status cards -->
   <div class="cards">
-    <button class="card" onclick={() => onNavigate('messages')}>
+    <button class="card" onclick={() => onNavigate("messages")}>
       <div class="card-icon messages">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -83,16 +86,16 @@
       </div>
     </button>
 
-    <button class="card" onclick={() => onNavigate('health')}>
-      <div class="card-icon health" class:healthy={$healthStore.data?.status === 'healthy'}>
+    <button class="card" onclick={() => onNavigate("health")}>
+      <div class="card-icon health" class:healthy={$healthStore.data?.status === "healthy"}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
       </div>
       <div class="card-content">
         <h3>System Health</h3>
-        <p class="stat" class:healthy={$healthStore.data?.status === 'healthy'}>
-          {$healthStore.data?.status || 'Unknown'}
+        <p class="stat" class:healthy={$healthStore.data?.status === "healthy"}>
+          {$healthStore.data?.status || "Unknown"}
         </p>
         <p class="sub">
           {#if $healthStore.data && $healthStore.data.memory_available_gb !== null}
@@ -112,8 +115,8 @@
       </div>
       <div class="card-content">
         <h3>AI Model</h3>
-        <p class="stat">{$healthStore.data?.model_loaded ? 'Loaded' : 'Not Loaded'}</p>
-        <p class="sub">{$healthStore.data?.memory_mode || 'FULL'} mode</p>
+        <p class="stat">{$healthStore.data?.model_loaded ? "Loaded" : "Not Loaded"}</p>
+        <p class="sub">{$healthStore.data?.memory_mode || "FULL"} mode</p>
       </div>
     </div>
 
@@ -126,7 +129,7 @@
       </div>
       <div class="card-content">
         <h3>iMessage</h3>
-        <p class="stat">{$healthStore.data?.imessage_access ? 'Connected' : 'Not Connected'}</p>
+        <p class="stat">{$healthStore.data?.imessage_access ? "Connected" : "Not Connected"}</p>
         <p class="sub">
           {#if $healthStore.data?.imessage_access}
             Full Disk Access granted
@@ -176,12 +179,8 @@
           <h3>Decision Distribution</h3>
           <div class="decision-chips">
             {#each Object.entries($metricsStore.summary.decisions) as [decision, count]}
-              <span
-                class="decision-chip"
-                class:generate={decision === 'generate'}
-                class:template={decision === 'template'}
-                class:cache={decision === 'cache'}
-              >
+              <span class="decision-chip" class:generate={decision === "generate"}
+                class:template={decision === "template"} class:cache={decision === "cache"}>
                 {decision}: {count}
               </span>
             {/each}
@@ -211,12 +210,9 @@
                   <tr>
                     <td class="mono">{formatTimestamp(req.timestamp)}</td>
                     <td>
-                      <span
-                        class="badge"
-                        class:generate={req.routing_decision === 'generate'}
-                        class:template={req.routing_decision === 'template'}
-                        class:cache={req.routing_decision === 'cache'}
-                      >
+                      <span class="badge" class:generate={req.routing_decision === "generate"}
+                        class:template={req.routing_decision === "template"}
+                        class:cache={req.routing_decision === "cache"}>
                         {req.routing_decision}
                       </span>
                     </td>
@@ -230,19 +226,12 @@
                     </td>
                     <td class="mono">{formatLatency(req.total_latency_ms)}</td>
                     <td>
-                      <div
-                        class="latency-bar"
-                        title={getPhases(req.latency)
-                          .map(([p, v]) => `${p}: ${formatLatency(v)}`)
-                          .join(', ')}
-                      >
+                      <div class="latency-bar"
+                        title={getPhases(req.latency).map(([p, v]) => `${p}: ${formatLatency(v)}`).join(", ")}>
                         {#each getPhases(req.latency) as [phase, ms]}
                           <div
                             class="bar-segment"
-                            style="width: {Math.max(
-                              2,
-                              (ms / maxLatency) * 120
-                            )}px; background: {getPhaseColor(phase)};"
+                            style="width: {Math.max(2, (ms / maxLatency) * 120)}px; background: {getPhaseColor(phase)};"
                             title="{phase}: {formatLatency(ms)}"
                           ></div>
                         {/each}
@@ -424,9 +413,7 @@
   }
 
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
   }
 
   .metrics-empty {
@@ -559,7 +546,7 @@
   }
 
   .mono {
-    font-family: 'SF Mono', 'Menlo', monospace;
+    font-family: "SF Mono", "Menlo", monospace;
     font-size: 12px;
   }
 

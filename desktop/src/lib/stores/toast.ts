@@ -2,9 +2,9 @@
  * Toast notification store for user feedback
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived } from "svelte/store";
 
-export type ToastType = 'success' | 'error' | 'warning' | 'info';
+export type ToastType = "success" | "error" | "warning" | "info";
 
 export interface Toast {
   id: string;
@@ -40,14 +40,14 @@ let toastCounter = 0;
  */
 export function showToast(
   message: string,
-  options: Partial<Omit<Toast, 'id' | 'message'>> = {}
+  options: Partial<Omit<Toast, "id" | "message">> = {}
 ): string {
   const id = `toast-${++toastCounter}-${Date.now()}`;
 
   const toast: Toast = {
     id,
     message,
-    type: options.type ?? 'info',
+    type: options.type ?? "info",
     duration: options.duration ?? 4000,
     dismissible: options.dismissible ?? true,
     ...(options.description !== undefined && { description: options.description }),
@@ -91,17 +91,17 @@ export function dismissAllToasts(): void {
 
 // Convenience functions
 export const toast = {
-  success: (message: string, options?: Partial<Omit<Toast, 'id' | 'message' | 'type'>>) =>
-    showToast(message, { ...options, type: 'success' }),
+  success: (message: string, options?: Partial<Omit<Toast, "id" | "message" | "type">>) =>
+    showToast(message, { ...options, type: "success" }),
 
-  error: (message: string, options?: Partial<Omit<Toast, 'id' | 'message' | 'type'>>) =>
-    showToast(message, { ...options, type: 'error', duration: options?.duration ?? 6000 }),
+  error: (message: string, options?: Partial<Omit<Toast, "id" | "message" | "type">>) =>
+    showToast(message, { ...options, type: "error", duration: options?.duration ?? 6000 }),
 
-  warning: (message: string, options?: Partial<Omit<Toast, 'id' | 'message' | 'type'>>) =>
-    showToast(message, { ...options, type: 'warning' }),
+  warning: (message: string, options?: Partial<Omit<Toast, "id" | "message" | "type">>) =>
+    showToast(message, { ...options, type: "warning" }),
 
-  info: (message: string, options?: Partial<Omit<Toast, 'id' | 'message' | 'type'>>) =>
-    showToast(message, { ...options, type: 'info' }),
+  info: (message: string, options?: Partial<Omit<Toast, "id" | "message" | "type">>) =>
+    showToast(message, { ...options, type: "info" }),
 
   promise: async <T>(
     promise: Promise<T>,
@@ -111,20 +111,22 @@ export const toast = {
       error: string | ((err: Error) => string);
     }
   ): Promise<T> => {
-    const id = showToast(messages.loading, { type: 'info', duration: 0, dismissible: false });
+    const id = showToast(messages.loading, { type: "info", duration: 0, dismissible: false });
 
     try {
       const result = await promise;
       dismissToast(id);
-      const successMsg =
-        typeof messages.success === 'function' ? messages.success(result) : messages.success;
-      showToast(successMsg, { type: 'success' });
+      const successMsg = typeof messages.success === "function"
+        ? messages.success(result)
+        : messages.success;
+      showToast(successMsg, { type: "success" });
       return result;
     } catch (err) {
       dismissToast(id);
-      const errorMsg =
-        typeof messages.error === 'function' ? messages.error(err as Error) : messages.error;
-      showToast(errorMsg, { type: 'error' });
+      const errorMsg = typeof messages.error === "function"
+        ? messages.error(err as Error)
+        : messages.error;
+      showToast(errorMsg, { type: "error" });
       throw err;
     }
   },

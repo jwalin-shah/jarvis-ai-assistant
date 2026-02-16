@@ -1,12 +1,12 @@
-
-import unittest
-from unittest.mock import MagicMock, patch
-from pathlib import Path
-import tempfile
 import shutil
-from jarvis.tasks.models import Task, TaskType, TaskResult
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from jarvis.tasks.models import Task, TaskType
 from jarvis.tasks.worker import TaskWorker
-import integrations.imessage
+
 
 class TestSecurityIssue(unittest.TestCase):
     def setUp(self):
@@ -44,10 +44,7 @@ class TestSecurityIssue(unittest.TestCase):
         # Create task
         task = Task(
             task_type=TaskType.BATCH_EXPORT,
-            params={
-                "chat_ids": ["chat1"],
-                "output_dir": str(dangerous_dir)
-            }
+            params={"chat_ids": ["chat1"], "output_dir": str(dangerous_dir)},
         )
 
         # Execute handler directly
@@ -66,6 +63,7 @@ class TestSecurityIssue(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertTrue(len(expected_files) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()

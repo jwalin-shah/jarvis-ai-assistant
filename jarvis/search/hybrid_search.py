@@ -16,6 +16,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from jarvis.config import get_config
 from jarvis.search.bm25_search import BM25Searcher
 from jarvis.search.vec_search import VecSearchResult, get_vec_searcher
 
@@ -178,28 +179,41 @@ class HybridSearcher:
     def search(
         self,
         query: str,
-        limit: int = 5,
+        limit: int | None = None,
         rerank: bool = True,
     ) -> list[dict[str, Any]]:
         """Perform hybrid search using RRF.
 
         Args:
             query: Search query.
-            limit: Max results.
+            limit: Max results. Uses config retrieval.hybrid_search_limit if None.
             rerank: Whether to enable cross-encoder reranking in vec search.
 
         Returns:
             Ranked list of chunk dictionaries.
         """
+        if limit is None:
+            limit = get_config().retrieval.hybrid_search_limit
+
         self._ensure_initialized()
 
-        # 1. Get semantic results (top 20)
-        vec_results = self.vec_searcher.search_with_chunks_global(
-            query=query, limit=max(20, limit * 2), rerank=rerank
-        )
+        from concurrent.futures import ThreadPoolExecutor
 
-        # 2. Get keyword results (top 20)
-        bm25_results = self.bm25_searcher.search(query, limit=20)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # 1. Get semantic results (top 20) in parallel
+            f_vec = executor.submit(
+                self.vec_searcher.search_with_chunks_global,
+                query=query,
+                limit=max(20, limit * 2),
+                rerank=rerank,
+            )
+
+            # 2. Get keyword results (top 20) in parallel
+            f_bm25 = executor.submit(self.bm25_searcher.search, query, limit=20)
+
+            # Wait for both results
+            vec_results = f_vec.result()
+            bm25_results = f_bm25.result()
 
         # 3. Reciprocal Rank Fusion (RRF)
         # score = sum(1 / (k + rank))

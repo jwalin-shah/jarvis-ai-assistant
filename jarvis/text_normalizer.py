@@ -494,7 +494,7 @@ def detect_language(text: str) -> str:
         return "en"  # Default to English on any error
 
 
-def is_english(text: str, threshold: float = 0.8) -> bool:
+def is_english(text: str, threshold: float | None = None) -> bool:
     """Check if text is primarily English.
 
     Uses langdetect library with probability threshold to determine if
@@ -503,13 +503,19 @@ def is_english(text: str, threshold: float = 0.8) -> bool:
 
     Args:
         text: Text to check.
-        threshold: Minimum probability for English (default 0.8).
+        threshold: Minimum probability for English (default from config).
 
     Returns:
         True if text is primarily English, False otherwise.
     """
     if not text:
         return True
+
+    # Set default from config if not provided
+    if threshold is None:
+        from jarvis.config import get_config
+
+        threshold = get_config().text_processing.english_threshold
 
     # Short texts are often slang/abbreviations - assume English
     stripped = text.strip()

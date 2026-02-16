@@ -60,6 +60,17 @@ from jarvis.prompts.examples import (
     SUMMARY_EXAMPLES,
     THREAD_EXAMPLES,
 )
+from jarvis.prompts.generation_config import (
+    CATEGORY_CONTEXT_DEPTHS,
+    DEFAULT_CONTEXT_DEPTH,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_REPETITION_PENALTY,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TOP_K,
+    DEFAULT_TOP_P,
+    get_generation_config,
+    get_max_tokens_for_pressure,
+)
 from jarvis.prompts.rag import (
     build_prompt_from_request,
     build_rag_reply_prompt,
@@ -161,6 +172,15 @@ __all__ = [
     "format_summary_examples",
     "get_category_config",
     "get_thread_max_tokens",
+    "get_generation_config",
+    "get_max_tokens_for_pressure",
+    "DEFAULT_REPETITION_PENALTY",
+    "DEFAULT_MAX_TOKENS",
+    "DEFAULT_TEMPERATURE",
+    "DEFAULT_TOP_P",
+    "DEFAULT_TOP_K",
+    "DEFAULT_CONTEXT_DEPTH",
+    "CATEGORY_CONTEXT_DEPTHS",
     "is_within_token_limit",
     "resolve_category",
     "truncate_context",

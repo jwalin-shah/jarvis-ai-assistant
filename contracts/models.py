@@ -37,7 +37,8 @@ class GenerationRequest:
     temperature: float = 0.1
     top_p: float = 0.1
     top_k: int = 50
-    repetition_penalty: float = 1.05
+    # From jarvis.prompts.generation_config.DEFAULT_REPETITION_PENALTY
+    repetition_penalty: float = 1.15
     stop_sequences: list[str] | None = None
 
     def __post_init__(self) -> None:

@@ -1,7 +1,7 @@
 """Unit tests for PDF generator."""
 
-import sys
 import os
+import sys
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -85,13 +85,13 @@ def test_generate_simple(sample_message: Message, sample_conversation: Conversat
     """Test simple PDF generation."""
     generator = PDFGenerator()
 
-    with patch("jarvis.pdf_generator.SimpleDocTemplate") as MockDocTemplate:
-        mock_doc = MockDocTemplate.return_value
+    with patch("jarvis.pdf_generator.SimpleDocTemplate") as mock_doc_template:
+        mock_doc = mock_doc_template.return_value
 
         pdf_bytes = generator.generate([sample_message], sample_conversation)
 
         assert isinstance(pdf_bytes, bytes)
-        MockDocTemplate.assert_called_once()
+        mock_doc_template.assert_called_once()
         mock_doc.build.assert_called_once()
 
         # Verify story content was passed to build
@@ -105,11 +105,11 @@ def test_generate_with_options(sample_message: Message) -> None:
     generator = PDFGenerator()
     options = PDFExportOptions(include_attachments=False, include_reactions=False)
 
-    with patch("jarvis.pdf_generator.SimpleDocTemplate") as MockDocTemplate:
+    with patch("jarvis.pdf_generator.SimpleDocTemplate") as mock_doc_template:
         generator.generate([sample_message], options=options)
 
         # Verify call happened
-        MockDocTemplate.assert_called_once()
+        mock_doc_template.assert_called_once()
 
 
 def test_filter_by_date(sample_message: Message) -> None:
@@ -129,17 +129,15 @@ def test_filter_by_date(sample_message: Message) -> None:
     assert len(filtered) == 0
 
     # Filter include (message within range)
-    options = PDFExportOptions(
-        start_date=datetime(2022, 12, 31), end_date=datetime(2023, 1, 2)
-    )
+    options = PDFExportOptions(start_date=datetime(2022, 12, 31), end_date=datetime(2023, 1, 2))
     filtered = generator._filter_by_date([sample_message], options)
     assert len(filtered) == 1
 
 
 def test_generate_pdf_wrappers(sample_message: Message) -> None:
     """Test wrapper functions."""
-    with patch("jarvis.pdf_generator.PDFGenerator") as MockGenerator:
-        mock_instance = MockGenerator.return_value
+    with patch("jarvis.pdf_generator.PDFGenerator") as mock_generator:
+        mock_instance = mock_generator.return_value
         mock_instance.generate.return_value = b"pdf_content"
 
         # Test generate_pdf
@@ -154,16 +152,11 @@ def test_generate_pdf_wrappers(sample_message: Message) -> None:
 
 
 @patch("jarvis.pdf_generator.Path")
-def test_attachment_handling(
-    mock_path: MagicMock, sample_message: Message
-) -> None:
+def test_attachment_handling(mock_path: MagicMock, sample_message: Message) -> None:
     """Test attachment handling with mocked file system."""
     # Setup attachment
     attachment = Attachment(
-        filename="test.jpg",
-        file_path="/path/to/test.jpg",
-        mime_type="image/jpeg",
-        file_size=1000
+        filename="test.jpg", file_path="/path/to/test.jpg", mime_type="image/jpeg", file_size=1000
     )
     sample_message.attachments = [attachment]
 
@@ -175,28 +168,24 @@ def test_attachment_handling(
 
     generator = PDFGenerator()
 
-    with patch("jarvis.pdf_generator.SimpleDocTemplate") as MockDocTemplate:
+    with patch("jarvis.pdf_generator.SimpleDocTemplate") as mock_doc_template:
         generator.generate([sample_message])
 
         # Verify Image was instantiated (accessed via sys.modules mock)
         # Note: Depending on implementation details, checking exact calls on mocked modules
         # that are also patched might be tricky.
         # But we can assume if no exception was raised, it worked.
-        MockDocTemplate.assert_called()
+        mock_doc_template.assert_called()
+
 
 def test_reaction_handling(sample_message: Message) -> None:
     """Test reaction handling."""
-    reaction = Reaction(
-        type="love",
-        sender="+0987654321",
-        sender_name="Bob",
-        date=datetime.now()
-    )
+    reaction = Reaction(type="love", sender="+0987654321", sender_name="Bob", date=datetime.now())
     sample_message.reactions = [reaction]
 
     generator = PDFGenerator()
     options = PDFExportOptions(include_reactions=True)
 
-    with patch("jarvis.pdf_generator.SimpleDocTemplate") as MockDocTemplate:
+    with patch("jarvis.pdf_generator.SimpleDocTemplate") as mock_doc_template:
         generator.generate([sample_message], options=options)
-        MockDocTemplate.assert_called()
+        mock_doc_template.assert_called()

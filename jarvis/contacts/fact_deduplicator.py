@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from jarvis.config import get_config
+
 if TYPE_CHECKING:
     from jarvis.contacts.contact_profile import Fact
 
@@ -23,13 +25,19 @@ logger = logging.getLogger(__name__)
 class FactDeduplicator:
     """Deduplicates facts using semantic similarity with persistent caching."""
 
-    def __init__(self, threshold: float = 0.85) -> None:
+    def __init__(self, threshold: float | None = None) -> None:
         """Initialize deduplicator.
 
         Args:
             threshold: Semantic similarity threshold (0-1) above which
                        two facts are considered duplicates.
         """
+        if threshold is None:
+            threshold = (
+                get_config().similarity_thresholds.fact_dedup_threshold
+                if hasattr(get_config().similarity_thresholds, "fact_dedup_threshold")
+                else 0.85
+            )
         self.threshold = threshold
         self._embedder: Any | None = None
         self._cache_path = os.path.expanduser("~/.jarvis/embedding_cache.db")

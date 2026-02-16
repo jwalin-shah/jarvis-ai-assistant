@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -13,6 +14,7 @@ import numpy as np
 from contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.response_mobilization import ResponsePressure
+from jarvis.config import get_config
 from jarvis.contracts.pipeline import (
     GenerationRequest,
     GenerationResponse,
@@ -106,14 +108,15 @@ def prepare_streaming_context(
         ResponsePressure.NONE: 0.30,
     }[pressure]
 
-    if similarity < 0.5:
-        base_confidence *= 0.8
-    if example_diversity < 0.3:
-        base_confidence *= 0.9
+    config = get_config()
+    if similarity < config.similarity_thresholds.rag_min_similarity:
+        base_confidence *= config.similarity_thresholds.low_similarity_penalty
+    if example_diversity < 0.3:  # Keep 0.3 as it's not in config yet
+        base_confidence *= config.similarity_thresholds.medium_similarity_factor
 
-    if base_confidence >= 0.7:
+    if base_confidence >= config.similarity_thresholds.high_confidence:
         confidence = "high"
-    elif base_confidence >= 0.45:
+    elif base_confidence >= config.similarity_thresholds.medium_confidence:
         confidence = "medium"
     else:
         confidence = "low"
@@ -142,7 +145,6 @@ def build_generation_request(
     """Build typed generation request from routing/search context."""
     from jarvis.prompts import get_optimized_examples
 
-    incoming = context.message_text.strip()
     chat_id = context.chat_id or None
     category_name = str(classification.metadata.get("category_name", classification.category.value))
     category_config = get_category_config(category_name)
@@ -179,18 +181,23 @@ def build_generation_request(
         logger.debug("[build] Fetching context for %s...", chat_id[:12])
         t_ctx_start = time.perf_counter()
 
-        # Sequential fetching is safer for SQLite and memory-constrained systems
-        try:
-            service._fetch_contact_facts(context, chat_id)
-            logger.debug("[build] Facts fetched")
-        except Exception as e:
-            logger.warning("[build] Facts fetch failed: %s", e)
+        from concurrent.futures import ThreadPoolExecutor
 
-        try:
-            service._fetch_graph_context(context, chat_id)
-            logger.debug("[build] Graph context fetched")
-        except Exception as e:
-            logger.warning("[build] Graph fetch failed: %s", e)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # Launch both fetches in parallel
+            f_facts = executor.submit(service._fetch_contact_facts, context, chat_id)
+            f_graph = executor.submit(service._fetch_graph_context, context, chat_id)
+
+            # Wait for both to complete (with safety timeout)
+            try:
+                f_facts.result(timeout=2.0)
+            except Exception as e:
+                logger.warning("[build] Parallel facts fetch failed: %s", e)
+
+            try:
+                f_graph.result(timeout=2.0)
+            except Exception as e:
+                logger.warning("[build] Parallel graph fetch failed: %s", e)
 
         logger.debug(
             "[build] Context fetching took %.1fms", (time.perf_counter() - t_ctx_start) * 1000
@@ -204,6 +211,11 @@ def build_generation_request(
         category_config,
         classification,
     )
+
+    # Personalization: explicitly mention the contact name in the instruction
+    if cname and cname != "them":
+        personalization = f" You are replying to {cname}."
+        instruction = (instruction or "") + personalization
 
     # Add guidance for follow-ups if last message was from Me
     last_is_from_me = context.is_from_me
@@ -219,7 +231,8 @@ def build_generation_request(
     optimized_examples = get_optimized_examples(category_name)
     category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
 
-    top_results = search_results[:3]
+    config = get_config()
+    top_results = search_results[: config.retrieval.top_k_rag]
     similar_exchanges = [
         (str(r.get("context_text", "")), str(r.get("reply_text", ""))) for r in top_results
     ]
@@ -243,7 +256,7 @@ def build_generation_request(
         embedder=cached_embedder,
         rerank_scores=all_rerank_scores,
     )
-    all_exchanges = all_exchanges[:5]
+    all_exchanges = all_exchanges[: config.retrieval.top_k_examples]
     logger.debug("[build] Dedupe took %.1fms", (time.perf_counter() - t_dedupe_start) * 1000)
 
     logger.info(
@@ -418,48 +431,102 @@ def generate_llm_reply(
     try:
         model_request = to_model_generation_request(service, request)
         final_prompt = model_request.prompt
-        logger.info(
-            "[reply] Prompt built (%d chars), RAG docs=%d, examples=%d",
-            len(final_prompt),
-            len(request.retrieved_docs),
-            len(request.few_shot_examples),
-        )
-        response = service.generator.generate(model_request)
-        text = response.text.strip()
 
-        logger.info(
-            "[reply] LLM response (%d chars, %d tokens): %r",
-            len(text),
-            response.tokens_used,
-            text[:120],
-        )
-        logger.info(
-            "[reply] Generation time: %.1fms, model=%s",
-            response.generation_time_ms,
-            response.model_name,
-        )
+        # --- Best of N Generation ---
+        # Generate 2 candidates with different temperatures to explore style options
+        # LFM models often prefer lower temperatures (0.1-0.3) for stability.
+        candidates = []
+        temperatures = [0.1, 0.3]
 
-        # Strip XML tags and other artifacts that leaked through
-        if "</reply>" in text:
-            text = text.split("</reply>")[0].strip()
+        for temp in temperatures:
+            # Clone request with specific temp
+            variant_req = model_request
+            variant_req.temperature = temp
+            # Ensure repetition penalty is set if not already
+            # Use centralized default if not set
+            if not variant_req.repetition_penalty:
+                from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
 
-        for tag in [
-            "(Note:",
-            "Note:",
-            "[Note:",
-            "<system>",
-            "<conversation>",
-            "<facts>",
-            "<examples>",
-            "<style",
-            "<relationships>",
-        ]:
-            if tag in text:
-                text = text.split(tag)[0].strip()
+                variant_req.repetition_penalty = DEFAULT_REPETITION_PENALTY
 
-        # Strip trailing punctuation if it looks like the model was cut off
-        if text.endswith((":", "-", "(")):
-            text = text[:-1].strip()
+            response = service.generator.generate(variant_req)
+            text = response.text.strip()
+
+            # Basic cleanup
+            if "</reply>" in text:
+                text = text.split("</reply>")[0].strip()
+
+            for tag in ["(Note:", "Note:", "<system>", "<style", "[lowercase]"]:
+                if tag in text:
+                    text = text.split(tag)[0].strip()
+
+            if text:
+                candidates.append(text)
+
+        if not candidates:
+            return GenerationResponse(
+                response="...",
+                confidence=0.1,
+                metadata={"reason": "empty_candidates"},
+            )
+
+        # --- Heuristic Reranking ---
+        # Prefer: shorter, lowercase, fewer emojis (unless style dictates otherwise)
+        # Penalize: hallucinated names/entities not in context
+        best_candidate = candidates[0]
+        best_score = -float("inf")
+
+        # Gather context tokens for hallucination check
+        cname = str(request.context.metadata.get("contact_name", "them"))
+        context_text = (incoming + " " + " ".join(thread or []) + " " + cname).lower()
+        context_tokens = set(re.findall(r"\w+", context_text))
+
+        for cand in candidates:
+            score = 0.0
+
+            # Length penalty (prefer concise)
+            words = cand.split()
+            num_words = len(words)
+            if num_words > 20:
+                score -= 1.0
+            config = get_config()
+            if num_words < config.text_processing.short_reply_word_threshold:
+                score += config.scoring_weights.short_reply_bonus
+
+            # Lowercase bonus (casual)
+            if cand.islower():
+                score += 1.0
+
+            # Emoji penalty (unless very short)
+            emojis = len(re.findall(r"[^\w\s,.]", cand))
+            if emojis > 1 and num_words > config.text_processing.emoji_penalty_word_threshold:
+                score -= config.scoring_weights.emoji_penalty
+
+            # Hallucination Guard: Check for capitalized words (potential names) not in context
+            # We ignore common starting words or 'I', 'I'm' etc via simple length/stoplist check
+            potential_names = [w for w in words if w[0].isupper() and len(w) > 1]
+            hallucination_penalty = 0.0
+            for name in potential_names:
+                clean_name = re.sub(r"[^\w]", "", name).lower()
+                common_words = ["hey", "yeah", "sure", "okay", "wow", "lol", "omg"]
+                if clean_name not in context_tokens and clean_name not in common_words:
+                    hallucination_penalty += 2.0  # Heavy penalty for invented names
+
+            # Sentiment Mismatch Guard
+            sad_emojis = ["😢", "😭", "😔", "💔", "☹️"]
+            has_sad_response = any(e in cand for e in sad_emojis)
+            has_sad_input = any(e in incoming for e in sad_emojis)
+            if has_sad_response and not has_sad_input:
+                hallucination_penalty += 1.5
+
+            score -= hallucination_penalty
+
+            if score > best_score:
+                best_score = score
+                best_candidate = cand
+
+        text = best_candidate
+        logger.info("[reply] Selected candidate: %r (score=%.1f)", text, best_score)
 
         if text.lower() in UNCERTAIN_SIGNALS:
             return GenerationResponse(
@@ -502,12 +569,17 @@ def generate_llm_reply(
             example_diversity,
         )
 
+        config = get_config()
         similar_triggers = [
             str(row.get("context_text", ""))
-            for row in search_results[:3]
+            for row in search_results[: config.retrieval.top_k_rag]
             if row.get("context_text")
         ]
-        used_docs = [doc.content for doc in request.retrieved_docs[:3] if doc.content]
+        used_docs = [
+            doc.content
+            for doc in request.retrieved_docs[: config.retrieval.top_k_rag]
+            if doc.content
+        ]
 
         return GenerationResponse(
             response=text,

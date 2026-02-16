@@ -1,13 +1,13 @@
-
-import unittest
+import os
 import shutil
 import tempfile
-import os
+import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # Import the module under test
-from integrations.imessage.sender import _validate_file_path, IMessageSender
+from integrations.imessage.sender import IMessageSender, _validate_file_path
+
 
 class TestIMessageSenderSecurity(unittest.TestCase):
     def setUp(self):
@@ -80,14 +80,14 @@ class TestIMessageSenderSecurity(unittest.TestCase):
             self.home / ".bashrc",
             self.home / "other_folder" / "file.txt",
             Path("/etc/passwd"),  # System file
-            Path("/usr/bin/python3"), # System binary
+            Path("/usr/bin/python3"),  # System binary
         ]
 
         for file_path in denied_files:
             if str(file_path).startswith("/etc") or str(file_path).startswith("/usr"):
                 # System files exist, check directly
                 if file_path.exists():
-                     self.assertFalse(_validate_file_path(file_path), f"Should deny {file_path}")
+                    self.assertFalse(_validate_file_path(file_path), f"Should deny {file_path}")
             else:
                 self.create_file(file_path)
                 self.assertFalse(_validate_file_path(file_path), f"Should deny {file_path}")
@@ -146,6 +146,7 @@ class TestIMessageSenderSecurity(unittest.TestCase):
         result = sender.send_attachment(allowed, recipient="+1234567890")
         self.assertTrue(result.success)
         mock_run_script.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

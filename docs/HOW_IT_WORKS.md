@@ -1,6 +1,6 @@
 # How JARVIS Works
 
-> **Last Updated:** 2026-02-13
+> **Last Updated:** 2026-02-16
 
 This document explains the JARVIS system architecture, services, and message flow.
 
@@ -78,19 +78,24 @@ When a new message arrives:
 ```
 Incoming: "Want to grab lunch tomorrow?"
     │
-    ├─→ 1. Encode query → embedding (384-dim)
+    ├─→ 1. Classify mobilization level (is reply needed?)
+    │      └─→ HIGH: question/request requiring response
     │
-    ├─→ 2. sqlite-vec search → top 3 similar chunks
+    ├─→ 2. Encode query → embedding (384-dim)
+    │
+    ├─→ 3. sqlite-vec search → top 3 similar chunks
     │      └─→ "Planning Lunch" chunk with past conversations
     │
-    ├─→ 3. Build prompt
-    │      ├─→ System instructions
+    ├─→ 4. Build prompt (UNIVERSAL system prompt)
+    │      ├─→ "You are NOT an AI assistant..."
     │      ├─→ Similar chunks (style reference)
     │      └─→ Recent thread context
     │
-    └─→ 4. LLM Generate (MLX, ~2-3s)
-           └─→ "Sure! What time works?"
+    └─→ 5. LLM Generate (MLX, ~300ms)
+           └─→ "sure what time?"
 ```
+
+**Note:** We use a **universal prompt** for all categories. Category-specific prompts were removed after ablation study showed they hurt quality. See [Categorization Ablation Findings](./research/CATEGORIZATION_ABLATION_FINDINGS.md).
 
 ---
 
@@ -169,10 +174,11 @@ Messages: [
 
 ### Generation
 
-- **Default Model**: LFM-2.5-1.2B-Instruct-4bit
-- **Latency**: ~2-3s warm, 10-15s cold start
+- **Default Model**: LFM-1.2b-ft (fine-tuned for iMessage)
+- **Latency**: ~300ms warm, ~2s cold start
 - **Memory**: ~1.2GB model + ~200MB embeddings
-- **Model Registry**: See `models/registry.py` for all available models (Qwen, Phi-3, Gemma-3, LFM variants)
+- **Model Registry**: See `models/registry.py` for all available models
+- **Universal Prompt**: Single system prompt for all categories (categories hurt quality, see ablation study)
 
 ### Fact Extraction (V4)
 
@@ -185,12 +191,19 @@ Messages: [
 
 ## Performance
 
-| Operation             | P50         | Target    |
-| --------------------- | ----------- | --------- |
-| Intent classification | 12ms        | <50ms     |
-| sqlite-vec search     | 3ms         | <50ms     |
-| LLM generation        | 180ms/token | <2s total |
-| **Full pipeline**     | **250ms**   | **<3s**   |
+| Operation             | P50         | Target    | Status |
+| --------------------- | ----------- | --------- | ------ |
+| Mobilization classify | 12ms        | <50ms     | ✅     |
+| sqlite-vec search     | 3ms         | <50ms     | ✅     |
+| LLM generation        | 180ms/token | <2s total | ✅     |
+| **Full pipeline**     | **~300ms**  | **<500ms**| ✅     |
+
+## Quality Metrics (LLM-as-Judge)
+
+| Metric | Baseline | Target |
+|--------|----------|--------|
+| Judge Score | 6.27/10 | 7.0+ |
+| Anti-AI Rate | 0% | <5% ✅ |
 
 ---
 

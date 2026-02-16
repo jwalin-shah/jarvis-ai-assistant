@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Skeleton from './Skeleton.svelte';
+  import Skeleton from "./Skeleton.svelte";
 
   // Variable widths for natural look
-  const messageWidths = ['75%', '60%', '80%', '50%', '70%', '65%'];
+  const messageWidths = ["75%", "60%", "80%", "50%", "70%", "65%"];
   const alignments = [false, true, false, true, false, true]; // alternating for visual variety
 </script>
 
@@ -10,7 +10,7 @@
   {#each messageWidths as width, i}
     <div class="message-skeleton" class:from-me={alignments[i]}>
       <div class="bubble-skeleton">
-        <Skeleton {width} height="16px" borderRadius="4px" />
+        <Skeleton width={width} height="16px" borderRadius="4px" />
         {#if i % 2 === 0}
           <Skeleton width="40%" height="14px" borderRadius="4px" />
         {/if}

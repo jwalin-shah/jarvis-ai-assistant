@@ -204,7 +204,7 @@ test-integration:
 
 test-hardware:
 	@echo "Running hardware tests (requires Apple Silicon, 16GB RAM)..."
-	uv run pytest tests/hardware/ -v --tb=short 2>&1 | tee test_results.txt
+	uv run pytest --override-ini addopts='' tests/hardware/ -v --tb=short -m "hardware" 2>&1 | tee test_results.txt
 
 test-slow:
 	@echo "Running slow tests..."
@@ -216,7 +216,7 @@ test-ci:
 
 test-full:
 	@echo "Running full test suite (all tiers)..."
-	uv run pytest tests/ -v --tb=short 2>&1 | tee test_results.txt
+	uv run pytest --override-ini addopts='' tests/ -v --tb=short 2>&1 | tee test_results.txt
 
 # ============================================================================
 # CODE QUALITY

@@ -25,7 +25,7 @@ export function getNavAction(
   key: string,
   shiftKey: boolean,
   currentIndex: number,
-  maxIndex: number
+  maxIndex: number,
 ): NavAction {
   if (maxIndex < 0) return null;
 
@@ -69,5 +69,7 @@ export function getNavAction(
 
 /** Guard: returns true if event target is a text input (should skip nav). */
 export function isTypingInInput(event: KeyboardEvent): boolean {
-  return event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+  return (
+    event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement
+  );
 }

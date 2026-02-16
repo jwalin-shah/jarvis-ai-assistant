@@ -4,7 +4,7 @@
  * Tests the data transformation pipeline from raw SQL rows to typed objects,
  * with focus on the attributedBody fallback when row.text is null.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -12,13 +12,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /** Decode base64 to ArrayBuffer (works in Node via Buffer) */
 function b64toArrayBuffer(b64: string): ArrayBuffer {
-  const buf = Buffer.from(b64, 'base64');
+  const buf = Buffer.from(b64, "base64");
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 }
 
 // "Test" in typedstream format (NSArchiver legacy)
 const TYPEDSTREAM_TEST =
-  'BAtzdHJlYW10eXBlZIHoA4QBQISEhBJOU0F0dHJpYnV0ZWRTdHJpbmcAhIQITlNPYmplY3QAhZKEhIQITlNTdHJpbmcBlIQBKwRUZXN0hoQCaUkBBJKEhIQMTlNEaWN0aW9uYXJ5AJSEAWkBkoSWlh1fX2tJTU1lc3NhZ2VQYXJ0QXR0cmlidXRlTmFtZYaShISECE5TTnVtYmVyAISEB05TVmFsdWUAlIQBKoSZmQCGhoY=';
+  "BAtzdHJlYW10eXBlZIHoA4QBQISEhBJOU0F0dHJpYnV0ZWRTdHJpbmcAhIQITlNPYmplY3QAhZKEhIQITlNTdHJpbmcBlIQBKwRUZXN0hoQCaUkBBJKEhIQMTlNEaWN0aW9uYXJ5AJSEAWkBkoSWlh1fX2tJTU1lc3NhZ2VQYXJ0QXR0cmlidXRlTmFtZYaShISECE5TTnVtYmVyAISEB05TVmFsdWUAlIQBKoSZmQCGhoY=";
 
 // ---------------------------------------------------------------------------
 // Mock setup
@@ -31,16 +31,16 @@ const mockSelect = vi.fn();
 const mockClose = vi.fn();
 const mockLoad = vi.fn();
 
-vi.mock('@tauri-apps/plugin-sql', () => ({
+vi.mock("@tauri-apps/plugin-sql", () => ({
   default: {
     load: (...args: unknown[]) => mockLoad(...args),
   },
 }));
 
 // Mock @tauri-apps/api/path for initDatabases
-vi.mock('@tauri-apps/api/path', () => ({
-  homeDir: vi.fn().mockResolvedValue('/Users/testuser'),
-  join: vi.fn((...parts: string[]) => Promise.resolve(parts.join('/'))),
+vi.mock("@tauri-apps/api/path", () => ({
+  homeDir: vi.fn().mockResolvedValue("/Users/testuser"),
+  join: vi.fn((...parts: string[]) => Promise.resolve(parts.join("/"))),
 }));
 
 // ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ vi.mock('@tauri-apps/api/path', () => ({
 globalThis.window = { __TAURI__: true };
 
 // We dynamically import the module after setting up mocks
-let directModule: typeof import('../../src/lib/db/direct');
+let directModule: typeof import("../../src/lib/db/direct");
 
 // ---------------------------------------------------------------------------
 // Helpers to build mock rows
@@ -66,13 +66,13 @@ let directModule: typeof import('../../src/lib/db/direct');
 function makeConversationRow(overrides: Record<string, unknown> = {}) {
   return {
     chat_rowid: 1,
-    chat_id: 'iMessage;-;+15551234567',
+    chat_id: "iMessage;-;+15551234567",
     display_name: null,
-    chat_identifier: '+15551234567',
-    participants: '+15551234567',
+    chat_identifier: "+15551234567",
+    participants: "+15551234567",
     message_count: 42,
     last_message_date: 700000000000000000, // Apple timestamp (nanoseconds)
-    last_message_text: 'Hello there',
+    last_message_text: "Hello there",
     last_message_attributed_body: null,
     ...overrides,
   };
@@ -81,10 +81,10 @@ function makeConversationRow(overrides: Record<string, unknown> = {}) {
 function makeMessageRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 100,
-    guid: 'msg-guid-001',
-    chat_id: 'iMessage;-;+15551234567',
-    sender: '+15551234567',
-    text: 'Hello world',
+    guid: "msg-guid-001",
+    chat_id: "iMessage;-;+15551234567",
+    sender: "+15551234567",
+    text: "Hello world",
     attributedBody: null,
     date: 700000000000000000,
     is_from_me: 0,
@@ -101,7 +101,7 @@ function makeMessageRow(overrides: Record<string, unknown> = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('direct.ts', () => {
+describe("direct.ts", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
@@ -118,18 +118,18 @@ describe('direct.ts', () => {
     vi.resetModules();
 
     // Re-apply mocks after module reset
-    vi.doMock('@tauri-apps/plugin-sql', () => ({
+    vi.doMock("@tauri-apps/plugin-sql", () => ({
       default: {
         load: (...args: unknown[]) => mockLoad(...args),
       },
     }));
 
-    vi.doMock('@tauri-apps/api/path', () => ({
-      homeDir: vi.fn().mockResolvedValue('/Users/testuser'),
-      join: vi.fn((...parts: string[]) => Promise.resolve(parts.join('/'))),
+    vi.doMock("@tauri-apps/api/path", () => ({
+      homeDir: vi.fn().mockResolvedValue("/Users/testuser"),
+      join: vi.fn((...parts: string[]) => Promise.resolve(parts.join("/"))),
     }));
 
-    directModule = await import('../../src/lib/db/direct');
+    directModule = await import("../../src/lib/db/direct");
   });
 
   afterEach(async () => {
@@ -144,19 +144,19 @@ describe('direct.ts', () => {
   // -------------------------------------------------------------------------
   // isDirectAccessAvailable
   // -------------------------------------------------------------------------
-  describe('isDirectAccessAvailable', () => {
-    it('returns false before initialization', () => {
+  describe("isDirectAccessAvailable", () => {
+    it("returns false before initialization", () => {
       expect(directModule.isDirectAccessAvailable()).toBe(false);
     });
 
-    it('returns true after successful initialization', async () => {
+    it("returns true after successful initialization", async () => {
       // detectSchemaVersion query returns v14 (no service_name column)
       mockSelect.mockResolvedValue([]);
       await directModule.initDatabases();
       expect(directModule.isDirectAccessAvailable()).toBe(true);
     });
 
-    it('returns false after closeDatabases', async () => {
+    it("returns false after closeDatabases", async () => {
       mockSelect.mockResolvedValue([]);
       await directModule.initDatabases();
       expect(directModule.isDirectAccessAvailable()).toBe(true);
@@ -169,30 +169,30 @@ describe('direct.ts', () => {
   // -------------------------------------------------------------------------
   // getInitError
   // -------------------------------------------------------------------------
-  describe('getInitError', () => {
-    it('returns null before any init attempt', () => {
+  describe("getInitError", () => {
+    it("returns null before any init attempt", () => {
       expect(directModule.getInitError()).toBe(null);
     });
 
-    it('returns error when Database.load fails', async () => {
-      mockLoad.mockRejectedValue(new Error('DB open failed'));
-      await expect(directModule.initDatabases()).rejects.toThrow('DB open failed');
+    it("returns error when Database.load fails", async () => {
+      mockLoad.mockRejectedValue(new Error("DB open failed"));
+      await expect(directModule.initDatabases()).rejects.toThrow("DB open failed");
       expect(directModule.getInitError()).toBeInstanceOf(Error);
-      expect(directModule.getInitError()!.message).toBe('DB open failed');
+      expect(directModule.getInitError()!.message).toBe("DB open failed");
     });
 
-    it('provides helpful message for Full Disk Access errors', async () => {
-      mockLoad.mockRejectedValue(new Error('error code 14: unable to open database'));
-      await expect(directModule.initDatabases()).rejects.toThrow('Full Disk Access');
-      expect(directModule.getInitError()!.message).toContain('Full Disk Access');
+    it("provides helpful message for Full Disk Access errors", async () => {
+      mockLoad.mockRejectedValue(new Error("error code 14: unable to open database"));
+      await expect(directModule.initDatabases()).rejects.toThrow("Full Disk Access");
+      expect(directModule.getInitError()!.message).toContain("Full Disk Access");
     });
   });
 
   // -------------------------------------------------------------------------
   // initDatabases - idempotency
   // -------------------------------------------------------------------------
-  describe('initDatabases', () => {
-    it('only initializes once on repeated calls', async () => {
+  describe("initDatabases", () => {
+    it("only initializes once on repeated calls", async () => {
       mockSelect.mockResolvedValue([]);
       await directModule.initDatabases();
       await directModule.initDatabases();
@@ -200,9 +200,9 @@ describe('direct.ts', () => {
       expect(mockLoad).toHaveBeenCalledTimes(1);
     });
 
-    it('allows retry after previous failure', async () => {
-      mockLoad.mockRejectedValueOnce(new Error('transient fail'));
-      await expect(directModule.initDatabases()).rejects.toThrow('transient fail');
+    it("allows retry after previous failure", async () => {
+      mockLoad.mockRejectedValueOnce(new Error("transient fail"));
+      await expect(directModule.initDatabases()).rejects.toThrow("transient fail");
 
       // Should allow retry - error is not permanently cached
       mockLoad.mockResolvedValue({
@@ -218,14 +218,14 @@ describe('direct.ts', () => {
   // -------------------------------------------------------------------------
   // getConversations - data transformation
   // -------------------------------------------------------------------------
-  describe('getConversations', () => {
+  describe("getConversations", () => {
     beforeEach(async () => {
       // Initialize the database first
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
     });
 
-    it('transforms a basic 1:1 conversation row correctly', async () => {
+    it("transforms a basic 1:1 conversation row correctly", async () => {
       const row = makeConversationRow();
       mockSelect.mockResolvedValueOnce([row]);
 
@@ -233,22 +233,22 @@ describe('direct.ts', () => {
 
       expect(result).toHaveLength(1);
       const conv = result[0];
-      expect(conv.chat_id).toBe('iMessage;-;+15551234567');
-      expect(conv.participants).toEqual(['+15551234567']);
+      expect(conv.chat_id).toBe("iMessage;-;+15551234567");
+      expect(conv.participants).toEqual(["+15551234567"]);
       expect(conv.is_group).toBe(false);
       expect(conv.message_count).toBe(42);
-      expect(conv.last_message_text).toBe('Hello there');
+      expect(conv.last_message_text).toBe("Hello there");
       // display_name is null (no contact resolution in direct mode)
       expect(conv.display_name).toBe(null);
       // last_message_date should be an ISO string
       expect(conv.last_message_date).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
-    it('identifies group conversations (multiple participants)', async () => {
+    it("identifies group conversations (multiple participants)", async () => {
       const row = makeConversationRow({
-        chat_id: 'iMessage;+;chat123',
-        participants: '+15551234567, +15559876543, john@example.com',
-        display_name: 'The Gang',
+        chat_id: "iMessage;+;chat123",
+        participants: "+15551234567, +15559876543, john@example.com",
+        display_name: "The Gang",
       });
       mockSelect.mockResolvedValueOnce([row]);
 
@@ -257,12 +257,12 @@ describe('direct.ts', () => {
       expect(result).toHaveLength(1);
       expect(result[0].is_group).toBe(true);
       expect(result[0].participants).toHaveLength(3);
-      expect(result[0].display_name).toBe('The Gang');
+      expect(result[0].display_name).toBe("The Gang");
       // Email should be lowercased by normalizePhoneNumber
-      expect(result[0].participants[2]).toBe('john@example.com');
+      expect(result[0].participants[2]).toBe("john@example.com");
     });
 
-    it('falls back to attributedBody when last_message_text is null (typedstream)', async () => {
+    it("falls back to attributedBody when last_message_text is null (typedstream)", async () => {
       const row = makeConversationRow({
         last_message_text: null,
         last_message_attributed_body: b64toArrayBuffer(TYPEDSTREAM_TEST),
@@ -272,10 +272,10 @@ describe('direct.ts', () => {
       const result = await directModule.getConversations(50);
 
       expect(result).toHaveLength(1);
-      expect(result[0].last_message_text).toBe('Test');
+      expect(result[0].last_message_text).toBe("Test");
     });
 
-    it('returns null last_message_text when both text and attributedBody are null', async () => {
+    it("returns null last_message_text when both text and attributedBody are null", async () => {
       const row = makeConversationRow({
         last_message_text: null,
         last_message_attributed_body: null,
@@ -288,7 +288,7 @@ describe('direct.ts', () => {
       expect(result[0].last_message_text).toBe(null);
     });
 
-    it('handles empty result set', async () => {
+    it("handles empty result set", async () => {
       mockSelect.mockResolvedValueOnce([]);
 
       const result = await directModule.getConversations(50);
@@ -296,21 +296,21 @@ describe('direct.ts', () => {
       expect(result).toEqual([]);
     });
 
-    it('normalizes phone numbers in participants', async () => {
+    it("normalizes phone numbers in participants", async () => {
       const row = makeConversationRow({
-        participants: '+1 (555) 123-4567',
+        participants: "+1 (555) 123-4567",
       });
       mockSelect.mockResolvedValueOnce([row]);
 
       const result = await directModule.getConversations(50);
 
       // normalizePhoneNumber strips formatting, keeps + and digits
-      expect(result[0].participants[0]).toBe('+15551234567');
+      expect(result[0].participants[0]).toBe("+15551234567");
     });
 
-    it('handles participants with empty string entries', async () => {
+    it("handles participants with empty string entries", async () => {
       const row = makeConversationRow({
-        participants: '+15551234567, , +15559876543',
+        participants: "+15551234567, , +15559876543",
       });
       mockSelect.mockResolvedValueOnce([row]);
 
@@ -320,25 +320,27 @@ describe('direct.ts', () => {
       expect(result[0].participants).toHaveLength(2);
     });
 
-    it('throws when database not initialized', async () => {
+    it("throws when database not initialized", async () => {
       // Close to reset state
       await directModule.closeDatabases();
 
-      await expect(directModule.getConversations(50)).rejects.toThrow('Database not initialized');
+      await expect(directModule.getConversations(50)).rejects.toThrow(
+        "Database not initialized"
+      );
     });
   });
 
   // -------------------------------------------------------------------------
   // getMessages - data transformation
   // -------------------------------------------------------------------------
-  describe('getMessages', () => {
+  describe("getMessages", () => {
     beforeEach(async () => {
       // Initialize the database
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
     });
 
-    it('transforms a basic message row correctly', async () => {
+    it("transforms a basic message row correctly", async () => {
       const row = makeMessageRow();
 
       // Main messages query
@@ -348,14 +350,14 @@ describe('direct.ts', () => {
       // Reactions query (called per message)
       mockSelect.mockResolvedValueOnce([]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       const msg = result[0];
       expect(msg.id).toBe(100);
-      expect(msg.chat_id).toBe('iMessage;-;+15551234567');
-      expect(msg.sender).toBe('+15551234567');
-      expect(msg.text).toBe('Hello world');
+      expect(msg.chat_id).toBe("iMessage;-;+15551234567");
+      expect(msg.sender).toBe("+15551234567");
+      expect(msg.text).toBe("Hello world");
       expect(msg.is_from_me).toBe(false);
       expect(msg.is_system_message).toBe(false);
       expect(msg.attachments).toEqual([]);
@@ -364,7 +366,7 @@ describe('direct.ts', () => {
       expect(msg.date).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
-    it('falls back to attributedBody when text is null (typedstream)', async () => {
+    it("falls back to attributedBody when text is null (typedstream)", async () => {
       const row = makeMessageRow({
         text: null,
         attributedBody: b64toArrayBuffer(TYPEDSTREAM_TEST),
@@ -374,15 +376,15 @@ describe('direct.ts', () => {
       mockSelect.mockResolvedValueOnce([]); // attachments
       mockSelect.mockResolvedValueOnce([]); // reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Test');
+      expect(result[0].text).toBe("Test");
     });
 
-    it('falls back to attributedBody when text is empty string', async () => {
+    it("falls back to attributedBody when text is empty string", async () => {
       const row = makeMessageRow({
-        text: '',
+        text: "",
         attributedBody: b64toArrayBuffer(TYPEDSTREAM_TEST),
       });
 
@@ -390,13 +392,13 @@ describe('direct.ts', () => {
       mockSelect.mockResolvedValueOnce([]); // attachments
       mockSelect.mockResolvedValueOnce([]); // reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Test');
+      expect(result[0].text).toBe("Test");
     });
 
-    it('skips messages with no content (no text, no attributedBody, no attachments)', async () => {
+    it("skips messages with no content (no text, no attributedBody, no attachments)", async () => {
       const row = makeMessageRow({
         text: null,
         attributedBody: null,
@@ -406,13 +408,13 @@ describe('direct.ts', () => {
       mockSelect.mockResolvedValueOnce([]); // batch attachments (empty)
       mockSelect.mockResolvedValueOnce([]); // batch reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       // Message should be filtered out
       expect(result).toHaveLength(0);
     });
 
-    it('keeps messages with attachments even if text is empty', async () => {
+    it("keeps messages with attachments even if text is empty", async () => {
       const row = makeMessageRow({
         text: null,
         attributedBody: null,
@@ -424,30 +426,30 @@ describe('direct.ts', () => {
         {
           message_id: 100,
           attachment_id: 1,
-          filename: '~/Library/Messages/Attachments/photo.jpg',
-          mime_type: 'image/jpeg',
+          filename: "~/Library/Messages/Attachments/photo.jpg",
+          mime_type: "image/jpeg",
           file_size: 12345,
-          transfer_name: 'photo.jpg',
+          transfer_name: "photo.jpg",
         },
       ]);
       // Batch reactions
       mockSelect.mockResolvedValueOnce([]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('');
+      expect(result[0].text).toBe("");
       expect(result[0].attachments).toHaveLength(1);
-      expect(result[0].attachments[0].filename).toBe('photo.jpg');
-      expect(result[0].attachments[0].mime_type).toBe('image/jpeg');
+      expect(result[0].attachments[0].filename).toBe("photo.jpg");
+      expect(result[0].attachments[0].mime_type).toBe("image/jpeg");
       expect(result[0].attachments[0].file_size).toBe(12345);
     });
 
-    it('generates system message text for group events', async () => {
+    it("generates system message text for group events", async () => {
       // group_action_type = 1 means "left or removed"
       const row = makeMessageRow({
         group_action_type: 1,
-        sender: '+15551234567',
+        sender: "+15551234567",
         is_from_me: 0,
         affected_handle_id: null,
       });
@@ -456,71 +458,71 @@ describe('direct.ts', () => {
       mockSelect.mockResolvedValueOnce([]); // batch attachments
       mockSelect.mockResolvedValueOnce([]); // batch reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       expect(result[0].is_system_message).toBe(true);
-      expect(result[0].text).toContain('left the group');
+      expect(result[0].text).toContain("left the group");
     });
 
     it("generates 'You' for system messages from me", async () => {
       const row = makeMessageRow({
         group_action_type: 2, // name changed
         is_from_me: 1,
-        sender: 'me',
+        sender: "me",
       });
 
       mockSelect.mockResolvedValueOnce([row]);
       mockSelect.mockResolvedValueOnce([]); // batch attachments
       mockSelect.mockResolvedValueOnce([]); // batch reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       expect(result[0].is_system_message).toBe(true);
-      expect(result[0].text).toContain('You changed the group name');
+      expect(result[0].text).toContain("You changed the group name");
     });
 
     it("generates 'added' text for group_action_type 3", async () => {
       const row = makeMessageRow({
         group_action_type: 3,
-        sender: '+15551234567',
+        sender: "+15551234567",
         is_from_me: 0,
-        affected_handle_id: '+15559876543',
+        affected_handle_id: "+15559876543",
       });
 
       mockSelect.mockResolvedValueOnce([row]);
       mockSelect.mockResolvedValueOnce([]); // batch attachments
       mockSelect.mockResolvedValueOnce([]); // batch reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       expect(result[0].is_system_message).toBe(true);
-      expect(result[0].text).toContain('added');
-      expect(result[0].text).toContain('+15559876543');
+      expect(result[0].text).toContain("added");
+      expect(result[0].text).toContain("+15559876543");
     });
 
     it("generates 'removed' text for group_action_type 1 with different affected handle", async () => {
       const row = makeMessageRow({
         group_action_type: 1,
-        sender: '+15551234567',
+        sender: "+15551234567",
         is_from_me: 0,
-        affected_handle_id: '+15559876543',
+        affected_handle_id: "+15559876543",
       });
 
       mockSelect.mockResolvedValueOnce([row]);
       mockSelect.mockResolvedValueOnce([]); // batch attachments
       mockSelect.mockResolvedValueOnce([]); // batch reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
-      expect(result[0].text).toContain('removed');
-      expect(result[0].text).toContain('+15559876543');
+      expect(result[0].text).toContain("removed");
+      expect(result[0].text).toContain("+15559876543");
     });
 
-    it('generates fallback text for unknown group_action_type', async () => {
+    it("generates fallback text for unknown group_action_type", async () => {
       const row = makeMessageRow({
         group_action_type: 99,
         is_from_me: 0,
@@ -530,33 +532,33 @@ describe('direct.ts', () => {
       mockSelect.mockResolvedValueOnce([]); // batch attachments
       mockSelect.mockResolvedValueOnce([]); // batch reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('Group event (type 99)');
+      expect(result[0].text).toBe("Group event (type 99)");
     });
 
-    it('sets is_from_me correctly', async () => {
+    it("sets is_from_me correctly", async () => {
       const row = makeMessageRow({
         is_from_me: 1,
-        sender: 'me',
+        sender: "me",
       });
 
       mockSelect.mockResolvedValueOnce([row]);
       mockSelect.mockResolvedValueOnce([]); // attachments
       mockSelect.mockResolvedValueOnce([]); // reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       expect(result[0].is_from_me).toBe(true);
       expect(result[0].sender_name).toBe(null);
     });
 
-    it('includes delivery/read receipts for sent messages', async () => {
+    it("includes delivery/read receipts for sent messages", async () => {
       const row = makeMessageRow({
         is_from_me: 1,
-        sender: 'me',
+        sender: "me",
         date_delivered: 700001000000000000,
         date_read: 700002000000000000,
       });
@@ -565,14 +567,14 @@ describe('direct.ts', () => {
       mockSelect.mockResolvedValueOnce([]); // attachments
       mockSelect.mockResolvedValueOnce([]); // reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       expect(result[0].date_delivered).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(result[0].date_read).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
-    it('does not set delivery/read receipts for received messages', async () => {
+    it("does not set delivery/read receipts for received messages", async () => {
       const row = makeMessageRow({
         is_from_me: 0,
         date_delivered: 700001000000000000,
@@ -583,7 +585,7 @@ describe('direct.ts', () => {
       mockSelect.mockResolvedValueOnce([]); // attachments
       mockSelect.mockResolvedValueOnce([]); // reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       // Receipts should be null for received messages (direct.ts only sets them for is_from_me)
@@ -591,69 +593,69 @@ describe('direct.ts', () => {
       expect(result[0].date_read).toBe(null);
     });
 
-    it('resolves reply_to_guid to ROWID', async () => {
+    it("resolves reply_to_guid to ROWID", async () => {
       const row = makeMessageRow({
-        reply_to_guid: 'original-msg-guid',
+        reply_to_guid: "original-msg-guid",
       });
 
       mockSelect.mockResolvedValueOnce([row]); // main query
       mockSelect.mockResolvedValueOnce([]); // batch attachments
       mockSelect.mockResolvedValueOnce([]); // batch reactions
       // batch GUID→ROWID resolution
-      mockSelect.mockResolvedValueOnce([{ guid: 'original-msg-guid', id: 42 }]);
+      mockSelect.mockResolvedValueOnce([{ guid: "original-msg-guid", id: 42 }]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(1);
       expect(result[0].reply_to_id).toBe(42);
     });
 
-    it('handles multiple messages correctly', async () => {
+    it("handles multiple messages correctly", async () => {
       const rows = [
-        makeMessageRow({ id: 100, text: 'First', guid: 'guid-100' }),
-        makeMessageRow({ id: 101, text: 'Second', guid: 'guid-101' }),
-        makeMessageRow({ id: 102, text: 'Third', guid: 'guid-102' }),
+        makeMessageRow({ id: 100, text: "First", guid: "guid-100" }),
+        makeMessageRow({ id: 101, text: "Second", guid: "guid-101" }),
+        makeMessageRow({ id: 102, text: "Third", guid: "guid-102" }),
       ];
 
       mockSelect.mockResolvedValueOnce(rows);
       mockSelect.mockResolvedValueOnce([]); // batch attachments
       mockSelect.mockResolvedValueOnce([]); // batch reactions
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toHaveLength(3);
-      expect(result[0].text).toBe('First');
-      expect(result[1].text).toBe('Second');
-      expect(result[2].text).toBe('Third');
+      expect(result[0].text).toBe("First");
+      expect(result[1].text).toBe("Second");
+      expect(result[2].text).toBe("Third");
     });
 
-    it('handles empty result set', async () => {
+    it("handles empty result set", async () => {
       mockSelect.mockResolvedValueOnce([]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result).toEqual([]);
     });
 
-    it('throws when database not initialized', async () => {
+    it("throws when database not initialized", async () => {
       await directModule.closeDatabases();
 
-      await expect(directModule.getMessages('iMessage;-;+15551234567')).rejects.toThrow(
-        'Database not initialized'
-      );
+      await expect(
+        directModule.getMessages("iMessage;-;+15551234567")
+      ).rejects.toThrow("Database not initialized");
     });
   });
 
   // -------------------------------------------------------------------------
   // getLastMessageRowid
   // -------------------------------------------------------------------------
-  describe('getLastMessageRowid', () => {
-    it('returns 0 when database not initialized', async () => {
+  describe("getLastMessageRowid", () => {
+    it("returns 0 when database not initialized", async () => {
       const result = await directModule.getLastMessageRowid();
       expect(result).toBe(0);
     });
 
-    it('returns the last ROWID', async () => {
+    it("returns the last ROWID", async () => {
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
 
@@ -666,30 +668,30 @@ describe('direct.ts', () => {
   // -------------------------------------------------------------------------
   // getNewMessagesSince
   // -------------------------------------------------------------------------
-  describe('getNewMessagesSince', () => {
-    it('returns empty array when database not initialized', async () => {
+  describe("getNewMessagesSince", () => {
+    it("returns empty array when database not initialized", async () => {
       const result = await directModule.getNewMessagesSince(100);
       expect(result).toEqual([]);
     });
 
-    it('transforms new message rows to chatId/messageId pairs', async () => {
+    it("transforms new message rows to chatId/messageId pairs", async () => {
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
 
       mockSelect.mockResolvedValueOnce([
-        { id: 101, chat_id: 'iMessage;-;+15551234567' },
-        { id: 102, chat_id: 'iMessage;-;+15559876543' },
+        { id: 101, chat_id: "iMessage;-;+15551234567" },
+        { id: 102, chat_id: "iMessage;-;+15559876543" },
       ]);
 
       const result = await directModule.getNewMessagesSince(100);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual({
-        chatId: 'iMessage;-;+15551234567',
+        chatId: "iMessage;-;+15551234567",
         messageId: 101,
       });
       expect(result[1]).toEqual({
-        chatId: 'iMessage;-;+15559876543',
+        chatId: "iMessage;-;+15559876543",
         messageId: 102,
       });
     });
@@ -698,13 +700,13 @@ describe('direct.ts', () => {
   // -------------------------------------------------------------------------
   // Attachment transformation
   // -------------------------------------------------------------------------
-  describe('attachment transformation', () => {
+  describe("attachment transformation", () => {
     beforeEach(async () => {
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
     });
 
-    it('maps attachment rows to Attachment objects with transfer_name preferred', async () => {
+    it("maps attachment rows to Attachment objects with transfer_name preferred", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]);
 
@@ -713,27 +715,29 @@ describe('direct.ts', () => {
         {
           message_id: 100,
           attachment_id: 1,
-          filename: '~/Library/Messages/Attachments/00/ABCDEF/photo.heic',
-          mime_type: 'image/heic',
+          filename: "~/Library/Messages/Attachments/00/ABCDEF/photo.heic",
+          mime_type: "image/heic",
           file_size: 2048000,
-          transfer_name: 'vacation.heic',
+          transfer_name: "vacation.heic",
         },
       ]);
       // Batch reactions
       mockSelect.mockResolvedValueOnce([]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       const att = result[0].attachments[0];
       // transfer_name is preferred for display filename
-      expect(att.filename).toBe('vacation.heic');
+      expect(att.filename).toBe("vacation.heic");
       // file_path gets the full path
-      expect(att.file_path).toBe('~/Library/Messages/Attachments/00/ABCDEF/photo.heic');
-      expect(att.mime_type).toBe('image/heic');
+      expect(att.file_path).toBe(
+        "~/Library/Messages/Attachments/00/ABCDEF/photo.heic"
+      );
+      expect(att.mime_type).toBe("image/heic");
       expect(att.file_size).toBe(2048000);
     });
 
-    it('falls back to filename when transfer_name is null', async () => {
+    it("falls back to filename when transfer_name is null", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]);
 
@@ -741,17 +745,17 @@ describe('direct.ts', () => {
         {
           message_id: 100,
           attachment_id: 1,
-          filename: 'document.pdf',
-          mime_type: 'application/pdf',
+          filename: "document.pdf",
+          mime_type: "application/pdf",
           file_size: 1024,
           transfer_name: null,
         },
       ]);
       mockSelect.mockResolvedValueOnce([]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
-      expect(result[0].attachments[0].filename).toBe('document.pdf');
+      expect(result[0].attachments[0].filename).toBe("document.pdf");
     });
 
     it("uses 'attachment' as fallback when both names are null", async () => {
@@ -770,22 +774,22 @@ describe('direct.ts', () => {
       ]);
       mockSelect.mockResolvedValueOnce([]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
-      expect(result[0].attachments[0].filename).toBe('attachment');
+      expect(result[0].attachments[0].filename).toBe("attachment");
     });
   });
 
   // -------------------------------------------------------------------------
   // Reaction filtering
   // -------------------------------------------------------------------------
-  describe('reaction transformation', () => {
+  describe("reaction transformation", () => {
     beforeEach(async () => {
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
     });
 
-    it('maps reaction rows to Reaction objects', async () => {
+    it("maps reaction rows to Reaction objects", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]); // main query
       mockSelect.mockResolvedValueOnce([]); // batch attachments
@@ -793,69 +797,69 @@ describe('direct.ts', () => {
       // Batch reactions
       mockSelect.mockResolvedValueOnce([
         {
-          message_guid: 'msg-guid-001',
+          message_guid: "msg-guid-001",
           id: 200,
           associated_message_type: 2000, // love
           date: 700001000000000000,
           is_from_me: 0,
-          sender: '+15559876543',
+          sender: "+15559876543",
         },
       ]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result[0].reactions).toHaveLength(1);
-      expect(result[0].reactions[0].type).toBe('love');
-      expect(result[0].reactions[0].sender).toBe('+15559876543');
+      expect(result[0].reactions[0].type).toBe("love");
+      expect(result[0].reactions[0].sender).toBe("+15559876543");
     });
 
-    it('filters out remove_* reaction types', async () => {
+    it("filters out remove_* reaction types", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]);
       mockSelect.mockResolvedValueOnce([]); // batch attachments
 
       mockSelect.mockResolvedValueOnce([
         {
-          message_guid: 'msg-guid-001',
+          message_guid: "msg-guid-001",
           id: 200,
           associated_message_type: 2001, // like
           date: 700001000000000000,
           is_from_me: 0,
-          sender: '+15559876543',
+          sender: "+15559876543",
         },
         {
-          message_guid: 'msg-guid-001',
+          message_guid: "msg-guid-001",
           id: 201,
           associated_message_type: 3001, // remove_like (should be filtered out)
           date: 700002000000000000,
           is_from_me: 0,
-          sender: '+15559876543',
+          sender: "+15559876543",
         },
       ]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result[0].reactions).toHaveLength(1);
-      expect(result[0].reactions[0].type).toBe('like');
+      expect(result[0].reactions[0].type).toBe("like");
     });
 
-    it('filters out unknown reaction types', async () => {
+    it("filters out unknown reaction types", async () => {
       const row = makeMessageRow();
       mockSelect.mockResolvedValueOnce([row]);
       mockSelect.mockResolvedValueOnce([]); // batch attachments
 
       mockSelect.mockResolvedValueOnce([
         {
-          message_guid: 'msg-guid-001',
+          message_guid: "msg-guid-001",
           id: 200,
           associated_message_type: 9999, // unknown type
           date: 700001000000000000,
           is_from_me: 0,
-          sender: '+15559876543',
+          sender: "+15559876543",
         },
       ]);
 
-      const result = await directModule.getMessages('iMessage;-;+15551234567');
+      const result = await directModule.getMessages("iMessage;-;+15551234567");
 
       expect(result[0].reactions).toHaveLength(0);
     });
@@ -864,8 +868,8 @@ describe('direct.ts', () => {
   // -------------------------------------------------------------------------
   // closeDatabases
   // -------------------------------------------------------------------------
-  describe('closeDatabases', () => {
-    it('resets all state and calls db.close()', async () => {
+  describe("closeDatabases", () => {
+    it("resets all state and calls db.close()", async () => {
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
       expect(directModule.isDirectAccessAvailable()).toBe(true);
@@ -881,30 +885,30 @@ describe('direct.ts', () => {
   // -------------------------------------------------------------------------
   // getMessage (single)
   // -------------------------------------------------------------------------
-  describe('getMessage', () => {
+  describe("getMessage", () => {
     beforeEach(async () => {
       mockSelect.mockResolvedValueOnce([]); // detectSchemaVersion
       await directModule.initDatabases();
     });
 
-    it('returns null when no matching message found', async () => {
+    it("returns null when no matching message found", async () => {
       mockSelect.mockResolvedValueOnce([]);
 
-      const result = await directModule.getMessage('iMessage;-;+15551234567', 999);
+      const result = await directModule.getMessage("iMessage;-;+15551234567", 999);
       expect(result).toBe(null);
     });
 
-    it('transforms a single message row', async () => {
-      const row = makeMessageRow({ id: 42, text: 'Specific message' });
+    it("transforms a single message row", async () => {
+      const row = makeMessageRow({ id: 42, text: "Specific message" });
       mockSelect.mockResolvedValueOnce([row]);
       mockSelect.mockResolvedValueOnce([]); // attachments
       mockSelect.mockResolvedValueOnce([]); // reactions
 
-      const result = await directModule.getMessage('iMessage;-;+15551234567', 42);
+      const result = await directModule.getMessage("iMessage;-;+15551234567", 42);
 
       expect(result).not.toBe(null);
       expect(result!.id).toBe(42);
-      expect(result!.text).toBe('Specific message');
+      expect(result!.text).toBe("Specific message");
     });
   });
 });

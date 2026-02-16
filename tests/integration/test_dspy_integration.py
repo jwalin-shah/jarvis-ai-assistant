@@ -4,6 +4,8 @@ Verifies that the DSPYMLXClient adapter correctly connects
 DSPy's high-level logic with the local MLX model via BaseLM.forward().
 """
 
+import os
+
 import dspy
 import pytest
 
@@ -18,6 +20,10 @@ class SimpleReply(dspy.Signature):
 
 
 @pytest.mark.real_model
+@pytest.mark.skipif(
+    os.getenv("RUN_DSPY_INTEGRATION") != "1",
+    reason="DSPy integration is opt-in. Set RUN_DSPY_INTEGRATION=1 to enable.",
+)
 def test_dspy_mlx_integration():
     """Verify DSPy can drive the local MLX model via BaseLM.forward()."""
     try:

@@ -35,7 +35,7 @@ from jarvis.config import (
 logger = logging.getLogger(__name__)
 
 # Constants
-DEFAULT_MODEL_PATH = "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit"
+DEFAULT_MODEL_PATH = "models/lfm-0.7b-4bit"
 # DEPRECATED: Use routing.quick_reply_threshold instead. Kept for backwards compatibility.
 DEFAULT_QUICK_REPLY_THRESHOLD = 0.7
 CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"

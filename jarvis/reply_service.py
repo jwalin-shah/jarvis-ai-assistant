@@ -76,6 +76,7 @@ from jarvis.reply_service_utils import (
 )
 from jarvis.search.hybrid_search import get_hybrid_searcher
 from jarvis.services.context_service import ContextService
+from models.templates import TemplateMatcher
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
@@ -120,6 +121,7 @@ class ReplyService:
         self._imessage_reader = imessage_reader
         self._context_service: ContextService | None = None
         self._reranker: Any | None = None
+        self._template_matcher: TemplateMatcher | None = None
         self._lock = threading.RLock()
 
     @property
@@ -169,6 +171,23 @@ class ReplyService:
                         imessage_reader=self.imessage_reader,
                     )
         return self._context_service
+
+    @property
+    def template_matcher(self) -> TemplateMatcher | None:
+        """Get or create the semantic template matcher (lazy-loaded)."""
+        if self._template_matcher is None:
+            with self._lock:
+                if self._template_matcher is None:
+                    try:
+                        self._template_matcher = TemplateMatcher()
+                        logger.info(
+                            "Semantic template matcher initialized with %d templates",
+                            len(self._template_matcher.templates),
+                        )
+                    except Exception as e:
+                        logger.warning("Could not initialize template matcher: %s", e)
+                        return None
+        return self._template_matcher
 
     @property
     def reranker(self) -> Any | None:
@@ -381,6 +400,15 @@ class ReplyService:
         )
         category_config = get_category_config(category_name)
 
+        # Try semantic template matching first (context-aware, 74 templates)
+        # This uses embeddings to match against universal texting patterns
+        semantic_result = self._try_semantic_template(incoming, embedder=cached_embedder)
+        if semantic_result:
+            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+            self._persist_reply_log(context, classification, None, semantic_result, latency_ms)
+            return semantic_result
+
+        # Fall back to simple templates for acknowledge/closing categories
         if category_config.skip_slm:
             result = self._template_response(category_name, routing_start)
             latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
@@ -463,6 +491,54 @@ class ReplyService:
         if isinstance(metadata_thread, list):
             return [msg for msg in metadata_thread if isinstance(msg, str)]
         return []
+
+    def _try_semantic_template(
+        self,
+        incoming: str,
+        embedder: CachedEmbedder | None = None,
+    ) -> GenerationResponse | None:
+        """Try to match incoming message with semantic templates.
+
+        Uses sentence embeddings to find the best matching template from
+        models/template_defaults.py. This provides context-aware responses
+        based on 74 universal texting patterns.
+
+        Args:
+            incoming: The incoming message text
+            embedder: Optional embedder for cache cohesion
+
+        Returns:
+            GenerationResponse if match found, None otherwise
+        """
+        if not self.template_matcher:
+            return None
+
+        try:
+            match = self.template_matcher.match(incoming, embedder=embedder, track_analytics=True)
+
+            if match and match.similarity >= 0.85:  # High confidence threshold
+                log_event(
+                    logger,
+                    "reply.semantic_template",
+                    template=match.template.name,
+                    similarity=round(match.similarity, 3),
+                    pattern=match.matched_pattern,
+                )
+                return GenerationResponse(
+                    response=match.template.response,
+                    confidence=min(0.95, match.similarity),
+                    metadata={
+                        "type": "semantic_template",
+                        "template_name": match.template.name,
+                        "matched_pattern": match.matched_pattern,
+                        "similarity": match.similarity,
+                        "reason": f"template_match:{match.template.name}",
+                    },
+                )
+        except Exception as e:
+            logger.debug("Semantic template matching failed: %s", e)
+
+        return None
 
     def _template_response(
         self,

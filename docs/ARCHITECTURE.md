@@ -1,6 +1,6 @@
 # JARVIS Architecture V2: Direct SQLite + Unix Sockets
 
-> **Last Updated:** 2026-02-12
+> **Last Updated:** 2026-02-16
 
 ## Overview
 
@@ -664,6 +664,31 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 - Security hardening: rate limiting, path validation, timing-safe token comparison
 - Documentation updates (SECURITY.md, TROUBLESHOOTING.md)
 
+### Recent Merges (2026-02-16)
+
+Recent pull requests integrated:
+
+| PR | Description |
+|----|-------------|
+| #122 | Desktop logger improvements |
+| #123 | Socket client logging improvements |
+| #124 | WebSocket writer extraction |
+| #125 | Security fix: iMessage path traversal |
+| #126 | Rate limiter extraction (refactor) |
+| #127 | Loader env side-effect cleanup |
+| #128 | Validity gate tests |
+| #129 | Feedback DB config refactor |
+| #130 | Watcher performance optimization |
+| #131 | Feedback bulk insert optimization |
+| #132 | Topic segmentation optimization |
+| #133 | Bolt watcher pagination optimization |
+| #135 | Task export path traversal fix |
+
+**Code Quality Improvements:**
+- DeepSource fixes: subprocess security, exception handling
+- Ruff/Prettier auto-formatting applied across codebase
+- Bot detection logic consolidated in generation service
+
 ### Phase 4: V4 Fact Extraction & Contact Profiling (2026-02-13)
 
 - **Turn-Based Extraction**: Switched from segment-based to Turn-Based grouping. Consecutive messages from the same sender are combined into single turns, providing coherent context for the LLM.
@@ -680,6 +705,14 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 - **Observability (`PipelineMonitor`)**: Real-time tracking of throughput, success/failure rates, and rejection metrics across all ingestion stages.
 - **Database Resilience (`SafeChatReader`)**: Implemented exponential backoff and retries for SQLite "Database Locked" errors using a specialized `sqlite_retry` decorator.
 - **Semantic Deduplication**: Added `FactDeduplicator` using BERT embeddings to prevent redundant facts from cluttering the Knowledge Graph.
+
+### Phase 6: Reply Pipeline Simplification (2026-02-16)
+
+- **Universal Prompt System**: Removed category-specific prompts after ablation study showed they hurt reply quality (see [Categorization Ablation Findings](./research/CATEGORIZATION_ABLATION_FINDINGS.md))
+- **LLM-as-Judge Framework**: Productionized automated evaluation using Llama 3.3 70B via Cerebras API
+- **Prompt Optimization**: Validated baseline universal prompt (6.27/10 judge score, 0% anti-AI rate)
+- **Consolidated Generation**: Single `reply_service.py` with clean pipeline (health check → classify → search → generate)
+- **Template Shortcuts**: Preserved fast-path templates for acknowledge/closing categories only
 
 ---
 

@@ -17,6 +17,8 @@ from typing import Any
 import numpy as np
 from rank_bm25 import BM25Okapi
 
+from jarvis.config import get_config
+
 logger = logging.getLogger(__name__)
 
 # Basic tokenizer for BM25 (reused from topic_segmenter pattern)
@@ -79,16 +81,19 @@ class BM25Searcher:
 
             return 0
 
-    def search(self, query: str, limit: int = 5) -> list[BM25Result]:
+    def search(self, query: str, limit: int | None = None) -> list[BM25Result]:
         """Search the keyword index.
 
         Args:
             query: Search query string.
-            limit: Max results.
+            limit: Max results. Uses config retrieval.bm25_limit if None.
 
         Returns:
             List of BM25Result objects.
         """
+        if limit is None:
+            limit = get_config().retrieval.bm25_limit
+
         if self._bm25 is None:
             return []
 

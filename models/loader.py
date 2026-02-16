@@ -23,6 +23,7 @@ from __future__ import annotations
 import gc
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -474,7 +475,7 @@ class MLXModelLoader:
                     raise model_not_found(self.config.model_path)
 
                 # mlx_lm.load returns (model, tokenizer) tuple
-                load_kwargs = {}
+                load_kwargs: dict[str, Any] = {}
                 if self.config.kv_cache_bits:
                     # MLX used to support 'kv_bits' in load() in older versions.
                     # Recent versions (>=0.20.0) moved this to generate() or removed it.
@@ -664,43 +665,37 @@ class MLXModelLoader:
         self._draft_model = None
         self._draft_config = None
 
-        def prefill_prompt_cache(self, prefix_text: str) -> None:
-            """Pre-compute KV cache for a static prompt prefix.
+    def prefill_prompt_cache(self, prefix_text: str) -> None:
+        """Pre-compute KV cache for a static prompt prefix.
 
+        The cached KV state can be reused across generation calls that share
+        the same prefix, saving ~50-100ms of prefill per call for a ~130 token
+        system prompt on a 1.2B model.
 
+        Must be called after load() and while holding _mlx_load_lock (or from
+        a context where no concurrent GPU ops are possible).
 
-            The cached KV state can be reused across generation calls that share
-
-            the same prefix, saving ~50-100ms of prefill per call for a ~130 token
-
-            system prompt on a 1.2B model.
-
-
-
-            Must be called after load() and while holding _mlx_load_lock (or from
-
-            a context where no concurrent GPU ops are possible).
-
-
-
-            Args:
-
-                prefix_text: The static prompt text to cache (e.g. system prompt).
-
-            """
-
-            if not self.is_loaded():
-                logger.warning("Cannot prefill cache: model not loaded")
-
-                return
-
+        Args:
+            prefix_text: The static prompt text to cache (e.g. system prompt).
+        """
+        if not self.is_loaded():
+            logger.warning("Cannot prefill cache: model not loaded")
+            return
 
         try:
             # Tokenize the prefix once and store for reuse (avoids redundant
             # re-encoding if callers need the token IDs later)
             tokens = mx.array(self._tokenizer.encode(prefix_text))
 
-            cache_kwargs = {}
+            # Import make_prompt_cache locally to avoid issues if mlx_lm is not available
+            # Some versions of mlx_lm may not have this function
+            try:
+                from mlx_lm.utils import make_prompt_cache  # type: ignore[attr-defined]
+            except ImportError:
+                logger.warning("make_prompt_cache not available in this mlx_lm version")
+                return
+
+            cache_kwargs: dict[str, Any] = {}
             if self.config.kv_cache_bits:
                 # Check if make_prompt_cache supports kv_bits (some MLX versions don't)
                 import inspect
@@ -727,7 +722,7 @@ class MLXModelLoader:
             from mlx_lm.generate import generate_step
 
             # Use the same kv_bits for prefilling to match generation
-            gen_step_kwargs = {}
+            gen_step_kwargs: dict[str, Any] = {}
             if self.config.kv_cache_bits and self.config.kv_cache_bits != 16:
                 gen_step_kwargs["kv_bits"] = self.config.kv_cache_bits
 
@@ -809,7 +804,11 @@ class MLXModelLoader:
         temperature = temperature if temperature is not None else self.config.default_temperature
         top_p = top_p if top_p is not None else 0.1
         top_k = top_k if top_k is not None else 50
-        repetition_penalty = repetition_penalty if repetition_penalty is not None else 1.05
+        # Use centralized default from generation_config
+        if repetition_penalty is None:
+            from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+
+            repetition_penalty = DEFAULT_REPETITION_PENALTY
 
         default_negative_constraints = [
             "as an ai",
@@ -822,6 +821,13 @@ class MLXModelLoader:
             "happy to help",
             "feel free to",
             "let me know if",
+            "i can help",
+            "how can i",
+            "assist you",
+            "i'll be happy to",
+            "i'd be happy to",
+            "the provided text",
+            "based on the context",
         ]
 
         if pre_formatted:
@@ -868,6 +874,21 @@ class MLXModelLoader:
         # Strip the prompt ONLY if MLX returned it (some versions/wrappers do)
         if response.startswith(formatted_prompt):
             response = response[len(formatted_prompt) :].strip()
+
+        # --- ARTIFACT STRIPPING ---
+        # 1. Strip timestamps like [11:05] or [11:05 AM]
+        response = re.sub(r"\[\d{1,2}:\d{2}(?:\s?[APM]{2})?\]", "", response)
+
+        # 2. Strip sender names like "College Friend:" or "You:"
+        # Matches patterns at start of line or after a newline
+        response = re.sub(r"(?:^|\n)(?:[A-Z][a-z]+(?:\s[A-Z][a-z]+)*|You):\s?", "", response)
+
+        # 3. Strip dialogue turns if model generates multiple
+        if "\n" in response:
+            # If multiple lines, take the first one that has content
+            lines = [line.strip() for line in response.split("\n") if line.strip()]
+            if lines:
+                response = lines[0]
 
         # Apply stop sequences
         if stop_sequences:
@@ -1018,7 +1039,7 @@ class MLXModelLoader:
             top_p: Nucleus sampling threshold (LFM optimal: 0.1)
             min_p: Minimum probability threshold (LFM optimal: 0.15)
             top_k: Top-k sampling limit (LFM optimal: 50)
-            repetition_penalty: Penalty for repeated tokens (LFM optimal: 1.05)
+            repetition_penalty: Penalty for repeated tokens (default from generation_config)
             stop_sequences: Strings that stop generation
             stop_event: If set, generation stops early (e.g. on client disconnect)
             system_prompt: Optional system prompt to include in chat template.

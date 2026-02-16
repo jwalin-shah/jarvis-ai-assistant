@@ -748,6 +748,24 @@ class FeedbackStore:
             except Exception:
                 logger.exception("Error writing feedback entry")
 
+            # Index "Gold Examples" for future RAG
+            if action == SuggestionAction.EDITED and edited_text:
+                try:
+                    from jarvis.search.vec_search import get_vec_searcher
+
+                    searcher = get_vec_searcher()
+                    # Only index if context and edited text are substantial
+                    if len(edited_text.strip()) > 2 and context_messages:
+                        context_blob = "\n".join(context_messages[-5:])
+                        searcher.index_feedback_pair(
+                            context_text=context_blob,
+                            reply_text=edited_text,
+                            chat_id=chat_id,
+                        )
+                        logger.info("Indexed gold feedback example for chat %s", chat_id[:16])
+                except Exception as e:
+                    logger.debug("Failed to index gold feedback: %s", e)
+
             # Trim if needed
             if len(self._entries) > MAX_FEEDBACK_ENTRIES:
                 self._entries = self._entries[-MAX_FEEDBACK_ENTRIES:]

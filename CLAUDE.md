@@ -400,6 +400,28 @@ def test_get_conversations_performance():
 
 ---
 
+## Environment Variables & Secrets
+
+**Critical:** The `.env` file contains API keys and secrets. It is:
+- Auto-ignored in `.gitignore` (line 81)
+- Listed in `.gitignore` as: `.env` and `.env.*`
+- **NEVER commit to git**
+
+**Required for DSPy optimization and evals:**
+```bash
+# Cerebras API (for LLM judge)
+CEREBRAS_API_KEY=<your_api_key>
+
+# Already configured in .env - do not modify unless rotating keys
+```
+
+**If you need to add new secrets:**
+1. Add to `.env` file only
+2. Add template to `.env.example` (with placeholder values)
+3. Verify `.gitignore` includes `.env`
+
+---
+
 ## Skill Auto-Load Rules
 
 Skills in `.claude/skills/` provide domain expertise. Load the right skill based on the files you're touching:

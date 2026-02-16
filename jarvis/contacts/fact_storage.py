@@ -338,6 +338,32 @@ def save_facts(
                 )
 
             if final_new_facts:
+                # --- ACTIVE DEGRADATION ---
+                # Check for conflicts and deprecate old facts
+                try:
+                    from jarvis.contacts.fact_index import find_conflicting_facts
+
+                    all_conflict_ids = []
+                    for fact in final_new_facts:
+                        conflicts = find_conflicting_facts(fact, contact_id)
+                        if conflicts:
+                            all_conflict_ids.extend(conflicts)
+
+                    if all_conflict_ids:
+                        # Deprecate old facts: mark expired and reduce confidence
+                        placeholders = ",".join(["?"] * len(all_conflict_ids))
+                        conn.execute(
+                            f"""
+                            UPDATE contact_facts
+                            SET valid_until = ?, confidence = confidence * 0.5
+                            WHERE id IN ({placeholders})
+                            """,
+                            [current_time] + [str(i) for i in all_conflict_ids],
+                        )
+                        logger.info("Deprecated %d conflicting facts", len(all_conflict_ids))
+                except Exception as e:
+                    logger.debug("Active degradation failed: %s", e)
+
                 # Prepare data for only new facts
                 fact_data = [
                     (

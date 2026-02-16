@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { api, APIError } from '../api/client';
-  import type { Message, SearchFilters, SemanticSearchResultItem } from '../api/types';
-  import { navigateToMessage, conversationsStore } from '../stores/conversations.svelte';
+  import { onMount, onDestroy } from "svelte";
+  import { api, APIError } from "../api/client";
+  import type { Message, SearchFilters, SemanticSearchResultItem } from "../api/types";
+  import { navigateToMessage, conversationsStore } from "../stores/conversations.svelte";
 
   interface Props {
     onClose: () => void;
@@ -11,16 +11,16 @@
   let { onClose }: Props = $props();
 
   // Search mode: text (keyword) or semantic (AI-powered)
-  type SearchMode = 'text' | 'semantic';
-  let searchMode = $state<SearchMode>('text');
+  type SearchMode = "text" | "semantic";
+  let searchMode = $state<SearchMode>("text");
 
   // Search state
-  type SearchState = 'idle' | 'searching' | 'results' | 'no-results' | 'error';
-  let searchState: SearchState = $state('idle');
-  let query = $state('');
+  type SearchState = "idle" | "searching" | "results" | "no-results" | "error";
+  let searchState: SearchState = $state("idle");
+  let query = $state("");
   let results: Message[] = $state([]);
   let semanticResults: SemanticSearchResultItem[] = $state([]);
-  let errorMessage = $state('');
+  let errorMessage = $state("");
   let selectedIndex = $state(-1);
 
   // Semantic search settings
@@ -28,9 +28,9 @@
 
   // Filter state
   let showFilters = $state(false);
-  let filterSender = $state('');
-  let filterStartDate = $state('');
-  let filterEndDate = $state('');
+  let filterSender = $state("");
+  let filterStartDate = $state("");
+  let filterEndDate = $state("");
   let filterHasAttachments = $state(false);
 
   // Conversation name cache (chat_id -> display name), populated after search results arrive
@@ -52,10 +52,9 @@
   }
 
   let groupedResults: GroupedResults[] = $derived.by(() => {
-    const items =
-      searchMode === 'semantic'
-        ? semanticResults.map((r) => ({ ...r.message, similarity: r.similarity }))
-        : results;
+    const items = searchMode === "semantic"
+      ? semanticResults.map(r => ({ ...r.message, similarity: r.similarity }))
+      : results;
 
     if (items.length === 0) return [];
 
@@ -67,7 +66,7 @@
         groups.set(msg.chat_id, {
           chat_id: msg.chat_id,
           conversation_name: conversationNameCache.get(msg.chat_id) || msg.chat_id,
-          messages: [],
+          messages: []
         });
       }
       groups.get(msg.chat_id)!.messages.push(msg);
@@ -77,13 +76,8 @@
   });
 
   // Flat list of all messages for keyboard navigation
-  let flatResults: {
-    msg: Message & { similarity?: number };
-    groupIndex: number;
-    msgIndex: number;
-  }[] = $derived.by(() => {
-    const flat: { msg: Message & { similarity?: number }; groupIndex: number; msgIndex: number }[] =
-      [];
+  let flatResults: { msg: Message & { similarity?: number }; groupIndex: number; msgIndex: number }[] = $derived.by(() => {
+    const flat: { msg: Message & { similarity?: number }; groupIndex: number; msgIndex: number }[] = [];
     groupedResults.forEach((group, groupIndex) => {
       group.messages.forEach((msg, msgIndex) => {
         flat.push({ msg, groupIndex, msgIndex });
@@ -102,9 +96,7 @@
   });
 
   // Total results count
-  let totalResultsCount = $derived(
-    searchMode === 'semantic' ? semanticResults.length : results.length
-  );
+  let totalResultsCount = $derived(searchMode === "semantic" ? semanticResults.length : results.length);
 
   onMount(() => {
     searchInput?.focus();
@@ -120,7 +112,7 @@
     if (debounceTimer) clearTimeout(debounceTimer);
 
     if (!query.trim()) {
-      searchState = 'idle';
+      searchState = "idle";
       results = [];
       semanticResults = [];
       selectedIndex = -1;
@@ -128,7 +120,7 @@
     }
 
     // Debounce search - longer for semantic to avoid unnecessary API calls
-    const delay = searchMode === 'semantic' ? 500 : 300;
+    const delay = searchMode === "semantic" ? 500 : 300;
     debounceTimer = setTimeout(() => {
       performSearch();
     }, delay);
@@ -142,27 +134,27 @@
     abortController?.abort();
     abortController = new AbortController();
 
-    searchState = 'searching';
-    errorMessage = '';
+    searchState = "searching";
+    errorMessage = "";
     selectedIndex = -1;
 
     try {
-      if (searchMode === 'semantic') {
+      if (searchMode === "semantic") {
         await performSemanticSearch(searchQuery);
       } else {
         await performTextSearch(searchQuery);
       }
     } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') {
+      if (e instanceof Error && e.name === "AbortError") {
         return;
       }
-      searchState = 'error';
+      searchState = "error";
       if (e instanceof APIError) {
         errorMessage = e.detail || e.message;
       } else if (e instanceof Error) {
         errorMessage = e.message;
       } else {
-        errorMessage = 'An unknown error occurred';
+        errorMessage = "An unknown error occurred";
       }
     }
   }
@@ -191,8 +183,8 @@
 
     results = searchResults;
     semanticResults = [];
-    populateConversationNameCache(searchResults.map((r) => r.chat_id));
-    searchState = searchResults.length > 0 ? 'results' : 'no-results';
+    populateConversationNameCache(searchResults.map(r => r.chat_id));
+    searchState = searchResults.length > 0 ? "results" : "no-results";
   }
 
   async function performSemanticSearch(searchQuery: string) {
@@ -213,27 +205,33 @@
       indexLimit: 1000,
       ...(Object.keys(filters).length > 0 && { filters }),
     };
-    const response = await api.semanticSearch(searchQuery, options, abortController!.signal);
+    const response = await api.semanticSearch(
+      searchQuery,
+      options,
+      abortController!.signal
+    );
 
     semanticResults = response.results;
     results = [];
-    populateConversationNameCache(response.results.map((r) => r.message.chat_id));
-    searchState = response.results.length > 0 ? 'results' : 'no-results';
+    populateConversationNameCache(response.results.map(r => r.message.chat_id));
+    searchState = response.results.length > 0 ? "results" : "no-results";
   }
 
   /** Snapshot conversation names from the store once, after results arrive */
   function populateConversationNameCache(chatIds: string[]) {
     // Build a Map once for O(1) lookup instead of O(n) .find() per chatId
-    const uncached = chatIds.filter((id) => !conversationNameCache.has(id));
+    const uncached = chatIds.filter(id => !conversationNameCache.has(id));
     if (uncached.length === 0) return;
 
-    const convMap = new Map(conversationsStore.conversations.map((c) => [c.chat_id, c]));
+    const convMap = new Map(
+      conversationsStore.conversations.map(c => [c.chat_id, c])
+    );
     for (const chatId of uncached) {
       const conv = convMap.get(chatId);
       if (conv) {
         conversationNameCache.set(
           chatId,
-          conv.display_name || conv.participants?.join(', ') || chatId
+          conv.display_name || conv.participants?.join(", ") || chatId
         );
       }
     }
@@ -242,24 +240,24 @@
 
   function handleKeyDown(event: KeyboardEvent) {
     switch (event.key) {
-      case 'Escape':
+      case "Escape":
         onClose();
         break;
-      case 'ArrowDown':
+      case "ArrowDown":
         event.preventDefault();
         if (flatResults.length > 0) {
           selectedIndex = Math.min(selectedIndex + 1, flatResults.length - 1);
           scrollSelectedIntoView();
         }
         break;
-      case 'ArrowUp':
+      case "ArrowUp":
         event.preventDefault();
         if (flatResults.length > 0) {
           selectedIndex = Math.max(selectedIndex - 1, 0);
           scrollSelectedIntoView();
         }
         break;
-      case 'Enter':
+      case "Enter":
         event.preventDefault();
         if (selectedIndex >= 0 && flatResults[selectedIndex]) {
           handleResultClick(flatResults[selectedIndex]!.msg);
@@ -273,9 +271,7 @@
   let searchResultsRef: HTMLDivElement | null = null;
 
   function scrollSelectedIntoView() {
-    const element = document.querySelector(
-      `[data-result-index="${selectedIndex}"]`
-    ) as HTMLElement | null;
+    const element = document.querySelector(`[data-result-index="${selectedIndex}"]`) as HTMLElement | null;
     if (!element || !searchResultsRef) return;
     const containerRect = searchResultsRef.getBoundingClientRect();
     const itemRect = element.getBoundingClientRect();
@@ -293,11 +289,11 @@
 
   function escapeHtml(str: string): string {
     return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   // Cache for compiled regex patterns (bounded to prevent memory leak)
@@ -314,15 +310,15 @@
     if (regexCache.size > 100) regexCache.clear();
 
     // For semantic search, highlight individual words from the query
-    if (searchMode === 'semantic') {
-      const words = safeQuery.split(/\s+/).filter((w) => w.length >= 2);
+    if (searchMode === "semantic") {
+      const words = safeQuery.split(/\s+/).filter(w => w.length >= 2);
       if (words.length === 0) return safeText;
 
       const cacheKey = `semantic:${words.join('|')}`;
       let regex = regexCache.get(cacheKey);
       if (!regex) {
-        const pattern = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-        regex = new RegExp(`(${pattern})`, 'gi');
+        const pattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+        regex = new RegExp(`(${pattern})`, "gi");
         regexCache.set(cacheKey, regex);
       }
       return safeText.replace(regex, '<mark class="highlight">$1</mark>');
@@ -331,8 +327,8 @@
     // Check cache before creating new RegExp
     let regex = regexCache.get(safeQuery);
     if (!regex) {
-      const escaped = safeQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      regex = new RegExp(`(${escaped})`, 'gi');
+      const escaped = safeQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      regex = new RegExp(`(${escaped})`, "gi");
       regexCache.set(safeQuery, regex);
     }
 
@@ -345,20 +341,20 @@
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     } else if (diffDays === 1) {
-      return 'Yesterday';
+      return "Yesterday";
     } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
+      return date.toLocaleDateString([], { weekday: "short" });
     } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString([], { month: "short", day: "numeric" });
     }
   }
 
   function getSnippet(text: string, maxLength: number = 150): string {
-    if (!text) return '';
+    if (!text) return "";
     if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
+    return text.substring(0, maxLength) + "...";
   }
 
   function toggleFilters() {
@@ -366,9 +362,9 @@
   }
 
   function clearFilters() {
-    filterSender = '';
-    filterStartDate = '';
-    filterEndDate = '';
+    filterSender = "";
+    filterStartDate = "";
+    filterEndDate = "";
     filterHasAttachments = false;
     if (query.trim()) {
       performSearch();
@@ -382,7 +378,7 @@
   }
 
   function toggleSearchMode() {
-    searchMode = searchMode === 'text' ? 'semantic' : 'text';
+    searchMode = searchMode === "text" ? "semantic" : "text";
     // Clear results and re-search
     results = [];
     semanticResults = [];
@@ -401,37 +397,17 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="search-overlay" onclick={handleOverlayClick} role="presentation">
   <!-- svelte-ignore a11y_interactive_supports_focus -->
-  <div
-    class="search-modal"
-    onclick={(e) => e.stopPropagation()}
-    role="dialog"
-    aria-label="Global Search"
-    aria-modal="true"
-  >
+  <div class="search-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Global Search" aria-modal="true">
     <div class="search-header">
       <div class="search-input-wrapper">
-        {#if searchMode === 'semantic'}
-          <svg
-            class="search-icon semantic"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
+        {#if searchMode === "semantic"}
+          <svg class="search-icon semantic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <title>Semantic Search</title>
             <circle cx="12" cy="12" r="3"></circle>
-            <path
-              d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"
-            ></path>
+            <path d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"></path>
           </svg>
         {:else}
-          <svg
-            class="search-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
           </svg>
@@ -440,21 +416,12 @@
           bind:this={searchInput}
           type="text"
           class="search-input"
-          placeholder={searchMode === 'semantic' ? 'Search by meaning...' : 'Search messages...'}
+          placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search messages..."}
           bind:value={query}
           oninput={handleInput}
         />
         {#if query}
-          <button
-            class="clear-btn"
-            onclick={() => {
-              query = '';
-              searchState = 'idle';
-              results = [];
-              semanticResults = [];
-            }}
-            aria-label="Clear search"
-          >
+          <button class="clear-btn" onclick={() => { query = ""; searchState = "idle"; results = []; semanticResults = []; }} aria-label="Clear search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -464,12 +431,12 @@
       </div>
       <button
         class="mode-toggle"
-        class:semantic={searchMode === 'semantic'}
+        class:semantic={searchMode === "semantic"}
         onclick={toggleSearchMode}
         aria-label="Toggle search mode"
-        title={searchMode === 'semantic' ? 'Switch to keyword search' : 'Switch to semantic search'}
+        title={searchMode === "semantic" ? "Switch to keyword search" : "Switch to semantic search"}
       >
-        {#if searchMode === 'semantic'}
+        {#if searchMode === "semantic"}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M12 1v6m0 6v10M1 12h6m6 0h10"></path>
@@ -480,13 +447,7 @@
           </svg>
         {/if}
       </button>
-      <button
-        class="filter-toggle"
-        class:active={showFilters}
-        onclick={toggleFilters}
-        aria-label="Toggle filters"
-        title="Filters"
-      >
+      <button class="filter-toggle" class:active={showFilters} onclick={toggleFilters} aria-label="Toggle filters" title="Filters">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
         </svg>
@@ -532,9 +493,13 @@
           </div>
         </div>
         <div class="filter-row">
-          {#if searchMode === 'text'}
+          {#if searchMode === "text"}
             <label class="checkbox-label">
-              <input type="checkbox" bind:checked={filterHasAttachments} onchange={performSearch} />
+              <input
+                type="checkbox"
+                bind:checked={filterHasAttachments}
+                onchange={performSearch}
+              />
               <span>Has attachments</span>
             </label>
           {:else}
@@ -557,14 +522,12 @@
     {/if}
 
     <div class="search-results" bind:this={searchResultsRef}>
-      {#if searchState === 'idle'}
+      {#if searchState === "idle"}
         <div class="empty-state">
-          {#if searchMode === 'semantic'}
+          {#if searchMode === "semantic"}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="12" r="3"></circle>
-              <path
-                d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"
-              ></path>
+              <path d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"></path>
             </svg>
             <p>Semantic search finds messages by meaning</p>
             <span class="hint">Try "dinner plans" to find messages about eating out</span>
@@ -577,12 +540,12 @@
             <span class="hint">Use filters to narrow down results</span>
           {/if}
         </div>
-      {:else if searchState === 'searching'}
+      {:else if searchState === "searching"}
         <div class="loading-state">
           <div class="spinner"></div>
-          <p>{searchMode === 'semantic' ? 'Computing semantic similarity...' : 'Searching...'}</p>
+          <p>{searchMode === "semantic" ? "Computing semantic similarity..." : "Searching..."}</p>
         </div>
-      {:else if searchState === 'error'}
+      {:else if searchState === "error"}
         <div class="error-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
@@ -592,7 +555,7 @@
           <p>{errorMessage}</p>
           <button class="retry-btn" onclick={performSearch}>Try Again</button>
         </div>
-      {:else if searchState === 'no-results'}
+      {:else if searchState === "no-results"}
         <div class="no-results-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8"></circle>
@@ -603,7 +566,7 @@
           <div class="search-tips">
             <h4>Search tips:</h4>
             <ul>
-              {#if searchMode === 'semantic'}
+              {#if searchMode === "semantic"}
                 <li>Try describing what you're looking for differently</li>
                 <li>Lower the similarity threshold in filters</li>
                 <li>Use simpler, more common phrases</li>
@@ -616,13 +579,10 @@
             </ul>
           </div>
         </div>
-      {:else if searchState === 'results'}
+      {:else if searchState === "results"}
         <div class="results-count">
-          {totalResultsCount} result{totalResultsCount !== 1 ? 's' : ''} in {groupedResults.length} conversation{groupedResults.length !==
-          1
-            ? 's'
-            : ''}
-          {#if searchMode === 'semantic'}
+          {totalResultsCount} result{totalResultsCount !== 1 ? "s" : ""} in {groupedResults.length} conversation{groupedResults.length !== 1 ? "s" : ""}
+          {#if searchMode === "semantic"}
             <span class="mode-indicator">Semantic</span>
           {/if}
         </div>
@@ -644,7 +604,7 @@
                   <div class="result-meta">
                     <span class="sender">{message.sender_name || message.sender}</span>
                     <div class="meta-right">
-                      {#if searchMode === 'semantic' && message.similarity !== undefined}
+                      {#if searchMode === "semantic" && message.similarity !== undefined}
                         <span class="similarity-badge">{formatSimilarity(message.similarity)}</span>
                       {/if}
                       <span class="date">{formatDate(message.date)}</span>
@@ -656,15 +616,9 @@
                   {#if message.attachments.length > 0}
                     <div class="attachment-indicator">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path
-                          d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
-                        ></path>
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                       </svg>
-                      <span
-                        >{message.attachments.length} attachment{message.attachments.length !== 1
-                          ? 's'
-                          : ''}</span
-                      >
+                      <span>{message.attachments.length} attachment{message.attachments.length !== 1 ? "s" : ""}</span>
                     </div>
                   {/if}
                 </button>
@@ -682,7 +636,7 @@
         <span><kbd>Esc</kbd> Close</span>
       </div>
       <div class="mode-hint">
-        {searchMode === 'semantic' ? 'AI-powered' : 'Keyword'} search
+        {searchMode === "semantic" ? "AI-powered" : "Keyword"} search
       </div>
     </div>
   </div>
@@ -705,12 +659,8 @@
   }
 
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   .search-modal {
@@ -905,7 +855,7 @@
     cursor: pointer;
   }
 
-  .checkbox-label input[type='checkbox'] {
+  .checkbox-label input[type="checkbox"] {
     accent-color: var(--accent-color);
     width: 16px;
     height: 16px;
@@ -924,7 +874,7 @@
     white-space: nowrap;
   }
 
-  .threshold-control input[type='range'] {
+  .threshold-control input[type="range"] {
     flex: 1;
     accent-color: var(--accent-color);
     max-width: 150px;
@@ -996,9 +946,7 @@
   }
 
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
   }
 
   .error-state svg {
@@ -1050,7 +998,7 @@
   }
 
   .search-tips li::before {
-    content: '*';
+    content: "*";
     margin-right: 8px;
     color: var(--accent-color);
   }

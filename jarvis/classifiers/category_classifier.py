@@ -417,6 +417,12 @@ class CategoryClassifier(EmbedderMixin):
                 embeddings = None
 
             if embeddings is not None:
+                # Some embedder backends/mocks may return a single vector as 1D.
+                # Normalize to 2D so feature concatenation remains stable.
+                embeddings = np.asarray(embeddings, dtype=np.float32)
+                if embeddings.ndim == 1:
+                    embeddings = embeddings.reshape(1, -1)
+
                 # Batch non-BERT feature extraction
                 mob_pressures = [m.pressure if m else "none" for m in pipeline_mobs]
                 mob_types = [m.response_type if m else "answer" for m in pipeline_mobs]
@@ -430,8 +436,28 @@ class CategoryClassifier(EmbedderMixin):
 
                 # Build full feature matrix: BERT(384) + context_BERT(384) + hand-crafted(147) = 915
                 # Context BERT zeroed at inference (intentional auxiliary supervision).
-                non_bert_matrix = np.array(non_bert_batch, dtype=np.float32)
+                non_bert_matrix = np.asarray(non_bert_batch, dtype=np.float32)
+                if non_bert_matrix.ndim == 1:
+                    non_bert_matrix = non_bert_matrix.reshape(1, -1)
                 context_embeddings = np.zeros((len(pipeline_texts), 384), dtype=np.float32)
+
+                if embeddings.shape[0] != len(pipeline_texts):
+                    logger.warning(
+                        "Batch embedding shape mismatch (%s), expected %d rows; falling back",
+                        embeddings.shape,
+                        len(pipeline_texts),
+                    )
+                    embeddings = None
+
+                if non_bert_matrix.shape[0] != len(pipeline_texts):
+                    logger.warning(
+                        "Feature extraction shape mismatch (%s), expected %d rows; falling back",
+                        non_bert_matrix.shape,
+                        len(pipeline_texts),
+                    )
+                    embeddings = None
+
+            if embeddings is not None:
                 feature_matrix = np.concatenate(
                     [embeddings, context_embeddings, non_bert_matrix],
                     axis=1,

@@ -47,7 +47,7 @@
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     hoverCardX = rect.left;
     hoverCardY = rect.bottom + 8;
-
+    
     if (hoverTimeout) clearTimeout(hoverTimeout);
     hoverTimeout = setTimeout(() => {
       hoverCardVisible = true;
@@ -134,8 +134,7 @@
     const _heights = messageHeights;
     const cumulative = new Float64Array(messages.length + 1);
     for (let i = 0; i < messages.length; i++) {
-      cumulative[i + 1] =
-        cumulative[i]! + (_heights.get(messages[i]!.id) ?? ESTIMATED_MESSAGE_HEIGHT);
+      cumulative[i + 1] = cumulative[i]! + (_heights.get(messages[i]!.id) ?? ESTIMATED_MESSAGE_HEIGHT);
     }
     return cumulative;
   });
@@ -170,8 +169,7 @@
     const topPadding = cumHeights[startIdx]!;
 
     // Binary search to find first message whose top edge > adjustedScrollTop + containerHeight
-    const scrollBottom =
-      adjustedScrollTop + containerHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT;
+    const scrollBottom = adjustedScrollTop + containerHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT;
     lo = startIdx;
     hi = messages.length;
     while (lo < hi) {
@@ -196,8 +194,9 @@
   function getVisibleMessages(): Message[] {
     const allMessages = conversationsStore.messagesWithOptimistic;
     // Extend end index to include optimistic messages if we're showing the tail
-    const effectiveEnd =
-      visibleEndIndex >= conversationsStore.messages.length ? allMessages.length : visibleEndIndex;
+    const effectiveEnd = visibleEndIndex >= conversationsStore.messages.length
+      ? allMessages.length
+      : visibleEndIndex;
     return allMessages.slice(visibleStartIndex, effectiveEnd);
   }
 
@@ -224,8 +223,7 @@
     visibleEndIndex = Math.min(messages.length, msgIndex + BUFFER_SIZE + MIN_VISIBLE_MESSAGES);
 
     virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
-    virtualBottomPadding =
-      cumulativeHeights[messages.length]! - cumulativeHeights[visibleEndIndex]!;
+    virtualBottomPadding = cumulativeHeights[messages.length]! - cumulativeHeights[visibleEndIndex]!;
 
     await tick();
 
@@ -251,14 +249,10 @@
       // Ensure optimistic message is visible - it gets appended to messagesWithOptimistic
       // So we need to include it in the visible range
       isAtBottom = true;
-      const totalWithOptimistic =
-        conversationsStore.messages.length + conversationsStore.optimisticMessages.length;
+      const totalWithOptimistic = conversationsStore.messages.length + conversationsStore.optimisticMessages.length;
       visibleEndIndex = totalWithOptimistic;
       visibleStartIndex = Math.max(0, totalWithOptimistic - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-      virtualTopPadding = Math.max(
-        0,
-        (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT
-      );
+      virtualTopPadding = Math.max(0, (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT);
       virtualBottomPadding = 0;
       scrollToBottom();
     }
@@ -425,12 +419,9 @@
           visibleEndIndex = msgLen;
           visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
           // Calculate top padding based on real messages only (optimistic don't have heights yet)
-          virtualTopPadding =
-            visibleStartIndex <= conversationsStore.messages.length
-              ? (cumulativeHeights[visibleStartIndex] ??
-                visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
-              : conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT +
-                (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
+          virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
+            ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+            : conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT + (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
           virtualBottomPadding = 0;
 
           suppressScrollRecalc = true;
@@ -472,8 +463,7 @@
       if (needsScrollToBottom) {
         visibleEndIndex = msgCount;
         visibleStartIndex = Math.max(0, msgCount - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-        virtualTopPadding =
-          cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
+        virtualTopPadding = cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
         virtualBottomPadding = 0;
 
         needsScrollToBottom = false;
@@ -543,6 +533,7 @@
   }
 
   function handleNewMessagesClick() {
+
     const messages = conversationsStore.messages;
     visibleEndIndex = messages.length;
     visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
@@ -626,7 +617,9 @@
   }
 
   function announceMessage(message: Message) {
-    const sender = message.is_from_me ? 'You' : message.sender_name || message.sender || 'Contact';
+    const sender = message.is_from_me
+      ? 'You'
+      : message.sender_name || message.sender || 'Contact';
     const time = formatDate(message.date);
     const text = message.text || 'Attachment';
     announce(`${sender} at ${time}: ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}`);
@@ -653,10 +646,7 @@
     if (actualIndex >= messages.length) return false;
 
     const curr = getMessageDateString(messages[actualIndex]!.id, messages[actualIndex]!.date);
-    const prev = getMessageDateString(
-      messages[actualIndex - 1]!.id,
-      messages[actualIndex - 1]!.date
-    );
+    const prev = getMessageDateString(messages[actualIndex - 1]!.id, messages[actualIndex - 1]!.date);
     return curr !== prev;
   }
 
@@ -697,8 +687,8 @@
     </EmptyState>
   {:else}
     <div class="header">
-      <div
-        class="avatar"
+      <div 
+        class="avatar" 
         class:group={conversationsStore.selectedConversation.is_group}
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
@@ -721,13 +711,11 @@
       </div>
       <div class="info">
         <h2>
-          {conversationsStore.selectedConversation.display_name ||
-            conversationsStore.selectedConversation.participants
-              .map((p) => formatParticipant(p))
-              .join(', ')}
+          {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.map(p => formatParticipant(p)).join(', ')}
         </h2>
       </div>
       <div class="header-actions">
+
         <button
           class="action-btn primary"
           onclick={() => {
@@ -836,7 +824,7 @@
           showDraftPanel = false;
           prefetchedSuggestions = undefined;
         }}
-        {...prefetchedSuggestions && { initialSuggestions: prefetchedSuggestions }}
+        {...(prefetchedSuggestions && { initialSuggestions: prefetchedSuggestions })}
       />
     {/if}
 
@@ -856,6 +844,7 @@
     {/if}
   {/if}
 </div>
+
 
 <style>
   .message-view {

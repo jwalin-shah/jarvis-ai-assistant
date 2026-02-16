@@ -132,6 +132,7 @@ def build_rag_reply_prompt(
     relationship_graph: str = "",
     user_style: UserStyleAnalysis | None = None,
     last_is_from_me: bool = False,
+    auto_context: str = "",
 ) -> str:
     """Build a RAG-enhanced prompt for generating personalized iMessage replies.
 
@@ -157,10 +158,40 @@ def build_rag_reply_prompt(
         resolved_style = user_style or analyze_user_style([])
 
     # Format relationship context with user messages for style analysis
+    style_section = _format_relationship_context(
+        contact_context=contact_context,
+        tone=tone,
+        avg_length=avg_length,
+        response_patterns=response_patterns,
+        user_messages=user_messages,
+        user_style=resolved_style,
+    )
+
     # Build extra context — only include facts when present (avoid noise)
     extra_parts: list[str] = []
-    # if contact_facts and contact_facts.strip():
-    #     extra_parts.append(f"Facts about them: {contact_facts.strip()}")
+    if style_section:
+        extra_parts.append(f"<style>\n{style_section}\n</style>")
+
+    if contact_facts and contact_facts.strip():
+        extra_parts.append(f"<facts>\n{contact_facts.strip()}\n</facts>")
+
+    if auto_context and auto_context.strip():
+        extra_parts.append(f"<auto_context>\n{auto_context.strip()}\n</auto_context>")
+
+    if relationship_graph and relationship_graph.strip():
+        extra_parts.append(f"<relationships>\n{relationship_graph.strip()}\n</relationships>")
+
+    if similar_exchanges:
+        formatted_exchanges = _format_similar_exchanges(similar_exchanges)
+        extra_parts.append(f"<examples>\n{formatted_exchanges}\n</examples>")
+
+    # 1. Temporal Context
+    from datetime import datetime
+
+    now = datetime.now()
+    time_context = f"Current time: {now.strftime('%A, %I:%M %p')}."
+    extra_parts.append(time_context)
+
     extra_context = "\n".join(extra_parts) + "\n" if extra_parts else ""
 
     # Format custom instruction
@@ -262,6 +293,9 @@ def build_prompt_from_request(req: Any) -> str:
     relationship_graph_raw = req.context.metadata.get("relationship_graph")
     relationship_graph = relationship_graph_raw if isinstance(relationship_graph_raw, str) else ""
 
+    auto_context_raw = req.context.metadata.get("auto_context")
+    auto_context = auto_context_raw if isinstance(auto_context_raw, str) else ""
+
     return build_rag_reply_prompt(
         context=formatted_context,
         last_message=req.context.message_text,
@@ -274,6 +308,7 @@ def build_prompt_from_request(req: Any) -> str:
         contact_facts=contact_facts,
         relationship_graph=relationship_graph,
         last_is_from_me=last_is_from_me,
+        auto_context=auto_context,
     )
 
 

@@ -56,8 +56,8 @@ def ensure_messages_exist(chat_id: str, messages: list[Message]) -> None:
 def build_reply_context(
     messages: list[Message],
     context_messages: int,
-) -> tuple[str, list[str], list[str]]:
-    """Build last message, participants, and thread context for reply generation."""
+) -> tuple[str, list[str], list[str], bool]:
+    """Build last message, participants, thread context, and sender flag for reply generation."""
     # The actual last message is the first one in our newest-first list
     last_message = messages[0].text if messages and messages[0].text else ""
 
@@ -69,7 +69,7 @@ def build_reply_context(
 
     # If the last message was from me, the context should reflect that
     # we might be following up or adding more info.
-    return last_message or "", participants, thread
+    return last_message or "", participants, thread, last_is_from_me
 
 
 async def build_draft_suggestions(
@@ -79,6 +79,7 @@ async def build_draft_suggestions(
     thread: list[str],
     instruction: str | None,
     num_suggestions: int,
+    last_is_from_me: bool = False,
 ) -> list[DraftSuggestion]:
     """Generate draft suggestions with retrieval and model generation."""
     reply_service = get_reply_service()
@@ -91,8 +92,6 @@ async def build_draft_suggestions(
     except Exception as e:
         logger.error("Classification/search failed: %s", e)
         raise ModelError("Model service unavailable", cause=e) from e
-
-    last_is_from_me = messages[0].is_from_me if messages else False
 
     context = MessageContext(
         chat_id=chat_id,

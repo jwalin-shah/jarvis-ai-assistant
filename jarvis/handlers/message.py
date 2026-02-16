@@ -11,6 +11,7 @@ from jarvis.handlers.base import (
     JsonRpcError,
     rpc_handler,
 )
+from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
 
 if TYPE_CHECKING:
     pass
@@ -76,7 +77,7 @@ class MessageHandler(BaseHandler):
             max_tokens=512,
             temperature=0.7,
             top_p=0.9,
-            repetition_penalty=1.05,
+            repetition_penalty=DEFAULT_REPETITION_PENALTY,  # From generation_config
             stop_sequences=["<|im_end|>", "<|im_start|>"],
         )
 

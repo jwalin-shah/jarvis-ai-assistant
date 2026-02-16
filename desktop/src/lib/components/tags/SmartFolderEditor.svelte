@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { SmartFolder, SmartFolderRules, RuleCondition, Tag } from '../../api/types';
-  import { TAG_COLORS, RULE_FIELDS, RULE_OPERATORS } from '../../api/types';
-  import { createEventDispatcher } from 'svelte';
+  import type { SmartFolder, SmartFolderRules, RuleCondition, Tag } from "../../api/types";
+  import { TAG_COLORS, RULE_FIELDS, RULE_OPERATORS } from "../../api/types";
+  import { createEventDispatcher } from "svelte";
 
   export let folder: SmartFolder | null = null;
   export let tags: Tag[] = [];
@@ -15,72 +15,72 @@
   }>();
 
   // Form state
-  let name = '';
-  let icon = 'folder';
+  let name = "";
+  let icon = "folder";
   let color: string = TAG_COLORS.SLATE;
-  let matchType: 'all' | 'any' = 'all';
+  let matchType: "all" | "any" = "all";
   let conditions: RuleCondition[] = [];
-  let sortBy = 'last_message_date';
-  let sortOrder: 'asc' | 'desc' = 'desc';
+  let sortBy = "last_message_date";
+  let sortOrder: "asc" | "desc" = "desc";
   let limitResults = 0;
 
   // Field labels for display
   const fieldLabels: Record<string, string> = {
-    chat_id: 'Chat ID',
-    display_name: 'Contact Name',
-    last_message_date: 'Last Message Date',
-    message_count: 'Message Count',
-    is_group: 'Is Group Chat',
-    unread_count: 'Unread Count',
-    is_flagged: 'Is Flagged',
-    relationship: 'Relationship',
-    contact_name: 'Contact Name',
-    last_message_text: 'Last Message Text',
-    has_attachments: 'Has Attachments',
-    tags: 'Tags',
-    sentiment: 'Sentiment',
-    priority: 'Priority',
-    needs_response: 'Needs Response',
+    chat_id: "Chat ID",
+    display_name: "Contact Name",
+    last_message_date: "Last Message Date",
+    message_count: "Message Count",
+    is_group: "Is Group Chat",
+    unread_count: "Unread Count",
+    is_flagged: "Is Flagged",
+    relationship: "Relationship",
+    contact_name: "Contact Name",
+    last_message_text: "Last Message Text",
+    has_attachments: "Has Attachments",
+    tags: "Tags",
+    sentiment: "Sentiment",
+    priority: "Priority",
+    needs_response: "Needs Response",
   };
 
   // Operator labels
   const operatorLabels: Record<string, string> = {
-    equals: 'equals',
-    not_equals: 'does not equal',
-    contains: 'contains',
-    not_contains: 'does not contain',
-    starts_with: 'starts with',
-    ends_with: 'ends with',
-    is_empty: 'is empty',
-    is_not_empty: 'is not empty',
-    greater_than: 'is greater than',
-    less_than: 'is less than',
-    in_last_days: 'in last N days',
-    before: 'is before',
-    after: 'is after',
-    has_tag: 'has tag',
-    has_any_tag: 'has any of tags',
-    has_all_tags: 'has all tags',
-    has_no_tags: 'has no tags',
+    equals: "equals",
+    not_equals: "does not equal",
+    contains: "contains",
+    not_contains: "does not contain",
+    starts_with: "starts with",
+    ends_with: "ends with",
+    is_empty: "is empty",
+    is_not_empty: "is not empty",
+    greater_than: "is greater than",
+    less_than: "is less than",
+    in_last_days: "in last N days",
+    before: "is before",
+    after: "is after",
+    has_tag: "has tag",
+    has_any_tag: "has any of tags",
+    has_all_tags: "has all tags",
+    has_no_tags: "has no tags",
   };
 
   const colorOptions = Object.entries(TAG_COLORS);
   const iconOptions = [
-    { value: 'folder', label: 'Folder' },
-    { value: 'inbox', label: 'Inbox' },
-    { value: 'mail', label: 'Mail' },
-    { value: 'flag', label: 'Flag' },
-    { value: 'clock', label: 'Clock' },
-    { value: 'star', label: 'Star' },
-    { value: 'heart', label: 'Heart' },
-    { value: 'users', label: 'Users' },
-    { value: 'briefcase', label: 'Briefcase' },
+    { value: "folder", label: "Folder" },
+    { value: "inbox", label: "Inbox" },
+    { value: "mail", label: "Mail" },
+    { value: "flag", label: "Flag" },
+    { value: "clock", label: "Clock" },
+    { value: "star", label: "Star" },
+    { value: "heart", label: "Heart" },
+    { value: "users", label: "Users" },
+    { value: "briefcase", label: "Briefcase" },
   ];
-  const nameInputId = 'smart-folder-name';
-  const iconInputId = 'smart-folder-icon';
-  const sortByInputId = 'smart-folder-sort-by';
-  const sortOrderInputId = 'smart-folder-sort-order';
-  const limitInputId = 'smart-folder-limit';
+  const nameInputId = "smart-folder-name";
+  const iconInputId = "smart-folder-icon";
+  const sortByInputId = "smart-folder-sort-by";
+  const sortOrderInputId = "smart-folder-sort-order";
+  const limitInputId = "smart-folder-limit";
 
   $: isEditing = folder !== null;
   $: if (isOpen) {
@@ -96,19 +96,22 @@
       limitResults = folder.rules.limit;
     } else {
       // Reset to defaults for new folder
-      name = '';
-      icon = 'folder';
+      name = "";
+      icon = "folder";
       color = TAG_COLORS.SLATE;
-      matchType = 'all';
+      matchType = "all";
       conditions = [];
-      sortBy = 'last_message_date';
-      sortOrder = 'desc';
+      sortBy = "last_message_date";
+      sortOrder = "desc";
       limitResults = 0;
     }
   }
 
   function addCondition() {
-    conditions = [...conditions, { field: 'display_name', operator: 'contains', value: '' }];
+    conditions = [
+      ...conditions,
+      { field: "display_name", operator: "contains", value: "" },
+    ];
   }
 
   function removeCondition(index: number) {
@@ -116,21 +119,21 @@
   }
 
   function updateCondition(index: number, field: keyof RuleCondition, value: unknown) {
-    conditions = conditions.map((c, i) => (i === index ? { ...c, [field]: value } : c));
+    conditions = conditions.map((c, i) =>
+      i === index ? { ...c, [field]: value } : c
+    );
   }
 
-  function getValueInputType(
-    operator: string
-  ): 'text' | 'number' | 'date' | 'boolean' | 'tags' | 'none' {
-    if (['is_empty', 'is_not_empty', 'has_no_tags'].includes(operator)) return 'none';
-    if (['has_tag', 'has_any_tag', 'has_all_tags'].includes(operator)) return 'tags';
-    if (['in_last_days', 'greater_than', 'less_than'].includes(operator)) return 'number';
-    if (['before', 'after'].includes(operator)) return 'date';
-    if (['equals', 'not_equals'].includes(operator)) {
+  function getValueInputType(operator: string): "text" | "number" | "date" | "boolean" | "tags" | "none" {
+    if (["is_empty", "is_not_empty", "has_no_tags"].includes(operator)) return "none";
+    if (["has_tag", "has_any_tag", "has_all_tags"].includes(operator)) return "tags";
+    if (["in_last_days", "greater_than", "less_than"].includes(operator)) return "number";
+    if (["before", "after"].includes(operator)) return "date";
+    if (["equals", "not_equals"].includes(operator)) {
       // Could be boolean for certain fields
-      return 'text';
+      return "text";
     }
-    return 'text';
+    return "text";
   }
 
   function buildRules(): SmartFolderRules {
@@ -159,49 +162,36 @@
       updated_at: null,
     };
 
-    dispatch('save', { folder: savedFolder, isNew: !folder });
+    dispatch("save", { folder: savedFolder, isNew: !folder });
   }
 
   function handlePreview() {
-    dispatch('preview', buildRules());
+    dispatch("preview", buildRules());
   }
 
   function handleDelete() {
     if (folder && confirm(`Delete smart folder "${folder.name}"?`)) {
-      dispatch('delete', folder);
+      dispatch("delete", folder);
     }
   }
 </script>
 
 {#if isOpen}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div
-      class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
-    >
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
       <!-- Header -->
-      <div
-        class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700"
-      >
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-          {isEditing ? 'Edit Smart Folder' : 'Create Smart Folder'}
+          {isEditing ? "Edit Smart Folder" : "Create Smart Folder"}
         </h2>
         <button
           type="button"
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          on:click={() => dispatch('cancel')}
+          on:click={() => dispatch("cancel")}
           aria-label="Close smart folder editor"
         >
-          <svg
-            class="w-5 h-5"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-              clip-rule="evenodd"
-            />
+          <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
           </svg>
         </button>
       </div>
@@ -211,10 +201,7 @@
         <!-- Basic Info -->
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label
-              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              for={nameInputId}
-            >
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={nameInputId}>
               Name
             </label>
             <input
@@ -227,10 +214,7 @@
           </div>
 
           <div>
-            <label
-              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              for={iconInputId}
-            >
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={iconInputId}>
               Icon
             </label>
             <select
@@ -247,7 +231,9 @@
 
         <!-- Color -->
         <div>
-          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Color</p>
+          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Color
+          </p>
           <div class="flex flex-wrap gap-2">
             {#each colorOptions as [colorName, colorValue]}
               <button
@@ -267,7 +253,9 @@
 
         <!-- Match Type -->
         <div>
-          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Match</p>
+          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Match
+          </p>
           <div class="flex gap-4">
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -293,7 +281,9 @@
         <!-- Conditions -->
         <div>
           <div class="flex items-center justify-between mb-2">
-            <p class="block text-sm font-medium text-gray-700 dark:text-gray-300">Conditions</p>
+            <p class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Conditions
+            </p>
             <button
               type="button"
               class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
@@ -313,7 +303,7 @@
                 <div class="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <select
                     value={condition.field}
-                    on:change={(e) => updateCondition(index, 'field', e.currentTarget.value)}
+                    on:change={(e) => updateCondition(index, "field", e.currentTarget.value)}
                     class="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   >
                     {#each RULE_FIELDS as field}
@@ -323,7 +313,7 @@
 
                   <select
                     value={condition.operator}
-                    on:change={(e) => updateCondition(index, 'operator', e.currentTarget.value)}
+                    on:change={(e) => updateCondition(index, "operator", e.currentTarget.value)}
                     class="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   >
                     {#each RULE_OPERATORS as op}
@@ -331,34 +321,32 @@
                     {/each}
                   </select>
 
-                  {#if getValueInputType(condition.operator) === 'text'}
+                  {#if getValueInputType(condition.operator) === "text"}
                     <input
                       type="text"
-                      value={condition.value || ''}
-                      on:input={(e) => updateCondition(index, 'value', e.currentTarget.value)}
+                      value={condition.value || ""}
+                      on:input={(e) => updateCondition(index, "value", e.currentTarget.value)}
                       placeholder="Value"
                       class="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     />
-                  {:else if getValueInputType(condition.operator) === 'number'}
+                  {:else if getValueInputType(condition.operator) === "number"}
                     <input
                       type="number"
                       value={condition.value || 0}
-                      on:input={(e) =>
-                        updateCondition(index, 'value', parseInt(e.currentTarget.value))}
+                      on:input={(e) => updateCondition(index, "value", parseInt(e.currentTarget.value))}
                       class="w-24 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     />
-                  {:else if getValueInputType(condition.operator) === 'date'}
+                  {:else if getValueInputType(condition.operator) === "date"}
                     <input
                       type="date"
-                      value={condition.value || ''}
-                      on:input={(e) => updateCondition(index, 'value', e.currentTarget.value)}
+                      value={condition.value || ""}
+                      on:input={(e) => updateCondition(index, "value", e.currentTarget.value)}
                       class="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     />
-                  {:else if getValueInputType(condition.operator) === 'tags'}
+                  {:else if getValueInputType(condition.operator) === "tags"}
                     <select
                       value={condition.value}
-                      on:change={(e) =>
-                        updateCondition(index, 'value', parseInt(e.currentTarget.value))}
+                      on:change={(e) => updateCondition(index, "value", parseInt(e.currentTarget.value))}
                       class="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     >
                       {#each tags as tag}
@@ -373,17 +361,8 @@
                     on:click={() => removeCondition(index)}
                     aria-label="Remove condition"
                   >
-                    <svg
-                      class="w-4 h-4"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fill-rule="evenodd"
-                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                        clip-rule="evenodd"
-                      />
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                     </svg>
                   </button>
                 </div>
@@ -395,10 +374,7 @@
         <!-- Sort Options -->
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label
-              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              for={sortByInputId}
-            >
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={sortByInputId}>
               Sort by
             </label>
             <select
@@ -414,10 +390,7 @@
           </div>
 
           <div>
-            <label
-              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              for={sortOrderInputId}
-            >
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={sortOrderInputId}>
               Order
             </label>
             <select
@@ -433,10 +406,7 @@
 
         <!-- Limit -->
         <div>
-          <label
-            class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            for={limitInputId}
-          >
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={limitInputId}>
             Limit results (0 = unlimited)
           </label>
           <input
@@ -451,9 +421,7 @@
       </div>
 
       <!-- Footer -->
-      <div
-        class="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
-      >
+      <div class="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
         <div>
           {#if isEditing && !folder?.is_default}
             <button
@@ -477,7 +445,7 @@
           <button
             type="button"
             class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-            on:click={() => dispatch('cancel')}
+            on:click={() => dispatch("cancel")}
           >
             Cancel
           </button>
@@ -487,7 +455,7 @@
             disabled={!name.trim()}
             on:click={handleSave}
           >
-            {isEditing ? 'Save Changes' : 'Create Folder'}
+            {isEditing ? "Save Changes" : "Create Folder"}
           </button>
         </div>
       </div>

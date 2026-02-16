@@ -308,3 +308,9 @@ fact_extraction_review.md
 
 # Local binaries
 bin/
+
+# Template/research generated artifacts
+models/template_defaults_backup.py
+models/template_defaults_v2.py
+evals/optimized_reply.json
+jarvis_auto_context/

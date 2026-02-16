@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
+from jarvis.config import get_config
 from jarvis.utils.async_utils import log_task_exception
 from jarvis.utils.backoff import AsyncConsecutiveErrorTracker
 from jarvis.utils.datetime_utils import (
@@ -347,10 +348,22 @@ class ChatDBWatcher:
             new_messages = await self._get_new_messages()
 
             if new_messages:
-                # Pre-index messages for semantic search in the background
+                # 1. Pre-index messages for semantic search in the background
                 # This ensures near-instant availability for RAG
                 task = asyncio.create_task(self._index_new_messages(new_messages))
                 task.add_done_callback(log_task_exception)
+
+                # 2. Pre-warm the model generator
+                # Trigger model load as soon as a message arrives, anticipating a reply.
+                try:
+                    from jarvis.model_warmer import get_model_warmer
+
+                    warmer = get_model_warmer()
+                    # We don't await this as it can be slow; just touch and ensure_warm in thread
+                    asyncio.create_task(asyncio.to_thread(warmer.ensure_warm))
+                    logger.debug("Triggered model pre-warm on new message")
+                except Exception as e:
+                    logger.debug("Failed to trigger pre-warm: %s", e)
 
             # Pre-build all payloads, then broadcast (avoids dict creation inside loop)
             for msg in new_messages:
@@ -486,13 +499,6 @@ class ChatDBWatcher:
 
         Identifies when a user sends a message that was previously suggested
         by the AI, or when they send a message that implies feedback.
-
-        This is a simple implementation that logs matches for monitoring.
-        A full implementation would:
-        1. Store recent suggestions with timestamps and chat_id
-        2. Compute semantic similarity between sent message and suggestions
-        3. Record to FeedbackStore with action=SENT (>0.92 similarity) or EDITED (>0.55)
-        4. Track which suggestions were ignored (wrote_from_scratch)
         """
         try:
             # Filter to outgoing messages with text (is_from_me=True)
@@ -501,43 +507,75 @@ class ChatDBWatcher:
                 return
 
             # Get recent feedback entries to check for matches
-            from jarvis.eval.evaluation import get_feedback_store
+            import numpy as np
+
+            from jarvis.embedding_adapter import get_embedder
+            from jarvis.eval.evaluation import SuggestionAction, get_feedback_store
 
             store = get_feedback_store()
-            recent_entries = await asyncio.to_thread(store.get_recent_entries, limit=50)
+            embedder = get_embedder()
 
-            # Simple time window: only compare against suggestions from last 5 minutes
-            cutoff_time = datetime.now(UTC) - timedelta(minutes=5)
+            # Fetch recent entries (likely suggestions) from the last 10 minutes
+            recent_entries = await asyncio.to_thread(store.get_recent_entries, limit=50)
+            cutoff_time = datetime.now(UTC) - timedelta(minutes=10)
+            suggestions = [e for e in recent_entries if e.timestamp > cutoff_time]
+
+            if not suggestions:
+                return
 
             for msg in outgoing:
-                msg_text = msg.get("text", "").strip().lower()
+                msg_text = msg.get("text", "").strip()
                 chat_id = msg.get("chat_id", "")
 
-                # Look for recent suggestions for this chat
-                for entry in recent_entries:
-                    # Skip if wrong chat or too old
-                    if entry.chat_id != chat_id:
-                        continue
-                    if entry.timestamp < cutoff_time:
-                        continue
+                # Check for suggestions in this same chat
+                chat_suggestions = [s for s in suggestions if s.chat_id == chat_id]
+                if not chat_suggestions:
+                    continue
 
-                    suggestion_text = entry.suggestion_text.strip().lower()
+                # Compute embedding for the outgoing message to do semantic comparison
+                msg_emb = await asyncio.to_thread(embedder.encode, [msg_text], normalize=True)
 
-                    # Simple exact match check (a full implementation would use embeddings)
-                    # This logs when user sends exactly what was suggested
-                    if msg_text == suggestion_text:
-                        logger.info(
-                            "Passive feedback detected: user sent suggested message "
-                            "(chat=%s, suggestion_id=%s)",
-                            chat_id[:20],
-                            entry.suggestion_id,
+                for entry in chat_suggestions:
+                    # Compute similarity with the suggestion
+                    sugg_emb = await asyncio.to_thread(
+                        embedder.encode, [entry.suggestion_text], normalize=True
+                    )
+                    similarity = float(np.dot(msg_emb[0], sugg_emb[0]))
+
+                    config = get_config()
+                    if similarity > config.similarity_thresholds.exact_match_similarity:
+                        # SENT UNCHANGED
+                        await asyncio.to_thread(
+                            store.record_feedback,
+                            action=SuggestionAction.SENT,
+                            suggestion_text=entry.suggestion_text,
+                            chat_id=chat_id,
+                            context_messages=[],  # Context already captured in original entry
+                            metadata={"passive": True, "similarity": similarity},
                         )
-                        # A full implementation would call:
-                        # store.record_feedback(
-                        #     action=SuggestionAction.SENT,
-                        #     suggestion_id=entry.suggestion_id,
-                        #     ...
-                        # )
+                        logger.info(
+                            "Passive feedback: Suggestion SENT unchanged (%s)", chat_id[:12]
+                        )
+                        break
+                    elif (
+                        config.similarity_thresholds.edited_similarity_low
+                        < similarity
+                        <= config.similarity_thresholds.exact_match_similarity
+                    ):
+                        # EDITED (The user sent something similar but modified)
+                        # We record this as a "Gold Example" in the store
+                        await asyncio.to_thread(
+                            store.record_feedback,
+                            action=SuggestionAction.EDITED,
+                            suggestion_text=entry.suggestion_text,
+                            edited_text=msg_text,
+                            chat_id=chat_id,
+                            context_messages=[],  # We rely on existing context if possible
+                            metadata={"passive": True, "similarity": similarity},
+                        )
+                        logger.info(
+                            "Passive feedback: Suggestion EDITED and sent (%s)", chat_id[:12]
+                        )
                         break
 
         except Exception as e:
