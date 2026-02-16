@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import * as d3 from "d3";
   import { api } from "../../api/client";
   import type { GraphData, GraphNode, KnowledgeGraphData, KnowledgeNode, LayoutType } from "../../api/types";
@@ -111,11 +111,14 @@
 
       adjacencyMap = buildAdjacencyMap(graphData.edges);
       nodeMap = buildNodeMap(graphData.nodes);
+      
+      loading = false;
+      await tick();
+      
       console.log("[Graph] Rendering:", graphData.nodes.length, "nodes,", graphData.edges.length, "edges, svgElement:", !!svgElement);
       renderGraph();
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load graph";
-    } finally {
       loading = false;
     }
   }
