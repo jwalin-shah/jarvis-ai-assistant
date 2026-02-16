@@ -34,16 +34,28 @@ def run_bakeoff():
     
     conv = convs[0]
     messages = reader.get_messages(conv.chat_id, limit=5)
+    # messages[0] is the most recent (incoming)
     incoming = messages[0].text or "Hey what's up?"
+    # messages[1:] are previous messages
+    thread = []
+    for m in reversed(messages[1:]):
+        if not m.text:
+            continue
+        prefix = "Me" if m.is_from_me else "Them"
+        thread.append(f"{prefix}: {m.text}")
     
+    # Clean up input for display
     print(f"Test Input: \"{incoming}\"\n")
+    print(f"Thread Context ({len(thread)} msgs):")
+    for t in thread:
+        print(f"  {t}")
 
     message_context = MessageContext(
         chat_id=conv.chat_id,
         message_text=incoming,
-        is_from_me=False,
+        is_from_me=messages[0].is_from_me,
         timestamp=datetime.now(UTC),
-        metadata={"thread": [m.text for m in reversed(messages) if m.text]}
+        metadata={"thread": thread}
     )
 
     dummy_class = ClassificationResult(
@@ -61,8 +73,15 @@ def run_bakeoff():
         service = ReplyService(generator=gen)
         
         start = time.perf_counter()
-        response = service.generate_reply(message_context, classification=dummy_class)
+        # Pass empty search_results to test zero-shot capabilities first
+        response = service.generate_reply(message_context, classification=dummy_class, search_results=[])
         elapsed = (time.perf_counter() - start) * 1000
+        
+        # Show the actual prompt the model saw
+        final_prompt = response.metadata.get("final_prompt", "(not captured)")
+        print(f"\n--- PROMPT SENT TO MODEL ---")
+        print(final_prompt)
+        print(f"--- END PROMPT ---\n")
         
         print(f"Time: {elapsed:.0f}ms")
         print(f"Reply: \"{response.response}\"")

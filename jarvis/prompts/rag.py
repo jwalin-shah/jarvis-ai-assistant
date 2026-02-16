@@ -157,18 +157,11 @@ def build_rag_reply_prompt(
         resolved_style = user_style or analyze_user_style([])
 
     # Format relationship context with user messages for style analysis
-    relationship_context = _format_relationship_context(
-        contact_context=contact_context,
-        tone=tone,
-        avg_length=avg_length,
-        response_patterns=response_patterns if isinstance(response_patterns, dict) else None,
-        user_messages=user_messages,
-        user_style=resolved_style,
-    )
-
-    # Format similar exchanges
-    exchanges = similar_exchanges or []
-    similar_context = _format_similar_exchanges(exchanges)
+    # Build extra context — only include facts when present (avoid noise)
+    extra_parts: list[str] = []
+    # if contact_facts and contact_facts.strip():
+    #     extra_parts.append(f"Facts about them: {contact_facts.strip()}")
+    extra_context = "\n".join(extra_parts) + "\n" if extra_parts else ""
 
     # Format custom instruction
     custom_instruction = instruction or ""
@@ -176,23 +169,30 @@ def build_rag_reply_prompt(
     # Add guidance for follow-ups if last message was from Me
     if last_is_from_me:
         followup_guidance = (
-            "\n- Note: You were the last one to speak. This is a follow-up or additional thought."
+            "You spoke last. Add a follow-up or ask if they saw your message."
         )
         if custom_instruction:
-            custom_instruction += followup_guidance
+            custom_instruction += " " + followup_guidance
         else:
-            custom_instruction = followup_guidance.strip("- \n")
+            custom_instruction = followup_guidance
+
+    # Add newline after instruction if present
+    if custom_instruction:
+        custom_instruction = custom_instruction + "\n"
 
     # Truncate context if needed
     truncated_context = truncate_context(context)
 
+    # Prefix last message with speaker label
+    last_message_prefix = "Me" if last_is_from_me else "Them"
+    prefixed_last_message = f"{last_message_prefix}: {last_message}"
+
     # Build the prompt
     prompt = RAG_REPLY_PROMPT.template.format(
-        relationship_context=relationship_context,
-        contact_facts=contact_facts or "(none)",
-        similar_exchanges=similar_context,
+        instruction=custom_instruction,
+        extra_context=extra_context,
         context=truncated_context,
-        last_message=last_message,
+        last_message=prefixed_last_message,
     )
 
     return prompt
@@ -201,16 +201,12 @@ def build_rag_reply_prompt(
 def build_prompt_from_request(req: Any) -> str:
     """Build a reply prompt from a typed pipeline generation request."""
     context_messages = req.context.metadata.get("context_messages")
-    last_is_from_me = False
+    last_is_from_me = req.context.is_from_me  # Default to true source
 
     if isinstance(context_messages, list) and context_messages:
         formatted_context = "\n".join(str(msg) for msg in context_messages if isinstance(msg, str))
-        # In context_messages (chronological), last is [-1]
-        # But we need to know if the message we are "replying to" (req.context.message_text)
-        # was sent by Me or Them.
-        # Check if context messages end with "You:"
-        if str(context_messages[-1]).startswith("You:"):
-            last_is_from_me = True
+        # No need to override last_is_from_me from context_messages[-1]
+        # because req.context.is_from_me is the ground truth for the *triggering* message.
     else:
         thread_messages = req.context.metadata.get("thread", [])
         if isinstance(thread_messages, list) and thread_messages:

@@ -311,22 +311,28 @@ TEXT_ABBREVIATIONS: set[str] = {
 # =============================================================================
 
 # Static system prefix for KV cache reuse.
-SYSTEM_PREFIX = """<|im_start|>system
-Respond as a human texting from their phone.
-RULES: Be brief, casual, and never formal. Use lower-case. No AI-assistant phrases.<|im_end|>
-"""
+SYSTEM_PREFIX = "Respond as a person texting. Be brief, casual, and lowercase.\n"
 
 REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
     system_message="",
-    template="<|im_start|>user\nHistory:\n{context}\n{last_message}<|im_end|>\n<|im_start|>assistant\n",
+    template="{context}\nMe: ",
     max_output_tokens=50,
 )
 
 RAG_REPLY_PROMPT = PromptTemplate(
     name="rag_reply_generation",
     system_message="",
-    template="<|im_start|>user\nContext/Facts: {relationship_context} {contact_facts}\n\nHistory:\n{context}\n{last_message}<|im_end|>\n<|im_start|>assistant\n",
+    template=(
+        "<|im_start|>system\n"
+        + SYSTEM_PREFIX
+        + "{instruction}<|im_end|>\n"
+        "<|im_start|>user\n"
+        "{extra_context}"
+        "{context}\n"
+        "{last_message}<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    ),
     max_output_tokens=40,
 )
 

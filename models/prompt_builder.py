@@ -35,9 +35,9 @@ class PromptBuilder:
         Returns:
             Formatted prompt string ready for model input
         """
-        # Pass through XML-tagged prompts that already contain everything
+        # Pass through simple prompts that don't need wrapping
         has_extra = bool(request.context_documents) or bool(request.few_shot_examples)
-        if not has_extra and request.prompt.lstrip().startswith("<"):
+        if not has_extra:
             return request.prompt
 
         sections = []
