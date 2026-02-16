@@ -91,7 +91,10 @@ export async function initDatabases(): Promise<void> {
     // Open chat.db in read-only mode via URI
     // tauri-plugin-sql uses sqlite:// protocol
     const { join } = await import("@tauri-apps/api/path");
-    const chatDbPath = await join(resolvedHomePath!, "Library", "Messages", "chat.db");
+    if (resolvedHomePath == null) {
+      throw new Error("Home directory path not resolved");
+    }
+    const chatDbPath = await join(resolvedHomePath, "Library", "Messages", "chat.db");
     const uri = `sqlite:${chatDbPath}?mode=ro`;
     try {
       chatDb = await Database.load(uri);
@@ -216,7 +219,7 @@ interface ReactionRow {
  * Get recent conversations
  */
 export async function getConversations(
-  limit: number = 50,
+  limit = 50,
   since?: Date,
   before?: Date
 ): Promise<Conversation[]> {
@@ -225,8 +228,8 @@ export async function getConversations(
   }
 
   const query = getConversationsQuery({
-    withSinceFilter: !!since,
-    withBeforeFilter: !!before,
+    withSinceFilter: Boolean(since),
+    withBeforeFilter: Boolean(before),
   });
 
   // Build parameters array
@@ -272,7 +275,10 @@ export async function getConversations(
       // Get display name or resolve from contacts
       let displayName = row.display_name || null;
       if (!displayName && !isGroup && participants.length === 1) {
-        displayName = resolveContactName(participants[0]!);
+        const participant = participants[0];
+        if (participant !== undefined) {
+          displayName = resolveContactName(participant);
+        }
       }
 
       // Get last message text
@@ -302,7 +308,7 @@ export async function getConversations(
  */
 export async function getMessages(
   chatId: string,
-  limit: number = 100,
+  limit = 100,
   before?: Date
 ): Promise<Message[]> {
   if (!chatDb) {
@@ -312,11 +318,11 @@ export async function getMessages(
   // Use ROWID-direct query if cached (skips JOIN chat), else fall back
   const cachedRowid = chatGuidToRowid.get(chatId);
   const query = cachedRowid !== undefined
-    ? getMessagesQueryDirect({ withBeforeFilter: !!before })
-    : getMessagesQuery({ withBeforeFilter: !!before });
+    ? getMessagesQueryDirect({ withBeforeFilter: Boolean(before) })
+    : getMessagesQuery({ withBeforeFilter: Boolean(before) });
 
   // Build parameters: ROWID (number) or GUID (string)
-  const params: (string | number)[] = [cachedRowid !== undefined ? cachedRowid : chatId];
+  const params = [cachedRowid !== undefined ? cachedRowid : chatId];
   if (before) {
     params.push(toAppleTimestamp(before));
   }
@@ -331,12 +337,12 @@ export async function getMessages(
     // Before: 3 sequential queries (~60-220ms). After: 3 parallel queries (~30-50ms)
     const messageIds = rows.map((row) => row.id);
     const messageGuids = rows.map((row) => row.guid);
-    const validGuids = messageGuids.filter((g) => g);
+    const validGuids = messageGuids.filter((g) => Boolean(g));
 
     // Collect uncached reply GUIDs before launching parallel queries
     const replyGuids = rows
       .map((row) => row.reply_to_guid)
-      .filter((g): g is string => !!g && !guidToRowidCache.has(g));
+      .filter((g): g is string => Boolean(g) && !guidToRowidCache.has(g));
     const uncachedGuids = [...new Set(replyGuids)];
 
     // Run all 3 batch queries in parallel
@@ -391,7 +397,7 @@ export async function getMessages(
       if (!attachmentsByMessageId.has(msgId)) {
         attachmentsByMessageId.set(msgId, []);
       }
-      attachmentsByMessageId.get(msgId)!.push({
+      attachmentsByMessageId.get(msgId)?.push({
         filename: row.transfer_name || row.filename || "attachment",
         file_path: row.filename,
         mime_type: row.mime_type,
@@ -410,7 +416,7 @@ export async function getMessages(
         reactionsByMessageGuid.set(guid, []);
       }
       const sender = normalizePhoneNumber(row.sender) || row.sender;
-      reactionsByMessageGuid.get(guid)!.push({
+      reactionsByMessageGuid.get(guid)?.push({
         type: reactionType,
         sender,
         sender_name: row.is_from_me ? null : resolveContactName(sender),
@@ -520,7 +526,8 @@ export async function getMessage(
       query, [cachedRowid !== undefined ? cachedRowid : chatId, messageId]
     );
     if (rows.length === 0) return null;
-    return await rowToMessage(rows[0]!, chatId);
+    const row = rows[0];
+    return await rowToMessage(row, chatId);
   } catch (error) {
     logger.error("getMessage error:", error);
     return null;
@@ -592,7 +599,7 @@ export async function getMessagesBatch(
     const guids = rows.map((r) => r.guid).filter((g) => g);
     const replyGuidsRaw = rows
       .map((r) => r.reply_to_guid)
-      .filter((g): g is string => !!g && !guidToRowidCache.has(g));
+      .filter((g): g is string => Boolean(g) && !guidToRowidCache.has(g));
     const uncachedGuids = [...new Set(replyGuidsRaw)];
 
     const [attachmentRows, reactionRows, guidRows] = await Promise.all([
@@ -642,10 +649,12 @@ export async function getMessagesBatch(
     // Build attachments map
     const attachmentsByMessageId = new Map<number, Attachment[]>();
     for (const row of attachmentRows) {
-      if (!attachmentsByMessageId.has(row.message_id)) {
-        attachmentsByMessageId.set(row.message_id, []);
+      let attachments = attachmentsByMessageId.get(row.message_id);
+      if (!attachments) {
+        attachments = [];
+        attachmentsByMessageId.set(row.message_id, attachments);
       }
-      attachmentsByMessageId.get(row.message_id)!.push({
+      attachments.push({
         filename: row.transfer_name || row.filename || "attachment",
         file_path: row.filename,
         mime_type: row.mime_type,
@@ -659,11 +668,13 @@ export async function getMessagesBatch(
       const reactionType = parseReactionType(rRow.associated_message_type);
       if (!reactionType || reactionType.startsWith("remove_")) continue;
       const guid = rRow.message_guid;
-      if (!reactionsByMessageGuid.has(guid)) {
-        reactionsByMessageGuid.set(guid, []);
+      let reactions = reactionsByMessageGuid.get(guid);
+      if (!reactions) {
+        reactions = [];
+        reactionsByMessageGuid.set(guid, reactions);
       }
       const sender = normalizePhoneNumber(rRow.sender) || rRow.sender;
-      reactionsByMessageGuid.get(guid)!.push({
+      reactions.push({
         type: reactionType,
         sender,
         sender_name: rRow.is_from_me ? null : resolveContactName(sender),
@@ -778,7 +789,7 @@ async function rowToMessage(
       sender,
       senderName,
       row.affected_handle_id,
-      !!row.is_from_me
+      Boolean(row.is_from_me)
     );
 
     return {
@@ -788,7 +799,7 @@ async function rowToMessage(
       sender_name: senderName,
       text,
       date: formatDate(parseAppleTimestamp(row.date)) || "",
-      is_from_me: !!row.is_from_me,
+      is_from_me: Boolean(row.is_from_me),
       attachments: [],
       reply_to_id: null,
       reactions: [],
@@ -842,7 +853,7 @@ async function rowToMessage(
     sender_name: senderName,
     text,
     date: formatDate(parseAppleTimestamp(row.date)) || "",
-    is_from_me: !!row.is_from_me,
+    is_from_me: Boolean(row.is_from_me),
     attachments,
     reply_to_id: replyToId,
     reactions,
@@ -921,8 +932,9 @@ async function getMessageRowidByGuid(guid: string): Promise<number | null> {
       guid,
     ]);
     if (rows.length > 0) {
-      guidToRowidCache.set(guid, rows[0]!.id);
-      return rows[0]!.id;
+      const row = rows[0];
+      guidToRowidCache.set(guid, row.id);
+      return row.id;
     }
     return null;
   } catch {
@@ -1082,7 +1094,7 @@ export function formatParticipant(identifier: string): string {
     // Show last 4 digits for privacy: "+1 (555) 123-4567" -> "...4567"
     const digits = normalized.replace(/\D/g, '');
     if (digits.length >= 10) {
-      return '...' + digits.slice(-4);
+      return `...${digits.slice(-4)}`;
     }
   }
   return identifier;
