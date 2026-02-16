@@ -200,7 +200,8 @@ class MockEmbedder:
 
         return np.array(embeddings, dtype=np.float32)
 
-    def unload(self) -> None:
+    @staticmethod
+    def unload() -> None:
         """No-op for mock embedder since there are no resources to unload."""
         pass
 
