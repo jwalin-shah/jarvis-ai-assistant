@@ -52,6 +52,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, cast
 
+from jarvis.config import get_config
 from jarvis.core.exceptions import (
     ErrorCode,
     FeedbackError,
@@ -59,9 +60,6 @@ from jarvis.core.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Default database path (same directory as main jarvis.db)
-FEEDBACK_DB_PATH = Path.home() / ".jarvis" / "jarvis.db"
 
 # Current schema version for migrations
 FEEDBACK_SCHEMA_VERSION = 2
@@ -205,9 +203,14 @@ class FeedbackStore:
 
         Args:
             db_path: Path to the SQLite database file.
-                    Defaults to ~/.jarvis/jarvis.db
+                    Defaults to configured feedback path.
         """
-        self.db_path = db_path or FEEDBACK_DB_PATH
+        if db_path is None:
+            config = get_config()
+            self.db_path = Path(config.database.feedback_path)
+        else:
+            self.db_path = db_path
+
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
 
@@ -446,32 +449,20 @@ class FeedbackStore:
         if not feedback_items:
             return 0
 
-        recorded = 0
         try:
             with self.connection() as conn:
+                params = []
+                now = datetime.now(UTC)
                 for item in feedback_items:
                     action = item["action"]
                     if isinstance(action, str):
                         action = FeedbackAction(action)
 
-                    timestamp = item.get("timestamp") or datetime.now(UTC)
+                    timestamp = item.get("timestamp") or now
                     metadata = item.get("metadata")
                     metadata_json = json.dumps(metadata) if metadata else None
 
-                    conn.execute(
-                        """
-                        INSERT INTO feedback
-                            (message_id, suggestion_id, action, timestamp, metadata_json,
-                             contact_id, original_suggestion, edited_text)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(message_id, suggestion_id) DO UPDATE SET
-                            action = excluded.action,
-                            timestamp = excluded.timestamp,
-                            metadata_json = excluded.metadata_json,
-                            contact_id = excluded.contact_id,
-                            original_suggestion = excluded.original_suggestion,
-                            edited_text = excluded.edited_text
-                        """,
+                    params.append(
                         (
                             item["message_id"],
                             item["suggestion_id"],
@@ -481,11 +472,29 @@ class FeedbackStore:
                             item.get("contact_id"),
                             item.get("original_suggestion"),
                             item.get("edited_text"),
-                        ),
+                        )
                     )
-                    recorded += 1
 
-            return recorded
+                if not params:
+                    return 0
+
+                conn.executemany(
+                    """
+                    INSERT INTO feedback
+                        (message_id, suggestion_id, action, timestamp, metadata_json,
+                         contact_id, original_suggestion, edited_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(message_id, suggestion_id) DO UPDATE SET
+                        action = excluded.action,
+                        timestamp = excluded.timestamp,
+                        metadata_json = excluded.metadata_json,
+                        contact_id = excluded.contact_id,
+                        original_suggestion = excluded.original_suggestion,
+                        edited_text = excluded.edited_text
+                    """,
+                    params,
+                )
+                return len(params)
         except sqlite3.Error as e:
             raise FeedbackError(
                 f"Failed to record bulk feedback: {e}",

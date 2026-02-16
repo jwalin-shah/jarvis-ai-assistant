@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { api } from "../api/client";
+  import { onMount } from 'svelte';
+  import { api } from '../api/client';
   import type {
     CustomTemplate,
     CustomTemplateCreateRequest,
     CustomTemplateListResponse,
     CustomTemplateTestResult,
     CustomTemplateUsageStats,
-  } from "../api/types";
+  } from '../api/types';
 
   // State
   let templates: CustomTemplate[] = $state([]);
@@ -18,8 +18,8 @@
   let error: string | null = $state(null);
 
   // Filters
-  let filterCategory = $state("");
-  let filterTag = $state("");
+  let filterCategory = $state('');
+  let filterTag = $state('');
   let filterEnabled = $state(false);
 
   // Edit mode
@@ -27,18 +27,18 @@
   let showEditor = $state(false);
 
   // Form state
-  let formName = $state("");
-  let formTemplateText = $state("");
-  let formTriggerPhrases = $state("");
-  let formCategory = $state("general");
-  let formTags = $state("");
+  let formName = $state('');
+  let formTemplateText = $state('');
+  let formTriggerPhrases = $state('');
+  let formCategory = $state('general');
+  let formTags = $state('');
   let formMinGroupSize = $state<number | null>(null);
   let formMaxGroupSize = $state<number | null>(null);
   let formEnabled = $state(true);
 
   // Test mode
   let showTester = $state(false);
-  let testInputs = $state("");
+  let testInputs = $state('');
   let testResults: CustomTemplateTestResult[] = $state([]);
   let testMatchRate = $state(0);
   let testThreshold = $state(0.7);
@@ -46,13 +46,13 @@
 
   // Import/Export
   let showImportExport = $state(false);
-  let importData = $state("");
+  let importData = $state('');
   let importing = $state(false);
   let exporting = $state(false);
 
   // Tab state
-  type TabType = "list" | "stats";
-  let activeTab: TabType = $state("list");
+  type TabType = 'list' | 'stats';
+  let activeTab: TabType = $state('list');
 
   // Saving state
   let saving = $state(false);
@@ -75,7 +75,7 @@
       categories = response.categories;
       allTags = response.tags;
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to load templates";
+      error = e instanceof Error ? e.message : 'Failed to load templates';
     } finally {
       loading = false;
     }
@@ -85,7 +85,7 @@
     try {
       usageStats = await api.getCustomTemplateUsageStats();
     } catch (e) {
-      console.error("Failed to load usage stats:", e);
+      console.error('Failed to load usage stats:', e);
     }
   }
 
@@ -94,19 +94,19 @@
       editingTemplate = template;
       formName = template.name;
       formTemplateText = template.template_text;
-      formTriggerPhrases = template.trigger_phrases.join("\n");
+      formTriggerPhrases = template.trigger_phrases.join('\n');
       formCategory = template.category;
-      formTags = template.tags.join(", ");
+      formTags = template.tags.join(', ');
       formMinGroupSize = template.min_group_size;
       formMaxGroupSize = template.max_group_size;
       formEnabled = template.enabled;
     } else {
       editingTemplate = null;
-      formName = "";
-      formTemplateText = "";
-      formTriggerPhrases = "";
-      formCategory = "general";
-      formTags = "";
+      formName = '';
+      formTemplateText = '';
+      formTriggerPhrases = '';
+      formCategory = 'general';
+      formTags = '';
       formMinGroupSize = null;
       formMaxGroupSize = null;
       formEnabled = true;
@@ -123,25 +123,25 @@
 
   async function saveTemplate() {
     const triggerPhrases = formTriggerPhrases
-      .split("\n")
+      .split('\n')
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
 
     if (!formName.trim()) {
-      error = "Template name is required";
+      error = 'Template name is required';
       return;
     }
     if (!formTemplateText.trim()) {
-      error = "Template response text is required";
+      error = 'Template response text is required';
       return;
     }
     if (triggerPhrases.length === 0) {
-      error = "At least one trigger phrase is required";
+      error = 'At least one trigger phrase is required';
       return;
     }
 
     const tags = formTags
-      .split(",")
+      .split(',')
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
@@ -177,7 +177,7 @@
       await loadTemplates();
       await loadUsageStats();
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to save template";
+      error = e instanceof Error ? e.message : 'Failed to save template';
     } finally {
       saving = false;
     }
@@ -191,7 +191,7 @@
       await loadTemplates();
       await loadUsageStats();
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to delete template";
+      error = e instanceof Error ? e.message : 'Failed to delete template';
     }
   }
 
@@ -202,7 +202,7 @@
       });
       await loadTemplates();
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to update template";
+      error = e instanceof Error ? e.message : 'Failed to update template';
     }
   }
 
@@ -213,21 +213,21 @@
 
   async function runTest() {
     const triggerPhrases = formTriggerPhrases
-      .split("\n")
+      .split('\n')
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
 
     const inputs = testInputs
-      .split("\n")
+      .split('\n')
       .map((i) => i.trim())
       .filter((i) => i.length > 0);
 
     if (triggerPhrases.length === 0) {
-      error = "Add trigger phrases first";
+      error = 'Add trigger phrases first';
       return;
     }
     if (inputs.length === 0) {
-      error = "Enter test inputs";
+      error = 'Enter test inputs';
       return;
     }
 
@@ -243,7 +243,7 @@
       testMatchRate = response.match_rate;
       testThreshold = response.threshold;
     } catch (e) {
-      error = e instanceof Error ? e.message : "Test failed";
+      error = e instanceof Error ? e.message : 'Test failed';
     } finally {
       testing = false;
     }
@@ -256,16 +256,16 @@
     try {
       const response = await api.exportCustomTemplates();
       const blob = new Blob([JSON.stringify(response, null, 2)], {
-        type: "application/json",
+        type: 'application/json',
       });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
-      a.download = `jarvis-templates-${new Date().toISOString().split("T")[0]}.json`;
+      a.download = `jarvis-templates-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      error = e instanceof Error ? e.message : "Export failed";
+      error = e instanceof Error ? e.message : 'Export failed';
     } finally {
       exporting = false;
     }
@@ -273,7 +273,7 @@
 
   async function importTemplates() {
     if (!importData.trim()) {
-      error = "Paste export data to import";
+      error = 'Paste export data to import';
       return;
     }
 
@@ -286,15 +286,13 @@
         data,
         overwrite: false,
       });
-      alert(
-        `Imported ${response.imported} templates (${response.errors} errors)`
-      );
-      importData = "";
+      alert(`Imported ${response.imported} templates (${response.errors} errors)`);
+      importData = '';
       showImportExport = false;
       await loadTemplates();
       await loadUsageStats();
     } catch (e) {
-      error = e instanceof Error ? e.message : "Import failed";
+      error = e instanceof Error ? e.message : 'Import failed';
     } finally {
       importing = false;
     }
@@ -325,7 +323,7 @@
   }
 
   function handleBackdropKeydown(event: KeyboardEvent, closeFn: () => void) {
-    if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+    if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       closeFn();
     }
@@ -359,18 +357,10 @@
 
   <!-- Tabs -->
   <div class="tabs">
-    <button
-      class="tab"
-      class:active={activeTab === "list"}
-      onclick={() => (activeTab = "list")}
-    >
+    <button class="tab" class:active={activeTab === 'list'} onclick={() => (activeTab = 'list')}>
       Templates ({templates.length})
     </button>
-    <button
-      class="tab"
-      class:active={activeTab === "stats"}
-      onclick={() => (activeTab = "stats")}
-    >
+    <button class="tab" class:active={activeTab === 'stats'} onclick={() => (activeTab = 'stats')}>
       Usage Stats
     </button>
   </div>
@@ -382,7 +372,7 @@
     </div>
   {/if}
 
-  {#if activeTab === "list"}
+  {#if activeTab === 'list'}
     <!-- Filters -->
     <div class="filters">
       <div class="filter-group">
@@ -405,11 +395,7 @@
       </div>
       <div class="filter-group checkbox">
         <label>
-          <input
-            type="checkbox"
-            bind:checked={filterEnabled}
-            onchange={() => loadTemplates()}
-          />
+          <input type="checkbox" bind:checked={filterEnabled} onchange={() => loadTemplates()} />
           Enabled only
         </label>
       </div>
@@ -428,9 +414,7 @@
         </svg>
         <h3>No templates yet</h3>
         <p>Create your first custom template to get started</p>
-        <button class="btn-primary" onclick={() => openEditor()}>
-          Create Template
-        </button>
+        <button class="btn-primary" onclick={() => openEditor()}> Create Template </button>
       </div>
     {:else}
       <div class="template-list">
@@ -447,8 +431,8 @@
               <div class="template-actions">
                 <button
                   class="icon-btn"
-                  title={template.enabled ? "Disable" : "Enable"}
-                  aria-label={template.enabled ? "Disable template" : "Enable template"}
+                  title={template.enabled ? 'Disable' : 'Enable'}
+                  aria-label={template.enabled ? 'Disable template' : 'Enable template'}
                   onclick={() => toggleEnabled(template)}
                 >
                   {#if template.enabled}
@@ -458,7 +442,9 @@
                     </svg>
                   {:else}
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      ></path>
                       <line x1="1" y1="1" x2="23" y2="23"></line>
                     </svg>
                   {/if}
@@ -482,7 +468,9 @@
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <path
+                      d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                    ></path>
                   </svg>
                 </button>
               </div>
@@ -499,7 +487,9 @@
                     <span class="trigger-chip">{phrase}</span>
                   {/each}
                   {#if template.trigger_phrases.length > 3}
-                    <span class="trigger-chip more">+{template.trigger_phrases.length - 3} more</span>
+                    <span class="trigger-chip more"
+                      >+{template.trigger_phrases.length - 3} more</span
+                    >
                   {/if}
                 </div>
               </div>
@@ -513,13 +503,15 @@
             </div>
             <div class="template-footer">
               <span class="usage">Used {template.usage_count} times</span>
-              <span class="updated">Updated {new Date(template.updated_at).toLocaleDateString()}</span>
+              <span class="updated"
+                >Updated {new Date(template.updated_at).toLocaleDateString()}</span
+              >
             </div>
           </div>
         {/each}
       </div>
     {/if}
-  {:else if activeTab === "stats"}
+  {:else if activeTab === 'stats'}
     <!-- Usage Stats -->
     {#if usageStats}
       <div class="stats-grid">
@@ -583,8 +575,13 @@
   >
     <div class="modal editor-modal" role="dialog" aria-label="Template editor" tabindex="-1">
       <div class="modal-header">
-        <h2>{editingTemplate ? "Edit Template" : "New Template"}</h2>
-        <button class="close-btn" onclick={closeEditor} aria-label="Close editor" title="Close editor">
+        <h2>{editingTemplate ? 'Edit Template' : 'New Template'}</h2>
+        <button
+          class="close-btn"
+          onclick={closeEditor}
+          aria-label="Close editor"
+          title="Close editor"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -710,12 +707,8 @@
                   rows="3"
                 ></textarea>
               </div>
-              <button
-                class="btn-primary"
-                onclick={runTest}
-                disabled={testing}
-              >
-                {testing ? "Testing..." : "Run Test"}
+              <button class="btn-primary" onclick={runTest} disabled={testing}>
+                {testing ? 'Testing...' : 'Run Test'}
               </button>
 
               {#if testResults.length > 0}
@@ -746,7 +739,7 @@
       <div class="modal-footer">
         <button class="btn-secondary" onclick={closeEditor}>Cancel</button>
         <button class="btn-primary" onclick={saveTemplate} disabled={saving}>
-          {saving ? "Saving..." : editingTemplate ? "Update" : "Create"}
+          {saving ? 'Saving...' : editingTemplate ? 'Update' : 'Create'}
         </button>
       </div>
     </div>
@@ -766,7 +759,12 @@
     <div class="modal" role="dialog" aria-label="Template import export dialog" tabindex="-1">
       <div class="modal-header">
         <h2>Import/Export Templates</h2>
-        <button class="close-btn" onclick={() => (showImportExport = false)} aria-label="Close import/export" title="Close import/export">
+        <button
+          class="close-btn"
+          onclick={() => (showImportExport = false)}
+          aria-label="Close import/export"
+          title="Close import/export"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -778,12 +776,8 @@
         <div class="import-export-section">
           <h3>Export</h3>
           <p>Download all templates as a JSON file to share or backup.</p>
-          <button
-            class="btn-primary"
-            onclick={exportTemplates}
-            disabled={exporting}
-          >
-            {exporting ? "Exporting..." : "Export All Templates"}
+          <button class="btn-primary" onclick={exportTemplates} disabled={exporting}>
+            {exporting ? 'Exporting...' : 'Export All Templates'}
           </button>
         </div>
 
@@ -792,12 +786,7 @@
         <div class="import-export-section">
           <h3>Import</h3>
           <p>Import templates from a JSON file or paste export data.</p>
-          <input
-            type="file"
-            accept=".json"
-            onchange={handleFileUpload}
-            class="file-input"
-          />
+          <input type="file" accept=".json" onchange={handleFileUpload} class="file-input" />
           <textarea
             bind:value={importData}
             placeholder="Or paste exported JSON data here..."
@@ -808,7 +797,7 @@
             onclick={importTemplates}
             disabled={importing || !importData.trim()}
           >
-            {importing ? "Importing..." : "Import Templates"}
+            {importing ? 'Importing...' : 'Import Templates'}
           </button>
         </div>
       </div>
@@ -915,7 +904,8 @@
     font-size: 14px;
   }
 
-  .btn-primary, .btn-secondary {
+  .btn-primary,
+  .btn-secondary {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -951,7 +941,8 @@
     background: var(--bg-hover);
   }
 
-  .btn-primary svg, .btn-secondary svg {
+  .btn-primary svg,
+  .btn-secondary svg {
     width: 16px;
     height: 16px;
   }
@@ -976,7 +967,8 @@
     text-decoration: underline;
   }
 
-  .loading, .empty-state {
+  .loading,
+  .empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1098,7 +1090,8 @@
     padding: 16px;
   }
 
-  .response-preview, .triggers-preview {
+  .response-preview,
+  .triggers-preview {
     margin-bottom: 12px;
   }
 
@@ -1196,13 +1189,15 @@
     font-size: 14px;
   }
 
-  .category-stats, .top-templates {
+  .category-stats,
+  .top-templates {
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
-  .category-stat, .top-template {
+  .category-stat,
+  .top-template {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1210,7 +1205,8 @@
     border-bottom: 1px solid var(--border-color);
   }
 
-  .category-stat:last-child, .top-template:last-child {
+  .category-stat:last-child,
+  .top-template:last-child {
     border-bottom: none;
   }
 
@@ -1329,8 +1325,8 @@
     color: var(--text-secondary);
   }
 
-  .form-group input[type="text"],
-  .form-group input[type="number"],
+  .form-group input[type='text'],
+  .form-group input[type='number'],
   .form-group textarea {
     width: 100%;
     padding: 10px 12px;

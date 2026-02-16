@@ -5,12 +5,12 @@ You are reviewing as **Lane {REVIEWER_LANE} ({REVIEWER_LABEL})**.
 
 ## Lane Ownership Reference
 
-| Lane | Owned Paths |
-|------|-------------|
-| A (App) | `desktop/`, `api/`, `jarvis/router.py`, `jarvis/prompts.py`, `jarvis/retrieval/` |
-| B (ML) | `models/`, `jarvis/classifiers/`, `jarvis/extractors/`, `jarvis/graph/`, `scripts/train*`, `scripts/extract*` |
-| C (QA) | `tests/`, `benchmarks/`, `evals/` |
-| Shared | `jarvis/contracts/pipeline.py` |
+| Lane    | Owned Paths                                                                                                   |
+| ------- | ------------------------------------------------------------------------------------------------------------- |
+| A (App) | `desktop/`, `api/`, `jarvis/router.py`, `jarvis/prompts.py`, `jarvis/retrieval/`                              |
+| B (ML)  | `models/`, `jarvis/classifiers/`, `jarvis/extractors/`, `jarvis/graph/`, `scripts/train*`, `scripts/extract*` |
+| C (QA)  | `tests/`, `benchmarks/`, `evals/`                                                                             |
+| Shared  | `jarvis/contracts/pipeline.py`                                                                                |
 
 ## The Diff
 
@@ -30,6 +30,7 @@ You are reviewing as **Lane {REVIEWER_LANE} ({REVIEWER_LABEL})**.
 ## Your Response
 
 Start your response with EXACTLY one of these on the first line:
+
 - `APPROVE: <one-line reason>`
 - `REJECT: <one-line reason>`
 
