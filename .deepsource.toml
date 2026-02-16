@@ -1,24 +1,5 @@
 version = 1
 
-[[analyzers]]
-name = "python"
-enabled = true
-
-  [analyzers.meta]
-  runtime_version = "3.12.x"
-  max_line_length = 100
-
-[[analyzers]]
-name = "rust"
-enabled = true
-
-[[analyzers]]
-name = "javascript"
-enabled = true
-
-  [analyzers.meta]
-  environment = ["browser", "nodejs"]
-
 test_patterns = [
   "tests/**",
   "test/**",
@@ -35,3 +16,22 @@ exclude_patterns = [
   "*.min.js",
   "migrations/**",
 ]
+
+[[analyzers]]
+name = "python"
+enabled = true
+
+  [analyzers.meta]
+  runtime_version = "3.x.x"
+  max_line_length = 100
+
+[[analyzers]]
+name = "rust"
+enabled = true
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  environment = ["browser", "nodejs"]

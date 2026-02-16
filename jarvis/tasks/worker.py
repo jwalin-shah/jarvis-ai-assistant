@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from contracts.imessage import Message
@@ -72,42 +71,6 @@ class TaskWorker:
         self._handlers[TaskType.SINGLE_SUMMARIZE] = self._handle_single_summarize
         self._handlers[TaskType.SINGLE_GENERATE_REPLY] = self._handle_single_generate_reply
         self._handlers[TaskType.FACT_EXTRACTION] = self._handle_fact_extraction
-
-    def _validate_export_dir(self, path_str: str) -> Path:
-        """Validate export directory path (prevent traversal/arbitrary write)."""
-        path = Path(path_str).expanduser().resolve()
-        home = Path.home().resolve()
-
-        # Allow temp directories
-        temp_dirs = [Path("/tmp"), Path("/private/tmp"), Path("/var/tmp")]
-        if any(path.is_relative_to(p) for p in temp_dirs if p.exists()):
-            return path
-
-        # Must be in user's home directory (but not root of home)
-        if not path.is_relative_to(home) or path == home:
-            raise ValueError(f"Export directory must be a subdirectory of {home}")
-
-        # Allow specific standard directories and .jarvis/exports
-        allowed_dirs = [
-            home / d
-            for d in [
-                "Downloads",
-                "Documents",
-                "Desktop",
-                "Public",
-                "Pictures",
-                "Music",
-                "Movies",
-            ]
-        ]
-        allowed_dirs.append(home / ".jarvis" / "exports")
-
-        if not any(path.is_relative_to(d) for d in allowed_dirs):
-            raise ValueError(
-                "Export directory must be in standard user folders (Downloads, Documents, etc.)"
-            )
-
-        return path
 
     def register_handler(self, task_type: TaskType, handler: TaskHandler) -> None:
         """Register a custom handler for a task type.
@@ -278,17 +241,16 @@ class TaskWorker:
 
                     # Save to file if output_dir specified
                     if output_dir:
-                        from jarvis.export import get_export_filename
+                        from pathlib import Path
 
-                        # Security check for output directory
-                        validated_dir = self._validate_export_dir(output_dir)
+                        from jarvis.export import get_export_filename
 
                         filename = get_export_filename(
                             format=export_format,
                             prefix="conversation",
                             chat_id=chat_id,
                         )
-                        output_path = validated_dir / filename
+                        output_path = Path(output_dir) / filename
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                         output_path.write_text(exported_data, encoding="utf-8")
                         result_item["output_file"] = str(output_path)
