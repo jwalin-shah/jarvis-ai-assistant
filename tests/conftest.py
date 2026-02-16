@@ -71,6 +71,7 @@ def _mock_mlx_modules():
     # Need to mock 'mlx' top-level for 'mlx.core' to be importable
     sys.modules["mlx"] = mock_mlx
     sys.modules["mlx.core"] = mock_mx
+    sys.modules["mlx.nn"] = MagicMock()
     sys.modules["mlx_lm"] = mock_mlx_lm
     sys.modules["mlx_lm.sample_utils"] = mock_sample_utils
 
