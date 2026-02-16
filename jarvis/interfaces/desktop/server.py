@@ -653,8 +653,6 @@ class JarvisSocketServer:
                     result = await handler()
                 _record_rpc_latency(method, (time.perf_counter() - start_time) * 1000)
                 return success_response(request_id, result)
-        except asyncio.CancelledError:
-            raise
         except JsonRpcError as e:
             return error_response(request_id, e.code, e.message, e.data)
         except TypeError as e:
