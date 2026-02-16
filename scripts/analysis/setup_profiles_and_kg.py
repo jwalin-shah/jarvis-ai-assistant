@@ -30,7 +30,7 @@ def run_script(name: str, args: list[str] | None = None) -> bool:
     print(f"Running: {name}")
     print("=" * 60)
 
-    result = subprocess.run(cmd, capture_output=False)  # noqa: S603
+    result = subprocess.run(cmd, capture_output=False, check=False)  # noqa: S603
     return result.returncode == 0
 
 

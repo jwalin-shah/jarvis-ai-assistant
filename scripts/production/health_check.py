@@ -116,6 +116,7 @@ def check_applescript() -> list[HealthCheckError]:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode != 0:
             errors.append(
