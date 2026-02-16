@@ -9,6 +9,7 @@ mod tray;
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
+use tempfile::tempdir;
 
 /// Saved window position and size for persistence across launches.
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,9 +59,10 @@ fn update_tray_badge(app: tauri::AppHandle, count: u32) {
 /// List AddressBook source directory UUIDs for direct contact resolution.
 /// Returns paths to AddressBook-v22.abcddb files that exist.
 #[tauri::command]
-fn list_addressbook_sources() -> Vec<String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
-    let sources_dir = std::path::PathBuf::from(&home)
+fn list_addressbook_sources() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let sources_dir = dir
+        .path()
         .join("Library")
         .join("Application Support")
         .join("AddressBook")
@@ -79,7 +81,7 @@ fn list_addressbook_sources() -> Vec<String> {
             }
         }
     }
-    paths
+    Ok(paths)
 }
 
 /// Run the Tauri application

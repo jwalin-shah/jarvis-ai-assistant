@@ -8,6 +8,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, Manager};
+use tempfile::tempdir;
 
 /// Managed state holding the spawned backend child process.
 #[derive(Default)]
@@ -114,10 +115,8 @@ fn spawn_backend() -> Result<Child, String> {
     let root = project_root().ok_or("Could not find JARVIS project root (pyproject.toml)")?;
 
     // Ensure log directory exists
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let log_dir = PathBuf::from(&home).join(".jarvis");
-    let _ = std::fs::create_dir_all(&log_dir);
-    let log_path = log_dir.join("backend.log");
+    let dir = tempdir()?;
+    let log_path = dir.path().join("backend.log");
 
     let log_file = std::fs::OpenOptions::new()
         .create(true)
