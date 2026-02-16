@@ -58,6 +58,41 @@ class ContextService:
             return self.db.get_contact_by_chat_id(chat_id)
         return None
 
+    def is_bot_chat(self, chat_id: str | None, contact_name: str | None = None) -> bool:
+        """Determine if a chat is with an automated service or bot.
+
+        Uses heuristics like shortcodes (<= 6 digits) and keyword matching
+        on the contact name.
+        """
+        if not chat_id:
+            return False
+
+        # 1. Check for shortcodes or service-like identifiers
+        # chat_id often looks like "iMessage;-;+1234567890" or "iMessage;-;12345"
+        identifier = chat_id.rsplit(";", 1)[-1] if ";" in chat_id else chat_id
+        if identifier.isdigit() and len(identifier) <= 6:
+            return True
+
+        # 2. Keyword matching on contact name
+        if contact_name:
+            cname_lower = contact_name.lower()
+            bot_keywords = [
+                "airline",
+                "bank",
+                "cvs",
+                "uber",
+                "doordash",
+                "verification",
+                "auth",
+                "notify",
+                "alert",
+                "delivery",
+            ]
+            if any(k in cname_lower for k in bot_keywords):
+                return True
+
+        return False
+
     def fetch_conversation_context(
         self, chat_id: str, limit: int = 10
     ) -> tuple[list[str], set[str]]:
