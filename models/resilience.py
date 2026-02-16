@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Memory pressure threshold above which we skip model loads.
 # macOS pressure_level: 0 = good, >1000 = warning, >2500 = critical.
-# macOS vm.memory_pressure is a relative score, not a percentage. 
+# macOS vm.memory_pressure is a relative score, not a percentage.
 # 1000 is a safe threshold for 8GB systems with compression.
 PRESSURE_SKIP_THRESHOLD = 2500
 

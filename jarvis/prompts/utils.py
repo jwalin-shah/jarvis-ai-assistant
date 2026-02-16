@@ -10,21 +10,21 @@ if TYPE_CHECKING:
 
 import re
 
+
 def format_examples(examples: list[FewShotExample]) -> str:
     """Format few-shot examples for prompt inclusion, normalizing labels and stripping timestamps."""
     formatted = []
     timestamp_re = re.compile(r"\[\d{1,2}:\d{2}\]\s*")
-    
+
     for i, ex in enumerate(examples):
         # Strip timestamps from example context
         clean_context = timestamp_re.sub("", ex.context)
         # Normalize "You:" or "Me:" to match current conversation style if needed
         # In examples, 'You' is often the model. In real chat, 'You' is the user.
         # We'll keep it as is but ensure it looks like a clean turn.
-        
-        formatted.append(f"Example {i+1}:\n{clean_context}\nYour reply: {ex.output}")
-    return "\n\n".join(formatted)
 
+        formatted.append(f"Example {i + 1}:\n{clean_context}\nYour reply: {ex.output}")
+    return "\n\n".join(formatted)
 
 
 def format_summary_examples(examples: list[tuple[str, str]]) -> str:

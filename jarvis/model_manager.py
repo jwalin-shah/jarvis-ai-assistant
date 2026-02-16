@@ -49,8 +49,7 @@ class ModelManager:
         pressure = get_memory_controller().get_state().pressure_level
         if pressure in ("red", "critical"):
             logger.warning(
-                "High memory pressure (%s) detected during prepare_for(%s). "
-                "Unloading all models.",
+                "High memory pressure (%s) detected during prepare_for(%s). Unloading all models.",
                 pressure,
                 model_type,
             )

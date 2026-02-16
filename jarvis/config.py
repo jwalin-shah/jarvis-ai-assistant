@@ -221,7 +221,6 @@ class ModelSettings(BaseModel):
     speculative_draft_model_id: str = "lfm-350m"
     speculative_num_draft_tokens: int = Field(default=4, ge=1, le=10)
 
-
     kv_cache_bits: int = Field(default=8, ge=2, le=16)
 
 

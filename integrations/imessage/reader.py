@@ -1092,10 +1092,10 @@ class ChatDBReader:
 
             # --- OPTIMIZATION: Batch Fetch Secondary Data ---
             chat_rowids = [row["chat_id"] for row in rows]
-            
+
             # 1. Batch fetch participants
             participants_map = self._get_participants_batch(chat_rowids)
-            
+
             # 2. Batch fetch last message text
             last_msg_map = self._get_last_messages_batch(chat_rowids)
 
@@ -1106,11 +1106,11 @@ class ChatDBReader:
             for row in rows:
                 chat_rowid = row["chat_id"]
                 chat_guid = row["chat_guid"]
-                
+
                 # Use batch-fetched data
                 participants = participants_map.get(chat_rowid, [])
                 last_message_text = last_msg_map.get(chat_rowid)
-                
+
                 # Determine if group chat
                 is_group = len(participants) > 1
 
@@ -1284,8 +1284,9 @@ class ChatDBReader:
                     text = row[1]
                     if not text and row[2]:
                         from .parser import parse_attributed_body
+
                         text = parse_attributed_body(row[2])
-                    
+
                     if text:
                         result[cid] = text
             except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
@@ -1924,11 +1925,11 @@ class ChatDBReader:
         # Batch-fetch attachments and reactions (2 queries instead of 2*N)
         attachments_map = self._prefetch_attachments(message_ids)
         reactions_map = self._prefetch_reactions(message_ids, id_guid_map=id_guid_map)
-        
+
         # Prefetch reply row IDs
         reply_guids = [
-            row["reply_to_guid"] 
-            for row in rows 
+            row["reply_to_guid"]
+            for row in rows
             if "reply_to_guid" in row.keys() and row["reply_to_guid"]
         ]
         reply_map = self._prefetch_reply_rowids(reply_guids)

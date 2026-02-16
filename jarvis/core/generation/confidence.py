@@ -5,12 +5,22 @@ from typing import Any
 from jarvis.classifiers.response_mobilization import ResponsePressure
 
 # Responses that signal the model is uncertain / lacks context
-UNCERTAIN_SIGNALS = frozenset({
-    "?", "??", "hm?", "what?", "huh?", "idk", "not sure", 
-    "need more context", "i don't know", "context?",
-    "what do you mean?", "not enough info"
-})
-
+UNCERTAIN_SIGNALS = frozenset(
+    {
+        "?",
+        "??",
+        "hm?",
+        "what?",
+        "huh?",
+        "idk",
+        "not sure",
+        "need more context",
+        "i don't know",
+        "context?",
+        "what do you mean?",
+        "not enough info",
+    }
+)
 
 
 def compute_confidence(

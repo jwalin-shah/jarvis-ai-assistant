@@ -261,7 +261,7 @@ class MessageHandler(BaseHandler):
                     # Stop at closing reply tag
                     if "</reply>" in accumulated:
                         before_tag = accumulated.split("</reply>")[0]
-                        remaining = before_tag[len("".join(response_tokens)):]
+                        remaining = before_tag[len("".join(response_tokens)) :]
                         if remaining:
                             response_tokens.append(remaining)
                             await self.send_stream_token(

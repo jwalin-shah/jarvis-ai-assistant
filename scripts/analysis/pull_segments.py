@@ -9,9 +9,9 @@ Usage:
     uv run python scripts/pull_segments.py --chat-id "iMessage;-;+14081234567"
     uv run python scripts/pull_segments.py --limit 5 --msgs 30
 """
+
 import argparse
 import json
-import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -86,7 +86,8 @@ def pull_conversations(limit: int = 5) -> list[dict]:
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         WITH chat_stats AS (
             SELECT cmj.chat_id, COUNT(*) as msg_count,
                    MAX(m.date) as last_date
@@ -102,17 +103,21 @@ def pull_conversations(limit: int = 5) -> list[dict]:
         WHERE c.style = 45
         ORDER BY cs.last_date DESC
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
 
     results = []
     for row in cur.fetchall():
-        results.append({
-            "rowid": row["ROWID"],
-            "guid": row["guid"],
-            "display_name": row["display_name"],
-            "chat_identifier": row["chat_identifier"],
-            "msg_count": row["msg_count"],
-        })
+        results.append(
+            {
+                "rowid": row["ROWID"],
+                "guid": row["guid"],
+                "display_name": row["display_name"],
+                "chat_identifier": row["chat_identifier"],
+                "msg_count": row["msg_count"],
+            }
+        )
     conn.close()
     return results
 
@@ -123,7 +128,8 @@ def pull_messages(chat_rowid: int, limit: int = 50) -> list[dict]:
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT m.ROWID, m.text, m.is_from_me, m.date,
                h.id as handle_id
         FROM message m
@@ -134,25 +140,30 @@ def pull_messages(chat_rowid: int, limit: int = 50) -> list[dict]:
           AND m.text != ''
         ORDER BY m.date DESC
         LIMIT ?
-    """, (chat_rowid, limit))
+    """,
+        (chat_rowid, limit),
+    )
 
     messages = []
     for row in cur.fetchall():
-        messages.append({
-            "id": row["ROWID"],
-            "text": row["text"],
-            "is_from_me": bool(row["is_from_me"]),
-            "handle": row["handle_id"] or "",
-            "date": row["date"],
-        })
+        messages.append(
+            {
+                "id": row["ROWID"],
+                "text": row["text"],
+                "is_from_me": bool(row["is_from_me"]),
+                "handle": row["handle_id"] or "",
+                "date": row["date"],
+            }
+        )
     conn.close()
     # Reverse to chronological order
     messages.reverse()
     return messages
 
 
-def format_segment(messages: list[dict], contacts: dict[str, str],
-                   user_name: str = "Jwalin") -> str:
+def format_segment(
+    messages: list[dict], contacts: dict[str, str], user_name: str = "Jwalin"
+) -> str:
     """Format messages as a segment for model input."""
     lines = []
     for msg in messages:
@@ -173,14 +184,46 @@ def format_segment(messages: list[dict], contacts: dict[str, str],
 def find_fact_rich_segments(messages: list[dict], window: int = 8) -> list[list[dict]]:
     """Find segments likely to contain facts (health, jobs, locations, etc.)."""
     fact_keywords = [
-        "moved", "moving", "live in", "lives in", "from",
-        "job", "work", "hired", "started", "company", "quit",
-        "doctor", "hospital", "sick", "allergic", "surgery",
-        "married", "engaged", "dating", "broke up", "divorced",
-        "graduated", "school", "college", "degree", "major",
-        "sister", "brother", "mom", "dad", "cousin", "uncle",
-        "birthday", "pregnant", "baby", "born",
-        "bought", "apartment", "house", "lease",
+        "moved",
+        "moving",
+        "live in",
+        "lives in",
+        "from",
+        "job",
+        "work",
+        "hired",
+        "started",
+        "company",
+        "quit",
+        "doctor",
+        "hospital",
+        "sick",
+        "allergic",
+        "surgery",
+        "married",
+        "engaged",
+        "dating",
+        "broke up",
+        "divorced",
+        "graduated",
+        "school",
+        "college",
+        "degree",
+        "major",
+        "sister",
+        "brother",
+        "mom",
+        "dad",
+        "cousin",
+        "uncle",
+        "birthday",
+        "pregnant",
+        "baby",
+        "born",
+        "bought",
+        "apartment",
+        "house",
+        "lease",
     ]
 
     segments = []
@@ -216,7 +259,7 @@ def main():
         print(f"\nFound {len(segments)} fact-rich segments in chat {chat_rowid}\n", flush=True)
         for i, seg in enumerate(segments):
             formatted = format_segment(seg, contacts)
-            print(f"--- Segment {i+1} ({len(seg)} msgs) ---", flush=True)
+            print(f"--- Segment {i + 1} ({len(seg)} msgs) ---", flush=True)
             print(formatted, flush=True)
             print(flush=True)
     else:
@@ -236,11 +279,13 @@ def main():
 
             for seg in segments[:3]:  # Max 3 segments per conversation
                 formatted = format_segment(seg, contacts)
-                all_segments.append({
-                    "chat": name,
-                    "message_count": len(seg),
-                    "formatted": formatted,
-                })
+                all_segments.append(
+                    {
+                        "chat": name,
+                        "message_count": len(seg),
+                        "formatted": formatted,
+                    }
+                )
                 print(f"\n    --- Segment ({len(seg)} msgs) ---", flush=True)
                 print(f"    {formatted[:200]}...", flush=True)
             print(flush=True)
@@ -250,7 +295,9 @@ def main():
                 json.dump(all_segments, f, indent=2, ensure_ascii=False)
             print(f"\nSaved {len(all_segments)} segments to {args.output}", flush=True)
 
-        print(f"\nTotal: {len(all_segments)} segments across {len(convos)} conversations", flush=True)
+        print(
+            f"\nTotal: {len(all_segments)} segments across {len(convos)} conversations", flush=True
+        )
 
 
 if __name__ == "__main__":

@@ -60,9 +60,9 @@ def run_experiment(
 
     result_path = output_dir / f"{name}.json"
 
-    print(f"\n{'='*60}", flush=True)
+    print(f"\n{'=' * 60}", flush=True)
     print(f"Experiment: {name} (extractor={extractor}, split={split})", flush=True)
-    print(f"{'='*60}", flush=True)
+    print(f"{'=' * 60}", flush=True)
 
     # Build subprocess command
     runner_script = str(ROOT / "scripts" / "run_single_experiment.py")
@@ -81,7 +81,8 @@ def run_experiment(
     if extractor == "gliner":
         # GLiNER must run in compat venv
         cmd = [
-            "bash", str(ROOT / "scripts" / "run_gliner_compat.sh"),
+            "bash",
+            str(ROOT / "scripts" / "run_gliner_compat.sh"),
             str(ROOT / "scripts" / "gliner_extract_standalone.py"),
         ]
         # Pass config as argument
@@ -170,7 +171,7 @@ def run_all(
     total = len(configs)
 
     for i, config in enumerate(configs):
-        print(f"\n[{i+1}/{total}] Starting experiment: {config['name']}", flush=True)
+        print(f"\n[{i + 1}/{total}] Starting experiment: {config['name']}", flush=True)
         result = run_experiment(config, split=split, output_dir=output_dir, cv_folds=cv_folds)
         results.append(result)
 
@@ -179,9 +180,9 @@ def run_all(
 
 def print_summary(results: list[dict]) -> None:
     """Print summary table of all experiment results."""
-    print(f"\n{'='*80}", flush=True)
+    print(f"\n{'=' * 80}", flush=True)
     print("SUMMARY", flush=True)
-    print(f"{'='*80}", flush=True)
+    print(f"{'=' * 80}", flush=True)
     print(
         f"{'Name':<25} {'Extractor':<10} {'micro_F1':>8} {'P':>6} {'R':>6} "
         f"{'TP':>4} {'FP':>4} {'FN':>4} {'Time':>6}",
@@ -205,7 +206,7 @@ def print_summary(results: list[dict]) -> None:
                 flush=True,
             )
 
-    print(f"{'='*80}\n", flush=True)
+    print(f"{'=' * 80}\n", flush=True)
 
 
 def main() -> None:
@@ -217,7 +218,8 @@ def main() -> None:
     group.add_argument("--payload", help="JSON experiment config (for programmatic use)")
 
     parser.add_argument(
-        "--split", default="dev",
+        "--split",
+        default="dev",
         help="Goldset split (train, dev, test, train+dev)",
     )
     parser.add_argument("--output-dir", default=None, help="Output directory for results")
@@ -228,16 +230,24 @@ def main() -> None:
 
     if args.stdin:
         config = json.load(sys.stdin)
-        results = [run_experiment(
-            config, split=args.split, output_dir=output_dir,
-            cv_folds=args.cv_folds,
-        )]
+        results = [
+            run_experiment(
+                config,
+                split=args.split,
+                output_dir=output_dir,
+                cv_folds=args.cv_folds,
+            )
+        ]
     elif args.payload:
         config = json.loads(args.payload)
-        results = [run_experiment(
-            config, split=args.split, output_dir=output_dir,
-            cv_folds=args.cv_folds,
-        )]
+        results = [
+            run_experiment(
+                config,
+                split=args.split,
+                output_dir=output_dir,
+                cv_folds=args.cv_folds,
+            )
+        ]
     elif args.experiment:
         # Load from default configs
         config_path = ROOT / "scripts" / "extraction_lab_configs.json"
@@ -250,20 +260,25 @@ def main() -> None:
         if config is None:
             names = [c["name"] for c in all_configs]
             print(
-                f"ERROR: Unknown experiment '{args.experiment}'."
-                f" Available: {names}",
+                f"ERROR: Unknown experiment '{args.experiment}'. Available: {names}",
                 file=sys.stderr,
             )
             sys.exit(1)
-        results = [run_experiment(
-            config, split=args.split, output_dir=output_dir,
-            cv_folds=args.cv_folds,
-        )]
+        results = [
+            run_experiment(
+                config,
+                split=args.split,
+                output_dir=output_dir,
+                cv_folds=args.cv_folds,
+            )
+        ]
     else:
         with open(args.config) as f:
             all_configs = json.load(f)
         results = run_all(
-            all_configs, split=args.split, output_dir=output_dir,
+            all_configs,
+            split=args.split,
+            output_dir=output_dir,
             cv_folds=args.cv_folds,
         )
 
