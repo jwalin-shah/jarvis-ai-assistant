@@ -9,7 +9,12 @@
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import Toast from './lib/components/Toast.svelte';
   import { checkApiConnection } from './lib/stores/health';
-  import { clearSelection, conversationsStore, selectConversation, handleUserActivity } from './lib/stores/conversations.svelte';
+  import {
+    clearSelection,
+    conversationsStore,
+    selectConversation,
+    handleUserActivity,
+  } from './lib/stores/conversations.svelte';
   import { initializeTheme } from './lib/stores/theme';
   import { initAnnouncer } from './lib/stores/keyboard';
 
@@ -19,14 +24,7 @@
   // Check if running in Tauri context
   const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
-  type View =
-    | 'messages'
-    | 'dashboard'
-    | 'health'
-    | 'settings'
-    | 'templates'
-    | 'network'
-    | 'chat';
+  type View = 'messages' | 'dashboard' | 'health' | 'settings' | 'templates' | 'network' | 'chat';
 
   // View state
   let currentView = $state<View>('messages');
@@ -45,19 +43,21 @@
 
   // Lazy loaded components with error handling
   type LazyComponent = any;
-  
+
   interface LoadState {
     component: LazyComponent | null;
     loading: boolean;
     error: Error | null;
   }
-  
+
   function createLazyLoader(importFn: () => Promise<{ default: LazyComponent }>) {
     let state: LoadState = $state({ component: null, loading: false, error: null });
     let loaded = false;
-    
+
     return {
-      get state() { return state; },
+      get state() {
+        return state;
+      },
       load: async () => {
         if (loaded) return;
         state.loading = true;
@@ -76,10 +76,10 @@
       reset: () => {
         state = { component: null, loading: false, error: null };
         loaded = false;
-      }
+      },
     };
   }
-  
+
   const lazyLoaders = {
     dashboard: createLazyLoader(() => import('./lib/components/Dashboard.svelte')),
     health: createLazyLoader(() => import('./lib/components/HealthStatus.svelte')),
@@ -88,7 +88,7 @@
     network: createLazyLoader(() => import('./lib/components/graph/RelationshipGraph.svelte')),
     chat: createLazyLoader(() => import('./lib/components/ChatView.svelte')),
   };
-  
+
   // Trigger load when view changes
   $effect(() => {
     if (currentView === 'dashboard') lazyLoaders.dashboard.load();
@@ -98,28 +98,28 @@
     else if (currentView === 'network') lazyLoaders.network.load();
     else if (currentView === 'chat') lazyLoaders.chat.load();
   });
-  
+
   // Derived states for templates
   const Dashboard = $derived(lazyLoaders.dashboard.state.component as LazyComponent);
   const dashboardLoading = $derived(lazyLoaders.dashboard.state.loading);
   const dashboardError = $derived(lazyLoaders.dashboard.state.error);
-  
+
   const HealthStatus = $derived(lazyLoaders.health.state.component as LazyComponent);
   const healthLoading = $derived(lazyLoaders.health.state.loading);
   const healthError = $derived(lazyLoaders.health.state.error);
-  
+
   const Settings = $derived(lazyLoaders.settings.state.component as LazyComponent);
   const settingsLoading = $derived(lazyLoaders.settings.state.loading);
   const settingsError = $derived(lazyLoaders.settings.state.error);
-  
+
   const TemplateBuilder = $derived(lazyLoaders.templates.state.component as LazyComponent);
   const templatesLoading = $derived(lazyLoaders.templates.state.loading);
   const templatesError = $derived(lazyLoaders.templates.state.error);
-  
+
   const RelationshipGraph = $derived(lazyLoaders.network.state.component as LazyComponent);
   const networkLoading = $derived(lazyLoaders.network.state.loading);
   const networkError = $derived(lazyLoaders.network.state.error);
-  
+
   const ChatView = $derived(lazyLoaders.chat.state.component as LazyComponent);
   const chatLoading = $derived(lazyLoaders.chat.state.loading);
   const chatError = $derived(lazyLoaders.chat.state.error);
@@ -289,7 +289,9 @@
       if (activityThrottled) return;
       activityThrottled = true;
       handleUserActivity();
-      setTimeout(() => { activityThrottled = false; }, 5000);
+      setTimeout(() => {
+        activityThrottled = false;
+      }, 5000);
     };
     window.addEventListener('mousemove', onUserActivity);
     window.addEventListener('keydown', onUserActivity);
@@ -454,7 +456,11 @@
     {:else}
       <div class="messages-container">
         <div class="search-bar">
-          <button class="search-button" onclick={() => (showSearch = true)} title="Search messages (Cmd+K)">
+          <button
+            class="search-button"
+            onclick={() => (showSearch = true)}
+            title="Search messages (Cmd+K)"
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <path d="m21 21-4.35-4.35"></path>
@@ -471,8 +477,15 @@
           {/if}
           <div class="message-view-wrapper">
             {#if isNarrow && !showConversationList}
-              <button class="back-button" onclick={() => showConversationList = true}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <button class="back-button" onclick={() => (showConversationList = true)}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  width="20"
+                  height="20"
+                >
                   <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
                 Back

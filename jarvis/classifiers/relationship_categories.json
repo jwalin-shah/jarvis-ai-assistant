@@ -27,13 +27,7 @@
       "kid",
       "kids"
     ],
-    "anti_keywords": [
-      "meeting",
-      "deadline",
-      "project",
-      "sprint",
-      "standup"
-    ],
+    "anti_keywords": ["meeting", "deadline", "project", "sprint", "standup"],
     "patterns": {
       "time_any_hour": true,
       "high_emoji_rate": true,
@@ -68,13 +62,7 @@
       "game",
       "watch the game"
     ],
-    "anti_keywords": [
-      "deadline",
-      "sprint",
-      "standup",
-      "sync",
-      "meeting"
-    ],
+    "anti_keywords": ["deadline", "sprint", "standup", "sync", "meeting"],
     "patterns": {
       "casual_language": true,
       "late_night_messages": true,
@@ -139,13 +127,7 @@
       "merge",
       "deploy"
     ],
-    "anti_keywords": [
-      "love you",
-      "miss you",
-      "party",
-      "drinks",
-      "hangout"
-    ],
+    "anti_keywords": ["love you", "miss you", "party", "drinks", "hangout"],
     "patterns": {
       "work_hours_only": true,
       "formal_language": true,
@@ -154,12 +136,7 @@
   },
   "acquaintance": {
     "label": "acquaintance",
-    "keywords": [
-      "long time",
-      "nice to meet",
-      "good seeing you",
-      "let's catch up"
-    ],
+    "keywords": ["long time", "nice to meet", "good seeing you", "let's catch up"],
     "anti_keywords": [],
     "patterns": {
       "low_frequency": true,

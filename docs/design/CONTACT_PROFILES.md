@@ -6,32 +6,32 @@
 
 ### Why Per-Contact Topics (Not Global)?
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| **Global topics** ("sports", "food") | Simple, one model | Generic, misses YOUR topics |
-| **Per-contact topics** | Learns "paradigms-class", "valorant" | More storage (~15KB/contact) |
+| Approach                             | Pros                                 | Cons                         |
+| ------------------------------------ | ------------------------------------ | ---------------------------- |
+| **Global topics** ("sports", "food") | Simple, one model                    | Generic, misses YOUR topics  |
+| **Per-contact topics**               | Learns "paradigms-class", "valorant" | More storage (~15KB/contact) |
 
 **Decision**: Per-contact. Your conversations have specific topics (professor names, games you play, friend groups) that global topics miss. 15KB/contact is trivial.
 
 ### Why HDBSCAN (Not K-Means, LDA, BERTopic)?
 
-| Algorithm | Pros | Cons | Memory |
-|-----------|------|------|--------|
-| **K-Means** | Fast | Need to specify K upfront | Low |
-| **LDA** | Interpretable | Bag-of-words, misses semantics | Low |
-| **BERTopic** | Best quality | [2+ GB RAM, slow](https://github.com/MaartenGr/BERTopic/issues/484) | High |
-| **HDBSCAN** | Auto-detects K, handles noise | Slightly slower | Low |
+| Algorithm    | Pros                          | Cons                                                                | Memory |
+| ------------ | ----------------------------- | ------------------------------------------------------------------- | ------ |
+| **K-Means**  | Fast                          | Need to specify K upfront                                           | Low    |
+| **LDA**      | Interpretable                 | Bag-of-words, misses semantics                                      | Low    |
+| **BERTopic** | Best quality                  | [2+ GB RAM, slow](https://github.com/MaartenGr/BERTopic/issues/484) | High   |
+| **HDBSCAN**  | Auto-detects K, handles noise | Slightly slower                                                     | Low    |
 
 **Decision**: HDBSCAN. It auto-detects number of topics, handles variable density clusters, and works on embeddings. ~800ms for 1000 messages is acceptable for one-time extraction.
 
 ### Why bge-small (Not MiniLM, OpenAI)?
 
-| Model | Dimensions | MTEB Score | Memory | Speed |
-|-------|------------|------------|--------|-------|
-| OpenAI ada-002 | 1536 | ~61 | API cost | Slow (network) |
-| MiniLM-L6 | 384 | ~58 | ~90MB | Fast |
-| **bge-small** | 384 | ~62 | ~130MB | Fast |
-| bge-large | 1024 | ~64 | ~1.3GB | Slow |
+| Model          | Dimensions | MTEB Score | Memory   | Speed          |
+| -------------- | ---------- | ---------- | -------- | -------------- |
+| OpenAI ada-002 | 1536       | ~61        | API cost | Slow (network) |
+| MiniLM-L6      | 384        | ~58        | ~90MB    | Fast           |
+| **bge-small**  | 384        | ~62        | ~130MB   | Fast           |
+| bge-large      | 1024       | ~64        | ~1.3GB   | Slow           |
 
 **Decision**: bge-small. Best quality-to-size ratio, already used for FAISS search (no extra model load), runs locally via MLX server.
 
@@ -41,55 +41,59 @@ Research shows ["hybrid approaches combining traditional stylometric features wi
 
 We use **regex patterns + features from preprocessing we already run**:
 
-| Feature | Source | What it tells us |
-|---------|--------|------------------|
-| `uses_lowercase` | Regex | Casual texters don't capitalize |
-| `uses_abbreviations` | TEXT_ABBREVIATIONS set | "u rn gonna" = informal |
-| `slang_frequency` | jarvis/slang.py (already run) | Higher = more casual |
-| `spell_error_rate` | symspellpy (already run) | Fast typers make more errors |
-| `vocabulary_diversity` | Word analysis | Formal = richer vocabulary |
-| `emoji_frequency` | EMOJI_PATTERN | Emoji usage patterns |
+| Feature                | Source                        | What it tells us                |
+| ---------------------- | ----------------------------- | ------------------------------- |
+| `uses_lowercase`       | Regex                         | Casual texters don't capitalize |
+| `uses_abbreviations`   | TEXT_ABBREVIATIONS set        | "u rn gonna" = informal         |
+| `slang_frequency`      | jarvis/slang.py (already run) | Higher = more casual            |
+| `spell_error_rate`     | symspellpy (already run)      | Fast typers make more errors    |
+| `vocabulary_diversity` | Word analysis                 | Formal = richer vocabulary      |
+| `emoji_frequency`      | EMOJI_PATTERN                 | Emoji usage patterns            |
 
 **Why not pure ML/embeddings for style?**
-- Embeddings capture *meaning*, not *style* ("u wanna" and "do you want to" have same meaning, different style)
+
+- Embeddings capture _meaning_, not _style_ ("u wanna" and "do you want to" have same meaning, different style)
 - Need labeled training data for classifiers
 - Our hybrid approach: 0.5ms, no training data
 
 **Results:**
 
-| Metric | Casual Texter | Formal Texter |
-|--------|---------------|---------------|
-| slang_frequency | 1.1/msg | 0.0/msg |
-| spell_error_rate | 17.1% | 1.8% |
-| avg_words_per_msg | 3.5 | 5.6 |
-| formality | very_casual | casual |
+| Metric            | Casual Texter | Formal Texter |
+| ----------------- | ------------- | ------------- |
+| slang_frequency   | 1.1/msg       | 0.0/msg       |
+| spell_error_rate  | 17.1%         | 1.8%          |
+| avg_words_per_msg | 3.5           | 5.6           |
+| formality         | very_casual   | casual        |
 
 **Decision**: Hybrid (regex + preprocessing features). Leverages work we already do, no extra compute, richer signals than pure regex.
 
 ### Why Unsupervised (Not Fine-tuned Classifier)?
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| **Fine-tuned classifier** | High accuracy | Need labeled data, retraining |
+| Approach                       | Pros                | Cons                           |
+| ------------------------------ | ------------------- | ------------------------------ |
+| **Fine-tuned classifier**      | High accuracy       | Need labeled data, retraining  |
 | **LightGBM + BERT embeddings** | High accuracy, fast | Requires labeled training data |
-| **Unsupervised clustering** | No labels, adapts | Slightly lower precision |
+| **Unsupervised clustering**    | No labels, adapts   | Slightly lower precision       |
 
 **Decision**: Unsupervised. No labeled data collection needed, automatically adapts to new contacts and topics, minimal memory overhead.
 
 ### Why Cache Profiles (Not Compute On-Demand)?
 
 Old approach in `prompts.py`:
+
 ```python
 # Every prompt generation (10x/minute):
 style = analyze_user_style(messages)  # Fetches messages, analyzes
 ```
 
 Problems:
+
 - Redundant: style doesn't change between messages
 - Wasteful: same computation repeated
 - Slow startup: need to fetch messages
 
 New approach:
+
 ```python
 # Once per contact (during extraction):
 profile = build_contact_profile(contact_id, messages, embeddings)
@@ -102,10 +106,10 @@ profile = get_contact_profile(contact_id)  # 0.002ms from cache
 
 ### Why JSON Files (Not SQLite)?
 
-| Storage | Pros | Cons |
-|---------|------|------|
-| **SQLite** | ACID, queries | Centroid BLOBs awkward, migration needed |
-| **JSON files** | Simple, human-readable | No queries, separate files |
+| Storage        | Pros                   | Cons                                     |
+| -------------- | ---------------------- | ---------------------------------------- |
+| **SQLite**     | ACID, queries          | Centroid BLOBs awkward, migration needed |
+| **JSON files** | Simple, human-readable | No queries, separate files               |
 
 **Decision**: JSON files for now. Simple to implement, easy to debug (can read profiles), ~15KB/file is trivial. Can migrate to SQLite later if needed.
 
@@ -164,24 +168,24 @@ style = analyze_user_style(user_messages)  # 0.22ms each time
 
 ### New Approach Benefits
 
-| Aspect | Old | New |
-|--------|-----|-----|
-| Style computation | Every prompt | Once per contact |
-| Topic detection | Fixed keywords | Learned per person |
-| Adapts to new people | ❌ No | ✅ Automatically |
-| Labeled data needed | N/A | ❌ None |
-| Storage | None | ~15KB/contact |
+| Aspect               | Old            | New                |
+| -------------------- | -------------- | ------------------ |
+| Style computation    | Every prompt   | Once per contact   |
+| Topic detection      | Fixed keywords | Learned per person |
+| Adapts to new people | ❌ No          | ✅ Automatically   |
+| Labeled data needed  | N/A            | ❌ None            |
+| Storage              | None           | ~15KB/contact      |
 
 ## No Labeled Data Required
 
 Everything is **unsupervised**:
 
-| Component | Method | Training Data? |
-|-----------|--------|----------------|
-| **Style Analysis** | Regex patterns + word counting | ❌ None |
-| **Topic Discovery** | HDBSCAN clustering on embeddings | ❌ None |
-| **Topic Classification** | Cosine similarity to centroids | ❌ None |
-| **Chunk Detection** | Topic change = boundary | ❌ None |
+| Component                | Method                           | Training Data? |
+| ------------------------ | -------------------------------- | -------------- |
+| **Style Analysis**       | Regex patterns + word counting   | ❌ None        |
+| **Topic Discovery**      | HDBSCAN clustering on embeddings | ❌ None        |
+| **Topic Classification** | Cosine similarity to centroids   | ❌ None        |
+| **Chunk Detection**      | Topic change = boundary          | ❌ None        |
 
 ### Adapts to New Contacts Automatically
 
@@ -294,12 +298,12 @@ if profile and profile.topics:
 
 ## Performance
 
-| Operation | Time | When |
-|-----------|------|------|
-| Build profile | ~800ms | Once per contact (extraction) |
-| Load cached | 0.002ms | Every prompt |
-| Classify topic | 0.03ms | Per message |
-| Style analysis (old) | 0.22ms | Was every prompt |
+| Operation            | Time    | When                          |
+| -------------------- | ------- | ----------------------------- |
+| Build profile        | ~800ms  | Once per contact (extraction) |
+| Load cached          | 0.002ms | Every prompt                  |
+| Classify topic       | 0.03ms  | Per message                   |
+| Style analysis (old) | 0.22ms  | Was every prompt              |
 
 ## Storage
 
@@ -317,12 +321,12 @@ Each file: ~15KB
 
 ### Topic Detection: Fixed vs Learned
 
-| Message | Fixed Keywords | Learned Topics |
-|---------|---------------|----------------|
-| "elden ring dlc is insane" | unknown | gaming/elden-ring |
-| "paradigms hw due friday" | information | school/paradigms |
-| "lakers traded for harden" | unknown | nba/trades |
-| "salazar's class is brutal" | unknown | school/salazar |
+| Message                     | Fixed Keywords | Learned Topics    |
+| --------------------------- | -------------- | ----------------- |
+| "elden ring dlc is insane"  | unknown        | gaming/elden-ring |
+| "paradigms hw due friday"   | information    | school/paradigms  |
+| "lakers traded for harden"  | unknown        | nba/trades        |
+| "salazar's class is brutal" | unknown        | school/salazar    |
 
 **Fixed keywords: 31% coverage → Learned: 100% coverage**
 
@@ -340,8 +344,8 @@ LLM adapts response style to match each contact.
 
 ## Files
 
-| File | Purpose |
-|------|---------|
+| File                        | Purpose                                          |
+| --------------------------- | ------------------------------------------------ |
 | `jarvis/contact_profile.py` | Main ContactProfile class, StyleProfile, storage |
-| `jarvis/topic_discovery.py` | HDBSCAN clustering, centroid computation |
-| `jarvis/text_normalizer.py` | Preprocessing (slang, NER integration) |
+| `jarvis/topic_discovery.py` | HDBSCAN clustering, centroid computation         |
+| `jarvis/text_normalizer.py` | Preprocessing (slang, NER integration)           |

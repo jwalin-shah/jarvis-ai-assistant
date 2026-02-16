@@ -5,8 +5,8 @@
  * reactive state for the Dashboard component.
  */
 
-import { writable, get } from "svelte/store";
-import { jarvis } from "../socket/client";
+import { writable, get } from 'svelte/store';
+import { jarvis } from '../socket/client';
 
 /** Latency breakdown for a single routing request */
 export interface LatencyBreakdown {
@@ -71,7 +71,7 @@ export async function fetchMetrics(limit = 100): Promise<void> {
     const result = await jarvis.call<{
       recent_requests: MetricsRequest[];
       summary: MetricsSummary;
-    }>("get_routing_metrics", { limit });
+    }>('get_routing_metrics', { limit });
 
     metricsStore.update((s) => ({
       ...s,
@@ -81,7 +81,7 @@ export async function fetchMetrics(limit = 100): Promise<void> {
       lastFetched: Date.now(),
     }));
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to fetch metrics";
+    const message = err instanceof Error ? err.message : 'Failed to fetch metrics';
     metricsStore.update((s) => ({
       ...s,
       loading: false,

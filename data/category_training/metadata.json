@@ -1,15 +1,6 @@
 {
-  "sources": [
-    "OpenRL/daily_dialog",
-    "knkarthick/samsum"
-  ],
-  "categories": [
-    "ack",
-    "clarify",
-    "emotional",
-    "info",
-    "social"
-  ],
+  "sources": ["OpenRL/daily_dialog", "knkarthick/samsum"],
+  "categories": ["ack", "clarify", "emotional", "info", "social"],
   "labeling_method": "weak_supervision (majority)",
   "num_labeling_functions": 29,
   "aggregation_method": "majority",

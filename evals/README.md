@@ -48,15 +48,15 @@ Edit `promptfoo.yaml` to add new test cases:
 
 ```yaml
 tests:
-  - description: "My new test"
+  - description: 'My new test'
     vars:
       context: "[10:00] Friend: Hey what's up?"
       last_message: "Hey what's up?"
-      tone: "casual"
-      user_style: "brief, uses abbreviations"
+      tone: 'casual'
+      user_style: 'brief, uses abbreviations'
     assert:
       - type: llm-rubric
-        value: "Response should be casual and brief"
+        value: 'Response should be casual and brief'
 ```
 
 ## Adding Prompt Variations
@@ -74,10 +74,11 @@ By default, promptfoo uses OpenAI for `llm-rubric` evaluations. To use a differe
 defaultTest:
   options:
     provider:
-      id: openai:gpt-4o-mini  # or anthropic:claude-3-haiku
+      id: openai:gpt-4o-mini # or anthropic:claude-3-haiku
 ```
 
 Set your API key:
+
 ```bash
 export OPENAI_API_KEY=sk-...
 # or

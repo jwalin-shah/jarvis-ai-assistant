@@ -33,6 +33,7 @@ else:
 ```
 
 **Categories** (6):
+
 - `acknowledge` - "ok", "sure", "thanks"
 - `question` - "What time?", "Where are you?"
 - `request` - "Can you pick me up?"
@@ -41,6 +42,7 @@ else:
 - `statement` - "Running late", "Just got home"
 
 **Mobilization** (4 levels):
+
 - `HIGH` - Question/request that needs answer
 - `MEDIUM` - Emotional content, casual reply expected
 - `LOW` - Statement, optional acknowledgment
@@ -54,16 +56,16 @@ else:
 context_parts = {
     # Recent conversation (essential)
     "conversation_history": get_last_n_messages(10),
-    
+
     # Contact knowledge (from fact DB)
     "facts": get_relevant_facts(contact_id, query=incoming_text, k=5),
-    
+
     # Similar past replies (RAG)
     "similar_examples": search_similar_replies(incoming_text, k=3),
-    
+
     # Relationship type
     "relationship": classify_relationship(contact_id),
-    
+
     # Time context
     "time_since_last": time_since_last_message(),
 }
@@ -102,18 +104,18 @@ Style:
 
 ### 4. LLM Selection
 
-| Model | Recommendation |
-|-------|---------------|
-| **Qwen 1.5B** | Default - best speed/quality balance |
-| **Gemma 3 4B** | Use if Qwen quality insufficient |
-| **LFM 0.3B** | Testing only - very fast, lower quality |
+| Model          | Recommendation                          |
+| -------------- | --------------------------------------- |
+| **Qwen 1.5B**  | Default - best speed/quality balance    |
+| **Gemma 3 4B** | Use if Qwen quality insufficient        |
+| **LFM 0.3B**   | Testing only - very fast, lower quality |
 
 **Configuration** (in `config.yaml`):
 
 ```yaml
 model:
-  name: "mlx-community/Qwen2.5-1.5B-Instruct-4bit"
-  max_tokens: 50  # Keep replies short
+  name: 'mlx-community/Qwen2.5-1.5B-Instruct-4bit'
+  max_tokens: 50 # Keep replies short
   temperature: 0.7
   top_p: 0.9
 ```
@@ -147,6 +149,7 @@ for r in results:
 **Quality Filtering for RAG**:
 
 Only index high-quality pairs:
+
 - Response length: 3-100 characters
 - Not acknowledgments only (avoid "ok" → "ok" training)
 - Quality score > 0.7 (from `filter_quality_pairs.py`)
@@ -176,9 +179,12 @@ uv run python scripts/prepare_personal_data.py --both
 ```json
 {
   "messages": [
-    {"role": "system", "content": "You are NOT an AI assistant... Category: question"},
-    {"role": "user", "content": "<conversation>...\n<last_message>Friend: Want to grab lunch?</last_message>"},
-    {"role": "assistant", "content": "sure what time?"}
+    { "role": "system", "content": "You are NOT an AI assistant... Category: question" },
+    {
+      "role": "user",
+      "content": "<conversation>...\n<last_message>Friend: Want to grab lunch?</last_message>"
+    },
+    { "role": "assistant", "content": "sure what time?" }
   ]
 }
 ```
@@ -186,6 +192,7 @@ uv run python scripts/prepare_personal_data.py --both
 ### 7. Optional: LoRA Fine-tuning
 
 **When to fine-tune**:
+
 - You have 5,000+ high-quality pairs
 - RAG alone doesn't capture your style
 - You want to reduce latency (no retrieval step)
@@ -266,18 +273,21 @@ print(result["category"])  # "request"
 ## Next Steps
 
 1. **Validate your data quality**:
+
    ```bash
    uv run python scripts/filter_quality_pairs.py
    # Check quality_metrics.txt output
    ```
 
 2. **Test RAG-only first**:
+
    ```bash
    # Don't fine-tune yet, just use RAG
    # Test with 100 messages, see quality
    ```
 
 3. **Measure before optimizing**:
+
    ```bash
    uv run python evals/run_comparison.py
    # Check if replies match your style

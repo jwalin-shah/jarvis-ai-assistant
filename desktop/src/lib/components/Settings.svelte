@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { api } from "../api/client";
+  import { onMount } from 'svelte';
+  import { api } from '../api/client';
   import type {
     ModelInfo,
     SettingsResponse,
     GenerationSettings,
     BehaviorSettings,
-  } from "../api/types";
+  } from '../api/types';
   import {
     themeMode,
     setTheme,
@@ -16,7 +16,7 @@
     setReducedMotion,
     accentColors,
     type AccentColorKey,
-  } from "../stores/theme";
+  } from '../stores/theme';
 
   let settings: SettingsResponse | null = null;
   let models: ModelInfo[] = [];
@@ -26,7 +26,7 @@
   let successMessage: string | null = null;
 
   // Local state for form
-  let selectedModelId = "";
+  let selectedModelId = '';
   let temperature = 0.7;
   let maxTokensReply = 150;
   let maxTokensSummary = 500;
@@ -47,10 +47,7 @@
     loading = true;
     error = null;
     try {
-      const [settingsData, modelsData] = await Promise.all([
-        api.getSettings(),
-        api.getModels(),
-      ]);
+      const [settingsData, modelsData] = await Promise.all([api.getSettings(), api.getModels()]);
       settings = settingsData;
       models = modelsData;
 
@@ -64,7 +61,7 @@
       contextMessagesReply = settings.behavior.context_messages_reply;
       contextMessagesSummary = settings.behavior.context_messages_summary;
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to load settings";
+      error = e instanceof Error ? e.message : 'Failed to load settings';
     } finally {
       loading = false;
     }
@@ -92,10 +89,10 @@
         generation,
         behavior,
       });
-      successMessage = "Settings saved successfully";
+      successMessage = 'Settings saved successfully';
       setTimeout(() => (successMessage = null), 3000);
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to save settings";
+      error = e instanceof Error ? e.message : 'Failed to save settings';
     } finally {
       saving = false;
     }
@@ -117,14 +114,14 @@
     error = null;
     try {
       const status = await api.downloadModel(modelId);
-      if (status.status === "failed") {
-        error = status.error || "Download failed";
+      if (status.status === 'failed') {
+        error = status.error || 'Download failed';
       } else {
         // Refresh models to update download status
         models = await api.getModels();
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : "Download failed";
+      error = e instanceof Error ? e.message : 'Download failed';
     } finally {
       downloadingModel = null;
     }
@@ -136,16 +133,16 @@
     try {
       const response = await api.activateModel(modelId);
       if (!response.success) {
-        error = response.error || "Activation failed";
+        error = response.error || 'Activation failed';
       } else {
         selectedModelId = modelId;
         // Refresh data
         await loadData();
-        successMessage = "Model activated successfully";
+        successMessage = 'Model activated successfully';
         setTimeout(() => (successMessage = null), 3000);
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : "Activation failed";
+      error = e instanceof Error ? e.message : 'Activation failed';
     } finally {
       activatingModel = null;
     }
@@ -153,12 +150,12 @@
 
   function getQualityLabel(tier: string): string {
     switch (tier) {
-      case "basic":
-        return "Basic";
-      case "good":
-        return "Good";
-      case "best":
-        return "Best";
+      case 'basic':
+        return 'Basic';
+      case 'good':
+        return 'Good';
+      case 'best':
+        return 'Best';
       default:
         return tier;
     }
@@ -206,7 +203,8 @@
           <label
             class="model-card"
             class:selected={selectedModelId === model.model_id}
-            class:disabled={!model.is_downloaded && model.ram_requirement_gb > (settings?.system.system_ram_gb || 0)}
+            class:disabled={!model.is_downloaded &&
+              model.ram_requirement_gb > (settings?.system.system_ram_gb || 0)}
           >
             <input
               type="radio"
@@ -249,7 +247,7 @@
                   onclick={() => downloadModel(model.model_id)}
                   disabled={downloadingModel === model.model_id}
                 >
-                  {downloadingModel === model.model_id ? "Downloading..." : "Download"}
+                  {downloadingModel === model.model_id ? 'Downloading...' : 'Download'}
                 </button>
               {:else if !model.is_loaded && selectedModelId === model.model_id}
                 <button
@@ -257,7 +255,7 @@
                   onclick={() => activateModel(model.model_id)}
                   disabled={activatingModel === model.model_id}
                 >
-                  {activatingModel === model.model_id ? "Activating..." : "Activate"}
+                  {activatingModel === model.model_id ? 'Activating...' : 'Activate'}
                 </button>
               {/if}
             </div>
@@ -396,13 +394,13 @@
       <div class="subsection">
         <h3 class="subsection-title">Theme</h3>
         <div class="theme-selector">
-          <label class="theme-option" class:selected={$themeMode === "dark"}>
+          <label class="theme-option" class:selected={$themeMode === 'dark'}>
             <input
               type="radio"
               name="theme"
               value="dark"
-              checked={$themeMode === "dark"}
-              onchange={() => setTheme("dark")}
+              checked={$themeMode === 'dark'}
+              onchange={() => setTheme('dark')}
             />
             <div class="theme-icon dark">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -412,13 +410,13 @@
             <span>Dark</span>
           </label>
 
-          <label class="theme-option" class:selected={$themeMode === "light"}>
+          <label class="theme-option" class:selected={$themeMode === 'light'}>
             <input
               type="radio"
               name="theme"
               value="light"
-              checked={$themeMode === "light"}
-              onchange={() => setTheme("light")}
+              checked={$themeMode === 'light'}
+              onchange={() => setTheme('light')}
             />
             <div class="theme-icon light">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -436,13 +434,13 @@
             <span>Light</span>
           </label>
 
-          <label class="theme-option" class:selected={$themeMode === "system"}>
+          <label class="theme-option" class:selected={$themeMode === 'system'}>
             <input
               type="radio"
               name="theme"
               value="system"
-              checked={$themeMode === "system"}
-              onchange={() => setTheme("system")}
+              checked={$themeMode === 'system'}
+              onchange={() => setTheme('system')}
             />
             <div class="theme-icon system">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -519,13 +517,13 @@
             <span class="info-value" class:status-ok={settings.system.model_loaded}>
               {settings.system.model_loaded
                 ? `Loaded (${settings.system.model_memory_usage_gb.toFixed(1)} GB)`
-                : "Not Loaded"}
+                : 'Not Loaded'}
             </span>
           </div>
           <div class="info-row">
             <span class="info-label">iMessage Access</span>
             <span class="info-value" class:status-ok={settings.system.imessage_access}>
-              {settings.system.imessage_access ? "Connected" : "Not Connected"}
+              {settings.system.imessage_access ? 'Connected' : 'Not Connected'}
             </span>
           </div>
         </div>
@@ -534,7 +532,7 @@
 
     <div class="actions">
       <button class="btn-primary" onclick={saveSettings} disabled={saving}>
-        {saving ? "Saving..." : "Save Settings"}
+        {saving ? 'Saving...' : 'Save Settings'}
       </button>
       <button class="btn-secondary" onclick={resetToDefaults} disabled={saving}>
         Reset to Defaults
@@ -654,7 +652,7 @@
     cursor: not-allowed;
   }
 
-  .model-card input[type="radio"] {
+  .model-card input[type='radio'] {
     display: none;
   }
 
@@ -673,7 +671,7 @@
   }
 
   .model-card.selected .model-radio::after {
-    content: "";
+    content: '';
     position: absolute;
     top: 4px;
     left: 4px;
@@ -776,7 +774,7 @@
     font-weight: 600;
   }
 
-  .form-group input[type="range"] {
+  .form-group input[type='range'] {
     width: 100%;
     height: 6px;
     background: var(--bg-active);
@@ -785,7 +783,7 @@
     cursor: pointer;
   }
 
-  .form-group input[type="range"]::-webkit-slider-thumb {
+  .form-group input[type='range']::-webkit-slider-thumb {
     appearance: none;
     width: 18px;
     height: 18px;
@@ -951,7 +949,7 @@
     background: rgba(11, 147, 246, 0.1);
   }
 
-  .theme-option input[type="radio"] {
+  .theme-option input[type='radio'] {
     display: none;
   }
 

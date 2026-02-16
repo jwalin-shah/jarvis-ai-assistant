@@ -49,7 +49,7 @@
 </script>
 
 <div class="socket-status" class:connected={connectionInfo.state === 'connected'}>
-  <button class="status-btn" onclick={() => showDetails = !showDetails}>
+  <button class="status-btn" onclick={() => (showDetails = !showDetails)}>
     <span class="status-icon" style="color: {getStatusColor(connectionInfo.state)}">
       {getStatusIcon(connectionInfo.state)}
     </span>
@@ -76,9 +76,7 @@
       </div>
 
       {#if connectionInfo.state !== 'connected'}
-        <button class="reconnect-btn" onclick={reconnect}>
-          Reconnect
-        </button>
+        <button class="reconnect-btn" onclick={reconnect}> Reconnect </button>
       {/if}
 
       <div class="help-text">

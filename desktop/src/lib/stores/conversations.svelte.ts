@@ -8,9 +8,9 @@ import type {
   PaginationState,
   OptimisticMessage,
   ConnectionStatus,
-  DraftSuggestion
-} from "../api/types";
-import { api } from "../api/client";
+  DraftSuggestion,
+} from '../api/types';
+import { api } from '../api/client';
 import {
   initDatabases,
   isDirectAccessAvailable,
@@ -24,12 +24,12 @@ import {
   loadContactsFromAddressBook,
   isContactsCacheLoaded,
   resolveContactName,
-} from "../db";
-import { jarvis } from "../socket";
-import type { NewMessageEvent } from "../socket/client";
+} from '../db';
+import { jarvis } from '../socket';
+import type { NewMessageEvent } from '../socket/client';
 
 /** Check if running in Tauri context */
-const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 /** Default number of messages to fetch per page */
 const PAGE_SIZE = 20;
@@ -50,7 +50,7 @@ interface MessageCacheEntry {
 function setCacheEntry(
   cache: Map<string, MessageCacheEntry>,
   key: string,
-  value: MessageCacheEntry,
+  value: MessageCacheEntry
 ): void {
   cache.delete(key);
   cache.set(key, value);
@@ -69,7 +69,7 @@ function setCacheEntry(
  */
 function getCacheEntry(
   cache: Map<string, MessageCacheEntry>,
-  key: string,
+  key: string
 ): MessageCacheEntry | undefined {
   const entry = cache.get(key);
   if (entry !== undefined) {
@@ -93,7 +93,7 @@ class ConversationsState {
   loadingMore = $state(false);
   hasMore = $state(false);
   error = $state<string | null>(null);
-  connectionStatus = $state<ConnectionStatus>("disconnected");
+  connectionStatus = $state<ConnectionStatus>('disconnected');
   unreadCounts = $state(new Map<string, number>());
   pinnedChats = $state(new Set<string>());
   archivedChats = $state(new Set<string>());
@@ -101,7 +101,7 @@ class ConversationsState {
   isWindowFocused = $state(true);
   optimisticMessages = $state<OptimisticMessage[]>([]);
   prefetchedDraft = $state<{ chatId: string; suggestions: DraftSuggestion[] } | null>(null);
-  
+
   // Internal cache
   messageCache = new Map<string, MessageCacheEntry>();
   lastKnownGlobalRowid = 0;
@@ -120,10 +120,10 @@ class ConversationsState {
 
     const optimisticAsMessages: Message[] = this.optimisticMessages.map((opt) => ({
       id: opt.stableId,
-      chat_id: this.selectedChatId || "",
+      chat_id: this.selectedChatId || '',
       text: opt.text,
       date: new Date(opt.timestamp).toISOString(),
-      sender: "me",
+      sender: 'me',
       sender_name: null,
       is_from_me: true,
       is_system_message: false,
@@ -153,7 +153,7 @@ export const conversationsStore = new ConversationsState();
 
 // Helper stores for UI components (these use traditional Svelte stores, not runes)
 // These can be accessed with $ prefix in components
-import { writable } from "svelte/store";
+import { writable } from 'svelte/store';
 export const highlightedMessageId = writable<number | null>(null);
 export const scrollToMessageId = writable<number | null>(null);
 
@@ -177,14 +177,18 @@ function loadPinnedChats(): Set<string> {
   try {
     const stored = localStorage.getItem(PINNED_STORAGE_KEY);
     return stored ? new Set(JSON.parse(stored)) : new Set();
-  } catch { return new Set(); }
+  } catch {
+    return new Set();
+  }
 }
 
 function loadArchivedChats(): Set<string> {
   try {
     const stored = localStorage.getItem(ARCHIVED_STORAGE_KEY);
     return stored ? new Set(JSON.parse(stored)) : new Set();
-  } catch { return new Set(); }
+  } catch {
+    return new Set();
+  }
 }
 
 function savePinnedChats() {
@@ -229,22 +233,27 @@ export function addOptimisticMessage(text: string): string {
   conversationsStore.optimisticMessages.push({
     id,
     text,
-    status: "sending",
+    status: 'sending',
     timestamp: Date.now(),
     stableId,
   });
   return id;
 }
 
-export function updateOptimisticMessage(id: string, updates: Partial<Pick<OptimisticMessage, "status" | "error">>) {
-  const msg = conversationsStore.optimisticMessages.find(m => m.id === id);
+export function updateOptimisticMessage(
+  id: string,
+  updates: Partial<Pick<OptimisticMessage, 'status' | 'error'>>
+) {
+  const msg = conversationsStore.optimisticMessages.find((m) => m.id === id);
   if (msg) {
     Object.assign(msg, updates);
   }
 }
 
 export function removeOptimisticMessage(id: string) {
-  conversationsStore.optimisticMessages = conversationsStore.optimisticMessages.filter(m => m.id !== id);
+  conversationsStore.optimisticMessages = conversationsStore.optimisticMessages.filter(
+    (m) => m.id !== id
+  );
 }
 
 export function clearOptimisticMessages(chatId?: string) {
@@ -262,7 +271,7 @@ export function reconcileMessages(chatId: string, newMessages: Message[]) {
 
   const currentMessages = conversationsStore.messages;
   const existingIds = new Set(currentMessages.map((m) => m.id));
-  
+
   // Only add truly new messages
   const filteredNew = newMessages.filter((m) => !existingIds.has(m.id));
   if (filteredNew.length === 0) return;
@@ -289,7 +298,7 @@ export function reconcileMessages(chatId: string, newMessages: Message[]) {
       } else {
         // Fallback: clear oldest 'sent' optimistic message
         const oldestSent = conversationsStore.optimisticMessages.find(
-          (opt) => opt.status === "sent"
+          (opt) => opt.status === 'sent'
         );
         if (oldestSent) removeOptimisticMessage(oldestSent.id);
       }
@@ -308,18 +317,21 @@ export async function fetchConversations(isPolling = false) {
   }
   // Track initial load vs polling for UI distinction (UX-04)
   conversationsStore.isPolling = isPolling;
-  conversationsStore.connectionStatus = "connecting";
+  conversationsStore.connectionStatus = 'connecting';
 
   try {
     let conversations: Conversation[] = [];
-    
+
     if (isTauri) {
       if (isDirectAccessAvailable()) {
         // Direct SQLite is ~50ms vs 1-3s through socket RPC
         conversations = await getConversationsDirect(50);
       } else {
         try {
-          const result = await jarvis.call<{ conversations: Conversation[] }>("list_conversations", { limit: 50 });
+          const result = await jarvis.call<{ conversations: Conversation[] }>(
+            'list_conversations',
+            { limit: 50 }
+          );
           conversations = result.conversations;
         } catch (e) {
           conversations = await api.getConversations();
@@ -332,7 +344,11 @@ export async function fetchConversations(isPolling = false) {
     // Detect new messages
     for (const conv of conversations) {
       const lastKnown = conversationsStore.lastKnownMessageDates.get(conv.chat_id);
-      if (lastKnown && conv.last_message_date > lastKnown && conv.chat_id !== conversationsStore.selectedChatId) {
+      if (
+        lastKnown &&
+        conv.last_message_date > lastKnown &&
+        conv.chat_id !== conversationsStore.selectedChatId
+      ) {
         markConversationAsNew(conv.chat_id);
       }
       conversationsStore.lastKnownMessageDates.set(conv.chat_id, conv.last_message_date);
@@ -342,14 +358,15 @@ export async function fetchConversations(isPolling = false) {
     conversationsStore.loading = false;
     conversationsStore.isInitialLoad = false;
     conversationsStore.isPolling = false;
-    conversationsStore.connectionStatus = "connected";
+    conversationsStore.connectionStatus = 'connected';
     conversationsStore.lastConversationFetchTime = Date.now();
   } catch (e) {
     conversationsStore.loading = false;
     conversationsStore.isInitialLoad = false;
     conversationsStore.isPolling = false;
-    conversationsStore.connectionStatus = "disconnected";
-    if (!isPolling) conversationsStore.error = e instanceof Error ? e.message : "Failed to fetch conversations";
+    conversationsStore.connectionStatus = 'disconnected';
+    if (!isPolling)
+      conversationsStore.error = e instanceof Error ? e.message : 'Failed to fetch conversations';
   }
 }
 
@@ -363,7 +380,7 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
     }
     return messages.toReversed();
   } catch (e) {
-    console.error("fetchMessages failed", e);
+    console.error('fetchMessages failed', e);
     return [];
   }
 }
@@ -397,18 +414,18 @@ export async function pollMessages(force = false): Promise<Message[]> {
       conversationsStore.lastKnownGlobalRowid = currentGlobalRowid;
 
       // Filter to messages for the current chat
-      const relevantEntries = newEntries.filter(e => e.chatId === chatId);
+      const relevantEntries = newEntries.filter((e) => e.chatId === chatId);
       if (relevantEntries.length === 0) return [];
 
       // Batch fetch all new messages in a single query (avoids N+1)
-      const existingIds = new Set(conversationsStore.messages.map(m => m.id));
+      const existingIds = new Set(conversationsStore.messages.map((m) => m.id));
       const idsToFetch = relevantEntries
-        .map(e => e.messageId)
-        .filter(id => !existingIds.has(id));
+        .map((e) => e.messageId)
+        .filter((id) => !existingIds.has(id));
       if (idsToFetch.length === 0) return [];
 
       const fetchedMessages = await getMessagesBatchDirect(chatId, idsToFetch);
-      
+
       if (conversationsStore.selectedChatId !== chatId) return [];
 
       reconcileMessages(chatId, fetchedMessages);
@@ -442,23 +459,26 @@ export async function selectConversation(chatId: string) {
   pendingPrefetchChatId = chatId;
 
   // Background prefetch - fire and forget, but guard against stale results
-  void jarvis.call<{
-    status: string;
-    prefetched?: boolean;
-    draft?: { suggestions: DraftSuggestion[] };
-    error?: string;
-  }>("prefetch_focus", { chat_id: chatId }).then((result) => {
-    // Only apply if the user is still on the same chat AND this is still the
-    // active prefetch (not superseded by a newer selectConversation call) (FE-04)
-    if (
-      result?.prefetched &&
-      result?.draft?.suggestions?.length &&
-      conversationsStore.selectedChatId === chatId &&
-      pendingPrefetchChatId === chatId
-    ) {
-      conversationsStore.prefetchedDraft = { chatId, suggestions: result.draft.suggestions };
-    }
-  }).catch(() => {});
+  void jarvis
+    .call<{
+      status: string;
+      prefetched?: boolean;
+      draft?: { suggestions: DraftSuggestion[] };
+      error?: string;
+    }>('prefetch_focus', { chat_id: chatId })
+    .then((result) => {
+      // Only apply if the user is still on the same chat AND this is still the
+      // active prefetch (not superseded by a newer selectConversation call) (FE-04)
+      if (
+        result?.prefetched &&
+        result?.draft?.suggestions?.length &&
+        conversationsStore.selectedChatId === chatId &&
+        pendingPrefetchChatId === chatId
+      ) {
+        conversationsStore.prefetchedDraft = { chatId, suggestions: result.draft.suggestions };
+      }
+    })
+    .catch(() => {});
 
   const cached = getCacheEntry(conversationsStore.messageCache, chatId);
   if (cached) {
@@ -487,7 +507,7 @@ export async function selectConversation(chatId: string) {
     const hasMore = messages.length >= PAGE_SIZE;
     setCacheEntry(conversationsStore.messageCache, chatId, {
       messages,
-      pagination: { hasMore, loadingMore: false }
+      pagination: { hasMore, loadingMore: false },
     });
 
     conversationsStore.messages = messages;
@@ -497,7 +517,7 @@ export async function selectConversation(chatId: string) {
   } catch (e) {
     if (conversationsStore.selectedChatId !== chatId) return;
     conversationsStore.loadingMessages = false;
-    conversationsStore.error = e instanceof Error ? e.message : "Failed to load messages";
+    conversationsStore.error = e instanceof Error ? e.message : 'Failed to load messages';
   }
 }
 
@@ -524,7 +544,7 @@ export async function loadMoreMessages(): Promise<boolean> {
     const newMessages = [...chronologicalOlder, ...conversationsStore.messages];
     setCacheEntry(conversationsStore.messageCache, selectedChatId, {
       messages: newMessages,
-      pagination: { hasMore: newHasMore, loadingMore: false }
+      pagination: { hasMore: newHasMore, loadingMore: false },
     });
 
     conversationsStore.messages = newMessages;
@@ -686,8 +706,8 @@ export async function initializePolling(): Promise<() => void> {
     // Socket fallback if AddressBook failed (only if still no contacts)
     if (!isContactsCacheLoaded()) {
       try {
-        const contacts = await jarvis.call<Record<string, string | null>>("get_contacts", {});
-        if (contacts && typeof contacts === "object") {
+        const contacts = await jarvis.call<Record<string, string | null>>('get_contacts', {});
+        if (contacts && typeof contacts === 'object') {
           populateContactsCache(contacts);
           refreshConversationNames();
         }
@@ -698,7 +718,7 @@ export async function initializePolling(): Promise<() => void> {
   } else {
     startConversationPolling();
   }
-  
+
   const FOCUS_STALE_MS = 60000; // Only re-fetch if >60s since last fetch
   const handleFocus = () => {
     conversationsStore.isWindowFocused = true;
@@ -712,16 +732,16 @@ export async function initializePolling(): Promise<() => void> {
     conversationsStore.isWindowFocused = false;
   };
 
-  window.addEventListener("focus", handleFocus);
-  window.addEventListener("blur", handleBlur);
+  window.addEventListener('focus', handleFocus);
+  window.addEventListener('blur', handleBlur);
 
-  const unlistenNewMsg = jarvis.on<NewMessageEvent>("new_message", handleNewMessagePush);
+  const unlistenNewMsg = jarvis.on<NewMessageEvent>('new_message', handleNewMessagePush);
 
   return () => {
     stopConversationPolling();
     stopMessagePolling();
-    window.removeEventListener("focus", handleFocus);
-    window.removeEventListener("blur", handleBlur);
+    window.removeEventListener('focus', handleFocus);
+    window.removeEventListener('blur', handleBlur);
     unlistenNewMsg();
   };
 }
