@@ -168,7 +168,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_write_buffers_data(self):
         """write() buffers data instead of sending immediately."""
-        from jarvis.interfaces.desktop.protocol import WebSocketWriter
+        from jarvis.interfaces.desktop.websocket_writer import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)
@@ -182,7 +182,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_drain_sends_combined_data(self):
         """drain() combines buffered data and sends once."""
-        from jarvis.interfaces.desktop.protocol import WebSocketWriter
+        from jarvis.interfaces.desktop.websocket_writer import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)
@@ -196,7 +196,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_drain_clears_buffer(self):
         """drain() clears the buffer after sending."""
-        from jarvis.interfaces.desktop.protocol import WebSocketWriter
+        from jarvis.interfaces.desktop.websocket_writer import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)
@@ -215,7 +215,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_drain_noop_when_empty(self):
         """drain() with empty buffer does nothing."""
-        from jarvis.interfaces.desktop.protocol import WebSocketWriter
+        from jarvis.interfaces.desktop.websocket_writer import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)
