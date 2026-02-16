@@ -310,14 +310,22 @@ TEXT_ABBREVIATIONS: set[str] = {
 # Prompt Templates
 # =============================================================================
 
+# Static system prefix for KV cache reuse.
+SYSTEM_PREFIX = "<|im_start|>system\nRespond as a human texting. Be brief and casual.<|im_end|>\n"
+
 REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
     system_message="",
-    template="{context}\n{last_message}\nMe:",
+    template="<|im_start|>user\n{context}\n{last_message}<|im_end|>\n<|im_start|>assistant\n",
     max_output_tokens=50,
 )
 
-
+RAG_REPLY_PROMPT = PromptTemplate(
+    name="rag_reply_generation",
+    system_message="",
+    template="<|im_start|>user\nContext: {relationship_context} {contact_facts}\n\nHistory:\n{context}\n{last_message}<|im_end|>\n<|im_start|>assistant\n",
+    max_output_tokens=40,
+)
 
 
 SUMMARY_PROMPT = PromptTemplate(
@@ -397,19 +405,6 @@ Your role: {user_role}
 <reply>""",
     max_output_tokens=100,
 )
-
-
-# Static system prefix for KV cache reuse.
-SYSTEM_PREFIX = ""
-
-RAG_REPLY_PROMPT = PromptTemplate(
-    name="rag_reply_generation",
-    system_message="",
-    template="{relationship_context}\n{contact_facts}\n{context}\n{last_message}\nMe:",
-    max_output_tokens=40,
-)
-
-
 
 
 # System prompt for chat-based reply generation

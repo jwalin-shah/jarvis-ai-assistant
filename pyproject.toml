@@ -180,9 +180,9 @@ source = ["jarvis", "api", "models", "core", "integrations", "contracts", "bench
 omit = ["tests/*", "*/test_*.py"]
 
 [tool.coverage.report]
-# Current repository baseline is below 60%; keep a strict gate while we
-# incrementally raise coverage in follow-up work.
-fail_under = 55
+# Current repository baseline is below 60%; incrementally raising to 75%+ for portfolio quality.
+# Target: 65% → 70% → 75%+
+fail_under = 65
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
