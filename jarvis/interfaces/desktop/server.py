@@ -35,7 +35,7 @@ from jarvis.interfaces.desktop.constants import (
     WEBSOCKET_PORT,
     WS_TOKEN_PATH,
 )
-from jarvis.interfaces.desktop.limiter import RateLimiter
+from jarvis.utils.rate_limiter import RateLimiter
 from jarvis.interfaces.desktop.protocol import (
     WebSocketWriter,
     error_response,
