@@ -171,7 +171,7 @@ class VecSearcher:
                         message.chat_id,
                         message.text[:200],  # Preview
                         message.sender,
-                        message.date.timestamp(),
+                        int(message.date.timestamp()),
                         1 if message.is_from_me else 0,
                     ),
                 )
@@ -211,7 +211,7 @@ class VecSearcher:
                             msg.chat_id,
                             msg.text[:200],
                             msg.sender,
-                            msg.date.timestamp(),
+                            int(msg.date.timestamp()),
                             1 if msg.is_from_me else 0,
                         )
                     )
