@@ -99,6 +99,7 @@ class ModelConfig:
     generation_timeout_seconds: float | None = field(
         default_factory=_get_default_generation_timeout
     )
+    kv_cache_bits: int | None = None
     _resolved_spec: ModelSpec | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -125,6 +126,14 @@ class ModelConfig:
                 logger.warning("DEFAULT_MODEL_ID '%s' not in registry", DEFAULT_MODEL_ID)
                 default_spec = MODEL_REGISTRY[DEFAULT_MODEL_ID]
                 self.model_path = default_spec.path
+
+        if self.kv_cache_bits is None:
+            try:
+                from jarvis.config import get_config
+
+                self.kv_cache_bits = get_config().model.kv_cache_bits
+            except Exception:
+                self.kv_cache_bits = 16  # Default to full precision if config fails
 
     @property
     def display_name(self) -> str:
@@ -421,7 +430,12 @@ class MLXModelLoader:
                 apply_llm_limits()
 
                 # mlx_lm.load returns (model, tokenizer) tuple
-                result = load(self.config.model_path)
+                load_kwargs = {}
+                if self.config.kv_cache_bits:
+                    # MLX uses 'kv_bits' or 'cache_bits' depending on version
+                    load_kwargs["kv_bits"] = self.config.kv_cache_bits
+
+                result = load(self.config.model_path, **load_kwargs)
                 self._model = result[0]
                 self._tokenizer = result[1]
                 self._loaded_at = time.perf_counter()
@@ -593,7 +607,12 @@ class MLXModelLoader:
             # Tokenize the prefix once and store for reuse (avoids redundant
             # re-encoding if callers need the token IDs later)
             tokens = mx.array(self._tokenizer.encode(prefix_text))
-            self._prompt_cache = make_prompt_cache(self._model)
+            
+            cache_kwargs = {}
+            if self.config.kv_cache_bits:
+                cache_kwargs["kv_bits"] = self.config.kv_cache_bits
+                
+            self._prompt_cache = make_prompt_cache(self._model, **cache_kwargs)
             self._cache_prefix_len = tokens.shape[0]
             self._cache_prefix_tokens = tokens
 
