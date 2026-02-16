@@ -100,20 +100,18 @@ def get_mlx_memory_info() -> dict[str, Any] | None:
 
 def get_gpu_load_percent() -> float | None:
     """Get GPU utilization percentage on macOS.
-    
+
     Warning: This calls powermetrics which can be slow (~100ms).
     """
     if not IS_MACOS:
         return None
-        
+
     try:
         # Use powermetrics to get GPU load. Requires sudo or specific permissions.
         # Alternatively, use a faster but less reliable system_profiler check.
         # For now, we'll try a fast sysctl check for GPU activity.
-        output = subprocess.check_output(
-            ["sysctl", "-n", "machdep.cpu.brand_string"], text=True
-        ).lower()
-        
+        subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)
+
         # If Apple Silicon, we might be able to get it via some IOKit hooks
         # but for a CLI tool, powermetrics is the standard way.
         # We'll stick to memory-based utilization for now as it's 100% reliable.
@@ -288,13 +286,13 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
 
 def get_thermal_state() -> str | None:
     """Get macOS thermal state (throttling indicator).
-    
+
     Returns:
         nominal, fair, serious, critical, or None if unavailable.
     """
     if not IS_MACOS:
         return None
-        
+
     try:
         # Try kern.thermal_level first
         try:
@@ -310,11 +308,15 @@ def get_thermal_state() -> str | None:
             ).strip()
             # Convert 0-100 scale to 0-3 scale
             val = int(sysctl)
-            if val < 50: level = 0
-            elif val < 80: level = 1
-            elif val < 95: level = 2
-            else: level = 3
-            
+            if val < 50:
+                level = 0
+            elif val < 80:
+                level = 1
+            elif val < 95:
+                level = 2
+            else:
+                level = 3
+
         states = {0: "nominal", 1: "fair", 2: "serious", 3: "critical"}
         return states.get(level, "unknown")
     except Exception:
@@ -328,7 +330,7 @@ def get_memory_info() -> MemoryInfo:
     swap = psutil.swap_memory()
 
     # Get Footprint (macOS-specific)
-    # On macOS, RSS includes shared libraries. 'footprint' is what the OS 
+    # On macOS, RSS includes shared libraries. 'footprint' is what the OS
     # uses for 'out of memory' killing.
     footprint = mem.rss
     if IS_MACOS:
@@ -453,16 +455,16 @@ class MemoryMonitor:
             if prev.macos_pressure:
                 # 1. Track Page-outs (Disk I/O)
                 pageouts_delta = info.macos_pressure.pageouts - prev.macos_pressure.pageouts
-                
+
                 # 2. Track Compression Activity (CPU I/O)
                 comp_delta = info.macos_pressure.compressions - prev.macos_pressure.compressions
-                
+
                 time_delta = info.timestamp - prev.timestamp
                 if time_delta > 0:
                     if pageouts_delta > 0:
                         pageouts_per_sec = pageouts_delta / time_delta
                         log_msg += f" | SWAPPING: {pageouts_delta} pages ({pageouts_per_sec:.1f}/s)"
-                    
+
                     if comp_delta > 0:
                         comp_per_sec = comp_delta / time_delta
                         log_msg += f" | COMPRESSING: {comp_delta} ops ({comp_per_sec:.1f}/s)"

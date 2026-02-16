@@ -6,10 +6,10 @@ intervals and timeouts.
 
 from __future__ import annotations
 
-import time
 import logging
+import time
 from collections.abc import Callable
-from typing import TypeVar, Any
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -37,15 +37,15 @@ def poll_until(
     """
     start_time = time.time()
     current_interval = interval
-    
+
     while time.time() - start_time < timeout:
         result = predicate()
         if result:
             return result
-        
+
         time.sleep(current_interval)
         current_interval *= backoff
-        
+
     logger.debug(f"Timed out waiting for {name} after {timeout}s")
     return None
 
@@ -59,17 +59,17 @@ async def async_poll_until(
 ) -> Any:
     """Async version of poll_until."""
     import asyncio
-    
+
     start_time = time.time()
     current_interval = interval
-    
+
     while time.time() - start_time < timeout:
         result = await predicate() if asyncio.iscoroutinefunction(predicate) else predicate()
         if result:
             return result
-        
+
         await asyncio.sleep(current_interval)
         current_interval *= backoff
-        
+
     logger.debug(f"Timed out waiting for {name} after {timeout}s")
     return None

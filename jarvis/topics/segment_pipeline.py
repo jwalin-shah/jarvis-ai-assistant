@@ -225,7 +225,7 @@ def _extract_facts_from_segments(
         total_raw = 0
         total_prefilter_rejected = 0
         batch_size = max(1, int(os.getenv("FACT_EXTRACT_BATCH_SIZE", "2")))
-        
+
         # Deferred NLI collection
         candidates_to_verify: list[tuple[Any, str, int]] = []
 
@@ -272,7 +272,7 @@ def _extract_facts_from_segments(
                         segment_text = "\n".join(
                             (m.text or "") for m in getattr(segment_obj, "messages", [])
                         )
-                    
+
                     # Store for batch NLI
                     for f in fast_gated_facts:
                         candidates_to_verify.append((f, segment_text, db_id))
@@ -280,29 +280,32 @@ def _extract_facts_from_segments(
         # --- BATCH VERIFICATION (Deferred Stage) ---
         all_verified_facts = []
         if candidates_to_verify:
-            print(f"    - Verifying {len(candidates_to_verify)} candidate facts via NLI...", flush=True)
+            print(
+                f"    - Verifying {len(candidates_to_verify)} candidate facts via NLI...",
+                flush=True,
+            )
             verifier = FactVerifier(threshold=0.05)
-            
+
             # Prepare data for verifier
             verification_input = [(f, text) for f, text, _ in candidates_to_verify]
             verified_facts, rejected_count = verifier.verify_facts_batch(verification_input)
-            
+
             total_rejected = rejected_count
-            
+
             # Re-link segment IDs to verified facts
             # Note: verified_facts is a subset of candidates_to_verify (ordered)
             # We match them back by Fact object identity or index
             # Fact objects in verified_facts are the SAME instances from candidates_to_verify
             # But since verify_facts_batch returns new list, we need to ensure segment_id is set
-            
+
             # Map fact instance to its db_id from our collection
             fact_to_db_id = {id(f): db_id for f, _, db_id in candidates_to_verify}
-            
+
             for f in verified_facts:
                 db_id = fact_to_db_id.get(id(f))
                 if db_id is not None:
                     setattr(f, "_segment_db_id", db_id)
-            
+
             all_verified_facts = verified_facts
 
         total_inserted = save_facts(

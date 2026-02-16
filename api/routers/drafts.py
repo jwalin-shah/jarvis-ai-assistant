@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
@@ -39,11 +38,6 @@ from api.schemas import (
     RoutedReplyRequest,
     RoutedReplyResponse,
 )
-from integrations.imessage import ChatDBReader
-from jarvis.contracts.pipeline import MessageContext
-from jarvis.errors import ModelError, iMessageQueryError
-from jarvis.model_warmer import get_warm_generator
-from jarvis.prompts import API_REPLY_EXAMPLES, API_SUMMARY_EXAMPLES
 from api.services.drafts_helpers import (
     build_summary_prompt,
     format_messages_for_context,
@@ -55,6 +49,11 @@ from api.services.drafts_pipeline import (
     route_reply_sync,
     run_classification_and_search,
 )
+from integrations.imessage import ChatDBReader
+from jarvis.contracts.pipeline import MessageContext
+from jarvis.errors import ModelError, iMessageQueryError
+from jarvis.model_warmer import get_warm_generator
+from jarvis.prompts import API_REPLY_EXAMPLES, API_SUMMARY_EXAMPLES
 
 logger = logging.getLogger(__name__)
 

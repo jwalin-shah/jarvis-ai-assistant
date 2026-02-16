@@ -6,7 +6,7 @@ Apple-related epoch timestamps and other common assistant formats.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Apple epoch starts at Jan 1, 2001
 APPLE_EPOCH_OFFSET = 978307200
@@ -37,9 +37,9 @@ def parse_apple_timestamp(ns: int) -> datetime:
     """
     seconds = ns / 1_000_000_000
     unix_ts = seconds + APPLE_EPOCH_OFFSET
-    return datetime.fromtimestamp(unix_ts, tz=timezone.utc)
+    return datetime.fromtimestamp(unix_ts, tz=UTC)
 
 
 def now_utc() -> datetime:
     """Get current time as UTC-aware datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)

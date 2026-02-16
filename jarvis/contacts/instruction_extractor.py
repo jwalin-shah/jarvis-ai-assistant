@@ -240,19 +240,22 @@ def _is_low_signal_block(text: str) -> bool:
     clean = text.strip()
     if len(clean) < 15:
         return True
-    
+
     # 2. Only emojis and punctuation
     if not any(c.isalnum() for c in clean):
         return True
-        
+
     # 3. Common low-signal reactions (case-insensitive)
     low_signal_patterns = [
-        r"^(?:lol|haha|ok|okay|yep|yup|nope|no|yes|thanks|thx|cool|nice|wow|sounds good|bet|got it|will do)\W*$"
+        (
+            r"^(?:lol|haha|ok|okay|yep|yup|nope|no|yes|thanks|thx|cool|nice|wow|"
+            r"sounds good|bet|got it|will do)\W*$"
+        )
     ]
     low_signal_re = re.compile("|".join(low_signal_patterns), re.IGNORECASE)
     if low_signal_re.match(clean):
         return True
-        
+
     return False
 
 

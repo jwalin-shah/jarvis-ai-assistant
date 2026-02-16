@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from pathlib import Path
 from types import TracebackType
+
+from jarvis.utils.polling import poll_until
 
 from .api import FastAPIService
 from .base import Service, ServiceError
 from .ner import NERService
 from .socket import SocketService
-from jarvis.utils.polling import poll_until
 
 logger = logging.getLogger(__name__)
 

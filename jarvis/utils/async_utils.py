@@ -56,7 +56,7 @@ def sync_to_async(func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
 
 
 def log_task_exception(
-    task: asyncio.Task[Any], 
+    task: asyncio.Task[Any],
     msg: str = "Background task failed",
     logger_instance: logging.Logger | None = None
 ) -> None:
@@ -91,8 +91,8 @@ def task_callback(
 
 
 async def wait_with_timeout(
-    awaitable: Awaitable[R], 
-    timeout: float, 
+    awaitable: Awaitable[R],
+    timeout: float,
     default: R | None = None
 ) -> R | None:
     """Wait for an awaitable with a timeout, returning a default on timeout.
@@ -107,5 +107,5 @@ async def wait_with_timeout(
     """
     try:
         return await asyncio.wait_for(awaitable, timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return default

@@ -103,7 +103,7 @@ def graceful_shutdown(func: F) -> F:
             return func(*args, **kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except Exception:
             # Re-raise other exceptions - this decorator is just for documentation
             # and to ensure interrupts are never accidentally caught
             raise
@@ -189,7 +189,7 @@ class ErrorBoundary:
         self.consecutive_errors = 0
         self.total_errors = 0
 
-    def __enter__(self) -> "ErrorBoundary":
+    def __enter__(self) -> ErrorBoundary:
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:

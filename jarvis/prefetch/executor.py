@@ -30,8 +30,6 @@ from jarvis.observability.logging import log_event
 from jarvis.prefetch.cache import CacheTier, MultiTierCache, get_cache
 from jarvis.prefetch.predictor import Prediction, PredictionPriority, PredictionType
 from jarvis.utils.backoff import ConsecutiveErrorTracker
-from jarvis.utils.error_handling import silence_exceptions
-from jarvis.prefetch.handlers import PrefetchHandler as BasePrefetchHandler
 
 logger = logging.getLogger(__name__)
 

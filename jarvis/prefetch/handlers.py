@@ -6,8 +6,8 @@ validation, error handling, and performance tracking.
 
 from __future__ import annotations
 
-import time
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -50,18 +50,18 @@ class PrefetchHandler(ABC):
 
         # 2. Execute with timing and error handling
         from jarvis.utils.latency_tracker import track_latency
-        
+
         try:
             with track_latency(f"prefetch.{self.name}"):
                 result = self.execute(params)
-                
+
             if result is None:
                 return None
-            
+
             # Ensure result has timing info for the cache
             if "prefetch_time" not in result:
                 result["prefetch_time"] = time.time()
-                
+
             return result
         except (KeyboardInterrupt, SystemExit):
             raise

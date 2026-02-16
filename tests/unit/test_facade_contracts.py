@@ -42,7 +42,9 @@ def test_errors_facade_exports_expected_surface() -> None:
 def test_router_facade_retains_compat_methods() -> None:
     module = _read_module("jarvis/router.py")
     reply_router = next(
-        node for node in module.body if isinstance(node, ast.ClassDef) and node.name == "ReplyRouter"
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "ReplyRouter"
     )
     methods = {
         node.name
@@ -52,6 +54,8 @@ def test_router_facade_retains_compat_methods() -> None:
     assert {"route", "route_message", "get_routing_stats", "close"}.issubset(methods)
 
     module_functions = {
-        node.name for node in module.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        node.name
+        for node in module.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     assert {"get_reply_router", "reset_reply_router"}.issubset(module_functions)
