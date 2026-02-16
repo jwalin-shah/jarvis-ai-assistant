@@ -446,32 +446,20 @@ class FeedbackStore:
         if not feedback_items:
             return 0
 
-        recorded = 0
         try:
             with self.connection() as conn:
+                params = []
+                now = datetime.now(UTC)
                 for item in feedback_items:
                     action = item["action"]
                     if isinstance(action, str):
                         action = FeedbackAction(action)
 
-                    timestamp = item.get("timestamp") or datetime.now(UTC)
+                    timestamp = item.get("timestamp") or now
                     metadata = item.get("metadata")
                     metadata_json = json.dumps(metadata) if metadata else None
 
-                    conn.execute(
-                        """
-                        INSERT INTO feedback
-                            (message_id, suggestion_id, action, timestamp, metadata_json,
-                             contact_id, original_suggestion, edited_text)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(message_id, suggestion_id) DO UPDATE SET
-                            action = excluded.action,
-                            timestamp = excluded.timestamp,
-                            metadata_json = excluded.metadata_json,
-                            contact_id = excluded.contact_id,
-                            original_suggestion = excluded.original_suggestion,
-                            edited_text = excluded.edited_text
-                        """,
+                    params.append(
                         (
                             item["message_id"],
                             item["suggestion_id"],
@@ -481,11 +469,29 @@ class FeedbackStore:
                             item.get("contact_id"),
                             item.get("original_suggestion"),
                             item.get("edited_text"),
-                        ),
+                        )
                     )
-                    recorded += 1
 
-            return recorded
+                if not params:
+                    return 0
+
+                conn.executemany(
+                    """
+                    INSERT INTO feedback
+                        (message_id, suggestion_id, action, timestamp, metadata_json,
+                         contact_id, original_suggestion, edited_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(message_id, suggestion_id) DO UPDATE SET
+                        action = excluded.action,
+                        timestamp = excluded.timestamp,
+                        metadata_json = excluded.metadata_json,
+                        contact_id = excluded.contact_id,
+                        original_suggestion = excluded.original_suggestion,
+                        edited_text = excluded.edited_text
+                    """,
+                    params,
+                )
+                return len(params)
         except sqlite3.Error as e:
             raise FeedbackError(
                 f"Failed to record bulk feedback: {e}",
