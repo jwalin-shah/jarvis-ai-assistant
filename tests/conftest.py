@@ -81,6 +81,11 @@ def _mock_mlx_modules():
 
     # Create mock for mlx.nn
     mock_nn = MagicMock()
+    mock_nn.Module = MagicMock
+    mock_nn.Embedding = MagicMock
+    mock_nn.LayerNorm = MagicMock
+    mock_nn.Linear = MagicMock
+    mock_nn.gelu = MagicMock
 
     mock_mlx_lm = MagicMock()
     mock_mlx_lm.load = MagicMock(return_value=(MagicMock(), MagicMock()))
