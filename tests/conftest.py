@@ -94,9 +94,6 @@ def _mock_mlx_modules():
     mock_sample_utils = MagicMock()
     mock_sample_utils.make_sampler = MagicMock(return_value=MagicMock())
 
-    # Mock mlx.nn
-    mock_nn = MagicMock()
-
     # Install mocks in sys.modules before any imports
     # Need to mock 'mlx' top-level for 'mlx.core' to be importable
     sys.modules["mlx"] = mock_mlx
