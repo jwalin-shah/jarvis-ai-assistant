@@ -253,6 +253,50 @@ export function clearOptimisticMessages(chatId?: string) {
   }
 }
 
+/**
+ * Reconcile real messages with optimistic ones.
+ * Appends new messages and removes corresponding optimistic placeholders.
+ */
+export function reconcileMessages(chatId: string, newMessages: Message[]) {
+  if (newMessages.length === 0) return;
+
+  const currentMessages = conversationsStore.messages;
+  const existingIds = new Set(currentMessages.map((m) => m.id));
+  
+  // Only add truly new messages
+  const filteredNew = newMessages.filter((m) => !existingIds.has(m.id));
+  if (filteredNew.length === 0) return;
+
+  // Append to state
+  conversationsStore.messages = [...currentMessages, ...filteredNew];
+
+  // Sync cache
+  const cached = conversationsStore.messageCache.get(chatId);
+  if (cached) {
+    cached.messages = conversationsStore.messages;
+  }
+
+  // Clear matching optimistic messages (outgoing only)
+  const outgoingNew = filteredNew.filter((m) => m.is_from_me);
+  if (outgoingNew.length > 0 && conversationsStore.optimisticMessages.length > 0) {
+    for (const realMsg of outgoingNew) {
+      // Try exact text match
+      const matching = conversationsStore.optimisticMessages.find(
+        (opt) => opt.text.trim() === realMsg.text?.trim()
+      );
+      if (matching) {
+        removeOptimisticMessage(matching.id);
+      } else {
+        // Fallback: clear oldest 'sent' optimistic message
+        const oldestSent = conversationsStore.optimisticMessages.find(
+          (opt) => opt.status === "sent"
+        );
+        if (oldestSent) removeOptimisticMessage(oldestSent.id);
+      }
+    }
+  }
+}
+
 export function clearPrefetchedDraft() {
   conversationsStore.prefetchedDraft = null;
 }
@@ -364,37 +408,21 @@ export async function pollMessages(force = false): Promise<Message[]> {
       if (idsToFetch.length === 0) return [];
 
       const fetchedMessages = await getMessagesBatchDirect(chatId, idsToFetch);
-      const newMessages = fetchedMessages.filter(msg => !existingIds.has(msg.id));
-
+      
       if (conversationsStore.selectedChatId !== chatId) return [];
 
-      if (newMessages.length > 0) {
-        conversationsStore.messages = [...conversationsStore.messages, ...newMessages];
-        const cached = conversationsStore.messageCache.get(chatId);
-        if (cached) {
-          cached.messages = conversationsStore.messages;
-        }
-        conversationsStore.lastSyncTimestamp = now;
-      }
-      return newMessages;
+      reconcileMessages(chatId, fetchedMessages);
+      conversationsStore.lastSyncTimestamp = now;
+      return fetchedMessages;
     }
 
     // Fallback: full re-fetch for non-direct access
     const freshMessages = await fetchMessages(chatId);
     if (conversationsStore.selectedChatId !== chatId) return [];
 
-    const currentIds = new Set(conversationsStore.messages.map(m => m.id));
-    const newMessages = freshMessages.filter(m => !currentIds.has(m.id));
-
-    if (newMessages.length > 0) {
-      conversationsStore.messages = freshMessages;
-      const cached = conversationsStore.messageCache.get(chatId);
-      if (cached) {
-        cached.messages = freshMessages;
-      }
-      conversationsStore.lastSyncTimestamp = now;
-    }
-    return newMessages;
+    reconcileMessages(chatId, freshMessages);
+    conversationsStore.lastSyncTimestamp = now;
+    return freshMessages;
   } catch (e) {
     return [];
   } finally {
@@ -519,38 +547,13 @@ export async function handleNewMessagePush(data: NewMessageEvent) {
     // Append to current conversation
     if (isDirectAccessAvailable()) {
       const msg = await getMessageDirect(chat_id, message_id);
-      if (msg && !conversationsStore.messages.some((m) => m.id === msg.id)) {
-        conversationsStore.messages = [...conversationsStore.messages, msg];
-        const cached = conversationsStore.messageCache.get(chat_id);
-        if (cached) {
-          cached.messages = conversationsStore.messages;
-        }
-      }
-      // Clear matching optimistic messages when real sent message arrives
-      if (msg?.is_from_me && conversationsStore.optimisticMessages.length > 0) {
-        // First try exact text match
-        const matching = conversationsStore.optimisticMessages.find(
-          (opt) => opt.text.trim() === msg.text?.trim()
-        );
-        if (matching) {
-          removeOptimisticMessage(matching.id);
-        } else {
-          // Fallback: clear oldest optimistic message with 'sent' status
-          // (it's almost certainly the one that produced this real message)
-          const oldest = conversationsStore.optimisticMessages.find(
-            (opt) => opt.status === "sent"
-          );
-          if (oldest) removeOptimisticMessage(oldest.id);
-        }
+      if (msg) {
+        reconcileMessages(chat_id, [msg]);
       }
     } else {
       const freshMessages = await fetchMessages(chat_id);
       if (conversationsStore.selectedChatId === chat_id) {
-        conversationsStore.messages = freshMessages;
-        const cached = conversationsStore.messageCache.get(chat_id);
-        if (cached) {
-          cached.messages = freshMessages;
-        }
+        reconcileMessages(chat_id, freshMessages);
       }
     }
   }
@@ -617,7 +620,7 @@ export function startMessagePolling() {
 
 function scheduleNextPoll() {
   const idle = Date.now() - lastUserActivity;
-  const interval = idle < 60_000 ? 10_000 : idle < 300_000 ? 30_000 : 60_000;
+  const interval = idle < 60_000 ? 3_000 : idle < 300_000 ? 10_000 : 30_000;
   messagePollTimeout = setTimeout(() => {
     if (conversationsStore.isWindowFocused && conversationsStore.selectedChatId) {
       pollMessages().then(scheduleNextPoll);

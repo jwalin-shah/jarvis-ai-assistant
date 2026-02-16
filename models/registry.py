@@ -69,8 +69,8 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     # Base models
     "lfm-350m": ModelSpec(
         id="lfm-350m",
-        path="mlx-community/LFM2-350M-4bit",
-        display_name="LFM 2.5 350M (Base)",
+        path="models/lfm2-350m-extract-mlx-4bit",
+        display_name="LFM 2.5 350M",
         size_gb=0.35,
         min_ram_gb=4,
         quality_tier="basic",
@@ -87,36 +87,26 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         description="LFM 2.5 1.2B base model. No instruct tuning - raw completion.",
         recommended_for=["completion", "few_shot", "style_matching"],
     ),
-    # Fine-tuned variants
-    "lfm-1.2b-ft": ModelSpec(
-        id="lfm-1.2b-ft",
+    # Instruct/SFT variants
+    "lfm-1.2b": ModelSpec(
+        id="lfm-1.2b",
         path="mlx-community/LFM2.5-1.2B-Instruct-4bit",
-        display_name="LFM 2.5 1.2B Fine-Tuned",
+        display_name="LFM 2.5 1.2B Instruct",
         size_gb=1.2,
         min_ram_gb=8,
         quality_tier="excellent",
-        description="LFM 2.5 1.2B fine-tuned on SOC + ORPO aligned. Best for texting.",
+        description="LFM 2.5 1.2B instruct model. Best for natural conversation.",
         recommended_for=["quick_replies", "natural_conversation", "drafting", "iMessage"],
     ),
-    "lfm-1.2b-sft": ModelSpec(
-        id="lfm-1.2b-sft",
+    "lfm-1.2b-soc": ModelSpec(
+        id="lfm-1.2b-soc",
         path="models/lfm-1.2b-soc-fused",
-        display_name="LFM 2.5 1.2B SFT Only",
+        display_name="LFM 2.5 1.2B SOC",
         size_gb=1.2,
         min_ram_gb=8,
         quality_tier="excellent",
-        description="LFM 2.5 1.2B SFT fine-tuned on SOC conversations (no ORPO).",
+        description="LFM 2.5 1.2B SFT fine-tuned on SOC conversations.",
         recommended_for=["quick_replies", "natural_conversation", "iMessage"],
-    ),
-    "lfm-0.3b-ft": ModelSpec(
-        id="lfm-0.3b-ft",
-        path="models/lfm-0.3b-soc-fused",
-        display_name="LFM 2.5 0.3B Fine-Tuned",
-        size_gb=0.3,
-        min_ram_gb=4,
-        quality_tier="basic",
-        description="LFM 2.5 0.3B fine-tuned draft model for speculative decoding.",
-        recommended_for=["speculative_decoding", "testing"],
     ),
     "lfm-0.7b": ModelSpec(
         id="lfm-0.7b",

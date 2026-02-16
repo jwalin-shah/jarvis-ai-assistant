@@ -79,23 +79,29 @@ def build_reply_prompt(
     user_style: Any | None = None,
 ) -> str:
     """Build a prompt for generating iMessage replies."""
+    from jarvis.prompts.utils import format_examples
+
     effective_tone = determine_effective_tone(tone, relationship_profile)
 
     tone_str = "professional/formal" if effective_tone == "professional" else "casual/friendly"
 
     style_instructions = ""
+    examples_str = ""
     if user_messages:
         style_analysis = user_style or analyze_user_style(user_messages)
         style_instructions = build_style_instructions(style_analysis)
+        
+        # Include a few examples matching the tone
+        examples = select_examples_for_tone(effective_tone, relationship_profile)
+        if examples:
+            examples_str = f"\n<examples>\n{format_examples(examples)}\n</examples>"
 
-    custom_instruction = build_custom_instructions(instruction, relationship_profile)
     truncated_context = truncate_context(context)
 
     prompt = REPLY_PROMPT.template.format(
         context=truncated_context,
         tone=tone_str,
-        style_instructions=style_instructions,
-        custom_instruction=custom_instruction,
+        style_instructions=style_instructions + examples_str,
         last_message=last_message,
     )
 

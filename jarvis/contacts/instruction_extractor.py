@@ -537,70 +537,44 @@ class InstructionFactExtractor:
 
         try:
             self._last_batch_pass1_claims = [[] for _ in segments]
-            # PASS 1: Extraction - Get natural language sentences
-            p1_system = _build_extraction_system_prompt(
+            # SINGLE PASS: Triple Extraction
+            system_prompt = _build_extraction_system_prompt(
                 user_name=user_name,
                 contact_name=contact_name,
             )
-            p1_user = f"Conversation:\n{batch_text}\n\nReturn JSONL durable claims now (or NONE):\n"
+            user_prompt = f"Conversation:\n{batch_text}\n\nTriples:\n- "
 
-            messages_p1 = [
-                {"role": "system", "content": p1_system},
-                {"role": "user", "content": p1_user},
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ]
-            formatted_p1 = self._loader._tokenizer.apply_chat_template(
-                messages_p1, tokenize=False, add_generation_prompt=True
+            formatted_prompt = self._loader._tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
             )
-            if not formatted_p1.endswith("\n"):
-                formatted_p1 += "\n"
+            # Nudge model into generating triples immediately
+            if not formatted_prompt.endswith("- "):
+                formatted_prompt += "- "
 
-            res1 = self._loader.generate_sync(
-                prompt=formatted_p1,
-                max_tokens=240,
+            res = self._loader.generate_sync(
+                prompt=formatted_prompt,
+                max_tokens=400,
                 temperature=0.0,
                 stop_sequences=["<|im_end|>", "###"],
                 pre_formatted=True,
                 negative_constraints=NEGATIVE_CONSTRAINTS,
             )
-            self._last_batch_pass1_claims, raw_facts = _parse_pass1_json_lines(res1.text.strip())
-            logger.debug(f"Batch Pass 1: {raw_facts}")
+            
+            raw_output = "- " + res.text.strip()
+            logger.debug(f"Batch Extract Output: {raw_output}")
 
-            # SHORT-CIRCUIT: skip pass-2 if pass-1 produced no claims
-            if raw_facts == "NONE":
-                logger.debug("Pass-1 produced no claims, skipping pass-2")
+            if "NONE" in raw_output[:10]:
                 return [[] for _ in segments]
-
-            # PASS 2: Structuring - Convert sentences to triples
-            p2_system = VERIFY_SYSTEM_PROMPT.format(user_name=user_name, contact_name=contact_name)
-            p2_user = VERIFY_USER_PROMPT.format(text=batch_text, facts=raw_facts)
-
-            messages_p2 = [
-                {"role": "system", "content": p2_system},
-                {"role": "user", "content": p2_user},
-            ]
-            formatted_p2 = self._loader._tokenizer.apply_chat_template(
-                messages_p2, tokenize=False, add_generation_prompt=True
-            )
-            if not formatted_p2.endswith("- "):
-                formatted_p2 += "- "
-
-            res2 = self._loader.generate_sync(
-                prompt=formatted_p2,
-                max_tokens=800,
-                temperature=0.0,
-                stop_sequences=["<|im_end|>"],
-                pre_formatted=True,
-                negative_constraints=NEGATIVE_CONSTRAINTS,
-            )
-
-            verified_output = "- " + res2.text.strip()
-            logger.debug(f"Batch Pass 2: {verified_output}")
 
             # 3. ROBUST PARSING WITH SEGMENT ATTRIBUTION
             batch_facts: list[list[Fact]] = [[] for _ in segments]
             commentary_markers = ["removing", "keeping", "verified", "here are", "revised"]
 
-            for line in verified_output.split("\n"):
+            for line in raw_output.split("\n"):
                 line = line.strip()
                 if not line or len(line) < 5:
                     continue

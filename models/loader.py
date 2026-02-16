@@ -104,6 +104,24 @@ class ModelConfig:
 
     def __post_init__(self) -> None:
         """Resolve model_id to model_path and estimated_memory_mb."""
+        # ABSOLUTE GATE: Directly read the file to bypass any potential caching
+        if not self.model_id and not self.model_path:
+            try:
+                import json
+                from pathlib import Path
+                raw_cfg_path = Path.home() / ".jarvis" / "config.json"
+                if raw_cfg_path.exists():
+                    with open(raw_cfg_path) as f:
+                        raw_data = json.load(f)
+                        # The config file has a "model" nested object
+                        model_data = raw_data.get("model", {})
+                        direct_model_id = model_data.get("model_id")
+                        if direct_model_id:
+                            print(f"DEBUG: DIRECT DISK LOAD OF MODEL_ID: {direct_model_id}")
+                            self.model_id = direct_model_id
+            except Exception as e:
+                print(f"DEBUG: CONFIG DISK LOAD FAILED: {e}")
+
         if self.model_id:
             spec = get_model_spec(self.model_id)
             if spec:
@@ -114,7 +132,7 @@ class ModelConfig:
                 logger.warning("Unknown model_id '%s', using as-is", self.model_id)
                 self.model_path = self.model_id
         elif not self.model_path:
-            # Neither model_id nor model_path specified, use default
+            # Registry should always have DEFAULT_MODEL_ID, but handle gracefully
             spec = get_model_spec(DEFAULT_MODEL_ID)
             if spec:
                 self._resolved_spec = spec
@@ -122,7 +140,6 @@ class ModelConfig:
                 self.model_path = spec.path
                 self.estimated_memory_mb = spec.estimated_memory_mb
             else:
-                # Registry should always have DEFAULT_MODEL_ID, but handle gracefully
                 logger.warning("DEFAULT_MODEL_ID '%s' not in registry", DEFAULT_MODEL_ID)
                 default_spec = MODEL_REGISTRY[DEFAULT_MODEL_ID]
                 self.model_path = default_spec.path
@@ -134,6 +151,22 @@ class ModelConfig:
                 self.kv_cache_bits = get_config().model.kv_cache_bits
             except Exception:
                 self.kv_cache_bits = 16  # Default to full precision if config fails
+
+    @property
+    def is_local(self) -> bool:
+        """Check if model_path is a local directory."""
+        return os.path.isdir(self.model_path)
+
+    @property
+    def exists(self) -> bool:
+        """Check if model exists locally (either as a directory or in HF cache)."""
+        if self.is_local:
+            return True
+        if self.model_id:
+            from models.registry import is_model_available
+
+            return is_model_available(self.model_id)
+        return False
 
     @property
     def display_name(self) -> str:
@@ -429,13 +462,41 @@ class MLXModelLoader:
                 # Set MLX memory limits before loading (critical on 8GB systems)
                 apply_llm_limits()
 
+                # Check if model exists locally before trying to load it
+                # This prevents noisy HF Hub tracebacks when offline or model is missing.
+                if not self.config.exists:
+                    logger.error(
+                        "Model '%s' not found locally. Run `jarvis setup` to download.",
+                        self.config.display_name,
+                    )
+                    raise model_not_found(self.config.model_path)
+
                 # mlx_lm.load returns (model, tokenizer) tuple
                 load_kwargs = {}
                 if self.config.kv_cache_bits:
-                    # MLX uses 'kv_bits' or 'cache_bits' depending on version
-                    load_kwargs["kv_bits"] = self.config.kv_cache_bits
+                    # MLX used to support 'kv_bits' in load() in older versions.
+                    # Recent versions (>=0.20.0) moved this to generate() or removed it.
+                    # We check the signature to remain compatible with various versions.
+                    import inspect
 
-                result = load(self.config.model_path, **load_kwargs)
+                    sig = inspect.signature(load)
+                    if "kv_bits" in sig.parameters:
+                        load_kwargs["kv_bits"] = self.config.kv_cache_bits
+                    elif "cache_bits" in sig.parameters:
+                        load_kwargs["cache_bits"] = self.config.kv_cache_bits
+
+                if load_kwargs:
+                    logger.debug("Loading model with kwargs: %s", list(load_kwargs.keys()))
+                
+                try:
+                    result = load(self.config.model_path, **load_kwargs)
+                except TypeError as e:
+                    if "unexpected keyword argument" in str(e) and load_kwargs:
+                        logger.warning("Retry loading model without kwargs due to TypeError: %s", e)
+                        result = load(self.config.model_path)
+                    else:
+                        raise
+
                 self._model = result[0]
                 self._tokenizer = result[1]
                 self._loaded_at = time.perf_counter()
@@ -454,24 +515,22 @@ class MLXModelLoader:
                 self.unload()
                 raise model_not_found(self.config.model_path) from e
             except MemoryError as e:
-                logger.error("Out of memory loading model. Free up memory or use a smaller model.")
+                logger.error("Out of memory loading model '%s'", self.config.display_name)
                 self.unload()
                 raise model_out_of_memory(self.config.display_name) from e
-            except OSError as e:
-                # Covers network errors, disk errors, permission issues
-                logger.error("OS error loading model: %s", e)
-                self.unload()
-                raise ModelLoadError(
-                    f"OS error loading model: {e}",
-                    model_name=self.config.display_name,
-                    model_path=self.config.model_path,
-                    cause=e,
-                ) from e
             except Exception as e:
-                logger.exception("Failed to load model")
+                # Cleaner error message for various loading failures (network, permissions, etc)
+                error_msg = str(e).split("\n")[0]
+                logger.error("Failed to load model '%s': %s", self.config.display_name, error_msg)
                 self.unload()
+                if "OfflineModeIsEnabled" in str(e) or "LocalEntryNotFoundError" in str(e):
+                    raise ModelLoadError(
+                        f"Model not found locally and system is offline: {self.config.model_path}",
+                        model_name=self.config.display_name,
+                        code=ErrorCode.MDL_NOT_FOUND,
+                    ) from e
                 raise ModelLoadError(
-                    f"Failed to load model: {e}",
+                    f"Failed to load model: {error_msg}",
                     model_name=self.config.display_name,
                     model_path=self.config.model_path,
                     cause=e,
@@ -540,6 +599,16 @@ class MLXModelLoader:
 
         draft_config = ModelConfig(model_id=draft_model_id)
 
+        # Check if draft model is available locally before trying to load it
+        # This prevents noisy HF Hub tracebacks when offline or model is missing.
+        if not draft_config.exists:
+            logger.warning(
+                "Draft model '%s' not found locally. Skipping speculative decoding. "
+                "Run `jarvis setup` to download recommended models.",
+                draft_model_id,
+            )
+            return False
+
         with MLXModelLoader._mlx_load_lock:
             try:
                 logger.info(
@@ -572,8 +641,15 @@ class MLXModelLoader:
                 logger.info("Draft model loaded in %.0fms", load_ms)
                 return True
 
-            except Exception:
-                logger.exception("Failed to load draft model %s", draft_model_id)
+            except Exception as e:
+                # Capture and log only the error message to avoid flooding logs with tracebacks
+                # for what is an optional performance feature.
+                error_msg = str(e).split("\n")[0]
+                logger.warning(
+                    "Failed to load draft model %s: %s. Speculative decoding disabled.",
+                    draft_model_id,
+                    error_msg,
+                )
                 return False
 
     def unload_draft_model(self) -> None:
@@ -610,9 +686,22 @@ class MLXModelLoader:
             
             cache_kwargs = {}
             if self.config.kv_cache_bits:
-                cache_kwargs["kv_bits"] = self.config.kv_cache_bits
-                
-            self._prompt_cache = make_prompt_cache(self._model, **cache_kwargs)
+                # Check if make_prompt_cache supports kv_bits (some MLX versions don't)
+                import inspect
+
+                sig = inspect.signature(make_prompt_cache)
+                if "kv_bits" in sig.parameters:
+                    cache_kwargs["kv_bits"] = self.config.kv_cache_bits
+
+            try:
+                self._prompt_cache = make_prompt_cache(self._model, **cache_kwargs)
+            except TypeError as e:
+                if "unexpected keyword argument" in str(e) and cache_kwargs:
+                    logger.warning("Retry make_prompt_cache without kwargs due to TypeError: %s", e)
+                    self._prompt_cache = make_prompt_cache(self._model)
+                else:
+                    raise
+
             self._cache_prefix_len = tokens.shape[0]
             self._cache_prefix_tokens = tokens
 
@@ -621,11 +710,17 @@ class MLXModelLoader:
             # re-encoding occurs here.
             from mlx_lm.generate import generate_step
 
+            # Use the same kv_bits for prefilling to match generation
+            gen_step_kwargs = {}
+            if self.config.kv_cache_bits and self.config.kv_cache_bits != 16:
+                gen_step_kwargs["kv_bits"] = self.config.kv_cache_bits
+
             for _ in generate_step(
                 self._cache_prefix_tokens,
                 self._model,
                 max_tokens=0,
                 prompt_cache=self._prompt_cache,
+                **gen_step_kwargs,
             ):
                 pass
             mx.eval([c.state for c in self._prompt_cache if hasattr(c, "state")])
@@ -760,6 +855,36 @@ class MLXModelLoader:
             for stop_seq in stop_sequences:
                 if stop_seq in response:
                     response = response[: response.index(stop_seq)]
+                # Also check for trimmed versions (sometimes tokenization adds a space)
+                elif stop_seq.strip() in response:
+                    trimmed_seq = stop_seq.strip()
+                    response = response[: response.index(trimmed_seq)]
+
+        # Extra safety: strip any common trailing tags if they leak through
+        # (happens if model generates them but they weren't in explicit stop_sequences)
+        trailing_tags = ["</reply>", "</summary>", "</answer>", "</html>", "</div>"]
+        for tag in trailing_tags:
+            if tag in response:
+                response = response[: response.index(tag)]
+
+        # Final cleanup of any partial trailing tags or artifacts
+        response = response.strip()
+        
+        # If the model ONLY output the prefix or nothing, we need to know
+        original_response = response
+        prefixes = ["Reply: ", "Result: ", "- ", "JARVIS: ", "Reply:", "Result:"]
+        for prefix in prefixes:
+            if response.startswith(prefix):
+                response = response[len(prefix) :].strip()
+                break # Only strip one level
+            
+        # If we stripped everything, keep original for visibility in debug/bakeoff
+        if not response and original_response:
+            logger.warning("Stripping resulted in empty string, reverting to original: '%s'", original_response)
+            response = original_response
+
+        if response.endswith(("</", "<")):
+            response = response.rsplit("<", 1)[0].strip()
 
         response = response.strip()
 
@@ -889,6 +1014,8 @@ class MLXModelLoader:
                 kwargs: dict[str, Any] = {}
                 if prompt_cache is not None:
                     kwargs["prompt_cache"] = prompt_cache
+                if self.config.kv_cache_bits and self.config.kv_cache_bits != 16:
+                    kwargs["kv_bits"] = self.config.kv_cache_bits
 
                 with MLXModelLoader._mlx_load_lock:
                     # Restore LLM memory limits in case embedder lowered them
@@ -1061,6 +1188,8 @@ class MLXModelLoader:
             stream_kwargs: dict[str, Any] = {}
             if prompt_cache is not None:
                 stream_kwargs["prompt_cache"] = prompt_cache
+            if self.config.kv_cache_bits and self.config.kv_cache_bits != 16:
+                stream_kwargs["kv_bits"] = self.config.kv_cache_bits
             if self._draft_model is not None:
                 stream_kwargs["draft_model"] = self._draft_model
                 stream_kwargs["num_draft_tokens"] = num_draft_tokens or 3

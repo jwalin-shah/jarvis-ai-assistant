@@ -29,6 +29,7 @@ ENV/
 env/
 .venv/
 .venv-gliner/
+.venv-setfit/
 
 # uv package manager
 uv.lock
@@ -257,6 +258,10 @@ models/*_imessage_thresholds.json
 # Optuna databases
 optuna_bayesian.db
 optuna_studies.db
+*.db
+
+# Bandit security reports
+bandit_report.json
 
 # Training data (personal, regeneratable)
 training_data/

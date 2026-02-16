@@ -75,20 +75,37 @@ class ContextService:
                 return [], set()
 
             # Format messages for context (newest first, so reverse for chronological)
-            context_messages = []
+            chronological = list(reversed(messages))
+            context_turns = []
             participants: set[str] = set()
-            for msg in reversed(messages):
-                sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender or "Them")
+            
+            current_sender: str | None = None
+            current_text_parts: list[str] = []
+            
+            for msg in chronological:
+                sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender or "Contact")
                 participants.add(sender)
-                text = msg.text or ""
-                if text:
-                    context_messages.append(f"{sender}: {text}")
+                text = (msg.text or "").strip()
+                if not text:
+                    continue
+                    
+                if sender == current_sender:
+                    current_text_parts.append(text)
+                else:
+                    if current_sender is not None:
+                        context_turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
+                    current_sender = sender
+                    current_text_parts = [text]
+                    
+            if current_sender is not None:
+                context_turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
 
-            return context_messages, participants
+            return context_turns, participants
 
         except Exception as e:
             logger.warning("Failed to fetch conversation context: %s", e)
             return [], set()
+
 
     def _get_vec_searcher(self) -> VecSearcher | None:
         """Get or lazily initialize the VecSearcher."""

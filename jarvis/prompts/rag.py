@@ -131,6 +131,7 @@ def build_rag_reply_prompt(
     contact_facts: str = "",
     relationship_graph: str = "",
     user_style: UserStyleAnalysis | None = None,
+    last_is_from_me: bool = False,
 ) -> str:
     """Build a RAG-enhanced prompt for generating personalized iMessage replies.
 
@@ -171,19 +172,24 @@ def build_rag_reply_prompt(
 
     # Format custom instruction
     custom_instruction = instruction or ""
+    
+    # Add guidance for follow-ups if last message was from Me
+    if last_is_from_me:
+        followup_guidance = "\n- Note: You were the last one to speak. This is a follow-up or additional thought."
+        if custom_instruction:
+            custom_instruction += followup_guidance
+        else:
+            custom_instruction = followup_guidance.strip("- \n")
 
     # Truncate context if needed
     truncated_context = truncate_context(context)
 
     # Build the prompt
     prompt = RAG_REPLY_PROMPT.template.format(
-        contact_name=contact_name,
         relationship_context=relationship_context,
-        relationship_graph=relationship_graph or "(none)",
         contact_facts=contact_facts or "(none)",
         similar_exchanges=similar_context,
         context=truncated_context,
-        custom_instruction=custom_instruction,
         last_message=last_message,
     )
 
@@ -193,14 +199,25 @@ def build_rag_reply_prompt(
 def build_prompt_from_request(req: Any) -> str:
     """Build a reply prompt from a typed pipeline generation request."""
     context_messages = req.context.metadata.get("context_messages")
-    if isinstance(context_messages, list):
+    last_is_from_me = False
+    
+    if isinstance(context_messages, list) and context_messages:
         formatted_context = "\n".join(str(msg) for msg in context_messages if isinstance(msg, str))
+        # In context_messages (chronological), last is [-1]
+        # But we need to know if the message we are "replying to" (req.context.message_text)
+        # was sent by Me or Them.
+        # Check if context messages end with "You:"
+        if str(context_messages[-1]).startswith("You:"):
+            last_is_from_me = True
     else:
         thread_messages = req.context.metadata.get("thread", [])
-        if isinstance(thread_messages, list):
+        if isinstance(thread_messages, list) and thread_messages:
             formatted_context = "\n".join(
                 str(msg) for msg in thread_messages if isinstance(msg, str)
             )
+            # If thread comes from build_reply_context, it's chronological
+            # and may contain "Me:" or "You:" or "Contact:" prefixes depending on how it was built.
+            # However, MessageContext.is_from_me is the most reliable source.
         else:
             formatted_context = ""
 
@@ -208,6 +225,7 @@ def build_prompt_from_request(req: Any) -> str:
         formatted_context = req.context.message_text
 
     similar_exchanges: list[tuple[str, str]] = []
+
     for doc in req.retrieved_docs:
         response_text = str(doc.metadata.get("response_text", "")).strip()
         if doc.content.strip() and response_text:
@@ -259,7 +277,9 @@ def build_prompt_from_request(req: Any) -> str:
         user_messages=user_messages,
         contact_facts=contact_facts,
         relationship_graph=relationship_graph,
+        last_is_from_me=last_is_from_me,
     )
+
 
 
 def build_rag_reply_prompt_from_embeddings(

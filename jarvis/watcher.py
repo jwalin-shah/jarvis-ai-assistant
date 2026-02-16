@@ -62,7 +62,7 @@ class PermanentWatcherError(WatcherError):
 CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
 
 # Debounce interval for rapid file changes
-DEBOUNCE_INTERVAL = 0.05  # 50ms - very fast with FSEvents
+DEBOUNCE_INTERVAL = 0.01  # 10ms - extremely fast with FSEvents
 
 # Polling interval (fallback when FSEvents unavailable)
 POLL_INTERVAL = 2.0  # seconds

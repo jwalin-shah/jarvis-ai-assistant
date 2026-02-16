@@ -49,11 +49,12 @@ export function getConversationsQuery(options: {
       LIMIT ?
     ),
     chat_participants AS (
-      SELECT chat_handle_join.chat_id,
+      SELECT chj.chat_id,
              GROUP_CONCAT(handle.id, ', ') as participants
-      FROM chat_handle_join
-      JOIN handle ON chat_handle_join.handle_id = handle.ROWID
-      GROUP BY chat_handle_join.chat_id
+      FROM chat_handle_join chj
+      INNER JOIN top_chats tc ON chj.chat_id = tc.chat_id
+      JOIN handle ON chj.handle_id = handle.ROWID
+      GROUP BY chj.chat_id
     ),
     last_msg_ids AS (
       SELECT cmj.chat_id, MAX(cmj.message_id) as last_msg_id

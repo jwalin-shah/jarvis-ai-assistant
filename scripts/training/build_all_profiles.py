@@ -90,6 +90,13 @@ def main():
             # Save if not dry run
             if not args.dry_run:
                 save_profile(profile)
+                
+                # Persist relationship back to SQLite database for visibility in UI/Bakeoff
+                with db.connection() as conn:
+                    conn.execute(
+                        "UPDATE contacts SET relationship = ?, relationship_reasoning = ? WHERE chat_id = ?",
+                        (profile.relationship, profile.relationship_reasoning, chat_id)
+                    )
                 stats["saved"] += 1
             else:
                 stats["saved"] += 1  # Count as saved for dry-run reporting
