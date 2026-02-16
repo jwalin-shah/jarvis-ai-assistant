@@ -638,9 +638,6 @@ def _cmd_db_build_profiles(args: argparse.Namespace) -> int:
                 except Exception as e:
                     logger.warning("Error building profile for %s: %s", conv.chat_id, e)
                     errors += 1
-                except Exception as e:
-                    logger.warning("Error building profile for %s: %s", conv.chat_id, e)
-                    errors += 1
 
     console.print("\n[bold green]Profile building complete![/bold green]")
     console.print(f"  Built: {built}")
