@@ -27,7 +27,7 @@ class PrefetchHandler(BaseHandler):
         manager = self.server.get_prefetch_manager()
         if manager is None:
             return {"enabled": False}
-        return manager.get_stats()
+        return manager.stats()
 
     @rpc_handler("Failed to invalidate prefetch")
     async def _prefetch_invalidate(self, chat_id: str | None = None) -> dict[str, bool]:
@@ -44,7 +44,7 @@ class PrefetchHandler(BaseHandler):
         manager = self.server.get_prefetch_manager()
         if manager is None:
             return {"success": False}
-        manager.record_event("focus", chat_id)
+        manager.on_focus(chat_id)
         return {"success": True}
 
     @rpc_handler("Failed to record hover")
@@ -53,5 +53,5 @@ class PrefetchHandler(BaseHandler):
         manager = self.server.get_prefetch_manager()
         if manager is None:
             return {"success": False}
-        manager.record_event("hover", chat_id)
+        manager.on_hover(chat_id)
         return {"success": True}

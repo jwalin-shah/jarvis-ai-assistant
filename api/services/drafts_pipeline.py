@@ -25,7 +25,7 @@ def run_classification_and_search(
 def generate_summary(
     generator: object,
     prompt: str,
-    summary_examples: list[dict[str, str]],
+    summary_examples: list[tuple[str, str]],
 ) -> str:
     """Generate a summary synchronously for threadpool execution."""
     gen_request = GenerationRequest(

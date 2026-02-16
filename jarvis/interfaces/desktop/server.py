@@ -7,12 +7,17 @@ import logging
 import os
 import secrets
 import time
-from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable, Coroutine, Sequence
+from re import Pattern
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import websockets
-from websockets.server import ServerConnection
+from websockets.asyncio.server import Server, ServerConnection
+from websockets.datastructures import Headers
+from websockets.http11 import Request as WebSocketRequest
+from websockets.http11 import Response as WebSocketResponse
+from websockets.typing import Origin
 
 from jarvis.config import get_config
 from jarvis.handlers.base import (
@@ -85,7 +90,7 @@ class JarvisSocketServer:
         enable_prefetch: bool = True,
     ) -> None:
         self._server: asyncio.Server | None = None
-        self._ws_server: websockets.WebSocketServer | None = None
+        self._ws_server: Server | None = None
         self._methods: dict[str, Callable[..., Coroutine[Any, Any, Any]]] = {}
         self._streaming_methods: set[str] = set()
         self._clients: set[asyncio.StreamWriter] = set()
@@ -250,12 +255,15 @@ class JarvisSocketServer:
             raise
 
         server_cfg = get_config().server
+        origins = cast(Sequence[Origin | Pattern[str] | None], server_cfg.cors_origins)
+
         self._ws_server = await websockets.serve(
             self._handle_websocket_client,
             server_cfg.websocket_host,
             WEBSOCKET_PORT,
             max_size=MAX_MESSAGE_SIZE,
-            origins=server_cfg.cors_origins,
+            origins=origins,
+            process_request=self._process_websocket_request,
         )
 
         self._running = True
@@ -453,6 +461,35 @@ class JarvisSocketServer:
             return True
         return False
 
+    @staticmethod
+    def _http_error_response(status: int, reason: str, body: str) -> WebSocketResponse:
+        payload = body.encode("utf-8")
+        headers = Headers(
+            [
+                ("Content-Type", "text/plain; charset=utf-8"),
+                ("Content-Length", str(len(payload))),
+            ]
+        )
+        return WebSocketResponse(status, reason, headers, payload)
+
+    async def _process_websocket_request(
+        self,
+        connection: ServerConnection,
+        request: WebSocketRequest,
+    ) -> WebSocketResponse | None:
+        del connection  # Not needed; token is in request path query params.
+
+        if self._ws_auth_token and (time.monotonic() - self._token_created_at) > 86400:
+            self._rotate_ws_token()
+        if not self._ws_auth_token:
+            return None
+
+        query_params = parse_qs(urlparse(request.path).query)
+        client_token = query_params.get("token", [None])[0]
+        if not client_token or not self._verify_ws_token(client_token):
+            return self._http_error_response(401, "Unauthorized", "Unauthorized")
+        return None
+
     async def broadcast(self, method: str, params: dict[str, Any]) -> None:
         notification = json.dumps({"jsonrpc": "2.0", "method": method, "params": params})
         notification_bytes = notification.encode() + b"\n"
@@ -532,20 +569,6 @@ class JarvisSocketServer:
             logger.exception(f"Error processing message for {peer}")
 
     async def _handle_websocket_client(self, websocket: ServerConnection) -> None:
-        if self._ws_auth_token and (time.monotonic() - self._token_created_at) > 86400:
-            self._rotate_ws_token()
-        if self._ws_auth_token:
-            try:
-                path = websocket.request.path if websocket.request else ""
-                query_params = parse_qs(urlparse(path).query)
-                client_token = query_params.get("token", [None])[0]
-                if not client_token or not self._verify_ws_token(client_token):
-                    await websocket.close(4001, "Unauthorized")
-                    return
-            except Exception:
-                await websocket.close(4001, "Unauthorized")
-                return
-
         async with self._clients_lock:
             if len(self._ws_clients) >= MAX_WS_CONNECTIONS:
                 await websocket.close(4002, "Too many connections")
