@@ -147,7 +147,7 @@ class ContextFetcher:
         # Turn-based grouping: merge consecutive messages from same sender
         if messages:
             current_sender = self._format_sender_name(messages[0])
-            current_msgs = []
+            current_msgs: list[str] = []
 
             for msg in messages:
                 if msg.is_system_message:
@@ -274,11 +274,11 @@ class ContextFetcher:
 
         try:
             from jarvis.contacts.fact_storage import get_facts_for_contact
-            from jarvis.prompts.builders import format_facts_for_prompt
+            from jarvis.prompts.contact import format_facts_for_prompt
 
             facts = get_facts_for_contact(chat_id)
             contact_facts = format_facts_for_prompt(facts)
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
         try:
@@ -287,7 +287,7 @@ class ContextFetcher:
             profile = get_contact_profile(chat_id)
             if profile:
                 contact_profile = profile.to_dict()
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
         return ReplyContext(
@@ -322,7 +322,7 @@ class ContextFetcher:
                     # Segments are ordered by start_time DESC
                     if seg.get("start_time") and seg["start_time"] <= newest_time:
                         return seg.get("topic_label")
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
         return None

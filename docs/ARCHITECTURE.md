@@ -351,7 +351,7 @@ class JarvisSocketServer:
 
     async def _generate_draft(self, params: dict) -> dict:
         """Generate draft replies with optional streaming."""
-        from jarvis.router import generate_response
+        from jarvis.reply_service import get_reply_service
         
         stream = params.get("stream", False)
         chat_id = params["chat_id"]
@@ -361,10 +361,12 @@ class JarvisSocketServer:
             async def on_token(token: str):
                 await self.broadcast("streaming_token", {"token": token, "done": False})
             
-            result = await asyncio.to_thread(generate_response, chat_id, stream_callback=on_token)
+            service = get_reply_service()
+            result = await asyncio.to_thread(service.route_legacy, incoming="", chat_id=chat_id)
             return {"drafts": result}
-        
-        result = await asyncio.to_thread(generate_response, chat_id)
+
+        service = get_reply_service()
+        result = await asyncio.to_thread(service.route_legacy, incoming="", chat_id=chat_id)
         return {"drafts": result}
 ```
 
@@ -713,7 +715,7 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 
 **New Files (Created):**
 ```
-jarvis/socket_server.py           # Unix socket JSON-RPC server with model preloading
+jarvis/interfaces/desktop/server.py  # Unix socket JSON-RPC server with model preloading
 jarvis/watcher.py                 # chat.db file watcher for real-time notifications
 desktop/src/lib/db/direct.ts      # Direct SQLite access layer
 desktop/src/lib/db/queries.ts     # SQL queries ported from Python
@@ -721,7 +723,7 @@ desktop/src/lib/db/index.ts       # DB module exports
 desktop/src/lib/socket/client.ts  # TypeScript socket client with auto-reconnect
 desktop/src/lib/socket/index.ts   # Socket module exports
 desktop/src-tauri/src/socket.rs   # Rust Unix socket bridge
-tests/unit/test_socket_server.py  # Socket server tests (17 tests)
+tests/integration/test_socket_server.py  # Socket server tests
 tests/unit/test_watcher.py        # File watcher tests (8 tests)
 ```
 

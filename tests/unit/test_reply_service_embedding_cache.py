@@ -28,7 +28,7 @@ class TestGetCachedEmbeddings:
         service = ReplyService()
 
         # Cache should not exist before first call
-        assert not hasattr(service, '_embedding_cache')
+        assert not hasattr(service, "_embedding_cache")
 
         # Mock embedder
         mock_embedder = MagicMock()
@@ -37,7 +37,7 @@ class TestGetCachedEmbeddings:
         # First call should create cache
         _result = service._get_cached_embeddings(["test text"], mock_embedder)
 
-        assert hasattr(service, '_embedding_cache')
+        assert hasattr(service, "_embedding_cache")
         assert isinstance(service._embedding_cache, dict)
         assert service._embedding_cache_misses > 0
 
@@ -129,10 +129,12 @@ class TestGetCachedEmbeddings:
         service = ReplyService()
 
         mock_embedder = MagicMock()
-        mock_embedder.encode.return_value = np.array([
-            [0.1, 0.2],
-            [0.3, 0.4],
-        ])
+        mock_embedder.encode.return_value = np.array(
+            [
+                [0.1, 0.2],
+                [0.3, 0.4],
+            ]
+        )
 
         texts = ["first text", "second text"]
         _result = service._get_cached_embeddings(texts, mock_embedder)
@@ -191,11 +193,13 @@ class TestEmbeddingCacheIntegration:
         service = ReplyService()
 
         mock_embedder = MagicMock()
-        mock_embedder.encode.return_value = np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ])
+        mock_embedder.encode.return_value = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
 
         examples = [
             ("context 1", "reply 1"),
@@ -254,7 +258,7 @@ class TestCacheMetrics:
         mock_embedder.encode.return_value = np.array([[0.1, 0.2]])
 
         # Before first call
-        assert not hasattr(service, '_embedding_cache_hits')
+        assert not hasattr(service, "_embedding_cache_hits")
 
         # After first call
         service._get_cached_embeddings(["test"], mock_embedder)

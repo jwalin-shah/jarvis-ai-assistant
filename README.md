@@ -231,6 +231,7 @@ For parallel work, use git worktrees - see [CLAUDE.md](CLAUDE.md) for details.
 - [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) - End-to-end system overview
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - V2 technical architecture
 - [docs/REPLY_PIPELINE_GUIDE.md](docs/REPLY_PIPELINE_GUIDE.md) - Reply generation pipeline
+- [docs/FACADE_MIGRATION.md](docs/FACADE_MIGRATION.md) - Canonical import map after facade retirement
 - [API docs](http://localhost:8742/docs) - REST API documentation (when server is running)
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) - Performance tuning and metrics guide
 - [desktop/README.md](desktop/README.md) - Desktop app setup and E2E testing

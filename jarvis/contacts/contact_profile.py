@@ -484,6 +484,14 @@ class ContactProfileBuilder:
     def __init__(self, min_messages: int = MIN_MESSAGES_FOR_PROFILE) -> None:
         self.min_messages = min_messages
 
+    @staticmethod
+    def _normalize_relationship_label(label: str) -> str:
+        """Normalize relationship labels from classifiers/LLM output."""
+        normalized = (label or "").strip().lower()
+        # Remove common markdown emphasis/noise from model output.
+        normalized = normalized.strip("*_` ")
+        return normalized or "unknown"
+
     def build_profile(
         self,
         contact_id: str,
@@ -504,7 +512,7 @@ class ContactProfileBuilder:
                     conv = reader.get_conversation(contact_id)
                     if conv and conv.display_name:
                         contact_name = conv.display_name
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
         if len(messages) < self.min_messages:
@@ -524,15 +532,18 @@ class ContactProfileBuilder:
         relationship, rel_confidence = self._classify_relationship(
             contact_id, messages, contact_name
         )
+        relationship = self._normalize_relationship_label(relationship)
 
         # LLM Refinement
         relationship_reasoning = None
-        if len(messages) >= 5:
+        # Keep high-confidence classifier output stable; only refine uncertain cases.
+        if len(messages) >= 5 and rel_confidence < 0.9:
             relationship, rel_confidence, relationship_reasoning = (
                 self._refine_relationship_with_llm(
                     messages, contact_name or "Contact", relationship, rel_confidence
                 )
             )
+            relationship = self._normalize_relationship_label(relationship)
 
         # Formality (Laplace-smoothed)
         formality_score = self._compute_formality(analyze_msgs)
@@ -1005,7 +1016,7 @@ def _get_profile_path(contact_id: str) -> Path:
     return _ensure_profiles_dir() / f"{hashed}.json"
 
 
-def _json_serial(obj):
+def _json_serial(obj: Any) -> Any:
     """JSON serializer for objects not serializable by default json code."""
     if isinstance(obj, datetime):
         return obj.isoformat()

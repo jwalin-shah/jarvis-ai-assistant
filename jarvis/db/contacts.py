@@ -5,13 +5,32 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from jarvis.db.models import Contact
 
 if TYPE_CHECKING:
-    from jarvis.db.core import JarvisDBBase
+    pass
 
+# Cache key types for contact lookups
+ContactCacheKey = tuple[str, int] | tuple[str, str]
+
+
+class _ContactMixinProtocol(Protocol):
+    """Protocol defining the interface required by ContactMixin."""
+
+    _contact_cache: Any
+    _stats_cache: Any
+    _trigger_pattern_cache: Any
+
+    @staticmethod
+    def _row_to_contact(row: sqlite3.Row) -> Contact: ...
+
+    def connection(self) -> Any: ...
+
+
+# TypeVar for self in mixin methods
+_ContactMixinSelf = TypeVar("_ContactMixinSelf", bound=_ContactMixinProtocol)
 
 _CONTACT_COLUMNS = (
     "id, chat_id, display_name, phone_or_email, relationship,"
@@ -22,13 +41,26 @@ _CONTACT_COLUMNS = (
 class ContactMixin:
     """Mixin providing contact CRUD operations."""
 
-    # Type hints for attributes provided by JarvisDBBase
-    _contact_cache: Any
-    _stats_cache: Any
-    _trigger_pattern_cache: Any
+    @staticmethod
+    def _row_to_contact(row: sqlite3.Row) -> Contact:
+        """Convert a database row to a Contact object."""
+        return Contact(
+            id=row["id"],
+            chat_id=row["chat_id"],
+            display_name=row["display_name"],
+            phone_or_email=row["phone_or_email"],
+            relationship=row["relationship"],
+            relationship_reasoning=row["relationship_reasoning"]
+            if "relationship_reasoning" in row.keys()
+            else None,
+            style_notes=row["style_notes"],
+            handles_json=row["handles_json"] if "handles_json" in row.keys() else None,
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
 
     def add_contact(
-        self: JarvisDBBase,
+        self: _ContactMixinSelf,
         display_name: str,
         chat_id: str | None = None,
         phone_or_email: str | None = None,
@@ -123,7 +155,7 @@ class ContactMixin:
             self._stats_cache.invalidate("db_stats")
             return new_contact
 
-    def get_contact(self: JarvisDBBase, contact_id: int) -> Contact | None:
+    def get_contact(self: _ContactMixinSelf, contact_id: int) -> Contact | None:
         """Get a contact by ID.
 
         Results are cached with 30-second TTL for performance.
@@ -131,11 +163,11 @@ class ContactMixin:
         cache_key = ("contact_id", contact_id)
         hit, cached = self._contact_cache.get(cache_key)
         if hit:
-            return cached
+            return cached  # type: ignore[no-any-return]
 
         with self.connection() as conn:
             cursor = conn.execute(
-                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE id = ?",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE id = ?",  # nosec B608
                 (contact_id,),
             )
             row = cursor.fetchone()
@@ -143,7 +175,7 @@ class ContactMixin:
             self._contact_cache.set(cache_key, result)
             return result
 
-    def get_contact_by_chat_id(self: JarvisDBBase, chat_id: str) -> Contact | None:
+    def get_contact_by_chat_id(self: _ContactMixinSelf, chat_id: str) -> Contact | None:
         """Get a contact by their chat ID.
 
         Handles iMessage-format chat_ids (e.g., "iMessage;-;+15551234567")
@@ -154,12 +186,12 @@ class ContactMixin:
         cache_key = ("chat_id", chat_id)
         hit, cached = self._contact_cache.get(cache_key)
         if hit:
-            return cached
+            return cached  # type: ignore[no-any-return]
 
         with self.connection() as conn:
             # Try exact match first
             cursor = conn.execute(
-                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id = ?",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id = ?",  # nosec B608
                 (chat_id,),
             )
             row = cursor.fetchone()
@@ -180,20 +212,20 @@ class ContactMixin:
             self._contact_cache.set(cache_key, result)
             return result
 
-    def get_contact_by_handle(self: JarvisDBBase, handle: str) -> Contact | None:
+    def get_contact_by_handle(self: _ContactMixinSelf, handle: str) -> Contact | None:
         """Get a contact by phone number or email handle.
 
         Checks chat_id and phone_or_email fields.
         """
         with self.connection() as conn:
             cursor = conn.execute(
-                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id = ? OR phone_or_email = ?",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id = ? OR phone_or_email = ?",  # nosec B608
                 (handle, handle),
             )
             row = cursor.fetchone()
             return self._row_to_contact(row) if row else None
 
-    def get_contact_by_handles(self: JarvisDBBase, handles: list[str]) -> Contact | None:
+    def get_contact_by_handles(self: _ContactMixinSelf, handles: list[str]) -> Contact | None:
         """Get first matching contact for any of the given handles.
 
         Batch version of get_contact_by_handle - checks all handles in a single
@@ -204,7 +236,7 @@ class ContactMixin:
         with self.connection() as conn:
             placeholders = ",".join("?" for _ in handles)
             cursor = conn.execute(
-                f"SELECT {_CONTACT_COLUMNS} FROM contacts"
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts"  # nosec B608
                 f" WHERE chat_id IN ({placeholders})"
                 f" OR phone_or_email IN ({placeholders})"
                 f" LIMIT 1",
@@ -213,12 +245,12 @@ class ContactMixin:
             row = cursor.fetchone()
             return self._row_to_contact(row) if row else None
 
-    def get_contact_by_name(self: JarvisDBBase, name: str) -> Contact | None:
+    def get_contact_by_name(self: _ContactMixinSelf, name: str) -> Contact | None:
         """Get a contact by display name (case-insensitive partial match)."""
         with self.connection() as conn:
             # Try exact match first
             cursor = conn.execute(
-                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE LOWER(display_name) = LOWER(?)",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE LOWER(display_name) = LOWER(?)",  # nosec B608
                 (name,),
             )
             row = cursor.fetchone()
@@ -227,7 +259,7 @@ class ContactMixin:
                 # Try partial match - escape wildcards for LIKE
                 escaped_name = name.replace("%", "\\%").replace("_", "\\_")
                 cursor = conn.execute(
-                    f"SELECT {_CONTACT_COLUMNS} FROM contacts "
+                    f"SELECT {_CONTACT_COLUMNS} FROM contacts "  # nosec B608
                     "WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'",
                     (f"%{escaped_name}%",),
                 )
@@ -237,16 +269,16 @@ class ContactMixin:
                 return self._row_to_contact(row)
             return None
 
-    def list_contacts(self: JarvisDBBase, limit: int = 100) -> list[Contact]:
+    def list_contacts(self: _ContactMixinSelf, limit: int = 100) -> list[Contact]:
         """List all contacts."""
         with self.connection() as conn:
             cursor = conn.execute(
-                f"SELECT {_CONTACT_COLUMNS} FROM contacts ORDER BY display_name LIMIT ?",
+                f"SELECT {_CONTACT_COLUMNS} FROM contacts ORDER BY display_name LIMIT ?",  # nosec B608
                 (limit,),
             )
             return [self._row_to_contact(row) for row in cursor]
 
-    def delete_contact(self: JarvisDBBase, contact_id: int) -> bool:
+    def delete_contact(self: _ContactMixinSelf, contact_id: int) -> bool:
         """Delete a contact and all associated data.
 
         Removes segments, facts, style, timing, drafts, and scheduled drafts.
@@ -266,7 +298,7 @@ class ContactMixin:
             conn.execute("DELETE FROM contact_facts WHERE contact_id = ?", (str(contact_id),))
             # Finally delete the contact
             cursor = conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
-            deleted = cursor.rowcount > 0
+            deleted = bool(cursor.rowcount > 0)
 
             if deleted:
                 # Invalidate caches
@@ -278,21 +310,3 @@ class ContactMixin:
                 self._trigger_pattern_cache.clear()  # Simpler than tracking individual keys
 
             return deleted
-
-    @staticmethod
-    def _row_to_contact(row: sqlite3.Row) -> Contact:
-        """Convert a database row to a Contact object."""
-        return Contact(
-            id=row["id"],
-            chat_id=row["chat_id"],
-            display_name=row["display_name"],
-            phone_or_email=row["phone_or_email"],
-            relationship=row["relationship"],
-            relationship_reasoning=row.get("relationship_reasoning")
-            if "relationship_reasoning" in row.keys()
-            else None,
-            style_notes=row["style_notes"],
-            handles_json=row["handles_json"] if "handles_json" in row.keys() else None,
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )

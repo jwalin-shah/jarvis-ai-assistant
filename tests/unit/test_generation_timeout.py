@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from jarvis.errors import ErrorCode, ModelGenerationError
+from jarvis.core.exceptions import ErrorCode, ModelGenerationError
 
 
 class TestGenerationTimeout:

@@ -165,8 +165,8 @@ def _get_system_info() -> SystemInfo:
         if generator._model is not None:  # type: ignore[attr-defined]
             model_loaded = True
             model_memory_gb = generator.config.estimated_memory_mb / 1024
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Model memory check failed: {e}")
 
     return SystemInfo(
         system_ram_gb=round(system_ram_gb, 1),

@@ -55,7 +55,7 @@
 2. **Remove stale socket and restart:**
    ```bash
    rm -f ~/.jarvis/jarvis.sock
-   uv run python -m jarvis.socket_server
+   uv run python -m jarvis.interfaces.desktop
    ```
 
 3. **Check permissions:**
@@ -146,7 +146,7 @@
 
 3. **Skip preloading for faster startup** (models load on first request):
    ```bash
-   uv run python -m jarvis.socket_server --no-preload
+   uv run python -m jarvis.interfaces.desktop
    ```
 
 ---
@@ -197,7 +197,7 @@
 
 3. **Profile hot paths:**
    ```bash
-   uv run python -m cProfile -s cumulative -m jarvis.socket_server
+   uv run python -m cProfile -s cumulative -m jarvis.interfaces.desktop
    ```
 
 4. **Check prefetch cache hit rate:**

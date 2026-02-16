@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.routers.tasks import TaskResponse, _task_to_response
-from jarvis.errors import iMessageQueryError
+from jarvis.core.exceptions import iMessageQueryError
 from jarvis.tasks import TaskType, get_task_queue, get_worker, start_worker
 
 router = APIRouter(prefix="/batch", tags=["batch"])

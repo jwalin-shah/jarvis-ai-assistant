@@ -52,7 +52,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, cast
 
-from jarvis.errors import (
+from jarvis.core.exceptions import (
     ErrorCode,
     FeedbackError,
     FeedbackInvalidActionError,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from jarvis.db.core import JarvisDBBase
+    pass
 
 
 class StatsMixin:
@@ -14,7 +14,7 @@ class StatsMixin:
     # Type hints for attributes provided by JarvisDBBase
     _stats_cache: Any
 
-    def get_stats(self: JarvisDBBase, use_cache: bool = True) -> dict[str, Any]:
+    def get_stats(self: Any, use_cache: bool = True) -> dict[str, Any]:
         """Get database statistics.
 
         Results are cached with 60-second TTL since stats don't change frequently.
@@ -26,7 +26,7 @@ class StatsMixin:
         if use_cache:
             hit, cached = self._stats_cache.get(cache_key)
             if hit:
-                return cached
+                return cached  # type: ignore[no-any-return]
 
         with self.connection() as conn:
             stats: dict[str, Any] = {}
@@ -66,7 +66,7 @@ class StatsMixin:
             self._stats_cache.set(cache_key, stats)
             return stats
 
-    def get_vector_stats(self: JarvisDBBase) -> dict[str, Any]:
+    def get_vector_stats(self: Any) -> dict[str, Any]:
         """Get statistics about vector embeddings.
 
         Returns stats about vec_chunks table (sqlite-vec based storage).

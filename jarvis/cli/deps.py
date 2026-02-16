@@ -42,17 +42,17 @@ def cleanup() -> None:
 
     try:
         reset_generator()
-    except Exception:
+    except Exception:  # nosec B110
         pass  # Ignore errors during cleanup
 
     try:
         reset_degradation_controller()
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     try:
         reset_memory_controller()
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
 

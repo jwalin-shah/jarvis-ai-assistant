@@ -7,7 +7,7 @@ Uses a connection pool for thread-safe database access.
 from collections.abc import Iterator
 
 from integrations.imessage import ChatDBReader, reset_connection_pool
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 
 # Cache access check result to avoid per-request DB queries.
 # TTL of 60s balances freshness with performance.
@@ -39,7 +39,8 @@ def get_imessage_reader() -> Iterator[ChatDBReader]:
 
     if not has_access:
         reader.close()
-        from jarvis.errors import imessage_permission_denied
+        from jarvis.core.exceptions import imessage_permission_denied
+
         raise imessage_permission_denied()
 
     try:

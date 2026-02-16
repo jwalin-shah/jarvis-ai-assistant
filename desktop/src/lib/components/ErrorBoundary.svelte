@@ -89,11 +89,16 @@
   }
 
   function getErrorMessage(err: Error): string {
-    return ERROR_CATEGORIES[getErrorCategory(err)]?.message || ERROR_CATEGORIES.default.message;
+    const fallback = ERROR_CATEGORIES.default ?? { message: 'Something went wrong', suggestion: '' };
+    return ERROR_CATEGORIES[getErrorCategory(err)]?.message || fallback.message;
   }
 
   function getErrorSuggestion(err: Error): string {
-    return ERROR_CATEGORIES[getErrorCategory(err)]?.suggestion || ERROR_CATEGORIES.default.suggestion;
+    const fallback = ERROR_CATEGORIES.default ?? {
+      message: 'Something went wrong',
+      suggestion: 'Please try again or reload the page if the issue persists.',
+    };
+    return ERROR_CATEGORIES[getErrorCategory(err)]?.suggestion || fallback.suggestion;
   }
 
   function reset() {

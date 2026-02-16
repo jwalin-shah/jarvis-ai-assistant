@@ -7,17 +7,12 @@ Consolidates logic from:
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import random
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-
-import numpy as np
 
 from contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.classifiers.cascade import classify_with_cascade
@@ -28,32 +23,56 @@ from jarvis.classifiers.response_mobilization import (
     ResponseType,
 )
 from jarvis.contracts.pipeline import (
-    CategoryType,
     ClassificationResult,
     GenerationRequest,
     GenerationResponse,
     MessageContext,
-    RAGDocument,
-    UrgencyLevel,
 )
-from jarvis.core.generation.confidence import (
-    UNCERTAIN_SIGNALS,
-    compute_confidence,
-    compute_example_diversity,
-)
+from jarvis.core.exceptions import ErrorCode, JarvisError
+from jarvis.core.generation.confidence import compute_example_diversity
 from jarvis.core.generation.logging import log_custom_generation, persist_reply_log
 from jarvis.core.generation.metrics import (
     record_routing_metrics,
 )
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
-from jarvis.errors import ErrorCode, JarvisError
 from jarvis.observability.logging import log_event
 from jarvis.prompts import (
     ACKNOWLEDGE_TEMPLATES,
     CLOSING_TEMPLATES,
-    build_prompt_from_request,
     get_category_config,
+)
+from jarvis.reply_service_generation import (
+    build_generation_request as build_generation_request_payload,
+)
+from jarvis.reply_service_generation import (
+    dedupe_examples as dedupe_examples_payload,
+)
+from jarvis.reply_service_generation import (
+    generate_llm_reply as generate_llm_reply_payload,
+)
+from jarvis.reply_service_generation import (
+    get_cached_embeddings as get_cached_embeddings_payload,
+)
+from jarvis.reply_service_generation import (
+    prepare_streaming_context as prepare_streaming_context_payload,
+)
+from jarvis.reply_service_generation import (
+    to_model_generation_request as to_model_generation_request_payload,
+)
+from jarvis.reply_service_legacy import (
+    get_routing_stats as get_routing_stats_payload,
+)
+from jarvis.reply_service_legacy import (
+    route_legacy as route_legacy_payload,
+)
+from jarvis.reply_service_utils import (
+    build_mobilization_hint,
+    build_thread_context,
+    max_tokens_for_pressure,
+    pressure_from_classification,
+    safe_float,
+    to_legacy_response,
 )
 from jarvis.search.hybrid_search import get_hybrid_searcher
 from jarvis.services.context_service import ContextService
@@ -68,6 +87,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PrecomputedContext:
     """Optional precomputed inputs to avoid redundant work in generate_reply /"""
+
     """prepare_streaming_context."""
 
     classification_result: ClassificationResult | None = None
@@ -209,34 +229,15 @@ class ReplyService:
 
     @staticmethod
     def _safe_float(value: Any, default: float = 0.0) -> float:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        return safe_float(value, default=default)
 
     @staticmethod
     def _pressure_from_classification(classification: ClassificationResult) -> ResponsePressure:
-        pressure_raw = classification.metadata.get("mobilization_pressure")
-        if isinstance(pressure_raw, str):
-            try:
-                return ResponsePressure(pressure_raw)
-            except ValueError:
-                pass
-        if classification.category in {
-            CategoryType.ACKNOWLEDGE,
-            CategoryType.CLOSING,
-            CategoryType.OFF_TOPIC,
-        }:
-            return ResponsePressure.NONE
-        if classification.urgency == UrgencyLevel.HIGH:
-            return ResponsePressure.HIGH
-        if classification.urgency == UrgencyLevel.MEDIUM:
-            return ResponsePressure.MEDIUM
-        return ResponsePressure.LOW
+        return pressure_from_classification(classification)
 
     @staticmethod
     def _max_tokens_for_pressure(pressure: ResponsePressure) -> int:
-        return 20 if pressure == ResponsePressure.NONE else 40
+        return max_tokens_for_pressure(pressure)
 
     def _build_classification_result(
         self,
@@ -245,6 +246,40 @@ class ReplyService:
         mobilization: MobilizationResult,
     ) -> ClassificationResult:
         return build_classification_result(incoming, thread, mobilization)
+
+    @staticmethod
+    def _build_thread_context(conversation_messages: list[Any]) -> list[str]:
+        return build_thread_context(conversation_messages)
+
+    @staticmethod
+    def _to_legacy_response(response: GenerationResponse) -> dict[str, Any]:
+        return to_legacy_response(
+            response_text=response.response,
+            confidence=response.confidence,
+            metadata=response.metadata,
+        )
+
+    def route_legacy(
+        self,
+        incoming: str,
+        contact_id: int | None = None,
+        thread: list[str] | None = None,
+        chat_id: str | None = None,
+        conversation_messages: list[Any] | None = None,
+        context: MessageContext | None = None,
+    ) -> dict[str, Any]:
+        return route_legacy_payload(
+            self,
+            incoming=incoming,
+            contact_id=contact_id,
+            thread=thread,
+            chat_id=chat_id,
+            conversation_messages=conversation_messages,
+            context=context,
+        )
+
+    def get_routing_stats(self) -> dict[str, Any]:
+        return get_routing_stats_payload(self)
 
     def prepare_streaming_context(
         self,
@@ -274,84 +309,18 @@ class ReplyService:
                 else search_results
             )
             cached_embedder = precomputed.cached_embedder or cached_embedder
-        can_generate, health_reason = self.can_use_llm()
-        if not can_generate:
-            raise ReplyServiceError(f"LLM unavailable: {health_reason}")
-
-        normalized_incoming = incoming.strip()
-        thread_messages = [msg for msg in (thread or []) if isinstance(msg, str)]
-
-        if cached_embedder is None:
-            cached_embedder = get_embedder()
-
-        if contact is None:
-            contact = self.context_service.get_contact(None, chat_id)
-
-        if classification_result is None:
-            mobilization = classify_with_cascade(normalized_incoming)
-            classification_result = self._build_classification_result(
-                normalized_incoming,
-                thread_messages,
-                mobilization,
-            )
-
-        if search_results is None:
-            # Hybrid search for better retrieval precision
-            hybrid_searcher = get_hybrid_searcher()
-            search_results = hybrid_searcher.search(query=normalized_incoming, limit=5, rerank=True)
-
-        message_context = MessageContext(
-            chat_id=chat_id or "",
-            message_text=normalized_incoming,
-            is_from_me=False,
-            timestamp=datetime.now(UTC),
-            metadata={
-                "thread": thread_messages,
-            },
-        )
-
-        pipeline_request = self.build_generation_request(
-            context=message_context,
-            classification=classification_result,
-            search_results=search_results,
-            contact=contact,
-            thread=thread_messages,
+        return prepare_streaming_context_payload(
+            self,
+            incoming=incoming,
+            thread=thread,
+            chat_id=chat_id,
             instruction=instruction,
+            classification_result=classification_result,
+            contact=contact,
+            search_results=search_results,
+            cached_embedder=cached_embedder,
+            reply_error_cls=ReplyServiceError,
         )
-        model_request = self._to_model_generation_request(pipeline_request)
-
-        similarity = search_results[0].get("similarity", 0.0) if search_results else 0.0
-        example_diversity = self._compute_example_diversity(search_results)
-        pressure = self._pressure_from_classification(classification_result)
-
-        base_confidence = {
-            ResponsePressure.HIGH: 0.85,
-            ResponsePressure.MEDIUM: 0.65,
-            ResponsePressure.LOW: 0.45,
-            ResponsePressure.NONE: 0.30,
-        }[pressure]
-
-        if similarity < 0.5:
-            base_confidence *= 0.8
-        if example_diversity < 0.3:
-            base_confidence *= 0.9
-
-        if base_confidence >= 0.7:
-            confidence = "high"
-        elif base_confidence >= 0.45:
-            confidence = "medium"
-        else:
-            confidence = "low"
-
-        metadata = {
-            "confidence": confidence,
-            "confidence_score": base_confidence,
-            "similarity_score": similarity,
-            "example_diversity": example_diversity,
-            "mobilization_pressure": pressure.value,
-        }
-
-        return model_request, metadata
 
     def generate_reply(
         self,
@@ -498,9 +467,9 @@ class ReplyService:
     ) -> GenerationResponse:
         """Return a template response for categories that skip the SLM."""
         if category_name == "closing":
-            template_response = random.choice(CLOSING_TEMPLATES)
+            template_response = random.choice(CLOSING_TEMPLATES)  # nosec B311
         else:
-            template_response = random.choice(ACKNOWLEDGE_TEMPLATES)
+            template_response = random.choice(ACKNOWLEDGE_TEMPLATES)  # nosec B311
 
         log_event(
             logger,
@@ -673,117 +642,19 @@ class ReplyService:
         cached_embedder: CachedEmbedder | None = None,
     ) -> GenerationRequest:
         """Build a typed GenerationRequest with context, classification, and RAG docs."""
-        from jarvis.prompts import get_optimized_examples
-
-        incoming = context.message_text.strip()
-        chat_id = context.chat_id or None
-        category_name = str(
-            classification.metadata.get("category_name", classification.category.value)
-        )
-        category_config = get_category_config(category_name)
-        context_depth = category_config.context_depth
-
-        context_messages: list[str] = []
-        if thread:
-            context_messages = thread[-context_depth:] if context_depth > 0 else []
-        elif chat_id and context_depth > 0:
-            context_messages, _ = self.context_service.fetch_conversation_context(
-                chat_id, limit=context_depth
-            )
-
-        relationship_profile, contact_context = self.context_service.get_relationship_profile(
-            contact, chat_id
-        )
-        context.metadata["context_messages"] = context_messages
-        context.metadata["relationship_profile"] = relationship_profile
-        context.metadata["contact_context"] = contact_context
-        if contact and contact.display_name:
-            context.metadata.setdefault("contact_name", contact.display_name)
-
-        if chat_id:
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                facts_future = pool.submit(self._fetch_contact_facts, context, chat_id)
-                graph_future = pool.submit(self._fetch_graph_context, context, chat_id)
-                facts_future.result()
-                graph_future.result()
-
-        instruction = self._resolve_instruction(
-            instruction, category_name, category_config, classification
-        )
-        context.metadata["instruction"] = instruction or ""
-
-        if len(search_results) > 3 and self.reranker:
-            search_results = self.reranker.rerank(
-                query=incoming,
-                candidates=search_results,
-                text_key="context_text",
-                top_k=5,
-            )
-
-        optimized_examples = get_optimized_examples(category_name)
-        category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
-
-        top_results = search_results[:3]
-        similar_exchanges = [
-            (str(r.get("context_text", "")), str(r.get("reply_text", ""))) for r in top_results
-        ]
-        rag_rerank_scores = [
-            self._safe_float(r.get("rerank_score"), default=0.0) for r in top_results
-        ]
-
-        all_exchanges = similar_exchanges + [
-            ex for ex in category_exchanges if ex not in similar_exchanges
-        ]
-        all_rerank_scores = rag_rerank_scores + [0.0] * (
-            len(all_exchanges) - len(similar_exchanges)
-        )
-
-        if cached_embedder is None:
-            cached_embedder = get_embedder()
-        all_exchanges = self._dedupe_examples(
-            all_exchanges, cached_embedder, rerank_scores=all_rerank_scores
-        )
-        all_exchanges = all_exchanges[:5]
-
-        rag_documents: list[RAGDocument] = []
-        for result in top_results:
-            context_text = str(result.get("context_text", "")).strip()
-            if not context_text:
-                continue
-            rag_documents.append(
-                RAGDocument(
-                    content=context_text,
-                    source=str(result.get("topic") or chat_id or "rag"),
-                    score=self._safe_float(result.get("similarity"), default=0.0),
-                    metadata={
-                        "response_text": str(result.get("response_text", "")),
-                        "rerank_score": self._safe_float(result.get("rerank_score"), default=0.0),
-                    },
-                )
-            )
-
-        return GenerationRequest(
+        return build_generation_request_payload(
+            self,
             context=context,
             classification=classification,
-            extraction=None,
-            retrieved_docs=rag_documents,
-            few_shot_examples=[
-                {
-                    "input": ctx,
-                    "output": response,
-                }
-                for ctx, response in all_exchanges
-                if ctx and response
-            ],
+            search_results=search_results,
+            contact=contact,
+            thread=thread,
+            instruction=instruction,
+            cached_embedder=cached_embedder,
         )
 
     def _to_model_generation_request(self, request: GenerationRequest) -> ModelGenerationRequest:
-        pressure = self._pressure_from_classification(request.classification)
-        prompt = build_prompt_from_request(request)
-        return ModelGenerationRequest(
-            prompt=prompt,
-            max_tokens=self._max_tokens_for_pressure(pressure),
-        )
+        return to_model_generation_request_payload(self, request)
 
     def _dedupe_examples(
         self,
@@ -791,113 +662,19 @@ class ReplyService:
         embedder: CachedEmbedder,
         rerank_scores: list[float] | None = None,
     ) -> list[tuple[str, str]]:
-        """Deduplicate examples using greedy semantic similarity filtering.
-
-        Args:
-            examples: List of (context, output) tuples.
-            embedder: Embedder for computing similarity.
-            rerank_scores: Optional per-example rerank scores (higher = better).
-
-        Returns:
-            Deduplicated list of examples (highest quality kept).
-        """
-        if len(examples) <= 1:
-            return examples
-
-        # Skip expensive embedding-based dedup for small example sets
-        # Small sets are unlikely to have problematic duplicates
-        if len(examples) <= 6:
-            return examples
-
-        texts = [f"{ctx} {out}" for ctx, out in examples]
-
-        # Use content-addressable caching for dedupe embeddings
-        # This avoids recomputing embeddings for the same examples across calls
-        embeddings = self._get_cached_embeddings(texts, embedder)
-
-        # Score for ordering: prefer rerank_score, fallback to context length
-        scores = rerank_scores or [0.0] * len(examples)
-
-        # Sort by score descending (best first) for greedy selection
-        indexed = sorted(
-            range(len(examples)),
-            key=lambda i: (scores[i], len(examples[i][0])),
-            reverse=True,
+        return dedupe_examples_payload(
+            self,
+            examples=examples,
+            embedder=embedder,
+            rerank_scores=rerank_scores,
         )
-
-        # Greedy dedup: keep candidate if not too similar to any already-kept item
-        kept_indices: list[int] = []
-        kept_embs: list[Any] = []
-        for i in indexed:
-            emb = embeddings[i]
-            too_similar = any(float(np.dot(emb, k)) > 0.85 for k in kept_embs)
-            if not too_similar:
-                kept_indices.append(i)
-                kept_embs.append(emb)
-
-        # Return in original order
-        kept_indices.sort()
-        return [examples[i] for i in kept_indices]
 
     def _get_cached_embeddings(
         self,
         texts: list[str],
         embedder: CachedEmbedder,
     ) -> Any:
-        """Get embeddings with content-addressable caching.
-
-        Uses a simple hash-based cache to avoid recomputing embeddings
-        for the same text across multiple deduplication calls.
-
-        Args:
-            texts: List of texts to embed.
-            embedder: Embedder for computing embeddings.
-
-        Returns:
-            Array of embeddings corresponding to input texts.
-        """
-        # Use a class-level cache to persist across calls
-        if not hasattr(self, '_embedding_cache'):
-            # LRU cache with max 1000 entries (~4MB for 384-dim float32 embeddings)
-            self._embedding_cache: dict[str, Any] = {}
-            self._embedding_cache_hits = 0
-            self._embedding_cache_misses = 0
-
-        cache = self._embedding_cache
-        results: list[Any] = []
-        texts_to_encode: list[tuple[int, str]] = []
-
-        # Check cache for each text
-        for idx, text in enumerate(texts):
-            # Use hash of text as cache key
-            text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()[:32]
-            if text_hash in cache:
-                results.append((idx, cache[text_hash]))
-                self._embedding_cache_hits += 1
-            else:
-                texts_to_encode.append((idx, text))
-                self._embedding_cache_misses += 1
-
-        # Batch encode missing texts
-        if texts_to_encode:
-            missing_texts = [t for _, t in texts_to_encode]
-            new_embeddings = embedder.encode(missing_texts, normalize=True)
-
-            # Store in cache and results
-            for (idx, text), emb in zip(texts_to_encode, new_embeddings):
-                text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()[:32]
-                # Simple LRU eviction: if cache too big, clear half
-                if len(cache) >= 1000:
-                    # Clear oldest half (arbitrary but simple)
-                    keys_to_remove = list(cache.keys())[:500]
-                    for k in keys_to_remove:
-                        del cache[k]
-                cache[text_hash] = emb
-                results.append((idx, emb))
-
-        # Sort by original index and return embeddings
-        results.sort(key=lambda x: x[0])
-        return np.array([emb for _, emb in results])
+        return get_cached_embeddings_payload(self, texts=texts, embedder=embedder)
 
     def _generate_llm_reply(
         self,
@@ -905,143 +682,16 @@ class ReplyService:
         search_results: list[dict[str, Any]],
         thread: list[str] | None,
     ) -> GenerationResponse:
-        incoming = request.context.message_text.strip()
-        pressure = self._pressure_from_classification(request.classification)
-
-        if pressure == ResponsePressure.NONE and not search_results:
-            return GenerationResponse(
-                response="",
-                confidence=0.2,
-                metadata={
-                    "type": "skip",
-                    "reason": "no_response_needed",
-                    "similarity_score": 0.0,
-                    "vec_candidates": 0,
-                },
-            )
-
-        cat_conf = self._safe_float(
-            request.classification.metadata.get("category_confidence"),
-            default=request.classification.confidence,
+        return generate_llm_reply_payload(
+            self,
+            request=request,
+            search_results=search_results,
+            thread=thread,
         )
-        has_thin_context = not thread or len(thread) < 2
-        is_short_msg = len(incoming.split()) <= 3
-        if (
-            cat_conf < 0.4
-            and pressure == ResponsePressure.NONE
-            and is_short_msg
-            and has_thin_context
-        ):
-            return GenerationResponse(
-                response="",
-                confidence=max(0.1, cat_conf),
-                metadata={
-                    "type": "clarify",
-                    "reason": "ambiguous_message",
-                    "similarity_score": 0.0,
-                    "vec_candidates": len(search_results),
-                },
-            )
-
-        try:
-            model_request = self._to_model_generation_request(request)
-            final_prompt = model_request.prompt
-            response = self.generator.generate(model_request)
-            text = response.text.strip()
-
-            if text.lower() in UNCERTAIN_SIGNALS:
-                return GenerationResponse(
-                    response=text,
-                    confidence=0.25,
-                    metadata={
-                        "type": "uncertain",
-                        "reason": "model_uncertain",
-                        "similarity_score": 0.0,
-                        "vec_candidates": len(search_results),
-                        "final_prompt": final_prompt,
-                    },
-                )
-
-            similarity = (
-                self._safe_float(search_results[0].get("similarity"), default=0.0)
-                if search_results
-                else 0.0
-            )
-            example_diversity = compute_example_diversity(search_results)
-            reply_length = len(text.split())
-            rerank_score = (
-                self._safe_float(search_results[0].get("rerank_score"), default=0.0)
-                if search_results
-                else None
-            )
-
-            confidence_score, confidence_label = compute_confidence(
-                pressure,
-                similarity,
-                example_diversity,
-                reply_length,
-                text,
-                incoming_text=incoming,
-                rerank_score=rerank_score,
-            )
-
-            similar_triggers = [
-                str(row.get("context_text", ""))
-                for row in search_results[:3]
-                if row.get("context_text")
-            ]
-            used_docs = [doc.content for doc in request.retrieved_docs[:3] if doc.content]
-
-            return GenerationResponse(
-                response=text,
-                confidence=confidence_score,
-                used_kg_facts=used_docs,
-                metadata={
-                    "type": "generated",
-                    "reason": "generated",
-                    "category": str(
-                        request.classification.metadata.get(
-                            "category_name",
-                            request.classification.category.value,
-                        )
-                    ),
-                    "similarity_score": similarity,
-                    "example_diversity": example_diversity,
-                    "confidence_label": confidence_label,
-                    "vec_candidates": len(search_results),
-                    "similar_triggers": similar_triggers,
-                    "final_prompt": final_prompt,
-                },
-            )
-        except Exception as e:
-            logger.exception("LLM generation failed: %s", e)
-            return GenerationResponse(
-                response="I'm having trouble generating a response.",
-                confidence=0.2,
-                metadata={
-                    "type": "clarify",
-                    "reason": "generation_error",
-                    "similarity_score": 0.0,
-                    "vec_candidates": len(search_results),
-                },
-            )
 
     @staticmethod
     def _build_mobilization_hint(mobilization: MobilizationResult) -> str:
-        """Build a generation instruction hint based on response mobilization."""
-        if mobilization.pressure == ResponsePressure.HIGH:
-            if mobilization.response_type.value == "commitment":
-                return "Respond with a clear commitment (accept, decline, or defer)."
-            elif mobilization.response_type.value == "answer":
-                return "Answer the question directly and clearly."
-            elif mobilization.response_type.value == "confirmation":
-                return "Confirm or deny clearly."
-            return "Respond directly to their question."
-        elif mobilization.pressure == ResponsePressure.MEDIUM:
-            return "Respond with appropriate emotion and empathy."
-        elif mobilization.pressure == ResponsePressure.LOW:
-            return "Keep the response brief and casual."
-        return "A brief acknowledgment is fine."
+        return build_mobilization_hint(mobilization)
 
 
 _service: ReplyService | None = None

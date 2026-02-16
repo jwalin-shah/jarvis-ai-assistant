@@ -16,6 +16,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
 class PrefetchHandler(ABC):
     """Abstract base class for all prefetch handlers.
 

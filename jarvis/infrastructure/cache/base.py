@@ -13,7 +13,13 @@ class CacheBackend(ABC):
         pass
 
     @abstractmethod
-    def set(self, key: str, value: Any, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl: float | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
         """Set a value in the cache with an optional TTL."""
         pass
 

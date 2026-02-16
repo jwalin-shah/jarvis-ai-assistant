@@ -23,7 +23,7 @@ from typing import Any
 
 import psutil
 
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

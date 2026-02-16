@@ -119,7 +119,7 @@ class ServiceManager:
                         service.health_check,
                         timeout=timeout,
                         interval=1.0,
-                        name=f"service {service_name}"
+                        name=f"service {service_name}",
                     ):
                         logger.info(f"Service {service_name} is healthy")
                     else:

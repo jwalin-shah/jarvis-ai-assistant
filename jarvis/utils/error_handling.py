@@ -65,7 +65,7 @@ def silence_exceptions(
                 if preserve_interrupts:
                     raise
                 # If interrupts are not preserved, treat as silenced exception
-                error_msg = str(exc) if (exc := __import__('sys').exc_info()[1]) else "Interrupt"
+                error_msg = str(exc) if (exc := __import__("sys").exc_info()[1]) else "Interrupt"
                 if log_msg:
                     formatted_msg = log_msg.format(error=error_msg, func_name=func.__qualname__)
                 else:
@@ -97,6 +97,7 @@ def graceful_shutdown(func: F) -> F:
             while running:
                 do_work()
     """
+
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
@@ -137,6 +138,7 @@ def safe_execution(
             # do work
             result.value = computed_value
     """
+
     class Result:
         def __init__(self) -> None:
             self.value = default_return
@@ -149,7 +151,7 @@ def safe_execution(
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception as e:
-        result.exc_info = __import__('sys').exc_info()
+        result.exc_info = __import__("sys").exc_info()
         if reraise and isinstance(e, reraise):
             raise
         logger.log(log_level, f"{operation_name} failed: {e}")
@@ -211,7 +213,7 @@ class ErrorBoundary:
             if self.on_threshold:
                 try:
                     self.on_threshold()
-                except Exception:
+                except Exception:  # nosec B110
                     pass
             # Reset after threshold to avoid spamming
             if self.reset_on_success:

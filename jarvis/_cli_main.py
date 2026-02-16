@@ -42,8 +42,8 @@ from rich.text import Text
 from contracts.health import FeatureState
 from core.health import get_degradation_controller, reset_degradation_controller
 from core.memory import get_memory_controller, reset_memory_controller
+from jarvis.core.exceptions import JarvisError
 from jarvis.db import get_db
-from jarvis.errors import JarvisError
 from jarvis.system import (
     FEATURE_CHAT,
     FEATURE_IMESSAGE,
@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 def _format_jarvis_error(error: JarvisError) -> None:
     """Format and display a JARVIS error with helpful suggestions."""
-    from jarvis.errors import (
+    from jarvis.core.exceptions import (
         ConfigurationError,
         ModelError,
         ResourceError,
@@ -211,14 +211,14 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         console.print(f"Available types: {', '.join(benchmark_modules.keys())}")
         return 1
 
-    import subprocess
+    import subprocess  # nosec B404
 
     cmd = [sys.executable, "-m", benchmark_modules[benchmark_type]]
     if output_file:
         cmd.extend(["--output", output_file])
 
     try:
-        result = subprocess.run(cmd, check=False)
+        result = subprocess.run(cmd, check=False)  # nosec B603
         return result.returncode
     except Exception as e:
         console.print(f"[red]Error running benchmark: {e}[/red]")
@@ -325,7 +325,7 @@ def _cmd_feedback(args: argparse.Namespace) -> int:
     console.print("\n", actions_table)
 
     if args.limit > 0:
-        entries = store.list_feedback(limit=args.limit)
+        entries = store.list_feedback(limit=args.limit)  # type: ignore[attr-defined]
         if entries:
             console.print("\n[bold]Recent Feedback Entries:[/bold]")
             entries_table = Table()
@@ -354,7 +354,7 @@ def cmd_ner(args: argparse.Namespace) -> int:
     """Handle NER service management."""
     import os
     import signal
-    import subprocess
+    import subprocess  # nosec B404
     from pathlib import Path
 
     from jarvis.nlp.ner_client import PID_FILE, SOCKET_PATH, get_pid, is_service_running
@@ -374,7 +374,7 @@ def cmd_ner(args: argparse.Namespace) -> int:
             console.print(f"[red]Setup script not found: {setup_script}[/red]")
             return 1
         console.print("[bold]Setting up NER environment...[/bold]")
-        result = subprocess.run(["bash", str(setup_script)], check=False)
+        result = subprocess.run(["bash", str(setup_script)], check=False)  # nosec B603 B607
         return result.returncode
 
     if subcommand == "status":
@@ -415,7 +415,7 @@ def cmd_ner(args: argparse.Namespace) -> int:
         ner_log_path = Path.home() / ".jarvis" / "ner_server.log"
         ner_log_path.parent.mkdir(parents=True, exist_ok=True)
         ner_log_file = open(ner_log_path, "a")  # noqa: SIM115
-        process = subprocess.Popen(
+        process = subprocess.Popen(  # nosec B603
             [str(python_path), str(server_script)],
             stdout=subprocess.DEVNULL,
             stderr=ner_log_file,

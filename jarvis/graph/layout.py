@@ -66,7 +66,7 @@ class LayoutEngine:
             config: Layout configuration (uses defaults if None)
         """
         self.config = config or LayoutConfig()
-        self._rng = random.Random(self.config.random_seed)
+        self._rng = random.Random(self.config.random_seed)  # nosec B311
 
     def force_directed(self, graph: GraphData) -> GraphData:
         """Apply force-directed layout to the graph.

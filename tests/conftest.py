@@ -262,12 +262,6 @@ def auto_mock_embedder(monkeypatch, request):
     monkeypatch.setattr("jarvis.embedding_adapter.get_embedder", mock_get_embedder)
     monkeypatch.setattr("jarvis.embedding_adapter.is_embedder_available", mock_is_available)
 
-    # Also patch where it might be imported directly
-    try:
-        monkeypatch.setattr("jarvis.router.get_embedder", mock_get_embedder)
-    except AttributeError:
-        pass
-
 
 # =============================================================================
 # Mock SpaCy for Tests

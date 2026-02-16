@@ -5,7 +5,7 @@ import logging
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
-from jarvis.errors import ErrorCode, JarvisError
+from jarvis.core.exceptions import ErrorCode, JarvisError
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -30,8 +30,11 @@ class ContextServiceProtocol(Protocol):
 
 
 class ReplyServiceProtocol(Protocol):
-    context_service: ContextServiceProtocol
-    generator: Any
+    @property
+    def context_service(self) -> ContextServiceProtocol: ...
+
+    @property
+    def generator(self) -> Any: ...
 
     def prepare_streaming_context(
         self,
@@ -40,6 +43,16 @@ class ReplyServiceProtocol(Protocol):
         chat_id: str | None = None,
         instruction: str | None = None,
     ) -> tuple[Any, dict[str, Any]]: ...
+
+    def route_legacy(
+        self,
+        incoming: str,
+        contact_id: int | None = None,
+        thread: list[str] | None = None,
+        chat_id: str | None = None,
+        conversation_messages: list[Any] | None = None,
+        context: Any | None = None,
+    ) -> dict[str, Any]: ...
 
 
 class HandlerServerProtocol(Protocol):
@@ -74,6 +87,7 @@ class HandlerServerProtocol(Protocol):
         request_id: Any,
         result: dict[str, Any],
     ) -> None: ...
+
 
 logger = logging.getLogger(__name__)
 

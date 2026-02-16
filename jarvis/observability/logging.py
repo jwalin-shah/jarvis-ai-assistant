@@ -43,11 +43,11 @@ class StructuredFormatter(logging.Formatter):
 
         # Include extra structured fields (set via log_event or extra={})
         if hasattr(record, "event_type"):
-            entry["event"] = record.event_type  # type: ignore[attr-defined]
+            entry["event"] = record.event_type  # type: ignore[attr-defined, unused-ignore]
         if hasattr(record, "metrics"):
-            entry["metrics"] = record.metrics  # type: ignore[attr-defined]
+            entry["metrics"] = record.metrics  # type: ignore[attr-defined, unused-ignore]
         if hasattr(record, "metadata"):
-            entry["metadata"] = record.metadata  # type: ignore[attr-defined]
+            entry["metadata"] = record.metadata  # type: ignore[attr-defined, unused-ignore]
 
         # Include exception info if present
         if record.exc_info and record.exc_info[1]:
@@ -65,7 +65,7 @@ def timed_operation(
     operation: str,
     level: int = logging.INFO,
     **extra: Any,
-):
+) -> Any:
     """Context manager that logs operation start/complete with timing.
 
     Args:

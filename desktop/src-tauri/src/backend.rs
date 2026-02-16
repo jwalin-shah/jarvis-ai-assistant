@@ -1,7 +1,7 @@
 //! Backend process management for auto-launching the Python socket server.
 //!
-//! Spawns `uv run python -m jarvis.socket_server` when the Tauri app starts,
-//! monitors readiness via socket probe, and kills on app exit.
+//! Spawns `uv run python -m jarvis.interfaces.desktop` when the Tauri app
+//! starts, monitors readiness via socket probe, and kills on app exit.
 
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -129,7 +129,7 @@ fn spawn_backend() -> Result<Child, String> {
         .map_err(|e| format!("Failed to clone log file handle: {e}"))?;
 
     let child = Command::new(uv.as_os_str())
-        .args(["run", "python", "-m", "jarvis.socket_server"])
+        .args(["run", "python", "-m", "jarvis.interfaces.desktop"])
         .current_dir(&root)
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(stderr_file))

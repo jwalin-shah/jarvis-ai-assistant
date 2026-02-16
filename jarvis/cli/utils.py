@@ -6,6 +6,7 @@ Common functions used across multiple CLI commands.
 import importlib.util
 import logging
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import NoReturn
 
@@ -13,7 +14,7 @@ from rich.console import Console
 from rich.text import Text
 
 from contracts.health import FeatureState
-from jarvis.errors import (
+from jarvis.core.exceptions import (
     ConfigurationError,
     JarvisError,
     ModelError,
@@ -142,7 +143,10 @@ def cleanup() -> None:
         logger.debug("Error resetting generator during cleanup: %s", e)
 
 
-def run_with_error_handling(main_func, argv: list[str] | None = None) -> NoReturn:
+def run_with_error_handling(
+    main_func: Callable[[list[str] | None], int],
+    argv: list[str] | None = None,
+) -> NoReturn:
     """Run main function with error handling and cleanup.
 
     Args:

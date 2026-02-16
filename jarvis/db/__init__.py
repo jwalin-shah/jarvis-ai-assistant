@@ -17,7 +17,6 @@ Usage:
 import threading
 from pathlib import Path
 
-from jarvis.cache import TTLCache
 from jarvis.db.contacts import ContactMixin
 from jarvis.db.core import JarvisDBBase
 from jarvis.db.index_versions import IndexVersionMixin
@@ -38,6 +37,7 @@ from jarvis.db.schema import (
     VALID_MIGRATION_COLUMNS,
 )
 from jarvis.db.stats import StatsMixin
+from jarvis.infrastructure.cache import TTLCache
 
 
 class JarvisDB(

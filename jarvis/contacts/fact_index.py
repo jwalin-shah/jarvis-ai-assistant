@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 
@@ -118,7 +119,7 @@ def index_facts(
         if all_fact_ids:
             placeholders = ",".join("?" * len(all_fact_ids))
             existing = conn.execute(
-                f"SELECT fact_id FROM vec_facts WHERE fact_id IN ({placeholders})",  # noqa: S608
+                f"SELECT fact_id FROM vec_facts WHERE fact_id IN ({placeholders})",  # noqa: S608  # nosec B608
                 list(all_fact_ids),
             ).fetchall()
             already_indexed = {row[0] for row in existing}
@@ -288,16 +289,15 @@ def search_relevant_facts(
                 return _fallback_get_facts(contact_id, limit)
 
             # 3. Fetch full fact objects in one query
-            placeholders = ",".join("?" * len(relevant_ids))
             fact_rows = conn.execute(
-                f"""
+                """
                 SELECT category, subject, predicate, value, confidence,
                        source_text, source_message_id, extracted_at,
                        linked_contact_id, valid_from, valid_until
                 FROM contact_facts
-                WHERE id IN ({placeholders})
-                """,  # noqa: S608
-                relevant_ids,
+                WHERE id IN (SELECT value FROM json_each(?))
+                """,
+                (json.dumps(relevant_ids),),
             ).fetchall()
     except Exception:
         return _fallback_get_facts(contact_id, limit)

@@ -13,17 +13,13 @@ which is the single source of truth for all prompts in the JARVIS system.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
 from api.ratelimit import (
     RATE_LIMIT_GENERATION,
-    get_timeout_generation,
     limiter,
 )
 from api.schemas import (
@@ -31,28 +27,23 @@ from api.schemas import (
     DateRange,
     DraftReplyRequest,
     DraftReplyResponse,
-    DraftSuggestion,
     DraftSummaryRequest,
     DraftSummaryResponse,
     ErrorResponse,
     RoutedReplyRequest,
     RoutedReplyResponse,
 )
-from api.services.drafts_helpers import (
-    build_summary_prompt,
-    format_messages_for_context,
-    parse_summary_response,
-    sanitize_instruction,
-)
-from api.services.drafts_pipeline import (
-    generate_summary,
-    route_reply_sync,
-    run_classification_and_search,
+from api.services.drafts_helpers import sanitize_instruction
+from api.services.drafts_service import (
+    build_draft_suggestions,
+    build_reply_context,
+    build_smart_reply_input,
+    ensure_messages_exist,
+    fetch_messages,
+    generate_summary_payload,
+    route_smart_reply,
 )
 from integrations.imessage import ChatDBReader
-from jarvis.contracts.pipeline import MessageContext
-from jarvis.errors import ModelError, iMessageQueryError
-from jarvis.model_warmer import get_warm_generator
 from jarvis.prompts import API_REPLY_EXAMPLES, API_SUMMARY_EXAMPLES
 
 logger = logging.getLogger(__name__)
@@ -63,6 +54,10 @@ router = APIRouter(prefix="/drafts", tags=["drafts"])
 REPLY_EXAMPLES = API_REPLY_EXAMPLES
 SUMMARY_EXAMPLES = API_SUMMARY_EXAMPLES
 
+
+def _sanitize_instruction(instruction: str | None) -> str | None:
+    """Backward-compatible shim for legacy imports."""
+    return sanitize_instruction(instruction)
 
 
 @router.post(
@@ -189,120 +184,20 @@ async def generate_draft_reply(
         HTTPException 500: Failed to generate suggestions
         HTTPException 503: Model service unavailable
     """
-    # Fetch conversation messages for context (I/O bound - run in threadpool)
-    try:
-        messages = await run_in_threadpool(
-            reader.get_messages,
-            chat_id=draft_request.chat_id,
-            limit=draft_request.context_messages,
-        )
-    except Exception as e:
-        logger.error("Failed to fetch messages for chat %s: %s", draft_request.chat_id, e)
-        raise iMessageQueryError(
-            f"Failed to fetch conversation context for chat: {draft_request.chat_id}",
-            cause=e,
-        )
-
-    if not messages:
-        from jarvis.errors import ConversationNotFoundError
-        raise ConversationNotFoundError(f"No messages found for chat_id: {draft_request.chat_id}")
-
-    # Last incoming message and thread (chronological, for RAG)
-    last_message = None
-    for msg in messages:
-        if not msg.is_from_me and msg.text:
-            last_message = msg.text
-            break
-    if not last_message:
-        last_message = messages[0].text if messages else ""
-    participants = list({m.sender_name or m.sender for m in messages if not m.is_from_me})
-    thread = [m.text for m in reversed(messages) if m.text][: draft_request.context_messages]
-
-    from jarvis.reply_service import get_reply_service
-
-    reply_service = get_reply_service()
-
-    try:
-        classification, search_results = await run_in_threadpool(
-            run_classification_and_search,
-            last_message or "",
-            thread,
-        )
-    except Exception as e:
-        logger.error("Classification/search failed: %s", e)
-        raise ModelError("Model service unavailable", cause=e) from e
-
-    context = MessageContext(
-        chat_id=draft_request.chat_id,
-        message_text=last_message or "",
-        is_from_me=False,
-        timestamp=datetime.now(UTC),
-        metadata={"thread": thread},
+    messages = await fetch_messages(reader, draft_request.chat_id, draft_request.context_messages)
+    ensure_messages_exist(draft_request.chat_id, messages)
+    last_message, participants, thread = build_reply_context(
+        messages,
+        draft_request.context_messages,
     )
 
-    # Variety instructions for multiple suggestions
-    base_instruction = sanitize_instruction(draft_request.instruction)
-
-    variant_instructions: list[str | None] = [base_instruction]
-    if draft_request.num_suggestions > 1:
-        variant_instructions.append(
-            (base_instruction + " (slightly more casual)")
-            if base_instruction
-            else "be slightly more casual"
-        )
-    if draft_request.num_suggestions > 2:
-        variant_instructions.append(
-            (base_instruction + " (concise)") if base_instruction else "be concise"
-        )
-
-    suggestions: list[DraftSuggestion] = []
-    try:
-        async with asyncio.timeout(get_timeout_generation()):
-            for i in range(draft_request.num_suggestions):
-                instruction = (
-                    variant_instructions[i]
-                    if i < len(variant_instructions)
-                    else variant_instructions[0]
-                )
-                try:
-                    gen_response = await run_in_threadpool(
-                        reply_service.generate_reply,
-                        context,
-                        classification,
-                        search_results,
-                        thread,
-                        None,
-                        None,
-                        instruction,
-                    )
-                except Exception as e:
-                    logger.warning("Generation %d failed: %s", i, e)
-                    continue
-                if gen_response.response:
-                    confidence = max(0.5, gen_response.confidence)
-                    suggestions.append(
-                        DraftSuggestion(
-                            text=gen_response.response,
-                            confidence=confidence,
-                        )
-                    )
-                    await run_in_threadpool(
-                        reply_service.log_custom_generation,
-                        chat_id=draft_request.chat_id,
-                        incoming_text=last_message or "",
-                        final_prompt=gen_response.metadata.get("final_prompt", ""),
-                        response_text=gen_response.response,
-                        confidence=confidence,
-                        category="draft_reply",
-                        metadata={"suggestion_index": i},
-                    )
-    except TimeoutError:
-        logger.warning("Generation timed out after %s seconds", get_timeout_generation())
-        if not suggestions:
-            raise HTTPException(
-                status_code=408,
-                detail=f"Request timed out after {get_timeout_generation()} seconds",
-            ) from None
+    suggestions = await build_draft_suggestions(
+        chat_id=draft_request.chat_id,
+        last_message=last_message,
+        thread=thread,
+        instruction=draft_request.instruction,
+        num_suggestions=draft_request.num_suggestions,
+    )
 
     if not suggestions:
         raise HTTPException(
@@ -318,6 +213,7 @@ async def generate_draft_reply(
             last_message=last_message,
         ),
     )
+
 
 @router.post(
     "/summarize",
@@ -433,79 +329,18 @@ async def summarize_conversation(
         HTTPException 500: Failed to generate summary
         HTTPException 503: Model service unavailable
     """
-    # Fetch conversation messages (I/O bound - run in threadpool)
-    try:
-        messages = await run_in_threadpool(
-            reader.get_messages,
-            chat_id=summary_request.chat_id,
-            limit=summary_request.num_messages,
-        )
-    except Exception as e:
-        logger.error("Failed to fetch messages for chat %s: %s", summary_request.chat_id, e)
-        raise iMessageQueryError(
-            f"Failed to fetch conversation for chat: {summary_request.chat_id}",
-            cause=e,
-        )
-
-    if not messages:
-        from jarvis.errors import ConversationNotFoundError
-        raise ConversationNotFoundError(f"No messages found for chat_id: {summary_request.chat_id}")
-
-    # Build context
-    context_text = format_messages_for_context(messages)
+    messages = await fetch_messages(reader, summary_request.chat_id, summary_request.num_messages)
+    ensure_messages_exist(summary_request.chat_id, messages)
 
     # Determine date range (messages are newest-first)
     newest_date = messages[0].date
     oldest_date = messages[-1].date
 
-    # Get the generator
-    try:
-        generator = await run_in_threadpool(get_warm_generator)
-    except Exception as e:
-        logger.error("Failed to get generator: %s", e)
-        raise ModelError(
-            "Model service unavailable",
-            cause=e,
-        )
-
-    # Generate summary with timeout
-    prompt = build_summary_prompt(context_text, len(messages))
-
-    try:
-        async with asyncio.timeout(get_timeout_generation()):
-            response_text = await run_in_threadpool(
-                generate_summary,
-                generator,
-                prompt,
-                SUMMARY_EXAMPLES,
-            )
-            summary, key_points = parse_summary_response(response_text)
-
-            # Log for traceability
-            from jarvis.reply_service import get_reply_service
-
-            reply_service = get_reply_service()
-            await run_in_threadpool(
-                reply_service.log_custom_generation,
-                chat_id=summary_request.chat_id,
-                incoming_text=f"Summarize {len(messages)} messages",
-                final_prompt=prompt,
-                response_text=response_text,
-                category="summary",
-                metadata={"num_messages": len(messages)},
-            )
-    except TimeoutError:
-        logger.warning("Summary generation timed out after %s seconds", get_timeout_generation())
-        raise HTTPException(
-            status_code=408,
-            detail=f"Request timed out after {get_timeout_generation()} seconds",
-        ) from None
-    except Exception as e:
-        logger.error("Failed to generate summary: %s", e)
-        raise ModelError(
-            "Failed to generate conversation summary",
-            cause=e,
-        )
+    summary, key_points = await generate_summary_payload(
+        summary_request.chat_id,
+        messages,
+        SUMMARY_EXAMPLES,
+    )
 
     return DraftSummaryResponse(
         summary=summary,
@@ -579,71 +414,13 @@ async def generate_smart_reply(
     Returns:
         RoutedReplyResponse with response, type, confidence, and metadata
     """
-    # Fetch conversation messages for context
-    try:
-        messages = await run_in_threadpool(
-            reader.get_messages,
-            chat_id=routed_request.chat_id,
-            limit=routed_request.context_messages,
-        )
-    except Exception as e:
-        logger.error("Failed to fetch messages for chat %s: %s", routed_request.chat_id, e)
-        raise iMessageQueryError(
-            f"Failed to fetch conversation context for chat: {routed_request.chat_id}",
-            cause=e,
-        )
-
-    if not messages:
-        from jarvis.errors import ConversationNotFoundError
-        raise ConversationNotFoundError(f"No messages found for chat_id: {routed_request.chat_id}")
-
-    # Determine the message to respond to
-    last_message = routed_request.last_message
-    if not last_message and messages:
-        # Use the most recent message that's not from us
-        for msg in messages:
-            if not msg.is_from_me and msg.text:
-                last_message = msg.text
-                break
-
-    if not last_message:
-        # Fall back to the most recent message
-        last_message = messages[0].text if messages[0].text else ""
-
-    # Build thread context (reverse chronological -> chronological)
-    thread_context = [msg.text for msg in reversed(messages) if msg.text and len(msg.text) > 0][
-        -10:
-    ]  # Last 10 messages
-
-    # Build context info for response
-    participants = list({m.sender_name or m.sender for m in messages if not m.is_from_me})
-    context_info = ContextInfo(
-        num_messages=len(messages),
-        participants=participants,
-        last_message=last_message,
+    messages = await fetch_messages(reader, routed_request.chat_id, routed_request.context_messages)
+    ensure_messages_exist(routed_request.chat_id, messages)
+    last_message, thread_context, context_info = build_smart_reply_input(
+        messages=messages,
+        requested_last_message=routed_request.last_message,
     )
-
-    # Route the reply with timeout
-    try:
-        async with asyncio.timeout(get_timeout_generation()):
-            result = await run_in_threadpool(
-                route_reply_sync,
-                routed_request.chat_id,
-                last_message,
-                thread_context,
-            )
-    except TimeoutError:
-        logger.warning("Routed reply timed out after %s seconds", get_timeout_generation())
-        raise HTTPException(
-            status_code=408,
-            detail=f"Request timed out after {get_timeout_generation()} seconds",
-        ) from None
-    except Exception as e:
-        logger.error("Failed to route reply: %s", e)
-        raise ModelError(
-            "Failed to generate smart reply",
-            cause=e,
-        )
+    result = await route_smart_reply(routed_request.chat_id, last_message, thread_context)
 
     return RoutedReplyResponse(
         response=result["response"],

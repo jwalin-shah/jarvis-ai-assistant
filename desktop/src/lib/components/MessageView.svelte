@@ -663,7 +663,13 @@
             />
           </svg>
         {:else}
-          {(conversationsStore.selectedConversation.display_name || formatParticipant(conversationsStore.selectedConversation.participants[0]) || '?').charAt(0).toUpperCase()}
+          {(
+            conversationsStore.selectedConversation.display_name ||
+            formatParticipant(conversationsStore.selectedConversation.participants[0] ?? '') ||
+            '?'
+          )
+            .charAt(0)
+            .toUpperCase()}
         {/if}
       </div>
       <div class="info">

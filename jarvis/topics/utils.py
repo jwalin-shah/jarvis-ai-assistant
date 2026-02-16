@@ -75,7 +75,7 @@ def get_embeddings_for_segmentation(
 
     embedder = get_embedder()
     n = len(messages)
-    embeddings = [None] * n
+    embeddings: list[Any] = [None] * n
 
     # 1. Use pre-fetched if available
     if pre_fetched_embeddings:
@@ -105,7 +105,7 @@ def get_embeddings_for_segmentation(
             for idx, text in zip(to_encode_indices, to_encode_texts):
                 try:
                     embeddings[idx] = embedder.encode(text, normalize=True)
-                except Exception:
+                except Exception:  # nosec B110
                     pass
 
     return embeddings

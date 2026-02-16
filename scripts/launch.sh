@@ -170,7 +170,7 @@ start_socket_server() {
         kill_port_process "$SOCKET_PORT"
     fi
     cd "$PROJECT_ROOT"
-    uv run python -m jarvis.socket_server --no-preload &
+    uv run python -m jarvis.interfaces.desktop &
     SOCKET_PID=$!
     log_info "Socket server started (PID: $SOCKET_PID)"
 

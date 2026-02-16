@@ -18,7 +18,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -351,7 +351,7 @@ class MessagePriorityScorer:
             norm = np.linalg.norm(embedding)
             if norm > 0:
                 embedding = embedding / norm
-            return embedding
+            return cast(np.ndarray | None, embedding)
         except (ValueError, TypeError) as e:
             logger.debug("Text embedding failed: %s", e)
         except (RuntimeError, OSError) as e:

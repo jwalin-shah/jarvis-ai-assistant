@@ -59,7 +59,7 @@ class FactDeduplicator:
                 chunk = hashes[i : i + 900]
                 placeholders = ",".join(["?"] * len(chunk))
                 rows = conn.execute(
-                    f"SELECT hash, embedding FROM embedding_cache WHERE hash IN ({placeholders})",
+                    f"SELECT hash, embedding FROM embedding_cache WHERE hash IN ({placeholders})",  # nosec B608
                     chunk,
                 ).fetchall()
                 for h, blob in rows:
@@ -144,7 +144,7 @@ class FactDeduplicator:
         texts = [f.to_searchable_text() for f in compact_facts]
         cached_map = self._get_cached_embeddings(texts)
 
-        embeddings = [None] * len(texts)
+        embeddings: list[Any] = [None] * len(texts)
         missing_indices = []
         missing_texts = []
 

@@ -448,16 +448,16 @@ class ReportGenerator:
                 ],
             )
             writer.writeheader()
-            for agg in weekly_aggs:
+            for wagg in weekly_aggs:
                 writer.writerow(
                     {
-                        "week": agg.week,
-                        "start_date": agg.start_date,
-                        "end_date": agg.end_date,
-                        "total_messages": agg.total_messages,
-                        "sent": agg.sent_count,
-                        "received": agg.received_count,
-                        "active_contacts": agg.active_contacts,
+                        "week": wagg.week,
+                        "start_date": wagg.start_date,
+                        "end_date": wagg.end_date,
+                        "total_messages": wagg.total_messages,
+                        "sent": wagg.sent_count,
+                        "received": wagg.received_count,
+                        "active_contacts": wagg.active_contacts,
                     }
                 )
             exports["weekly_analytics.csv"] = buffer.getvalue()
@@ -477,15 +477,15 @@ class ReportGenerator:
                 ],
             )
             writer.writeheader()
-            for agg in monthly_aggs:
+            for magg in monthly_aggs:
                 writer.writerow(
                     {
-                        "month": agg.month,
-                        "total_messages": agg.total_messages,
-                        "sent": agg.sent_count,
-                        "received": agg.received_count,
-                        "active_contacts": agg.active_contacts,
-                        "avg_per_day": agg.avg_messages_per_day,
+                        "month": magg.month,
+                        "total_messages": magg.total_messages,
+                        "sent": magg.sent_count,
+                        "received": magg.received_count,
+                        "active_contacts": magg.active_contacts,
+                        "avg_per_day": magg.avg_messages_per_day,
                     }
                 )
             exports["monthly_analytics.csv"] = buffer.getvalue()

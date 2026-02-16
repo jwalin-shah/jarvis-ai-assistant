@@ -446,7 +446,8 @@ class MLXGenerator:
                 if item is _STREAM_DONE:
                     break
 
-                yield item
+                if isinstance(item, dict):
+                    yield item
 
             gen_thread.join(timeout=5.0)
 

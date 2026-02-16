@@ -332,7 +332,7 @@ class MigrationTester:
 
             for table in tables:
                 try:
-                    cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
+                    cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")  # nosec B608
                     counts[table] = cursor.fetchone()[0]
                 except sqlite3.Error:
                     counts[table] = -1

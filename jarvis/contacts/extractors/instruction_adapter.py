@@ -6,10 +6,10 @@ Maps structured Facts (Subject, Predicate, Value) to Candidates (span_text, labe
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from jarvis.contacts.extractors.base import ExtractedCandidate, ExtractorAdapter, register_extractor
-
 from jarvis.contacts.instruction_extractor import get_instruction_extractor
 from jarvis.topics.topic_segmenter import TopicSegment
 
@@ -47,11 +47,12 @@ class InstructionExtractorAdapter(ExtractorAdapter):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__("instruction", config)
+        config = config or {}
         self.model_tier = config.get("model_tier", "1.2b")
         self.extractor = get_instruction_extractor(tier=self.model_tier)
 
     def extract_from_text(
-        self, text: str, message_id: int, is_from_me: bool = False, **kwargs
+        self, text: str, message_id: int, is_from_me: bool = False, **kwargs: Any
     ) -> list[ExtractedCandidate]:
         """Extract facts from a single message (treated as a 1-msg segment)."""
         if not text:
@@ -59,19 +60,20 @@ class InstructionExtractorAdapter(ExtractorAdapter):
 
         # Mock a message object
         class MockMessage:
-            def __init__(self, text, is_from_me):
+            def __init__(self, text: str, is_from_me: bool) -> None:
                 self.text = text
                 self.is_from_me = is_from_me
                 self.sender_name = "User" if is_from_me else "Contact"
                 self.id = message_id
 
         # Wrap in a segment
+        now = datetime.now()
         segment = TopicSegment(
             chat_id="eval_chat",
             contact_id="eval_contact",
             messages=[MockMessage(text, is_from_me)],
-            start_time=0,
-            end_time=0,
+            start_time=now,
+            end_time=now,
             message_count=1,
             segment_id=f"eval_{message_id}",
             text=text,

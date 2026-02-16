@@ -456,7 +456,7 @@ class RoutingMetricsStore:
                 where_clause = "WHERE timestamp >= ?" if since is not None else ""
                 where_params = [since] if since is not None else []
                 count_row = conn.execute(
-                    f"SELECT COUNT(*) as cnt FROM routing_metrics {where_clause}",
+                    f"SELECT COUNT(*) as cnt FROM routing_metrics {where_clause}",  # nosec B608
                     where_params,
                 ).fetchone()
                 total_count = count_row["cnt"] if count_row else 0

@@ -115,10 +115,7 @@ class ConsecutiveErrorTracker:
         if self._consecutive >= self.max_consecutive:
             # Exponential backoff: base_delay * factor^(consecutive - threshold)
             exponent = self._consecutive - self.max_consecutive + 1
-            delay = min(
-                self.base_delay * (self.backoff_factor ** exponent),
-                self.max_delay
-            )
+            delay = min(self.base_delay * (self.backoff_factor**exponent), self.max_delay)
         else:
             delay = self.base_delay
 
@@ -126,8 +123,7 @@ class ConsecutiveErrorTracker:
 
         logger.log(
             log_level,
-            f"{self.name}: Consecutive error {self._consecutive}, "
-            f"backing off for {delay:.1f}s"
+            f"{self.name}: Consecutive error {self._consecutive}, backing off for {delay:.1f}s",
         )
 
         return delay
@@ -190,6 +186,7 @@ class AsyncConsecutiveErrorTracker:
     async def sleep(self, delay: float | None = None) -> None:
         """Async sleep for the specified or current delay."""
         import asyncio
+
         await asyncio.sleep(delay if delay is not None else self._tracker.get_delay())
 
 
@@ -263,9 +260,7 @@ class CircuitBreaker:
 
         if self._failures >= self.failure_threshold:
             if self._state != "OPEN":
-                logger.warning(
-                    f"{self.name}: Circuit OPEN after {self._failures} failures"
-                )
+                logger.warning(f"{self.name}: Circuit OPEN after {self._failures} failures")
                 self._state = "OPEN"
 
     def __enter__(self) -> CircuitBreaker:
@@ -357,7 +352,7 @@ def with_retry(
                         if on_retry:
                             try:
                                 on_retry(attempt + 1, e)
-                            except Exception:
+                            except Exception:  # nosec B110
                                 pass
                         delay = tracker.on_error()
                         time.sleep(delay)

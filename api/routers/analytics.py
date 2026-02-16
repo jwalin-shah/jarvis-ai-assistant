@@ -32,7 +32,7 @@ from api.services.analytics_service import (
     fetch_trends_data,
 )
 from integrations.imessage import ChatDBReader
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 from jarvis.metrics import get_template_analytics
 from models.templates import _load_templates
 
@@ -81,6 +81,7 @@ class TemplateInfo(BaseModel):
     name: str
     pattern_count: int
     sample_patterns: list[str]
+
 
 # Cache for analytics data with 5-minute TTL
 _analytics_cache: TTLCache | None = None
@@ -351,7 +352,8 @@ async def get_contact_stats(
     )
 
     if result is None:
-        from jarvis.errors import GraphContactNotFoundError
+        from jarvis.core.exceptions import GraphContactNotFoundError
+
         raise GraphContactNotFoundError(
             f"No messages found for contact {chat_id}", contact_id=chat_id
         )

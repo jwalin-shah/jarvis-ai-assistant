@@ -33,7 +33,7 @@ def main() -> None:
     parser.add_argument(
         "--resume-partial",
         action="store_true",
-        help="Resume contacts with partial window progress (skips fully completed)"
+        help="Resume contacts with partial window progress (skips fully completed)",
     )
     parser.add_argument(
         "--force", action="store_true", help="Force re-processing of already completed chats"
@@ -140,8 +140,7 @@ def main() -> None:
         skipped = min(args.offset, len(active_chats))
         active_chats = active_chats[args.offset :]
         print(
-            f"Skipped first {skipped} chats (offset={args.offset}), "
-            f"{len(active_chats)} remaining"
+            f"Skipped first {skipped} chats (offset={args.offset}), {len(active_chats)} remaining"
         )
 
     if args.limit > 0:
@@ -194,10 +193,7 @@ def main() -> None:
         i, conv = chat_data
         chat_id = conv.chat_id
         contact_name = _resolve_display_name(chat_id, conv.display_name)
-        print(
-            f"\n[{i + 1}/{len(active_chats)}] Processing {contact_name} "
-            f"({chat_id[:50]})..."
-        )
+        print(f"\n[{i + 1}/{len(active_chats)}] Processing {contact_name} ({chat_id[:50]})...")
 
         try:
             with ChatDBReader() as reader:
@@ -221,7 +217,6 @@ def main() -> None:
             # Step 2: Unified Pipeline (Segment + Embed + Extract Facts)
 
             if not args.skip_segments or not args.skip_facts:
-
                 from jarvis.contacts.fact_storage import log_pass1_claims, save_facts
                 from jarvis.contacts.instruction_extractor import get_instruction_extractor
                 from jarvis.topics.segment_pipeline import process_segments
@@ -347,9 +342,7 @@ def main() -> None:
                         total_raw_claims = 0
                         windows_actually_processed = 0
 
-                        for w_idx, extraction_window in enumerate(
-                            extraction_windows, start=1
-                        ):
+                        for w_idx, extraction_window in enumerate(extraction_windows, start=1):
                             # Skip already-completed windows (resume capability)
                             if w_idx in completed_windows:
                                 continue

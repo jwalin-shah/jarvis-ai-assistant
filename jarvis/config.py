@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -673,10 +674,8 @@ def _migrate_v8_to_v9(data: dict[str, Any]) -> dict[str, Any]:
         del embedding["mlx_service_url"]
 
     # Update socket path from /tmp to ~/.jarvis for security
-    if (
-        "mlx_service_socket" in embedding
-        and embedding["mlx_service_socket"] == "/tmp/jarvis-embed.sock"
-    ):
+    legacy_tmp_socket = str(Path(tempfile.gettempdir()) / "jarvis-embed.sock")
+    if "mlx_service_socket" in embedding and embedding["mlx_service_socket"] == legacy_tmp_socket:
         new_socket_path = str(Path.home() / ".jarvis" / "jarvis-embed.sock")
         logger.info(f"Migrating socket path from /tmp to {new_socket_path}")
         embedding["mlx_service_socket"] = new_socket_path

@@ -18,7 +18,7 @@
   });
 
   function reconnect() {
-    jarvis.reconnect();
+    void jarvis.connect();
   }
 
   function getStatusIcon(state: string) {
@@ -28,7 +28,6 @@
       case 'connecting':
         return '⏳';
       case 'disconnected':
-      case 'error':
         return '❌';
       default:
         return '⚪';
@@ -42,7 +41,6 @@
       case 'connecting':
         return 'var(--color-warning)';
       case 'disconnected':
-      case 'error':
         return 'var(--color-error)';
       default:
         return 'var(--text-secondary)';
@@ -58,9 +56,6 @@
     <span class="status-text">
       Socket {connectionInfo.state}
     </span>
-    {#if connectionInfo.latencyMs > 0}
-      <span class="latency">({connectionInfo.latencyMs}ms)</span>
-    {/if}
   </button>
 
   {#if showDetails}
@@ -76,15 +71,9 @@
         <span class="detail-value">{connectionInfo.transport}</span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">Latency:</span>
-        <span class="detail-value">{connectionInfo.latencyMs}ms</span>
+        <span class="detail-label">Fallback:</span>
+        <span class="detail-value">{connectionInfo.isFallback ? 'yes' : 'no'}</span>
       </div>
-      {#if connectionInfo.lastError}
-        <div class="detail-row error">
-          <span class="detail-label">Last Error:</span>
-          <span class="detail-value">{connectionInfo.lastError}</span>
-        </div>
-      {/if}
 
       {#if connectionInfo.state !== 'connected'}
         <button class="reconnect-btn" onclick={reconnect}>
@@ -97,8 +86,6 @@
           <p>Socket disconnected. Click reconnect or restart the app.</p>
         {:else if connectionInfo.state === 'connecting'}
           <p>Connecting to socket server...</p>
-        {:else if connectionInfo.state === 'error'}
-          <p>Connection error. Check that the backend is running.</p>
         {/if}
       </div>
     </div>

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from jarvis.handlers.base import BaseHandler, rpc_handler
 
@@ -25,7 +25,7 @@ class ContactHandler(BaseHandler):
         from jarvis.contacts.resolver import get_contact_resolver
 
         resolver = get_contact_resolver()
-        return resolver.resolve_batch(identifiers)
+        return cast(dict[str, str | None], resolver.resolve_batch(identifiers))
 
     @rpc_handler("Failed to get contacts")
     async def _get_contacts(self, limit: int = 100, offset: int = 0) -> dict[str, Any]:

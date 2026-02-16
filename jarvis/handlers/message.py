@@ -146,6 +146,7 @@ class MessageHandler(BaseHandler):
                 return cached_draft
 
         from jarvis.model_warmer import get_model_warmer
+
         get_model_warmer().touch()
 
         reply_service = self.server.get_reply_service()
@@ -160,6 +161,7 @@ class MessageHandler(BaseHandler):
 
         # Get last incoming message
         from integrations.imessage import ChatDBReader
+
         with ChatDBReader() as reader:
             messages = reader.get_messages(chat_id, limit=context_messages)
 
@@ -192,10 +194,11 @@ class MessageHandler(BaseHandler):
         if prefetch_manager:
             self.server.pause_prefetch()
         try:
-            from jarvis.router import get_reply_router
-            router = get_reply_router()
-            result = await asyncio.to_thread(
-                router.route,
+            from jarvis.reply_service import get_reply_service
+
+            reply_service = get_reply_service()
+            result: dict[str, Any] = await asyncio.to_thread(
+                reply_service.route_legacy,
                 incoming=last_incoming,
                 thread=context[-10:],
                 chat_id=chat_id,
@@ -284,9 +287,11 @@ class MessageHandler(BaseHandler):
             raise JsonRpcError(INVALID_PARAMS, "No messages found")
 
         from jarvis.model_warmer import get_model_warmer
+
         get_model_warmer().touch()
 
         from models.loader import get_model
+
         model = get_model()
         if not model:
             raise JsonRpcError(INTERNAL_ERROR, "Model not available")
@@ -306,12 +311,12 @@ class MessageHandler(BaseHandler):
                 request_id=_request_id,
             )
 
-        def _summarize_sync():
+        def _summarize_sync() -> Any:
             if not model.is_loaded():
                 model.load()
             return model.generate_sync(prompt, max_tokens=300)
 
-        result = await asyncio.to_thread(_summarize_sync)
+        result: Any = await asyncio.to_thread(_summarize_sync)
         response_text = result.text
 
         lines = response_text.strip().split("\n")
@@ -391,23 +396,22 @@ class MessageHandler(BaseHandler):
         num_suggestions: int = 3,
     ) -> dict[str, Any]:
         """Get smart reply suggestions."""
-        from jarvis.router import get_reply_router
+        from jarvis.reply_service import get_reply_service
 
-        router = get_reply_router()
-        result = await asyncio.to_thread(router.route, incoming=last_message)
+        reply_service = get_reply_service()
+        result = await asyncio.to_thread(reply_service.route_legacy, incoming=last_message)
         return result
 
     @rpc_handler("Failed to list conversations")
     async def _list_conversations(
         self,
         limit: int = 50,
-        offset: int = 0,
     ) -> dict[str, Any]:
         """List recent iMessage conversations."""
         from integrations.imessage import ChatDBReader
 
         with ChatDBReader() as reader:
-            chats = reader.get_recent_chats(limit=limit, offset=offset)
+            chats = reader.get_conversations(limit=limit)
 
         return {
             "conversations": [

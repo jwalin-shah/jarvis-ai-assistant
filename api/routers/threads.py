@@ -22,7 +22,7 @@ from api.schemas import (
     ThreadResponse,
 )
 from integrations.imessage import ChatDBReader
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 from jarvis.threading import (
     ThreadAnalyzer,
     ThreadingConfig,

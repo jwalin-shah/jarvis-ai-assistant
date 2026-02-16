@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
-from hashlib import sha1
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ def segment_fingerprint(segment: TopicSegment) -> str:
     """Stable fingerprint used for deduplicating fact extraction work."""
     text = get_segment_text(segment)
     normalized = " ".join(text.lower().split())
-    return sha1(normalized.encode("utf-8")).hexdigest()
+    return hashlib.sha1(normalized.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def get_segment_text(segment: TopicSegment) -> str:
@@ -73,9 +73,7 @@ def collect_fact_candidates(
         if not segment_facts:
             continue
         fast_gated_facts = [
-            fact
-            for fact in segment_facts
-            if should_verify_fact_value(getattr(fact, "value", ""))
+            fact for fact in segment_facts if should_verify_fact_value(getattr(fact, "value", ""))
         ]
         if not fast_gated_facts:
             continue

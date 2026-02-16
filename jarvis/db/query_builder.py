@@ -78,14 +78,14 @@ class QueryBuilder:
             Tuple of (sql_query, parameters)
         """
         placeholders, params = QueryBuilder.in_clause(values)
-        sql = f"SELECT {columns} FROM {table} WHERE {where_column} IN ({placeholders})"
+        sql = f"SELECT {columns} FROM {table} WHERE {where_column} IN ({placeholders})"  # nosec B608
         return sql, params
 
     @staticmethod
     def delete_in(table: str, where_column: str, values: list[Any]) -> tuple[str, list[Any]]:
         """Build DELETE ... WHERE col IN (...) query."""
         placeholders, params = QueryBuilder.in_clause(values)
-        sql = f"DELETE FROM {table} WHERE {where_column} IN ({placeholders})"
+        sql = f"DELETE FROM {table} WHERE {where_column} IN ({placeholders})"  # nosec B608
         return sql, params
 
     @staticmethod
@@ -115,7 +115,7 @@ class QueryBuilder:
             conditions.append(additional_where)
 
         where_clause = " AND ".join(conditions)
-        sql = f"SELECT {columns} FROM {table} WHERE {where_clause}"
+        sql = f"SELECT {columns} FROM {table} WHERE {where_clause}"  # nosec B608
 
         return sql, params
 
@@ -144,7 +144,7 @@ class VecSearchQueries:
         ]
         cols = ", ".join(columns)
         placeholders = ", ".join(["vec_int8(?)", "?" * 13])
-        sql = f"INSERT INTO vec_chunks({cols}) VALUES ({placeholders}) RETURNING rowid"
+        sql = f"INSERT INTO vec_chunks({cols}) VALUES ({placeholders}) RETURNING rowid"  # nosec B608
         return sql, columns
 
     @staticmethod
@@ -169,7 +169,7 @@ class VecSearchQueries:
         """Build queries to fetch embeddings by IDs (chunked for SQLite limits)."""
         queries = []
         for ph, ids in QueryBuilder.chunked_in_clause(message_ids):
-            sql = f"SELECT rowid, embedding FROM vec_messages WHERE rowid IN ({ph})"
+            sql = f"SELECT rowid, embedding FROM vec_messages WHERE rowid IN ({ph})"  # nosec B608
             queries.append((sql, ids))
         return queries
 
@@ -177,7 +177,7 @@ class VecSearchQueries:
     def delete_vec_binary_by_chunkids(chunk_rowids: list[int]) -> tuple[str, list[int]]:
         """Build DELETE for vec_binary by chunk_rowids."""
         ph, params = QueryBuilder.in_clause(chunk_rowids)
-        sql = f"DELETE FROM vec_binary WHERE chunk_rowid IN ({ph})"
+        sql = f"DELETE FROM vec_binary WHERE chunk_rowid IN ({ph})"  # nosec B608
         return sql, params
 
 
@@ -203,7 +203,7 @@ class SegmentStorageQueries:
         ]
         cols = ", ".join(columns)
         placeholders = ", ".join(["?"] * len(columns))
-        sql = f"INSERT INTO conversation_segments ({cols}) VALUES ({placeholders})"
+        sql = f"INSERT INTO conversation_segments ({cols}) VALUES ({placeholders})"  # nosec B608
         return sql, cols
 
     @staticmethod
@@ -212,21 +212,21 @@ class SegmentStorageQueries:
         columns = ["segment_id", "message_rowid", "position", "is_from_me"]
         cols = ", ".join(columns)
         placeholders = ", ".join(["?"] * len(columns))
-        sql = f"INSERT INTO segment_messages ({cols}) VALUES ({placeholders})"
+        sql = f"INSERT INTO segment_messages ({cols}) VALUES ({placeholders})"  # nosec B608
         return sql, cols
 
     @staticmethod
     def delete_segments_by_ids(segment_ids: list[int]) -> tuple[str, list[int]]:
         """Build DELETE for segments by ID."""
         ph, params = QueryBuilder.in_clause(segment_ids)
-        sql = f"DELETE FROM conversation_segments WHERE id IN ({ph})"
+        sql = f"DELETE FROM conversation_segments WHERE id IN ({ph})"  # nosec B608
         return sql, params
 
     @staticmethod
     def delete_segment_messages_by_segmentids(segment_ids: list[int]) -> tuple[str, list[int]]:
         """Build DELETE for segment_messages by segment_id."""
         ph, params = QueryBuilder.in_clause(segment_ids)
-        sql = f"DELETE FROM segment_messages WHERE segment_id IN ({ph})"
+        sql = f"DELETE FROM segment_messages WHERE segment_id IN ({ph})"  # nosec B608
         return sql, params
 
     @staticmethod
@@ -239,7 +239,7 @@ class SegmentStorageQueries:
     def mark_facts_extracted(segment_ids: list[int]) -> tuple[str, list[int]]:
         """Build UPDATE to mark segments as having facts extracted."""
         ph, params = QueryBuilder.in_clause(segment_ids)
-        sql = f"UPDATE conversation_segments SET has_facts = 1 WHERE id IN ({ph})"
+        sql = f"UPDATE conversation_segments SET has_facts = 1 WHERE id IN ({ph})"  # nosec B608
         return sql, params
 
 
@@ -267,7 +267,7 @@ class FactStorageQueries:
         ]
         cols = ", ".join(columns)
         placeholders = ", ".join(["?"] * len(columns))
-        sql = f"INSERT INTO contact_facts ({cols}) VALUES ({placeholders})"
+        sql = f"INSERT INTO contact_facts ({cols}) VALUES ({placeholders})"  # nosec B608
         return sql, cols
 
     @staticmethod

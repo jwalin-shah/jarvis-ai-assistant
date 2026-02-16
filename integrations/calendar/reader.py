@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from contracts.calendar import Calendar, CalendarEvent
-from jarvis.errors import CalendarAccessError
+from jarvis.core.exceptions import CalendarAccessError
 
 logger = logging.getLogger(__name__)
 

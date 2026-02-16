@@ -6,6 +6,7 @@ All write operations use batch inserts (executemany) to avoid N+1 patterns.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -187,7 +188,7 @@ def delete_segments_for_chat(conn: sqlite3.Connection, chat_id: str) -> int:
 
     # Delete child rows first
     conn.execute(
-        f"DELETE FROM segment_messages WHERE segment_id IN ({placeholders})",  # noqa: S608
+        f"DELETE FROM segment_messages WHERE segment_id IN ({placeholders})",  # noqa: S608  # nosec B608
         seg_ids,
     )
 
@@ -234,15 +235,14 @@ def get_segments_for_chat(
 
     # Batch fetch all message memberships
     seg_ids = [r["id"] for r in seg_rows]
-    placeholders = ",".join("?" * len(seg_ids))
     msg_rows = conn.execute(
-        f"""
+        """
         SELECT segment_id, message_rowid, position, is_from_me
         FROM segment_messages
-        WHERE segment_id IN ({placeholders})
+        WHERE segment_id IN (SELECT value FROM json_each(?))
         ORDER BY segment_id, position
-        """,  # noqa: S608
-        seg_ids,
+        """,
+        (json.dumps(seg_ids),),
     ).fetchall()
 
     # Group messages by segment_id

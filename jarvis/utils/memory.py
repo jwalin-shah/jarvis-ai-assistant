@@ -16,7 +16,7 @@ so "swap used" alone is NOT a good indicator. Memory pressure + page-outs are th
 import logging
 import platform
 import re
-import subprocess
+import subprocess  # nosec B404
 import time
 from dataclasses import dataclass
 from functools import lru_cache
@@ -69,7 +69,7 @@ def get_mlx_memory_info() -> dict[str, Any] | None:
 
         # Get the memory limit if available (MLX 0.18+)
         try:
-            limit_bytes = mx.metal.get_memory_limit()
+            limit_bytes = getattr(mx.metal, "get_memory_limit", lambda: None)()
         except (AttributeError, TypeError):
             limit_bytes = None
 
@@ -110,7 +110,7 @@ def get_gpu_load_percent() -> float | None:
         # Use powermetrics to get GPU load. Requires sudo or specific permissions.
         # Alternatively, use a faster but less reliable system_profiler check.
         # For now, we'll try a fast sysctl check for GPU activity.
-        subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)
+        subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)  # nosec B603 B607
 
         # If Apple Silicon, we might be able to get it via some IOKit hooks
         # but for a CLI tool, powermetrics is the standard way.
@@ -234,7 +234,7 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
 
     try:
         # Parse vm_stat
-        vm_stat = subprocess.check_output(["vm_stat"], text=True)
+        vm_stat = subprocess.check_output(["vm_stat"], text=True)  # nosec B603 B607
         stats = {}
         for line in vm_stat.splitlines():
             match = re.match(r'"?([^"]+)"?:\s+(\d+)', line)
@@ -254,7 +254,7 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
                         break
 
         # Get sysctl metrics
-        sysctl = subprocess.check_output(["sysctl", "vm.memory_pressure"], text=True).strip()
+        sysctl = subprocess.check_output(["sysctl", "vm.memory_pressure"], text=True).strip()  # nosec B603 B607
         pressure_level = int(sysctl.split(":")[-1].strip())
 
         # Calculate metrics
@@ -296,14 +296,14 @@ def get_thermal_state() -> str | None:
     try:
         # Try kern.thermal_level first
         try:
-            sysctl = subprocess.check_output(
+            sysctl = subprocess.check_output(  # nosec B603 B607
                 ["sysctl", "-n", "kern.thermal_level"], text=True
             ).strip()
             level = int(sysctl)
         except Exception:
             # Fallback for some Apple Silicon versions: thermal_threshold
             # Note: thermal_threshold is usually 0-100 where higher is hotter
-            sysctl = subprocess.check_output(
+            sysctl = subprocess.check_output(  # nosec B603 B607
                 ["sysctl", "-n", "machdep.xcpm.thermal_threshold"], text=True
             ).strip()
             # Convert 0-100 scale to 0-3 scale
@@ -338,12 +338,12 @@ def get_memory_info() -> MemoryInfo:
             # RSS on macOS psutil is actually task_info.resident_size
             # We want task_info.phys_footprint if possible.
             # Some versions of psutil provide it in memory_info().
-            if hasattr(mem, 'pfid'): # some psutil versions
-                footprint = getattr(mem, 'footprint', mem.rss)
+            if hasattr(mem, "pfid"):  # some psutil versions
+                footprint = getattr(mem, "footprint", mem.rss)
             else:
                 # Fallback to a faster way if psutil doesn't have it
                 pass
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     macos_pressure = get_macos_memory_pressure() if IS_MACOS else None

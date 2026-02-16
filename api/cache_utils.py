@@ -8,7 +8,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 
 
 def get_or_create_ttl_cache(
@@ -76,9 +76,7 @@ class CacheManager:
         if name not in self._caches:
             with self._global_lock:
                 if name not in self._caches:
-                    self._caches[name] = TTLCache(
-                        ttl_seconds=ttl_seconds, maxsize=maxsize
-                    )
+                    self._caches[name] = TTLCache(ttl_seconds=ttl_seconds, maxsize=maxsize)
                     self._locks[name] = threading.Lock()
         return self._caches[name]
 
@@ -112,10 +110,11 @@ class CacheManager:
         """
         stats = {}
         for name, cache in self._caches.items():
+            cache_stats = cache.stats()
             stats[name] = {
-                "size": len(cache),
-                "maxsize": cache.maxsize,
-                "ttl_seconds": cache.ttl_seconds,
+                "size": cache_stats["size"],
+                "maxsize": cache_stats["maxsize"],
+                "ttl_seconds": cache_stats["ttl_seconds"],
             }
         return stats
 

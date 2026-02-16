@@ -27,7 +27,7 @@ Usage:
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import spacy
@@ -300,7 +300,7 @@ class CategoryFeatureExtractor:
     Parse spaCy doc once, reuse for all feature extraction methods.
     """
 
-    def __init__(self, nlp: spacy.Language | None = None) -> None:
+    def __init__(self, nlp: Any | None = None) -> None:
         """Initialize feature extractor.
 
         Args:
@@ -310,7 +310,7 @@ class CategoryFeatureExtractor:
         self._spacy_available: bool | None = None  # None = not checked yet
 
     @property
-    def nlp(self) -> spacy.Language:
+    def nlp(self) -> Any:
         """Lazy-load spaCy model."""
         if self._nlp is None:
             if self._spacy_available is False:
@@ -890,7 +890,7 @@ class CategoryFeatureExtractor:
             profile = get_contact_profile(chat_id)
             if profile:
                 return np.array([profile.formality_score], dtype=np.float32)
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
         return np.array([0.5], dtype=np.float32)

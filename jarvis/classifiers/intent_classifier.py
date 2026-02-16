@@ -13,7 +13,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -21,6 +21,8 @@ import numpy as np
 from huggingface_hub import snapshot_download
 from safetensors import safe_open
 from tokenizers import Tokenizer
+
+HF_MODEL_REVISION = os.getenv("JARVIS_HF_MODEL_REVISION", "main")
 
 ZERO_SHOT_LABEL_DESCRIPTIONS: dict[str, str] = {
     "no_reply_ack": "acknowledgment or reaction that does not need a reply",
@@ -264,30 +266,30 @@ class MLXPromptIntentClassifier:
         )
 
 
-class _MLXDistilEmbeddings(nn.Module):
-    def __init__(self, cfg: dict) -> None:
+class _MLXDistilEmbeddings(nn.Module):  # type: ignore[name-defined,misc]
+    def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
-        self.word_embeddings = nn.Embedding(cfg["vocab_size"], cfg["dim"])
-        self.position_embeddings = nn.Embedding(cfg["max_position_embeddings"], cfg["dim"])
-        self.LayerNorm = nn.LayerNorm(cfg["dim"], eps=1e-12)
+        self.word_embeddings = nn.Embedding(cfg["vocab_size"], cfg["dim"])  # type: ignore[attr-defined]
+        self.position_embeddings = nn.Embedding(cfg["max_position_embeddings"], cfg["dim"])  # type: ignore[attr-defined]
+        self.LayerNorm = nn.LayerNorm(cfg["dim"], eps=1e-12)  # type: ignore[attr-defined]
 
     def __call__(self, input_ids: mx.array) -> mx.array:
         seq_len = input_ids.shape[1]
         pos = mx.arange(seq_len)
         out = self.word_embeddings(input_ids) + self.position_embeddings(pos)
-        return self.LayerNorm(out)
+        return cast(mx.array, self.LayerNorm(out))
 
 
-class _MLXDistilAttention(nn.Module):
-    def __init__(self, cfg: dict) -> None:
+class _MLXDistilAttention(nn.Module):  # type: ignore[name-defined,misc]
+    def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         dim = cfg["dim"]
         self.n_heads = cfg["n_heads"]
         self.head_dim = dim // self.n_heads
-        self.q_lin = nn.Linear(dim, dim)
-        self.k_lin = nn.Linear(dim, dim)
-        self.v_lin = nn.Linear(dim, dim)
-        self.out_lin = nn.Linear(dim, dim)
+        self.q_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
+        self.k_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
+        self.v_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
+        self.out_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
 
     def __call__(self, x: mx.array, attention_mask: mx.array | None) -> mx.array:
         bsz, seq, dim = x.shape
@@ -301,29 +303,29 @@ class _MLXDistilAttention(nn.Module):
             scores = scores + mask
         attn = mx.softmax(scores, axis=-1)
         out = (attn @ v).transpose(0, 2, 1, 3).reshape(bsz, seq, dim)
-        return self.out_lin(out)
+        return cast(mx.array, self.out_lin(out))
 
 
-class _MLXDistilLayer(nn.Module):
-    def __init__(self, cfg: dict) -> None:
+class _MLXDistilLayer(nn.Module):  # type: ignore[name-defined,misc]
+    def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         dim = cfg["dim"]
         hidden_dim = cfg["hidden_dim"]
         self.attention = _MLXDistilAttention(cfg)
-        self.sa_layer_norm = nn.LayerNorm(dim, eps=1e-12)
-        self.ffn = nn.Module()
-        self.ffn.lin1 = nn.Linear(dim, hidden_dim)
-        self.ffn.lin2 = nn.Linear(hidden_dim, dim)
-        self.output_layer_norm = nn.LayerNorm(dim, eps=1e-12)
+        self.sa_layer_norm = nn.LayerNorm(dim, eps=1e-12)  # type: ignore[attr-defined]
+        self.ffn = nn.Module()  # type: ignore[attr-defined]
+        self.ffn.lin1 = nn.Linear(dim, hidden_dim)  # type: ignore[attr-defined]
+        self.ffn.lin2 = nn.Linear(hidden_dim, dim)  # type: ignore[attr-defined]
+        self.output_layer_norm = nn.LayerNorm(dim, eps=1e-12)  # type: ignore[attr-defined]
 
     def __call__(self, x: mx.array, attention_mask: mx.array | None) -> mx.array:
         x = self.sa_layer_norm(x + self.attention(x, attention_mask))
-        ff = self.ffn.lin2(nn.gelu(self.ffn.lin1(x)))
-        return self.output_layer_norm(x + ff)
+        ff = self.ffn.lin2(nn.gelu(self.ffn.lin1(x)))  # type: ignore[attr-defined]
+        return cast(mx.array, self.output_layer_norm(x + ff))
 
 
-class _MLXDistilTransformer(nn.Module):
-    def __init__(self, cfg: dict) -> None:
+class _MLXDistilTransformer(nn.Module):  # type: ignore[name-defined,misc]
+    def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         self.layer = [_MLXDistilLayer(cfg) for _ in range(cfg["n_layers"])]
 
@@ -333,8 +335,8 @@ class _MLXDistilTransformer(nn.Module):
         return x
 
 
-class _MLXDistilBertModel(nn.Module):
-    def __init__(self, cfg: dict) -> None:
+class _MLXDistilBertModel(nn.Module):  # type: ignore[name-defined,misc]
+    def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         self.embeddings = _MLXDistilEmbeddings(cfg)
         self.transformer = _MLXDistilTransformer(cfg)
@@ -343,17 +345,17 @@ class _MLXDistilBertModel(nn.Module):
         return self.transformer(self.embeddings(input_ids), attention_mask)
 
 
-class _MLXDistilBertForSequenceClassification(nn.Module):
-    def __init__(self, cfg: dict, num_labels: int) -> None:
+class _MLXDistilBertForSequenceClassification(nn.Module):  # type: ignore[name-defined,misc]
+    def __init__(self, cfg: dict[str, Any], num_labels: int) -> None:
         super().__init__()
         self.distilbert = _MLXDistilBertModel(cfg)
-        self.pre_classifier = nn.Linear(cfg["dim"], cfg["dim"])
-        self.classifier = nn.Linear(cfg["dim"], num_labels)
+        self.pre_classifier = nn.Linear(cfg["dim"], cfg["dim"])  # type: ignore[attr-defined]
+        self.classifier = nn.Linear(cfg["dim"], num_labels)  # type: ignore[attr-defined]
 
     def __call__(self, input_ids: mx.array, attention_mask: mx.array | None = None) -> mx.array:
         hidden = self.distilbert(input_ids, attention_mask)
         pooled = hidden[:, 0]
-        return self.classifier(nn.relu(self.pre_classifier(pooled)))
+        return cast(mx.array, self.classifier(nn.relu(self.pre_classifier(pooled))))  # type: ignore[attr-defined]
 
 
 class MLXDistilBertIntentClassifier:
@@ -366,8 +368,9 @@ class MLXDistilBertIntentClassifier:
         max_length: int = 128,
     ) -> None:
         self._model_path = Path(
-            snapshot_download(
+            snapshot_download(  # nosec B615
                 repo_id=model_path,
+                revision=HF_MODEL_REVISION,
                 allow_patterns=[
                     "*.safetensors",
                     "config.json",
@@ -392,7 +395,10 @@ class MLXDistilBertIntentClassifier:
         else:
             from transformers import AutoTokenizer
 
-            self._tokenizer = AutoTokenizer.from_pretrained(str(self._model_path))
+            self._tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+                str(self._model_path),
+                revision=HF_MODEL_REVISION,
+            )
             self._use_hf_tokenizer = True
 
         self._pad_id = 0
@@ -410,7 +416,7 @@ class MLXDistilBertIntentClassifier:
 
         loaded: dict[str, mx.array] = {}
         for file in safetensor_files:
-            with safe_open(str(file), framework="np") as f:
+            with safe_open(str(file), framework="np") as f:  # type: ignore[no-untyped-call]
                 for key in f.keys():
                     loaded[key] = mx.array(f.get_tensor(key))
         self._model.load_weights(list(loaded.items()))
@@ -484,25 +490,40 @@ class HFTransformersIntentClassifier:
             self._pipe = pipeline(
                 "zero-shot-classification",
                 model=model_id,
+                revision=HF_MODEL_REVISION,
             )
             return
 
         if task == "seq2seq":
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-            self._tokenizer = AutoTokenizer.from_pretrained(model_id)
-            self._model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+            self._tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+                model_id,
+                revision=HF_MODEL_REVISION,
+            )
+            self._model = AutoModelForSeq2SeqLM.from_pretrained(  # nosec B615
+                model_id,
+                revision=HF_MODEL_REVISION,
+            )
             return
 
         # Default: sequence classification model
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-        self._tokenizer = AutoTokenizer.from_pretrained(model_id)
-        self._model = AutoModelForSequenceClassification.from_pretrained(model_id)
+        self._tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+            model_id,
+            revision=HF_MODEL_REVISION,
+        )
+        self._model = AutoModelForSequenceClassification.from_pretrained(  # nosec B615
+            model_id,
+            revision=HF_MODEL_REVISION,
+        )
         self._id2label = getattr(self._model.config, "id2label", {})
 
     @staticmethod
-    def _closest_option(text: str, intent_options: list[str]) -> tuple[str, float]:
+    def _closest_option(text: str | list[str], intent_options: list[str]) -> tuple[str, float]:
+        if isinstance(text, list):
+            text = text[0] if text else ""
         return _closest_intent_option(text, intent_options)
 
     @staticmethod

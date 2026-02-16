@@ -18,12 +18,13 @@ from __future__ import annotations
 
 import functools
 import threading
+from collections.abc import Callable
 from typing import Any, TypeVar
 
 T = TypeVar("T")
 
 
-def thread_safe_singleton(factory_fn):  # noqa: ANN001, ANN201
+def thread_safe_singleton(factory_fn: Callable[..., T]) -> Callable[..., T]:
     """Decorator that caches the return value of a factory function.
 
     Thread-safe via double-check locking.  The decorated function gains:
@@ -33,11 +34,11 @@ def thread_safe_singleton(factory_fn):  # noqa: ANN001, ANN201
     Note: only the *first* call's arguments are used to create the instance.
     Subsequent calls return the cached value regardless of arguments.
     """
-    instance: Any = None
+    instance: T | None = None
     lock = threading.Lock()
 
     @functools.wraps(factory_fn)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: Any, **kwargs: Any) -> T:
         nonlocal instance
         if instance is not None:
             return instance
@@ -45,15 +46,16 @@ def thread_safe_singleton(factory_fn):  # noqa: ANN001, ANN201
             # Double-check inside lock to handle race with reset()
             if instance is not None:
                 return instance
-            instance = factory_fn(*args, **kwargs)
-            return instance
+            new_instance = factory_fn(*args, **kwargs)
+            instance = new_instance
+            return new_instance
 
     def reset() -> None:
         nonlocal instance
         with lock:
             instance = None
 
-    def peek() -> Any:
+    def peek() -> T | None:
         """Return the cached instance, or None if not yet created."""
         return instance
 

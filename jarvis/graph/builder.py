@@ -7,6 +7,7 @@ supporting full network graphs and ego-centric views.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import math
 import sqlite3
@@ -611,7 +612,7 @@ class GraphBuilder:
 
             # Collect all chat_ids and fetch messages in a single batch query
             chat_ids = [conv.chat_id for conv in conversations]
-            messages_by_chat: dict[str, list] = self._batch_get_messages(
+            messages_by_chat: dict[str, list[Any]] = self._batch_get_messages(
                 reader, chat_ids, limit_per_chat=500, after=since, before=until
             )
 
@@ -688,7 +689,7 @@ class GraphBuilder:
         limit_per_chat: int = 500,
         after: datetime | None = None,
         before: datetime | None = None,
-    ) -> dict[str, list]:
+    ) -> dict[str, list[Any]]:
         """Fetch messages for multiple chat_ids in a single SQL query.
 
         Returns a dict mapping chat_id -> list of Message objects.
@@ -703,23 +704,21 @@ class GraphBuilder:
             parse_apple_timestamp,
         )
 
-        messages_by_chat: dict[str, list] = defaultdict(list)
+        messages_by_chat: dict[str, list[Any]] = defaultdict(list)
 
         try:
             with reader._connection_context() as conn:
-                placeholders = ",".join("?" * len(chat_ids))
-                params: list[Any] = list(chat_ids)
-
-                date_clauses = ""
-                if after is not None:
-                    params.append(datetime_to_apple_timestamp(after))
-                    date_clauses += "AND message.date > ?"
-                if before is not None:
-                    params.append(datetime_to_apple_timestamp(before))
-                    date_clauses += " AND message.date < ?"
-
-                params.append(limit_per_chat)
-                query = f"""
+                after_ts = datetime_to_apple_timestamp(after) if after is not None else None
+                before_ts = datetime_to_apple_timestamp(before) if before is not None else None
+                params: list[Any] = [
+                    json.dumps(chat_ids),
+                    after_ts,
+                    after_ts,
+                    before_ts,
+                    before_ts,
+                    limit_per_chat,
+                ]
+                query = """
                     WITH ranked_msgs AS (
                         SELECT
                             chat.guid as chat_id,
@@ -735,8 +734,9 @@ class GraphBuilder:
                         JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
                         JOIN message ON chat_message_join.message_id = message.ROWID
                         LEFT JOIN handle ON message.handle_id = handle.ROWID
-                        WHERE chat.guid IN ({placeholders})
-                        {date_clauses}
+                        WHERE chat.guid IN (SELECT value FROM json_each(?))
+                          AND (? IS NULL OR message.date > ?)
+                          AND (? IS NULL OR message.date < ?)
                     )
                     SELECT chat_id, msg_id, text, is_from_me, date, sender
                     FROM ranked_msgs

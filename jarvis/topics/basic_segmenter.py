@@ -92,9 +92,7 @@ def segment_conversation_basic(
         return [_create_basic_segment(messages, contact_id)]
 
     # Use shared embedding logic
-    embeddings_list = get_embeddings_for_segmentation(
-        messages, norm_texts, pre_fetched_embeddings
-    )
+    embeddings_list = get_embeddings_for_segmentation(messages, norm_texts, pre_fetched_embeddings)
 
     # Detect boundaries
     boundaries = _detect_boundaries_basic(messages, embeddings_list, drift_threshold)
@@ -186,7 +184,7 @@ def _create_basic_segment(
 _basic_segmenter_embedder = None
 
 
-def get_basic_segmenter_embedder():
+def get_basic_segmenter_embedder() -> Any:
     global _basic_segmenter_embedder
     if _basic_segmenter_embedder is None:
         from jarvis.embedding_adapter import get_embedder

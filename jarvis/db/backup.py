@@ -28,15 +28,12 @@ import shutil
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from jarvis.db.models import JARVIS_DB_PATH
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -196,10 +193,15 @@ class BackupManager:
             with sqlite3.connect(str(self.db_path)) as source:
                 with sqlite3.connect(str(backup_path)) as dest:
                     # Use backup API with page-by-page copying
+                    # Wrap progress callback to match sqlite3's expected signature
+                    def _progress_callback(status: int, remaining: int, total: int) -> None:
+                        if progress_callback is not None:
+                            progress_callback(remaining, total)
+
                     source.backup(
                         dest,
                         pages=BACKUP_PAGE_SIZE,
-                        progress=progress_callback,
+                        progress=_progress_callback,
                     )
 
             # Calculate checksum
@@ -320,7 +322,7 @@ class BackupManager:
                             f.write(f"{row[0]};\n\n")
 
                         # Export data (table name validated against sqlite_master above)
-                        cursor = conn.execute(f"SELECT * FROM [{table}]")
+                        cursor = conn.execute(f"SELECT * FROM [{table}]")  # nosec B608
                         columns = [desc[0] for desc in cursor.description]
 
                         for row in cursor:
@@ -335,7 +337,7 @@ class BackupManager:
                                     values.append(f"'{escaped}'")
 
                             f.write(
-                                f"INSERT INTO [{table}] ({','.join(columns)}) "
+                                f"INSERT INTO [{table}] ({','.join(columns)}) "  # nosec B608
                                 f"VALUES ({','.join(values)});\n"
                             )
 
@@ -595,8 +597,9 @@ class BackupManager:
                 h.update(chunk)
         return h.hexdigest()
 
-    def _format_bytes(self, size: int) -> str:
+    def _format_bytes(self, size_bytes: int) -> str:
         """Format byte size for human readability."""
+        size = float(size_bytes)
         for unit in ["B", "KB", "MB", "GB"]:
             if size < 1024:
                 return f"{size:.1f} {unit}"
@@ -640,7 +643,7 @@ class BackupManager:
 
                 for table in tables:
                     try:
-                        cursor = conn.execute(f"SELECT COUNT(*) FROM [{table}]")
+                        cursor = conn.execute(f"SELECT COUNT(*) FROM [{table}]")  # nosec B608
                         counts[table] = cursor.fetchone()[0]
                     except sqlite3.Error:
                         counts[table] = -1

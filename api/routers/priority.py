@@ -18,12 +18,14 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.dependencies import get_imessage_reader
-from integrations.imessage import ChatDBReader
-from jarvis.errors import iMessageQueryError
-from jarvis.priority import (
-    PriorityLevel,
-    get_priority_scorer,
+from api.services.priority_service import (
+    build_priority_inbox_payload,
+    clear_handled_items,
+    get_priority_stats_payload,
+    mark_contact_importance,
+    mark_handled_state,
 )
+from integrations.imessage import ChatDBReader
 
 logger = logging.getLogger(__name__)
 
@@ -320,33 +322,6 @@ class ImportantContactResponse(BaseModel):
     )
 
 
-def _get_conversation_name(
-    reader: object, chat_id: str, conversations_cache: dict[str, str]
-) -> str | None:
-    """Get conversation display name with caching.
-
-    Args:
-        reader: iMessage reader instance
-        chat_id: Conversation ID
-        conversations_cache: Cache of chat_id -> display_name
-
-    Returns:
-        Display name or None
-    """
-    if chat_id in conversations_cache:
-        return conversations_cache[chat_id]
-
-    try:
-        conv = reader.get_conversation(chat_id)  # type: ignore[attr-defined]
-        if conv:
-            name = conv.display_name or ", ".join(conv.participants[:3])
-            conversations_cache[chat_id] = name
-            return name
-        return None
-    except Exception:
-        return None
-
-
 @router.get(
     "",
     response_model=PriorityInboxResponse,
@@ -446,125 +421,20 @@ def get_priority_inbox(
     Returns:
         PriorityInboxResponse with prioritized messages and counts
     """
-    scorer = get_priority_scorer()
-
-    # Get recent conversations and their messages
-    # Fetch only conversations we'll actually analyze (15) to avoid wasted fetches
-    try:
-        conversations = reader.get_conversations(limit=15)
-    except Exception as e:
-        logger.exception("Failed to get conversations")
-        raise iMessageQueryError(
-            "Failed to read conversations for priority inbox",
-            cause=e,
-        )
-
-    # Build conversation name cache
-    conv_cache: dict[str, str] = {}
-    for conv in conversations:
-        conv_cache[conv.chat_id] = conv.display_name or ", ".join(conv.participants[:3])
-
-    # Collect recent messages from each conversation
-    # Batch fetch to avoid N+1 queries
-    all_messages = []
-    chat_ids = [conv.chat_id for conv in conversations[:15]]  # Limit conversations to analyze
-    limit_per_chat = max(1, limit // 5)
-    try:
-        # Single batch query instead of per-chat loop
-        batch_result = reader.get_messages_batch(chat_ids, limit_per_chat=limit_per_chat)
-        for msgs in batch_result.values():
-            all_messages.extend(msgs)
-    except Exception:
-        # Fallback: individual queries if batch fails
-        for chat_id in chat_ids:
-            try:
-                messages = reader.get_messages(chat_id, limit=limit_per_chat)
-                all_messages.extend(messages)
-            except Exception:
-                continue
-
-    # Score all messages
-    priority_scores = scorer.score_messages(all_messages)
-
-    # Filter based on parameters
-    filtered_scores = []
-    for score in priority_scores:
-        # Skip handled if not requested
-        if not include_handled and score.handled:
-            continue
-
-        # Filter by minimum level
-        if min_level:
-            try:
-                min_level_enum = PriorityLevel(min_level.lower())
-                level_order = {
-                    PriorityLevel.CRITICAL: 4,
-                    PriorityLevel.HIGH: 3,
-                    PriorityLevel.MEDIUM: 2,
-                    PriorityLevel.LOW: 1,
-                }
-                if level_order[score.level] < level_order[min_level_enum]:
-                    continue
-            except ValueError:
-                logger.warning("Invalid priority level filter: %s", min_level)
-
-        filtered_scores.append(score)
-
-    # Build message lookup
-    message_lookup = {(m.chat_id, m.id): m for m in all_messages}
-
-    # Build response and calculate counts in single pass
-    response_messages = []
-    critical_count = 0
-    high_count = 0
-    needs_response_count = 0
-    unhandled_count = 0
-
-    for score in filtered_scores:
-        # Calculate counts for all scores
-        if score.level == PriorityLevel.CRITICAL:
-            critical_count += 1
-        elif score.level == PriorityLevel.HIGH:
-            high_count += 1
-
-        if score.needs_response:
-            needs_response_count += 1
-
-        if not score.handled:
-            unhandled_count += 1
-
-        # Build response for top N messages only
-        if len(response_messages) >= limit:
-            continue
-
-        message = message_lookup.get((score.chat_id, score.message_id))
-        if not message:
-            continue
-
-        response_messages.append(
-            PriorityMessageResponse(
-                message_id=score.message_id,
-                chat_id=score.chat_id,
-                sender=message.sender,
-                sender_name=message.sender_name,
-                text=message.text,
-                date=message.date.isoformat(),
-                priority_score=score.score,
-                priority_level=score.level.value,
-                reasons=[r.value for r in score.reasons],
-                needs_response=score.needs_response,
-                handled=score.handled,
-                conversation_name=conv_cache.get(score.chat_id),
-            )
-        )
+    payload = build_priority_inbox_payload(
+        reader=reader,
+        limit=limit,
+        include_handled=include_handled,
+        min_level=min_level,
+    )
 
     return PriorityInboxResponse(
-        messages=response_messages,
-        total_count=len(priority_scores),
-        unhandled_count=unhandled_count,
-        needs_response_count=needs_response_count,
-        critical_count=critical_count,
-        high_count=high_count,
+        messages=[PriorityMessageResponse(**m) for m in payload.messages],
+        total_count=payload.total_count,
+        unhandled_count=payload.unhandled_count,
+        needs_response_count=payload.needs_response_count,
+        critical_count=payload.critical_count,
+        high_count=payload.high_count,
     )
 
 
@@ -609,8 +479,7 @@ def mark_handled(request: MarkHandledRequest) -> MarkHandledResponse:
     Returns:
         MarkHandledResponse confirming the operation
     """
-    scorer = get_priority_scorer()
-    scorer.mark_handled(request.chat_id, request.message_id)
+    mark_handled_state(chat_id=request.chat_id, message_id=request.message_id, handled=True)
 
     return MarkHandledResponse(
         success=True,
@@ -660,8 +529,7 @@ def unmark_handled(request: MarkHandledRequest) -> MarkHandledResponse:
     Returns:
         MarkHandledResponse confirming the operation
     """
-    scorer = get_priority_scorer()
-    scorer.unmark_handled(request.chat_id, request.message_id)
+    mark_handled_state(chat_id=request.chat_id, message_id=request.message_id, handled=False)
 
     return MarkHandledResponse(
         success=True,
@@ -711,8 +579,7 @@ def mark_contact_important(request: ImportantContactRequest) -> ImportantContact
     Returns:
         ImportantContactResponse confirming the operation
     """
-    scorer = get_priority_scorer()
-    scorer.mark_contact_important(request.identifier, request.important)
+    mark_contact_importance(identifier=request.identifier, important=request.important)
 
     return ImportantContactResponse(
         success=True,
@@ -747,12 +614,7 @@ def get_priority_stats() -> dict[str, int]:
     Returns:
         Dictionary with handled_count and important_contacts_count
     """
-    scorer = get_priority_scorer()
-
-    return {
-        "handled_count": scorer.get_handled_count(),
-        "important_contacts_count": len(scorer._important_contacts),
-    }
+    return get_priority_stats_payload()
 
 
 @router.post(
@@ -782,8 +644,7 @@ def clear_handled() -> dict[str, str | bool]:
     Returns:
         Success confirmation
     """
-    scorer = get_priority_scorer()
-    scorer.clear_handled()
+    clear_handled_items()
 
     return {
         "success": True,

@@ -12,16 +12,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from jarvis.socket_server import (
+from jarvis.handlers.base import (
     INTERNAL_ERROR,
     INVALID_PARAMS,
     INVALID_REQUEST,
     METHOD_NOT_FOUND,
     PARSE_ERROR,
-    JarvisSocketServer,
     JsonRpcError,
-    WebSocketWriter,
 )
+from jarvis.interfaces.desktop.protocol import WebSocketWriter
+from jarvis.interfaces.desktop.server import JarvisSocketServer
 
 
 class TestJsonRpcProtocol:

@@ -6,6 +6,7 @@ Facts are deduplicated by (contact_id, category, subject, predicate) UNIQUE cons
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sqlite3
@@ -399,7 +400,7 @@ def save_facts(
 
         if return_embeddings:
             # fact_embeddings is always set when return_embeddings=True
-            return inserted_count, fact_embeddings  # type: ignore[return-value]
+            return inserted_count, fact_embeddings
         return inserted_count
 
 
@@ -508,7 +509,6 @@ def get_facts_for_contacts(contact_ids: list[str]) -> dict[str, list[Fact]]:
         Dict mapping contact_id -> list of Facts.
     """
     from jarvis.db import get_db
-    from jarvis.db.query_builder import QueryBuilder
 
     if not contact_ids:
         return {}
@@ -522,18 +522,17 @@ def get_facts_for_contacts(contact_ids: list[str]) -> dict[str, list[Fact]]:
         # Process in chunks to stay within SQLite parameter limits
         for chunk_start in range(0, len(contact_ids), 900):
             chunk = contact_ids[chunk_start : chunk_start + 900]
-            placeholders, params = QueryBuilder.in_clause(chunk)
 
             rows = conn.execute(
-                f"""
+                """
                 SELECT contact_id, category, subject, predicate, value, confidence,
                        source_text, source_message_id, extracted_at,
                        valid_from, valid_until, attribution
                 FROM contact_facts
-                WHERE contact_id IN ({placeholders})
+                WHERE contact_id IN (SELECT value FROM json_each(?))
                 ORDER BY confidence DESC
                 """,
-                params,
+                (json.dumps(chunk),),
             ).fetchall()
 
             for row in rows:

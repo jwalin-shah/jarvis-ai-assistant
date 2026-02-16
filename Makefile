@@ -5,6 +5,7 @@
 .PHONY: help install hooks setup \
         test test-fast test-verbose test-coverage test-file \
         lint format format-check typecheck check \
+        guardrails \
         ci-fast backfill-smoke \
         verify review health \
         clean clean-all \
@@ -234,6 +235,11 @@ format-check:
 typecheck:
 	uv run mypy jarvis/ core/ models/ integrations/ api/ --ignore-missing-imports
 
+guardrails:
+	@echo "Running legacy import and module size guardrails..."
+	uv run python scripts/check_retired_imports.py
+	uv run python scripts/check_module_size.py
+
 backfill-smoke:
 	@echo "Running backfill entrypoint smoke checks..."
 	uv run python scripts/backfill_complete.py --help
@@ -244,12 +250,14 @@ ci-fast:
 	@echo "Running fast CI gate..."
 	uv run ruff check .
 	uv run mypy jarvis/ core/ models/ integrations/ api/ --ignore-missing-imports
+	uv run python scripts/check_retired_imports.py
+	uv run python scripts/check_module_size.py
 	uv run python -m compileall -q jarvis scripts api models core integrations contracts
 	uv run pytest --override-ini addopts='' tests/unit/test_tasks.py tests/unit/test_fact_extractor.py tests/unit/test_watcher_resegmentation.py -q
 	$(MAKE) backfill-smoke
 	@echo "✅ ci-fast passed"
 
-check: lint format-check typecheck svelte-check
+check: lint format-check typecheck guardrails svelte-check
 	@echo ""
 	@echo "All static checks passed!"
 

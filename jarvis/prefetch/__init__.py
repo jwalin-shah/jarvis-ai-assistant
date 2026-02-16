@@ -18,7 +18,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
 from jarvis.prefetch.cache import (
     CacheEntry,
@@ -70,6 +71,7 @@ from jarvis.prefetch.predictor import (
     get_predictor,
     reset_predictor,
 )
+from jarvis.utils.singleton import thread_safe_singleton
 
 logger = logging.getLogger(__name__)
 
@@ -275,16 +277,16 @@ class PrefetchManager:
         for prefix in ["draft:focus:", "draft:cont:", "draft:tod:", "draft:"]:
             result = self._cache.get(f"{prefix}{chat_id}")
             if result is not None:
-                return result
+                return cast(dict[str, Any], result)
         return None
 
     def get_embedding(self, chat_id: str) -> dict[str, Any] | None:
         """Get prefetched embeddings for a chat."""
-        return self._cache.get(f"embed:ctx:{chat_id}")
+        return cast(dict[str, Any] | None, self._cache.get(f"embed:ctx:{chat_id}"))
 
     def get_contact(self, chat_id: str) -> dict[str, Any] | None:
         """Get prefetched contact profile."""
-        return self._cache.get(f"contact:{chat_id}")
+        return cast(dict[str, Any] | None, self._cache.get(f"contact:{chat_id}"))
 
     def schedule_prefetch(self, prediction: Prediction) -> bool:
         """Manually schedule a prefetch."""
@@ -349,7 +351,7 @@ class PrefetchManager:
                         logger.debug("Skipping prediction cycle: memory pressure %s", pressure)
                         self._shutdown_event.wait(self._prediction_interval)
                         continue
-                except Exception:
+                except Exception:  # nosec B110
                     pass  # If memory check fails, proceed normally
 
                 # Generate predictions
@@ -412,13 +414,10 @@ class PrefetchManager:
         self._executor.schedule_batch(warmup_predictions)
 
 
-from jarvis.utils.singleton import thread_safe_singleton  # noqa: E402
+# Type stub for the singleton-decorated function
+GetPrefetchManager = Callable[[], PrefetchManager]
 
-
-@thread_safe_singleton
-def get_prefetch_manager() -> PrefetchManager:
-    """Get or create singleton prefetch manager."""
-    return PrefetchManager()
+get_prefetch_manager: GetPrefetchManager = thread_safe_singleton(lambda: PrefetchManager())
 
 
 def reset_prefetch_manager() -> None:

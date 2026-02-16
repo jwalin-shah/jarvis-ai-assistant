@@ -14,9 +14,13 @@ import functools
 import logging
 import time
 from collections import deque
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from enum import Enum
+from typing import Any, TypeVar
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +68,7 @@ OPERATION_BUDGETS: dict[str, tuple[BudgetTier, int]] = {
 }
 
 # Backward compat: derive LATENCY_THRESHOLDS from OPERATION_BUDGETS
-LATENCY_THRESHOLDS = {
+LATENCY_THRESHOLDS: dict[str, float | int] = {
     op: budget_ms for op, (_, budget_ms) in OPERATION_BUDGETS.items() if budget_ms > 0
 }
 
@@ -78,9 +82,9 @@ class LatencyRecord:
     timestamp: float
     threshold_ms: float | None = None
     exceeded: bool = False
-    metadata: dict = None
+    metadata: dict[str, Any] | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON serialization."""
         return {
             **asdict(self),
@@ -91,12 +95,17 @@ class LatencyRecord:
 class LatencyTracker:
     """Track operation latencies and detect performance regressions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._records: deque[LatencyRecord] = deque(maxlen=10000)
         self._thresholds = LATENCY_THRESHOLDS.copy()
 
     @contextmanager
-    def track(self, operation: str, threshold_ms: float | None = None, **metadata):
+    def track(
+        self,
+        operation: str,
+        threshold_ms: float | None = None,
+        **metadata: Any,
+    ) -> Iterator[None]:
         """Context manager for tracking operation latency.
 
         Usage:
@@ -110,7 +119,7 @@ class LatencyTracker:
             yield
         finally:
             elapsed_ms = (time.perf_counter() - start) * 1000
-            exceeded = threshold and elapsed_ms > threshold
+            exceeded = bool(threshold and elapsed_ms > threshold)
 
             record = LatencyRecord(
                 operation=operation,
@@ -134,13 +143,13 @@ class LatencyTracker:
 
     def get_records(self) -> list[LatencyRecord]:
         """Get all recorded latencies."""
-        return self._records
+        return list(self._records)
 
     def get_slow_operations(self) -> list[LatencyRecord]:
         """Get operations that exceeded thresholds."""
         return [r for r in self._records if r.exceeded]
 
-    def get_slo_compliance(self, operation: str | None = None) -> dict:
+    def get_slo_compliance(self, operation: str | None = None) -> dict[str, Any]:
         """Get SLO compliance stats.
 
         Args:
@@ -169,7 +178,7 @@ class LatencyTracker:
             "p95_ms": round(sorted_ms[p95_idx], 2),
         }
 
-    def summary(self) -> dict:
+    def summary(self) -> dict[str, Any]:
         """Get summary statistics."""
         if not self._records:
             return {}
@@ -185,7 +194,7 @@ class LatencyTracker:
 
 
 # Global tracker instance
-_tracker = LatencyTracker()
+_tracker: LatencyTracker = LatencyTracker()
 
 
 def get_tracker() -> LatencyTracker:
@@ -194,7 +203,7 @@ def get_tracker() -> LatencyTracker:
 
 
 @contextmanager
-def track_latency(operation: str, **metadata):
+def track_latency(operation: str, **metadata: Any) -> Iterator[None]:
     """Convenience function for tracking latency.
 
     Usage:
@@ -205,7 +214,7 @@ def track_latency(operation: str, **metadata):
         yield
 
 
-def perf_budget(budget: BudgetTier | int):
+def perf_budget(budget: BudgetTier | int) -> Callable[[F], F]:
     """Decorator that tracks function execution against a performance budget.
 
     Usage:
@@ -222,12 +231,12 @@ def perf_budget(budget: BudgetTier | int):
     else:
         threshold_ms = budget if budget > 0 else None
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             with _tracker.track(func.__qualname__, threshold_ms=threshold_ms):
                 return func(*args, **kwargs)
 
-        return wrapper
+        return wrapper  # type: ignore[return-value]
 
     return decorator

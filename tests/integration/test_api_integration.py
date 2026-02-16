@@ -158,7 +158,7 @@ class TestFastAPIAppStartup:
         """Exception handlers are registered on the app."""
         from slowapi.errors import RateLimitExceeded
 
-        from jarvis.errors import JarvisError
+        from jarvis.core.exceptions import JarvisError
 
         handlers = app.exception_handlers
         # Rate limit handler

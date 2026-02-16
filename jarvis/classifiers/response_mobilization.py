@@ -35,6 +35,7 @@ References:
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -126,7 +127,7 @@ class MobilizationResult:
     pressure: ResponsePressure
     response_type: ResponseType
     confidence: float
-    features: dict[str, bool]  # Which features were detected
+    features: Mapping[str, bool]  # Which features were detected
     method: str = "structural"
 
     def __repr__(self) -> str:
@@ -569,7 +570,7 @@ def _make_result(
     pressure: ResponsePressure,
     response_type: ResponseType,
     confidence: float,
-    features: dict[str, bool | int],
+    features: Mapping[str, bool],
     method: str = "rule",
 ) -> MobilizationResult:
     return MobilizationResult(
@@ -583,7 +584,7 @@ def _make_result(
 
 def _classify_question_mark(
     text_lower: str,
-    features: dict[str, bool | int],
+    features: Mapping[str, bool],
     cfg: MobilizationConfig = MOBILIZATION_CONFIG,
 ) -> MobilizationResult:
     """Handle messages with explicit question mark."""
@@ -611,7 +612,7 @@ def _classify_question_mark(
 
 def _classify_recipient_oriented(
     text_lower: str,
-    features: dict[str, bool | int],
+    features: Mapping[str, bool],
     cfg: MobilizationConfig = MOBILIZATION_CONFIG,
 ) -> MobilizationResult:
     """Handle recipient-oriented questions."""

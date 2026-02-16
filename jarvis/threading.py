@@ -519,7 +519,7 @@ class ThreadAnalyzer:
         if not text or not text.strip():
             return None
 
-        cache_key = hashlib.md5(text.encode()).hexdigest()
+        cache_key = hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()
         with self._lock:
             if cache_key in self._embeddings_cache:
                 # Move to end (mark as recently used) for LRU eviction
@@ -590,7 +590,7 @@ class ThreadAnalyzer:
                 current_start = msg.date
             else:
                 # current_start is guaranteed to be set when current_msgs is non-empty
-                assert current_start is not None
+                assert current_start is not None  # nosec B101
                 should_start, _ = self._should_start_new_thread(
                     msg, sorted_messages[i - 1], current_start
                 )

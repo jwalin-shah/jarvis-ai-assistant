@@ -22,7 +22,7 @@ import json
 import logging
 import shutil
 import sqlite3
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -391,7 +391,7 @@ class ReliabilityMonitor:
 
                 for table in tables:
                     try:
-                        cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
+                        cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")  # nosec B608
                         cursor.fetchone()
                     except sqlite3.DatabaseError as e:
                         affected_tables.append(table)
@@ -494,11 +494,12 @@ class ReliabilityMonitor:
     @staticmethod
     def _format_bytes(size: int) -> str:
         """Format byte size for human readability."""
+        current_size: float = size
         for unit in ["B", "KB", "MB", "GB"]:
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"
+            if current_size < 1024:
+                return f"{current_size:.1f} {unit}"
+            current_size /= 1024
+        return f"{current_size:.1f} TB"
 
 
 class RecoveryManager:
@@ -621,7 +622,7 @@ class RecoveryManager:
 
         # Use sqlite3 .recover command
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607
                 ["sqlite3", str(self.db_path), ".recover"],
                 capture_output=True,
                 text=True,

@@ -12,12 +12,13 @@ import logging
 import sqlite3
 
 import spacy
+from spacy.pipeline import EntityRuler
 
 logger = logging.getLogger(__name__)
 
 
 class EntityAnchorTracker:
-    def __init__(self, jarvis_db_path: str = None) -> None:
+    def __init__(self, jarvis_db_path: str | None = None) -> None:
         # 1. Load tiny spaCy model (12MB)
         try:
             self.nlp = spacy.load(
@@ -25,19 +26,19 @@ class EntityAnchorTracker:
             )  # Disable default NER, we'll build a better one
         except OSError:
             # Fallback if not installed
-            import subprocess
+            import subprocess  # nosec B404
 
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])  # nosec B603 B607
             self.nlp = spacy.load("en_core_web_sm", disable=["ner"])
 
         # 2. Add custom EntityRuler for high-precision local matching
-        self.ruler = self.nlp.add_pipe("entity_ruler")
+        self.ruler: EntityRuler = self.nlp.add_pipe("entity_ruler")  # type: ignore[assignment]
 
         # 3. Seed ruler with contact names from DB
         if jarvis_db_path:
             self._seed_from_contacts(jarvis_db_path)
 
-    def _seed_from_contacts(self, db_path: str):
+    def _seed_from_contacts(self, db_path: str) -> None:
         """Load all contact names into the ruler so spaCy always finds them."""
         try:
             conn = sqlite3.connect(db_path)
@@ -82,7 +83,7 @@ class EntityAnchorTracker:
 _tracker = None
 
 
-def get_tracker(db_path: str = None) -> EntityAnchorTracker:
+def get_tracker(db_path: str | None = None) -> EntityAnchorTracker:
     global _tracker
     if _tracker is None:
         # Default path

@@ -11,6 +11,7 @@ from jarvis.contacts.contact_profile_context import (
     is_contact_profile_context_enabled,
 )
 from jarvis.db import Contact, JarvisDB, get_db
+from jarvis.search.vec_search import VecSearchResult
 
 if TYPE_CHECKING:
     from integrations.imessage.reader import ChatDBReader
@@ -96,7 +97,7 @@ class ContextService:
                 from jarvis.search.vec_search import get_vec_searcher
 
                 self._vec_searcher = get_vec_searcher(self._db)
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         return self._vec_searcher
 
@@ -155,7 +156,7 @@ class ContextService:
                                 top_k=3,
                             )
                         return exchanges
-            except Exception:
+            except Exception:  # nosec B110
                 pass  # Fall through to standard search
 
             # Standard search path (no segment data)
@@ -174,14 +175,15 @@ class ContextService:
                 )
 
             exchanges = []
-            for r in results:
-                if r.context_text and r.reply_text:
+            result: VecSearchResult
+            for result in results:
+                if result.context_text and result.reply_text:
                     exchanges.append(
                         {
-                            "context_text": r.context_text,
-                            "reply_text": r.reply_text,
-                            "similarity": r.score,
-                            "topic": r.topic,
+                            "context_text": result.context_text,
+                            "reply_text": result.reply_text,
+                            "similarity": result.score,
+                            "topic": result.topic,
                         }
                     )
 

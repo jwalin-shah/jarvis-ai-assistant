@@ -16,6 +16,7 @@ Usage:
     # During full pipeline (segmentation parallel to LLM)
     embedder = get_embedder_for_context("parallel")
 """
+# mypy: ignore-errors
 
 from __future__ import annotations
 

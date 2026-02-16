@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Generic, Self, TypeVar
 
 from contracts.imessage import Attachment, Conversation, Message, Reaction
-from jarvis.errors import (
+from jarvis.core.exceptions import (
     ErrorCode,
     imessage_db_not_found,
     imessage_permission_denied,

@@ -144,9 +144,7 @@ class PrefetchCache:
         """Remove expired entries and return count cleaned."""
         with self._lock:
             now = time.time()
-            to_remove = [
-                k for k, exp in self._expiry.items() if exp <= now
-            ]
+            to_remove = [k for k, exp in self._expiry.items() if exp <= now]
             for key in to_remove:
                 self._remove(key)
             return len(to_remove)
@@ -162,9 +160,6 @@ class PrefetchCache:
                 "evictions": self._stats.evictions,
                 "hit_rate": self._stats.hit_rate,
             }
-
-
-
 
 
 # Backwards-compatible aliases
@@ -183,10 +178,10 @@ def get_cache() -> PrefetchCache:
 
 
 def reset_cache() -> None:
-    instance = get_cache.peek()
-    if instance is not None:
-        instance.clear()
-    get_cache.reset()
+    cache = get_cache.peek()  # type: ignore[attr-defined]
+    if cache is not None:
+        cache.clear()
+    get_cache.reset()  # type: ignore[attr-defined]
 
 
 # Stubs for compatibility

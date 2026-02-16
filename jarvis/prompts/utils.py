@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from jarvis.prompts.constants import MAX_CONTEXT_CHARS
 
 if TYPE_CHECKING:
-    from jarvis.prompts.examples import FewShotExample
+    from jarvis.prompts.constants import FewShotExample
 
 
 def format_examples(examples: list[FewShotExample]) -> str:

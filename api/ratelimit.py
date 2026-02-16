@@ -229,10 +229,12 @@ def get_timeout_generation() -> float:
     Returns:
         Timeout in seconds for generation operations.
     """
-    return _get_cached_config_value(
-        "timeout_generation",
-        lambda: get_config().rate_limit.generation_timeout_seconds,
-        30.0,  # Default fallback
+    return float(
+        _get_cached_config_value(
+            "timeout_generation",
+            lambda: get_config().rate_limit.generation_timeout_seconds,
+            30.0,  # Default fallback
+        )
     )
 
 
@@ -244,10 +246,12 @@ def get_timeout_read() -> float:
     Returns:
         Timeout in seconds for read operations.
     """
-    return _get_cached_config_value(
-        "timeout_read",
-        lambda: get_config().rate_limit.read_timeout_seconds,
-        10.0,  # Default fallback
+    return float(
+        _get_cached_config_value(
+            "timeout_read",
+            lambda: get_config().rate_limit.read_timeout_seconds,
+            10.0,  # Default fallback
+        )
     )
 
 

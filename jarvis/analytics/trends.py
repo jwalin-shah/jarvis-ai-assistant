@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import threading
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -69,7 +70,7 @@ class TrendAnalysis:
 
 
 def detect_trend(
-    values: list[float],
+    values: Sequence[float],
     window_size: int = 3,
 ) -> TrendResult:
     """Detect trend in a series of values.

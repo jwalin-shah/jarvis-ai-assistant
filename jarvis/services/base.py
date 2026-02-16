@@ -6,7 +6,7 @@ import abc
 import logging
 import os
 import signal
-import subprocess
+import subprocess  # nosec B404
 import threading
 import time
 from dataclasses import dataclass, field
@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from jarvis.errors import ErrorCode, JarvisError
+from jarvis.core.exceptions import ErrorCode, JarvisError
 
 logger = logging.getLogger(__name__)
 
@@ -307,7 +307,7 @@ class Service(abc.ABC):
         if hasattr(os, "setsid"):  # Unix/Linux/macOS
             popen_kwargs["process_group"] = 0
 
-        self._process = subprocess.Popen(self.config.command, **popen_kwargs)
+        self._process = subprocess.Popen(self.config.command, **popen_kwargs)  # nosec B603
 
     def _stop_process(self) -> None:
         """Stop the process gracefully.

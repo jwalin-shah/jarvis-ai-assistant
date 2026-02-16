@@ -5,7 +5,7 @@ Tests jarvis/errors.py custom exception classes and api/errors.py handlers.
 
 import pytest
 
-from jarvis.errors import (
+from jarvis.core.exceptions import (
     ConfigurationError,
     DiskResourceError,
     ErrorCode,
@@ -418,7 +418,7 @@ class TestAPIErrorHandlers:
     def test_error_status_code_mapping_exists(self):
         """API error handlers have status code mapping."""
         from api.errors import ERROR_CODE_STATUS_CODES
-        from jarvis.errors import ErrorCode
+        from jarvis.core.exceptions import ErrorCode
 
         # Mapping should have entries for key error codes
         assert ErrorCode.VAL_INVALID_INPUT in ERROR_CODE_STATUS_CODES

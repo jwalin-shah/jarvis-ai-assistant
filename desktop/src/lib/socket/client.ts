@@ -23,7 +23,6 @@ const WEBSOCKET_URL = getSocketRpcWebSocketUrl();
 const REQUEST_TIMEOUT = 30000; // 30s for normal requests
 const STREAMING_TIMEOUT = 120000; // 120s for streaming requests
 const STALE_REQUEST_CLEANUP_INTERVAL = 60000; // Clean up stale requests every 60s
-const STREAM_IDLE_TIMEOUT = 60000; // Auto-clean streaming requests after 60s of no activity
 
 /**
  * Wrap a promise with a timeout.

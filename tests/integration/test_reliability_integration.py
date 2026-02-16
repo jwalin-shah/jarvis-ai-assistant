@@ -23,7 +23,7 @@ from core.health.degradation import (
 )
 from core.memory.controller import DefaultMemoryController, MemoryMode
 from core.memory.monitor import MemoryMonitor
-from jarvis.errors import MemoryResourceError, ModelLoadError
+from jarvis.core.exceptions import MemoryResourceError, ModelLoadError
 from jarvis.tasks.models import TaskStatus, TaskType
 from jarvis.tasks.queue import TaskQueue, reset_task_queue
 

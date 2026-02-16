@@ -9,6 +9,7 @@ from .handlers import PrefetchHandler
 
 logger = logging.getLogger(__name__)
 
+
 class DraftReplyHandler(PrefetchHandler):
     @property
     def required_params(self) -> list[str]:
@@ -19,9 +20,9 @@ class DraftReplyHandler(PrefetchHandler):
 
         # Import router lazily to avoid circular imports
         from jarvis.prefetch.executor import get_executor
-        from jarvis.router import get_reply_router
+        from jarvis.reply_service import get_reply_service
 
-        router = get_reply_router()
+        reply_service = get_reply_service()
         executor = get_executor()
 
         # Get recent messages using shared reader
@@ -41,7 +42,7 @@ class DraftReplyHandler(PrefetchHandler):
         if not last_incoming:
             return None
 
-        result = router.route(
+        result = reply_service.route_legacy(
             incoming=last_incoming,
             chat_id=chat_id,
             conversation_messages=messages,
@@ -58,6 +59,7 @@ class DraftReplyHandler(PrefetchHandler):
             ],
             "prefetched": True,
         }
+
 
 class EmbeddingHandler(PrefetchHandler):
     @property
@@ -76,6 +78,7 @@ class EmbeddingHandler(PrefetchHandler):
             "texts": texts,
             "prefetched": True,
         }
+
 
 class ContactProfileHandler(PrefetchHandler):
     @property
@@ -101,6 +104,7 @@ class ContactProfileHandler(PrefetchHandler):
             }
         return None
 
+
 class ModelWarmHandler(PrefetchHandler):
     @property
     def required_params(self) -> list[str]:
@@ -110,16 +114,19 @@ class ModelWarmHandler(PrefetchHandler):
         model_type = params["model_type"]
         if model_type == "llm":
             from models.loader import get_model
+
             model = get_model()
             if model and not model.is_loaded():
                 model.load()
             return {"model": "llm", "warm": True}
         elif model_type == "embeddings":
             from jarvis.embedding_adapter import get_embedder
+
             embedder = get_embedder()
             embedder.encode(["warmup test"])
             return {"model": "embeddings", "warm": True}
         return None
+
 
 class SearchResultsHandler(PrefetchHandler):
     @property
@@ -133,17 +140,18 @@ class SearchResultsHandler(PrefetchHandler):
 
         db = get_db()
         searcher = get_vec_searcher(db)
-        results = searcher.search(query=query, k=10)
+        results = searcher.search(query=query, limit=10)
 
         return {
             "query": query,
             "results": [
-                {"trigger": r.last_trigger, "response": r.last_response, "sim": r.similarity}
+                {"trigger": r.context_text or r.text, "response": r.reply_text, "sim": r.score}
                 for r in results
-                if r.last_trigger
+                if r.context_text or r.text
             ],
             "prefetched": True,
         }
+
 
 class VecIndexHandler(PrefetchHandler):
     @property

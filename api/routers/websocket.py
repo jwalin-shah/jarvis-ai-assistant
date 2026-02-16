@@ -11,7 +11,6 @@ import asyncio
 import json
 import logging
 import os
-import secrets
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -21,6 +20,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.concurrency import run_in_threadpool
 
+from api.services.websocket_auth import load_or_generate_token, validate_websocket_auth
 from contracts.models import GenerationRequest
 from models import get_generator
 
@@ -31,11 +31,7 @@ MAX_WS_MESSAGE_SIZE_BYTES = 1024 * 1024  # 1 MiB payload cap per inbound message
 
 # SECURITY: WebSocket authentication token
 # Set JARVIS_WS_TOKEN environment variable or generate a random token
-_WS_AUTH_TOKEN: str | None = os.getenv("JARVIS_WS_TOKEN")
-if _WS_AUTH_TOKEN is None:
-    # Generate a random token for this session (log it so it can be used)
-    _WS_AUTH_TOKEN = secrets.token_urlsafe(32)
-    logger.info("Generated WebSocket auth token (set JARVIS_WS_TOKEN to persist)")
+_WS_AUTH_TOKEN = load_or_generate_token(os.getenv("JARVIS_WS_TOKEN"))
 
 
 def _validate_websocket_auth(websocket: WebSocket) -> bool:
@@ -53,33 +49,7 @@ def _validate_websocket_auth(websocket: WebSocket) -> bool:
     Returns:
         True if authenticated, False otherwise
     """
-    # Check X-WS-Token header (RECOMMENDED)
-    token_header = websocket.headers.get("x-ws-token")
-    if token_header and secrets.compare_digest(token_header, _WS_AUTH_TOKEN):
-        return True
-
-    # Check Sec-WebSocket-Protocol header (browser-compatible fallback)
-    # Browsers can set this during handshake when custom headers aren't allowed
-    ws_protocol = websocket.headers.get("sec-websocket-protocol")
-    if ws_protocol:
-        # Protocol may contain multiple comma-separated values; check each
-        protocols = [p.strip() for p in ws_protocol.split(",")]
-        for protocol in protocols:
-            if secrets.compare_digest(protocol, _WS_AUTH_TOKEN):
-                return True
-
-    # Check query parameters (DEPRECATED - security risk)
-    token = websocket.query_params.get("token")
-    if token and secrets.compare_digest(token, _WS_AUTH_TOKEN):
-        logger.warning(
-            "WebSocket auth via query parameter is DEPRECATED and will be removed. "
-            "Use X-WS-Token header or Sec-WebSocket-Protocol instead. "
-            "Query params are logged by proxies/servers. Client: %s",
-            websocket.client.host if websocket.client else "unknown",
-        )
-        return True
-
-    return False
+    return validate_websocket_auth(websocket, _WS_AUTH_TOKEN)
 
 
 class MessageType(StrEnum):
@@ -95,7 +65,7 @@ class MessageType(StrEnum):
 
     # Server -> Client
     CONNECTED = "connected"
-    TOKEN = "token"
+    TOKEN = "token"  # nosec B105
     GENERATION_START = "generation_start"
     GENERATION_COMPLETE = "generation_complete"
     GENERATION_ERROR = "generation_error"

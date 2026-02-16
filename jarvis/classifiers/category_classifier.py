@@ -37,7 +37,7 @@ import time
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import joblib
 import numpy as np
@@ -281,6 +281,8 @@ class CategoryClassifier(EmbedderMixin):
 
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", "X does not have valid feature names")
+                if self._pipeline is None:
+                    return None
                 proba = self._pipeline.predict_proba(features)[0]
 
             category_idx = int(np.argmax(proba))
@@ -398,7 +400,9 @@ class CategoryClassifier(EmbedderMixin):
         # --- Pass 2: Batch pipeline classification ---
         if pipeline_indices and self._load_pipeline():
             pipeline_texts = [texts[i] for i in pipeline_indices]
-            pipeline_contexts = [contexts[i] or [] for i in pipeline_indices]
+            pipeline_contexts: list[list[str] | None] = [
+                contexts[i] or [] for i in pipeline_indices
+            ]
             pipeline_mobs = [mobilizations[i] for i in pipeline_indices]
 
             # Batch BERT encode
@@ -437,6 +441,8 @@ class CategoryClassifier(EmbedderMixin):
                 try:
                     with warnings.catch_warnings():
                         warnings.filterwarnings("ignore", "X does not have valid feature names")
+                        if self._pipeline is None:
+                            raise ValueError("Pipeline not loaded")
                         proba_matrix = self._pipeline.predict_proba(feature_matrix)
 
                     classes = self._mlb.classes_ if self._mlb is not None else CATEGORIES
@@ -461,16 +467,17 @@ class CategoryClassifier(EmbedderMixin):
         # --- Pass 3: Fill any remaining with fallback ---
         for i in range(n):
             if results[i] is None:
-                results[i] = CategoryResult(
+                fallback = CategoryResult(
                     category="statement",
                     confidence=0.30,
                     method="default",
                 )
+                results[i] = fallback
                 ctx = contexts[i] or []
                 cache_key = self._cache_key(texts[i], ctx)
-                self._cache_put(cache_key, results[i])
+                self._cache_put(cache_key, fallback)
 
-        return results  # type: ignore[return-value]
+        return cast(list[CategoryResult], results)
 
 
 # ---------------------------------------------------------------------------
