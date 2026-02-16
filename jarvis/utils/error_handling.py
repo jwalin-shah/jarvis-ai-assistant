@@ -104,10 +104,6 @@ def graceful_shutdown(func: F) -> F:
             return func(*args, **kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception:
-            # Re-raise other exceptions - this decorator is just for documentation
-            # and to ensure interrupts are never accidentally caught
-            raise
 
     return wrapper  # type: ignore[return-value]
 
