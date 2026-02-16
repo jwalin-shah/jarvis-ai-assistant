@@ -312,7 +312,7 @@ def to_model_generation_request(service: Any, request: GenerationRequest) -> Mod
     return ModelGenerationRequest(
         prompt=prompt,
         max_tokens=service._max_tokens_for_pressure(pressure),
-        stop_sequences=["</reply>", "<system>", "<conversation>", "<examples>", "\n\n\n"],
+        stop_sequences=["</reply>", "<system>", "<conversation>", "<examples>"],
     )
 
 
@@ -460,19 +460,20 @@ def generate_llm_reply(
             response.model_name,
         )
 
-        # Strip XML tags that leaked through stop_sequences
+        # Strip XML tags and other artifacts that leaked through
         if "</reply>" in text:
             text = text.split("</reply>")[0].strip()
+        
         for tag in [
-            "<system>",
-            "<conversation>",
-            "<facts>",
-            "<examples>",
-            "<style",
-            "<relationships>",
+            "(Note:", "Note:", "[Note:",
+            "<system>", "<conversation>", "<facts>", "<examples>", "<style", "<relationships>",
         ]:
             if tag in text:
                 text = text.split(tag)[0].strip()
+        
+        # Strip trailing punctuation if it looks like the model was cut off
+        if text.endswith((":", "-", "(")):
+            text = text[:-1].strip()
 
         if text.lower() in UNCERTAIN_SIGNALS:
             return GenerationResponse(

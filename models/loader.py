@@ -902,11 +902,11 @@ class MLXModelLoader:
                 break
 
         # If we stripped everything, keep original for visibility in debug/bakeoff
-        if not response and original_response:
+        if not response and original_raw.strip():
             logger.warning(
-                "Stripping resulted in empty string, reverting to original: '%s'", original_response
+                "Stripping resulted in empty string, reverting to original: '%s'", original_raw.strip()
             )
-            response = original_response
+            response = original_raw.strip()
 
         if response.endswith(("</", "<")):
             response = response.rsplit("<", 1)[0].strip()
@@ -958,6 +958,9 @@ class MLXModelLoader:
             )
         )
 
+        # NOTE: SYSTEM_PREFIX is already baked into RAG_REPLY_PROMPT.template,
+        # so we do NOT prepend it here. Doing so would duplicate it.
+
         try:
             start_time = time.perf_counter()
             with MLXModelLoader._mlx_load_lock:
@@ -966,7 +969,7 @@ class MLXModelLoader:
                 response = generate(
                     model=self._model,
                     tokenizer=self._tokenizer,
-                    prompt=formatted_prompt,
+                    prompt=prompt,
                     max_tokens=max_tokens,
                     sampler=sampler,
                     verbose=False
@@ -1048,8 +1051,7 @@ class MLXModelLoader:
                 )
             )
             
-            # DEBUG PRINT FOR MODEL COLLAPSE DIAGNOSIS
-            print(f"\n[DEBUG] PROMPT SENT TO MODEL:\n{formatted_prompt}\n[DEBUG] END PROMPT\n")
+            logger.debug("Prompt sent to model (%d chars)", len(formatted_prompt))
 
             # Use real streaming with mlx_lm.stream_generate
             # Hold the shared GPU lock for the entire generation to prevent

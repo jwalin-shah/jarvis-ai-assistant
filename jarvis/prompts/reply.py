@@ -72,37 +72,21 @@ def build_custom_instructions(
 def build_reply_prompt(
     context: str,
     last_message: str,
-    instruction: str | None = None,
-    tone: Literal["casual", "professional", "mixed"] = "casual",
-    relationship_profile: RelationshipProfile | None = None,
-    user_messages: list[str] | None = None,
-    user_style: Any | None = None,
+    **_kwargs: Any,
 ) -> str:
-    """Build a prompt for generating iMessage replies."""
-    from jarvis.prompts.utils import format_examples
+    """Build a simple prompt for generating iMessage replies.
 
-    effective_tone = determine_effective_tone(tone, relationship_profile)
-
-    tone_str = "professional/formal" if effective_tone == "professional" else "casual/friendly"
-
-    style_instructions = ""
-    examples_str = ""
-    if user_messages:
-        style_analysis = user_style or analyze_user_style(user_messages)
-        style_instructions = build_style_instructions(style_analysis)
-
-        # Include a few examples matching the tone
-        examples = select_examples_for_tone(effective_tone, relationship_profile)
-        if examples:
-            examples_str = f"\n<examples>\n{format_examples(examples)}\n</examples>"
-
+    This is the non-RAG fallback path. The main path uses
+    build_rag_reply_prompt() via rag.py instead.
+    """
     truncated_context = truncate_context(context)
+    if last_message:
+        full_context = f"{truncated_context}\n{last_message}" if truncated_context else last_message
+    else:
+        full_context = truncated_context
 
     prompt = REPLY_PROMPT.template.format(
-        context=truncated_context,
-        tone=tone_str,
-        style_instructions=style_instructions + examples_str,
-        last_message=last_message,
+        context=full_context
     )
 
     return prompt
