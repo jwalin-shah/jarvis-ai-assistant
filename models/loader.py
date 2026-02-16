@@ -25,8 +25,6 @@ import logging
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -44,7 +42,6 @@ from jarvis.core.exceptions import (
     ErrorCode,
     ModelGenerationError,
     ModelLoadError,
-    model_generation_timeout,
     model_not_found,
     model_out_of_memory,
 )
@@ -662,10 +659,9 @@ class MLXModelLoader:
         self._draft_config = None
 
         def prefill_prompt_cache(self, prefix_text: str) -> None:
-
             """Pre-compute KV cache for a static prompt prefix.
 
-    
+
 
             The cached KV state can be reused across generation calls that share
 
@@ -673,13 +669,13 @@ class MLXModelLoader:
 
             system prompt on a 1.2B model.
 
-    
+
 
             Must be called after load() and while holding _mlx_load_lock (or from
 
             a context where no concurrent GPU ops are possible).
 
-    
+
 
             Args:
 
@@ -688,16 +684,10 @@ class MLXModelLoader:
             """
 
             if not self.is_loaded():
-
                 logger.warning("Cannot prefill cache: model not loaded")
 
                 return
 
-    
-
-            from mlx_lm.models.cache import make_prompt_cache
-
-    
 
         try:
             # Tokenize the prefix once and store for reuse (avoids redundant
@@ -874,7 +864,8 @@ class MLXModelLoader:
         # Apply stop sequences
         if stop_sequences:
             for stop_seq in stop_sequences:
-                if not stop_seq: continue
+                if not stop_seq:
+                    continue
                 if stop_seq in response:
                     response = response[: response.index(stop_seq)]
                 elif stop_seq.strip() in response:
@@ -904,7 +895,8 @@ class MLXModelLoader:
         # If we stripped everything, keep original for visibility in debug/bakeoff
         if not response and original_raw.strip():
             logger.warning(
-                "Stripping resulted in empty string, reverting to original: '%s'", original_raw.strip()
+                "Stripping resulted in empty string, reverting to original: '%s'",
+                original_raw.strip(),
             )
             response = original_raw.strip()
 
@@ -951,11 +943,17 @@ class MLXModelLoader:
         if not self.is_loaded():
             raise ModelLoadError("Model not loaded")
 
-        formatted_prompt, max_tokens, sampler, logits_processors = (
-            self._prepare_generation_params(
-                prompt, max_tokens, temperature, top_p, min_p, top_k,
-                repetition_penalty, pre_formatted, negative_constraints, system_prompt
-            )
+        formatted_prompt, max_tokens, sampler, logits_processors = self._prepare_generation_params(
+            prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            min_p,
+            top_k,
+            repetition_penalty,
+            pre_formatted,
+            negative_constraints,
+            system_prompt,
         )
 
         # NOTE: SYSTEM_PREFIX is already baked into RAG_REPLY_PROMPT.template,
@@ -972,7 +970,7 @@ class MLXModelLoader:
                     prompt=prompt,
                     max_tokens=max_tokens,
                     sampler=sampler,
-                    verbose=False
+                    verbose=False,
                 )
 
             return self._process_generation_result(
@@ -1050,7 +1048,7 @@ class MLXModelLoader:
                     system_prompt=system_prompt,
                 )
             )
-            
+
             logger.debug("Prompt sent to model (%d chars)", len(formatted_prompt))
 
             # Use real streaming with mlx_lm.stream_generate

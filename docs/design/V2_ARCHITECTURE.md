@@ -10,6 +10,7 @@ Desktop App ←─ HTTP (50-150ms) ─→ FastAPI Server
 ```
 
 **Pain points:**
+
 - 50-150ms latency for every operation
 - Polling wastes resources
 - Up to 10 second delay for new messages
@@ -31,13 +32,13 @@ Desktop App ←─ HTTP (50-150ms) ─→ FastAPI Server
 
 ## Performance Comparison
 
-| Operation | V1 (HTTP) | V2 (Socket) | Improvement |
-|-----------|-----------|-------------|-------------|
-| Load conversations | ~100-150ms | ~1-5ms | **30-50x** |
-| Load messages | ~100-150ms | ~1-5ms | **30-50x** |
-| New message notification | Up to 10s | Instant | **Instant** |
-| Generate draft | ~50ms + inference | ~1-5ms + inference | **10x less overhead** |
-| Idle resource usage | Constant polling | Zero | **No waste** |
+| Operation                | V1 (HTTP)         | V2 (Socket)        | Improvement           |
+| ------------------------ | ----------------- | ------------------ | --------------------- |
+| Load conversations       | ~100-150ms        | ~1-5ms             | **30-50x**            |
+| Load messages            | ~100-150ms        | ~1-5ms             | **30-50x**            |
+| New message notification | Up to 10s         | Instant            | **Instant**           |
+| Generate draft           | ~50ms + inference | ~1-5ms + inference | **10x less overhead** |
+| Idle resource usage      | Constant polling  | Zero               | **No waste**          |
 
 ## Unix Socket Protocol
 
@@ -45,21 +46,21 @@ JSON-RPC 2.0 over newline-delimited JSON.
 
 ### Available Methods
 
-| Method | Streaming | Description |
-|--------|-----------|-------------|
-| `ping` | No | Health check |
-| `generate_draft` | Yes | Generate reply draft for a conversation |
-| `summarize` | Yes | Summarize a conversation |
-| `get_smart_replies` | No | Get quick reply suggestions |
-| `semantic_search` | No | Search message history by meaning |
-| `batch` | No | Execute multiple RPC calls in one request |
-| `resolve_contacts` | No | Resolve contact info from handles |
-| `list_conversations` | No | List recent conversations |
-| `get_routing_metrics` | No | Get routing/classification metrics |
-| `prefetch_stats` | No | Get prefetch cache statistics |
-| `prefetch_invalidate` | No | Invalidate prefetch cache entries |
-| `prefetch_focus` | No | Signal that a conversation is focused |
-| `prefetch_hover` | No | Signal that a conversation is hovered |
+| Method                | Streaming | Description                               |
+| --------------------- | --------- | ----------------------------------------- |
+| `ping`                | No        | Health check                              |
+| `generate_draft`      | Yes       | Generate reply draft for a conversation   |
+| `summarize`           | Yes       | Summarize a conversation                  |
+| `get_smart_replies`   | No        | Get quick reply suggestions               |
+| `semantic_search`     | No        | Search message history by meaning         |
+| `batch`               | No        | Execute multiple RPC calls in one request |
+| `resolve_contacts`    | No        | Resolve contact info from handles         |
+| `list_conversations`  | No        | List recent conversations                 |
+| `get_routing_metrics` | No        | Get routing/classification metrics        |
+| `prefetch_stats`      | No        | Get prefetch cache statistics             |
+| `prefetch_invalidate` | No        | Invalidate prefetch cache entries         |
+| `prefetch_focus`      | No        | Signal that a conversation is focused     |
+| `prefetch_hover`      | No        | Signal that a conversation is hovered     |
 
 ### Message Format
 
@@ -89,10 +90,10 @@ For LLM generation, tokens stream as they're generated:
 
 ## Why Unix Sockets Over HTTP?
 
-| Option | Pros | Cons |
-|--------|------|------|
-| HTTP (FastAPI) | Simple, works | 50-150ms overhead |
-| gRPC | Typed, fast | Complex setup |
-| **Unix sockets** | **Fast, simple, local-only** | Local only |
+| Option           | Pros                         | Cons              |
+| ---------------- | ---------------------------- | ----------------- |
+| HTTP (FastAPI)   | Simple, works                | 50-150ms overhead |
+| gRPC             | Typed, fast                  | Complex setup     |
+| **Unix sockets** | **Fast, simple, local-only** | Local only        |
 
 We keep HTTP for CLI and potential remote clients.

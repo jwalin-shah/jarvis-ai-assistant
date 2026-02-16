@@ -12,19 +12,20 @@ JARVIS extracts structured personal facts (family members, locations, jobs, hobb
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `scripts/eval_llm_extraction.py` | Main eval script. Runs LLM extraction on goldset, computes P/R/F1 |
-| `scripts/eval_shared.py` | Shared evaluation utilities (spans_match, label aliases) |
-| `training_data/gliner_goldset/candidate_gold_merged_r4.json` | Gold evaluation set (796 records, 312 positive spans) |
-| `training_data/gliner_goldset/candidate_gold_merged_r4_clean.json` | Cleaned version of goldset |
-| `jarvis/contacts/fact_extractor.py` | Production fact extraction pipeline |
-| `models/loader.py` | MLX model loader |
-| `tasks/extraction-opt-status.md` | **YOUR STATUS FILE** - read this first, update after each iteration |
+| File                                                               | Purpose                                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `scripts/eval_llm_extraction.py`                                   | Main eval script. Runs LLM extraction on goldset, computes P/R/F1   |
+| `scripts/eval_shared.py`                                           | Shared evaluation utilities (spans_match, label aliases)            |
+| `training_data/gliner_goldset/candidate_gold_merged_r4.json`       | Gold evaluation set (796 records, 312 positive spans)               |
+| `training_data/gliner_goldset/candidate_gold_merged_r4_clean.json` | Cleaned version of goldset                                          |
+| `jarvis/contacts/fact_extractor.py`                                | Production fact extraction pipeline                                 |
+| `models/loader.py`                                                 | MLX model loader                                                    |
+| `tasks/extraction-opt-status.md`                                   | **YOUR STATUS FILE** - read this first, update after each iteration |
 
 ## Gold Set Format
 
 Each record in the goldset JSON array:
+
 ```json
 {
   "sample_id": "r2_fact_gs_0363",
@@ -37,10 +38,10 @@ Each record in the goldset JSON array:
   "gold_fact_type": "hobby",
   "gold_subject": "brother",
   "gold_notes": "speaker's brother bakes; speaker eats whatever brother makes",
-  "slice": "positive",  // or "random_negative", "hard_negative", "near_miss"
+  "slice": "positive", // or "random_negative", "hard_negative", "near_miss"
   "expected_candidates": [
-    {"span_text": "brother", "span_label": "family_member", "fact_type": "relationship.family"},
-    {"span_text": "bakes", "span_label": "activity", "fact_type": "preference.activity"}
+    { "span_text": "brother", "span_label": "family_member", "fact_type": "relationship.family" },
+    { "span_text": "bakes", "span_label": "activity", "fact_type": "preference.activity" }
   ],
   "source_slice": "backfill"
 }
@@ -51,12 +52,15 @@ Slices: `positive` (has facts), `random_negative` (no facts), `hard_negative` (l
 ## Evaluation Command
 
 Run evaluation and check results:
+
 ```bash
 uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset/candidate_gold_merged_r4.json --limit 100
 ```
+
 Use `--limit 100` for fast iteration (100 messages ~2 min), full goldset (796 messages) for final measurement.
 
 To see latest metrics:
+
 ```bash
 cat results/llm_extraction/lfm2-extract_metrics.json | python3 -c "import json,sys; m=json.load(sys.stdin); print(f'P={m[\"overall\"][\"precision\"]:.3f} R={m[\"overall\"][\"recall\"]:.3f} F1={m[\"overall\"][\"f1\"]:.3f}')"
 ```
@@ -96,6 +100,7 @@ cat results/llm_extraction/lfm2-extract_metrics.json | python3 -c "import json,s
 ## Goldset Creation (HIGH PRIORITY)
 
 The current goldset has known quality issues that cap achievable F1:
+
 - Only 192/796 records have `expected_candidates` (the rest are negatives with no spans)
 - Only 312 total gold spans across 13 label types (very sparse for some: friend_name=3, person_name=2)
 - Label inconsistencies: `gold_keep` has mixed int/string types (1 vs "1")
@@ -105,6 +110,7 @@ The current goldset has known quality issues that cap achievable F1:
 **You are encouraged to build a better goldset.** Here's how:
 
 ### Existing Tools
+
 - `scripts/build_fact_goldset.py` - Samples messages from iMessage chat.db (stratified: random, likely-fact-bearing, hard negatives). Outputs JSONL/CSV/manifest. Run: `uv run python scripts/build_fact_goldset.py --total 400`
 - `scripts/clean_goldset.py` - Cleans existing goldset (removes phantom spans, deduplicates entities)
 - `scripts/merge_goldsets.py` - Merges multiple goldset rounds
@@ -120,7 +126,9 @@ You can create a new goldset by writing a script that:
 5. **Includes proper negatives** - Messages that look like they have facts but don't (hard negatives)
 
 ### Goldset Quality Checklist
+
 When creating a new goldset, ensure:
+
 - [ ] Every `expected_candidates[].span_text` appears in `message_text` (case-insensitive substring match is OK)
 - [ ] No duplicate spans within a record
 - [ ] Labels use the canonical set: `family_member`, `activity`, `health_condition`, `job_role`, `org`, `place`, `food_item`, `current_location`, `future_location`, `past_location`, `friend_name`, `person_name`
@@ -130,12 +138,14 @@ When creating a new goldset, ensure:
 - [ ] `gold_keep` is consistent (int: 1 or 0)
 
 ### Goldset Files
+
 - **Original (read-only)**: `training_data/gliner_goldset/candidate_gold_merged_r4.json`
 - **New goldsets**: Save to `training_data/gliner_goldset/goldset_v5_<description>.json`
 - **Always eval on BOTH** old and new goldsets to track progress on each
 - **Document** all goldset changes in the status file
 
 ### Eval with Custom Goldset
+
 ```bash
 uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset/goldset_v5_improved.json --limit 100
 ```
@@ -143,6 +153,7 @@ uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset
 ## Prioritized Techniques to Try
 
 ### Tier 1: Quick Wins (try first)
+
 1. **Better prompts**: More specific instructions, few-shot examples from the goldset, chain-of-thought
 2. **Schema refinement**: Simplify or restructure the extraction schema to match what the model actually outputs
 3. **Post-processing**: Better JSON parsing, span normalization, label mapping
@@ -150,6 +161,7 @@ uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset
 5. **Two-pass extraction**: First pass detects if message has facts, second pass extracts them
 
 ### Tier 2: Structural Changes
+
 6. **Constrained generation**: Force JSON output structure using logit constraints
 7. **Label-specific prompts**: Run separate focused prompts for each fact type
 8. **Context injection**: Include context_prev/context_next in the prompt
@@ -157,6 +169,7 @@ uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset
 10. **Ensemble**: Combine GLiNER + LLM predictions
 
 ### Tier 3: Advanced / Research-Based
+
 11. **DSPy optimization**: Use DSPy framework to auto-optimize prompts (web search for latest techniques)
 12. **Self-consistency**: Generate N times, take majority vote
 13. **Error analysis driven**: Categorize failure modes, target specific fix for each
@@ -166,6 +179,7 @@ uv run python scripts/eval_llm_extraction.py --gold training_data/gliner_goldset
 ## Web Research
 
 Use WebSearch to research:
+
 - "NER extraction prompting techniques 2025"
 - "DSPy structured extraction optimization"
 - "few-shot NER small language models"
@@ -176,10 +190,12 @@ Use WebSearch to research:
 ## Status File Protocol
 
 At the START of each iteration:
+
 1. Read `tasks/extraction-opt-status.md`
 2. Check what's been tried, what worked, what didn't
 
 At the END of each iteration:
+
 1. Update the status file with:
    - What strategy you tried this iteration
    - The measured F1 (with --limit used)
@@ -193,6 +209,7 @@ At the END of each iteration:
 ## STATUS: IN_PROGRESS
 
 ## Current Best
+
 - **F1**: 0.368
 - **Strategy**: constrained_categories
 - **Commit**: <hash>
@@ -200,6 +217,7 @@ At the END of each iteration:
 ## Iteration Log
 
 ### Iteration N - <strategy name>
+
 - **F1**: <measured>
 - **Limit**: 100 or full
 - **Changes**: brief description
@@ -207,9 +225,11 @@ At the END of each iteration:
 - **Notes**: observations, error analysis
 
 ## Error Analysis
+
 - <category>: <observation>
 
 ## Next Steps
+
 1. <planned strategy>
 ```
 
@@ -226,6 +246,7 @@ At the END of each iteration:
 ## Starting Point
 
 If this is your first iteration:
+
 1. Read the current eval script thoroughly
 2. Run baseline: `uv run python scripts/eval_llm_extraction.py --limit 100`
 3. Analyze per-label breakdown to find biggest gaps

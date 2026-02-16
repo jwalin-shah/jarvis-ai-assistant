@@ -135,7 +135,9 @@
         </div>
         <div class="metric">
           <span class="metric-label">Memory</span>
-          <span class="metric-value">{health.memory_available_gb.toFixed(1)} GB ({health.memory_mode})</span>
+          <span class="metric-value"
+            >{health.memory_available_gb.toFixed(1)} GB ({health.memory_mode})</span
+          >
         </div>
         <div class="metric">
           <span class="metric-label">Model</span>
@@ -163,7 +165,8 @@
           <div class="check-item">
             <span class="check-name">{name}:</span>
             <span class="check-status" style="color: {getStatusColor(result.status)}">
-              {getStatusIcon(result.status)} {result.status}
+              {getStatusIcon(result.status)}
+              {result.status}
             </span>
           </div>
         {/each}

@@ -7,14 +7,14 @@
  * Delegates streaming logic to StreamManager and batching to BatchManager (REF-14).
  */
 
-import { getSocketRpcWebSocketUrl } from "../config/runtime";
-import type { InvokeArgs, InvokeOptions } from "@tauri-apps/api/core";
-import { StreamManager } from "./stream-manager";
-import { BatchQueue, WS_BATCH_CONFIG, TAURI_BATCH_CONFIG } from "./batch-manager";
-import type { BatchedRequest } from "./batch-manager";
+import { getSocketRpcWebSocketUrl } from '../config/runtime';
+import type { InvokeArgs, InvokeOptions } from '@tauri-apps/api/core';
+import { StreamManager } from './stream-manager';
+import { BatchQueue, WS_BATCH_CONFIG, TAURI_BATCH_CONFIG } from './batch-manager';
+import type { BatchedRequest } from './batch-manager';
 
 // Check if running in Tauri context
-const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 // WebSocket configuration for browser mode
 const WEBSOCKET_URL = getSocketRpcWebSocketUrl();
@@ -34,25 +34,32 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       reject(new Error(`${label} timed out after ${ms}ms`));
     }, ms);
     promise.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (err) => { clearTimeout(timer); reject(err); },
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
     );
   });
 }
 
 // Dynamic imports for Tauri APIs - only available in Tauri context
-let invoke: (<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions) => Promise<T>) | null = null;
+let invoke: (<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions) => Promise<T>) | null =
+  null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let listen: ((event: string, handler: (event: any) => void) => Promise<() => void>) | null = null;
 
 /** Connection state */
-export type ConnectionState = "disconnected" | "connecting" | "connected";
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
 /**
  * Connection transport — tracks which transport is active (UX-01).
  * "unix_socket" = Tauri IPC, "websocket" = browser or fallback, null = not connected.
  */
-export type ConnectionTransport = "unix_socket" | "websocket" | null;
+export type ConnectionTransport = 'unix_socket' | 'websocket' | null;
 
 /** Connection info exposed to UI components (UX-01) */
 export interface ConnectionInfo {
@@ -174,9 +181,7 @@ function recordRPCTiming(method: string, elapsed_ms: number): void {
   const budget_ms = RPC_BUDGETS[method];
   const exceeded = budget_ms !== undefined && elapsed_ms > budget_ms;
   if (exceeded) {
-    console.warn(
-      `[RPC Budget] ${method} took ${elapsed_ms.toFixed(1)}ms (budget: ${budget_ms}ms)`
-    );
+    console.warn(`[RPC Budget] ${method} took ${elapsed_ms.toFixed(1)}ms (budget: ${budget_ms}ms)`);
   }
   rpcTimings.push({ method, elapsed_ms, budget_ms, exceeded, timestamp: Date.now() });
   if (rpcTimings.length > MAX_RPC_TIMINGS) {
@@ -218,7 +223,7 @@ export function getRPCCompliance(method?: string): {
  * Delegates streaming to StreamManager and batching to BatchQueue (REF-14).
  */
 class JarvisSocket {
-  private state: ConnectionState = "disconnected";
+  private state: ConnectionState = 'disconnected';
   private transport: ConnectionTransport = null;
   private eventHandlers: Map<string, Set<EventHandler>> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -282,7 +287,7 @@ class JarvisSocket {
     return {
       state: this.state,
       transport: this.transport,
-      isFallback: isTauri && this.transport === "websocket",
+      isFallback: isTauri && this.transport === 'websocket',
     };
   }
 
@@ -294,24 +299,24 @@ class JarvisSocket {
 
     try {
       if (!invoke) {
-        const coreModule = await import("@tauri-apps/api/core");
-        if (!coreModule || typeof coreModule.invoke !== "function") {
-          console.warn("[JarvisSocket] Tauri core module missing invoke function");
+        const coreModule = await import('@tauri-apps/api/core');
+        if (!coreModule || typeof coreModule.invoke !== 'function') {
+          console.warn('[JarvisSocket] Tauri core module missing invoke function');
           return false;
         }
         invoke = coreModule.invoke;
       }
       if (!listen) {
-        const eventModule = await import("@tauri-apps/api/event");
-        if (!eventModule || typeof eventModule.listen !== "function") {
-          console.warn("[JarvisSocket] Tauri event module missing listen function");
+        const eventModule = await import('@tauri-apps/api/event');
+        if (!eventModule || typeof eventModule.listen !== 'function') {
+          console.warn('[JarvisSocket] Tauri event module missing listen function');
           return false;
         }
         listen = eventModule.listen;
       }
       return true;
     } catch (error) {
-      console.warn("[JarvisSocket] Failed to import Tauri APIs:", error);
+      console.warn('[JarvisSocket] Failed to import Tauri APIs:', error);
       return false;
     }
   }
@@ -326,27 +331,33 @@ class JarvisSocket {
     await this.cleanupEventListeners();
 
     // Listen for stream tokens
-    const unlistenToken = await listen("jarvis:stream_token", (event: { payload: StreamTokenEvent }) => {
-      this.streamManager.handleStreamToken(event.payload);
-    });
+    const unlistenToken = await listen(
+      'jarvis:stream_token',
+      (event: { payload: StreamTokenEvent }) => {
+        this.streamManager.handleStreamToken(event.payload);
+      }
+    );
     this.unlistenFns.push(unlistenToken);
 
     // Listen for new message notifications
-    const unlistenNewMsg = await listen("jarvis:new_message", (event: { payload: NewMessageEvent }) => {
-      this.emit("new_message", event.payload);
-    });
+    const unlistenNewMsg = await listen(
+      'jarvis:new_message',
+      (event: { payload: NewMessageEvent }) => {
+        this.emit('new_message', event.payload);
+      }
+    );
     this.unlistenFns.push(unlistenNewMsg);
 
     // Listen for connection events
-    const unlistenConnected = await listen("jarvis:connected", () => {
-      this.state = "connected";
-      this.emit("connected", {});
+    const unlistenConnected = await listen('jarvis:connected', () => {
+      this.state = 'connected';
+      this.emit('connected', {});
     });
     this.unlistenFns.push(unlistenConnected);
 
-    const unlistenDisconnected = await listen("jarvis:disconnected", () => {
-      this.state = "disconnected";
-      this.emit("disconnected", {});
+    const unlistenDisconnected = await listen('jarvis:disconnected', () => {
+      this.state = 'disconnected';
+      this.emit('disconnected', {});
       this.scheduleReconnect();
     });
     this.unlistenFns.push(unlistenDisconnected);
@@ -379,7 +390,7 @@ class JarvisSocket {
         const timeout = pending.isStreaming ? STREAMING_TIMEOUT : REQUEST_TIMEOUT;
         if (now - pending.createdAt > timeout) {
           console.warn(`[JarvisSocket] Cleaning up stale request ${requestId}`);
-          pending.reject(new Error("Request timed out (cleanup)"));
+          pending.reject(new Error('Request timed out (cleanup)'));
           this.wsPendingRequests.delete(requestId);
         }
       }
@@ -400,10 +411,10 @@ class JarvisSocket {
    * Connect to the socket server
    */
   async connect(): Promise<boolean> {
-    if (this.state === "connected") return true;
+    if (this.state === 'connected') return true;
 
-    this.state = "connecting";
-    this.emit("connecting", {});
+    this.state = 'connecting';
+    this.emit('connecting', {});
 
     // Use WebSocket in browser, Tauri commands in app
     if (!isTauri) {
@@ -414,34 +425,34 @@ class JarvisSocket {
       // Initialize Tauri APIs
       const apisReady = await this.initTauriApis();
       if (!apisReady || !invoke) {
-        throw new Error("Failed to initialize Tauri APIs");
+        throw new Error('Failed to initialize Tauri APIs');
       }
 
       // Set up event listeners before connecting
       await this.setupEventListeners();
 
       const connected = await withTimeout(
-        invoke<boolean>("connect_socket"),
+        invoke<boolean>('connect_socket'),
         REQUEST_TIMEOUT,
-        "connect_socket"
+        'connect_socket'
       );
 
       if (connected) {
-        this.state = "connected";
-        this.transport = "unix_socket";
+        this.state = 'connected';
+        this.transport = 'unix_socket';
         this.reconnectAttempts = 0;
-        this.emit("connected", {});
+        this.emit('connected', {});
         this.emitConnectionInfoChanged();
         return true;
       } else {
-        this.state = "disconnected";
+        this.state = 'disconnected';
         this.scheduleReconnect();
         return false;
       }
     } catch (error) {
-      console.warn("[JarvisSocket] Connection failed:", error);
-      this.state = "disconnected";
-      this.emit("error", { error });
+      console.warn('[JarvisSocket] Connection failed:', error);
+      this.state = 'disconnected';
+      this.emit('error', { error });
       this.scheduleReconnect();
       return false;
     }
@@ -456,40 +467,40 @@ class JarvisSocket {
         this.ws = new WebSocket(WEBSOCKET_URL);
 
         this.ws.onopen = () => {
-          console.log("[JarvisSocket] WebSocket connected");
-          this.state = "connected";
-          this.transport = "websocket";
+          console.log('[JarvisSocket] WebSocket connected');
+          this.state = 'connected';
+          this.transport = 'websocket';
           this.reconnectAttempts = 0;
           this.startStaleRequestCleanup();
-          this.emit("connected", {});
+          this.emit('connected', {});
           this.emitConnectionInfoChanged();
           resolve(true);
         };
 
         this.ws.onclose = () => {
-          console.log("[JarvisSocket] WebSocket disconnected");
-          this.state = "disconnected";
+          console.log('[JarvisSocket] WebSocket disconnected');
+          this.state = 'disconnected';
           this.transport = null;
           this.ws = null;
           this.stopStaleRequestCleanup();
           // Reject pending batch requests
-          this.wsBatchQueue.rejectAll(new Error("WebSocket disconnected"));
+          this.wsBatchQueue.rejectAll(new Error('WebSocket disconnected'));
           // Reject all pending requests on disconnect
           for (const [_requestId, pending] of this.wsPendingRequests) {
             if (pending.timeoutId) {
               clearTimeout(pending.timeoutId);
             }
-            pending.reject(new Error("WebSocket disconnected"));
+            pending.reject(new Error('WebSocket disconnected'));
           }
           this.wsPendingRequests.clear();
-          this.emit("disconnected", {});
+          this.emit('disconnected', {});
           this.emitConnectionInfoChanged();
           this.scheduleReconnect();
         };
 
         this.ws.onerror = (error) => {
-          console.warn("[JarvisSocket] WebSocket error:", error);
-          this.emit("error", { error });
+          console.warn('[JarvisSocket] WebSocket error:', error);
+          this.emit('error', { error });
         };
 
         this.ws.onmessage = (event) => {
@@ -498,17 +509,17 @@ class JarvisSocket {
 
         // Timeout after 5 seconds
         setTimeout(() => {
-          if (this.state === "connecting") {
-            console.warn("[JarvisSocket] WebSocket connection timeout");
+          if (this.state === 'connecting') {
+            console.warn('[JarvisSocket] WebSocket connection timeout');
             this.ws?.close();
-            this.state = "disconnected";
+            this.state = 'disconnected';
             resolve(false);
           }
         }, 5000);
       } catch (error) {
-        console.warn("[JarvisSocket] WebSocket connection failed:", error);
-        this.state = "disconnected";
-        this.emit("error", { error });
+        console.warn('[JarvisSocket] WebSocket connection failed:', error);
+        this.state = 'disconnected';
+        this.emit('error', { error });
         resolve(false);
       }
     });
@@ -522,20 +533,19 @@ class JarvisSocket {
       const message = JSON.parse(data);
 
       // Check if it's a notification (no id)
-      if (!("id" in message) && message.method) {
+      if (!('id' in message) && message.method) {
         // Handle streaming tokens (FE-03: validate params structure)
-        if (message.method === "stream.token") {
+        if (message.method === 'stream.token') {
           const params = message.params;
           if (
             params &&
-            typeof params === "object" &&
-            typeof params.token === "string" &&
-            typeof params.index === "number"
+            typeof params === 'object' &&
+            typeof params.token === 'string' &&
+            typeof params.index === 'number'
           ) {
             const { token, index } = params;
-            const streamRequestId = typeof params.request_id === "number"
-              ? params.request_id
-              : undefined;
+            const streamRequestId =
+              typeof params.request_id === 'number' ? params.request_id : undefined;
             if (streamRequestId !== undefined) {
               const pending = this.wsPendingRequests.get(streamRequestId);
               if (pending && pending.onToken) {
@@ -543,20 +553,20 @@ class JarvisSocket {
               }
             }
           } else {
-            console.warn("[JarvisSocket] Malformed stream.token params:", params);
+            console.warn('[JarvisSocket] Malformed stream.token params:', params);
           }
           return;
         }
 
         // Handle other notifications (e.g., new_message)
-        if (message.method === "new_message") {
-          this.emit("new_message", message.params);
+        if (message.method === 'new_message') {
+          this.emit('new_message', message.params);
           return;
         }
       }
 
       // Handle response to a request
-      if ("id" in message && message.id !== null) {
+      if ('id' in message && message.id !== null) {
         const pending = this.wsPendingRequests.get(message.id);
         if (pending) {
           if (pending.timeoutId) {
@@ -571,7 +581,7 @@ class JarvisSocket {
         }
       }
     } catch (error) {
-      console.warn("[JarvisSocket] Failed to parse WebSocket message:", error);
+      console.warn('[JarvisSocket] Failed to parse WebSocket message:', error);
     }
   }
 
@@ -588,8 +598,8 @@ class JarvisSocket {
     this.stopStaleRequestCleanup();
 
     // Reject pending batch requests
-    this.wsBatchQueue.rejectAll(new Error("Disconnected"));
-    this.tauriBatchQueue.rejectAll(new Error("Disconnected"));
+    this.wsBatchQueue.rejectAll(new Error('Disconnected'));
+    this.tauriBatchQueue.rejectAll(new Error('Disconnected'));
 
     // Close WebSocket if open
     if (this.ws) {
@@ -605,15 +615,15 @@ class JarvisSocket {
 
     if (isTauri && invoke) {
       try {
-        await invoke("disconnect_socket");
+        await invoke('disconnect_socket');
       } catch {
         // Ignore disconnect errors
       }
     }
 
-    this.state = "disconnected";
+    this.state = 'disconnected';
     this.transport = null;
-    this.emit("disconnected", {});
+    this.emit('disconnected', {});
     this.emitConnectionInfoChanged();
   }
 
@@ -628,7 +638,7 @@ class JarvisSocket {
 
     if (!invoke) return false;
     try {
-      return await invoke<boolean>("is_socket_connected");
+      return await invoke<boolean>('is_socket_connected');
     } catch {
       return false;
     }
@@ -639,10 +649,10 @@ class JarvisSocket {
    */
   async call<T>(method: string, params: object = {}): Promise<T> {
     // Ensure connected
-    if (this.state !== "connected") {
+    if (this.state !== 'connected') {
       const connected = await this.connect();
       if (!connected) {
-        throw new Error("Not connected to socket server");
+        throw new Error('Not connected to socket server');
       }
     }
 
@@ -660,13 +670,13 @@ class JarvisSocket {
     }
 
     if (!invoke) {
-      throw new Error("Tauri invoke not available");
+      throw new Error('Tauri invoke not available');
     }
 
     const rpcStart = performance.now();
     try {
       const result = await withTimeout(
-        invoke<T>("send_message", { method, params }),
+        invoke<T>('send_message', { method, params }),
         REQUEST_TIMEOUT,
         `send_message(${method})`
       );
@@ -675,7 +685,7 @@ class JarvisSocket {
     } catch (error) {
       recordRPCTiming(method, performance.now() - rpcStart);
       // On error, try to reconnect
-      this.state = "disconnected";
+      this.state = 'disconnected';
       this.scheduleReconnect();
       throw error;
     }
@@ -687,13 +697,13 @@ class JarvisSocket {
   private callWebSocket<T>(method: string, params: object = {}): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        reject(new Error("WebSocket not connected"));
+        reject(new Error('WebSocket not connected'));
         return;
       }
 
       const requestId = ++this.wsRequestId;
       const request = {
-        jsonrpc: "2.0",
+        jsonrpc: '2.0',
         method,
         params,
         id: requestId,
@@ -714,7 +724,7 @@ class JarvisSocket {
       const timeoutId = setTimeout(() => {
         if (this.wsPendingRequests.has(requestId)) {
           this.wsPendingRequests.delete(requestId);
-          reject(new Error("Request timeout"));
+          reject(new Error('Request timeout'));
         }
       }, REQUEST_TIMEOUT);
 
@@ -744,10 +754,10 @@ class JarvisSocket {
     }
 
     // Ensure connected
-    if (this.state !== "connected") {
+    if (this.state !== 'connected') {
       const connected = await this.connect();
       if (!connected) {
-        throw new Error("Not connected to socket server");
+        throw new Error('Not connected to socket server');
       }
     }
 
@@ -778,11 +788,13 @@ class JarvisSocket {
     console.log(`[JarvisSocket] Sending Tauri batch of ${batch.length} requests`);
 
     try {
-      const results = await withTimeout(
-        invoke!("send_batch", { requests: batch.map(r => ({ method: r.method, params: r.params })) }),
+      const results = (await withTimeout(
+        invoke!('send_batch', {
+          requests: batch.map((r) => ({ method: r.method, params: r.params })),
+        }),
         REQUEST_TIMEOUT,
-        "send_batch"
-      ) as Array<{ result?: unknown; error?: string }>;
+        'send_batch'
+      )) as Array<{ result?: unknown; error?: string }>;
 
       // Map results back to individual promises
       batch.forEach((req, index) => {
@@ -805,8 +817,8 @@ class JarvisSocket {
   private flushWsBatch(batch: BatchedRequest[]): void {
     // Check if WebSocket is still connected before sending
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn("[JarvisSocket] Cannot flush batch: WebSocket not connected");
-      batch.forEach((req) => req.reject(new Error("WebSocket not connected")));
+      console.warn('[JarvisSocket] Cannot flush batch: WebSocket not connected');
+      batch.forEach((req) => req.reject(new Error('WebSocket not connected')));
       return;
     }
 
@@ -815,9 +827,7 @@ class JarvisSocket {
       const first = batch[0];
       if (first) {
         const { method, params, resolve, reject } = first;
-        this.callWebSocket(method, params)
-          .then(resolve)
-          .catch(reject);
+        this.callWebSocket(method, params).then(resolve).catch(reject);
       }
       return;
     }
@@ -833,7 +843,7 @@ class JarvisSocket {
 
     // Send batch request
     this.callWebSocket<{ results: Array<{ result?: unknown; error?: { message: string } }> }>(
-      "batch",
+      'batch',
       { requests }
     )
       .then((response) => {
@@ -861,10 +871,10 @@ class JarvisSocket {
     onToken?: (token: string, index: number) => void
   ): AsyncGenerator<string, void, unknown> {
     // Ensure connected
-    if (this.state !== "connected") {
+    if (this.state !== 'connected') {
       const connected = await this.connect();
       if (!connected) {
-        throw new Error("Not connected to socket server");
+        throw new Error('Not connected to socket server');
       }
     }
 
@@ -875,12 +885,12 @@ class JarvisSocket {
     }
 
     if (!invoke) {
-      throw new Error("Tauri invoke not available");
+      throw new Error('Tauri invoke not available');
     }
 
     // Start streaming request
     const requestId = await withTimeout(
-      invoke<number>("send_streaming_message", { method, params }),
+      invoke<number>('send_streaming_message', { method, params }),
       STREAMING_TIMEOUT,
       `send_streaming_message(${method})`
     );
@@ -974,9 +984,9 @@ class JarvisSocket {
             }
           }),
           // 5 second timeout to periodically check overall duration
-          new Promise<never>((_, reject) => 
+          new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('TOKEN_TIMEOUT')), 5000)
-          )
+          ),
         ]).catch((err) => {
           if (err.message === 'TOKEN_TIMEOUT') {
             return null; // Return null to continue loop and check overall timeout
@@ -1012,12 +1022,12 @@ class JarvisSocket {
     onToken?: (token: string, index: number) => void
   ): AsyncGenerator<string, void, unknown> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error("WebSocket not connected");
+      throw new Error('WebSocket not connected');
     }
 
     const requestId = ++this.wsRequestId;
     const request = {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       method,
       params: { ...params, stream: true },
       id: requestId,
@@ -1138,7 +1148,7 @@ class JarvisSocket {
    * UI components can subscribe to this to show connection indicators.
    */
   private emitConnectionInfoChanged(): void {
-    this.emit("connection_info_changed", this.getConnectionInfo());
+    this.emit('connection_info_changed', this.getConnectionInfo());
   }
 
   /**
@@ -1151,12 +1161,12 @@ class JarvisSocket {
       if (isTauri) {
         // Unix socket exhausted - fall back to WebSocket (UX-01: emit fallback event)
         console.warn(
-          "[JarvisSocket] Unix socket reconnect failed after %d attempts, falling back to WebSocket",
+          '[JarvisSocket] Unix socket reconnect failed after %d attempts, falling back to WebSocket',
           this.maxReconnectAttempts
         );
-        this.emit("transport_fallback", {
-          from: "unix_socket",
-          to: "websocket",
+        this.emit('transport_fallback', {
+          from: 'unix_socket',
+          to: 'websocket',
           reason: `Unix socket failed after ${this.maxReconnectAttempts} attempts`,
         });
         this.reconnectAttempts = 0;
@@ -1164,13 +1174,13 @@ class JarvisSocket {
           this.reconnectTimer = null;
           const ok = await this.connectWebSocket();
           if (!ok) {
-            this.emit("max_reconnect_attempts", {});
+            this.emit('max_reconnect_attempts', {});
           }
         }, this.reconnectDelay);
         return;
       }
-      console.warn("[JarvisSocket] Max reconnect attempts reached");
-      this.emit("max_reconnect_attempts", {});
+      console.warn('[JarvisSocket] Max reconnect attempts reached');
+      this.emit('max_reconnect_attempts', {});
       return;
     }
 
@@ -1193,7 +1203,7 @@ class JarvisSocket {
    * Generate draft replies for a conversation (non-streaming)
    */
   async generateDraft(params: GenerateDraftParams): Promise<GenerateDraftResult> {
-    return this.call("generate_draft", params);
+    return this.call('generate_draft', params);
   }
 
   /**
@@ -1203,10 +1213,10 @@ class JarvisSocket {
     params: GenerateDraftParams,
     onToken?: (token: string) => void
   ): Promise<GenerateDraftResult> {
-    let fullText = "";
+    let fullText = '';
     let tokenCount = 0;
 
-    for await (const token of this.callStream("generate_draft", params, (t) => {
+    for await (const token of this.callStream('generate_draft', params, (t) => {
       if (onToken) onToken(t);
     })) {
       fullText += token;
@@ -1231,7 +1241,7 @@ class JarvisSocket {
   async getSmartReplies(params: SmartReplyParams): Promise<{
     suggestions: Array<{ text: string; score: number }>;
   }> {
-    return this.call("get_smart_replies", params);
+    return this.call('get_smart_replies', params);
   }
 
   /**
@@ -1250,21 +1260,21 @@ class JarvisSocket {
     }>;
     total_results: number;
   }> {
-    return this.call("semantic_search", params);
+    return this.call('semantic_search', params);
   }
 
   /**
    * Classify message intent
    */
   async classifyIntent(text: string): Promise<IntentResult> {
-    return this.call("classify_intent", { text });
+    return this.call('classify_intent', { text });
   }
 
   /**
    * Get conversation summary (non-streaming)
    */
   async summarize(chatId: string, numMessages = 50): Promise<SummarizeResult> {
-    return this.call("summarize", {
+    return this.call('summarize', {
       chat_id: chatId,
       num_messages: numMessages,
     });
@@ -1278,30 +1288,32 @@ class JarvisSocket {
     numMessages = 50,
     onToken?: (token: string) => void
   ): Promise<SummarizeResult> {
-    let fullText = "";
+    let fullText = '';
     let tokenCount = 0;
 
     for await (const token of this.callStream(
-      "summarize",
+      'summarize',
       { chat_id: chatId, num_messages: numMessages },
-      (t) => { if (onToken) onToken(t); }
+      (t) => {
+        if (onToken) onToken(t);
+      }
     )) {
       fullText += token;
       tokenCount++;
     }
 
     // Parse the streamed response
-    const lines = fullText.trim().split("\n");
-    const summary = lines[0] || "Conversation summary unavailable";
+    const lines = fullText.trim().split('\n');
+    const summary = lines[0] || 'Conversation summary unavailable';
     const keyPoints = lines
       .slice(1)
       .filter((line) => line.trim().length > 5)
-      .map((line) => line.replace(/^[\-\*\•\d\.\)]+\s*/, "").trim())
+      .map((line) => line.replace(/^[\-\*\•\d\.\)]+\s*/, '').trim())
       .slice(0, 5);
 
     return {
       summary,
-      key_points: keyPoints.length > 0 ? keyPoints : ["See full conversation for details"],
+      key_points: keyPoints.length > 0 ? keyPoints : ['See full conversation for details'],
       message_count: numMessages,
       streamed: true,
       tokens_generated: tokenCount,
@@ -1314,32 +1326,30 @@ class JarvisSocket {
    */
   async chatStream(
     message: string,
-    history: Array<{ role: "user" | "assistant"; content: string }>,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
     onToken?: (token: string) => void
   ): Promise<{ response: string; tokens_generated: number }> {
-    let fullText = "";
+    let fullText = '';
     let tokenCount = 0;
     const startTime = Date.now();
 
-    console.log("[JarvisSocket] Starting chatStream...");
+    console.log('[JarvisSocket] Starting chatStream...');
 
     try {
-      for await (const token of this.callStream(
-        "chat",
-        { message, history },
-        (t) => { if (onToken) onToken(t); }
-      )) {
+      for await (const token of this.callStream('chat', { message, history }, (t) => {
+        if (onToken) onToken(t);
+      })) {
         fullText += token;
         tokenCount++;
-        
+
         // Safety: break if streaming takes too long (2 minutes)
         if (Date.now() - startTime > 120000) {
-          console.warn("[JarvisSocket] chatStream timeout - breaking loop");
+          console.warn('[JarvisSocket] chatStream timeout - breaking loop');
           break;
         }
       }
     } catch (error) {
-      console.error("[JarvisSocket] chatStream error:", error);
+      console.error('[JarvisSocket] chatStream error:', error);
       throw error;
     }
 
@@ -1355,7 +1365,7 @@ class JarvisSocket {
    * Ping the server
    */
   async ping(): Promise<Record<string, unknown>> {
-    return this.call("ping");
+    return this.call('ping');
   }
 }
 

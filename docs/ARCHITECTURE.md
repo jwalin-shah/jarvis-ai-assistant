@@ -18,6 +18,7 @@ This document describes the optimized architecture for JARVIS, replacing HTTP po
 ## Socket Server API
 
 The socket server supports two protocols:
+
 - **Unix Socket:** `~/.jarvis/jarvis.sock` (for Tauri app)
 - **WebSocket:** `ws://localhost:8743` (for browser/Playwright)
 
@@ -128,6 +129,7 @@ Problems:
 | Vec Index | ~/.jarvis/jarvis.db | Read-write | Vector index (sqlite-vec) in vec_messages/vec_chunks |
 
 **Implementation:**
+
 ```typescript
 // desktop/src/lib/db/direct.ts
 import Database from '@tauri-apps/plugin-sql';
@@ -139,19 +141,16 @@ export async function initDatabases() {
   const homeDir = await homeDir();
 
   // Apple's iMessage database (read-only)
-  chatDb = await Database.load(
-    `sqlite:${homeDir}/Library/Messages/chat.db?mode=ro`
-  );
+  chatDb = await Database.load(`sqlite:${homeDir}/Library/Messages/chat.db?mode=ro`);
 
   // Our database
-  jarvisDb = await Database.load(
-    `sqlite:${homeDir}/.jarvis/jarvis.db`
-  );
+  jarvisDb = await Database.load(`sqlite:${homeDir}/.jarvis/jarvis.db`);
 }
 
 export async function getMessages(chatId: string, limit = 50): Promise<Message[]> {
   // Direct read - ~1-5ms
-  return chatDb.select(`
+  return chatDb.select(
+    `
     SELECT
       m.ROWID as id,
       m.text,
@@ -164,7 +163,9 @@ export async function getMessages(chatId: string, limit = 50): Promise<Message[]
     WHERE m.chat_id = ?
     ORDER BY m.date DESC
     LIMIT ?
-  `, [chatId, limit]);
+  `,
+    [chatId, limit]
+  );
 }
 
 export async function getConversations(): Promise<Conversation[]> {
@@ -185,6 +186,7 @@ export async function getConversations(): Promise<Conversation[]> {
 ```
 
 **Tauri Config (src-tauri/tauri.conf.json):**
+
 ```json
 {
   "plugins": {
@@ -196,6 +198,7 @@ export async function getConversations(): Promise<Conversation[]> {
 ```
 
 **Cargo.toml:**
+
 ```toml
 [dependencies]
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
@@ -208,17 +211,20 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 **What:** Bidirectional JSON-RPC communication over Unix socket.
 
 **Why:**
+
 - ~1-5ms latency vs ~50ms HTTP
 - Enables push notifications (no polling)
 - Persistent connection (no connection overhead)
 
-**Socket Locations:** 
+**Socket Locations:**
+
 - Unix Socket: `~/.jarvis/jarvis.sock`
 - WebSocket: `ws://localhost:8743` (with auth token at `~/.jarvis/ws_token`)
 
 **Protocol:** JSON-RPC 2.0 over newline-delimited JSON
 
 **Python Server (jarvis/socket_server.py):**
+
 ```python
 import asyncio
 import websockets
@@ -235,7 +241,7 @@ class JarvisSocketServer:
         self._clients: set[asyncio.StreamWriter] = set()
         self._ws_clients: set[ServerConnection] = set()
         self._rate_limiter = RateLimiter(max_requests=100, window_seconds=1.0)
-        
+
         # Register built-in methods
         self._register_methods()
 
@@ -272,12 +278,12 @@ class JarvisSocketServer:
             self._handle_client, path=SOCKET_PATH
         )
         SOCKET_PATH.chmod(0o600)
-        
+
         # Start WebSocket server
         self._ws_server = await websockets.serve(
             self._handle_ws_client, "localhost", WS_PORT
         )
-        
+
         # Start file watcher and model preload
         await asyncio.gather(
             self._server.serve_forever(),
@@ -291,7 +297,7 @@ class JarvisSocketServer:
         length = int.from_bytes(length_bytes, 'big')
         data = await reader.readexactly(length)
         request = json.loads(data.decode())
-        
+
         response = await self._handle_request(request)
         if response:
             await self._send(writer, response)
@@ -314,15 +320,15 @@ class JarvisSocketServer:
         client_id = request.get("client_id", "unknown")
         if not self._rate_limiter.is_allowed(client_id):
             return {"jsonrpc": "2.0", "error": {"code": -32001, "message": "Rate limited"}, "id": request.get("id")}
-        
+
         method = request.get("method")
         params = request.get("params", {})
         request_id = request.get("id")
-        
+
         handler = self._methods.get(method)
         if not handler:
             return {"jsonrpc": "2.0", "error": {"code": -32601, "message": f"Method not found: {method}"}, "id": request_id}
-        
+
         try:
             result = await handler(params)
             return {"jsonrpc": "2.0", "result": result, "id": request_id}
@@ -334,14 +340,14 @@ class JarvisSocketServer:
     async def broadcast(self, method: str, params: dict):
         """Push notification to all connected clients."""
         message = {"jsonrpc": "2.0", "method": method, "params": params}
-        
+
         # Unix socket clients
         for writer in self._clients:
             try:
                 await self._send(writer, message)
             except:
                 self._clients.discard(writer)
-        
+
         # WebSocket clients
         for ws in self._ws_clients:
             try:
@@ -352,15 +358,15 @@ class JarvisSocketServer:
     async def _generate_draft(self, params: dict) -> dict:
         """Generate draft replies with optional streaming."""
         from jarvis.reply_service import get_reply_service
-        
+
         stream = params.get("stream", False)
         chat_id = params["chat_id"]
-        
+
         if stream:
             # Register streaming callback for token notifications
             async def on_token(token: str):
                 await self.broadcast("streaming_token", {"token": token, "done": False})
-            
+
             service = get_reply_service()
             result = await asyncio.to_thread(service.route_legacy, incoming="", chat_id=chat_id)
             return {"drafts": result}
@@ -371,18 +377,19 @@ class JarvisSocketServer:
 ```
 
 **TypeScript Client (desktop/src/lib/socket/client.ts):**
+
 ```typescript
 import { invoke } from '@tauri-apps/api/core';
 
 type JsonRpcRequest = {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   method: string;
   params?: Record<string, unknown>;
   id?: number;
 };
 
 type JsonRpcResponse = {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   result?: unknown;
   error?: { code: number; message: string };
   id?: number;
@@ -392,10 +399,13 @@ type PushHandler = (params: Record<string, unknown>) => void;
 
 class JarvisSocket {
   private requestId = 0;
-  private pendingRequests = new Map<number, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }>();
+  private pendingRequests = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  >();
   private pushHandlers = new Map<string, PushHandler>();
   private connected = false;
 
@@ -411,10 +421,10 @@ class JarvisSocket {
   async call<T>(method: string, params?: Record<string, unknown>): Promise<T> {
     const id = ++this.requestId;
     const request: JsonRpcRequest = {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       method,
       params,
-      id
+      id,
     };
 
     return new Promise((resolve, reject) => {
@@ -464,16 +474,19 @@ export const jarvis = new JarvisSocket();
 **What:** Python daemon watches chat.db for changes, computes embeddings, pushes notifications.
 
 **Why:**
+
 - Instant new message notifications (no polling)
 - Embeddings computed in background
 - Tauri UI updates immediately
 
 **Technology Choice:** `watchfiles` (Rust-based, uses the `notify` crate internally). On macOS this uses FSEvents natively, giving ~100ms detection latency with our 50ms debounce. Alternatives considered:
+
 - `pyobjc` FSEvents wrapper: More code for no advantage over `watchfiles`
 - Raw kqueue: Lower-level than needed; FSEvents is better suited for file watching
 - SQLite WAL polling: Introduces unnecessary polling latency
 
 **Implementation (jarvis/watcher.py):**
+
 ```python
 import asyncio
 import sqlite3
@@ -545,6 +558,7 @@ class ChatDBWatcher:
 ### 4. Updated Frontend Store
 
 **desktop/src/lib/stores/conversations.ts:**
+
 ```typescript
 import { writable } from 'svelte/store';
 import { db } from '../db/direct';
@@ -559,7 +573,7 @@ export async function initialize() {
 
   // Load conversations directly from SQLite
   const conversations = await db.getConversations();
-  conversationsStore.update(s => ({ ...s, conversations }));
+  conversationsStore.update((s) => ({ ...s, conversations }));
 
   // Listen for push notifications
   jarvis.on('new_message', async (data) => {
@@ -569,7 +583,7 @@ export async function initialize() {
     const message = await db.getMessage(message_id);
 
     // Update store
-    conversationsStore.update(s => {
+    conversationsStore.update((s) => {
       if (s.selectedChatId === chat_id) {
         return { ...s, messages: [...s.messages, message] };
       }
@@ -583,26 +597,26 @@ export async function initialize() {
 
 // Select conversation - direct read, no HTTP
 export async function selectConversation(chatId: string) {
-  conversationsStore.update(s => ({
+  conversationsStore.update((s) => ({
     ...s,
     selectedChatId: chatId,
-    loadingMessages: true
+    loadingMessages: true,
   }));
 
   // Direct SQLite read - ~1-5ms
   const messages = await db.getMessages(chatId, 50);
 
-  conversationsStore.update(s => ({
+  conversationsStore.update((s) => ({
     ...s,
     messages,
-    loadingMessages: false
+    loadingMessages: false,
   }));
 }
 
 // Generate draft - needs LLM, use socket
 export async function generateDraft(chatId: string): Promise<string[]> {
   const result = await jarvis.call<{ drafts: string[] }>('generate_draft', {
-    chat_id: chatId
+    chat_id: chatId,
   });
   return result.drafts;
 }
@@ -620,6 +634,7 @@ export async function semanticSearch(query: string, chatId?: string) {
 The codebase underwent a 3-phase modernization effort to reduce complexity:
 
 ### Phase 1: Foundation Cleanup
+
 - Removed 100+ experimental scripts and result files from root
 - Pruned obsolete model artifacts (category_svm_v2, old LightGBM variants)
 - Consolidated scripts directory from 116 to ~25 production scripts
@@ -627,6 +642,7 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 - Stabilized test suite (0 failures baseline)
 
 ### Phase 2: Structural Reorganization
+
 - Established `contracts/` for Protocol-based interfaces (Classifier, Embedder, Generator)
 - Decomposed large modules:
   - `socket_server.py` remains single file but with clear handler sections
@@ -635,18 +651,21 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 - Standardized error responses across API routers
 
 ### Phase 3: Pipeline Simplification
+
 - Unified model access through registry pattern
 - Simplified feature extraction pipeline
 - Consolidated cache implementations into `jarvis/cache.py` (TTLCache)
 - Removed dead prefetch paths and redundant warming logic
 
 ### Phase 4: Stabilization & Hardoff
+
 - Performance baseline tests (`tests/test_performance_baselines.py`)
 - Coverage threshold enforcement (`--cov-fail-under=60`)
 - Security hardening: rate limiting, path validation, timing-safe token comparison
 - Documentation updates (SECURITY.md, TROUBLESHOOTING.md)
 
 ### Phase 4: V4 Fact Extraction & Contact Profiling (2026-02-13)
+
 - **Turn-Based Extraction**: Switched from segment-based to Turn-Based grouping. Consecutive messages from the same sender are combined into single turns, providing coherent context for the LLM.
 - **Dynamic Identity Anchor**: Automatically resolves the user's name (e.g., "Jwalin Shah") from the Address Book, eliminating hardcoded identity references.
 - **AddressBook Integration**: Generalizable name resolution for all contacts (including group chats) by resolving participant numbers against macOS AddressBook.
@@ -654,6 +673,7 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 - **Enriched Contact Profiles**: `ContactProfile` now stores `extracted_facts` and `relationship_reasoning` (LLM-derived justification for relationship labels).
 
 ### Phase 5: Pipeline Optimization & Resilience (2026-02-14)
+
 - **Streaming Delta Ingestion**: Replaced bulk message loading with a memory-efficient per-chat streaming approach. Uses end-time checkpoints to fetch only new messages (deltas), making updates near-instant.
 - **Automatic Preference Population**: Integrated computation of `contact_style_targets` and `contact_timing_prefs` (including quiet hours and optimal weekdays) directly into the ingestion loop.
 - **Resource Management (`ModelManager`)**: Centralized model lifecycle management to coordinate transitions between Embedding and LLM phases within strict memory constraints.
@@ -665,20 +685,21 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 
 ## Performance Comparison
 
-| Operation | V1 (HTTP) | V2 (Direct + Socket) |
-|-----------|-----------|----------------------|
-| Load conversations | ~100-150ms | ~1-5ms |
-| Load messages | ~100-150ms | ~1-5ms |
-| New message notification | Up to 10s (polling) | Instant (push) |
-| Generate draft | ~50ms + inference | ~1-5ms + inference |
-| Semantic search | ~50ms + compute | ~1-5ms + compute |
-| Idle resource usage | Polling requests | Zero |
+| Operation                | V1 (HTTP)           | V2 (Direct + Socket) |
+| ------------------------ | ------------------- | -------------------- |
+| Load conversations       | ~100-150ms          | ~1-5ms               |
+| Load messages            | ~100-150ms          | ~1-5ms               |
+| New message notification | Up to 10s (polling) | Instant (push)       |
+| Generate draft           | ~50ms + inference   | ~1-5ms + inference   |
+| Semantic search          | ~50ms + compute     | ~1-5ms + compute     |
+| Idle resource usage      | Polling requests    | Zero                 |
 
 ---
 
 ## Implementation Status
 
 ### Phase 1: Direct SQLite Reads ✅ COMPLETE
+
 1. ✅ Install `tauri-plugin-sql` - Added to `Cargo.toml` and `package.json`
 2. ✅ Create `db/direct.ts` with query functions - `desktop/src/lib/db/direct.ts`
 3. ✅ Create `db/queries.ts` with SQL queries - Ported from `integrations/imessage/queries.py`
@@ -686,6 +707,7 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 5. ✅ HTTP API fallback when SQLite unavailable
 
 ### Phase 2: Unix Socket Server ✅ COMPLETE
+
 1. ✅ Create `jarvis/socket_server.py` - JSON-RPC over `~/.jarvis/jarvis.sock`
 2. ✅ Create Rust socket bridge - `desktop/src-tauri/src/socket.rs`
 3. ✅ Create TypeScript client - `desktop/src/lib/socket/client.ts`
@@ -693,12 +715,14 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 5. ✅ Model preloading at startup for faster first request
 
 ### Phase 3: File Watcher + Push ✅ COMPLETE
+
 1. ✅ Create `jarvis/watcher.py` - Watches chat.db for changes
 2. ✅ Integrate watcher with socket server
 3. ✅ Push `new_message` notifications to clients
 4. ✅ Dynamic polling intervals (longer when socket connected)
 
 ### Phase 4: Deprecate HTTP for Tauri ✅ COMPLETE
+
 1. ✅ HTTP API remains for CLI and other clients
 2. ✅ Tauri uses direct reads + socket (fallback to HTTP when needed)
 3. ✅ Key operations migrated to socket/direct DB with HTTP fallback:
@@ -714,6 +738,7 @@ The codebase underwent a 3-phase modernization effort to reduce complexity:
 ## File Changes Summary
 
 **New Files (Created):**
+
 ```
 jarvis/interfaces/desktop/server.py  # Unix socket JSON-RPC server with model preloading
 jarvis/watcher.py                 # chat.db file watcher for real-time notifications
@@ -728,6 +753,7 @@ tests/unit/test_watcher.py        # File watcher tests (8 tests)
 ```
 
 **Modified Files:**
+
 ```
 desktop/src-tauri/Cargo.toml           # Added tauri-plugin-sql, tokio
 desktop/src-tauri/src/lib.rs           # Registered SQL plugin and socket commands
@@ -739,6 +765,7 @@ scripts/launch.sh                       # Starts socket server alongside API
 ```
 
 **Unchanged (kept for CLI/other clients):**
+
 ```
 api/main.py                  # HTTP API still works
 api/routers/*.py             # Still functional for CLI, web clients
@@ -754,19 +781,20 @@ This section tracks performance improvements beyond the core V2 architecture cha
 
 These optimizations are independent of V2 and improve base performance:
 
-| Optimization | File | Status | Impact |
-|-------------|------|--------|--------|
-| Vectorized semantic search | `jarvis/search/vec_search.py` | ✅ Done | 10-50x faster for large searches |
-| Scale thread pool | `jarvis/router.py` | ✅ Done | `max_workers=min(4, cpu_count)` for multi-core |
-| Batch message indexing | `jarvis/search/vec_search.py` | ✅ Done | Uses `executemany` + batch encoding |
-| Embedding result cache | `jarvis/embedding_adapter.py` | ✅ Done | Increased LRU cache to 1000 entries |
-| Intent classification | `jarvis/router.py` | ✅ Done | Streamlined to single intent classifier |
-| Stop words optimization | `jarvis/text_normalizer.py` | ✅ Done | Module-level frozenset for O(1) lookup |
-| Quick reply O(1) lookup | `jarvis/router.py` | ✅ Done | Dict lookup instead of linear search |
+| Optimization               | File                          | Status  | Impact                                         |
+| -------------------------- | ----------------------------- | ------- | ---------------------------------------------- |
+| Vectorized semantic search | `jarvis/search/vec_search.py` | ✅ Done | 10-50x faster for large searches               |
+| Scale thread pool          | `jarvis/router.py`            | ✅ Done | `max_workers=min(4, cpu_count)` for multi-core |
+| Batch message indexing     | `jarvis/search/vec_search.py` | ✅ Done | Uses `executemany` + batch encoding            |
+| Embedding result cache     | `jarvis/embedding_adapter.py` | ✅ Done | Increased LRU cache to 1000 entries            |
+| Intent classification      | `jarvis/router.py`            | ✅ Done | Streamlined to single intent classifier        |
+| Stop words optimization    | `jarvis/text_normalizer.py`   | ✅ Done | Module-level frozenset for O(1) lookup         |
+| Quick reply O(1) lookup    | `jarvis/router.py`            | ✅ Done | Dict lookup instead of linear search           |
 
 **Details:**
 
 1. **Vectorized Semantic Search** - Replaced per-message similarity loop with single NumPy matrix operation:
+
    ```python
    # Before: O(n) Python loop
    for msg in messages:
@@ -777,6 +805,7 @@ These optimizations are independent of V2 and improve base performance:
    ```
 
 2. **Thread Pool Scaling** - Dynamic worker count based on CPU:
+
    ```python
    ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 2))
    ```
@@ -789,13 +818,13 @@ These optimizations are independent of V2 and improve base performance:
 
 Apply these when V2 rewrites the relevant Svelte components:
 
-| Optimization | Files | Status | Description |
-|-------------|-------|--------|-------------|
-| Reduce animations | `MessageView.svelte`, `ConversationList.svelte` | ⏳ V2 | Remove decorative animations, keep functional |
-| Optimistic sending | `stores/conversations.ts` | ⏳ V2 | Show message instantly with "sending" state |
-| Skeleton states | `ConversationList.svelte`, `MessageView.svelte` | ⏳ V2 | Placeholder skeletons during loading |
-| Granular stores | `stores/conversations.ts` | ⏳ V2 | Split into focused stores for fewer re-renders |
-| Instant app shell | `App.svelte` | ⏳ V2 | Render structure immediately, load data into it |
+| Optimization       | Files                                           | Status | Description                                     |
+| ------------------ | ----------------------------------------------- | ------ | ----------------------------------------------- |
+| Reduce animations  | `MessageView.svelte`, `ConversationList.svelte` | ⏳ V2  | Remove decorative animations, keep functional   |
+| Optimistic sending | `stores/conversations.ts`                       | ⏳ V2  | Show message instantly with "sending" state     |
+| Skeleton states    | `ConversationList.svelte`, `MessageView.svelte` | ⏳ V2  | Placeholder skeletons during loading            |
+| Granular stores    | `stores/conversations.ts`                       | ⏳ V2  | Split into focused stores for fewer re-renders  |
+| Instant app shell  | `App.svelte`                                    | ⏳ V2  | Render structure immediately, load data into it |
 
 **Animation Strategy:**
 | Animation Type | Action | Reason |
@@ -814,14 +843,15 @@ Apply these when V2 rewrites the relevant Svelte components:
 
 These require V2's socket infrastructure:
 
-| Optimization | File | Status | Description |
-|-------------|------|--------|-------------|
-| Speculative prefetching | `jarvis/prefetch/` | ✅ Done | ML predictor + 3-tier cache (L1/L2/L3) + executor with resource awareness |
-| Pre-warm common queries | `jarvis/socket_server.py` | ✅ Done | Model preloading at startup via `model_warmer.py` |
-| Message virtualization | `MessageView.svelte` | ⏳ Post-V2 | Cache heights in localStorage, reduce buffer |
-| WebSocket multiplexing | `socket/client.ts` | ⏳ Post-V2 | Multiple streams over one connection |
+| Optimization            | File                      | Status     | Description                                                               |
+| ----------------------- | ------------------------- | ---------- | ------------------------------------------------------------------------- |
+| Speculative prefetching | `jarvis/prefetch/`        | ✅ Done    | ML predictor + 3-tier cache (L1/L2/L3) + executor with resource awareness |
+| Pre-warm common queries | `jarvis/socket_server.py` | ✅ Done    | Model preloading at startup via `model_warmer.py`                         |
+| Message virtualization  | `MessageView.svelte`      | ⏳ Post-V2 | Cache heights in localStorage, reduce buffer                              |
+| WebSocket multiplexing  | `socket/client.ts`        | ⏳ Post-V2 | Multiple streams over one connection                                      |
 
 **Speculative Prefetching Example:**
+
 ```typescript
 // When user hovers on a conversation for 200ms, prefetch messages
 function prefetchOnHover(chatId: string) {
@@ -832,6 +862,7 @@ function prefetchOnHover(chatId: string) {
 ```
 
 **Pre-warm Example:**
+
 ```python
 async def warmup():
     await get_conversations(limit=20)  # Likely first request
@@ -843,24 +874,25 @@ async def warmup():
 
 ### Skipped Optimizations
 
-| Optimization | Reason |
-|-------------|--------|
+| Optimization         | Reason                            |
+| -------------------- | --------------------------------- |
 | HTTP caching headers | V2 removes HTTP for Tauri clients |
 
 ---
 
 ### Performance Targets
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| Cold start time | ~4-5s | <2s to interactive |
-| Conversation switch | ~1-5ms (direct SQLite) | <100ms perceived ✅ |
-| Message send feedback | ~200ms | Instant (optimistic) |
-| Search response (10k messages) | ~800ms | <500ms |
+| Metric                         | Current                | Target               |
+| ------------------------------ | ---------------------- | -------------------- |
+| Cold start time                | ~4-5s                  | <2s to interactive   |
+| Conversation switch            | ~1-5ms (direct SQLite) | <100ms perceived ✅  |
+| Message send feedback          | ~200ms                 | Instant (optimistic) |
+| Search response (10k messages) | ~800ms                 | <500ms               |
 
 ### Verification
 
 After each optimization:
+
 1. `make test` - Ensure no regressions
 2. Manual test - Measure perceived speed improvement
 3. Profile if needed - `py-spy` for Python, Chrome DevTools for frontend

@@ -3,21 +3,21 @@
  * with accent color customization and reduced motion support
  */
 
-import { writable, get, derived } from "svelte/store";
+import { writable, get, derived } from 'svelte/store';
 
-export type ThemeMode = "dark" | "light" | "system";
+export type ThemeMode = 'dark' | 'light' | 'system';
 
 // Accent color presets
 export const accentColors = {
-  blue: { name: "Blue", value: "#007AFF", rgb: "0, 122, 255" },
-  purple: { name: "Purple", value: "#5856D6", rgb: "88, 86, 214" },
-  pink: { name: "Pink", value: "#FF2D55", rgb: "255, 45, 85" },
-  red: { name: "Red", value: "#FF3B30", rgb: "255, 59, 48" },
-  orange: { name: "Orange", value: "#FF9500", rgb: "255, 149, 0" },
-  yellow: { name: "Yellow", value: "#FFCC00", rgb: "255, 204, 0" },
-  green: { name: "Green", value: "#34C759", rgb: "52, 199, 89" },
-  teal: { name: "Teal", value: "#5AC8FA", rgb: "90, 200, 250" },
-  indigo: { name: "Indigo", value: "#5E5CE6", rgb: "94, 92, 230" },
+  blue: { name: 'Blue', value: '#007AFF', rgb: '0, 122, 255' },
+  purple: { name: 'Purple', value: '#5856D6', rgb: '88, 86, 214' },
+  pink: { name: 'Pink', value: '#FF2D55', rgb: '255, 45, 85' },
+  red: { name: 'Red', value: '#FF3B30', rgb: '255, 59, 48' },
+  orange: { name: 'Orange', value: '#FF9500', rgb: '255, 149, 0' },
+  yellow: { name: 'Yellow', value: '#FFCC00', rgb: '255, 204, 0' },
+  green: { name: 'Green', value: '#34C759', rgb: '52, 199, 89' },
+  teal: { name: 'Teal', value: '#5AC8FA', rgb: '90, 200, 250' },
+  indigo: { name: 'Indigo', value: '#5E5CE6', rgb: '94, 92, 230' },
 } as const;
 
 export type AccentColorKey = keyof typeof accentColors;
@@ -28,14 +28,14 @@ interface ThemeState {
   reducedMotion: boolean;
 }
 
-const STORAGE_KEY = "jarvis-theme";
-const ACCENT_STORAGE_KEY = "jarvis-accent-color";
-const MOTION_STORAGE_KEY = "jarvis-reduced-motion";
+const STORAGE_KEY = 'jarvis-theme';
+const ACCENT_STORAGE_KEY = 'jarvis-accent-color';
+const MOTION_STORAGE_KEY = 'jarvis-reduced-motion';
 
 // Get initial values from localStorage
 function getInitialState(): ThemeState {
-  if (typeof window === "undefined") {
-    return { mode: "dark", accentColor: "blue", reducedMotion: false };
+  if (typeof window === 'undefined') {
+    return { mode: 'dark', accentColor: 'blue', reducedMotion: false };
   }
 
   const storedMode = localStorage.getItem(STORAGE_KEY);
@@ -43,18 +43,16 @@ function getInitialState(): ThemeState {
   const storedMotion = localStorage.getItem(MOTION_STORAGE_KEY);
 
   // Check system preference for reduced motion
-  const systemPrefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const systemPrefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   return {
-    mode: (storedMode === "dark" || storedMode === "light" || storedMode === "system")
-      ? storedMode
-      : "dark",
-    accentColor: (storedAccent && storedAccent in accentColors)
-      ? storedAccent as AccentColorKey
-      : "blue",
-    reducedMotion: storedMotion !== null
-      ? storedMotion === "true"
-      : systemPrefersReducedMotion,
+    mode:
+      storedMode === 'dark' || storedMode === 'light' || storedMode === 'system'
+        ? storedMode
+        : 'dark',
+    accentColor:
+      storedAccent && storedAccent in accentColors ? (storedAccent as AccentColorKey) : 'blue',
+    reducedMotion: storedMotion !== null ? storedMotion === 'true' : systemPrefersReducedMotion,
   };
 }
 
@@ -74,38 +72,38 @@ let motionMediaQuery: MediaQueryList | null = null;
  * Apply all theme settings to the document
  */
 function applyTheme(state: ThemeState): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
 
   const { mode, accentColor: accent, reducedMotion: motion } = state;
 
   // Determine light/dark mode
   let shouldBeDark: boolean;
-  if (mode === "system") {
-    shouldBeDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  if (mode === 'system') {
+    shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   } else {
-    shouldBeDark = mode === "dark";
+    shouldBeDark = mode === 'dark';
   }
 
   // Toggle light class
   if (shouldBeDark) {
-    document.documentElement.classList.remove("light");
+    document.documentElement.classList.remove('light');
   } else {
-    document.documentElement.classList.add("light");
+    document.documentElement.classList.add('light');
   }
 
   // Apply accent color
   const colorConfig = accentColors[accent];
-  document.documentElement.style.setProperty("--color-primary", colorConfig.value);
-  document.documentElement.style.setProperty("--color-primary-rgb", colorConfig.rgb);
-  document.documentElement.style.setProperty("--accent-color", colorConfig.value);
-  document.documentElement.style.setProperty("--bubble-me", colorConfig.value);
-  document.documentElement.style.setProperty("--bg-bubble-me", colorConfig.value);
+  document.documentElement.style.setProperty('--color-primary', colorConfig.value);
+  document.documentElement.style.setProperty('--color-primary-rgb', colorConfig.rgb);
+  document.documentElement.style.setProperty('--accent-color', colorConfig.value);
+  document.documentElement.style.setProperty('--bubble-me', colorConfig.value);
+  document.documentElement.style.setProperty('--bg-bubble-me', colorConfig.value);
 
   // Apply reduced motion
   if (motion) {
-    document.documentElement.classList.add("reduce-motion");
+    document.documentElement.classList.add('reduce-motion');
   } else {
-    document.documentElement.classList.remove("reduce-motion");
+    document.documentElement.classList.remove('reduce-motion');
   }
 }
 
@@ -114,7 +112,7 @@ function applyTheme(state: ThemeState): void {
  */
 export function setTheme(mode: ThemeMode): void {
   themeState.update((state) => ({ ...state, mode }));
-  if (typeof window !== "undefined") {
+  if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, mode);
   }
 }
@@ -124,7 +122,7 @@ export function setTheme(mode: ThemeMode): void {
  */
 export function setAccentColor(color: AccentColorKey): void {
   themeState.update((state) => ({ ...state, accentColor: color }));
-  if (typeof window !== "undefined") {
+  if (typeof window !== 'undefined') {
     localStorage.setItem(ACCENT_STORAGE_KEY, color);
   }
 }
@@ -134,7 +132,7 @@ export function setAccentColor(color: AccentColorKey): void {
  */
 export function setReducedMotion(enabled: boolean): void {
   themeState.update((state) => ({ ...state, reducedMotion: enabled }));
-  if (typeof window !== "undefined") {
+  if (typeof window !== 'undefined') {
     localStorage.setItem(MOTION_STORAGE_KEY, String(enabled));
   }
 }
@@ -144,18 +142,18 @@ export function setReducedMotion(enabled: boolean): void {
  * Call this once on app mount
  */
 export function initializeTheme(): () => void {
-  if (typeof window === "undefined") return () => {};
+  if (typeof window === 'undefined') return () => {};
 
   // Apply initial theme
   applyTheme(get(themeState));
 
   // Set up media query listeners
-  mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  motionMediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  motionMediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const handleMediaChange = () => {
     const currentState = get(themeState);
-    if (currentState.mode === "system") {
+    if (currentState.mode === 'system') {
       applyTheme(currentState);
     }
   };
@@ -168,8 +166,8 @@ export function initializeTheme(): () => void {
     }
   };
 
-  mediaQuery.addEventListener("change", handleMediaChange);
-  motionMediaQuery.addEventListener("change", handleMotionChange);
+  mediaQuery.addEventListener('change', handleMediaChange);
+  motionMediaQuery.addEventListener('change', handleMotionChange);
 
   // Subscribe to theme state changes
   const unsubscribe = themeState.subscribe((state) => {
@@ -179,21 +177,21 @@ export function initializeTheme(): () => void {
   // Return cleanup function
   return () => {
     unsubscribe();
-    mediaQuery?.removeEventListener("change", handleMediaChange);
-    motionMediaQuery?.removeEventListener("change", handleMotionChange);
+    mediaQuery?.removeEventListener('change', handleMediaChange);
+    motionMediaQuery?.removeEventListener('change', handleMotionChange);
   };
 }
 
 /**
  * Get the current effective theme (resolved 'system' to actual theme)
  */
-export function getEffectiveTheme(): "dark" | "light" {
+export function getEffectiveTheme(): 'dark' | 'light' {
   const state = get(themeState);
-  if (state.mode === "system") {
-    if (typeof window !== "undefined") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  if (state.mode === 'system') {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    return "dark";
+    return 'dark';
   }
   return state.mode;
 }

@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import type { HealthResponse } from "../api/types";
-  import { healthStore, fetchHealth } from "../stores/health";
+  import { onMount } from 'svelte';
+  import type { HealthResponse } from '../api/types';
+  import { healthStore, fetchHealth } from '../stores/health';
   import {
     templateAnalyticsStore,
     fetchTemplateAnalytics,
     resetTemplateAnalytics,
     exportTemplateAnalytics,
-  } from "../stores/templateAnalytics";
+  } from '../stores/templateAnalytics';
 
   let refreshing = $state(false);
   let resettingAnalytics = $state(false);
@@ -28,7 +28,7 @@
   }
 
   async function handleResetAnalytics() {
-    if (confirm("Are you sure you want to reset template analytics? This cannot be undone.")) {
+    if (confirm('Are you sure you want to reset template analytics? This cannot be undone.')) {
       resettingAnalytics = true;
       try {
         await resetTemplateAnalytics();
@@ -53,7 +53,7 @@
   }
 
   function formatNullable(value: number | null, decimals: number): string {
-    return value === null ? "N/A" : value.toFixed(decimals);
+    return value === null ? 'N/A' : value.toFixed(decimals);
   }
 
   function memoryUsagePercent(data: HealthResponse): number {
@@ -67,7 +67,7 @@
 
   let detailEntries = $derived.by(() => {
     const details = $healthStore.data?.details;
-    if (!details || typeof details === "string") {
+    if (!details || typeof details === 'string') {
       return [] as Array<[string, string]>;
     }
     return Object.entries(details);
@@ -88,7 +88,7 @@
         <path d="M23 4v6h-6M1 20v-6h6"></path>
         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
       </svg>
-      {refreshing ? "Refreshing..." : "Refresh"}
+      {refreshing ? 'Refreshing...' : 'Refresh'}
     </button>
   </div>
 
@@ -104,16 +104,23 @@
       <span>{$healthStore.error}</span>
     </div>
   {:else if $healthStore.data}
-    <div class="status-banner" class:healthy={$healthStore.data.status === "healthy"} class:degraded={$healthStore.data.status === "degraded"} class:unhealthy={$healthStore.data.status === "unhealthy"}>
+    <div
+      class="status-banner"
+      class:healthy={$healthStore.data.status === 'healthy'}
+      class:degraded={$healthStore.data.status === 'degraded'}
+      class:unhealthy={$healthStore.data.status === 'unhealthy'}
+    >
       <div class="status-icon">
-        {#if $healthStore.data.status === "healthy"}
+        {#if $healthStore.data.status === 'healthy'}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
-        {:else if $healthStore.data.status === "degraded"}
+        {:else if $healthStore.data.status === 'degraded'}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <path
+              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            />
             <line x1="12" y1="9" x2="12" y2="13"></line>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
           </svg>
@@ -128,9 +135,9 @@
       <div class="status-text">
         <h2>System is {$healthStore.data.status}</h2>
         <p>
-          {#if $healthStore.data.status === "healthy"}
+          {#if $healthStore.data.status === 'healthy'}
             All systems operational
-          {:else if $healthStore.data.status === "degraded"}
+          {:else if $healthStore.data.status === 'degraded'}
             Some features may be limited
           {:else}
             Some services are unavailable
@@ -147,20 +154,17 @@
           <span class="metric-label">available</span>
         </div>
         <div class="metric-bar">
-          <div
-            class="metric-fill"
-            style="width: {memoryUsagePercent($healthStore.data)}%"
-          ></div>
+          <div class="metric-fill" style="width: {memoryUsagePercent($healthStore.data)}%"></div>
         </div>
         <p class="metric-detail">
-          {formatNullable($healthStore.data.memory_used_gb, 1)} GB used of{" "}
+          {formatNullable($healthStore.data.memory_used_gb, 1)} GB used of{' '}
           {#if $healthStore.data.memory_used_gb !== null && $healthStore.data.memory_available_gb !== null}
             {($healthStore.data.memory_used_gb + $healthStore.data.memory_available_gb).toFixed(1)} GB
           {:else}
             N/A GB
           {/if}
         </p>
-        <p class="metric-mode">Mode: {$healthStore.data.memory_mode ?? "Unknown"}</p>
+        <p class="metric-mode">Mode: {$healthStore.data.memory_mode ?? 'Unknown'}</p>
       </div>
 
       <div class="metric-card">
@@ -177,7 +181,7 @@
       <div class="metric-card">
         <h3>AI Model</h3>
         <div class="metric-value" class:loaded={$healthStore.data.model_loaded}>
-          {$healthStore.data.model_loaded ? "Loaded" : "Not Loaded"}
+          {$healthStore.data.model_loaded ? 'Loaded' : 'Not Loaded'}
         </div>
         <p class="metric-detail">
           {#if $healthStore.data.model_loaded}
@@ -191,7 +195,7 @@
       <div class="metric-card">
         <h3>iMessage Access</h3>
         <div class="metric-value" class:connected={$healthStore.data.imessage_access}>
-          {$healthStore.data.imessage_access ? "Connected" : "Not Connected"}
+          {$healthStore.data.imessage_access ? 'Connected' : 'Not Connected'}
         </div>
         <p class="metric-detail">
           {#if $healthStore.data.imessage_access}
@@ -209,7 +213,8 @@
         <ul>
           {#each detailEntries as [key, value]}
             <li>
-              <strong>{key}:</strong> {value}
+              <strong>{key}:</strong>
+              {value}
             </li>
           {/each}
         </ul>
@@ -231,7 +236,7 @@
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            {exportingAnalytics ? "Exporting..." : "Export JSON"}
+            {exportingAnalytics ? 'Exporting...' : 'Export JSON'}
           </button>
           <button
             class="action-btn reset-btn"
@@ -242,7 +247,7 @@
               <polyline points="1 4 1 10 7 10"></polyline>
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
-            {resettingAnalytics ? "Resetting..." : "Clear Metrics"}
+            {resettingAnalytics ? 'Resetting...' : 'Clear Metrics'}
           </button>
         </div>
       </div>
@@ -266,17 +271,24 @@
             <div class="coverage-chart">
               <div
                 class="pie-chart"
-                style="background: {getPieChartStyle($templateAnalyticsStore.data.summary.hit_rate_percent)}"
+                style="background: {getPieChartStyle(
+                  $templateAnalyticsStore.data.summary.hit_rate_percent
+                )}"
               >
                 <div class="pie-center">
-                  <span class="coverage-percent">{$templateAnalyticsStore.data.summary.hit_rate_percent.toFixed(1)}%</span>
+                  <span class="coverage-percent"
+                    >{$templateAnalyticsStore.data.summary.hit_rate_percent.toFixed(1)}%</span
+                  >
                   <span class="coverage-label">Coverage</span>
                 </div>
               </div>
               <div class="pie-legend">
                 <div class="legend-item">
                   <span class="legend-color template-color"></span>
-                  <span>Template: {$templateAnalyticsStore.data.pie_chart_data.template_responses}</span>
+                  <span
+                    >Template: {$templateAnalyticsStore.data.pie_chart_data
+                      .template_responses}</span
+                  >
                 </div>
                 <div class="legend-item">
                   <span class="legend-color model-color"></span>
@@ -298,11 +310,15 @@
                 <span class="stat-label">Template Hits</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{($templateAnalyticsStore.data.summary.cache_hit_rate * 100).toFixed(1)}%</span>
+                <span class="stat-value"
+                  >{($templateAnalyticsStore.data.summary.cache_hit_rate * 100).toFixed(1)}%</span
+                >
                 <span class="stat-label">Cache Hit Rate</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{$templateAnalyticsStore.data.coverage.total_templates}</span>
+                <span class="stat-value"
+                  >{$templateAnalyticsStore.data.coverage.total_templates}</span
+                >
                 <span class="stat-label">Templates</span>
               </div>
             </div>
@@ -318,7 +334,7 @@
                 {@const maxCount = $templateAnalyticsStore.data.top_templates[0]?.match_count || 1}
                 <div class="bar-item">
                   <div class="bar-label" title={template.template_name}>
-                    {template.template_name.replace(/_/g, " ")}
+                    {template.template_name.replace(/_/g, ' ')}
                   </div>
                   <div class="bar-container">
                     <div
@@ -367,7 +383,7 @@
                   <div class="missed-info">
                     <span class="query-hash">#{query.query_hash}</span>
                     {#if query.best_template}
-                      <span class="best-match">Best: {query.best_template.replace(/_/g, " ")}</span>
+                      <span class="best-match">Best: {query.best_template.replace(/_/g, ' ')}</span>
                     {/if}
                   </div>
                   <div class="similarity-badge" class:low={query.similarity < 0.5}>

@@ -64,8 +64,9 @@
       opacity 150ms cubic-bezier(0.33, 1, 0.68, 1);
     cursor: pointer;
     border: none;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
-      Helvetica, Arial, sans-serif;
+    font-family:
+      -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial,
+      sans-serif;
     line-height: 1.25;
   }
 
