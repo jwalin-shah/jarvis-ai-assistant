@@ -104,10 +104,7 @@ def _extract_facts_from_segments(
             batch_segments = segments[start:end]
             batch_db_ids = segment_db_ids[start:end]
 
-            logger.info(
-                "Extracting facts from segments %d-%d/%d",
-                start + 1, end, len(segments)
-            )
+            logger.info("Extracting facts from segments %d-%d/%d", start + 1, end, len(segments))
 
             batch_results = extractor.extract_facts_from_batch(
                 batch_segments,
@@ -133,10 +130,7 @@ def _extract_facts_from_segments(
 
         verified_facts: list[Any] = []
         if candidates_to_verify:
-            logger.info(
-                "Verifying %d candidate facts via NLI",
-                len(candidates_to_verify)
-            )
+            logger.info("Verifying %d candidate facts via NLI", len(candidates_to_verify))
             verified_facts, total_rejected = verify_fact_candidates(candidates_to_verify)
 
         save_result = save_facts(

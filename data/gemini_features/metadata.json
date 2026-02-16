@@ -1,13 +1,6 @@
 {
   "source": "gemini_labeled",
-  "categories": [
-    "acknowledge",
-    "closing",
-    "emotion",
-    "question",
-    "request",
-    "statement"
-  ],
+  "categories": ["acknowledge", "closing", "emotion", "question", "request", "statement"],
   "label_map": {
     "acknowledge": 0,
     "closing": 1,

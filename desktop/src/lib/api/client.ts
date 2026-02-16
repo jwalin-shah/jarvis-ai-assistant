@@ -39,7 +39,7 @@ import type {
   CustomTemplateUpdateRequest,
   CustomTemplateUsageStats,
   DetectedEvent,
-DownloadStatus,
+  DownloadStatus,
   DraftReplyResponse,
   Experiment,
   ExperimentListResponse,
@@ -96,24 +96,23 @@ DownloadStatus,
   TimeRange,
   TimingSuggestionsResponse,
   TrendingPatterns,
-
   VariantConfig,
-} from "./types";
+} from './types';
 
 // Socket client for LLM operations (drafts, search, classify, summarize)
-import { jarvis } from "../socket";
+import { jarvis } from '../socket';
 // Direct SQLite access for data reads (conversations, messages)
 import {
   isDirectAccessAvailable,
   getConversations as getConversationsDirect,
   getMessages as getMessagesDirect,
-} from "../db";
-import { getApiBaseUrl } from "../config/runtime";
+} from '../db';
+import { getApiBaseUrl } from '../config/runtime';
 
 const API_BASE = getApiBaseUrl();
 
 // Check if running in Tauri context (enables socket/direct DB)
-const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 // Track socket connection state
 let socketConnected = false;
@@ -131,12 +130,14 @@ async function ensureSocketConnected(): Promise<boolean> {
     try {
       socketConnected = await jarvis.connect();
       if (socketConnected) {
-        jarvis.on("disconnected", () => {
+        jarvis.on('disconnected', () => {
           socketConnected = false;
           // Reset so ensureSocketConnected() can retry after disconnect
           socketConnectionAttempted = false;
         });
-        jarvis.on("connected", () => { socketConnected = true; });
+        jarvis.on('connected', () => {
+          socketConnected = true;
+        });
       }
     } catch {
       socketConnected = false;
@@ -156,7 +157,7 @@ export class APIError extends Error {
 
   constructor(message: string, status: number, detail: string | null = null) {
     super(message);
-    this.name = "APIError";
+    this.name = 'APIError';
     this.status = status;
     this.detail = detail;
   }
@@ -169,29 +170,22 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         ...options.headers,
       },
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({
-        error: "Request failed",
+        error: 'Request failed',
         detail: response.statusText,
       }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
+      throw new APIError(error.error || 'Request failed', response.status, error.detail || null);
     }
 
     return response.json();
@@ -205,22 +199,22 @@ class ApiClient {
       try {
         const result = await jarvis.ping();
         return {
-          status: result.status === "ok" ? "healthy" : "degraded",
-          imessage_access: null,  // Unknown via socket ping
-          memory_available_gb: null,  // Not available via socket
-          memory_used_gb: null,  // Not available via socket
-          memory_mode: null,  // Not available via socket
+          status: result.status === 'ok' ? 'healthy' : 'degraded',
+          imessage_access: null, // Unknown via socket ping
+          memory_available_gb: null, // Not available via socket
+          memory_used_gb: null, // Not available via socket
+          memory_mode: null, // Not available via socket
           model_loaded: (result as { models_ready?: boolean }).models_ready ?? null,
-          permissions_ok: null,  // Not available via socket
+          permissions_ok: null, // Not available via socket
           details: 'Health details unavailable via socket - use HTTP for full status',
-          jarvis_rss_mb: null,  // Not available via socket
-          jarvis_vms_mb: null,  // Not available via socket
+          jarvis_rss_mb: null, // Not available via socket
+          jarvis_vms_mb: null, // Not available via socket
         };
       } catch {
         // Fall through to HTTP
       }
     }
-    return this.request<HealthResponse>("/health");
+    return this.request<HealthResponse>('/health');
   }
 
   // V2: Uses socket when available for faster response
@@ -234,7 +228,7 @@ class ApiClient {
         // Fall through to HTTP
       }
     }
-    const health = await this.request<HealthResponse>("/health");
+    const health = await this.request<HealthResponse>('/health');
     return { status: health.status };
   }
 
@@ -250,23 +244,17 @@ class ApiClient {
       }
     }
     const response = await this.request<{ conversations: Conversation[]; total: number }>(
-      "/conversations"
+      '/conversations'
     );
     return response.conversations;
   }
 
   async getConversation(chatId: string): Promise<Conversation> {
-    return this.request<Conversation>(
-      `/conversations/${encodeURIComponent(chatId)}`
-    );
+    return this.request<Conversation>(`/conversations/${encodeURIComponent(chatId)}`);
   }
 
   // V2: Uses direct SQLite when available (~20-100x faster)
-  async getMessages(
-    chatId: string,
-    limit: number = 50,
-    before?: string
-  ): Promise<Message[]> {
+  async getMessages(chatId: string, limit: number = 50, before?: string): Promise<Message[]> {
     // Try direct SQLite first in Tauri context
     if (isTauri && isDirectAccessAvailable()) {
       try {
@@ -294,20 +282,20 @@ class ApiClient {
     signal?: AbortSignal
   ): Promise<Message[]> {
     const params = new URLSearchParams();
-    params.set("q", query);
-    params.set("limit", limit.toString());
+    params.set('q', query);
+    params.set('limit', limit.toString());
 
     if (filters.sender) {
-      params.set("sender", filters.sender);
+      params.set('sender', filters.sender);
     }
     if (filters.after) {
-      params.set("after", filters.after);
+      params.set('after', filters.after);
     }
     if (filters.before) {
-      params.set("before", filters.before);
+      params.set('before', filters.before);
     }
     if (filters.has_attachments !== undefined) {
-      params.set("has_attachments", filters.has_attachments.toString());
+      params.set('has_attachments', filters.has_attachments.toString());
     }
 
     const url = `/conversations/search?${params.toString()}`;
@@ -332,7 +320,12 @@ class ApiClient {
     const socketReady = await ensureSocketConnected();
     if (socketReady) {
       try {
-        const params: { query: string; limit: number; threshold: number; filters?: SemanticSearchFilters } = {
+        const params: {
+          query: string;
+          limit: number;
+          threshold: number;
+          filters?: SemanticSearchFilters;
+        } = {
           query,
           limit: options.limit ?? 20,
           threshold: options.threshold ?? 0.3,
@@ -364,8 +357,8 @@ class ApiClient {
       filters: options.filters || null,
     };
 
-    return this.request<SemanticSearchResponse>("/search/semantic", {
-      method: "POST",
+    return this.request<SemanticSearchResponse>('/search/semantic', {
+      method: 'POST',
       body: JSON.stringify(body),
       ...(signal ? { signal } : {}),
     });
@@ -373,40 +366,37 @@ class ApiClient {
 
   // Semantic search cache stats
   async getSemanticCacheStats(): Promise<SemanticCacheStats> {
-    return this.request<SemanticCacheStats>("/search/semantic/cache/stats");
+    return this.request<SemanticCacheStats>('/search/semantic/cache/stats');
   }
 
   // Clear semantic search cache
   async clearSemanticCache(): Promise<{ status: string; message: string }> {
-    return this.request<{ status: string; message: string }>(
-      "/search/semantic/cache",
-      { method: "DELETE" }
-    );
+    return this.request<{ status: string; message: string }>('/search/semantic/cache', {
+      method: 'DELETE',
+    });
   }
 
   // Settings endpoints
   async getSettings(): Promise<SettingsResponse> {
-    return this.request<SettingsResponse>("/settings");
+    return this.request<SettingsResponse>('/settings');
   }
 
-  async updateSettings(
-    settings: SettingsUpdateRequest
-  ): Promise<SettingsResponse> {
-    return this.request<SettingsResponse>("/settings", {
-      method: "PUT",
+  async updateSettings(settings: SettingsUpdateRequest): Promise<SettingsResponse> {
+    return this.request<SettingsResponse>('/settings', {
+      method: 'PUT',
       body: JSON.stringify(settings),
     });
   }
 
   async getModels(): Promise<ModelInfo[]> {
-    return this.request<ModelInfo[]>("/settings/models");
+    return this.request<ModelInfo[]>('/settings/models');
   }
 
   async downloadModel(modelId: string): Promise<DownloadStatus> {
     return this.request<DownloadStatus>(
       `/settings/models/${encodeURIComponent(modelId)}/download`,
       {
-        method: "POST",
+        method: 'POST',
       }
     );
   }
@@ -415,7 +405,7 @@ class ApiClient {
     return this.request<ActivateResponse>(
       `/settings/models/${encodeURIComponent(modelId)}/activate`,
       {
-        method: "POST",
+        method: 'POST',
       }
     );
   }
@@ -459,8 +449,8 @@ class ApiClient {
       context_messages: 20,
     };
 
-    return this.request<DraftReplyResponse>("/drafts/reply", {
-      method: "POST",
+    return this.request<DraftReplyResponse>('/drafts/reply', {
+      method: 'POST',
       body: JSON.stringify(body),
       ...(signal ? { signal } : {}),
     });
@@ -491,8 +481,8 @@ class ApiClient {
       }
     }
 
-    return this.request<SmartReplySuggestionsResponse>("/suggestions", {
-      method: "POST",
+    return this.request<SmartReplySuggestionsResponse>('/suggestions', {
+      method: 'POST',
       body: JSON.stringify({
         last_message: lastMessage,
         num_suggestions: numSuggestions,
@@ -515,7 +505,7 @@ class ApiClient {
         return {
           summary: result.summary,
           key_points: result.key_points,
-          date_range: { start: "", end: "" }, // Socket doesn't provide this
+          date_range: { start: '', end: '' }, // Socket doesn't provide this
           message_count: result.message_count,
         };
       } catch {
@@ -528,8 +518,8 @@ class ApiClient {
       num_messages: numMessages,
     };
 
-    const data = await this.request<SummaryResponse>("/drafts/summarize", {
-      method: "POST",
+    const data = await this.request<SummaryResponse>('/drafts/summarize', {
+      method: 'POST',
       body: JSON.stringify(body),
       ...(signal ? { signal } : {}),
     });
@@ -540,7 +530,7 @@ class ApiClient {
   // Statistics endpoints
   async getConversationStats(
     chatId: string,
-    timeRange: TimeRange = "month",
+    timeRange: TimeRange = 'month',
     limit: number = 500
   ): Promise<ConversationStats> {
     const params = new URLSearchParams({
@@ -555,30 +545,29 @@ class ApiClient {
   async invalidateStatsCache(chatId: string): Promise<{ status: string; message: string }> {
     return this.request<{ status: string; message: string }>(
       `/stats/${encodeURIComponent(chatId)}/cache`,
-      { method: "DELETE" }
+      { method: 'DELETE' }
     );
   }
 
   // Template Analytics endpoints
   async getTemplateAnalytics(): Promise<TemplateAnalyticsSummary> {
-    return this.request<TemplateAnalyticsSummary>("/analytics/templates");
+    return this.request<TemplateAnalyticsSummary>('/analytics/templates');
   }
 
   async getTemplateAnalyticsDashboard(): Promise<TemplateAnalyticsDashboard> {
-    return this.request<TemplateAnalyticsDashboard>("/analytics/templates/dashboard");
+    return this.request<TemplateAnalyticsDashboard>('/analytics/templates/dashboard');
   }
 
   async resetTemplateAnalytics(): Promise<{ status: string; message: string }> {
-    return this.request<{ status: string; message: string }>(
-      "/analytics/templates/reset",
-      { method: "POST" }
-    );
+    return this.request<{ status: string; message: string }>('/analytics/templates/reset', {
+      method: 'POST',
+    });
   }
 
   async exportTemplateAnalytics(): Promise<Blob> {
     const response = await fetch(`${this.baseUrl}/analytics/templates/export`);
     if (!response.ok) {
-      throw new APIError("Export failed", response.status, null);
+      throw new APIError('Export failed', response.status, null);
     }
     return response.blob();
   }
@@ -596,14 +585,11 @@ class ApiClient {
       limit: options.limit ?? 1000,
     };
 
-    return this.request<PDFExportResponse>(
-      `/export/pdf/${encodeURIComponent(chatId)}`,
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-        ...(signal ? { signal } : {}),
-      }
-    );
+    return this.request<PDFExportResponse>(`/export/pdf/${encodeURIComponent(chatId)}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
+    });
   }
 
   /**
@@ -624,8 +610,8 @@ class ApiClient {
     const response = await fetch(
       `${this.baseUrl}/export/pdf/${encodeURIComponent(chatId)}/download`,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: signal ?? null,
       }
@@ -633,18 +619,14 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({
-        error: "Request failed",
+        error: 'Request failed',
         detail: response.statusText,
       }));
-      throw new APIError(
-        error.error || "Request failed",
-        response.status,
-        error.detail || null
-      );
+      throw new APIError(error.error || 'Request failed', response.status, error.detail || null);
     }
 
-    const contentDisposition = response.headers.get("Content-Disposition");
-    let filename = "conversation.pdf";
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = 'conversation.pdf';
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="?([^"]+)"?/);
       if (match && match[1]) {
@@ -659,7 +641,7 @@ class ApiClient {
   // Insights endpoints
   async getConversationInsights(
     chatId: string,
-    timeRange: TimeRange = "month",
+    timeRange: TimeRange = 'month',
     limit: number = 500
   ): Promise<ConversationInsights> {
     const params = new URLSearchParams({
@@ -673,7 +655,7 @@ class ApiClient {
 
   async getSentimentAnalysis(
     chatId: string,
-    timeRange: TimeRange = "month",
+    timeRange: TimeRange = 'month',
     limit: number = 200
   ): Promise<SentimentResult> {
     const params = new URLSearchParams({
@@ -687,7 +669,7 @@ class ApiClient {
 
   async getResponsePatterns(
     chatId: string,
-    timeRange: TimeRange = "month",
+    timeRange: TimeRange = 'month',
     limit: number = 500
   ): Promise<ResponsePatterns> {
     const params = new URLSearchParams({
@@ -701,7 +683,7 @@ class ApiClient {
 
   async getFrequencyTrends(
     chatId: string,
-    timeRange: TimeRange = "three_months",
+    timeRange: TimeRange = 'three_months',
     limit: number = 1000
   ): Promise<FrequencyTrends> {
     const params = new URLSearchParams({
@@ -715,7 +697,7 @@ class ApiClient {
 
   async getRelationshipHealth(
     chatId: string,
-    timeRange: TimeRange = "month",
+    timeRange: TimeRange = 'month',
     limit: number = 500
   ): Promise<RelationshipHealth> {
     const params = new URLSearchParams({
@@ -730,7 +712,7 @@ class ApiClient {
   async invalidateInsightsCache(chatId: string): Promise<{ status: string; message: string }> {
     return this.request<{ status: string; message: string }>(
       `/insights/${encodeURIComponent(chatId)}/cache`,
-      { method: "DELETE" }
+      { method: 'DELETE' }
     );
   }
 
@@ -746,23 +728,17 @@ class ApiClient {
       include_handled: includeHandled.toString(),
     });
     if (minLevel) {
-      params.set("min_level", minLevel);
+      params.set('min_level', minLevel);
     }
 
-    return this.request<PriorityInboxResponse>(
-      `/priority?${params.toString()}`,
-      {
-        ...(signal ? { signal } : {}),
-      }
-    );
+    return this.request<PriorityInboxResponse>(`/priority?${params.toString()}`, {
+      ...(signal ? { signal } : {}),
+    });
   }
 
-  async markMessageHandled(
-    chatId: string,
-    messageId: number
-  ): Promise<MarkHandledResponse> {
-    return this.request<MarkHandledResponse>("/priority/handled", {
-      method: "POST",
+  async markMessageHandled(chatId: string, messageId: number): Promise<MarkHandledResponse> {
+    return this.request<MarkHandledResponse>('/priority/handled', {
+      method: 'POST',
       body: JSON.stringify({
         chat_id: chatId,
         message_id: messageId,
@@ -770,12 +746,9 @@ class ApiClient {
     });
   }
 
-  async unmarkMessageHandled(
-    chatId: string,
-    messageId: number
-  ): Promise<MarkHandledResponse> {
-    return this.request<MarkHandledResponse>("/priority/handled", {
-      method: "DELETE",
+  async unmarkMessageHandled(chatId: string, messageId: number): Promise<MarkHandledResponse> {
+    return this.request<MarkHandledResponse>('/priority/handled', {
+      method: 'DELETE',
       body: JSON.stringify({
         chat_id: chatId,
         message_id: messageId,
@@ -787,32 +760,28 @@ class ApiClient {
     identifier: string,
     important: boolean = true
   ): Promise<ImportantContactResponse> {
-    return this.request<ImportantContactResponse>(
-      "/priority/contacts/important",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          identifier,
-          important,
-        }),
-      }
-    );
+    return this.request<ImportantContactResponse>('/priority/contacts/important', {
+      method: 'POST',
+      body: JSON.stringify({
+        identifier,
+        important,
+      }),
+    });
   }
 
   async getPriorityStats(): Promise<PriorityStats> {
-    return this.request<PriorityStats>("/priority/stats");
+    return this.request<PriorityStats>('/priority/stats');
   }
 
   async clearHandledItems(): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      "/priority/clear-handled",
-      { method: "POST" }
-    );
+    return this.request<{ success: boolean; message: string }>('/priority/clear-handled', {
+      method: 'POST',
+    });
   }
 
   // Calendar endpoints
   async getCalendars(): Promise<Calendar[]> {
-    return this.request<Calendar[]>("/calendars");
+    return this.request<Calendar[]>('/calendars');
   }
 
   async getCalendarEvents(
@@ -825,7 +794,7 @@ class ApiClient {
       limit: limit.toString(),
     });
     if (calendarId) {
-      params.set("calendar_id", calendarId);
+      params.set('calendar_id', calendarId);
     }
     return this.request<CalendarEvent[]>(`/calendars/events?${params.toString()}`);
   }
@@ -840,17 +809,14 @@ class ApiClient {
       limit: limit.toString(),
     });
     if (calendarId) {
-      params.set("calendar_id", calendarId);
+      params.set('calendar_id', calendarId);
     }
     return this.request<CalendarEvent[]>(`/calendars/events/search?${params.toString()}`);
   }
 
-  async detectEventsInText(
-    text: string,
-    messageId?: number
-  ): Promise<DetectedEvent[]> {
-    return this.request<DetectedEvent[]>("/calendars/detect", {
-      method: "POST",
+  async detectEventsInText(text: string, messageId?: number): Promise<DetectedEvent[]> {
+    return this.request<DetectedEvent[]>('/calendars/detect', {
+      method: 'POST',
       body: JSON.stringify({
         text,
         message_id: messageId || null,
@@ -858,12 +824,9 @@ class ApiClient {
     });
   }
 
-  async detectEventsInMessages(
-    chatId: string,
-    limit: number = 50
-  ): Promise<DetectedEvent[]> {
-    return this.request<DetectedEvent[]>("/calendars/detect/messages", {
-      method: "POST",
+  async detectEventsInMessages(chatId: string, limit: number = 50): Promise<DetectedEvent[]> {
+    return this.request<DetectedEvent[]>('/calendars/detect/messages', {
+      method: 'POST',
       body: JSON.stringify({
         chat_id: chatId,
         limit,
@@ -883,8 +846,8 @@ class ApiClient {
       url?: string;
     } = {}
   ): Promise<CreateEventResponse> {
-    return this.request<CreateEventResponse>("/calendars/events", {
-      method: "POST",
+    return this.request<CreateEventResponse>('/calendars/events', {
+      method: 'POST',
       body: JSON.stringify({
         calendar_id: calendarId,
         title,
@@ -899,8 +862,8 @@ class ApiClient {
     calendarId: string,
     detectedEvent: DetectedEvent
   ): Promise<CreateEventResponse> {
-    return this.request<CreateEventResponse>("/calendars/events/from-detected", {
-      method: "POST",
+    return this.request<CreateEventResponse>('/calendars/events/from-detected', {
+      method: 'POST',
       body: JSON.stringify({
         calendar_id: calendarId,
         detected_event: detectedEvent,
@@ -915,25 +878,21 @@ class ApiClient {
     enabledOnly: boolean = false
   ): Promise<CustomTemplateListResponse> {
     const params = new URLSearchParams();
-    if (category) params.set("category", category);
-    if (tag) params.set("tag", tag);
-    if (enabledOnly) params.set("enabled_only", "true");
+    if (category) params.set('category', category);
+    if (tag) params.set('tag', tag);
+    if (enabledOnly) params.set('enabled_only', 'true');
     const queryString = params.toString();
-    const url = queryString ? `/templates?${queryString}` : "/templates";
+    const url = queryString ? `/templates?${queryString}` : '/templates';
     return this.request<CustomTemplateListResponse>(url);
   }
 
   async getCustomTemplate(templateId: string): Promise<CustomTemplate> {
-    return this.request<CustomTemplate>(
-      `/templates/${encodeURIComponent(templateId)}`
-    );
+    return this.request<CustomTemplate>(`/templates/${encodeURIComponent(templateId)}`);
   }
 
-  async createCustomTemplate(
-    template: CustomTemplateCreateRequest
-  ): Promise<CustomTemplate> {
-    return this.request<CustomTemplate>("/templates", {
-      method: "POST",
+  async createCustomTemplate(template: CustomTemplateCreateRequest): Promise<CustomTemplate> {
+    return this.request<CustomTemplate>('/templates', {
+      method: 'POST',
       body: JSON.stringify(template),
     });
   }
@@ -942,21 +901,16 @@ class ApiClient {
     templateId: string,
     updates: CustomTemplateUpdateRequest
   ): Promise<CustomTemplate> {
-    return this.request<CustomTemplate>(
-      `/templates/${encodeURIComponent(templateId)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(updates),
-      }
-    );
+    return this.request<CustomTemplate>(`/templates/${encodeURIComponent(templateId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
   }
 
-  async deleteCustomTemplate(
-    templateId: string
-  ): Promise<{ status: string; template_id: string }> {
+  async deleteCustomTemplate(templateId: string): Promise<{ status: string; template_id: string }> {
     return this.request<{ status: string; template_id: string }>(
       `/templates/${encodeURIComponent(templateId)}`,
-      { method: "DELETE" }
+      { method: 'DELETE' }
     );
   }
 
@@ -964,48 +918,44 @@ class ApiClient {
     templateIdOrData: string | CustomTemplateTestRequest,
     testData?: CustomTemplateTestRequest
   ): Promise<CustomTemplateTestResponse> {
-    if (typeof templateIdOrData === "string") {
+    if (typeof templateIdOrData === 'string') {
       return this.request<CustomTemplateTestResponse>(
         `/templates/${encodeURIComponent(templateIdOrData)}/test`,
         {
-          method: "POST",
+          method: 'POST',
           body: JSON.stringify(testData),
         }
       );
     }
 
-    return this.request<CustomTemplateTestResponse>("/templates/test", {
-      method: "POST",
+    return this.request<CustomTemplateTestResponse>('/templates/test', {
+      method: 'POST',
       body: JSON.stringify(templateIdOrData),
     });
   }
 
-  async getCustomTemplateStats(
-    templateId: string
-  ): Promise<CustomTemplateUsageStats> {
+  async getCustomTemplateStats(templateId: string): Promise<CustomTemplateUsageStats> {
     return this.request<CustomTemplateUsageStats>(
       `/templates/${encodeURIComponent(templateId)}/stats`
     );
   }
 
   async getCustomTemplateUsageStats(): Promise<CustomTemplateUsageStats> {
-    return this.request<CustomTemplateUsageStats>("/templates/stats/usage");
+    return this.request<CustomTemplateUsageStats>('/templates/stats/usage');
   }
 
-  async exportCustomTemplates(
-    category?: string
-  ): Promise<CustomTemplateExportResponse> {
+  async exportCustomTemplates(category?: string): Promise<CustomTemplateExportResponse> {
     const url = category
       ? `/templates/export?category=${encodeURIComponent(category)}`
-      : "/templates/export";
+      : '/templates/export';
     return this.request<CustomTemplateExportResponse>(url);
   }
 
   async importCustomTemplates(
     data: CustomTemplateImportRequest
   ): Promise<CustomTemplateImportResponse> {
-    return this.request<CustomTemplateImportResponse>("/templates/import", {
-      method: "POST",
+    return this.request<CustomTemplateImportResponse>('/templates/import', {
+      method: 'POST',
       body: JSON.stringify(data),
     });
   }
@@ -1026,7 +976,7 @@ class ApiClient {
       refresh: refresh.toString(),
     });
     if (before) {
-      params.set("before", before);
+      params.set('before', before);
     }
     return this.request<ThreadedViewResponse>(
       `/conversations/${encodeURIComponent(chatId)}/threads?${params.toString()}`
@@ -1052,7 +1002,7 @@ class ApiClient {
     return this.request<ThreadResponse[]>(
       `/conversations/${encodeURIComponent(chatId)}/threads/analyze?${params.toString()}`,
       {
-        method: "POST",
+        method: 'POST',
         body: config ? JSON.stringify(config) : null,
       }
     );
@@ -1074,23 +1024,23 @@ class ApiClient {
   ): Promise<AttachmentWithContext[]> {
     const params = new URLSearchParams();
     if (options.chatId) {
-      params.set("chat_id", options.chatId);
+      params.set('chat_id', options.chatId);
     }
-    if (options.attachmentType && options.attachmentType !== "all") {
-      params.set("attachment_type", options.attachmentType);
+    if (options.attachmentType && options.attachmentType !== 'all') {
+      params.set('attachment_type', options.attachmentType);
     }
     if (options.after) {
-      params.set("after", options.after);
+      params.set('after', options.after);
     }
     if (options.before) {
-      params.set("before", options.before);
+      params.set('before', options.before);
     }
     if (options.limit) {
-      params.set("limit", options.limit.toString());
+      params.set('limit', options.limit.toString());
     }
 
     const queryString = params.toString();
-    const url = `/attachments${queryString ? `?${queryString}` : ""}`;
+    const url = `/attachments${queryString ? `?${queryString}` : ''}`;
     return this.request<AttachmentWithContext[]>(url);
   }
 
@@ -1098,9 +1048,7 @@ class ApiClient {
    * Get attachment statistics for a conversation
    */
   async getAttachmentStats(chatId: string): Promise<AttachmentStats> {
-    return this.request<AttachmentStats>(
-      `/attachments/stats/${encodeURIComponent(chatId)}`
-    );
+    return this.request<AttachmentStats>(`/attachments/stats/${encodeURIComponent(chatId)}`);
   }
 
   /**
@@ -1134,8 +1082,8 @@ class ApiClient {
     includeEvaluation: boolean = true,
     metadata?: Record<string, unknown>
   ): Promise<RecordFeedbackResponse> {
-    return this.request<RecordFeedbackResponse>("/feedback/response", {
-      method: "POST",
+    return this.request<RecordFeedbackResponse>('/feedback/response', {
+      method: 'POST',
       body: JSON.stringify({
         action,
         suggestion_text: suggestionText,
@@ -1149,31 +1097,25 @@ class ApiClient {
   }
 
   async getFeedbackStats(): Promise<FeedbackStatsResponse> {
-    return this.request<FeedbackStatsResponse>("/feedback/stats");
+    return this.request<FeedbackStatsResponse>('/feedback/stats');
   }
 
   async getFeedbackImprovements(limit: number = 10): Promise<ImprovementsResponse> {
-    return this.request<ImprovementsResponse>(
-      `/feedback/improvements?limit=${limit}`
-    );
+    return this.request<ImprovementsResponse>(`/feedback/improvements?limit=${limit}`);
   }
 
   // Experiment endpoints
   async getExperiments(activeOnly: boolean = false): Promise<ExperimentListResponse> {
-    const params = activeOnly ? "?active_only=true" : "";
+    const params = activeOnly ? '?active_only=true' : '';
     return this.request<ExperimentListResponse>(`/experiments${params}`);
   }
 
   async getExperiment(name: string): Promise<Experiment> {
-    return this.request<Experiment>(
-      `/experiments/${encodeURIComponent(name)}`
-    );
+    return this.request<Experiment>(`/experiments/${encodeURIComponent(name)}`);
   }
 
   async getExperimentResults(name: string): Promise<ExperimentResults> {
-    return this.request<ExperimentResults>(
-      `/experiments/${encodeURIComponent(name)}/results`
-    );
+    return this.request<ExperimentResults>(`/experiments/${encodeURIComponent(name)}/results`);
   }
 
   async recordExperimentOutcome(
@@ -1183,43 +1125,39 @@ class ApiClient {
     return this.request<RecordOutcomeResponse>(
       `/experiments/${encodeURIComponent(experimentName)}/record`,
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify(request),
       }
     );
   }
 
   async createExperiment(request: CreateExperimentRequest): Promise<Experiment> {
-    return this.request<Experiment>("/experiments", {
-      method: "POST",
+    return this.request<Experiment>('/experiments', {
+      method: 'POST',
       body: JSON.stringify(request),
     });
   }
 
-  async updateExperiment(
-    name: string,
-    enabled: boolean
-  ): Promise<Experiment> {
-    return this.request<Experiment>(
-      `/experiments/${encodeURIComponent(name)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ enabled }),
-      }
-    );
+  async updateExperiment(name: string, enabled: boolean): Promise<Experiment> {
+    return this.request<Experiment>(`/experiments/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
   }
 
   async deleteExperiment(name: string): Promise<{ status: string; experiment_name: string }> {
     return this.request<{ status: string; experiment_name: string }>(
       `/experiments/${encodeURIComponent(name)}`,
-      { method: "DELETE" }
+      { method: 'DELETE' }
     );
   }
 
-  async clearExperimentOutcomes(name: string): Promise<{ status: string; experiment_name: string }> {
+  async clearExperimentOutcomes(
+    name: string
+  ): Promise<{ status: string; experiment_name: string }> {
     return this.request<{ status: string; experiment_name: string }>(
       `/experiments/${encodeURIComponent(name)}/outcomes`,
-      { method: "DELETE" }
+      { method: 'DELETE' }
     );
   }
 
@@ -1235,7 +1173,7 @@ class ApiClient {
 
   // Quality Metrics endpoints
   async getQualitySummary(): Promise<QualitySummary> {
-    return this.request<QualitySummary>("/quality/summary");
+    return this.request<QualitySummary>('/quality/summary');
   }
 
   async getQualityDashboard(
@@ -1246,30 +1184,23 @@ class ApiClient {
       trend_days: trendDays.toString(),
       top_contacts_limit: topContactsLimit.toString(),
     });
-    return this.request<QualityDashboardData>(
-      `/quality/dashboard?${params.toString()}`
-    );
+    return this.request<QualityDashboardData>(`/quality/dashboard?${params.toString()}`);
   }
 
   async resetQualityMetrics(): Promise<{ status: string; message: string }> {
-    return this.request<{ status: string; message: string }>(
-      "/quality/reset",
-      { method: "POST" }
-    );
+    return this.request<{ status: string; message: string }>('/quality/reset', { method: 'POST' });
   }
 
   // Analytics Dashboard endpoints
-  async getAnalyticsOverview(
-    timeRange: TimeRange = "month"
-  ): Promise<AnalyticsOverview> {
+  async getAnalyticsOverview(timeRange: TimeRange = 'month'): Promise<AnalyticsOverview> {
     const params = new URLSearchParams({ time_range: timeRange });
     return this.request<AnalyticsOverview>(`/analytics/overview?${params.toString()}`);
   }
 
   async getAnalyticsTimeline(
-    granularity: "hour" | "day" | "week" | "month" = "day",
-    timeRange: TimeRange = "month",
-    metric: "messages" | "sentiment" | "response_time" = "messages"
+    granularity: 'hour' | 'day' | 'week' | 'month' = 'day',
+    timeRange: TimeRange = 'month',
+    metric: 'messages' | 'sentiment' | 'response_time' = 'messages'
   ): Promise<AnalyticsTimeline> {
     const params = new URLSearchParams({
       granularity,
@@ -1279,17 +1210,12 @@ class ApiClient {
     return this.request<AnalyticsTimeline>(`/analytics/timeline?${params.toString()}`);
   }
 
-  async getActivityHeatmap(
-    timeRange: TimeRange = "three_months"
-  ): Promise<ActivityHeatmap> {
+  async getActivityHeatmap(timeRange: TimeRange = 'three_months'): Promise<ActivityHeatmap> {
     const params = new URLSearchParams({ time_range: timeRange });
     return this.request<ActivityHeatmap>(`/analytics/heatmap?${params.toString()}`);
   }
 
-  async getContactStats(
-    chatId: string,
-    timeRange: TimeRange = "month"
-  ): Promise<ContactStats> {
+  async getContactStats(chatId: string, timeRange: TimeRange = 'month'): Promise<ContactStats> {
     const params = new URLSearchParams({ time_range: timeRange });
     return this.request<ContactStats>(
       `/analytics/contacts/${encodeURIComponent(chatId)}/stats?${params.toString()}`
@@ -1297,28 +1223,28 @@ class ApiClient {
   }
 
   async getContactsLeaderboard(
-    timeRange: TimeRange = "month",
+    timeRange: TimeRange = 'month',
     limit: number = 10,
-    sortBy: "messages" | "engagement" | "response_time" = "messages"
+    sortBy: 'messages' | 'engagement' | 'response_time' = 'messages'
   ): Promise<ContactsLeaderboard> {
     const params = new URLSearchParams({
       time_range: timeRange,
       limit: limit.toString(),
       sort_by: sortBy,
     });
-    return this.request<ContactsLeaderboard>(`/analytics/contacts/leaderboard?${params.toString()}`);
+    return this.request<ContactsLeaderboard>(
+      `/analytics/contacts/leaderboard?${params.toString()}`
+    );
   }
 
-  async getTrendingPatterns(
-    timeRange: TimeRange = "month"
-  ): Promise<TrendingPatterns> {
+  async getTrendingPatterns(timeRange: TimeRange = 'month'): Promise<TrendingPatterns> {
     const params = new URLSearchParams({ time_range: timeRange });
     return this.request<TrendingPatterns>(`/analytics/trends?${params.toString()}`);
   }
 
   async exportAnalytics(
-    format: "json" | "csv" = "json",
-    timeRange: TimeRange = "month"
+    format: 'json' | 'csv' = 'json',
+    timeRange: TimeRange = 'month'
   ): Promise<Blob> {
     const params = new URLSearchParams({
       format,
@@ -1326,33 +1252,28 @@ class ApiClient {
     });
     const response = await fetch(`${this.baseUrl}/analytics/export?${params.toString()}`);
     if (!response.ok) {
-      throw new APIError("Export failed", response.status, null);
+      throw new APIError('Export failed', response.status, null);
     }
     return response.blob();
   }
 
   async clearAnalyticsCache(): Promise<{ status: string; message: string }> {
-    return this.request<{ status: string; message: string }>(
-      "/analytics/cache",
-      { method: "DELETE" }
-    );
+    return this.request<{ status: string; message: string }>('/analytics/cache', {
+      method: 'DELETE',
+    });
   }
 
   // Scheduler endpoints
-  async scheduleDraft(
-    request: ScheduleDraftRequest
-  ): Promise<ScheduledItem> {
-    return this.request<ScheduledItem>("/scheduler/schedule", {
-      method: "POST",
+  async scheduleDraft(request: ScheduleDraftRequest): Promise<ScheduledItem> {
+    return this.request<ScheduledItem>('/scheduler/schedule', {
+      method: 'POST',
       body: JSON.stringify(request),
     });
   }
 
-  async smartScheduleDraft(
-    request: SmartScheduleRequest
-  ): Promise<SmartScheduleResponse> {
-    return this.request<SmartScheduleResponse>("/scheduler/smart-schedule", {
-      method: "POST",
+  async smartScheduleDraft(request: SmartScheduleRequest): Promise<SmartScheduleResponse> {
+    return this.request<SmartScheduleResponse>('/scheduler/smart-schedule', {
+      method: 'POST',
       body: JSON.stringify(request),
     });
   }
@@ -1364,55 +1285,37 @@ class ApiClient {
   ): Promise<ScheduledListResponse> {
     const params = new URLSearchParams({ limit: limit.toString() });
     if (contactId !== undefined) {
-      params.set("contact_id", contactId.toString());
+      params.set('contact_id', contactId.toString());
     }
     if (status) {
-      params.set("status", status);
+      params.set('status', status);
     }
-    return this.request<ScheduledListResponse>(
-      `/scheduler?${params.toString()}`
-    );
+    return this.request<ScheduledListResponse>(`/scheduler?${params.toString()}`);
   }
 
   async getScheduledItem(itemId: string): Promise<ScheduledItem> {
-    return this.request<ScheduledItem>(
-      `/scheduler/${encodeURIComponent(itemId)}`
-    );
+    return this.request<ScheduledItem>(`/scheduler/${encodeURIComponent(itemId)}`);
   }
 
-  async cancelScheduledItem(
-    itemId: string
-  ): Promise<{ success: boolean; message: string }> {
+  async cancelScheduledItem(itemId: string): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>(
       `/scheduler/${encodeURIComponent(itemId)}`,
-      { method: "DELETE" }
+      { method: 'DELETE' }
     );
   }
 
-  async rescheduleItem(
-    itemId: string,
-    sendAt: string
-  ): Promise<ScheduledItem> {
-    return this.request<ScheduledItem>(
-      `/scheduler/${encodeURIComponent(itemId)}/reschedule`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ send_at: sendAt }),
-      }
-    );
+  async rescheduleItem(itemId: string, sendAt: string): Promise<ScheduledItem> {
+    return this.request<ScheduledItem>(`/scheduler/${encodeURIComponent(itemId)}/reschedule`, {
+      method: 'PUT',
+      body: JSON.stringify({ send_at: sendAt }),
+    });
   }
 
-  async updateScheduledMessage(
-    itemId: string,
-    messageText: string
-  ): Promise<ScheduledItem> {
-    return this.request<ScheduledItem>(
-      `/scheduler/${encodeURIComponent(itemId)}/message`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ message_text: messageText }),
-      }
-    );
+  async updateScheduledMessage(itemId: string, messageText: string): Promise<ScheduledItem> {
+    return this.request<ScheduledItem>(`/scheduler/${encodeURIComponent(itemId)}/message`, {
+      method: 'PUT',
+      body: JSON.stringify({ message_text: messageText }),
+    });
   }
 
   async getTimingSuggestions(
@@ -1425,10 +1328,10 @@ class ApiClient {
       num_suggestions: numSuggestions.toString(),
     });
     if (earliest) {
-      params.set("earliest", earliest);
+      params.set('earliest', earliest);
     }
     if (latest) {
-      params.set("latest", latest);
+      params.set('latest', latest);
     }
     return this.request<TimingSuggestionsResponse>(
       `/scheduler/timing/suggest/${contactId}?${params.toString()}`
@@ -1436,71 +1339,70 @@ class ApiClient {
   }
 
   async getSchedulerStats(): Promise<SchedulerStatsResponse> {
-    return this.request<SchedulerStatsResponse>("/scheduler/stats");
+    return this.request<SchedulerStatsResponse>('/scheduler/stats');
   }
 
   async startScheduler(): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      "/scheduler/start",
-      { method: "POST" }
-    );
+    return this.request<{ success: boolean; message: string }>('/scheduler/start', {
+      method: 'POST',
+    });
   }
 
   async stopScheduler(): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      "/scheduler/stop",
-      { method: "POST" }
-    );
+    return this.request<{ success: boolean; message: string }>('/scheduler/stop', {
+      method: 'POST',
+    });
   }
 
   async clearTerminalScheduledItems(): Promise<{
     success: boolean;
     items_removed: number;
   }> {
-    return this.request<{ success: boolean; items_removed: number }>(
-      "/scheduler/terminal/clear",
-      { method: "DELETE" }
-    );
+    return this.request<{ success: boolean; items_removed: number }>('/scheduler/terminal/clear', {
+      method: 'DELETE',
+    });
   }
 
   // Graph Visualization endpoints
-  async getNetworkGraph(options: {
-    includeRelationships?: string[];
-    minMessages?: number;
-    daysBack?: number;
-    maxNodes?: number;
-    layout?: LayoutType;
-    includeClusters?: boolean;
-    width?: number;
-    height?: number;
-  } = {}): Promise<GraphData> {
+  async getNetworkGraph(
+    options: {
+      includeRelationships?: string[];
+      minMessages?: number;
+      daysBack?: number;
+      maxNodes?: number;
+      layout?: LayoutType;
+      includeClusters?: boolean;
+      width?: number;
+      height?: number;
+    } = {}
+  ): Promise<GraphData> {
     const params = new URLSearchParams();
     if (options.includeRelationships) {
-      options.includeRelationships.forEach(r => params.append("include_relationships", r));
+      options.includeRelationships.forEach((r) => params.append('include_relationships', r));
     }
     if (options.minMessages !== undefined) {
-      params.set("min_messages", options.minMessages.toString());
+      params.set('min_messages', options.minMessages.toString());
     }
     if (options.daysBack !== undefined) {
-      params.set("days_back", options.daysBack.toString());
+      params.set('days_back', options.daysBack.toString());
     }
     if (options.maxNodes !== undefined) {
-      params.set("max_nodes", options.maxNodes.toString());
+      params.set('max_nodes', options.maxNodes.toString());
     }
     if (options.layout) {
-      params.set("layout", options.layout);
+      params.set('layout', options.layout);
     }
     if (options.includeClusters !== undefined) {
-      params.set("include_clusters", options.includeClusters.toString());
+      params.set('include_clusters', options.includeClusters.toString());
     }
     if (options.width !== undefined) {
-      params.set("width", options.width.toString());
+      params.set('width', options.width.toString());
     }
     if (options.height !== undefined) {
-      params.set("height", options.height.toString());
+      params.set('height', options.height.toString());
     }
     const queryString = params.toString();
-    return this.request<GraphData>(`/graph/network${queryString ? `?${queryString}` : ""}`);
+    return this.request<GraphData>(`/graph/network${queryString ? `?${queryString}` : ''}`);
   }
 
   async getEgoGraph(
@@ -1508,53 +1410,55 @@ class ApiClient {
     options: {
       depth?: number;
       maxNeighbors?: number;
-      layout?: "force" | "radial";
+      layout?: 'force' | 'radial';
       width?: number;
       height?: number;
     } = {}
   ): Promise<GraphData> {
     const params = new URLSearchParams();
     if (options.depth !== undefined) {
-      params.set("depth", options.depth.toString());
+      params.set('depth', options.depth.toString());
     }
     if (options.maxNeighbors !== undefined) {
-      params.set("max_neighbors", options.maxNeighbors.toString());
+      params.set('max_neighbors', options.maxNeighbors.toString());
     }
     if (options.layout) {
-      params.set("layout", options.layout);
+      params.set('layout', options.layout);
     }
     if (options.width !== undefined) {
-      params.set("width", options.width.toString());
+      params.set('width', options.width.toString());
     }
     if (options.height !== undefined) {
-      params.set("height", options.height.toString());
+      params.set('height', options.height.toString());
     }
     const queryString = params.toString();
     return this.request<GraphData>(
-      `/graph/ego/${encodeURIComponent(contactId)}${queryString ? `?${queryString}` : ""}`
+      `/graph/ego/${encodeURIComponent(contactId)}${queryString ? `?${queryString}` : ''}`
     );
   }
 
-  async getGraphClusters(options: {
-    maxNodes?: number;
-    resolution?: number;
-  } = {}): Promise<ClusterResult> {
+  async getGraphClusters(
+    options: {
+      maxNodes?: number;
+      resolution?: number;
+    } = {}
+  ): Promise<ClusterResult> {
     const params = new URLSearchParams();
     if (options.maxNodes !== undefined) {
-      params.set("max_nodes", options.maxNodes.toString());
+      params.set('max_nodes', options.maxNodes.toString());
     }
     if (options.resolution !== undefined) {
-      params.set("resolution", options.resolution.toString());
+      params.set('resolution', options.resolution.toString());
     }
     const queryString = params.toString();
-    return this.request<ClusterResult>(`/graph/clusters${queryString ? `?${queryString}` : ""}`);
+    return this.request<ClusterResult>(`/graph/clusters${queryString ? `?${queryString}` : ''}`);
   }
 
   async getGraphEvolution(
     fromDate: string,
     toDate: string,
     options: {
-      interval?: "day" | "week" | "month";
+      interval?: 'day' | 'week' | 'month';
       maxNodes?: number;
     } = {}
   ): Promise<GraphEvolutionResponse> {
@@ -1563,32 +1467,34 @@ class ApiClient {
       to_date: toDate,
     });
     if (options.interval) {
-      params.set("interval", options.interval);
+      params.set('interval', options.interval);
     }
     if (options.maxNodes !== undefined) {
-      params.set("max_nodes", options.maxNodes.toString());
+      params.set('max_nodes', options.maxNodes.toString());
     }
     return this.request<GraphEvolutionResponse>(`/graph/evolution?${params.toString()}`);
   }
 
-  async exportGraph(options: {
-    format?: "json" | "graphml" | "svg" | "html";
-    includeLayout?: boolean;
-    width?: number;
-    height?: number;
-    maxNodes?: number;
-  } = {}): Promise<GraphExportResponse> {
+  async exportGraph(
+    options: {
+      format?: 'json' | 'graphml' | 'svg' | 'html';
+      includeLayout?: boolean;
+      width?: number;
+      height?: number;
+      maxNodes?: number;
+    } = {}
+  ): Promise<GraphExportResponse> {
     const params = new URLSearchParams();
     if (options.maxNodes !== undefined) {
-      params.set("max_nodes", options.maxNodes.toString());
+      params.set('max_nodes', options.maxNodes.toString());
     }
     const queryString = params.toString();
     return this.request<GraphExportResponse>(
-      `/graph/export${queryString ? `?${queryString}` : ""}`,
+      `/graph/export${queryString ? `?${queryString}` : ''}`,
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
-          format: options.format ?? "json",
+          format: options.format ?? 'json',
           include_layout: options.includeLayout ?? true,
           width: options.width ?? 800,
           height: options.height ?? 600,
@@ -1598,9 +1504,7 @@ class ApiClient {
   }
 
   async getContactProfile(contactId: string): Promise<ContactProfileDetail> {
-    return this.request<ContactProfileDetail>(
-      `/graph/contact/${encodeURIComponent(contactId)}`
-    );
+    return this.request<ContactProfileDetail>(`/graph/contact/${encodeURIComponent(contactId)}`);
   }
 
   async getGraphStats(maxNodes: number = 200): Promise<GraphStats> {
@@ -1609,7 +1513,7 @@ class ApiClient {
 
   // Knowledge Graph endpoints
   async getKnowledgeGraph(): Promise<KnowledgeGraphData> {
-    return this.request<KnowledgeGraphData>("/graph/knowledge");
+    return this.request<KnowledgeGraphData>('/graph/knowledge');
   }
 }
 

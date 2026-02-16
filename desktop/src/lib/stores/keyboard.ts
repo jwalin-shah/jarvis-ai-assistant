@@ -2,9 +2,9 @@
  * Keyboard navigation store for managing focus and navigation state
  */
 
-import { writable, derived, get } from "svelte/store";
+import { writable, derived, get } from 'svelte/store';
 
-export type FocusZone = "sidebar" | "conversations" | "messages" | "compose" | "modal" | null;
+export type FocusZone = 'sidebar' | 'conversations' | 'messages' | 'compose' | 'modal' | null;
 
 interface KeyboardState {
   activeZone: FocusZone;
@@ -106,12 +106,9 @@ export function handleGlobalKeydown(
   const state = get(keyboardStore);
 
   // Don't handle if typing in an input
-  if (
-    event.target instanceof HTMLInputElement ||
-    event.target instanceof HTMLTextAreaElement
-  ) {
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
     // Only handle Escape in inputs
-    if (event.key === "Escape" && callbacks.onEscape) {
+    if (event.key === 'Escape' && callbacks.onEscape) {
       callbacks.onEscape();
       return true;
     }
@@ -119,14 +116,14 @@ export function handleGlobalKeydown(
   }
 
   switch (event.key) {
-    case "Escape":
+    case 'Escape':
       if (callbacks.onEscape) {
         callbacks.onEscape();
         return true;
       }
       break;
 
-    case "Enter":
+    case 'Enter':
       if (callbacks.onEnter) {
         event.preventDefault();
         callbacks.onEnter();
@@ -134,7 +131,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "ArrowUp":
+    case 'ArrowUp':
       if (callbacks.onArrowUp) {
         event.preventDefault();
         callbacks.onArrowUp();
@@ -142,7 +139,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "ArrowDown":
+    case 'ArrowDown':
       if (callbacks.onArrowDown) {
         event.preventDefault();
         callbacks.onArrowDown();
@@ -150,7 +147,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "ArrowLeft":
+    case 'ArrowLeft':
       if (callbacks.onArrowLeft) {
         event.preventDefault();
         callbacks.onArrowLeft();
@@ -158,7 +155,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "ArrowRight":
+    case 'ArrowRight':
       if (callbacks.onArrowRight) {
         event.preventDefault();
         callbacks.onArrowRight();
@@ -166,7 +163,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "Tab":
+    case 'Tab':
       if (callbacks.onTab) {
         event.preventDefault();
         callbacks.onTab(event.shiftKey);
@@ -175,7 +172,7 @@ export function handleGlobalKeydown(
       break;
 
     // Vim-style navigation
-    case "j":
+    case 'j':
       if (state.isVimMode && callbacks.onVimJ) {
         event.preventDefault();
         callbacks.onVimJ();
@@ -183,7 +180,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "k":
+    case 'k':
       if (state.isVimMode && callbacks.onVimK) {
         event.preventDefault();
         callbacks.onVimK();
@@ -191,7 +188,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "g":
+    case 'g':
       if (state.isVimMode && !event.shiftKey && callbacks.onVimG) {
         event.preventDefault();
         callbacks.onVimG();
@@ -199,7 +196,7 @@ export function handleGlobalKeydown(
       }
       break;
 
-    case "G":
+    case 'G':
       if (state.isVimMode && event.shiftKey && callbacks.onVimShiftG) {
         event.preventDefault();
         callbacks.onVimShiftG();
@@ -218,16 +215,16 @@ let announceElement: HTMLElement | null = null;
  * Initialize the ARIA announcer element
  */
 export function initAnnouncer(): void {
-  if (typeof document === "undefined") return;
+  if (typeof document === 'undefined') return;
 
-  announceElement = document.getElementById("aria-announcer");
+  announceElement = document.getElementById('aria-announcer');
   if (!announceElement) {
-    announceElement = document.createElement("div");
-    announceElement.id = "aria-announcer";
-    announceElement.setAttribute("role", "status");
-    announceElement.setAttribute("aria-live", "polite");
-    announceElement.setAttribute("aria-atomic", "true");
-    announceElement.className = "sr-only";
+    announceElement = document.createElement('div');
+    announceElement.id = 'aria-announcer';
+    announceElement.setAttribute('role', 'status');
+    announceElement.setAttribute('aria-live', 'polite');
+    announceElement.setAttribute('aria-atomic', 'true');
+    announceElement.className = 'sr-only';
     document.body.appendChild(announceElement);
   }
 }
@@ -246,14 +243,14 @@ export function destroyAnnouncer(): void {
 /**
  * Announce a message to screen readers
  */
-export function announce(message: string, priority: "polite" | "assertive" = "polite"): void {
+export function announce(message: string, priority: 'polite' | 'assertive' = 'polite'): void {
   if (!announceElement) {
     initAnnouncer();
   }
 
   if (announceElement) {
-    announceElement.setAttribute("aria-live", priority);
-    announceElement.textContent = "";
+    announceElement.setAttribute('aria-live', priority);
+    announceElement.textContent = '';
     // Small delay to ensure the change is announced
     requestAnimationFrame(() => {
       if (announceElement) {

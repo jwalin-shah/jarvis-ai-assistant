@@ -6,44 +6,44 @@
 # Run: cd evals && npx promptfoo eval -c model_comparison.yaml
 # View: npx promptfoo view
 
-description: "Multi-model comparison: LFM family + Qwen-1.5B + Gemma-2-2B"
+description: 'Multi-model comparison: LFM family + Qwen-1.5B + Gemma-2-2B'
 
 # Disable caching - each exec provider call must run fresh
 cacheType: none
 
 prompts:
   - id: xml_drafter
-    label: "XML + Drafter"
-    raw: "strategy:xml_drafter"
+    label: 'XML + Drafter'
+    raw: 'strategy:xml_drafter'
 
 providers:
-  - id: "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b"
-    label: "LFM2 350M"
+  - id: 'exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b'
+    label: 'LFM2 350M'
     config:
       temperature: 0.1
       max_tokens: 50
-  - id: "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b"
-    label: "LFM2 700M (8bit)"
+  - id: 'exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b'
+    label: 'LFM2 700M (8bit)'
     config:
       temperature: 0.1
       max_tokens: 50
-  - id: "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b"
-    label: "LFM2.5 1.2B Instruct (current)"
+  - id: 'exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b'
+    label: 'LFM2.5 1.2B Instruct (current)'
     config:
       temperature: 0.1
       max_tokens: 50
-  - id: "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base"
-    label: "LFM2.5 1.2B Base"
+  - id: 'exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base'
+    label: 'LFM2.5 1.2B Base'
     config:
       temperature: 0.1
       max_tokens: 50
-  - id: "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b"
-    label: "Qwen2.5 1.5B"
+  - id: 'exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b'
+    label: 'Qwen2.5 1.5B'
     config:
       temperature: 0.1
       max_tokens: 50
-  - id: "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b"
-    label: "Gemma-2 2B"
+  - id: 'exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b'
+    label: 'Gemma-2 2B'
     config:
       temperature: 0.1
       max_tokens: 50
@@ -57,26 +57,26 @@ defaultTest:
       value: "I'd be happy to"
       weight: 2
     - type: not-icontains
-      value: "I hope this helps"
+      value: 'I hope this helps'
       weight: 2
     - type: not-icontains
-      value: "Let me know if"
+      value: 'Let me know if'
       weight: 2
     - type: not-icontains
-      value: "I understand"
+      value: 'I understand'
       weight: 1
 
 tests:
   # === question ===
 
-  - description: "Simple yes/no - trash"
+  - description: 'Simple yes/no - trash'
     metadata:
       category: question
     vars:
-      context: "[15:00] Dad: Did you take out the trash?"
-      last_message: "Did you take out the trash?"
-      tone: "casual"
-      user_style: "direct"
+      context: '[15:00] Dad: Did you take out the trash?'
+      last_message: 'Did you take out the trash?'
+      tone: 'casual'
+      user_style: 'direct'
     assert:
       - type: javascript
         value: output.split(' ').length < 8
@@ -85,14 +85,14 @@ tests:
         value: "Is this a direct answer to 'did you take out trash?' Should be very brief - ideally just 'yes/yep/yeah' or 'no/not yet'. Fail if it's more than one sentence."
         weight: 3
 
-  - description: "ETA check"
+  - description: 'ETA check'
     metadata:
       category: question
     vars:
-      context: "[19:00] Jake: you close?"
-      last_message: "you close?"
-      tone: "casual"
-      user_style: "brief"
+      context: '[19:00] Jake: you close?'
+      last_message: 'you close?'
+      tone: 'casual'
+      user_style: 'brief'
     assert:
       - type: javascript
         value: output.length < 40
@@ -101,43 +101,43 @@ tests:
         value: "Quick reply to 'you close?' asking about arrival. Good: 'yeah 5 min', 'almost there', 'pulling up'. Bad: long explanation, formal response."
         weight: 3
 
-  - description: "Professional - deadline question"
+  - description: 'Professional - deadline question'
     metadata:
       category: question
     vars:
-      context: "[11:30] HR: When can you have the compliance training done?"
-      last_message: "When can you have the compliance training done?"
-      tone: "professional"
-      user_style: "direct, professional"
+      context: '[11:30] HR: When can you have the compliance training done?'
+      last_message: 'When can you have the compliance training done?'
+      tone: 'professional'
+      user_style: 'direct, professional'
     assert:
       - type: not-icontains
-        value: "lol"
+        value: 'lol'
         weight: 1
       - type: llm-rubric
         value: "Professional response to a deadline question. Good: 'I'll have it done by end of week', 'Can finish by Wednesday'. Bad: vague, too casual, no commitment."
         weight: 3
 
-  - description: "Ambiguous question mark"
+  - description: 'Ambiguous question mark'
     metadata:
       category: question
     vars:
-      context: "[11:00] Chris: ?"
-      last_message: "?"
-      tone: "casual"
-      user_style: "casual"
+      context: '[11:00] Chris: ?'
+      last_message: '?'
+      tone: 'casual'
+      user_style: 'casual'
     assert:
       - type: llm-rubric
         value: "Reply to just a '?' with no context. Should ask for clarification briefly. Good: 'what's up?', '??', 'hm?'. Bad: long response, assuming what they mean."
         weight: 3
 
-  - description: "Weekend plans"
+  - description: 'Weekend plans'
     metadata:
       category: question
     vars:
-      context: "[18:30] Sam: Any plans this weekend?"
-      last_message: "Any plans this weekend?"
-      tone: "casual"
-      user_style: "conversational"
+      context: '[18:30] Sam: Any plans this weekend?'
+      last_message: 'Any plans this weekend?'
+      tone: 'casual'
+      user_style: 'conversational'
     assert:
       - type: javascript
         value: output.length < 120
@@ -148,58 +148,58 @@ tests:
 
   # === request ===
 
-  - description: "Lunch invitation"
+  - description: 'Lunch invitation'
     metadata:
       category: request
     vars:
-      context: "[14:00] John: Want to grab lunch tomorrow?"
-      last_message: "Want to grab lunch tomorrow?"
-      tone: "casual"
-      user_style: "brief, friendly"
+      context: '[14:00] John: Want to grab lunch tomorrow?'
+      last_message: 'Want to grab lunch tomorrow?'
+      tone: 'casual'
+      user_style: 'brief, friendly'
     assert:
       - type: javascript
         value: output.length < 80
         weight: 1
       - type: not-icontains
-        value: "sounds great"
+        value: 'sounds great'
         weight: 2
       - type: not-icontains
-        value: "absolutely"
+        value: 'absolutely'
         weight: 2
       - type: llm-rubric
-        value: "Is this a natural, casual text reply to a lunch invitation? Should be brief (<15 words), friendly, and sound human (not AI). Pass if it sounds like a real person texting."
+        value: 'Is this a natural, casual text reply to a lunch invitation? Should be brief (<15 words), friendly, and sound human (not AI). Pass if it sounds like a real person texting.'
         weight: 3
 
-  - description: "Professional - report request"
+  - description: 'Professional - report request'
     metadata:
       category: request
     vars:
-      context: "[09:00] Manager: Can you send the Q4 report by EOD?"
-      last_message: "Can you send the Q4 report by EOD?"
-      tone: "professional"
-      user_style: "professional but not stiff"
+      context: '[09:00] Manager: Can you send the Q4 report by EOD?'
+      last_message: 'Can you send the Q4 report by EOD?'
+      tone: 'professional'
+      user_style: 'professional but not stiff'
     assert:
       - type: not-icontains
-        value: "lol"
+        value: 'lol'
         weight: 1
       - type: not-icontains
-        value: "gonna"
+        value: 'gonna'
         weight: 1
       - type: llm-rubric
         value: "Is this professional but not stiff? Should confirm the task briefly. Good: 'Will do', 'On it', 'I'll have it ready'. Bad: too casual, too formal/corporate."
         weight: 3
 
-  - description: "Professional - meeting reschedule"
+  - description: 'Professional - meeting reschedule'
     metadata:
       category: request
     vars:
-      context: "[10:00] Client: Need to push our 2pm to Thursday. Does that work?"
-      last_message: "Need to push our 2pm to Thursday. Does that work?"
-      tone: "professional"
-      user_style: "polite, concise"
+      context: '[10:00] Client: Need to push our 2pm to Thursday. Does that work?'
+      last_message: 'Need to push our 2pm to Thursday. Does that work?'
+      tone: 'professional'
+      user_style: 'polite, concise'
     assert:
       - type: not-icontains
-        value: "lol"
+        value: 'lol'
         weight: 1
       - type: llm-rubric
         value: "Professional response to a meeting reschedule. Good: 'Thursday works for me', 'Sure, same time?'. Bad: too casual, overly formal, long response."
@@ -207,28 +207,28 @@ tests:
 
   # === emotion ===
 
-  - description: "Emotional support - venting"
+  - description: 'Emotional support - venting'
     metadata:
       category: emotion
     vars:
       context: |
         [20:00] Mike: Work was brutal today
         [20:01] Mike: Boss dumped a project on me last minute
-      last_message: "Boss dumped a project on me last minute"
-      tone: "casual"
-      user_style: "empathetic friend"
+      last_message: 'Boss dumped a project on me last minute'
+      tone: 'casual'
+      user_style: 'empathetic friend'
     assert:
       - type: not-icontains
-        value: "have you tried"
+        value: 'have you tried'
         weight: 2
       - type: not-icontains
-        value: "you should"
+        value: 'you should'
         weight: 2
       - type: llm-rubric
         value: "Is this empathetic without giving unsolicited advice? Good: 'that sucks', 'ugh sorry'. Bad: 'have you tried...', 'you should...', therapist-speak."
         weight: 3
 
-  - description: "Emotional support - breakup"
+  - description: 'Emotional support - breakup'
     metadata:
       category: emotion
     vars:
@@ -236,8 +236,8 @@ tests:
         [22:00] Sarah: Mark and I broke up
         [22:01] Sarah: I don't even know what happened
       last_message: "I don't even know what happened"
-      tone: "casual"
-      user_style: "warm, supportive"
+      tone: 'casual'
+      user_style: 'warm, supportive'
     assert:
       - type: not-icontains
         value: "you'll find someone"
@@ -246,17 +246,17 @@ tests:
         value: "Is this supportive without minimizing or giving cliched advice? Good: 'I'm so sorry', 'that's rough, I'm here for you'. Bad: 'you'll find someone better', platitudes, therapist-speak."
         weight: 3
 
-  - description: "Emotional support - bad news"
+  - description: 'Emotional support - bad news'
     metadata:
       category: emotion
     vars:
       context: "[15:00] John: Didn't get the job. Thought the interview went well"
       last_message: "Didn't get the job. Thought the interview went well"
-      tone: "casual"
-      user_style: "empathetic, brief"
+      tone: 'casual'
+      user_style: 'empathetic, brief'
     assert:
       - type: not-icontains
-        value: "everything happens for a reason"
+        value: 'everything happens for a reason'
         weight: 2
       - type: llm-rubric
         value: "Empathetic response to job rejection. Good: 'damn that sucks', 'their loss honestly'. Bad: toxic positivity, unsolicited advice, long pep talk."
@@ -264,35 +264,35 @@ tests:
 
   # === statement ===
 
-  - description: "Photo reaction"
+  - description: 'Photo reaction'
     metadata:
       category: statement
     vars:
       context: |
         [16:00] Emma: [Photo]
         [16:00] Emma: Look at this view!
-      last_message: "Look at this view!"
-      tone: "casual"
-      user_style: "enthusiastic"
+      last_message: 'Look at this view!'
+      tone: 'casual'
+      user_style: 'enthusiastic'
     assert:
       - type: not-icontains
-        value: "I can see"
+        value: 'I can see'
         weight: 2
       - type: not-icontains
-        value: "the photo"
+        value: 'the photo'
         weight: 2
       - type: llm-rubric
         value: "React to a friend sharing a photo of a nice view. Should be positive and match enthusiasm. Bad: describing the photo, generic 'nice', overly formal."
         weight: 3
 
-  - description: "Inside joke / unknown reference"
+  - description: 'Inside joke / unknown reference'
     metadata:
       category: statement
     vars:
-      context: "[14:00] Tom: lmao remember the thing"
-      last_message: "lmao remember the thing"
-      tone: "casual"
-      user_style: "casual bro"
+      context: '[14:00] Tom: lmao remember the thing'
+      last_message: 'lmao remember the thing'
+      tone: 'casual'
+      user_style: 'casual bro'
     assert:
       - type: javascript
         value: output.length < 40
@@ -301,17 +301,17 @@ tests:
         value: "Reply to an inside joke reference ('the thing') that the model can't possibly know. Should NOT pretend to know. Good: 'lol which thing', 'haha yes', 'omg yes'. Bad: making up a specific memory, detailed response about 'the thing'."
         weight: 3
 
-  - description: "Travel flex"
+  - description: 'Travel flex'
     metadata:
       category: statement
     vars:
-      context: "[10:00] Lisa: Just landed in Tokyo!!"
-      last_message: "Just landed in Tokyo!!"
-      tone: "casual"
-      user_style: "excited, enthusiastic"
+      context: '[10:00] Lisa: Just landed in Tokyo!!'
+      last_message: 'Just landed in Tokyo!!'
+      tone: 'casual'
+      user_style: 'excited, enthusiastic'
     assert:
       - type: not-icontains
-        value: "i hope you"
+        value: 'i hope you'
         weight: 2
       - type: llm-rubric
         value: "Excited response to a friend's travel announcement. Good: 'omg so jealous!', 'yesss enjoy!', 'send pics!'. Bad: formal wishes, travel advice, assistant-like response."
@@ -319,14 +319,14 @@ tests:
 
   # === edge cases ===
 
-  - description: "No context - bare message from unknown"
+  - description: 'No context - bare message from unknown'
     metadata:
       category: statement
     vars:
-      context: "[11:00] Unknown: hey"
-      last_message: "hey"
-      tone: "casual"
-      user_style: ""
+      context: '[11:00] Unknown: hey'
+      last_message: 'hey'
+      tone: 'casual'
+      user_style: ''
     assert:
       - type: javascript
         value: output.length < 30
@@ -335,36 +335,36 @@ tests:
         value: "Reply to 'hey' from an unknown person with zero context. Should be very brief - a simple greeting back. Good: 'hey', 'hey what's up', 'yo'. Bad: long reply, introducing yourself, asking detailed questions."
         weight: 3
 
-  - description: "Ambiguous forwarded link - no text"
+  - description: 'Ambiguous forwarded link - no text'
     metadata:
       category: question
     vars:
-      context: "[12:00] Sarah: [Link]"
-      last_message: "[Link]"
-      tone: "casual"
-      user_style: ""
+      context: '[12:00] Sarah: [Link]'
+      last_message: '[Link]'
+      tone: 'casual'
+      user_style: ''
     assert:
       - type: javascript
         value: output.length < 40
         weight: 2
       - type: not-icontains
-        value: "article"
+        value: 'article'
         weight: 1
       - type: not-icontains
-        value: "interesting"
+        value: 'interesting'
         weight: 1
       - type: llm-rubric
         value: "Someone sent just a link with no text. Model should NOT confabulate what the link is about. Good: 'what's this?', '?', 'ooh what is it'. Bad: commenting on the content, assuming what it is."
         weight: 3
 
-  - description: "Stale thread - weeks-old message"
+  - description: 'Stale thread - weeks-old message'
     metadata:
       category: question
     vars:
-      context: "[3 weeks ago] Dave: hey you free Saturday?"
-      last_message: "hey you free Saturday?"
-      tone: "casual"
-      user_style: "casual"
+      context: '[3 weeks ago] Dave: hey you free Saturday?'
+      last_message: 'hey you free Saturday?'
+      tone: 'casual'
+      user_style: 'casual'
     assert:
       - type: javascript
         value: output.length < 60

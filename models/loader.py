@@ -25,26 +25,16 @@ import logging
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from typing import Any
 
-# Disable HuggingFace hub network checks after initial download
-# This prevents slow version checks on every model load/generate call
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-
 import mlx.core as mx
 import psutil
-from mlx_lm import generate, load, stream_generate
-from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
 
 from jarvis.core.exceptions import (
     ErrorCode,
     ModelGenerationError,
     ModelLoadError,
-    model_generation_timeout,
     model_not_found,
     model_out_of_memory,
 )
@@ -288,12 +278,21 @@ class MLXModelLoader:
         """Public accessor for the GPU serialization lock."""
         return cls._mlx_load_lock
 
+    @staticmethod
+    def _configure_environment() -> None:
+        """Configure environment variables for offline model loading."""
+        # Disable HuggingFace hub network checks after initial download
+        # This prevents slow version checks on every model load/generate call
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
     def __init__(self, config: ModelConfig | None = None) -> None:
         """Initialize the loader.
 
         Args:
             config: Model configuration. Uses defaults if not provided.
         """
+        self._configure_environment()
         self.config = config or ModelConfig()
         # MLX model returned by mlx_lm.load() - typed as Any due to external library complexity
         self._model: Any = None
@@ -453,6 +452,8 @@ class MLXModelLoader:
                 return True
 
             try:
+                from mlx_lm import load
+
                 logger.info(
                     "Loading model: %s (%s)",
                     self.config.display_name,
@@ -612,6 +613,8 @@ class MLXModelLoader:
 
         with MLXModelLoader._mlx_load_lock:
             try:
+                from mlx_lm import load
+
                 logger.info(
                     "Loading draft model: %s (%s)",
                     draft_config.display_name,
@@ -662,10 +665,9 @@ class MLXModelLoader:
         self._draft_config = None
 
         def prefill_prompt_cache(self, prefix_text: str) -> None:
-
             """Pre-compute KV cache for a static prompt prefix.
 
-    
+
 
             The cached KV state can be reused across generation calls that share
 
@@ -673,13 +675,13 @@ class MLXModelLoader:
 
             system prompt on a 1.2B model.
 
-    
+
 
             Must be called after load() and while holding _mlx_load_lock (or from
 
             a context where no concurrent GPU ops are possible).
 
-    
+
 
             Args:
 
@@ -688,16 +690,10 @@ class MLXModelLoader:
             """
 
             if not self.is_loaded():
-
                 logger.warning("Cannot prefill cache: model not loaded")
 
                 return
 
-    
-
-            from mlx_lm.models.cache import make_prompt_cache
-
-    
 
         try:
             # Tokenize the prefix once and store for reuse (avoids redundant
@@ -807,6 +803,8 @@ class MLXModelLoader:
         Returns:
             Tuple of (formatted_prompt, max_tokens, sampler, logits_processors).
         """
+        from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
+
         max_tokens = max_tokens or self.config.default_max_tokens
         temperature = temperature if temperature is not None else self.config.default_temperature
         top_p = top_p if top_p is not None else 0.1
@@ -874,7 +872,8 @@ class MLXModelLoader:
         # Apply stop sequences
         if stop_sequences:
             for stop_seq in stop_sequences:
-                if not stop_seq: continue
+                if not stop_seq:
+                    continue
                 if stop_seq in response:
                     response = response[: response.index(stop_seq)]
                 elif stop_seq.strip() in response:
@@ -904,7 +903,8 @@ class MLXModelLoader:
         # If we stripped everything, keep original for visibility in debug/bakeoff
         if not response and original_raw.strip():
             logger.warning(
-                "Stripping resulted in empty string, reverting to original: '%s'", original_raw.strip()
+                "Stripping resulted in empty string, reverting to original: '%s'",
+                original_raw.strip(),
             )
             response = original_raw.strip()
 
@@ -951,17 +951,25 @@ class MLXModelLoader:
         if not self.is_loaded():
             raise ModelLoadError("Model not loaded")
 
-        formatted_prompt, max_tokens, sampler, logits_processors = (
-            self._prepare_generation_params(
-                prompt, max_tokens, temperature, top_p, min_p, top_k,
-                repetition_penalty, pre_formatted, negative_constraints, system_prompt
-            )
+        formatted_prompt, max_tokens, sampler, logits_processors = self._prepare_generation_params(
+            prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            min_p,
+            top_k,
+            repetition_penalty,
+            pre_formatted,
+            negative_constraints,
+            system_prompt,
         )
 
         # NOTE: SYSTEM_PREFIX is already baked into RAG_REPLY_PROMPT.template,
         # so we do NOT prepend it here. Doing so would duplicate it.
 
         try:
+            from mlx_lm import generate
+
             start_time = time.perf_counter()
             with MLXModelLoader._mlx_load_lock:
                 apply_llm_limits()
@@ -972,7 +980,7 @@ class MLXModelLoader:
                     prompt=prompt,
                     max_tokens=max_tokens,
                     sampler=sampler,
-                    verbose=False
+                    verbose=False,
                 )
 
             return self._process_generation_result(
@@ -1050,7 +1058,7 @@ class MLXModelLoader:
                     system_prompt=system_prompt,
                 )
             )
-            
+
             logger.debug("Prompt sent to model (%d chars)", len(formatted_prompt))
 
             # Use real streaming with mlx_lm.stream_generate
@@ -1068,6 +1076,8 @@ class MLXModelLoader:
             if self._draft_model is not None:
                 stream_kwargs["draft_model"] = self._draft_model
                 stream_kwargs["num_draft_tokens"] = num_draft_tokens or 3
+
+            from mlx_lm import stream_generate
 
             with MLXModelLoader._mlx_load_lock:
                 for response in stream_generate(

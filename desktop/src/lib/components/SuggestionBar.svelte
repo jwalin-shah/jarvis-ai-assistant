@@ -1,51 +1,48 @@
 <script lang="ts">
-  import { apiClient, APIError } from "../api/client";
-  import type { DraftReplyResponse } from "../api/types";
-  import { jarvis } from "../socket/client";
-  import Icon from "./Icon.svelte";
+  import { apiClient, APIError } from '../api/client';
+  import type { DraftReplyResponse } from '../api/types';
+  import { jarvis } from '../socket/client';
+  import Icon from './Icon.svelte';
 
   interface Props {
     chatId: string;
     onSelect: (text: string) => void;
     onClose: () => void;
-    initialSuggestions?: DraftReplyResponse["suggestions"];
+    initialSuggestions?: DraftReplyResponse['suggestions'];
   }
 
   let { chatId, onSelect, onClose, initialSuggestions }: Props = $props();
 
-  type BarState = "loading" | "streaming" | "results" | "error";
-  let barState: BarState = $state("loading");
-  let streamingText = $state("");
-  let suggestions: DraftReplyResponse["suggestions"] = $state([]);
-  let errorMessage = $state("");
+  type BarState = 'loading' | 'streaming' | 'results' | 'error';
+  let barState: BarState = $state('loading');
+  let streamingText = $state('');
+  let suggestions: DraftReplyResponse['suggestions'] = $state([]);
+  let errorMessage = $state('');
   let abortController: AbortController | null = null;
 
   async function generateReplies() {
     abortController?.abort();
     abortController = new AbortController();
 
-    barState = "streaming";
-    streamingText = "";
-    errorMessage = "";
+    barState = 'streaming';
+    streamingText = '';
+    errorMessage = '';
 
     try {
       // Stream tokens via socket for typewriter effect
-      const result = await jarvis.generateDraftStream(
-        { chat_id: chatId },
-        (token: string) => {
-          streamingText += token;
-        }
-      );
+      const result = await jarvis.generateDraftStream({ chat_id: chatId }, (token: string) => {
+        streamingText += token;
+      });
       if (result.gated || result.suggestions.length === 0) {
         handleClose();
         return;
       }
       suggestions = result.suggestions;
-      barState = "results";
+      barState = 'results';
     } catch {
       // Fall back to non-streaming API
       try {
-        barState = "loading";
+        barState = 'loading';
         const response = await apiClient.getDraftReplies(
           chatId,
           undefined,
@@ -57,16 +54,16 @@
           return;
         }
         suggestions = response.suggestions;
-        barState = "results";
+        barState = 'results';
       } catch (e2) {
-        if (e2 instanceof Error && e2.name === "AbortError") return;
-        barState = "error";
+        if (e2 instanceof Error && e2.name === 'AbortError') return;
+        barState = 'error';
         if (e2 instanceof APIError) {
           errorMessage = e2.detail || e2.message;
         } else if (e2 instanceof Error) {
           errorMessage = e2.message;
         } else {
-          errorMessage = "Failed to generate suggestions";
+          errorMessage = 'Failed to generate suggestions';
         }
       }
     }
@@ -74,13 +71,13 @@
 
   function handleClose() {
     abortController?.abort();
-    streamingText = "";
-    barState = "loading";
+    streamingText = '';
+    barState = 'loading';
     onClose();
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === "Escape") {
+    if (event.key === 'Escape') {
       event.preventDefault();
       handleClose();
     }
@@ -88,7 +85,7 @@
 
   function truncate(text: string, maxLen: number): string {
     if (text.length <= maxLen) return text;
-    return text.slice(0, maxLen) + "...";
+    return text.slice(0, maxLen) + '...';
   }
 
   // Auto-generate on mount and re-generate when chatId changes.
@@ -97,7 +94,7 @@
     void chatId; // track chatId reactivity
     if (initialSuggestions && initialSuggestions.length > 0) {
       suggestions = initialSuggestions;
-      barState = "results";
+      barState = 'results';
     } else {
       generateReplies();
     }
@@ -112,7 +109,7 @@
 <div class="suggestion-bar">
   <span class="bar-icon"><Icon name="sparkles" size={16} /></span>
 
-  {#if barState === "streaming"}
+  {#if barState === 'streaming'}
     <div class="bar-content streaming">
       {#if streamingText}
         <span class="streaming-text">{streamingText}<span class="cursor"></span></span>
@@ -127,7 +124,7 @@
     </div>
   {/if}
 
-  {#if barState === "loading"}
+  {#if barState === 'loading'}
     <div class="bar-content loading">
       <div class="typing-indicator">
         <span class="typing-dot"></span>
@@ -138,7 +135,7 @@
     </div>
   {/if}
 
-  {#if barState === "results"}
+  {#if barState === 'results'}
     <div class="bar-content chips">
       {#each suggestions as suggestion}
         <button
@@ -161,7 +158,7 @@
     </button>
   {/if}
 
-  {#if barState === "error"}
+  {#if barState === 'error'}
     <div class="bar-content error">
       <Icon name="alert-circle" size={14} />
       <span class="error-text">{errorMessage}</span>
@@ -261,7 +258,6 @@
     font-size: 13px;
   }
 
-
   .loading-text,
   .error-text {
     white-space: nowrap;
@@ -343,7 +339,9 @@
   }
 
   @keyframes typingBounce {
-    0%, 60%, 100% {
+    0%,
+    60%,
+    100% {
       transform: translateY(0);
       opacity: 0.4;
     }

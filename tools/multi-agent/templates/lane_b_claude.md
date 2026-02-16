@@ -5,6 +5,7 @@ You are working in a **multi-agent worktree** for Lane B (ML + Extraction + Clas
 ## Your Ownership
 
 YOU OWN (can modify freely):
+
 - `models/` - Model weights and configs
 - `jarvis/classifiers/` - Classification pipeline
 - `jarvis/extractors/` - Entity/fact extraction
@@ -17,6 +18,7 @@ YOU OWN (can modify freely):
 ## Restrictions
 
 YOU MUST NOT MODIFY (owned by other lanes):
+
 - `desktop/` - Lane A (App)
 - `api/` - Lane A (App)
 - `jarvis/router.py` - Lane A (App)
@@ -28,11 +30,13 @@ YOU MUST NOT MODIFY (owned by other lanes):
 - `evals/` - Lane C (QA)
 
 SHARED (requires all-lane approval):
+
 - `jarvis/contracts/pipeline.py` - Modify only if necessary, document changes
 
 ## Key Files to Read First
 
 Before making changes, read these to understand the current architecture:
+
 - `jarvis/contracts/pipeline.py` - Shared type definitions (the contract)
 - `jarvis/classifiers/response_mobilization.py` - Main classifier
 - `jarvis/contacts/fact_extractor.py` - Fact extraction
@@ -49,6 +53,7 @@ Before making changes, read these to understand the current architecture:
 ## Completion Protocol
 
 When your work is done:
+
 1. Run `make format` to fix style
 2. Run `make test` and verify tests pass (read `test_results.txt`)
 3. Commit all changes: `git add <your files> && git commit -m "descriptive message"`
