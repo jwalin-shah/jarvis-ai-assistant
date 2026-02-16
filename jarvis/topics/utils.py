@@ -96,7 +96,8 @@ def get_embeddings_for_segmentation(
 
     if to_encode_texts:
         try:
-            new_embs = embedder.embed_batch(to_encode_texts)
+            import numpy as np
+            new_embs = embedder.encode(to_encode_texts, normalize=True, dtype=np.float16)
             for idx, emb in zip(to_encode_indices, new_embs):
                 embeddings[idx] = emb
         except Exception as e:
@@ -104,7 +105,7 @@ def get_embeddings_for_segmentation(
             # Fallback to individual encoding for remaining
             for idx, text in zip(to_encode_indices, to_encode_texts):
                 try:
-                    embeddings[idx] = embedder.encode(text, normalize=True)
+                    embeddings[idx] = embedder.encode(text, normalize=True, dtype=np.float16)
                 except Exception:  # nosec B110
                     pass
 
