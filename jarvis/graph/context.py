@@ -32,7 +32,7 @@ def get_graph_context(contact_id: str, chat_id: str) -> str:
         Compact context string, or empty string if unavailable.
     """
     parts: list[str] = []
-    
+
     # Identify if this is a group chat
     is_group = "chat" in contact_id.lower() or "chat" in chat_id.lower()
 

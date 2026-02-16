@@ -202,15 +202,14 @@ class VecSearcher:
             existing_ids = set()
             with self.db.connection() as conn:
                 for i in range(0, len(all_ids), 900):
-                    chunk = all_ids[i:i+900]
+                    chunk = all_ids[i : i + 900]
                     placeholders = ",".join(["?"] * len(chunk))
                     rows = conn.execute(
-                        f"SELECT rowid FROM vec_messages WHERE rowid IN ({placeholders})", 
-                        chunk
+                        f"SELECT rowid FROM vec_messages WHERE rowid IN ({placeholders})", chunk
                     ).fetchall()
                     for r in rows:
                         existing_ids.add(r[0])
-            
+
             to_index = [m for m in valid_messages if m.id not in existing_ids]
             if not to_index:
                 return 0

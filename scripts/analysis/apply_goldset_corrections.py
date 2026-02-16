@@ -29,6 +29,7 @@ MERGED_PATH = os.path.join(GOLDSET_DIR, "goldset_v6_merged.json")
 # Each entry is the FULL replacement for expected_candidates.
 # ---------------------------------------------------------------------------
 
+
 def _c(span_text: str, span_label: str, agreement: int = 3, confidence: str = "high") -> dict:
     """Shorthand for building a candidate dict."""
     return {
@@ -167,6 +168,7 @@ CORRECTIONS: dict[str, list[dict]] = {
 # Stratified train/dev/test split (copied from compute_goldset_iaa.py)
 # ---------------------------------------------------------------------------
 
+
 def stratified_split(
     samples: list[dict],
     train_frac: float = 0.6,
@@ -178,10 +180,9 @@ def stratified_split(
 
     strata: dict[tuple[str, bool], list[dict]] = defaultdict(list)
     for s in samples:
-        has_cands = len([
-            c for c in s.get("expected_candidates", [])
-            if c.get("agreement", 0) >= 2
-        ]) > 0
+        has_cands = (
+            len([c for c in s.get("expected_candidates", []) if c.get("agreement", 0) >= 2]) > 0
+        )
         key = (s.get("slice", "unknown"), has_cands)
         strata[key].append(s)
 
@@ -197,12 +198,11 @@ def stratified_split(
         n_test = n - n_train - n_dev
 
         train.extend(group[:n_train])
-        dev.extend(group[n_train:n_train + n_dev])
-        test.extend(group[n_train + n_dev:])
+        dev.extend(group[n_train : n_train + n_dev])
+        test.extend(group[n_train + n_dev :])
 
         print(
-            f"  Stratum {key}: {n} samples -> "
-            f"train={n_train}, dev={n_dev}, test={n_test}",
+            f"  Stratum {key}: {n} samples -> train={n_train}, dev={n_dev}, test={n_test}",
             flush=True,
         )
 
@@ -216,6 +216,7 @@ def stratified_split(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     print(f"Loading merged goldset from {MERGED_PATH}...", flush=True)

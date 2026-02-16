@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
@@ -180,27 +179,32 @@ def build_generation_request(
         identifier = chat_id.rsplit(";", 1)[-1] if ";" in chat_id else chat_id
         if identifier.isdigit() and len(identifier) <= 6:
             is_bot = True
-        elif any(s in cname.lower() for s in ["airline", "bank", "cvs", "uber", "doordash", "verification"]):
+        elif any(
+            s in cname.lower()
+            for s in ["airline", "bank", "cvs", "uber", "doordash", "verification"]
+        ):
             is_bot = True
 
     if chat_id and not is_bot:
         logger.debug("[build] Fetching context for %s...", chat_id[:12])
         t_ctx_start = time.perf_counter()
-        
+
         # Sequential fetching is safer for SQLite and memory-constrained systems
         try:
             service._fetch_contact_facts(context, chat_id)
             logger.debug("[build] Facts fetched")
         except Exception as e:
             logger.warning("[build] Facts fetch failed: %s", e)
-            
+
         try:
             service._fetch_graph_context(context, chat_id)
             logger.debug("[build] Graph context fetched")
         except Exception as e:
             logger.warning("[build] Graph fetch failed: %s", e)
-        
-        logger.debug("[build] Context fetching took %.1fms", (time.perf_counter() - t_ctx_start)*1000)
+
+        logger.debug(
+            "[build] Context fetching took %.1fms", (time.perf_counter() - t_ctx_start) * 1000
+        )
     elif is_bot:
         logger.debug("[build] Skipping person-specific context for bot/service chat")
 
@@ -210,11 +214,13 @@ def build_generation_request(
         category_config,
         classification,
     )
-    
+
     # Add guidance for follow-ups if last message was from Me
     last_is_from_me = context.is_from_me
     if last_is_from_me:
-        followup_guidance = " Note: You spoke last. Add a follow-up or ask if they saw your message."
+        followup_guidance = (
+            " Note: You spoke last. Add a follow-up or ask if they saw your message."
+        )
         instruction = (instruction or "") + followup_guidance
 
     context.metadata["instruction"] = instruction or ""
@@ -229,7 +235,7 @@ def build_generation_request(
             text_key="context_text",
             top_k=5,
         )
-        logger.debug("[build] Rerank took %.1fms", (time.perf_counter() - t_rerank_start)*1000)
+        logger.debug("[build] Rerank took %.1fms", (time.perf_counter() - t_rerank_start) * 1000)
 
     optimized_examples = get_optimized_examples(category_name)
     category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
@@ -249,7 +255,7 @@ def build_generation_request(
 
     if cached_embedder is None:
         cached_embedder = get_embedder()
-    
+
     logger.debug("[build] Deduplicating %d examples...", len(all_exchanges))
     t_dedupe_start = time.perf_counter()
     all_exchanges = dedupe_examples(
@@ -259,11 +265,13 @@ def build_generation_request(
         rerank_scores=all_rerank_scores,
     )
     all_exchanges = all_exchanges[:5]
-    logger.debug("[build] Dedupe took %.1fms", (time.perf_counter() - t_dedupe_start)*1000)
+    logger.debug("[build] Dedupe took %.1fms", (time.perf_counter() - t_dedupe_start) * 1000)
 
     logger.info(
         "[build] Context: %d messages, %d RAG docs, %d examples, contact=%s",
-        len(context_messages), len(top_results), len(all_exchanges),
+        len(context_messages),
+        len(top_results),
+        len(all_exchanges),
         context.metadata.get("contact_name", "unknown"),
     )
 
@@ -433,24 +441,36 @@ def generate_llm_reply(
         final_prompt = model_request.prompt
         logger.info(
             "[reply] Prompt built (%d chars), RAG docs=%d, examples=%d",
-            len(final_prompt), len(request.retrieved_docs), len(request.few_shot_examples),
+            len(final_prompt),
+            len(request.retrieved_docs),
+            len(request.few_shot_examples),
         )
         response = service.generator.generate(model_request)
         text = response.text.strip()
 
         logger.info(
             "[reply] LLM response (%d chars, %d tokens): %r",
-            len(text), response.tokens_used, text[:120],
+            len(text),
+            response.tokens_used,
+            text[:120],
         )
         logger.info(
             "[reply] Generation time: %.1fms, model=%s",
-            response.generation_time_ms, response.model_name,
+            response.generation_time_ms,
+            response.model_name,
         )
 
         # Strip XML tags that leaked through stop_sequences
         if "</reply>" in text:
             text = text.split("</reply>")[0].strip()
-        for tag in ["<system>", "<conversation>", "<facts>", "<examples>", "<style", "<relationships>"]:
+        for tag in [
+            "<system>",
+            "<conversation>",
+            "<facts>",
+            "<examples>",
+            "<style",
+            "<relationships>",
+        ]:
             if tag in text:
                 text = text.split(tag)[0].strip()
 
@@ -489,7 +509,10 @@ def generate_llm_reply(
         )
         logger.info(
             "[reply] Confidence: %.2f (%s) | similarity=%.3f | diversity=%.3f",
-            confidence_score, confidence_label, similarity, example_diversity,
+            confidence_score,
+            confidence_label,
+            similarity,
+            example_diversity,
         )
 
         similar_triggers = [

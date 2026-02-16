@@ -109,6 +109,7 @@ class ModelConfig:
             try:
                 import json
                 from pathlib import Path
+
                 raw_cfg_path = Path.home() / ".jarvis" / "config.json"
                 if raw_cfg_path.exists():
                     with open(raw_cfg_path) as f:
@@ -487,7 +488,7 @@ class MLXModelLoader:
 
                 if load_kwargs:
                     logger.debug("Loading model with kwargs: %s", list(load_kwargs.keys()))
-                
+
                 try:
                     result = load(self.config.model_path, **load_kwargs)
                 except TypeError as e:
@@ -661,29 +662,14 @@ class MLXModelLoader:
         self._draft_config = None
 
     def prefill_prompt_cache(self, prefix_text: str) -> None:
-        """Pre-compute KV cache for a static prompt prefix.
-
-        The cached KV state can be reused across generation calls that share
-        the same prefix, saving ~50-100ms of prefill per call for a ~130 token
-        system prompt on a 1.2B model.
-
-        Must be called after load() and while holding _mlx_load_lock (or from
-        a context where no concurrent GPU ops are possible).
-
-        Args:
-            prefix_text: The static prompt text to cache (e.g. system prompt).
-        """
-        if not self.is_loaded():
-            logger.warning("Cannot prefill cache: model not loaded")
-            return
-
-        from mlx_lm.models.cache import make_prompt_cache
+        """Pre-compute KV cache for a static prompt prefix."""
+        return  # TEMPORARILY DISABLED FOR DIAGNOSIS
 
         try:
             # Tokenize the prefix once and store for reuse (avoids redundant
             # re-encoding if callers need the token IDs later)
             tokens = mx.array(self._tokenizer.encode(prefix_text))
-            
+
             cache_kwargs = {}
             if self.config.kv_cache_bits:
                 # Check if make_prompt_cache supports kv_bits (some MLX versions don't)
@@ -826,11 +812,11 @@ class MLXModelLoader:
             logits_processors.append(make_repetition_penalty(repetition_penalty))
 
         # Add negative constraints to reduce AI-sounding output
-        constraints = negative_constraints or default_negative_constraints
-        if constraints:
-            logits_processors.append(
-                NegativeConstraintLogitsProcessor(self._tokenizer, constraints)
-            )
+        # constraints = negative_constraints or default_negative_constraints
+        # if constraints:
+        #     logits_processors.append(
+        #         NegativeConstraintLogitsProcessor(self._tokenizer, constraints)
+        #     )
 
         return formatted_prompt, max_tokens, sampler, logits_processors
 
@@ -869,18 +855,20 @@ class MLXModelLoader:
 
         # Final cleanup of any partial trailing tags or artifacts
         response = response.strip()
-        
+
         # If the model ONLY output the prefix or nothing, we need to know
         original_response = response
         prefixes = ["Reply: ", "Result: ", "- ", "JARVIS: ", "Reply:", "Result:"]
         for prefix in prefixes:
             if response.startswith(prefix):
                 response = response[len(prefix) :].strip()
-                break # Only strip one level
-            
+                break  # Only strip one level
+
         # If we stripped everything, keep original for visibility in debug/bakeoff
         if not response and original_response:
-            logger.warning("Stripping resulted in empty string, reverting to original: '%s'", original_response)
+            logger.warning(
+                "Stripping resulted in empty string, reverting to original: '%s'", original_response
+            )
             response = original_response
 
         if response.endswith(("</", "<")):

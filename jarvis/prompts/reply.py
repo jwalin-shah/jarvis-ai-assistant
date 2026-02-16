@@ -90,7 +90,7 @@ def build_reply_prompt(
     if user_messages:
         style_analysis = user_style or analyze_user_style(user_messages)
         style_instructions = build_style_instructions(style_analysis)
-        
+
         # Include a few examples matching the tone
         examples = select_examples_for_tone(effective_tone, relationship_profile)
         if examples:

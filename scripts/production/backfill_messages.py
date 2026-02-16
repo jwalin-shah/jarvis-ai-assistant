@@ -8,9 +8,9 @@ messages into the 'vec_messages' table for semantic search.
 import argparse
 import sys
 import time
-from datetime import datetime
 
 sys.path.insert(0, ".")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Backfill message search index")
@@ -18,10 +18,11 @@ def main():
     parser.add_argument("--messages", type=int, default=0, help="Messages per chat (0=all)")
     args = parser.parse_args()
 
-    from integrations.imessage import ChatDBReader
-    from jarvis.search.vec_search import get_vec_searcher
-    from jarvis.db import get_db
     import numpy as np
+
+    from integrations.imessage import ChatDBReader
+    from jarvis.db import get_db
+    from jarvis.search.vec_search import get_vec_searcher
 
     db = get_db()
     db.init_schema()
@@ -35,19 +36,19 @@ def main():
 
     with ChatDBReader() as reader:
         conversations = reader.get_conversations(limit=chat_limit)
-        
+
         total_indexed = 0
         t0 = time.time()
 
         for i, conv in enumerate(conversations):
             name = conv.display_name or conv.chat_id
-            print(f"[{i+1}/{len(conversations)}] Indexing: {name}")
-            
+            print(f"[{i + 1}/{len(conversations)}] Indexing: {name}")
+
             # Get messages for this chat
             messages = reader.get_messages(chat_id=conv.chat_id, limit=msg_limit)
             if not messages:
                 continue
-                
+
             # Filter valid messages here to avoid overhead
             valid_messages = [m for m in messages if m.text and len(m.text.strip()) >= 3]
             if not valid_messages:
@@ -56,13 +57,14 @@ def main():
             # Index messages - VecSearcher will use the MLX GPU backend
             count = searcher.index_messages(valid_messages, dtype=np.float16)
             total_indexed += count
-            
+
         elapsed = time.time() - t0
         print(f"\n{'=' * 50}")
         print(f"Backfill complete in {elapsed:.1f}s")
         print(f"Total messages indexed: {total_indexed}")
-        print(f"Speed: {total_indexed/elapsed:.1f} msgs/sec")
+        print(f"Speed: {total_indexed / elapsed:.1f} msgs/sec")
         print(f"{'=' * 50}")
+
 
 if __name__ == "__main__":
     main()

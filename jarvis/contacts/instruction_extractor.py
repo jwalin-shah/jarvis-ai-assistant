@@ -17,8 +17,6 @@ from jarvis.prompts.extraction import (
     EXTRACTION_MODELS,
     EXTRACTION_SYSTEM_PROMPT,
     NEGATIVE_CONSTRAINTS,
-    VERIFY_SYSTEM_PROMPT,
-    VERIFY_USER_PROMPT,
 )
 from jarvis.text_normalizer import normalize_text
 from models.loader import MLXModelLoader, ModelConfig
@@ -563,7 +561,7 @@ class InstructionFactExtractor:
                 pre_formatted=True,
                 negative_constraints=NEGATIVE_CONSTRAINTS,
             )
-            
+
             raw_output = "- " + res.text.strip()
             logger.debug(f"Batch Extract Output: {raw_output}")
 

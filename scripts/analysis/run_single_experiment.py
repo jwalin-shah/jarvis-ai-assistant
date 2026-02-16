@@ -70,8 +70,7 @@ def cross_validate(
         train_data = [data[i] for i in train_indices]
 
         print(
-            f"  Fold {fold+1}/{n_folds}: train={len(train_data)},"
-            f" val={len(val_data)}",
+            f"  Fold {fold + 1}/{n_folds}: train={len(train_data)}, val={len(val_data)}",
             flush=True,
         )
 
@@ -87,9 +86,15 @@ def cross_validate(
         fn_examples.extend(fold_result.get("fn_examples", []))
 
     return build_metrics(
-        per_label_tp, per_label_fp, per_label_fn,
-        all_tp, all_fp, all_fn,
-        len(data), fp_examples, fn_examples,
+        per_label_tp,
+        per_label_fp,
+        per_label_fn,
+        all_tp,
+        all_fp,
+        all_fn,
+        len(data),
+        fp_examples,
+        fn_examples,
     )
 
 
@@ -110,6 +115,7 @@ def evaluate_fold(
 
         # Normalize labels
         from eval_extraction import normalize_label
+
         for p in preds:
             p["span_label"] = normalize_label(p["span_label"])
 
@@ -126,8 +132,10 @@ def evaluate_fold(
                 if gold_matched[gi]:
                     continue
                 if spans_match(
-                    pred["span_text"], pred["span_label"],
-                    g["span_text"], g["span_label"],
+                    pred["span_text"],
+                    pred["span_label"],
+                    g["span_text"],
+                    g["span_label"],
                     label_aliases=DEFAULT_LABEL_ALIASES,
                 ):
                     gold_matched[gi] = True
@@ -138,18 +146,22 @@ def evaluate_fold(
         for pi, pred in enumerate(preds):
             if not pred_matched[pi]:
                 fp[pred["span_label"]] += 1
-                fp_examples.append({
-                    "message_text": msg["message_text"],
-                    "pred": pred,
-                })
+                fp_examples.append(
+                    {
+                        "message_text": msg["message_text"],
+                        "pred": pred,
+                    }
+                )
 
         for gi, g in enumerate(gold):
             if not gold_matched[gi]:
                 fn_count[g["span_label"]] += 1
-                fn_examples.append({
-                    "message_text": msg["message_text"],
-                    "gold": g,
-                })
+                fn_examples.append(
+                    {
+                        "message_text": msg["message_text"],
+                        "gold": g,
+                    }
+                )
 
     total_tp = sum(tp.values())
     total_fp = sum(fp.values())
@@ -171,9 +183,15 @@ def evaluate_fold(
 
 
 def build_metrics(
-    per_label_tp, per_label_fp, per_label_fn,
-    total_tp, total_fp, total_fn,
-    num_messages, fp_examples, fn_examples,
+    per_label_tp,
+    per_label_fp,
+    per_label_fn,
+    total_tp,
+    total_fp,
+    total_fn,
+    num_messages,
+    fp_examples,
+    fn_examples,
 ) -> dict:
     """Build structured metrics dict."""
     per_label = {}
@@ -185,35 +203,26 @@ def build_metrics(
         n = per_label_fn[label]
         precision = t / (t + f) if (t + f) > 0 else 0.0
         recall = t / (t + n) if (t + n) > 0 else 0.0
-        f1 = (
-            2 * precision * recall / (precision + recall)
-            if (precision + recall) > 0 else 0.0
-        )
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
         per_label[label] = {
             "precision": round(precision, 3),
             "recall": round(recall, 3),
             "f1": round(f1, 3),
-            "tp": t, "fp": f, "fn": n,
+            "tp": t,
+            "fp": f,
+            "fn": n,
             "support": t + n,
         }
 
-    micro_p = (
-        total_tp / (total_tp + total_fp)
-        if (total_tp + total_fp) > 0 else 0.0
-    )
-    micro_r = (
-        total_tp / (total_tp + total_fn)
-        if (total_tp + total_fn) > 0 else 0.0
-    )
-    micro_f1 = (
-        2 * micro_p * micro_r / (micro_p + micro_r)
-        if (micro_p + micro_r) > 0 else 0.0
-    )
+    micro_p = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
+    micro_r = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
+    micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r) if (micro_p + micro_r) > 0 else 0.0
 
     labels_with_support = [l for l in all_labels if per_label[l]["support"] > 0]
     macro_f1 = (
         sum(per_label[l]["f1"] for l in labels_with_support) / len(labels_with_support)
-        if labels_with_support else 0.0
+        if labels_with_support
+        else 0.0
     )
 
     return {
@@ -235,10 +244,12 @@ def build_metrics(
 # Extractor implementations
 # ---------------------------------------------------------------------------
 
+
 def make_spacy_extractor(params: dict):
     """Create spaCy extraction function."""
     model_name = params.get("model", "en_core_web_sm")
     import spacy
+
     nlp = spacy.load(model_name)
 
     from eval_extraction import trim_span
@@ -291,6 +302,7 @@ def make_llm_extractor(params: dict):
     print(f"  Loading LLM: {model_path}...", flush=True)
     from mlx_lm import generate as mlx_generate
     from mlx_lm import load
+
     model, tokenizer = load(model_path)
     print("  LLM loaded.", flush=True)
 
@@ -312,7 +324,7 @@ def make_llm_extractor(params: dict):
             "(just the entity, not surrounding words)\n"
             "- Skip vague references (it, that, stuff)\n"
             "- Skip bot/spam messages\n"
-            '- Output JSON array of '
+            "- Output JSON array of "
             '{"span_text": "...", "span_label": "..."} '
             "or empty array []"
         )
@@ -325,14 +337,14 @@ def make_llm_extractor(params: dict):
             )
         elif prompt_variant == "negative":
             base += (
-                '\n\nExamples of things NOT to extract: '
+                "\n\nExamples of things NOT to extract: "
                 '"my mom called" (transient event), '
                 '"that place" (vague), "lol" (filler)'
             )
 
         if few_shot:
             base += "\n\n## Examples\n\n"
-            for ex in few_shot[:n_fewshot or 5]:
+            for ex in few_shot[: n_fewshot or 5]:
                 msg_text = ex.get("message_text", "")
                 cands = ex.get("expected_candidates", [])
                 base += f'Message: "{msg_text}"\nOutput: {json.dumps(cands)}\n\n'
@@ -377,8 +389,7 @@ def make_llm_extractor(params: dict):
 
         system_prompt = _build_system_prompt(few_shot)
         user_prompt = (
-            f'Message: "{msg["message_text"]}"\n'
-            f"Extract lasting personal facts as JSON array."
+            f'Message: "{msg["message_text"]}"\nExtract lasting personal facts as JSON array.'
         )
 
         # Format for chat
@@ -389,14 +400,20 @@ def make_llm_extractor(params: dict):
 
         if hasattr(tokenizer, "apply_chat_template"):
             prompt_text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
             )
         else:
             prompt_text = f"{system_prompt}\n\nUser: {user_prompt}\nAssistant:"
 
         response = mlx_generate(
-            model, tokenizer, prompt=prompt_text,
-            max_tokens=max_tokens, temp=temperature, verbose=False,
+            model,
+            tokenizer,
+            prompt=prompt_text,
+            max_tokens=max_tokens,
+            temp=temperature,
+            verbose=False,
         )
 
         raw_spans = _parse_response(response)
@@ -407,10 +424,12 @@ def make_llm_extractor(params: dict):
             text = s.get("span_text", "").strip()
             label = s.get("span_label", "").strip()
             if text and label:
-                validated.append({
-                    "span_text": trim_span(text),
-                    "span_label": normalize_label(label),
-                })
+                validated.append(
+                    {
+                        "span_text": trim_span(text),
+                        "span_label": normalize_label(label),
+                    }
+                )
         return validated
 
     return extract
@@ -419,6 +438,7 @@ def make_llm_extractor(params: dict):
 def make_rules_extractor(params: dict):
     """Create rules-based extraction function (existing FactExtractor patterns)."""
     from jarvis.contacts.fact_extractor import FactExtractor
+
     extractor = FactExtractor()
 
     # Map Fact.category to span_label
@@ -462,17 +482,21 @@ def make_rules_extractor(params: dict):
                 span_label = "person_name"
 
             if span_text and len(span_text) >= 2:
-                candidates.append({
-                    "span_text": span_text,
-                    "span_label": span_label,
-                })
+                candidates.append(
+                    {
+                        "span_text": span_text,
+                        "span_label": span_label,
+                    }
+                )
         return candidates
 
     return extract
 
 
 def _run_gliner_subprocess(
-    messages: list[dict], params: dict, goldset_dir: str,
+    messages: list[dict],
+    params: dict,
+    goldset_dir: str,
 ) -> dict[str, list[dict]]:
     """Run GLiNER as subprocess and return extractions keyed by sample_id."""
     import tempfile
@@ -499,8 +523,7 @@ def _run_gliner_subprocess(
     # so for hybrid we run GLiNER inline via the compat venv with a simpler call
     # For now, just skip GLiNER in hybrid and warn
     print(
-        "  WARNING: GLiNER in hybrid requires compat venv."
-        " Skipping GLiNER sub-extractor.",
+        "  WARNING: GLiNER in hybrid requires compat venv. Skipping GLiNER sub-extractor.",
         flush=True,
     )
     print("  Use extraction_lab.py to run GLiNER separately, then combine results.", flush=True)
@@ -524,8 +547,10 @@ def make_hybrid_extractor(params: dict):
     sub_extractors = []
     for sub in sub_configs:
         if sub["extractor"] == "gliner":
-            print("  WARNING: Skipping GLiNER in hybrid (needs compat venv). "
-                  "Run GLiNER separately.", flush=True)
+            print(
+                "  WARNING: Skipping GLiNER in hybrid (needs compat venv). Run GLiNER separately.",
+                flush=True,
+            )
             continue
         ext = build_extractor(sub["extractor"], sub.get("params", {}))
         sub_extractors.append(ext)
@@ -568,12 +593,9 @@ def make_hybrid_extractor(params: dict):
                 for other_results in all_results[1:]:
                     found = False
                     for oc in other_results:
-                        if (
-                            c["span_label"] == oc["span_label"]
-                            and (
-                                c["span_text"].lower() == oc["span_text"].lower()
-                                or jaccard_tokens(c["span_text"], oc["span_text"]) > 0.5
-                            )
+                        if c["span_label"] == oc["span_label"] and (
+                            c["span_text"].lower() == oc["span_text"].lower()
+                            or jaccard_tokens(c["span_text"], oc["span_text"]) > 0.5
                         ):
                             found = True
                             break
@@ -587,6 +609,7 @@ def make_hybrid_extractor(params: dict):
         elif merge == "voting":
             # Keep spans with >= vote_threshold votes
             from collections import Counter
+
             span_votes: dict[tuple[str, str], int] = Counter()
             span_texts: dict[tuple[str, str], str] = {}
             for results in all_results:
@@ -615,10 +638,7 @@ def build_extractor(extractor_type: str, params: dict):
     }
     builder = builders.get(extractor_type)
     if builder is None:
-        raise ValueError(
-            f"Unknown extractor: {extractor_type}. "
-            f"Available: {list(builders.keys())}"
-        )
+        raise ValueError(f"Unknown extractor: {extractor_type}. Available: {list(builders.keys())}")
     return builder(params)
 
 
@@ -641,6 +661,7 @@ def main() -> None:
 
     # Track memory
     import resource
+
     resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
     # Build extractor
@@ -696,9 +717,7 @@ def main() -> None:
         flush=True,
     )
     print(
-        f"TP={results['total_tp']},"
-        f" FP={results['total_fp']},"
-        f" FN={results['total_fn']}",
+        f"TP={results['total_tp']}, FP={results['total_fp']}, FN={results['total_fn']}",
         flush=True,
     )
     print(f"Time: {elapsed:.1f}s, RSS: {results['rss_mb']}MB", flush=True)

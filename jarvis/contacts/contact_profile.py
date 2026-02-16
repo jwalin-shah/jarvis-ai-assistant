@@ -540,7 +540,9 @@ class ContactProfileBuilder:
         if len(messages) >= 3 and rel_confidence < 0.95:
             logger.info(
                 "Refining relationship for %s (current: %s, confidence: %.2f)",
-                contact_name or contact_id, relationship, rel_confidence
+                contact_name or contact_id,
+                relationship,
+                rel_confidence,
             )
             relationship, rel_confidence, relationship_reasoning = (
                 self._refine_relationship_with_llm(
@@ -550,7 +552,9 @@ class ContactProfileBuilder:
             relationship = self._normalize_relationship_label(relationship)
             logger.info(
                 "LLM refined relationship for %s to: %s (confidence: %.2f)",
-                contact_name or contact_id, relationship, rel_confidence
+                contact_name or contact_id,
+                relationship,
+                rel_confidence,
             )
 
         # Formality (Laplace-smoothed)

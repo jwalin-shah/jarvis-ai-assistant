@@ -172,10 +172,12 @@ def build_rag_reply_prompt(
 
     # Format custom instruction
     custom_instruction = instruction or ""
-    
+
     # Add guidance for follow-ups if last message was from Me
     if last_is_from_me:
-        followup_guidance = "\n- Note: You were the last one to speak. This is a follow-up or additional thought."
+        followup_guidance = (
+            "\n- Note: You were the last one to speak. This is a follow-up or additional thought."
+        )
         if custom_instruction:
             custom_instruction += followup_guidance
         else:
@@ -200,7 +202,7 @@ def build_prompt_from_request(req: Any) -> str:
     """Build a reply prompt from a typed pipeline generation request."""
     context_messages = req.context.metadata.get("context_messages")
     last_is_from_me = False
-    
+
     if isinstance(context_messages, list) and context_messages:
         formatted_context = "\n".join(str(msg) for msg in context_messages if isinstance(msg, str))
         # In context_messages (chronological), last is [-1]
@@ -279,7 +281,6 @@ def build_prompt_from_request(req: Any) -> str:
         relationship_graph=relationship_graph,
         last_is_from_me=last_is_from_me,
     )
-
 
 
 def build_rag_reply_prompt_from_embeddings(
