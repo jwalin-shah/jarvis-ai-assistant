@@ -28,15 +28,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-# Disable HuggingFace hub network checks after initial download
-# This prevents slow version checks on every model load/generate call
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-
 import mlx.core as mx
 import psutil
-from mlx_lm import generate, load, stream_generate
-from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
 
 from jarvis.core.exceptions import (
     ErrorCode,
@@ -285,12 +278,21 @@ class MLXModelLoader:
         """Public accessor for the GPU serialization lock."""
         return cls._mlx_load_lock
 
+    @staticmethod
+    def _configure_environment() -> None:
+        """Configure environment variables for offline model loading."""
+        # Disable HuggingFace hub network checks after initial download
+        # This prevents slow version checks on every model load/generate call
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
     def __init__(self, config: ModelConfig | None = None) -> None:
         """Initialize the loader.
 
         Args:
             config: Model configuration. Uses defaults if not provided.
         """
+        self._configure_environment()
         self.config = config or ModelConfig()
         # MLX model returned by mlx_lm.load() - typed as Any due to external library complexity
         self._model: Any = None
@@ -450,6 +452,8 @@ class MLXModelLoader:
                 return True
 
             try:
+                from mlx_lm import load
+
                 logger.info(
                     "Loading model: %s (%s)",
                     self.config.display_name,
@@ -609,6 +613,8 @@ class MLXModelLoader:
 
         with MLXModelLoader._mlx_load_lock:
             try:
+                from mlx_lm import load
+
                 logger.info(
                     "Loading draft model: %s (%s)",
                     draft_config.display_name,
@@ -797,6 +803,8 @@ class MLXModelLoader:
         Returns:
             Tuple of (formatted_prompt, max_tokens, sampler, logits_processors).
         """
+        from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
+
         max_tokens = max_tokens or self.config.default_max_tokens
         temperature = temperature if temperature is not None else self.config.default_temperature
         top_p = top_p if top_p is not None else 0.1
@@ -960,6 +968,8 @@ class MLXModelLoader:
         # so we do NOT prepend it here. Doing so would duplicate it.
 
         try:
+            from mlx_lm import generate
+
             start_time = time.perf_counter()
             with MLXModelLoader._mlx_load_lock:
                 apply_llm_limits()
@@ -1066,6 +1076,8 @@ class MLXModelLoader:
             if self._draft_model is not None:
                 stream_kwargs["draft_model"] = self._draft_model
                 stream_kwargs["num_draft_tokens"] = num_draft_tokens or 3
+
+            from mlx_lm import stream_generate
 
             with MLXModelLoader._mlx_load_lock:
                 for response in stream_generate(

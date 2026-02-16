@@ -10,8 +10,26 @@ import types
 from functools import lru_cache
 from unittest.mock import MagicMock
 
-import numpy as np
-import psutil
+try:
+    import numpy as np
+except ImportError:
+    # Create a dummy numpy for type hints and basic usage
+    # This allows tests to run without numpy installed
+    np = MagicMock()
+    np.ndarray = MagicMock
+    np.float32 = "float32"
+    np.array = MagicMock(return_value=[])
+    np.random = MagicMock()
+    np.linalg = MagicMock()
+    sys.modules["numpy"] = np
+
+try:
+    import psutil
+except ImportError:
+    psutil = MagicMock()
+    psutil.virtual_memory = MagicMock(return_value=MagicMock(total=16 * 1024**3))
+    sys.modules["psutil"] = psutil
+
 import pytest
 
 
@@ -77,6 +95,7 @@ def _mock_mlx_modules():
     sys.modules["mlx.core"] = mock_mx
     sys.modules["mlx.nn"] = mock_nn
     sys.modules["mlx_lm"] = mock_mlx_lm
+    sys.modules["tokenizers"] = MagicMock()
     sys.modules["mlx_lm.sample_utils"] = mock_sample_utils
 
 
@@ -126,6 +145,8 @@ def _check_sentence_transformers():
 
         available = True
     except (ImportError, ValueError, AttributeError, TypeError):
+        # AttributeError: torch._C or torch.fx not available (broken torch install)
+        # TypeError: packaging version parse error
         available = False
     return available
 
