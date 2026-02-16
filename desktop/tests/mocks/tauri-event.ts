@@ -8,10 +8,7 @@ export type UnlistenFn = () => void;
 /**
  * Mock listen function - returns a no-op unlisten function
  */
-export async function listen<T>(
-  _event: string,
-  _handler: EventCallback<T>
-): Promise<UnlistenFn> {
+export async function listen<T>(_event: string, _handler: EventCallback<T>): Promise<UnlistenFn> {
   // In browser tests, we don't have Tauri events - just return no-op
   return () => {};
 }
@@ -26,9 +23,6 @@ export async function emit(_event: string, _payload?: unknown): Promise<void> {
 /**
  * Mock once function - returns a no-op unlisten function
  */
-export async function once<T>(
-  _event: string,
-  _handler: EventCallback<T>
-): Promise<UnlistenFn> {
+export async function once<T>(_event: string, _handler: EventCallback<T>): Promise<UnlistenFn> {
   return () => {};
 }

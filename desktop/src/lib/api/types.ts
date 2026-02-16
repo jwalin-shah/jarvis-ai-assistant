@@ -34,7 +34,7 @@ export interface Message {
   // View-specific fields (for optimistic UI)
   _optimistic?: boolean;
   _optimisticId?: string;
-  _optimisticStatus?: "sending" | "sent" | "failed" | null;
+  _optimisticStatus?: 'sending' | 'sent' | 'failed' | null;
   _optimisticError?: string;
 }
 
@@ -44,13 +44,13 @@ export interface PaginationState {
   loadingMore: boolean;
 }
 
-export type ConnectionStatus = "connected" | "disconnected" | "connecting";
+export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting';
 
 /** Optimistic message for immediate UI feedback during send */
 export interface OptimisticMessage {
   id: string; // Temporary ID (e.g., "optimistic-{timestamp}")
   text: string;
-  status: "sending" | "sent" | "failed";
+  status: 'sending' | 'sent' | 'failed';
   error?: string;
   timestamp: number;
   stableId: number; // Negative ID assigned once for stable rendering
@@ -69,11 +69,11 @@ export interface Conversation {
 
 // Health types
 export interface HealthResponse {
-  status: "healthy" | "degraded" | "unhealthy";
+  status: 'healthy' | 'degraded' | 'unhealthy';
   imessage_access: boolean | null;
   memory_available_gb: number | null;
   memory_used_gb: number | null;
-  memory_mode: "FULL" | "LITE" | "MINIMAL" | null;
+  memory_mode: 'FULL' | 'LITE' | 'MINIMAL' | null;
   model_loaded: boolean | null;
   permissions_ok: boolean | null;
   details: Record<string, string> | string | null;
@@ -86,7 +86,7 @@ export interface ModelInfo {
   model_id: string;
   name: string;
   size_gb: number;
-  quality_tier: "basic" | "good" | "best";
+  quality_tier: 'basic' | 'good' | 'best';
   ram_requirement_gb: number;
   is_downloaded: boolean;
   is_loaded: boolean;
@@ -130,7 +130,7 @@ export interface SettingsUpdateRequest {
 
 export interface DownloadStatus {
   model_id: string;
-  status: "downloading" | "completed" | "failed";
+  status: 'downloading' | 'completed' | 'failed';
   progress: number;
   error: string | null;
 }
@@ -215,7 +215,7 @@ export interface ApiError {
 }
 
 // Statistics types
-export type TimeRange = "week" | "month" | "three_months" | "all_time";
+export type TimeRange = 'week' | 'month' | 'three_months' | 'all_time';
 
 export interface HourlyActivity {
   hour: number;
@@ -333,18 +333,18 @@ export interface SemanticCacheStats {
 }
 
 // Priority Inbox types
-export type PriorityLevel = "critical" | "high" | "medium" | "low";
+export type PriorityLevel = 'critical' | 'high' | 'medium' | 'low';
 
 export type PriorityReason =
-  | "contains_question"
-  | "action_requested"
-  | "time_sensitive"
-  | "important_contact"
-  | "frequent_contact"
-  | "awaiting_response"
-  | "multiple_messages"
-  | "contains_urgency"
-  | "normal";
+  | 'contains_question'
+  | 'action_requested'
+  | 'time_sensitive'
+  | 'important_contact'
+  | 'frequent_contact'
+  | 'awaiting_response'
+  | 'multiple_messages'
+  | 'contains_urgency'
+  | 'normal';
 
 export interface PriorityMessage {
   message_id: number;
@@ -423,7 +423,7 @@ export interface PDFExportResponse {
 export interface WebSocketStatus {
   active_connections: number;
   health_subscribers: number;
-  status: "operational" | "degraded" | "offline";
+  status: 'operational' | 'degraded' | 'offline';
 }
 
 export interface GenerationStreamRequest {
@@ -449,7 +449,7 @@ export interface StreamingGenerationResult {
 // Insights types
 export interface SentimentResult {
   score: number;
-  label: "positive" | "negative" | "neutral";
+  label: 'positive' | 'negative' | 'neutral';
   positive_count: number;
   negative_count: number;
   neutral_count: number;
@@ -476,7 +476,7 @@ export interface FrequencyTrends {
   daily_counts: Record<string, number>;
   weekly_counts: Record<string, number>;
   monthly_counts: Record<string, number>;
-  trend_direction: "increasing" | "decreasing" | "stable";
+  trend_direction: 'increasing' | 'decreasing' | 'stable';
   trend_percentage: number;
   most_active_day: string | null;
   most_active_hour: number | null;
@@ -489,7 +489,7 @@ export interface RelationshipHealth {
   sentiment_score: number;
   responsiveness_score: number;
   consistency_score: number;
-  health_label: "excellent" | "good" | "fair" | "needs_attention" | "concerning";
+  health_label: 'excellent' | 'good' | 'fair' | 'needs_attention' | 'concerning';
   factors: Record<string, string>;
 }
 
@@ -539,7 +539,7 @@ export interface CalendarEvent {
   notes: string | null;
   url: string | null;
   attendees: string[];
-  status: "confirmed" | "tentative" | "cancelled";
+  status: 'confirmed' | 'tentative' | 'cancelled';
 }
 
 export interface CreateEventResponse {
@@ -670,7 +670,7 @@ export interface ThreadingConfigRequest {
 }
 
 // Attachment Manager types
-export type AttachmentType = "images" | "videos" | "audio" | "documents" | "other" | "all";
+export type AttachmentType = 'images' | 'videos' | 'audio' | 'documents' | 'other' | 'all';
 
 export interface ExtendedAttachment {
   filename: string;
@@ -720,7 +720,7 @@ export interface StorageSummary {
 }
 
 // Feedback types
-export type FeedbackAction = "sent" | "edited" | "dismissed" | "copied";
+export type FeedbackAction = 'sent' | 'edited' | 'dismissed' | 'copied';
 
 export interface EvaluationScores {
   tone_score: number;
@@ -770,11 +770,7 @@ export interface ImprovementsResponse {
 }
 
 // A/B Testing Experiment types
-export type UserAction =
-  | "sent_unchanged"
-  | "sent_edited"
-  | "dismissed"
-  | "regenerated";
+export type UserAction = 'sent_unchanged' | 'sent_edited' | 'dismissed' | 'regenerated';
 
 export interface VariantConfig {
   id: string;
@@ -1008,10 +1004,10 @@ export interface RuleCondition {
 }
 
 export interface SmartFolderRules {
-  match: "all" | "any";
+  match: 'all' | 'any';
   conditions: RuleCondition[];
   sort_by: string;
-  sort_order: "asc" | "desc";
+  sort_order: 'asc' | 'desc';
   limit: number;
 }
 
@@ -1136,94 +1132,94 @@ export interface TagStatisticsResponse {
 
 // Tag color presets
 export const TAG_COLORS = {
-  RED: "#ef4444",
-  ORANGE: "#f97316",
-  AMBER: "#f59e0b",
-  YELLOW: "#eab308",
-  LIME: "#84cc16",
-  GREEN: "#22c55e",
-  EMERALD: "#10b981",
-  TEAL: "#14b8a6",
-  CYAN: "#06b6d4",
-  SKY: "#0ea5e9",
-  BLUE: "#3b82f6",
-  INDIGO: "#6366f1",
-  VIOLET: "#8b5cf6",
-  PURPLE: "#a855f7",
-  FUCHSIA: "#d946ef",
-  PINK: "#ec4899",
-  ROSE: "#f43f5e",
-  SLATE: "#64748b",
+  RED: '#ef4444',
+  ORANGE: '#f97316',
+  AMBER: '#f59e0b',
+  YELLOW: '#eab308',
+  LIME: '#84cc16',
+  GREEN: '#22c55e',
+  EMERALD: '#10b981',
+  TEAL: '#14b8a6',
+  CYAN: '#06b6d4',
+  SKY: '#0ea5e9',
+  BLUE: '#3b82f6',
+  INDIGO: '#6366f1',
+  VIOLET: '#8b5cf6',
+  PURPLE: '#a855f7',
+  FUCHSIA: '#d946ef',
+  PINK: '#ec4899',
+  ROSE: '#f43f5e',
+  SLATE: '#64748b',
 } as const;
 
 // Tag icon options
 export const TAG_ICONS = [
-  "star",
-  "heart",
-  "flag",
-  "bookmark",
-  "folder",
-  "tag",
-  "inbox",
-  "briefcase",
-  "home",
-  "users",
-  "user",
-  "clock",
-  "calendar",
-  "bell",
-  "alert",
-  "check",
-  "circle",
-  "square",
-  "arrow-up",
-  "arrow-down",
-  "message",
-  "mail",
-  "phone",
-  "sparkles",
-  "fire",
-  "zap",
+  'star',
+  'heart',
+  'flag',
+  'bookmark',
+  'folder',
+  'tag',
+  'inbox',
+  'briefcase',
+  'home',
+  'users',
+  'user',
+  'clock',
+  'calendar',
+  'bell',
+  'alert',
+  'check',
+  'circle',
+  'square',
+  'arrow-up',
+  'arrow-down',
+  'message',
+  'mail',
+  'phone',
+  'sparkles',
+  'fire',
+  'zap',
 ] as const;
 
 // Rule field options
 export const RULE_FIELDS = [
-  "chat_id",
-  "display_name",
-  "last_message_date",
-  "message_count",
-  "is_group",
-  "unread_count",
-  "is_flagged",
-  "relationship",
-  "contact_name",
-  "last_message_text",
-  "has_attachments",
-  "tags",
-  "sentiment",
-  "priority",
-  "needs_response",
+  'chat_id',
+  'display_name',
+  'last_message_date',
+  'message_count',
+  'is_group',
+  'unread_count',
+  'is_flagged',
+  'relationship',
+  'contact_name',
+  'last_message_text',
+  'has_attachments',
+  'tags',
+  'sentiment',
+  'priority',
+  'needs_response',
 ] as const;
 
 // Rule operator options
 export const RULE_OPERATORS = [
-  "equals",
-  "not_equals",
-  "contains",
-  "not_contains",
-  "starts_with",
-  "ends_with",
-  "is_empty",
-  "is_not_empty",
-  "greater_than",
-  "less_than",
-  "in_last_days",
-  "before",
-  "after",
-  "has_tag",
-  "has_any_tag",
-  "has_all_tags",
-  "has_no_tags",
+  'equals',
+  'not_equals',
+  'contains',
+  'not_contains',
+  'starts_with',
+  'ends_with',
+  'is_empty',
+  'is_not_empty',
+  'greater_than',
+  'less_than',
+  'in_last_days',
+  'before',
+  'after',
+  'has_tag',
+  'has_any_tag',
+  'has_all_tags',
+  'has_no_tags',
 ] as const;
 
 // =============================================================================
@@ -1377,16 +1373,16 @@ export interface TrendingPatterns {
 // Scheduler types
 // =============================================================================
 
-export type ScheduledPriority = "urgent" | "normal" | "low";
+export type ScheduledPriority = 'urgent' | 'normal' | 'low';
 
 export type ScheduledStatus =
-  | "pending"
-  | "queued"
-  | "sending"
-  | "sent"
-  | "failed"
-  | "cancelled"
-  | "expired";
+  | 'pending'
+  | 'queued'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
 
 export interface SendResult {
   success: boolean;
@@ -1516,7 +1512,7 @@ export interface ClusterResult {
   cluster_labels: Record<number, string>;
 }
 
-export type LayoutType = "force" | "hierarchical" | "radial";
+export type LayoutType = 'force' | 'hierarchical' | 'radial';
 
 export interface GraphEvolutionSnapshot {
   timestamp: string;
@@ -1578,7 +1574,7 @@ export interface GraphStats {
 export interface KnowledgeNode {
   id: string;
   label: string;
-  node_type: "contact" | "entity";
+  node_type: 'contact' | 'entity';
   category: string;
   color: string;
   size: number;

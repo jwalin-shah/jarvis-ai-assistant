@@ -22,13 +22,13 @@ This document consolidates all performance-related guidelines, optimizations, an
 
 Development built code without performance testing against realistic data (400k messages). Result: 5 critical performance bugs:
 
-| Issue | Impact | Root Cause |
-|-------|--------|-----------|
-| Conversations query | 1400ms startup | 5 correlated subqueries |
-| Message loading | 500ms per page | N+1 on attachments/reactions |
-| Fact extraction | 150ms per batch | N individual INSERTs |
-| Search filtering | 5x data wastage | Post-query filtering in code |
-| Graph building | 200ms startup | Sequential add_node() calls |
+| Issue               | Impact          | Root Cause                   |
+| ------------------- | --------------- | ---------------------------- |
+| Conversations query | 1400ms startup  | 5 correlated subqueries      |
+| Message loading     | 500ms per page  | N+1 on attachments/reactions |
+| Fact extraction     | 150ms per batch | N individual INSERTs         |
+| Search filtering    | 5x data wastage | Post-query filtering in code |
+| Graph building      | 200ms startup   | Sequential add_node() calls  |
 
 **Common pattern**: Doing per-item operations (query/insert/call) instead of batch operations.
 
@@ -38,6 +38,7 @@ Development built code without performance testing against realistic data (400k 
 
 ```markdown
 ## Performance Checklist
+
 - [ ] **Database queries**: No loops containing `db.query()` or `db.execute()`
 - [ ] **Subqueries**: Uses CTEs/JOINs, not correlated subqueries
 - [ ] **Batch operations**: Uses `executemany()` not loop with `execute()`
@@ -83,6 +84,7 @@ LATENCY_THRESHOLDS = {
 ```
 
 **Usage:**
+
 ```python
 from jarvis.utils.latency_tracker import track_latency
 
@@ -106,35 +108,43 @@ with track_latency("conversations_fetch", limit=50):
 ### Recent Optimizations
 
 #### 1. Batched Fact Extraction ✅
+
 **File**: `jarvis/contacts/batched_extractor.py`
+
 - Processes 5 segments per LLM call instead of 1
 - 5x speedup on backfill operations
 - Model kept warm during batch processing
 
 #### 2. Optimized vec_chunks INSERT ✅
+
 **File**: `jarvis/search/vec_search.py`
+
 - Changed from individual INSERTs to single transaction with RETURNING
 - Proper rollback on failure
 
 #### 3. SQL Query Builder ✅
+
 **File**: `jarvis/db/query_builder.py`
+
 - Centralized safe SQL generation
 - Automatic IN clause parameter limits (900 max)
 - Eliminates scattered f-string SQL
 
 #### 4. Single Transaction Pipeline ✅
+
 **File**: `jarvis/topics/segment_pipeline.py`
+
 - All DB operations in single transaction
 - Atomic persist → index → link operations
 
 ### Performance Impact
 
-| Optimization | Before | After | Improvement |
-|-------------|--------|-------|-------------|
-| Fact Extraction | 1 segment/call | 5 segments/call | **5x faster** |
-| vec_chunks INSERT | Individual INSERTs | Transaction + RETURNING | **~3x faster** |
-| DB Operations | Multiple connections | Single transaction | **Atomic + less I/O** |
-| Model Memory | 350M default | 700M default | **Better quality** |
+| Optimization      | Before               | After                   | Improvement           |
+| ----------------- | -------------------- | ----------------------- | --------------------- |
+| Fact Extraction   | 1 segment/call       | 5 segments/call         | **5x faster**         |
+| vec_chunks INSERT | Individual INSERTs   | Transaction + RETURNING | **~3x faster**        |
+| DB Operations     | Multiple connections | Single transaction      | **Atomic + less I/O** |
+| Model Memory      | 350M default         | 700M default            | **Better quality**    |
 
 ---
 
@@ -144,13 +154,13 @@ with track_latency("conversations_fetch", limit=50):
 
 JARVIS operates within strict memory constraints on consumer hardware:
 
-| Component | Memory | Notes |
-|-----------|--------|-------|
-| **Embedding Model** | ~200MB | BGE-small-en-v1.5 (int8) |
-| **Generation Model** | ~1.2GB | LFM-2.5-1.2B-Instruct (4-bit) |
-| **Extraction Model** | ~0.35GB | LFM-0.7B (4-bit) |
-| **System Overhead** | ~500MB | Python, SQLite, caches |
-| **Total Peak** | ~2.2GB | When both models loaded |
+| Component            | Memory  | Notes                         |
+| -------------------- | ------- | ----------------------------- |
+| **Embedding Model**  | ~200MB  | BGE-small-en-v1.5 (int8)      |
+| **Generation Model** | ~1.2GB  | LFM-2.5-1.2B-Instruct (4-bit) |
+| **Extraction Model** | ~0.35GB | LFM-0.7B (4-bit)              |
+| **System Overhead**  | ~500MB  | Python, SQLite, caches        |
+| **Total Peak**       | ~2.2GB  | When both models loaded       |
 
 **Target**: Stay under 3GB total to run on 8GB systems.
 
@@ -161,18 +171,21 @@ JARVIS operates within strict memory constraints on consumer hardware:
 **Solution**: Lazy loading with smart unloading based on memory pressure.
 
 #### Embedding Model
+
 - **Load**: On first search/indexing request
 - **Keep**: Until generation model needed
 - **Unload**: Before loading generation model (memory constraint)
 - **Reload**: After generation completes (for next search)
 
 #### Generation Model
+
 - **Load**: On first draft/chat request
 - **Keep**: For 5 minutes after last use (configurable)
 - **Unload**: After idle timeout or memory pressure
 - **Reload**: On next generation request
 
 #### Extraction Model
+
 - **Load**: During backfill operations
 - **Keep**: For entire batch processing session
 - **Unload**: After batch completes
@@ -181,6 +194,7 @@ JARVIS operates within strict memory constraints on consumer hardware:
 ### Implementation
 
 **Model Manager** (`jarvis/model_manager.py`):
+
 ```python
 class ModelManager:
     def __init__(self):
@@ -189,7 +203,7 @@ class ModelManager:
         self._extraction_model = None
         self._last_gen_use = None
         self._idle_timeout = 300  # 5 minutes
-    
+
     async def get_embedder(self):
         if self._embedding_model is None:
             # Unload generation if loaded
@@ -197,7 +211,7 @@ class ModelManager:
                 await self._unload_generation()
             self._embedding_model = load_embedding_model()
         return self._embedding_model
-    
+
     async def get_generator(self):
         if self._generation_model is None:
             # Unload embedding if loaded
@@ -218,6 +232,7 @@ class ModelManager:
 ### Metrics
 
 Track model lifecycle events:
+
 ```python
 from jarvis.observability.logging import log_event
 

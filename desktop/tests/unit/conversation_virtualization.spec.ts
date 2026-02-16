@@ -27,12 +27,12 @@ describe('Conversation Virtualization', () => {
       const scrollTop = 720; // Scroll 10 items down
       const containerHeight = 720; // Viewport fits 10 items
 
-      const startIdx = Math.max(0, Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - BUFFER_SIZE);
-      const visibleCount = Math.ceil(containerHeight / ESTIMATED_CONVERSATION_HEIGHT);
-      const endIdx = Math.min(
-        totalConversations,
-        startIdx + visibleCount + BUFFER_SIZE * 2
+      const startIdx = Math.max(
+        0,
+        Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - BUFFER_SIZE
       );
+      const visibleCount = Math.ceil(containerHeight / ESTIMATED_CONVERSATION_HEIGHT);
+      const endIdx = Math.min(totalConversations, startIdx + visibleCount + BUFFER_SIZE * 2);
 
       expect(startIdx).toBe(5); // 10 - 5 buffer
       expect(endIdx).toBe(30); // 5 + 10 + 15 buffer
@@ -42,7 +42,10 @@ describe('Conversation Virtualization', () => {
       const scrollTop = 0;
       const containerHeight = 720;
 
-      const startIdx = Math.max(0, Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - BUFFER_SIZE);
+      const startIdx = Math.max(
+        0,
+        Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - BUFFER_SIZE
+      );
 
       expect(startIdx).toBe(0);
     });
@@ -52,7 +55,10 @@ describe('Conversation Virtualization', () => {
       const scrollTop = 6500; // Near bottom
       const containerHeight = 720;
 
-      const startIdx = Math.max(0, Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - BUFFER_SIZE);
+      const startIdx = Math.max(
+        0,
+        Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - BUFFER_SIZE
+      );
       const endIdx = Math.min(
         totalConversations,
         startIdx + Math.ceil(containerHeight / ESTIMATED_CONVERSATION_HEIGHT) + BUFFER_SIZE * 2

@@ -26,11 +26,11 @@ This document defines the comprehensive reliability validation framework for JAR
 
 JARVIS operates in three connectivity tiers:
 
-| Tier | Condition | Capabilities |
-|------|-----------|--------------|
-| **Full** | All services available | 100% feature set |
+| Tier         | Condition                           | Capabilities                    |
+| ------------ | ----------------------------------- | ------------------------------- |
+| **Full**     | All services available              | 100% feature set                |
 | **Degraded** | Model unavailable / Memory pressure | Core features, no AI generation |
-| **Offline** | API/Socket disconnected | Read-only local data access |
+| **Offline**  | API/Socket disconnected             | Read-only local data access     |
 
 ### 1.2 Component Offline Behavior Matrix
 
@@ -47,6 +47,7 @@ Then:
 ```
 
 **Validation Criteria:**
+
 - [ ] Draft endpoint returns HTTP 503 with `Retry-After: 30`
 - [ ] Fallback suggestions are contextually appropriate
 - [ ] UI displays "AI features unavailable" banner
@@ -65,6 +66,7 @@ Then:
 ```
 
 **Validation Criteria:**
+
 - [ ] Desktop app detects disconnection within 5 seconds
 - [ ] Conversation list loads from local cache
 - [ ] New messages show "pending sync" indicator
@@ -82,6 +84,7 @@ Then:
 ```
 
 **Validation Criteria:**
+
 - [ ] Connection fallback chain completes within 10 seconds
 - [ ] Streaming gracefully degrades to polling
 - [ ] No data loss during transition
@@ -98,6 +101,7 @@ Then:
 ```
 
 **Validation Criteria:**
+
 - [ ] Clear permission error with fix instructions
 - [ ] Previously cached conversations remain visible
 - [ ] Manual message composition still works
@@ -109,19 +113,20 @@ Then:
 ```python
 class OfflineSyncQueue:
     """Queue for operations performed while offline."""
-    
+
     PRIORITY_ORDER = [
         SyncOp.MESSAGE_SEND,      # Highest - user-initiated
         SyncOp.MESSAGE_READ,      # Mark as read
         SyncOp.ANALYTICS_EVENT,   # Lowest - can be dropped
     ]
-    
+
     MAX_QUEUE_SIZE = 1000
     MAX_RETRY_ATTEMPTS = 5
     RETRY_BACKOFF = [1, 5, 15, 60, 300]  # seconds
 ```
 
 **Validation Criteria:**
+
 - [ ] Queue persists across app restarts
 - [ ] Operations execute in priority order on reconnection
 - [ ] Failed operations retry with exponential backoff
@@ -159,6 +164,7 @@ class OfflineSyncQueue:
 ```
 
 **Policy Requirements:**
+
 - [ ] Banner appears within 2 seconds of state change
 - [ ] Color coding: Green (healthy), Amber (degraded), Red (failed)
 - [ ] Dismissible but reappears on state change
@@ -166,11 +172,11 @@ class OfflineSyncQueue:
 
 #### 2.2.2 Feature-Level Indicators
 
-| Feature | Healthy | Degraded | Failed |
-|---------|---------|----------|--------|
-| Draft Gen | Full sparkle icon | Dimmed icon + tooltip | Hidden / disabled |
-| Search | Search icon | Icon + "keyword only" label | "Search unavailable" |
-| Summary | Summary button | Loading state slower | Button disabled |
+| Feature   | Healthy           | Degraded                    | Failed               |
+| --------- | ----------------- | --------------------------- | -------------------- |
+| Draft Gen | Full sparkle icon | Dimmed icon + tooltip       | Hidden / disabled    |
+| Search    | Search icon       | Icon + "keyword only" label | "Search unavailable" |
+| Summary   | Summary button    | Loading state slower        | Button disabled      |
 
 ### 2.3 User Messaging Guidelines
 
@@ -178,24 +184,24 @@ class OfflineSyncQueue:
 
 ```yaml
 Healthy:
-  tone: "Encouraging, proactive"
+  tone: 'Encouraging, proactive'
   examples:
-    - "AI model ready"
-    - "All features available"
+    - 'AI model ready'
+    - 'All features available'
 
 Degraded:
-  tone: "Informative, reassuring"
+  tone: 'Informative, reassuring'
   examples:
-    - "AI features running slower than usual"
-    - "Using backup search mode"
-    - "Some suggestions may be generic"
+    - 'AI features running slower than usual'
+    - 'Using backup search mode'
+    - 'Some suggestions may be generic'
 
 Failed:
-  tone: "Clear, actionable"
+  tone: 'Clear, actionable'
   examples:
-    - "AI features unavailable. Free up memory?"
-    - "Cannot access messages. Grant permission?"
-    - "Connection lost. Retrying..."
+    - 'AI features unavailable. Free up memory?'
+    - 'Cannot access messages. Grant permission?'
+    - 'Connection lost. Retrying...'
 ```
 
 #### 2.3.2 Actionable Suggestions
@@ -227,27 +233,27 @@ DEGRADED_SUGGESTIONS = {
 // Policy: Never block user input
 async function generateDraft(params: DraftParams): Promise<DraftResult> {
   const health = await checkHealth();
-  
+
   if (health.status === 'failed') {
     // Return fallback immediately, don't wait
     return {
       suggestions: getFallbackSuggestions(),
       degraded: true,
-      message: "AI features temporarily unavailable"
+      message: 'AI features temporarily unavailable',
     };
   }
-  
+
   if (health.status === 'degraded') {
     // Try with shorter timeout
     return await Promise.race([
       callModel(params),
       timeout(5000).then(() => ({
         suggestions: getFallbackSuggestions(),
-        degraded: true
-      }))
+        degraded: true,
+      })),
     ]);
   }
-  
+
   return await callModel(params);
 }
 ```
@@ -262,9 +268,9 @@ async function search(query: string): Promise<SearchResult> {
       return await semanticSearch(query);
     }
   } catch (e) {
-    logger.warn("Semantic search failed, falling back");
+    logger.warn('Semantic search failed, falling back');
   }
-  
+
   // Always fallback to keyword search
   return await keywordSearch(query);
 }
@@ -297,31 +303,31 @@ async function search(query: string): Promise<SearchResult> {
 # tests/reliability/test_circuit_breaker.py
 class TestCircuitBreakerResilience:
     """Test circuit breaker under various failure conditions."""
-    
+
     def test_circuit_opens_under_sustained_load(self):
         """Circuit opens when failure rate exceeds threshold."""
         cb = CircuitBreaker("test", config=CircuitBreakerConfig(
             failure_threshold=5,
             recovery_timeout_seconds=1
         ))
-        
+
         # Simulate sustained failures
         for _ in range(5):
             cb.record_failure()
-        
+
         assert cb.state == CircuitState.OPEN
         assert not cb.can_execute()
-    
+
     def test_circuit_half_open_allows_probe(self):
         """HALF_OPEN state allows single test request."""
         cb = CircuitBreaker("test", config=CircuitBreakerConfig(
             failure_threshold=1,
             recovery_timeout_seconds=0.1
         ))
-        
+
         cb.record_failure()
         time.sleep(0.15)
-        
+
         assert cb.state == CircuitState.HALF_OPEN
         assert cb.can_execute()  # One call allowed
         assert not cb.can_execute()  # Second call blocked
@@ -333,35 +339,35 @@ class TestCircuitBreakerResilience:
 # tests/reliability/test_retry_resilience.py
 class TestRetryResilience:
     """Test retry mechanisms under various conditions."""
-    
+
     def test_retry_with_jitter_prevents_thundering_herd(self):
         """Random jitter prevents synchronized retries."""
         delays = []
-        
+
         @retry_with_backoff(max_retries=3, base_delay=0.1, jitter=True)
         def flaky():
             raise ConnectionError()
-        
+
         # Collect actual delays from multiple runs
         for _ in range(100):
             try:
                 flaky()
             except ConnectionError:
                 pass
-        
+
         # Verify jitter creates variance
         unique_delays = set(delays)
         assert len(unique_delays) > 50  # High variance
-    
+
     def test_retry_exhaustion_preserves_context(self):
         """Original exception context preserved after retries."""
         @retry_with_backoff(max_retries=2, base_delay=0.01)
         def failing():
             raise ConnectionError("Original error")
-        
+
         with pytest.raises(ConnectionError) as exc_info:
             failing()
-        
+
         assert "Original error" in str(exc_info.value)
         assert exc_info.value.__cause__ is not None
 ```
@@ -372,22 +378,22 @@ class TestRetryResilience:
 # tests/reliability/test_memory_resilience.py
 class TestMemoryPressureResilience:
     """Test behavior under memory pressure."""
-    
+
     def test_model_unloads_under_pressure(self):
         """Model unloads when memory pressure detected."""
         # Simulate memory pressure
         with patch('psutil.virtual_memory') as mock_mem:
             mock_mem.return_value = Mock(available=500 * 1024 * 1024)  # 500MB
-            
+
             controller = DefaultMemoryController()
-            
+
             # Should trigger model unload
             assert controller.should_unload_model()
-            
+
             # Verify graceful degradation
             result = generate_draft_fallback()
             assert "memory" in result.message.lower()
-    
+
     def test_batch_size_reduces_under_pressure(self):
         """Batch operations reduce size when memory low."""
         # Test adaptive batch sizing
@@ -400,30 +406,30 @@ class TestMemoryPressureResilience:
 # tests/reliability/test_network_resilience.py
 class TestNetworkResilience:
     """Test behavior under network disruptions."""
-    
+
     @pytest.mark.asyncio
     async def test_socket_reconnection(self):
         """Socket client reconnects after disconnection."""
         client = JarvisSocket()
-        
+
         # Connect
         await client.connect()
         assert client.getState() == "connected"
-        
+
         # Simulate disconnect
         await simulate_network_partition()
-        
+
         # Verify auto-reconnect
         await asyncio.wait_for(
             wait_for_state(client, "connected"),
             timeout=30
         )
-    
+
     def test_api_timeout_handling(self):
         """API requests timeout gracefully."""
         with patch('requests.get', side_effect=TimeoutError):
             response = client.get_health()
-            
+
             # Should return cached/stale data, not error
             assert response is not None
             assert response.stale is True
@@ -434,27 +440,26 @@ class TestNetworkResilience:
 ```typescript
 // tests/e2e/reliability/test_offline_scenarios.spec.ts
 test.describe('Offline Scenarios', () => {
-  
   test('continues working when API goes offline', async ({ page }) => {
     // 1. Load conversations while online
     await page.goto('/');
     await expect(page.locator('.conversation-list')).toBeVisible();
-    
+
     // 2. Disconnect API
     await route.fulfill({ status: 503 });
-    
+
     // 3. Verify offline indicator appears
     await expect(page.locator('.offline-banner')).toBeVisible();
-    
+
     // 4. Verify cached data still accessible
     await page.click('.conversation-item:first-child');
     await expect(page.locator('.message-list')).toBeVisible();
-    
+
     // 5. Verify AI features disabled
     await page.keyboard.press('Cmd+D');
     await expect(page.locator('.draft-panel')).toContainText('unavailable');
   });
-  
+
   test('recovers when API comes back online', async ({ page }) => {
     // Test reconnection and sync
   });
@@ -493,11 +498,11 @@ def network_partition():
 def slow_responses():
     """Simulate slow API responses."""
     original = requests.request
-    
+
     def slow_request(*args, **kwargs):
         time.sleep(5)
         return original(*args, **kwargs)
-    
+
     with patch('requests.request', slow_request):
         yield
 ```
@@ -508,17 +513,17 @@ def slow_responses():
 # tests/utils/chaos_engineering.py
 class ChaosMonkey:
     """Inject failures for resilience testing."""
-    
+
     def __init__(self):
         self.failures = []
         self.enabled = False
-    
+
     def enable(self):
         self.enabled = True
-    
+
     def disable(self):
         self.enabled = False
-    
+
     def random_failure(self, probability: float = 0.1):
         """Decorator that randomly fails function calls."""
         def decorator(func):
@@ -529,7 +534,7 @@ class ChaosMonkey:
                 return func(*args, **kwargs)
             return wrapper
         return decorator
-    
+
     def latency_injection(self, min_ms: int = 100, max_ms: int = 1000):
         """Add random latency to function calls."""
         def decorator(func):
@@ -550,38 +555,38 @@ class ChaosMonkey:
 # tests/performance/reliability_load_tests.py
 class TestReliabilityUnderLoad:
     """Verify reliability under high load."""
-    
+
     def test_circuit_breaker_under_load(self):
         """Circuit breaker handles concurrent failures correctly."""
         cb = CircuitBreaker("load_test")
         failures = []
-        
+
         def worker():
             for _ in range(100):
                 try:
                     cb.execute(lambda: (_ for _ in ()).throw(ValueError()))
                 except Exception as e:
                     failures.append(e)
-        
+
         threads = [threading.Thread(target=worker) for _ in range(10)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
-        
+
         # Verify circuit state is consistent
         assert cb.state in [CircuitState.CLOSED, CircuitState.OPEN]
-    
+
     def test_queue_memory_under_load(self):
         """Task queue doesn't grow unbounded under load."""
         queue = TaskQueue(max_completed_tasks=100)
-        
+
         # Create many tasks
         for i in range(1000):
             task = queue.enqueue(TaskType.BATCH_EXPORT, {"id": i})
             task.status = TaskStatus.COMPLETED
             queue.update(task)
-        
+
         # Verify size is bounded
         stats = queue.get_stats()
         assert stats["total"] <= 200  # Some pending + max completed
@@ -624,7 +629,7 @@ controller.register_feature(DegradationPolicy(
 # 2. Implement with retry and circuit breaker
 @retry_with_backoff(max_retries=3, base_delay=0.1)
 def generate_smart_reply(context: str) -> str:
-    return controller.execute("smart_reply", 
+    return controller.execute("smart_reply",
         lambda: call_model(context))
 ```
 
@@ -637,15 +642,15 @@ RELIABILITY_METRICS = {
     # Circuit breaker metrics
     "circuit_open_count": Counter,
     "circuit_recovery_time": Histogram,
-    
-    # Retry metrics  
+
+    # Retry metrics
     "retry_attempts": Histogram,
     "retry_success_rate": Gauge,
-    
+
     # Degradation metrics
     "degraded_mode_duration": Histogram,
     "fallback_usage_count": Counter,
-    
+
     # Offline metrics
     "offline_duration": Histogram,
     "sync_queue_size": Gauge,
@@ -659,7 +664,7 @@ RELIABILITY_METRICS = {
 @router.get("/health/deep")
 async def deep_health_check() -> DeepHealthResponse:
     """Comprehensive health check for reliability monitoring."""
-    
+
     checks = {
         "database": await check_database(),
         "model": await check_model(),
@@ -667,7 +672,7 @@ async def deep_health_check() -> DeepHealthResponse:
         "memory": await check_memory(),
         "disk": await check_disk(),
     }
-    
+
     return DeepHealthResponse(
         status="healthy" if all(c.passed for c in checks.values()) else "degraded",
         checks=checks,
@@ -692,19 +697,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Run Circuit Breaker Tests
         run: pytest tests/reliability/test_circuit_breaker.py -v
-      
+
       - name: Run Retry Logic Tests
         run: pytest tests/reliability/test_retry_resilience.py -v
-      
+
       - name: Run Memory Pressure Tests
         run: pytest tests/reliability/test_memory_resilience.py -v
-      
+
       - name: Run Network Resilience Tests
         run: pytest tests/reliability/test_network_resilience.py -v
-      
+
       - name: Run Chaos Tests
         run: pytest tests/reliability/test_chaos.py --chaos-mode -v
 ```
@@ -713,13 +718,13 @@ jobs:
 
 Before each release, verify:
 
-| Criterion | Target | Measurement |
-|-----------|--------|-------------|
-| Circuit breaker recovery | < 60s | Average recovery time |
-| Retry success rate | > 95% | After 3 retries |
-| Degraded mode UX | 100% | All features have fallback |
-| Offline data loss | 0% | Operations queued successfully |
-| Recovery time | < 30s | From failed to healthy |
+| Criterion                | Target | Measurement                    |
+| ------------------------ | ------ | ------------------------------ |
+| Circuit breaker recovery | < 60s  | Average recovery time          |
+| Retry success rate       | > 95%  | After 3 retries                |
+| Degraded mode UX         | 100%   | All features have fallback     |
+| Offline data loss        | 0%     | Operations queued successfully |
+| Recovery time            | < 30s  | From failed to healthy         |
 
 ---
 

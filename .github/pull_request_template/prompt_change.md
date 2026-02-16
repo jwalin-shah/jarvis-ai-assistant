@@ -1,10 +1,10 @@
 ## Prompt Change Summary
 
-| Field | Value |
-|-------|-------|
-| **Type** | PATCH / MINOR / MAJOR |
-| **Version** | 1.0.0 → X.Y.Z |
-| **Affected Templates** | <!-- e.g., reply_generation, threaded_reply --> |
+| Field                   | Value                                                 |
+| ----------------------- | ----------------------------------------------------- |
+| **Type**                | PATCH / MINOR / MAJOR                                 |
+| **Version**             | 1.0.0 → X.Y.Z                                         |
+| **Affected Templates**  | <!-- e.g., reply_generation, threaded_reply -->       |
 | **Categories Impacted** | <!-- e.g., planning, logistics, emotional_support --> |
 
 ## Description
@@ -25,13 +25,13 @@
 
 ## Evaluation Results
 
-| Metric | Before | After | Delta | Status |
-|--------|--------|-------|-------|--------|
-| Category Accuracy | XX% | XX% | +/-X% | ✅/⚠️/❌ |
-| Anti-AI Clean Rate | XX% | XX% | +/-X% | ✅/⚠️/❌ |
-| Avg Response Length | XX chars | XX chars | +/-X | ✅/⚠️/❌ |
-| Latency p95 | XXms | XXms | +/-X% | ✅/⚠️/❌ |
-| Judge Score | X.X/10 | X.X/10 | +/-X.X | ✅/⚠️/❌ |
+| Metric              | Before   | After    | Delta  | Status   |
+| ------------------- | -------- | -------- | ------ | -------- |
+| Category Accuracy   | XX%      | XX%      | +/-X%  | ✅/⚠️/❌ |
+| Anti-AI Clean Rate  | XX%      | XX%      | +/-X%  | ✅/⚠️/❌ |
+| Avg Response Length | XX chars | XX chars | +/-X   | ✅/⚠️/❌ |
+| Latency p95         | XXms     | XXms     | +/-X%  | ✅/⚠️/❌ |
+| Judge Score         | X.X/10   | X.X/10   | +/-X.X | ✅/⚠️/❌ |
 
 <!-- Attach evaluation output or link to CI artifacts -->
 
@@ -49,8 +49,8 @@
 
 - [ ] A/B test configured
 - [ ] Success criteria defined
-- [ ] Minimum sample size: ___
-- [ ] Test duration: ___ hours
+- [ ] Minimum sample size: \_\_\_
+- [ ] Test duration: \_\_\_ hours
 
 ## Rollback Plan
 
@@ -88,6 +88,7 @@ git commit -m "rollback: Revert prompts to v1.0.0"
 **For Reviewers:**
 
 Please verify:
+
 1. Version bump is appropriate for the change type
 2. Evaluation results show no significant regression
 3. Rollback plan is clear and tested
