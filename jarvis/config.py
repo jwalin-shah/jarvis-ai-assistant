@@ -216,10 +216,11 @@ class ModelSettings(BaseModel):
     generation_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0)
     idle_timeout_seconds: float = Field(default=300.0, ge=0.0, le=3600.0)
     warm_on_startup: bool = False
-    # Speculative decoding
-    speculative_enabled: bool = False
-    speculative_draft_model_id: str = "lfm-0.3b"
-    speculative_num_draft_tokens: int = Field(default=3, ge=1, le=10)
+    # Turbo Mode: Speculative decoding + KV cache optimization
+    speculative_enabled: bool = True
+    speculative_draft_model_id: str = "lfm-0.3b-ft"
+    speculative_num_draft_tokens: int = Field(default=4, ge=1, le=10)
+    kv_cache_bits: int = Field(default=8, ge=2, le=16)
 
 
 class TaskQueueConfig(BaseModel):

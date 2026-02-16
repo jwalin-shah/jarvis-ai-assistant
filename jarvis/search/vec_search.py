@@ -155,7 +155,7 @@ class VecSearcher:
             with self.db.connection() as conn:
                 conn.execute(
                     """
-                    INSERT INTO vec_messages(
+                    INSERT OR IGNORE INTO vec_messages(
                         rowid,
                         embedding,
                         chat_id,
@@ -180,11 +180,12 @@ class VecSearcher:
             logger.error("Failed to index message %s: %s", message.id, e)
             return False
 
-    def index_messages(self, messages: list[Message]) -> int:
+    def index_messages(self, messages: list[Message], dtype: np.dtype = np.float32) -> int:
         """Index multiple messages efficiently.
 
         Args:
             messages: List of messages to index
+            dtype: Output dtype for embeddings (use np.float16 for GPU memory savings)
 
         Returns:
             Number of messages successfully indexed
@@ -198,7 +199,7 @@ class VecSearcher:
             # Batch compute embeddings
             texts = [m.text for m in valid_messages]
             # Use cached embedder which handles batching internally
-            embeddings = self._embedder.encode(texts, normalize=True)
+            embeddings = self._embedder.encode(texts, normalize=True, dtype=dtype)
 
             with self.db.connection() as conn:
                 # Prepare batch data
@@ -218,7 +219,7 @@ class VecSearcher:
 
                 conn.executemany(
                     """
-                    INSERT INTO vec_messages(
+                    INSERT OR IGNORE INTO vec_messages(
                         rowid,
                         embedding,
                         chat_id,
