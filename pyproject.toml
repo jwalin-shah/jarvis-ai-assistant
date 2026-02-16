@@ -135,6 +135,10 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true
+explicit_package_bases = true
+# Scope strict checks to runtime packages; scripts/experiments/tests stay out of
+# the default typed surface until migrated incrementally.
+exclude = "(^tests/|^scripts/|^experiments/|^tools/|^evals/|^benchmarks/)"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -182,4 +186,3 @@ dev = [
 [tool.bandit]
 exclude_dirs = ["tests", "tools"]
 targets = ["jarvis", "api", "core"]
-
