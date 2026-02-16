@@ -5,6 +5,7 @@
 
 import type { Conversation, Message, Attachment, Reaction } from "../api/types";
 import { LRUCache } from "../utils/lru-cache";
+import { Logger } from "../utils/logger";
 
 // Dynamic import for Tauri plugin - only works in Tauri context.
 // The plugin's default export is a class with static methods (e.g. Database.load()),
@@ -57,6 +58,8 @@ const guidToRowidCache = new LRUCache<string, number>(10000);
 // Chat GUID -> chat ROWID cache: eliminates JOIN chat in message queries
 const chatGuidToRowid = new Map<string, number>();
 
+const logger = new Logger("DirectDB");
+
 /**
  * Initialize database connections
  * Opens chat.db in read-only mode
@@ -108,10 +111,10 @@ export async function initDatabases(): Promise<void> {
     schemaVersion = await detectSchemaVersion();
 
     isInitialized = true;
-    console.log(`[DirectDB] Initialized with schema ${schemaVersion}`);
+    logger.info(`Initialized with schema ${schemaVersion}`);
   } catch (error) {
     initError = error instanceof Error ? error : new Error(String(error));
-    console.error("[DirectDB] Failed to initialize:", initError);
+    logger.error("Failed to initialize:", initError);
     throw initError;
   }
 }
@@ -238,12 +241,12 @@ export async function getConversations(
 
   try {
     const startTime = performance.now();
-    if (import.meta.env.DEV) { console.log(`[LATENCY] Starting getConversations, limit=${limit}`); }
+    logger.debug(`[LATENCY] Starting getConversations, limit=${limit}`);
     const rows = await chatDb.select<ConversationRow[]>(query, params);
     const elapsed = performance.now() - startTime;
-    if (import.meta.env.DEV) { console.log(`[LATENCY] getConversations fetched ${rows.length} conversations in ${elapsed.toFixed(1)}ms`); }
+    logger.debug(`[LATENCY] getConversations fetched ${rows.length} conversations in ${elapsed.toFixed(1)}ms`);
     if (elapsed > 100) {
-      console.warn(`[LATENCY WARNING] getConversations took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
+      logger.warn(`[LATENCY WARNING] getConversations took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
     }
 
     // Populate chat GUID -> ROWID cache to skip JOIN chat in message queries
@@ -289,7 +292,7 @@ export async function getConversations(
       };
     });
   } catch (error) {
-    console.error("[DirectDB] getConversations error:", error);
+    logger.error("getConversations error:", error);
     throw error;
   }
 }
@@ -321,7 +324,7 @@ export async function getMessages(
 
   try {
     const startTime = performance.now();
-    if (import.meta.env.DEV) { console.log(`[LATENCY] Starting getMessages for chat_id=${chatId}, limit=${limit}, rowid=${cachedRowid ?? 'miss'}`); }
+    logger.debug(`[LATENCY] Starting getMessages for chat_id=${chatId}, limit=${limit}, rowid=${cachedRowid ?? 'miss'}`);
     const rows = await chatDb.select<MessageRow[]>(query, params);
 
     // PERF FIX: Batch prefetch attachments, reactions, reply GUIDs in parallel
@@ -445,14 +448,14 @@ export async function getMessages(
     const messages = results.filter((m): m is Message => m !== null);
 
     const elapsed = performance.now() - startTime;
-    console.log(`[DirectDB] getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`);
+    logger.debug(`getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`);
     if (elapsed > 100) {
-      console.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms) - possible N+1 pattern`);
+      logger.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms) - possible N+1 pattern`);
     }
 
     return messages;
   } catch (error) {
-    console.error("[DirectDB] getMessages error:", error);
+    logger.error("getMessages error:", error);
     throw error;
   }
 }
@@ -519,7 +522,7 @@ export async function getMessage(
     if (rows.length === 0) return null;
     return await rowToMessage(rows[0]!, chatId);
   } catch (error) {
-    console.error("[DirectDB] getMessage error:", error);
+    logger.error("getMessage error:", error);
     return null;
   }
 }
@@ -699,7 +702,7 @@ export async function getMessagesBatch(
 
     return messages;
   } catch (error) {
-    console.error("[DirectDB] getMessagesBatch error:", error);
+    logger.error("getMessagesBatch error:", error);
     return [];
   }
 }
@@ -740,7 +743,7 @@ export async function getNewMessagesSince(
       messageId: row.id,
     }));
   } catch (error) {
-    console.error("[DirectDB] getNewMessagesSince error:", error);
+    logger.error("getNewMessagesSince error:", error);
     return [];
   }
 }
@@ -966,7 +969,7 @@ export function populateContactsCache(contacts: Record<string, string | null>): 
     }
   }
   contactsCacheLoaded = true;
-  console.log(`[DirectDB] Contacts cache populated: ${contactsCache.size} entries`);
+  logger.info(`Contacts cache populated: ${contactsCache.size} entries`);
 }
 
 /**
@@ -985,12 +988,12 @@ export async function loadContactsFromAddressBook(): Promise<void> {
   try {
     dbPaths = await invoke<string[]>("list_addressbook_sources");
   } catch {
-    console.log("[DirectDB] Could not list AddressBook sources");
+    logger.warn("Could not list AddressBook sources");
     return;
   }
 
   if (dbPaths.length === 0) {
-    console.log("[DirectDB] No AddressBook sources found");
+    logger.info("No AddressBook sources found");
     return;
   }
 
@@ -1044,7 +1047,7 @@ export async function loadContactsFromAddressBook(): Promise<void> {
 
   if (loaded > 0) {
     contactsCacheLoaded = true;
-    console.log(`[DirectDB] Loaded ${loaded} contacts from AddressBook (${contactsCache.size} cache entries)`);
+    logger.info(`Loaded ${loaded} contacts from AddressBook (${contactsCache.size} cache entries)`);
   }
 }
 
