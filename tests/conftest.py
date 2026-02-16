@@ -9,8 +9,26 @@ import sys
 import types
 from unittest.mock import MagicMock
 
-import numpy as np
-import psutil
+try:
+    import numpy as np
+except ImportError:
+    # Create a dummy numpy for type hints and basic usage
+    # This allows tests to run without numpy installed
+    np = MagicMock()
+    np.ndarray = MagicMock
+    np.float32 = "float32"
+    np.array = MagicMock(return_value=[])
+    np.random = MagicMock()
+    np.linalg = MagicMock()
+    sys.modules["numpy"] = np
+
+try:
+    import psutil
+except ImportError:
+    psutil = MagicMock()
+    psutil.virtual_memory = MagicMock(return_value=MagicMock(total=16 * 1024**3))
+    sys.modules["psutil"] = psutil
+
 import pytest
 
 
@@ -71,7 +89,9 @@ def _mock_mlx_modules():
     # Need to mock 'mlx' top-level for 'mlx.core' to be importable
     sys.modules["mlx"] = mock_mlx
     sys.modules["mlx.core"] = mock_mx
+    sys.modules["mlx.nn"] = MagicMock()
     sys.modules["mlx_lm"] = mock_mlx_lm
+    sys.modules["tokenizers"] = MagicMock()
     sys.modules["mlx_lm.sample_utils"] = mock_sample_utils
 
 
@@ -116,16 +136,14 @@ SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 def _check_sentence_transformers():
     """Lazy check for sentence_transformers availability."""
-    global SENTENCE_TRANSFORMERS_AVAILABLE
     try:
         from sentence_transformers import SentenceTransformer  # noqa: F401
-
-        SENTENCE_TRANSFORMERS_AVAILABLE = True
+        available = True
     except (ImportError, ValueError, AttributeError, TypeError):
         # AttributeError: torch._C or torch.fx not available (broken torch install)
         # TypeError: packaging version parse error
-        SENTENCE_TRANSFORMERS_AVAILABLE = False
-    return SENTENCE_TRANSFORMERS_AVAILABLE
+        available = False
+    return available
 
 
 # Defer the check to first actual use rather than import time
@@ -169,7 +187,8 @@ class MockEmbedder:
     def model_name(self) -> str:
         return self._model_name
 
-    def is_available(self) -> bool:
+    @staticmethod
+    def is_available() -> bool:
         return True
 
     def encode(
@@ -198,7 +217,7 @@ class MockEmbedder:
         return np.array(embeddings, dtype=np.float32)
 
     def unload(self) -> None:
-        pass
+        pass  # No resources to unload for mock embedder
 
 
 @pytest.fixture
@@ -223,12 +242,11 @@ def _check_mlx_service_available():
 _MLX_SERVICE_AVAILABLE = None
 
 
-def is_mlx_service_available():
+def is_mlx_service_available(_cache=[None]):
     """Check if MLX service is available (cached)."""
-    global _MLX_SERVICE_AVAILABLE
-    if _MLX_SERVICE_AVAILABLE is None:
-        _MLX_SERVICE_AVAILABLE = _check_mlx_service_available()
-    return _MLX_SERVICE_AVAILABLE
+    if _cache[0] is None:
+        _cache[0] = _check_mlx_service_available()
+    return _cache[0]
 
 
 # Marker for tests that require real embeddings (not mocks)
