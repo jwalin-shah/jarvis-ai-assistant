@@ -47,11 +47,17 @@ def _validate_file_path(file_path: Path) -> bool:
 
         # Define allowed base directories
         allowed_bases = [
-            Path.home(),  # User's home directory
+            Path.home() / "Downloads",  # User's Downloads
+            Path.home() / "Documents",  # User's Documents
+            Path.home() / "Desktop",  # User's Desktop
+            Path.home() / "Pictures",  # User's Pictures
+            Path.home() / "Music",  # User's Music
+            Path.home() / "Movies",  # User's Movies
+            Path.home() / "Public",  # User's Public
+            Path.home() / ".jarvis" / "attachments",  # App-specific attachments
             Path("/tmp"),  # Temp directory
             Path("/var/tmp"),  # Alternate temp
             Path("/private/tmp"),  # macOS temp
-            Path("/Users"),  # macOS user directories
         ]
 
         # Check if resolved path is within any allowed base
