@@ -13,4 +13,4 @@ export {
   type SmartReplyParams,
   type SemanticSearchParams,
   type IntentResult,
-} from "./client";
+} from './client';

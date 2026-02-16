@@ -23,7 +23,8 @@ record_routing_metrics(
 ```
 
 **Tracked Operations:**
-- `reply.generate` - Full reply generation latency 
+
+- `reply.generate` - Full reply generation latency
 - `embed.query` - Query embedding time
 - `search.vector` - Vector search time
 - `model.load` - Model loading time
@@ -143,6 +144,7 @@ for template in analytics.get_top_templates(10):
 ## What Gets Logged
 
 ### INFO Level (Default)
+
 - Model loading/unloading
 - Generation completions
 - Fact extraction results
@@ -151,6 +153,7 @@ for template in analytics.get_top_templates(10):
 - Error conditions
 
 ### DEBUG Level (Enable with `JARVIS_LOG_LEVEL=DEBUG`)
+
 - **LLM prompts and responses**
 - Embedding batch sizes
 - Cache hits/misses
@@ -174,6 +177,7 @@ make export-metrics
 ```
 
 This would show:
+
 - Reply latency histogram (p50/p90/p99)
 - Template hit rate over time
 - Memory usage graph

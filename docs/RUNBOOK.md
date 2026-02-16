@@ -10,14 +10,14 @@
 
 ## Quick Reference
 
-| Issue | Command | Response Time |
-|-------|---------|---------------|
-| Health check | `jarvis health` | <5s |
-| Check circuits | `curl http://localhost:8742/circuits` | <1s |
-| Reset circuit | `curl -X POST http://localhost:8742/circuits/{name}/reset` | <1s |
-| Clear queue | `jarvis tasks clear-completed` | <5s |
-| Memory status | `jarvis health \| grep memory` | <5s |
-| Restart service | `jarvis restart` | 30-60s |
+| Issue           | Command                                                    | Response Time |
+| --------------- | ---------------------------------------------------------- | ------------- |
+| Health check    | `jarvis health`                                            | <5s           |
+| Check circuits  | `curl http://localhost:8742/circuits`                      | <1s           |
+| Reset circuit   | `curl -X POST http://localhost:8742/circuits/{name}/reset` | <1s           |
+| Clear queue     | `jarvis tasks clear-completed`                             | <5s           |
+| Memory status   | `jarvis health \| grep memory`                             | <5s           |
+| Restart service | `jarvis restart`                                           | 30-60s        |
 
 ---
 
@@ -26,6 +26,7 @@
 ### Severity: WARNING
 
 ### Symptoms
+
 - Feature degraded to fallback mode
 - Users seeing template responses instead of AI-generated content
 - `/circuits` endpoint showing `state: "open"`
@@ -35,9 +36,9 @@
 ```bash
 # 1. Check which circuits are open
 curl -s http://localhost:8742/circuits | jq '
-  .circuits 
-  | to_entries[] 
-  | select(.value.state == "open") 
+  .circuits
+  | to_entries[]
+  | select(.value.state == "open")
   | {name: .key, state: .value.state, failures: .value.total_failures}'
 
 # 2. Check recent errors
@@ -52,16 +53,17 @@ jarvis models status
 
 ### Common Causes
 
-| Cause | Detection | Fix |
-|-------|-----------|-----|
-| Memory pressure | `memory_pressure: red/critical` | Free memory, restart |
-| Model corruption | `ModelLoadError` in logs | Verify model files |
-| Database lock | `iMessageQueryError` | Wait or restart iMessage |
-| MLX GPU error | Metal assertion in logs | Restart JARVIS |
+| Cause            | Detection                       | Fix                      |
+| ---------------- | ------------------------------- | ------------------------ |
+| Memory pressure  | `memory_pressure: red/critical` | Free memory, restart     |
+| Model corruption | `ModelLoadError` in logs        | Verify model files       |
+| Database lock    | `iMessageQueryError`            | Wait or restart iMessage |
+| MLX GPU error    | Metal assertion in logs         | Restart JARVIS           |
 
 ### Resolution Steps
 
 **Step 1: Identify Root Cause**
+
 ```bash
 # Check memory
 free_mb=$(jarvis health --json | jq '.memory.available_mb')
@@ -82,7 +84,8 @@ fi
 
 **Step 2: Apply Fix Based on Cause**
 
-*Memory Pressure:*
+_Memory Pressure:_
+
 ```bash
 # 1. Trigger emergency mode
 jarvis admin emergency-mode
@@ -98,7 +101,8 @@ sleep 5
 jarvis health
 ```
 
-*Model Error:*
+_Model Error:_
+
 ```bash
 # 1. Verify model files
 jarvis models verify
@@ -110,7 +114,8 @@ jarvis models download --force lfm-1.2b
 jarvis models reload
 ```
 
-*Database Lock:*
+_Database Lock:_
+
 ```bash
 # Check if iMessage is running
 if pgrep -x "Messages" > /dev/null; then
@@ -123,6 +128,7 @@ jarvis db ping
 ```
 
 **Step 3: Reset Circuit**
+
 ```bash
 # Reset specific circuit
 curl -X POST http://localhost:8742/circuits/model_generation/reset
@@ -133,6 +139,7 @@ curl -s http://localhost:8742/circuits/model_generation | jq '.state'
 ```
 
 **Step 4: Verify Recovery**
+
 ```bash
 # Test generation
 jarvis draft test-chat-id --instruction "Say hello"
@@ -142,6 +149,7 @@ jarvis health
 ```
 
 ### Escalation
+
 - If circuit keeps opening after reset: **Escalate to engineering** (possible bug)
 - If multiple circuits open simultaneously: **P0 incident** (systemic failure)
 
@@ -152,6 +160,7 @@ jarvis health
 ### Severity: CRITICAL (>95%), WARNING (>85%)
 
 ### Symptoms
+
 - Memory pressure level at `red` or `critical`
 - Slow response times
 - Model generation timeouts
@@ -234,6 +243,7 @@ echo "Emergency response complete"
 ### Resolution
 
 **Step 1: Identify Memory Leak Source**
+
 ```bash
 # Check for memory growth over time
 for i in {1..6}; do
@@ -246,6 +256,7 @@ jarvis logs | grep -i "memory\|leak\|unload\|gc"
 ```
 
 **Step 2: If Memory Not Recovering**
+
 ```bash
 # Graceful restart
 jarvis stop
@@ -263,6 +274,7 @@ jarvis health
 ```
 
 **Step 3: Prevent Recurrence**
+
 ```bash
 # Adjust memory thresholds (if consistently hitting limits)
 javis config set memory.full_mode_mb 6000
@@ -280,6 +292,7 @@ javis config set cache.ttl_seconds 300
 ### Severity: WARNING
 
 ### Symptoms
+
 - High number of pending tasks
 - Delayed task execution
 - Growing queue size metric
@@ -303,6 +316,7 @@ jarvis workers list | grep -E "(stuck|hung|timeout)"
 ### Resolution
 
 **Step 1: Assess the Situation**
+
 ```bash
 #!/bin/bash
 # assess_queue.sh
@@ -326,6 +340,7 @@ fi
 ```
 
 **Step 2: If Workers Stuck**
+
 ```bash
 # Restart workers
 jarvis workers restart
@@ -336,6 +351,7 @@ jarvis workers status
 ```
 
 **Step 3: Clear Stale Tasks**
+
 ```bash
 # Cancel tasks older than 1 hour
 jarvis tasks cancel --older-than 1h --status pending
@@ -348,6 +364,7 @@ jarvis tasks clear-completed
 ```
 
 **Step 4: If Queue Corrupted**
+
 ```bash
 # Backup first
 cp ~/.jarvis/task_queue.json ~/.jarvis/task_queue.json.bak.$(date +%s)
@@ -366,6 +383,7 @@ jarvis restart
 ### Severity: CRITICAL
 
 ### Symptoms
+
 - Cannot read iMessage conversations
 - `iMessageAccessError` in logs
 - `MSG_ACCESS_DENIED` error code
@@ -393,6 +411,7 @@ pgrep -x "Messages" > /dev/null && echo "iMessage running" || echo "iMessage not
 ### Resolution
 
 **Step 1: Permission Issue**
+
 ```bash
 # Re-request Full Disk Access
 echo "Opening System Settings..."
@@ -407,6 +426,7 @@ jarvis setup --check-permissions
 ```
 
 **Step 2: Database Locked**
+
 ```bash
 # Wait for iMessage to release lock
 attempts=0
@@ -426,6 +446,7 @@ jarvis db ping
 ```
 
 **Step 3: Database Corruption**
+
 ```bash
 # Run integrity check
 sqlite3 ~/Library/Messages/chat.db "PRAGMA integrity_check;"
@@ -444,6 +465,7 @@ sqlite3 ~/Library/Messages/chat.db "SELECT * FROM _SqliteDatabaseProperties WHER
 ### Severity: WARNING
 
 ### Symptoms
+
 - HTTP 429 responses
 - `Retry-After` header in responses
 - Client complaints about throttling
@@ -464,6 +486,7 @@ jarvis logs --since 10m | grep "request" | awk '{print $4}' | sort | uniq -c | s
 ### Resolution
 
 **Step 1: If Legitimate Traffic**
+
 ```bash
 # Temporarily increase limits
 curl -X POST http://localhost:8742/admin/ratelimit \
@@ -475,6 +498,7 @@ watch -n 5 'curl -s http://localhost:8742/metrics | grep ratelimit'
 ```
 
 **Step 2: If Abuse/Loop**
+
 ```bash
 # Identify problematic client
 jarvis logs --since 10m | grep "request" | awk '{print $4}' | sort | uniq -c | sort -nr | head -5
@@ -486,6 +510,7 @@ curl -X POST http://localhost:8742/admin/block \
 ```
 
 **Step 3: Permanent Adjustment**
+
 ```bash
 # Update config
 javis config set rate_limit.generation "15/minute"
@@ -499,6 +524,7 @@ javis config set rate_limit.read "90/minute"
 ### Severity: CRITICAL (Complete Outage)
 
 ### When to Use
+
 - JARVIS completely unresponsive
 - Multiple component failures
 - Data corruption suspected
@@ -609,19 +635,22 @@ echo "Backup location: $backup_dir"
 ## Post-Incident Review: INC-YYYY-MM-DD-XXX
 
 ### Summary
+
 One-line description of the incident.
 
 ### Timeline (All times local)
-| Time | Event | Owner |
-|------|-------|-------|
-| HH:MM | Alert fired | System |
-| HH:MM | Investigation started | @oncall |
-| HH:MM | Root cause identified | @oncall |
-| HH:MM | Mitigation applied | @oncall |
-| HH:MM | Service restored | @oncall |
+
+| Time  | Event                          | Owner   |
+| ----- | ------------------------------ | ------- |
+| HH:MM | Alert fired                    | System  |
+| HH:MM | Investigation started          | @oncall |
+| HH:MM | Root cause identified          | @oncall |
+| HH:MM | Mitigation applied             | @oncall |
+| HH:MM | Service restored               | @oncall |
 | HH:MM | Post-incident review completed | @oncall |
 
 ### Impact
+
 - **Duration:** X minutes
 - **Severity:** [P0/P1/P2/P3]
 - **Features Affected:** List affected features
@@ -629,26 +658,32 @@ One-line description of the incident.
 - **Data Loss:** Yes/No - details if yes
 
 ### Root Cause
+
 Detailed explanation of why the incident occurred.
 
 ### Resolution
+
 Steps taken to resolve the incident.
 
 ### What Went Well
+
 - Item 1
 - Item 2
 
 ### What Could Be Improved
+
 - Item 1
 - Item 2
 
 ### Action Items
-| ID | Action | Owner | Due Date |
-|----|--------|-------|----------|
-| 1 | | | |
-| 2 | | | |
+
+| ID  | Action | Owner | Due Date |
+| --- | ------ | ----- | -------- |
+| 1   |        |       |          |
+| 2   |        |       |          |
 
 ### Related Links
+
 - Alert: [link]
 - Dashboard: [link]
 - Logs: [link]
@@ -659,6 +694,7 @@ Steps taken to resolve the incident.
 ## 8. Preventive Maintenance
 
 ### Daily Checks
+
 ```bash
 #!/bin/bash
 # daily_health_check.sh
@@ -702,6 +738,7 @@ echo "=== Check Complete ==="
 ```
 
 ### Weekly Maintenance
+
 ```bash
 #!/bin/bash
 # weekly_maintenance.sh
@@ -778,4 +815,4 @@ curl http://localhost:8742/health
 
 ---
 
-*End of Runbook*
+_End of Runbook_

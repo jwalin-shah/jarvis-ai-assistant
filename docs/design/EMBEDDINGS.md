@@ -32,12 +32,12 @@ Models are configured via `~/.jarvis/config.json`:
 
 ### Available Models
 
-| Config Name | HuggingFace ID | Layers | MTEB | Latency | Notes |
-|-------------|----------------|--------|------|---------|-------|
-| `bge-small` | BAAI/bge-small-en-v1.5 | 12 | ~62 | 100-150ms | **Default**, best quality |
-| `gte-tiny` | TaylorAI/gte-tiny | 6 | ~57 | ~50-70ms | Good speed/quality balance |
-| `minilm-l6` | sentence-transformers/all-MiniLM-L6-v2 | 6 | ~56 | ~50-70ms | Most popular fast model |
-| `bge-micro` | TaylorAI/bge-micro-v2 | 3 | ~54 | ~30-40ms | Fastest, lowest quality |
+| Config Name | HuggingFace ID                         | Layers | MTEB | Latency   | Notes                      |
+| ----------- | -------------------------------------- | ------ | ---- | --------- | -------------------------- |
+| `bge-small` | BAAI/bge-small-en-v1.5                 | 12     | ~62  | 100-150ms | **Default**, best quality  |
+| `gte-tiny`  | TaylorAI/gte-tiny                      | 6      | ~57  | ~50-70ms  | Good speed/quality balance |
+| `minilm-l6` | sentence-transformers/all-MiniLM-L6-v2 | 6      | ~56  | ~50-70ms  | Most popular fast model    |
+| `bge-micro` | TaylorAI/bge-micro-v2                  | 3      | ~54  | ~30-40ms  | Fastest, lowest quality    |
 
 ## Architecture (MLX-Only)
 
@@ -136,13 +136,14 @@ class CachedEmbedder:
 
 For large histories (400K+ messages), benchmarked on 148K real messages:
 
-| Index Type | Size | Compression | Recall@10 |
-|------------|------|-------------|-----------|
-| IndexFlatIP (brute force) | 217 MB | 1x | 100% |
-| **IVFPQ 384x8 (4x)** | **57 MB** | **3.8x** | **92%** |
-| IVFPQ 192x8 (8x) | 30 MB | 7.2x | 88% |
+| Index Type                | Size      | Compression | Recall@10 |
+| ------------------------- | --------- | ----------- | --------- |
+| IndexFlatIP (brute force) | 217 MB    | 1x          | 100%      |
+| **IVFPQ 384x8 (4x)**      | **57 MB** | **3.8x**    | **92%**   |
+| IVFPQ 192x8 (8x)          | 30 MB     | 7.2x        | 88%       |
 
 **Key findings:**
+
 - 4x compression saves ~430MB on 400K messages
 - Search time is NOT the bottleneck (<2ms vs ~100ms for embedding)
 - **Default: IVFPQ 384x8 (4x)** - best quality/memory tradeoff
@@ -151,9 +152,9 @@ Configurable via `config.faiss_index.index_type`.
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `jarvis/embedding_adapter.py` | Unified interface, model registry |
-| `jarvis/config.py` | `EmbeddingConfig`, artifact path helpers |
-| `models/embeddings.py` | MLX service client (Unix socket) |
-| `~/.jarvis/mlx-embed-service/server.py` | MLX embedding microservice |
+| File                                    | Purpose                                  |
+| --------------------------------------- | ---------------------------------------- |
+| `jarvis/embedding_adapter.py`           | Unified interface, model registry        |
+| `jarvis/config.py`                      | `EmbeddingConfig`, artifact path helpers |
+| `models/embeddings.py`                  | MLX service client (Unix socket)         |
+| `~/.jarvis/mlx-embed-service/server.py` | MLX embedding microservice               |
