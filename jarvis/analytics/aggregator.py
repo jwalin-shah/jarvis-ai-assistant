@@ -10,7 +10,6 @@ falls back to pure Python for minimal dependencies.
 from __future__ import annotations
 
 import threading
-from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -85,6 +84,44 @@ class MonthlyAggregate:
     avg_messages_per_day: float = 0.0
 
 
+@dataclass(slots=True)
+class _HourlyBucket:
+    count: int = 0
+    sent: int = 0
+    received: int = 0
+    total_length: int = 0
+
+
+@dataclass(slots=True)
+class _DailyBucket:
+    messages: list[Message] = field(default_factory=list)
+    sent: int = 0
+    received: int = 0
+    contacts: set[str] = field(default_factory=set)
+    hourly: dict[int, int] = field(default_factory=dict)
+    attachments: int = 0
+
+
+@dataclass(slots=True)
+class _WeeklyBucket:
+    messages: list[Message] = field(default_factory=list)
+    sent: int = 0
+    received: int = 0
+    contacts: set[str] = field(default_factory=set)
+    daily: dict[str, int] = field(default_factory=dict)
+    dates: list[datetime] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class _MonthlyBucket:
+    messages: list[Message] = field(default_factory=list)
+    sent: int = 0
+    received: int = 0
+    contacts: set[str] = field(default_factory=set)
+    weekly: dict[str, int] = field(default_factory=dict)
+    days: set[str] = field(default_factory=set)
+
+
 def _aggregate_by_hour_vectorized(messages: list[Message]) -> list[HourlyAggregate]:
     """Vectorized implementation using pandas (10-50x faster)."""
     import pandas as pd
@@ -152,31 +189,30 @@ def aggregate_by_hour(messages: list[Message]) -> list[HourlyAggregate]:
         return _aggregate_by_hour_vectorized(messages)
 
     # Fallback to pure Python for small datasets
-    hourly_data: dict[int, dict[str, int | float]] = defaultdict(
-        lambda: {"count": 0, "sent": 0, "received": 0, "total_length": 0}
-    )
+    hourly_data: dict[int, _HourlyBucket] = {}
 
     for msg in messages:
         hour = msg.date.hour
-        hourly_data[hour]["count"] += 1
+        bucket = hourly_data.setdefault(hour, _HourlyBucket())
+        bucket.count += 1
         if msg.is_from_me:
-            hourly_data[hour]["sent"] += 1
+            bucket.sent += 1
         else:
-            hourly_data[hour]["received"] += 1
+            bucket.received += 1
         if msg.text:
-            hourly_data[hour]["total_length"] += len(msg.text)
+            bucket.total_length += len(msg.text)
 
     result: list[HourlyAggregate] = []
     for hour in range(24):
-        data = hourly_data[hour]
-        count = data["count"]
-        avg_length = data["total_length"] / count if count > 0 else 0.0
+        data = hourly_data.get(hour, _HourlyBucket())
+        count = data.count
+        avg_length = data.total_length / count if count > 0 else 0.0
         result.append(
             HourlyAggregate(
                 hour=hour,
-                count=count,
-                sent=data["sent"],
-                received=data["received"],
+                count=data.count,
+                sent=data.sent,
+                received=data.received,
                 avg_length=round(avg_length, 1),
             )
         )
@@ -272,33 +308,24 @@ def aggregate_by_day(
         return _aggregate_by_day_vectorized(messages, include_sentiment)
 
     # Fallback to pure Python
-    daily_data: dict[str, dict[str, object]] = defaultdict(
-        lambda: {
-            "messages": [],
-            "sent": 0,
-            "received": 0,
-            "contacts": set(),
-            "hourly": Counter(),
-            "attachments": 0,
-        }
-    )
+    daily_data: dict[str, _DailyBucket] = {}
 
     for msg in messages:
         date_key = msg.date.strftime("%Y-%m-%d")
-        data = daily_data[date_key]
-        data["messages"].append(msg)
+        data = daily_data.setdefault(date_key, _DailyBucket())
+        data.messages.append(msg)
         if msg.is_from_me:
-            data["sent"] += 1
+            data.sent += 1
         else:
-            data["received"] += 1
-            data["contacts"].add(msg.sender)
-        data["hourly"][msg.date.hour] += 1
+            data.received += 1
+            data.contacts.add(msg.sender)
+        data.hourly[msg.date.hour] = data.hourly.get(msg.date.hour, 0) + 1
         if msg.attachments:
-            data["attachments"] += len(msg.attachments)
+            data.attachments += len(msg.attachments)
 
     result: list[DailyAggregate] = []
     for date_key, data in sorted(daily_data.items()):
-        msgs = data["messages"]
+        msgs = data.messages
         total = len(msgs)
 
         # Sentiment (optional, expensive)
@@ -312,13 +339,13 @@ def aggregate_by_day(
             DailyAggregate(
                 date=date_key,
                 total_messages=total,
-                sent_count=data["sent"],
-                received_count=data["received"],
+                sent_count=data.sent,
+                received_count=data.received,
                 avg_sentiment=round(avg_sentiment, 3),
-                unique_contacts=len(data["contacts"]),
-                hourly_breakdown=dict(data["hourly"]),
+                unique_contacts=len(data.contacts),
+                hourly_breakdown=dict(data.hourly),
                 emoji_count=0,
-                attachment_count=data["attachments"],
+                attachment_count=data.attachments,
             )
         )
 
@@ -338,35 +365,26 @@ def aggregate_by_week(
     Returns:
         List of WeeklyAggregate objects sorted by week
     """
-    weekly_data: dict[str, dict[str, object]] = defaultdict(
-        lambda: {
-            "messages": [],
-            "sent": 0,
-            "received": 0,
-            "contacts": set(),
-            "daily": Counter(),
-            "dates": [],
-        }
-    )
+    weekly_data: dict[str, _WeeklyBucket] = {}
 
     for msg in messages:
         week_key = msg.date.strftime("%Y-W%W")
         date_key = msg.date.strftime("%Y-%m-%d")
-        data = weekly_data[week_key]
-        data["messages"].append(msg)
+        data = weekly_data.setdefault(week_key, _WeeklyBucket())
+        data.messages.append(msg)
         if msg.is_from_me:
-            data["sent"] += 1
+            data.sent += 1
         else:
-            data["received"] += 1
-            data["contacts"].add(msg.sender)
-        data["daily"][date_key] += 1
-        data["dates"].append(msg.date)
+            data.received += 1
+            data.contacts.add(msg.sender)
+        data.daily[date_key] = data.daily.get(date_key, 0) + 1
+        data.dates.append(msg.date)
 
     result: list[WeeklyAggregate] = []
     for week_key, data in sorted(weekly_data.items()):
-        msgs = data["messages"]
+        msgs = data.messages
         total = len(msgs)
-        dates = sorted(data["dates"])
+        dates = sorted(data.dates)
 
         # Sentiment
         avg_sentiment = 0.0
@@ -385,11 +403,11 @@ def aggregate_by_week(
                 start_date=start_date,
                 end_date=end_date,
                 total_messages=total,
-                sent_count=data["sent"],
-                received_count=data["received"],
+                sent_count=data.sent,
+                received_count=data.received,
                 avg_sentiment=round(avg_sentiment, 3),
-                daily_breakdown=dict(data["daily"]),
-                active_contacts=len(data["contacts"]),
+                daily_breakdown=dict(data.daily),
+                active_contacts=len(data.contacts),
             )
         )
 
@@ -409,36 +427,27 @@ def aggregate_by_month(
     Returns:
         List of MonthlyAggregate objects sorted by month
     """
-    monthly_data: dict[str, dict[str, object]] = defaultdict(
-        lambda: {
-            "messages": [],
-            "sent": 0,
-            "received": 0,
-            "contacts": set(),
-            "weekly": Counter(),
-            "days": set(),
-        }
-    )
+    monthly_data: dict[str, _MonthlyBucket] = {}
 
     for msg in messages:
         month_key = msg.date.strftime("%Y-%m")
         week_key = msg.date.strftime("%Y-W%W")
         date_key = msg.date.strftime("%Y-%m-%d")
-        data = monthly_data[month_key]
-        data["messages"].append(msg)
+        data = monthly_data.setdefault(month_key, _MonthlyBucket())
+        data.messages.append(msg)
         if msg.is_from_me:
-            data["sent"] += 1
+            data.sent += 1
         else:
-            data["received"] += 1
-            data["contacts"].add(msg.sender)
-        data["weekly"][week_key] += 1
-        data["days"].add(date_key)
+            data.received += 1
+            data.contacts.add(msg.sender)
+        data.weekly[week_key] = data.weekly.get(week_key, 0) + 1
+        data.days.add(date_key)
 
     result: list[MonthlyAggregate] = []
     for month_key, data in sorted(monthly_data.items()):
-        msgs = data["messages"]
+        msgs = data.messages
         total = len(msgs)
-        days_active = len(data["days"])
+        days_active = len(data.days)
 
         # Sentiment
         avg_sentiment = 0.0
@@ -454,11 +463,11 @@ def aggregate_by_month(
             MonthlyAggregate(
                 month=month_key,
                 total_messages=total,
-                sent_count=data["sent"],
-                received_count=data["received"],
+                sent_count=data.sent,
+                received_count=data.received,
                 avg_sentiment=round(avg_sentiment, 3),
-                weekly_breakdown=dict(data["weekly"]),
-                active_contacts=len(data["contacts"]),
+                weekly_breakdown=dict(data.weekly),
+                active_contacts=len(data.contacts),
                 avg_messages_per_day=round(avg_per_day, 2),
             )
         )
@@ -578,25 +587,29 @@ class TimeSeriesAggregator:
                 ]
             # Roll up to week/month if needed
             elif granularity == "week":
-                weekly: dict[str, dict[str, int]] = defaultdict(
-                    lambda: {"total": 0, "sent": 0, "received": 0}
-                )
+                weekly: dict[str, dict[str, int]] = {}
                 for agg in aggregates:
                     dt = datetime.strptime(agg.date, "%Y-%m-%d")
                     week_key = dt.strftime("%Y-W%W")
-                    weekly[week_key]["total"] += agg.total_messages
-                    weekly[week_key]["sent"] += agg.sent_count
-                    weekly[week_key]["received"] += agg.received_count
+                    bucket = weekly.setdefault(
+                        week_key,
+                        {"total": 0, "sent": 0, "received": 0},
+                    )
+                    bucket["total"] += agg.total_messages
+                    bucket["sent"] += agg.sent_count
+                    bucket["received"] += agg.received_count
                 return [{"date": k, **v} for k, v in sorted(weekly.items())]
             elif granularity == "month":
-                monthly: dict[str, dict[str, int]] = defaultdict(
-                    lambda: {"total": 0, "sent": 0, "received": 0}
-                )
+                monthly: dict[str, dict[str, int]] = {}
                 for agg in aggregates:
                     month_key = agg.date[:7]  # YYYY-MM
-                    monthly[month_key]["total"] += agg.total_messages
-                    monthly[month_key]["sent"] += agg.sent_count
-                    monthly[month_key]["received"] += agg.received_count
+                    bucket = monthly.setdefault(
+                        month_key,
+                        {"total": 0, "sent": 0, "received": 0},
+                    )
+                    bucket["total"] += agg.total_messages
+                    bucket["sent"] += agg.sent_count
+                    bucket["received"] += agg.received_count
                 return [{"date": k, **v} for k, v in sorted(monthly.items())]
             else:
                 # hour not supported from daily cache
