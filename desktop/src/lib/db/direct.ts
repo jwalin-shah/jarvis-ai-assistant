@@ -5,6 +5,7 @@
 
 import type { Conversation, Message, Attachment, Reaction } from '../api/types';
 import { LRUCache } from '../utils/lru-cache';
+import { Logger } from '../utils/logger';
 
 // Dynamic import for Tauri plugin - only works in Tauri context.
 // The plugin's default export is a class with static methods (e.g. Database.load()),
@@ -57,6 +58,8 @@ const guidToRowidCache = new LRUCache<string, number>(10000);
 // Chat GUID -> chat ROWID cache: eliminates JOIN chat in message queries
 const chatGuidToRowid = new Map<string, number>();
 
+const logger = new Logger("DirectDB");
+
 /**
  * Initialize database connections
  * Opens chat.db in read-only mode
@@ -87,8 +90,16 @@ export async function initDatabases(): Promise<void> {
 
     // Open chat.db in read-only mode via URI
     // tauri-plugin-sql uses sqlite:// protocol
+<<<<<<< ours
+    const { join } = await import("@tauri-apps/api/path");
+    if (resolvedHomePath == null) {
+      throw new Error("Home directory path not resolved");
+    }
+    const chatDbPath = await join(resolvedHomePath, "Library", "Messages", "chat.db");
+=======
     const { join } = await import('@tauri-apps/api/path');
     const chatDbPath = await join(resolvedHomePath!, 'Library', 'Messages', 'chat.db');
+>>>>>>> theirs
     const uri = `sqlite:${chatDbPath}?mode=ro`;
     try {
       chatDb = await Database.load(uri);
@@ -108,10 +119,14 @@ export async function initDatabases(): Promise<void> {
     schemaVersion = await detectSchemaVersion();
 
     isInitialized = true;
-    console.log(`[DirectDB] Initialized with schema ${schemaVersion}`);
+    logger.info(`Initialized with schema ${schemaVersion}`);
   } catch (error) {
     initError = error instanceof Error ? error : new Error(String(error));
+<<<<<<< ours
+    logger.error("Failed to initialize:", initError);
+=======
     console.error('[DirectDB] Failed to initialize:', initError);
+>>>>>>> theirs
     throw initError;
   }
 }
@@ -213,7 +228,7 @@ interface ReactionRow {
  * Get recent conversations
  */
 export async function getConversations(
-  limit: number = 50,
+  limit = 50,
   since?: Date,
   before?: Date
 ): Promise<Conversation[]> {
@@ -222,8 +237,8 @@ export async function getConversations(
   }
 
   const query = getConversationsQuery({
-    withSinceFilter: !!since,
-    withBeforeFilter: !!before,
+    withSinceFilter: Boolean(since),
+    withBeforeFilter: Boolean(before),
   });
 
   // Build parameters array
@@ -238,6 +253,14 @@ export async function getConversations(
 
   try {
     const startTime = performance.now();
+<<<<<<< ours
+    logger.debug(`[LATENCY] Starting getConversations, limit=${limit}`);
+    const rows = await chatDb.select<ConversationRow[]>(query, params);
+    const elapsed = performance.now() - startTime;
+    logger.debug(`[LATENCY] getConversations fetched ${rows.length} conversations in ${elapsed.toFixed(1)}ms`);
+    if (elapsed > 100) {
+      logger.warn(`[LATENCY WARNING] getConversations took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
+=======
     if (import.meta.env.DEV) {
       console.log(`[LATENCY] Starting getConversations, limit=${limit}`);
     }
@@ -252,6 +275,7 @@ export async function getConversations(
       console.warn(
         `[LATENCY WARNING] getConversations took ${elapsed.toFixed(1)}ms (threshold: 100ms)`
       );
+>>>>>>> theirs
     }
 
     // Populate chat GUID -> ROWID cache to skip JOIN chat in message queries
@@ -277,7 +301,10 @@ export async function getConversations(
       // Get display name or resolve from contacts
       let displayName = row.display_name || null;
       if (!displayName && !isGroup && participants.length === 1) {
-        displayName = resolveContactName(participants[0]!);
+        const participant = participants[0];
+        if (participant !== undefined) {
+          displayName = resolveContactName(participant);
+        }
       }
 
       // Get last message text
@@ -297,7 +324,11 @@ export async function getConversations(
       };
     });
   } catch (error) {
+<<<<<<< ours
+    logger.error("getConversations error:", error);
+=======
     console.error('[DirectDB] getConversations error:', error);
+>>>>>>> theirs
     throw error;
   }
 }
@@ -307,7 +338,7 @@ export async function getConversations(
  */
 export async function getMessages(
   chatId: string,
-  limit: number = 100,
+  limit = 100,
   before?: Date
 ): Promise<Message[]> {
   if (!chatDb) {
@@ -316,13 +347,19 @@ export async function getMessages(
 
   // Use ROWID-direct query if cached (skips JOIN chat), else fall back
   const cachedRowid = chatGuidToRowid.get(chatId);
+<<<<<<< ours
+  const query = cachedRowid !== undefined
+    ? getMessagesQueryDirect({ withBeforeFilter: Boolean(before) })
+    : getMessagesQuery({ withBeforeFilter: Boolean(before) });
+=======
   const query =
     cachedRowid !== undefined
       ? getMessagesQueryDirect({ withBeforeFilter: !!before })
       : getMessagesQuery({ withBeforeFilter: !!before });
+>>>>>>> theirs
 
   // Build parameters: ROWID (number) or GUID (string)
-  const params: (string | number)[] = [cachedRowid !== undefined ? cachedRowid : chatId];
+  const params = [cachedRowid !== undefined ? cachedRowid : chatId];
   if (before) {
     params.push(toAppleTimestamp(before));
   }
@@ -330,23 +367,27 @@ export async function getMessages(
 
   try {
     const startTime = performance.now();
+<<<<<<< ours
+    logger.debug(`[LATENCY] Starting getMessages for chat_id=${chatId}, limit=${limit}, rowid=${cachedRowid ?? 'miss'}`);
+=======
     if (import.meta.env.DEV) {
       console.log(
         `[LATENCY] Starting getMessages for chat_id=${chatId}, limit=${limit}, rowid=${cachedRowid ?? 'miss'}`
       );
     }
+>>>>>>> theirs
     const rows = await chatDb.select<MessageRow[]>(query, params);
 
     // PERF FIX: Batch prefetch attachments, reactions, reply GUIDs in parallel
     // Before: 3 sequential queries (~60-220ms). After: 3 parallel queries (~30-50ms)
     const messageIds = rows.map((row) => row.id);
     const messageGuids = rows.map((row) => row.guid);
-    const validGuids = messageGuids.filter((g) => g);
+    const validGuids = messageGuids.filter((g) => Boolean(g));
 
     // Collect uncached reply GUIDs before launching parallel queries
     const replyGuids = rows
       .map((row) => row.reply_to_guid)
-      .filter((g): g is string => !!g && !guidToRowidCache.has(g));
+      .filter((g): g is string => Boolean(g) && !guidToRowidCache.has(g));
     const uncachedGuids = [...new Set(replyGuids)];
 
     // Run all 3 batch queries in parallel
@@ -401,8 +442,13 @@ export async function getMessages(
       if (!attachmentsByMessageId.has(msgId)) {
         attachmentsByMessageId.set(msgId, []);
       }
+<<<<<<< ours
+      attachmentsByMessageId.get(msgId)?.push({
+        filename: row.transfer_name || row.filename || "attachment",
+=======
       attachmentsByMessageId.get(msgId)!.push({
         filename: row.transfer_name || row.filename || 'attachment',
+>>>>>>> theirs
         file_path: row.filename,
         mime_type: row.mime_type,
         file_size: row.file_size,
@@ -420,7 +466,7 @@ export async function getMessages(
         reactionsByMessageGuid.set(guid, []);
       }
       const sender = normalizePhoneNumber(row.sender) || row.sender;
-      reactionsByMessageGuid.get(guid)!.push({
+      reactionsByMessageGuid.get(guid)?.push({
         type: reactionType,
         sender,
         sender_name: row.is_from_me ? null : resolveContactName(sender),
@@ -458,6 +504,11 @@ export async function getMessages(
     const messages = results.filter((m): m is Message => m !== null);
 
     const elapsed = performance.now() - startTime;
+<<<<<<< ours
+    logger.debug(`getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`);
+    if (elapsed > 100) {
+      logger.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms) - possible N+1 pattern`);
+=======
     console.log(
       `[DirectDB] getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`
     );
@@ -465,11 +516,16 @@ export async function getMessages(
       console.warn(
         `[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms) - possible N+1 pattern`
       );
+>>>>>>> theirs
     }
 
     return messages;
   } catch (error) {
+<<<<<<< ours
+    logger.error("getMessages error:", error);
+=======
     console.error('[DirectDB] getMessages error:', error);
+>>>>>>> theirs
     throw error;
   }
 }
@@ -533,9 +589,14 @@ export async function getMessage(chatId: string, messageId: number): Promise<Mes
       messageId,
     ]);
     if (rows.length === 0) return null;
-    return await rowToMessage(rows[0]!, chatId);
+    const row = rows[0];
+    return await rowToMessage(row, chatId);
   } catch (error) {
+<<<<<<< ours
+    logger.error("getMessage error:", error);
+=======
     console.error('[DirectDB] getMessage error:', error);
+>>>>>>> theirs
     return null;
   }
 }
@@ -604,7 +665,7 @@ export async function getMessagesBatch(chatId: string, messageIds: number[]): Pr
     const guids = rows.map((r) => r.guid).filter((g) => g);
     const replyGuidsRaw = rows
       .map((r) => r.reply_to_guid)
-      .filter((g): g is string => !!g && !guidToRowidCache.has(g));
+      .filter((g): g is string => Boolean(g) && !guidToRowidCache.has(g));
     const uncachedGuids = [...new Set(replyGuidsRaw)];
 
     const [attachmentRows, reactionRows, guidRows] = await Promise.all([
@@ -654,11 +715,18 @@ export async function getMessagesBatch(chatId: string, messageIds: number[]): Pr
     // Build attachments map
     const attachmentsByMessageId = new Map<number, Attachment[]>();
     for (const row of attachmentRows) {
-      if (!attachmentsByMessageId.has(row.message_id)) {
-        attachmentsByMessageId.set(row.message_id, []);
+      let attachments = attachmentsByMessageId.get(row.message_id);
+      if (!attachments) {
+        attachments = [];
+        attachmentsByMessageId.set(row.message_id, attachments);
       }
+<<<<<<< ours
+      attachments.push({
+        filename: row.transfer_name || row.filename || "attachment",
+=======
       attachmentsByMessageId.get(row.message_id)!.push({
         filename: row.transfer_name || row.filename || 'attachment',
+>>>>>>> theirs
         file_path: row.filename,
         mime_type: row.mime_type,
         file_size: row.file_size,
@@ -671,11 +739,13 @@ export async function getMessagesBatch(chatId: string, messageIds: number[]): Pr
       const reactionType = parseReactionType(rRow.associated_message_type);
       if (!reactionType || reactionType.startsWith('remove_')) continue;
       const guid = rRow.message_guid;
-      if (!reactionsByMessageGuid.has(guid)) {
-        reactionsByMessageGuid.set(guid, []);
+      let reactions = reactionsByMessageGuid.get(guid);
+      if (!reactions) {
+        reactions = [];
+        reactionsByMessageGuid.set(guid, reactions);
       }
       const sender = normalizePhoneNumber(rRow.sender) || rRow.sender;
-      reactionsByMessageGuid.get(guid)!.push({
+      reactions.push({
         type: reactionType,
         sender,
         sender_name: rRow.is_from_me ? null : resolveContactName(sender),
@@ -714,7 +784,11 @@ export async function getMessagesBatch(chatId: string, messageIds: number[]): Pr
 
     return messages;
   } catch (error) {
+<<<<<<< ours
+    logger.error("getMessagesBatch error:", error);
+=======
     console.error('[DirectDB] getMessagesBatch error:', error);
+>>>>>>> theirs
     return [];
   }
 }
@@ -750,7 +824,11 @@ export async function getNewMessagesSince(
       messageId: row.id,
     }));
   } catch (error) {
+<<<<<<< ours
+    logger.error("getNewMessagesSince error:", error);
+=======
     console.error('[DirectDB] getNewMessagesSince error:', error);
+>>>>>>> theirs
     return [];
   }
 }
@@ -785,7 +863,7 @@ async function rowToMessage(
       sender,
       senderName,
       row.affected_handle_id,
-      !!row.is_from_me
+      Boolean(row.is_from_me)
     );
 
     return {
@@ -794,8 +872,13 @@ async function rowToMessage(
       sender,
       sender_name: senderName,
       text,
+<<<<<<< ours
+      date: formatDate(parseAppleTimestamp(row.date)) || "",
+      is_from_me: Boolean(row.is_from_me),
+=======
       date: formatDate(parseAppleTimestamp(row.date)) || '',
       is_from_me: !!row.is_from_me,
+>>>>>>> theirs
       attachments: [],
       reply_to_id: null,
       reactions: [],
@@ -851,8 +934,13 @@ async function rowToMessage(
     sender,
     sender_name: senderName,
     text,
+<<<<<<< ours
+    date: formatDate(parseAppleTimestamp(row.date)) || "",
+    is_from_me: Boolean(row.is_from_me),
+=======
     date: formatDate(parseAppleTimestamp(row.date)) || '',
     is_from_me: !!row.is_from_me,
+>>>>>>> theirs
     attachments,
     reply_to_id: replyToId,
     reactions,
@@ -925,8 +1013,9 @@ async function getMessageRowidByGuid(guid: string): Promise<number | null> {
   try {
     const rows = await chatDb.select<{ id: number }[]>(MESSAGE_BY_GUID_QUERY, [guid]);
     if (rows.length > 0) {
-      guidToRowidCache.set(guid, rows[0]!.id);
-      return rows[0]!.id;
+      const row = rows[0];
+      guidToRowidCache.set(guid, row.id);
+      return row.id;
     }
     return null;
   } catch {
@@ -973,7 +1062,7 @@ export function populateContactsCache(contacts: Record<string, string | null>): 
     }
   }
   contactsCacheLoaded = true;
-  console.log(`[DirectDB] Contacts cache populated: ${contactsCache.size} entries`);
+  logger.info(`Contacts cache populated: ${contactsCache.size} entries`);
 }
 
 /**
@@ -992,12 +1081,20 @@ export async function loadContactsFromAddressBook(): Promise<void> {
   try {
     dbPaths = await invoke<string[]>('list_addressbook_sources');
   } catch {
+<<<<<<< ours
+    logger.warn("Could not list AddressBook sources");
+=======
     console.log('[DirectDB] Could not list AddressBook sources');
+>>>>>>> theirs
     return;
   }
 
   if (dbPaths.length === 0) {
+<<<<<<< ours
+    logger.info("No AddressBook sources found");
+=======
     console.log('[DirectDB] No AddressBook sources found');
+>>>>>>> theirs
     return;
   }
 
@@ -1059,9 +1156,13 @@ export async function loadContactsFromAddressBook(): Promise<void> {
 
   if (loaded > 0) {
     contactsCacheLoaded = true;
+<<<<<<< ours
+    logger.info(`Loaded ${loaded} contacts from AddressBook (${contactsCache.size} cache entries)`);
+=======
     console.log(
       `[DirectDB] Loaded ${loaded} contacts from AddressBook (${contactsCache.size} cache entries)`
     );
+>>>>>>> theirs
   }
 }
 
@@ -1096,7 +1197,7 @@ export function formatParticipant(identifier: string): string {
     // Show last 4 digits for privacy: "+1 (555) 123-4567" -> "...4567"
     const digits = normalized.replace(/\D/g, '');
     if (digits.length >= 10) {
-      return '...' + digits.slice(-4);
+      return `...${digits.slice(-4)}`;
     }
   }
   return identifier;
