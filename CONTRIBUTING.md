@@ -5,6 +5,7 @@ Thank you for your interest in contributing to JARVIS! This guide will help you 
 ## Development Setup
 
 ### Prerequisites
+
 - macOS with Apple Silicon (M1/M2/M3)
 - Python 3.11+
 - Node.js 18+ (for desktop app)
@@ -20,6 +21,7 @@ make setup
 ```
 
 This will:
+
 1. Create a Python virtual environment
 2. Install dependencies via `uv`
 3. Download required ML models

@@ -4,7 +4,7 @@
  * Extracted from client.ts to reduce class size (REF-14).
  */
 
-import type { StreamTokenEvent } from "./client";
+import type { StreamTokenEvent } from './client';
 
 /** Idle timeout before auto-cleaning a stale streaming request */
 const STREAM_IDLE_TIMEOUT = 60000;
@@ -85,7 +85,7 @@ export class StreamManager {
 
     // Emit token event for subscribers
     if (this.onEmit) {
-      this.onEmit("stream_token", event);
+      this.onEmit('stream_token', event);
     }
 
     // Check if this is the final token
@@ -110,10 +110,7 @@ export class StreamManager {
   /**
    * Create an idle timeout that auto-cleans if server drops mid-stream.
    */
-  createIdleTimeout(
-    requestId: number,
-    onTimeout: () => void
-  ): ReturnType<typeof setTimeout> {
+  createIdleTimeout(requestId: number, onTimeout: () => void): ReturnType<typeof setTimeout> {
     return setTimeout(() => {
       console.warn(
         `[StreamManager] Streaming request ${requestId} timed out after ${STREAM_IDLE_TIMEOUT}ms of inactivity`

@@ -15,7 +15,7 @@ This document outlines testing patterns, conventions, and best practices for the
 
 2. **Comprehensive Coverage**
    - Success cases
-   - Error cases  
+   - Error cases
    - Edge cases (null, empty, boundaries)
    - Invalid inputs
    - Integration scenarios
@@ -35,12 +35,14 @@ This document outlines testing patterns, conventions, and best practices for the
 ### Pattern 1: Config-Driven Tests
 
 **❌ BAD:**
+
 ```python
 def test_threshold_check():
     assert router.route("test", threshold=0.85)  # Hardcoded!
 ```
 
 **✅ GOOD:**
+
 ```python
 def test_threshold_check():
     config = get_config()
@@ -51,6 +53,7 @@ def test_threshold_check():
 ### Pattern 2: Fixture-Based Config
 
 **✅ BEST:**
+
 ```python
 @pytest.fixture
 def test_config(tmp_path):
@@ -70,17 +73,18 @@ def test_with_custom_config(test_config, monkeypatch):
 ### Pattern 3: Boundary Testing
 
 **✅ GOOD:**
+
 ```python
 def test_threshold_at_min_boundary(self):
     """Test threshold at minimum valid value."""
     config = JarvisConfig(routing=RoutingConfig(quick_reply_threshold=0.0))
     # Test behavior at boundary
-    
+
 def test_threshold_at_max_boundary(self):
     """Test threshold at maximum valid value."""
     config = JarvisConfig(routing=RoutingConfig(quick_reply_threshold=1.0))
     # Test behavior at boundary
-    
+
 def test_threshold_below_minimum(self):
     """Test that values below minimum raise ValidationError."""
     with pytest.raises(ValidationError):
@@ -90,6 +94,7 @@ def test_threshold_below_minimum(self):
 ### Pattern 4: Edge Cases
 
 **✅ GOOD:**
+
 ```python
 def test_empty_input(self):
     """Test empty string input."""
@@ -116,6 +121,7 @@ def test_very_long_input(self):
 ### Pattern 5: Error Cases
 
 **✅ GOOD:**
+
 ```python
 def test_invalid_input_type(self):
     """Test that invalid input types raise appropriate errors."""
@@ -132,15 +138,16 @@ def test_missing_dependency(self, monkeypatch):
 ### Pattern 6: Integration Scenarios
 
 **✅ GOOD:**
+
 ```python
 def test_end_to_end_flow(self, test_config, mock_embedder, mock_db):
     """Test complete flow from input to output."""
     # Setup
     router = ReplyRouter(...)
-    
+
     # Execute
     result = router.route("test message")
-    
+
     # Verify
     assert result.response is not None
     assert result.similarity >= 0.0
@@ -204,38 +211,38 @@ def mock_db(tmp_path):
 ```python
 class TestFeatureName:
     """Tests for FeatureName functionality."""
-    
+
     # Success cases
     def test_basic_functionality(self):
         """Test basic successful case."""
         pass
-    
+
     def test_with_custom_config(self, custom_config):
         """Test with custom configuration."""
         pass
-    
+
     # Error cases
     def test_invalid_input(self):
         """Test error handling for invalid input."""
         pass
-    
+
     def test_missing_dependency(self):
         """Test error handling when dependency missing."""
         pass
-    
+
     # Edge cases
     def test_empty_input(self):
         """Test empty input handling."""
         pass
-    
+
     def test_none_input(self):
         """Test None input handling."""
         pass
-    
+
     def test_boundary_values(self):
         """Test boundary value handling."""
         pass
-    
+
     # Integration
     def test_integration_scenario(self):
         """Test end-to-end integration."""
@@ -267,7 +274,7 @@ def test_normalize():
 class TestSequence:
     def test_step1(self):
         self.value = 1
-    
+
     def test_step2(self):
         assert self.value == 1  # Depends on step1!
 ```
@@ -299,6 +306,7 @@ def test_uses_cache():
 ## Examples
 
 See:
+
 - `tests/unit/test_config.py` - Config-driven tests
 - `tests/unit/test_text_normalizer.py` - Comprehensive edge case testing
 - `tests/unit/test_router.py` - Mock-based testing
