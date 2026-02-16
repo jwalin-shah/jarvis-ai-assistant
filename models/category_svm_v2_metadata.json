@@ -6,14 +6,7 @@
     "hand_crafted": 26,
     "spacy": 14
   },
-  "categories": [
-    "acknowledge",
-    "closing",
-    "emotion",
-    "question",
-    "request",
-    "statement"
-  ],
+  "categories": ["acknowledge", "closing", "emotion", "question", "request", "statement"],
   "n_train": 11860,
   "n_test": 2965,
   "cv_f1_macro": 0.7935933562326536,

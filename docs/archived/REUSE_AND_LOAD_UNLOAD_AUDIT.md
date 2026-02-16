@@ -8,12 +8,12 @@ Audit of segmentation, extraction, prompt building, and model lifecycle.
 
 ### Entry points
 
-| Caller | Segmenter used | Then |
-|--------|----------------|------|
-| **segment_ingest** (backfill) | `segment_conversation_basic` (basic_segmenter) | persist + index + **BatchedInstructionFactExtractor** |
-| **watcher** (resegment) | `segment_conversation` (topic_segmenter) | `process_segments(..., extract_facts=False)` |
-| **backfill_complete** | (segments from elsewhere) | `process_segments(..., extract_facts=...)` |
-| **Scripts** (evaluate_segmentation, reextract_radhika*) | `segment_conversation` (topic_segmenter) | various |
+| Caller                                                   | Segmenter used                                 | Then                                                  |
+| -------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------- |
+| **segment_ingest** (backfill)                            | `segment_conversation_basic` (basic_segmenter) | persist + index + **BatchedInstructionFactExtractor** |
+| **watcher** (resegment)                                  | `segment_conversation` (topic_segmenter)       | `process_segments(..., extract_facts=False)`          |
+| **backfill_complete**                                    | (segments from elsewhere)                      | `process_segments(..., extract_facts=...)`            |
+| **Scripts** (evaluate_segmentation, reextract_radhika\*) | `segment_conversation` (topic_segmenter)       | various                                               |
 
 ### Shared vs duplicated
 
@@ -34,11 +34,11 @@ Audit of segmentation, extraction, prompt building, and model lifecycle.
 
 ### Entry points
 
-| Caller | Extractor | API used |
-|--------|-----------|----------|
-| **segment_pipeline** (watcher, backfill with facts) | `InstructionFactExtractor` (singleton `get_instruction_extractor`) | `extract_facts_from_batch()` |
-| **tasks/worker** (FACT_EXTRACTION) | `InstructionFactExtractor` (same singleton) | `extract_facts_from_batch()` called one window at a time |
-| **segment_ingest** | `BatchedInstructionFactExtractor` (separate class) | `extract_facts_from_segments_batch()` |
+| Caller                                              | Extractor                                                          | API used                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
+| **segment_pipeline** (watcher, backfill with facts) | `InstructionFactExtractor` (singleton `get_instruction_extractor`) | `extract_facts_from_batch()`                             |
+| **tasks/worker** (FACT_EXTRACTION)                  | `InstructionFactExtractor` (same singleton)                        | `extract_facts_from_batch()` called one window at a time |
+| **segment_ingest**                                  | `BatchedInstructionFactExtractor` (separate class)                 | `extract_facts_from_segments_batch()`                    |
 
 ### Inconsistencies
 
@@ -90,7 +90,7 @@ Audit of segmentation, extraction, prompt building, and model lifecycle.
 ### Recommendation (implemented)
 
 - Treat extraction as part of the “LLM” family for memory: only one of {reply LLM, extraction model} should be loaded at a time.
-- **ModelManager._unload_llm():** Also unload the instruction extractor (implemented: calls `reset_instruction_extractor()`).
+- **ModelManager.\_unload_llm():** Also unload the instruction extractor (implemented: calls `reset_instruction_extractor()`).
 - **InstructionFactExtractor.load():** Call `get_model_manager().prepare_for("llm")` before loading (implemented).
 - **Reply LLM load path:** When the generator loads the reply model, it calls `prepare_for("llm")` first so the extractor (and embedder/NLI) are unloaded (implemented in `models/generator.py`).
 - **reset_model():** Now only unloads the reply loader; does not set the singleton to `None`, so the generator’s reference remains valid and a subsequent `load()` reuses the same loader.
@@ -99,13 +99,13 @@ Audit of segmentation, extraction, prompt building, and model lifecycle.
 
 ## 5. Summary Table
 
-| Area | Reused? | Consistent? | Load/Unload |
-|------|---------|-------------|--------------|
-| Segmentation | Partially (process_segments shared; two segmenters, duplicated filtering/boundary logic) | No (basic vs topic, two types) | N/A (no model in segmenters; embedder used) |
-| Extraction | No (two extractors, two pipelines; worker/window path differs) | No (different prompts and output formats) | Improved (InstructionFactExtractor + generator now coordinate via ModelManager) |
-| Reply/summary/search prompts | Yes (jarvis/prompts) | Yes | N/A |
-| Extraction prompts | No (in each extractor file) | No | — |
-| ModelManager | — | — | Incomplete (extractor not unloaded with LLM) |
+| Area                         | Reused?                                                                                  | Consistent?                               | Load/Unload                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------- |
+| Segmentation                 | Partially (process_segments shared; two segmenters, duplicated filtering/boundary logic) | No (basic vs topic, two types)            | N/A (no model in segmenters; embedder used)                                     |
+| Extraction                   | No (two extractors, two pipelines; worker/window path differs)                           | No (different prompts and output formats) | Improved (InstructionFactExtractor + generator now coordinate via ModelManager) |
+| Reply/summary/search prompts | Yes (jarvis/prompts)                                                                     | Yes                                       | N/A                                                                             |
+| Extraction prompts           | No (in each extractor file)                                                              | No                                        | —                                                                               |
+| ModelManager                 | —                                                                                        | —                                         | Incomplete (extractor not unloaded with LLM)                                    |
 
 ---
 

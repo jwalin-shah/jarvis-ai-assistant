@@ -6,12 +6,12 @@
 
 ## Quick Reference
 
-| Metric | Result |
-|--------|--------|
-| Response Classifier F1 | **81.9%** |
-| Trigger Classifier F1 | **82.0%** |
-| Message Read Latency | **1-5ms** (direct SQLite) |
-| Memory Footprint | **<5.5GB** |
+| Metric                 | Result                    |
+| ---------------------- | ------------------------- |
+| Response Classifier F1 | **81.9%**                 |
+| Trigger Classifier F1  | **82.0%**                 |
+| Message Read Latency   | **1-5ms** (direct SQLite) |
+| Memory Footprint       | **<5.5GB**                |
 
 ## Core Innovation
 
@@ -38,34 +38,34 @@ The system learns from **your actual messaging patterns** by extracting (trigger
 
 ## Module Structure
 
-| Directory | Purpose |
-|-----------|---------|
-| `jarvis/` | Core logic: classifiers, router, embeddings, config, prompts |
-| `jarvis/analytics/` | Dashboard metrics, trends, time-series aggregation |
-| `jarvis/graph/` | Relationship networks, clustering, layout algorithms |
-| `jarvis/scheduler/` | Smart timing, draft scheduling, priority queue |
-| `jarvis/tags/` | Tags, smart folders, auto-tagging rules |
-| `jarvis/prefetch/` | Multi-tier cache, prediction, invalidation |
-| `jarvis/quality/` | Hallucination detection, factuality, grounding |
-| `api/` | FastAPI REST layer for HTTP clients |
-| `models/` | MLX model inference, registry, templates |
-| `integrations/imessage/` | iMessage database reader |
-| `desktop/` | Tauri + Svelte desktop application |
+| Directory                | Purpose                                                      |
+| ------------------------ | ------------------------------------------------------------ |
+| `jarvis/`                | Core logic: classifiers, router, embeddings, config, prompts |
+| `jarvis/analytics/`      | Dashboard metrics, trends, time-series aggregation           |
+| `jarvis/graph/`          | Relationship networks, clustering, layout algorithms         |
+| `jarvis/scheduler/`      | Smart timing, draft scheduling, priority queue               |
+| `jarvis/tags/`           | Tags, smart folders, auto-tagging rules                      |
+| `jarvis/prefetch/`       | Multi-tier cache, prediction, invalidation                   |
+| `jarvis/quality/`        | Hallucination detection, factuality, grounding               |
+| `api/`                   | FastAPI REST layer for HTTP clients                          |
+| `models/`                | MLX model inference, registry, templates                     |
+| `integrations/imessage/` | iMessage database reader                                     |
+| `desktop/`               | Tauri + Svelte desktop application                           |
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `jarvis/router.py` | Main routing logic, thresholds, decision flow |
-| `jarvis/response_classifier.py` | 3-layer hybrid response classifier |
-| `jarvis/response_classifier_v2.py` | Optimized batch classifier (10x throughput) |
-| `jarvis/trigger_classifier.py` | Trigger type classifier |
-| `jarvis/embedding_adapter.py` | Unified embedding interface |
-| `jarvis/index_v2.py` | Sharded FAISS with tiered storage |
-| `jarvis/adaptive_thresholds.py` | Learns thresholds from feedback |
-| `jarvis/socket_server.py` | Unix socket JSON-RPC server |
-| `jarvis/watcher.py` | File watcher for new messages |
-| `jarvis/evaluation.py` | Feedback storage and analysis |
+| File                               | Purpose                                       |
+| ---------------------------------- | --------------------------------------------- |
+| `jarvis/router.py`                 | Main routing logic, thresholds, decision flow |
+| `jarvis/response_classifier.py`    | 3-layer hybrid response classifier            |
+| `jarvis/response_classifier_v2.py` | Optimized batch classifier (10x throughput)   |
+| `jarvis/trigger_classifier.py`     | Trigger type classifier                       |
+| `jarvis/embedding_adapter.py`      | Unified embedding interface                   |
+| `jarvis/index_v2.py`               | Sharded FAISS with tiered storage             |
+| `jarvis/adaptive_thresholds.py`    | Learns thresholds from feedback               |
+| `jarvis/socket_server.py`          | Unix socket JSON-RPC server                   |
+| `jarvis/watcher.py`                | File watcher for new messages                 |
+| `jarvis/evaluation.py`             | Feedback storage and analysis                 |
 
 ## Related Docs
 

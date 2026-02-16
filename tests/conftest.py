@@ -7,6 +7,7 @@ to run on non-macOS platforms.
 import platform
 import sys
 import types
+from functools import lru_cache
 from unittest.mock import MagicMock
 
 try:
@@ -78,6 +79,9 @@ def _mock_mlx_modules():
     mock_mx.metal = MagicMock()
     mock_mx.metal.clear_cache = MagicMock()
 
+    # Create mock for mlx.nn
+    mock_nn = MagicMock()
+
     mock_mlx_lm = MagicMock()
     mock_mlx_lm.load = MagicMock(return_value=(MagicMock(), MagicMock()))
     mock_mlx_lm.generate = MagicMock(return_value="Generated text")
@@ -89,7 +93,7 @@ def _mock_mlx_modules():
     # Need to mock 'mlx' top-level for 'mlx.core' to be importable
     sys.modules["mlx"] = mock_mlx
     sys.modules["mlx.core"] = mock_mx
-    sys.modules["mlx.nn"] = MagicMock()
+    sys.modules["mlx.nn"] = mock_nn
     sys.modules["mlx_lm"] = mock_mlx_lm
     sys.modules["tokenizers"] = MagicMock()
     sys.modules["mlx_lm.sample_utils"] = mock_sample_utils
@@ -138,6 +142,7 @@ def _check_sentence_transformers():
     """Lazy check for sentence_transformers availability."""
     try:
         from sentence_transformers import SentenceTransformer  # noqa: F401
+
         available = True
     except (ImportError, ValueError, AttributeError, TypeError):
         # AttributeError: torch._C or torch.fx not available (broken torch install)
@@ -216,8 +221,10 @@ class MockEmbedder:
 
         return np.array(embeddings, dtype=np.float32)
 
-    def unload(self) -> None:
-        pass  # No resources to unload for mock embedder
+    @staticmethod
+    def unload() -> None:
+        """No-op for mock embedder since there are no resources to unload."""
+        pass
 
 
 @pytest.fixture
@@ -242,11 +249,10 @@ def _check_mlx_service_available():
 _MLX_SERVICE_AVAILABLE = None
 
 
-def is_mlx_service_available(_cache=[None]):
+@lru_cache(maxsize=1)
+def is_mlx_service_available():
     """Check if MLX service is available (cached)."""
-    if _cache[0] is None:
-        _cache[0] = _check_mlx_service_available()
-    return _cache[0]
+    return _check_mlx_service_available()
 
 
 # Marker for tests that require real embeddings (not mocks)

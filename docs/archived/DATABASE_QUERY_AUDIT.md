@@ -107,7 +107,7 @@ Walkthrough of DB-touching code with bottlenecks identified and fixes applied.
 **Summary:** BM25 + vector hybrid.
 
 - **Metadata / cache:** Single query for count and max timestamp. Good.
-- **_enrich_results:** Chunks rowids (900), one `IN` query per chunk. Good.
+- **\_enrich_results:** Chunks rowids (900), one `IN` query per chunk. Good.
 
 **Verdict:** No changes needed.
 
@@ -117,9 +117,9 @@ Walkthrough of DB-touching code with bottlenecks identified and fixes applied.
 
 **Summary:** chat.db watcher and new-message handling.
 
-- **_get_new_messages:** Persistent read-only connection; one query for new messages. Good.
-- **_resegment_chats:** One chat at a time by design (per-chat lock); each does one `MAX(end_time)` and one `process_segments`. Acceptable.
-- **_validate_schema:** One-off at startup. Fine.
+- **\_get_new_messages:** Persistent read-only connection; one query for new messages. Good.
+- **\_resegment_chats:** One chat at a time by design (per-chat lock); each does one `MAX(end_time)` and one `process_segments`. Acceptable.
+- **\_validate_schema:** One-off at startup. Fine.
 
 **Verdict:** No changes needed.
 
@@ -139,7 +139,7 @@ Walkthrough of DB-touching code with bottlenecks identified and fixes applied.
 
 **Summary:** Graph-based context for replies.
 
-- **get_graph_context:** Calls _get_fact_summary, _get_interaction_recency, _get_shared_connections; each does one or two focused queries. Fine.
+- **get_graph_context:** Calls \_get_fact_summary, \_get_interaction_recency, \_get_shared_connections; each does one or two focused queries. Fine.
 
 **Verdict:** No changes needed.
 
@@ -149,8 +149,8 @@ Walkthrough of DB-touching code with bottlenecks identified and fixes applied.
 
 **Summary:** Graph builder and message stats.
 
-- **_get_contacts:** Single SELECT. Good.
-- **_get_message_stats:** Uses `_batch_get_messages(reader, chat_ids, ...)` (one batched query). Good.
+- **\_get_contacts:** Single SELECT. Good.
+- **\_get_message_stats:** Uses `_batch_get_messages(reader, chat_ids, ...)` (one batched query). Good.
 
 **Verdict:** No changes needed.
 
@@ -160,8 +160,8 @@ Walkthrough of DB-touching code with bottlenecks identified and fixes applied.
 
 **Summary:** Profile build and DB facts.
 
-- **_fetch_db_facts:** One query per contact. Used during profile build (one contact at a time). Fine.
-- **_discover_topics:** One query for segments, then vec searcher. Fine.
+- **\_fetch_db_facts:** One query per contact. Used during profile build (one contact at a time). Fine.
+- **\_discover_topics:** One query for segments, then vec searcher. Fine.
 
 **Verdict:** No changes needed.
 
@@ -200,11 +200,11 @@ Walkthrough of DB-touching code with bottlenecks identified and fixes applied.
 
 ## Summary of code changes
 
-| File | Change |
-|------|--------|
-| `jarvis/topics/segment_storage.py` | Replace N single-row INSERTs in `persist_segments` with one `executemany` + one SELECT for IDs. |
-| `jarvis/search/segment_ingest.py` | Replace per-conversation `MAX(end_time)` in loop with one batched `GROUP BY chat_id` query before the loop. |
-| `jarvis/topics/segment_pipeline.py` | (Earlier) Replace per-segment INSERT + changes() with batch fingerprint insert and in-memory “new” set. |
+| File                                | Change                                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `jarvis/topics/segment_storage.py`  | Replace N single-row INSERTs in `persist_segments` with one `executemany` + one SELECT for IDs.             |
+| `jarvis/search/segment_ingest.py`   | Replace per-conversation `MAX(end_time)` in loop with one batched `GROUP BY chat_id` query before the loop. |
+| `jarvis/topics/segment_pipeline.py` | (Earlier) Replace per-segment INSERT + changes() with batch fingerprint insert and in-memory “new” set.     |
 
 ---
 
