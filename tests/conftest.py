@@ -125,16 +125,13 @@ SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 def _check_sentence_transformers():
     """Lazy check for sentence_transformers availability."""
-    global SENTENCE_TRANSFORMERS_AVAILABLE
     try:
         from sentence_transformers import SentenceTransformer  # noqa: F401
-
-        SENTENCE_TRANSFORMERS_AVAILABLE = True
+        return True
     except (ImportError, ValueError, AttributeError, TypeError):
         # AttributeError: torch._C or torch.fx not available (broken torch install)
         # TypeError: packaging version parse error
-        SENTENCE_TRANSFORMERS_AVAILABLE = False
-    return SENTENCE_TRANSFORMERS_AVAILABLE
+        return False
 
 
 # Defer the check to first actual use rather than import time
@@ -178,7 +175,8 @@ class MockEmbedder:
     def model_name(self) -> str:
         return self._model_name
 
-    def is_available(self) -> bool:
+    @staticmethod
+    def is_available() -> bool:
         return True
 
     def encode(
@@ -207,6 +205,7 @@ class MockEmbedder:
         return np.array(embeddings, dtype=np.float32)
 
     def unload(self) -> None:
+        """No-op for mock embedder; nothing to unload."""
         pass
 
 
@@ -232,12 +231,11 @@ def _check_mlx_service_available():
 _MLX_SERVICE_AVAILABLE = None
 
 
-def is_mlx_service_available():
+def is_mlx_service_available(_cache=[None]):
     """Check if MLX service is available (cached)."""
-    global _MLX_SERVICE_AVAILABLE
-    if _MLX_SERVICE_AVAILABLE is None:
-        _MLX_SERVICE_AVAILABLE = _check_mlx_service_available()
-    return _MLX_SERVICE_AVAILABLE
+    if _cache[0] is None:
+        _cache[0] = _check_mlx_service_available()
+    return _cache[0]
 
 
 # Marker for tests that require real embeddings (not mocks)
