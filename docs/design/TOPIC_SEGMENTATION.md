@@ -9,6 +9,7 @@ Semantic topic boundary detection for conversation chunking. Replaces arbitrary 
 ## Overview
 
 Topic segmentation divides long conversations into coherent topic chunks, enabling:
+
 - More accurate context retrieval (fetch entire topic, not arbitrary windows)
 - Better extraction pipeline processing (group related messages)
 - Improved summarization (summarize by topic, not by time)
@@ -52,12 +53,12 @@ A boundary is created when `score >= boundary_threshold` (default 0.5) OR when t
 
 ### Signal Components
 
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Embedding Drift | 0.4 | Cosine similarity drop between sliding window centroids |
-| Entity Discontinuity | 0.3 | Jaccard overlap of named entities (PERSON, ORG, etc.) |
-| Time Gap | 0.2 | Soft penalty for gaps > 10 min, hard boundary at 30 min |
-| Topic Shift Markers | 0.4 | Text markers like "btw", "anyway", "oh also" |
+| Signal               | Weight | Description                                             |
+| -------------------- | ------ | ------------------------------------------------------- |
+| Embedding Drift      | 0.4    | Cosine similarity drop between sliding window centroids |
+| Entity Discontinuity | 0.3    | Jaccard overlap of named entities (PERSON, ORG, etc.)   |
+| Time Gap             | 0.2    | Soft penalty for gaps > 10 min, hard boundary at 30 min |
+| Topic Shift Markers  | 0.4    | Text markers like "btw", "anyway", "oh also"            |
 
 ### Sliding Window Centroids
 
@@ -87,13 +88,13 @@ For each position `i`, the algorithm computes a centroid (mean embedding) of the
 
 ### Key Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `boundary_threshold` | 0.5 | Score above this creates a boundary |
-| `drift_threshold` | 0.35 | Default threshold in `segment_conversation()` function |
-| `similarity_threshold` | 0.55 | Cosine similarity below this indicates drift |
-| `time_gap_minutes` | 30.0 | Hard gap threshold (always splits) |
-| `soft_gap_minutes` | 10.0 | Soft gap threshold (contributes to score) |
+| Parameter              | Default | Description                                            |
+| ---------------------- | ------- | ------------------------------------------------------ |
+| `boundary_threshold`   | 0.5     | Score above this creates a boundary                    |
+| `drift_threshold`      | 0.35    | Default threshold in `segment_conversation()` function |
+| `similarity_threshold` | 0.55    | Cosine similarity below this indicates drift           |
+| `time_gap_minutes`     | 30.0    | Hard gap threshold (always splits)                     |
+| `soft_gap_minutes`     | 10.0    | Soft gap threshold (contributes to score)              |
 
 ## Data Types
 
@@ -131,7 +132,7 @@ from jarvis.topics.topic_segmenter import segment_conversation
 
 # With pre-fetched embeddings (for efficiency)
 segments = segment_conversation(
-    messages, 
+    messages,
     contact_id="...",
     drift_threshold=0.35,
     pre_fetched_embeddings={msg.id: embedding for msg, embedding in zip(messages, embeddings)}

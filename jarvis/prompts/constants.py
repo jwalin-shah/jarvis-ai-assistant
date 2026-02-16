@@ -324,9 +324,7 @@ RAG_REPLY_PROMPT = PromptTemplate(
     name="rag_reply_generation",
     system_message="",
     template=(
-        "<|im_start|>system\n"
-        + SYSTEM_PREFIX
-        + "{instruction}<|im_end|>\n"
+        "<|im_start|>system\n" + SYSTEM_PREFIX + "{instruction}<|im_end|>\n"
         "<|im_start|>user\n"
         "{extra_context}"
         "{context}\n"

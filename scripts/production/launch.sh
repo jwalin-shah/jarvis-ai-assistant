@@ -276,7 +276,7 @@ main() {
     # Step 5: Start the background task worker
     log_info "Starting background task worker..."
     cd "$PROJECT_ROOT"
-    uv run python scripts/start_worker_loop.py &
+    uv run python scripts/production/start_worker_loop.py &
     WORKER_PID=$!
     log_info "Background worker started (PID: $WORKER_PID)"
 

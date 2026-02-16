@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { tick, onMount } from "svelte";
-  import Icon, { type IconName } from "./Icon.svelte";
+  import { tick, onMount } from 'svelte';
+  import Icon, { type IconName } from './Icon.svelte';
   import { conversationsStore, selectConversation } from '../stores/conversations.svelte';
 
   interface Command {
@@ -15,14 +15,16 @@
 
   interface Props {
     onClose: () => void;
-    onNavigate: (view: "messages" | "dashboard" | "health" | "settings" | "templates" | "network" | "chat") => void;
+    onNavigate: (
+      view: 'messages' | 'dashboard' | 'health' | 'settings' | 'templates' | 'network' | 'chat'
+    ) => void;
     onOpenSearch: () => void;
     onOpenShortcuts: () => void;
   }
 
   let { onClose, onNavigate, onOpenSearch, onOpenShortcuts }: Props = $props();
 
-  let searchQuery = $state("");
+  let searchQuery = $state('');
   let selectedIndex = $state(0);
   let inputRef = $state<HTMLInputElement | null>(null);
 
@@ -30,84 +32,108 @@
   const commands: Command[] = [
     // Navigation
     {
-      id: "nav-messages",
-      label: "Go to Messages",
-      description: "View your conversations",
-      shortcut: ["⌘", "2"],
-      icon: "message-circle",
-      category: "Navigation",
-      action: () => { onNavigate("messages"); onClose(); },
+      id: 'nav-messages',
+      label: 'Go to Messages',
+      description: 'View your conversations',
+      shortcut: ['⌘', '2'],
+      icon: 'message-circle',
+      category: 'Navigation',
+      action: () => {
+        onNavigate('messages');
+        onClose();
+      },
     },
     {
-      id: "nav-dashboard",
-      label: "Go to Dashboard",
-      description: "View analytics and insights",
-      shortcut: ["⌘", "1"],
-      icon: "bar-chart-2",
-      category: "Navigation",
-      action: () => { onNavigate("dashboard"); onClose(); },
+      id: 'nav-dashboard',
+      label: 'Go to Dashboard',
+      description: 'View analytics and insights',
+      shortcut: ['⌘', '1'],
+      icon: 'bar-chart-2',
+      category: 'Navigation',
+      action: () => {
+        onNavigate('dashboard');
+        onClose();
+      },
     },
     {
-      id: "nav-chat",
-      label: "Go to Chat",
-      description: "Chat directly with the local AI",
-      shortcut: ["⌘", "5"],
-      icon: "message-circle",
-      category: "Navigation",
-      action: () => { onNavigate("chat"); onClose(); },
+      id: 'nav-chat',
+      label: 'Go to Chat',
+      description: 'Chat directly with the local AI',
+      shortcut: ['⌘', '5'],
+      icon: 'message-circle',
+      category: 'Navigation',
+      action: () => {
+        onNavigate('chat');
+        onClose();
+      },
     },
     {
-      id: "nav-templates",
-      label: "Go to Templates",
-      description: "Manage reply templates",
-      shortcut: ["⌘", "3"],
-      icon: "copy",
-      category: "Navigation",
-      action: () => { onNavigate("templates"); onClose(); },
+      id: 'nav-templates',
+      label: 'Go to Templates',
+      description: 'Manage reply templates',
+      shortcut: ['⌘', '3'],
+      icon: 'copy',
+      category: 'Navigation',
+      action: () => {
+        onNavigate('templates');
+        onClose();
+      },
     },
     {
-      id: "nav-settings",
-      label: "Go to Settings",
-      description: "Configure preferences",
-      shortcut: ["⌘", ","],
-      icon: "settings",
-      category: "Navigation",
-      action: () => { onNavigate("settings"); onClose(); },
+      id: 'nav-settings',
+      label: 'Go to Settings',
+      description: 'Configure preferences',
+      shortcut: ['⌘', ','],
+      icon: 'settings',
+      category: 'Navigation',
+      action: () => {
+        onNavigate('settings');
+        onClose();
+      },
     },
     {
-      id: "nav-health",
-      label: "Go to Health Status",
-      description: "Check system health",
-      icon: "alert-circle",
-      category: "Navigation",
-      action: () => { onNavigate("health"); onClose(); },
+      id: 'nav-health',
+      label: 'Go to Health Status',
+      description: 'Check system health',
+      icon: 'alert-circle',
+      category: 'Navigation',
+      action: () => {
+        onNavigate('health');
+        onClose();
+      },
     },
     // Actions
     {
-      id: "action-search",
-      label: "Search Messages",
-      description: "Find messages across all conversations",
-      shortcut: ["⌘", "K"],
-      icon: "search",
-      category: "Actions",
-      action: () => { onClose(); onOpenSearch(); },
+      id: 'action-search',
+      label: 'Search Messages',
+      description: 'Find messages across all conversations',
+      shortcut: ['⌘', 'K'],
+      icon: 'search',
+      category: 'Actions',
+      action: () => {
+        onClose();
+        onOpenSearch();
+      },
     },
     {
-      id: "action-shortcuts",
-      label: "Keyboard Shortcuts",
-      description: "View all keyboard shortcuts",
-      shortcut: ["⌘", "/"],
-      icon: "settings",
-      category: "Actions",
-      action: () => { onClose(); onOpenShortcuts(); },
+      id: 'action-shortcuts',
+      label: 'Keyboard Shortcuts',
+      description: 'View all keyboard shortcuts',
+      shortcut: ['⌘', '/'],
+      icon: 'settings',
+      category: 'Actions',
+      action: () => {
+        onClose();
+        onOpenShortcuts();
+      },
     },
     {
-      id: "action-next-unread",
-      label: "Next Unread Conversation",
-      description: "Jump to the next conversation with unread messages",
-      shortcut: ["⌘", "⇧", "]"],
-      icon: "message-circle",
-      category: "Actions",
+      id: 'action-next-unread',
+      label: 'Next Unread Conversation',
+      description: 'Jump to the next conversation with unread messages',
+      shortcut: ['⌘', '⇧', ']'],
+      icon: 'message-circle',
+      category: 'Actions',
       action: () => {
         for (const [chatId] of conversationsStore.unreadCounts) {
           if (chatId !== conversationsStore.selectedChatId) {
@@ -120,39 +146,41 @@
       },
     },
     {
-      id: "action-refresh",
-      label: "Refresh",
-      description: "Reload current view",
-      shortcut: ["⌘", "R"],
-      icon: "refresh-cw",
-      category: "Actions",
-      action: () => { location.reload(); },
+      id: 'action-refresh',
+      label: 'Refresh',
+      description: 'Reload current view',
+      shortcut: ['⌘', 'R'],
+      icon: 'refresh-cw',
+      category: 'Actions',
+      action: () => {
+        location.reload();
+      },
     },
     // Theme
     {
-      id: "theme-dark",
-      label: "Switch to Dark Theme",
-      category: "Theme",
+      id: 'theme-dark',
+      label: 'Switch to Dark Theme',
+      category: 'Theme',
       action: () => {
-        import("../stores/theme").then(({ setTheme }) => setTheme("dark"));
+        import('../stores/theme').then(({ setTheme }) => setTheme('dark'));
         onClose();
       },
     },
     {
-      id: "theme-light",
-      label: "Switch to Light Theme",
-      category: "Theme",
+      id: 'theme-light',
+      label: 'Switch to Light Theme',
+      category: 'Theme',
       action: () => {
-        import("../stores/theme").then(({ setTheme }) => setTheme("light"));
+        import('../stores/theme').then(({ setTheme }) => setTheme('light'));
         onClose();
       },
     },
     {
-      id: "theme-system",
-      label: "Use System Theme",
-      category: "Theme",
+      id: 'theme-system',
+      label: 'Use System Theme',
+      category: 'Theme',
       action: () => {
-        import("../stores/theme").then(({ setTheme }) => setTheme("system"));
+        import('../stores/theme').then(({ setTheme }) => setTheme('system'));
         onClose();
       },
     },
@@ -200,27 +228,27 @@
     const cmds = filteredCommands;
 
     switch (event.key) {
-      case "ArrowDown":
+      case 'ArrowDown':
         event.preventDefault();
         selectedIndex = Math.min(selectedIndex + 1, cmds.length - 1);
         scrollToSelected();
         break;
-      case "ArrowUp":
+      case 'ArrowUp':
         event.preventDefault();
         selectedIndex = Math.max(selectedIndex - 1, 0);
         scrollToSelected();
         break;
-      case "Enter":
+      case 'Enter':
         event.preventDefault();
         if (cmds[selectedIndex]) {
           cmds[selectedIndex]!.action();
         }
         break;
-      case "Escape":
+      case 'Escape':
         event.preventDefault();
         onClose();
         break;
-      case "Tab":
+      case 'Tab':
         event.preventDefault();
         if (event.shiftKey) {
           selectedIndex = Math.max(selectedIndex - 1, 0);
@@ -236,7 +264,7 @@
 
   function scrollToSelected() {
     tick().then(() => {
-      const selected = document.querySelector(".command-item.selected") as HTMLElement | null;
+      const selected = document.querySelector('.command-item.selected') as HTMLElement | null;
       if (!selected || !paletteContentRef) return;
       const containerRect = paletteContentRef.getBoundingClientRect();
       const itemRect = selected.getBoundingClientRect();
@@ -262,7 +290,7 @@
     // Don't close if typing in the input field
     if (event.target === inputRef) return;
 
-    if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+    if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       onClose();
     }
@@ -279,7 +307,13 @@
   aria-label="Close command palette"
   tabindex="0"
 >
-  <div class="palette glass" role="dialog" aria-label="Command Palette" aria-modal="true" tabindex="-1">
+  <div
+    class="palette glass"
+    role="dialog"
+    aria-label="Command Palette"
+    aria-modal="true"
+    tabindex="-1"
+  >
     <div class="palette-header">
       <Icon name="search" size={18} />
       <input
@@ -364,8 +398,12 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   .palette {

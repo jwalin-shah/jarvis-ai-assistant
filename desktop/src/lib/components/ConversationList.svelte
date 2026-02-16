@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { slide } from 'svelte/transition';
   import {
     conversationsStore,
     selectConversation,
@@ -451,8 +452,15 @@
     {/if}
   </div>
 
-  <div class="search">
-    <input type="text" placeholder="Search conversations..." bind:value={searchQuery} />
+  <div class="search" role="search">
+    <label for="conversation-search" class="sr-only">Search conversations</label>
+    <input
+      id="conversation-search"
+      type="text"
+      placeholder="Search conversations..."
+      bind:value={searchQuery}
+      aria-controls="conversation-list"
+    />
   </div>
 
   {#if conversationsStore.loading && conversationsStore.isInitialLoad}
@@ -462,7 +470,14 @@
   {:else if conversationsStore.conversations.length === 0}
     <div class="empty">No conversations found</div>
   {:else}
-    <div class="list" role="listbox" aria-label="Conversations" bind:this={listContainerRef} onscroll={handleScroll}>
+    <div
+      id="conversation-list"
+      class="list"
+      role="listbox"
+      aria-label="Conversations"
+      bind:this={listContainerRef}
+      onscroll={handleScroll}
+    >
       <!-- Virtual scroll spacer for conversations above viewport -->
       <div class="virtual-spacer-top" style="height: {virtualTopPadding}px;"></div>
       
@@ -541,43 +556,59 @@
       <div class="virtual-spacer-bottom" style="height: {virtualBottomPadding}px;"></div>
 
       {#if archivedConversations.length > 0}
-        <button class="archived-toggle" onclick={() => showArchived = !showArchived}>
+        <button
+          class="archived-toggle"
+          onclick={() => (showArchived = !showArchived)}
+          aria-expanded={showArchived}
+          aria-controls="archived-list"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points={showArchived ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}></polyline>
           </svg>
           Archived ({archivedConversations.length})
         </button>
         {#if showArchived}
-          {#each archivedConversations as conv (conv.chat_id)}
-            {@const identifier = getPrimaryIdentifier(conv)}
-            {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
-            {@const avatarState = identifier ? avatarStates.get(identifier) : null}
-            <button
-              class="conversation archived"
-              class:active={conversationsStore.selectedChatId === conv.chat_id}
-              onclick={() => selectConversation(conv.chat_id)}
-              oncontextmenu={(e) => handleContextMenu(e, conv.chat_id)}
-            >
-              <div class="avatar-container">
-                <div class="avatar" class:group={conv.is_group} class:has-image={avatarState === 'loaded' && avatarUrl} use:observeAvatar={identifier || ''}>
-                  {#if conv.is_group}
-                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6z" /></svg>
-                  {:else if avatarState === 'loaded' && avatarUrl}
-                    <img src={avatarUrl} alt="" class="avatar-image" />
-                  {:else}
-                    {getInitials(getDisplayName(conv))}
-                  {/if}
+          <div id="archived-list" transition:slide={{ duration: 200 }}>
+            {#each archivedConversations as conv (conv.chat_id)}
+              {@const identifier = getPrimaryIdentifier(conv)}
+              {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
+              {@const avatarState = identifier ? avatarStates.get(identifier) : null}
+              <button
+                class="conversation archived"
+                class:active={conversationsStore.selectedChatId === conv.chat_id}
+                onclick={() => selectConversation(conv.chat_id)}
+                oncontextmenu={(e) => handleContextMenu(e, conv.chat_id)}
+              >
+                <div class="avatar-container">
+                  <div
+                    class="avatar"
+                    class:group={conv.is_group}
+                    class:has-image={avatarState === 'loaded' && avatarUrl}
+                    use:observeAvatar={identifier || ''}
+                  >
+                    {#if conv.is_group}
+                      <svg viewBox="0 0 24 24" fill="currentColor"
+                        ><path
+                          d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6z"
+                        /></svg
+                      >
+                    {:else if avatarState === 'loaded' && avatarUrl}
+                      <img src={avatarUrl} alt="" class="avatar-image" />
+                    {:else}
+                      {getInitials(getDisplayName(conv))}
+                    {/if}
+                  </div>
                 </div>
-              </div>
-              <div class="info">
-                <div class="name-row">
-                  <span class="name">{getDisplayName(conv)}</span>
-                  <span class="date">{formatConversationDate(conv.last_message_date)}</span>
+                <div class="info">
+                  <div class="name-row">
+                    <span class="name">{getDisplayName(conv)}</span>
+                    <span class="date">{formatConversationDate(conv.last_message_date)}</span>
+                  </div>
+                  <div class="preview">{conv.last_message_text || 'No messages'}</div>
                 </div>
-                <div class="preview">{conv.last_message_text || 'No messages'}</div>
-              </div>
-            </button>
-          {/each}
+              </button>
+            {/each}
+          </div>
         {/if}
       {/if}
     </div>
