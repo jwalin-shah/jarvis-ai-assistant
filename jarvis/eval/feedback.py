@@ -52,6 +52,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, cast
 
+from jarvis.config import get_config
 from jarvis.core.exceptions import (
     ErrorCode,
     FeedbackError,
@@ -59,9 +60,6 @@ from jarvis.core.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Default database path (same directory as main jarvis.db)
-FEEDBACK_DB_PATH = Path.home() / ".jarvis" / "jarvis.db"
 
 # Current schema version for migrations
 FEEDBACK_SCHEMA_VERSION = 2
@@ -205,9 +203,14 @@ class FeedbackStore:
 
         Args:
             db_path: Path to the SQLite database file.
-                    Defaults to ~/.jarvis/jarvis.db
+                    Defaults to configured feedback path.
         """
-        self.db_path = db_path or FEEDBACK_DB_PATH
+        if db_path is None:
+            config = get_config()
+            self.db_path = Path(config.database.feedback_path)
+        else:
+            self.db_path = db_path
+
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
 
