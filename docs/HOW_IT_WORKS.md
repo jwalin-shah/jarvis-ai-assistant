@@ -36,13 +36,13 @@ JARVIS is a local-first AI assistant for iMessage on macOS. It reads messages, r
 
 ## Services
 
-| Service | Port/Socket | Purpose |
-|---------|-------------|---------|
-| **FastAPI Backend** | HTTP `localhost:8742` | REST API for CLI and web clients |
-| **Socket Server** | Unix `~/.jarvis/jarvis.sock` + WS `:8743` | Desktop IPC, LLM generation, search |
-| **MLX Embedding** | `~/.jarvis/jarvis-embed.sock` | GPU-accelerated embeddings |
-| **NER Server** | `~/.jarvis/jarvis-ner.sock` | Named entity recognition (optional) |
-| **Desktop App** | Standalone | Tauri UI with direct SQLite access |
+| Service             | Port/Socket                               | Purpose                             |
+| ------------------- | ----------------------------------------- | ----------------------------------- |
+| **FastAPI Backend** | HTTP `localhost:8742`                     | REST API for CLI and web clients    |
+| **Socket Server**   | Unix `~/.jarvis/jarvis.sock` + WS `:8743` | Desktop IPC, LLM generation, search |
+| **MLX Embedding**   | `~/.jarvis/jarvis-embed.sock`             | GPU-accelerated embeddings          |
+| **NER Server**      | `~/.jarvis/jarvis-ner.sock`               | Named entity recognition (optional) |
+| **Desktop App**     | Standalone                                | Tauri UI with direct SQLite access  |
 
 ### Starting Services
 
@@ -125,6 +125,7 @@ Incoming messages for a chat
 **Extraction model**: LFM-0.7b (`models/lfm-0.7b-4bit`) — instruction-tuned for fact extraction with ChatML. Turn-based formatting gives the model coherent context (who said what).
 
 **Two-Pass Architecture**:
+
 - **Pass 1**: Raw extraction with ChatML prompts (system + user)
 - **Pass 2**: Self-correction using the same model to filter noise and metaphors
 
@@ -184,23 +185,23 @@ Messages: [
 
 ## Performance
 
-| Operation | P50 | Target |
-|-----------|-----|--------|
-| Intent classification | 12ms | <50ms |
-| sqlite-vec search | 3ms | <50ms |
-| LLM generation | 180ms/token | <2s total |
-| **Full pipeline** | **250ms** | **<3s** |
+| Operation             | P50         | Target    |
+| --------------------- | ----------- | --------- |
+| Intent classification | 12ms        | <50ms     |
+| sqlite-vec search     | 3ms         | <50ms     |
+| LLM generation        | 180ms/token | <2s total |
+| **Full pipeline**     | **250ms**   | **<3s**   |
 
 ---
 
 ## Storage
 
-| Location | Purpose |
-|----------|---------|
-| `~/Library/Messages/chat.db` | iMessage DB (read-only) |
-| `~/.jarvis/jarvis.db` | JARVIS data (chunks, pairs, and vector index) |
-| `~/.jarvis/embeddings/` | Model-specific artifacts and embeddings.db |
-| `~/.jarvis/config.json` | User configuration |
+| Location                     | Purpose                                       |
+| ---------------------------- | --------------------------------------------- |
+| `~/Library/Messages/chat.db` | iMessage DB (read-only)                       |
+| `~/.jarvis/jarvis.db`        | JARVIS data (chunks, pairs, and vector index) |
+| `~/.jarvis/embeddings/`      | Model-specific artifacts and embeddings.db    |
+| `~/.jarvis/config.json`      | User configuration                            |
 
 ---
 
@@ -208,14 +209,14 @@ Messages: [
 
 JARVIS supports LFM models via `models/registry.py`:
 
-| Model ID | Display Name | Size | Quality | Best For |
-|----------|--------------|------|---------|----------|
-| **`lfm-0.7b`** | **LFM 0.7B (Extract)** | **~0.5GB** | **Good** | **Fact extraction (V4)** |
-| `lfm-350m` | LFM 2.5 350M (Base) | 0.35GB | Basic | Alternative extraction |
-| `lfm-1.2b-base` | LFM 2.5 1.2B (Base) | 1.2GB | Good | Few-shot, completion |
-| `lfm-1.2b-ft` | LFM 2.5 1.2B Fine-Tuned | 1.2GB | Excellent | **Default** - iMessage |
-| `lfm-1.2b-sft` | LFM 2.5 1.2B SFT Only | 1.2GB | Excellent | iMessage |
-| `lfm-0.3b-ft` | LFM 2.5 0.3B Fine-Tuned | 0.3GB | Basic | Speculative decoding |
+| Model ID        | Display Name            | Size       | Quality   | Best For                 |
+| --------------- | ----------------------- | ---------- | --------- | ------------------------ |
+| **`lfm-0.7b`**  | **LFM 0.7B (Extract)**  | **~0.5GB** | **Good**  | **Fact extraction (V4)** |
+| `lfm-350m`      | LFM 2.5 350M (Base)     | 0.35GB     | Basic     | Alternative extraction   |
+| `lfm-1.2b-base` | LFM 2.5 1.2B (Base)     | 1.2GB      | Good      | Few-shot, completion     |
+| `lfm-1.2b-ft`   | LFM 2.5 1.2B Fine-Tuned | 1.2GB      | Excellent | **Default** - iMessage   |
+| `lfm-1.2b-sft`  | LFM 2.5 1.2B SFT Only   | 1.2GB      | Excellent | iMessage                 |
+| `lfm-0.3b-ft`   | LFM 2.5 0.3B Fine-Tuned | 0.3GB      | Basic     | Speculative decoding     |
 
 ---
 
@@ -223,13 +224,14 @@ JARVIS supports LFM models via `models/registry.py`:
 
 JARVIS includes a structured observability system for debugging and monitoring:
 
-| Module | Purpose |
-|--------|---------|
-| `jarvis/observability/logging.py` | Structured logging with `log_event()` and `timed_operation()` |
-| `jarvis/observability/metrics_router.py` | Routing metrics collection and storage |
-| `jarvis/observability/insights.py` | Sentiment analysis and conversation insights |
+| Module                                   | Purpose                                                       |
+| ---------------------------------------- | ------------------------------------------------------------- |
+| `jarvis/observability/logging.py`        | Structured logging with `log_event()` and `timed_operation()` |
+| `jarvis/observability/metrics_router.py` | Routing metrics collection and storage                        |
+| `jarvis/observability/insights.py`       | Sentiment analysis and conversation insights                  |
 
 **Usage:**
+
 ```python
 from jarvis.observability.logging import log_event, timed_operation
 

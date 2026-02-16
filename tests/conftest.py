@@ -7,10 +7,29 @@ to run on non-macOS platforms.
 import platform
 import sys
 import types
+from functools import lru_cache
 from unittest.mock import MagicMock
 
-import numpy as np
-import psutil
+try:
+    import numpy as np
+except ImportError:
+    # Create a dummy numpy for type hints and basic usage
+    # This allows tests to run without numpy installed
+    np = MagicMock()
+    np.ndarray = MagicMock
+    np.float32 = "float32"
+    np.array = MagicMock(return_value=[])
+    np.random = MagicMock()
+    np.linalg = MagicMock()
+    sys.modules["numpy"] = np
+
+try:
+    import psutil
+except ImportError:
+    psutil = MagicMock()
+    psutil.virtual_memory = MagicMock(return_value=MagicMock(total=16 * 1024**3))
+    sys.modules["psutil"] = psutil
+
 import pytest
 
 
@@ -60,6 +79,14 @@ def _mock_mlx_modules():
     mock_mx.metal = MagicMock()
     mock_mx.metal.clear_cache = MagicMock()
 
+    # Create mock for mlx.nn
+    mock_nn = MagicMock()
+    mock_nn.Module = MagicMock
+    mock_nn.Embedding = MagicMock
+    mock_nn.LayerNorm = MagicMock
+    mock_nn.Linear = MagicMock
+    mock_nn.gelu = MagicMock
+
     mock_mlx_lm = MagicMock()
     mock_mlx_lm.load = MagicMock(return_value=(MagicMock(), MagicMock()))
     mock_mlx_lm.generate = MagicMock(return_value="Generated text")
@@ -77,6 +104,7 @@ def _mock_mlx_modules():
     sys.modules["mlx.core"] = mock_mx
     sys.modules["mlx.nn"] = mock_nn
     sys.modules["mlx_lm"] = mock_mlx_lm
+    sys.modules["tokenizers"] = MagicMock()
     sys.modules["mlx_lm.sample_utils"] = mock_sample_utils
 
 
@@ -121,16 +149,15 @@ SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 def _check_sentence_transformers():
     """Lazy check for sentence_transformers availability."""
-    global SENTENCE_TRANSFORMERS_AVAILABLE
     try:
         from sentence_transformers import SentenceTransformer  # noqa: F401
 
-        SENTENCE_TRANSFORMERS_AVAILABLE = True
+        available = True
     except (ImportError, ValueError, AttributeError, TypeError):
         # AttributeError: torch._C or torch.fx not available (broken torch install)
         # TypeError: packaging version parse error
-        SENTENCE_TRANSFORMERS_AVAILABLE = False
-    return SENTENCE_TRANSFORMERS_AVAILABLE
+        available = False
+    return available
 
 
 # Defer the check to first actual use rather than import time
@@ -174,7 +201,8 @@ class MockEmbedder:
     def model_name(self) -> str:
         return self._model_name
 
-    def is_available(self) -> bool:
+    @staticmethod
+    def is_available() -> bool:
         return True
 
     def encode(
@@ -202,7 +230,9 @@ class MockEmbedder:
 
         return np.array(embeddings, dtype=np.float32)
 
-    def unload(self) -> None:
+    @staticmethod
+    def unload() -> None:
+        """No-op for mock embedder since there are no resources to unload."""
         pass
 
 
@@ -228,12 +258,10 @@ def _check_mlx_service_available():
 _MLX_SERVICE_AVAILABLE = None
 
 
+@lru_cache(maxsize=1)
 def is_mlx_service_available():
     """Check if MLX service is available (cached)."""
-    global _MLX_SERVICE_AVAILABLE
-    if _MLX_SERVICE_AVAILABLE is None:
-        _MLX_SERVICE_AVAILABLE = _check_mlx_service_available()
-    return _MLX_SERVICE_AVAILABLE
+    return _check_mlx_service_available()
 
 
 # Marker for tests that require real embeddings (not mocks)

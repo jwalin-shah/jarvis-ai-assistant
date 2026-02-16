@@ -15,11 +15,6 @@ from jarvis.prompts.examples import (
     PROFESSIONAL_REPLY_EXAMPLES,
     THREAD_EXAMPLES,
 )
-from jarvis.prompts.tone import (
-    analyze_user_style,
-    build_style_instructions,
-    determine_effective_tone,
-)
 from jarvis.prompts.utils import truncate_context
 
 if TYPE_CHECKING:
@@ -85,9 +80,7 @@ def build_reply_prompt(
     else:
         full_context = truncated_context
 
-    prompt = REPLY_PROMPT.template.format(
-        context=full_context
-    )
+    prompt = REPLY_PROMPT.template.format(context=full_context)
 
     return prompt
 

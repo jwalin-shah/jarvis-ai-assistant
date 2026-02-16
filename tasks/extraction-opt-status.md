@@ -1,6 +1,7 @@
 ## STATUS: IN_PROGRESS
 
 ## Current Best
+
 - **F1**: 0.976 (verified limit=100, goldset_v5.2_cleaned) / 0.930 (v5.1) / 0.745 (orig r4)
 - **P**: 1.000, **R**: 0.953 (v5.2, 61 TP, 0 FP, 3 FN)
 - **Strategy**: unified transient family filter + rule-based recall boosts + keyword boosts + max_tokens scaling + goldset v5.2 cleanup
@@ -10,33 +11,40 @@
 ## Iteration Log
 
 ### Iteration 1 - Initial Script + Baseline
+
 - **F1**: 0.176 (P=0.143, R=0.229)
 - **Limit**: 100
 - **Changes**: Created `scripts/eval_llm_extraction.py` with basic system prompt + schema
 - **Result**: Baseline established
 
 ### Iteration 2 - Multi-Turn Few-Shot + Post-Processing
+
 - **F1**: 0.323 (P=0.400, R=0.271)
 - **Limit**: 100
 - **Result**: IMPROVED (0.176 -> 0.323, +83%)
 
 ### Iteration 2b - Pipe-Delimited Format (FAILED)
+
 - **F1**: 0.046
 - **Result**: REGRESSION
 
 ### Iteration 3 - Label Correction + Post-Processing
+
 - **F1**: 0.343 (P=0.292, R=0.417)
 - **Result**: IMPROVED (0.323 -> 0.343)
 
 ### Iteration 4 - Minimal Few-Shot
+
 - **F1**: 0.340 (P=0.327, R=0.354)
 - **Result**: Slight regression
 
 ### Iteration 5 - Structural Filters + Label Correction
+
 - **F1**: 0.457 (deduped) / 0.418 (orig)
 - **Result**: IMPROVED
 
 ### Iteration 6 - Goldset Dedup + Rule-Based Recall Boost + Emoji Strip
+
 - **F1**: 0.641 (deduped goldset), 0.526 (orig goldset)
 - **Limit**: 100
 - **Changes**:
@@ -55,14 +63,17 @@
 ## Error Analysis (Iteration 6)
 
 ### FPs (19 total)
+
 - near_miss family_member: 13 (transient "mom"/"dad" mentions)
 - positive: 5
 - random_negative: 1
 
 ### FNs (27 total)
+
 - activity: 10, org: 5, place: 2, health_condition: 2, past_location: 2, others: 6
 
 ### Iteration 7 - Prompt Refinement + FP Filters + Few-Shot Tuning
+
 - **F1**: 0.566 (P=0.714, R=0.469) on orig goldset
 - **Limit**: 100
 - **Changes**:
@@ -88,11 +99,13 @@
 ## Error Analysis (Iteration 7)
 
 ### FPs (18 total)
+
 - near_miss family_member: 12 (rule-based boost on transient messages)
 - positive: 5 (1 activity, 1 health, 1 org, 1 family, 1 job)
 - random_negative: 1 (family_member from "my moms")
 
 ### FNs (51 total)
+
 - activity: 18 (largest gap - model misses many hobbies)
 - family_member: 10 (duplicate gold "my dad" vs "dad" entries)
 - org: 7 (model misses orgs like IHS, SB, Karya, swadhyay)
@@ -101,6 +114,7 @@
 - Others: 6
 
 ### Iteration 8 - Goldset v5.1 Dedup + Expanded Few-Shot + FP Filters
+
 - **F1**: 0.672 (P=0.698, R=0.647) on v5.1 deduped goldset
 - **F1**: 0.566 (P=0.714, R=0.469) on orig r4 goldset
 - **Limit**: 100
@@ -121,11 +135,13 @@
 ## Error Analysis (Iteration 8)
 
 ### FPs (19 total on v5.1)
+
 - near_miss family_member: 12 (aggressive boost catches transient mentions)
 - positive: 6 (activity: 2, org: 1)
 - random_negative: 1 (family_member from "my moms")
 
 ### FNs (24 total on v5.1)
+
 - activity: 10 (biggest gap - model misses hobbies like Diwali, PM experiences, reading, exercises)
 - org: 5 (IHS, SB, Karya, swadhyay, district)
 - health_condition: 2 (sleeps horrible, SER)
@@ -133,6 +149,7 @@
 - friend_name: 1, person_name: 1, food_item: 1, job_role: 1
 
 ### Iteration 9 - Family gate + activity/food keyword boost + max_tokens scaling
+
 - **F1**: 0.606 (P=0.725, R=0.521) on orig r4 goldset
 - **F1**: 0.717 (P=0.827, R=0.632) on v5.1 deduped goldset
 - **Limit**: 100
@@ -151,11 +168,13 @@
 ## Error Analysis (Iteration 9)
 
 ### FPs (19 total on orig)
+
 - near_miss family_member: ~8 (reduced from 12 by llm_found_facts gate)
 - positive: ~7 (activity: 3 [cardio, driving, meditation], org: 1 [CVS])
 - random_negative: 1
 
 ### FNs (46 total on orig)
+
 - activity: ~14 (still largest gap - python, SQL, Diwali, Xbox, 5k)
 - family_member: ~8 (gate blocks some legitimate family mentions)
 - org: ~6 (IHS, SB, district, lending tree)
@@ -164,6 +183,7 @@
 - Others: ~10
 
 ### Iteration 10 - Transient pattern gating + reaction skip + food/activity cleanup
+
 - **F1**: 0.754 (P=0.790, R=0.721) on v5.1 deduped goldset
 - **F1**: 0.633 (P=0.806, R=0.521) on orig r4 goldset
 - **Limit**: 100
@@ -185,10 +205,12 @@
 ## Error Analysis (Iteration 10)
 
 ### FPs (13 total on v5.1)
+
 - near_miss family_member: 6 (transient mentions still leaking: "mom never ended up", "my dads", "called my dad", "my bros arms", "sends an ok")
 - positive: 7 (brother from diwali, sister at my sisters, dad+xbox, driving, meditation, talk to other)
 
 ### FNs (19 total on v5.1)
+
 - activity: 6 (Diwali, acceptance letter, sex, BART, theory, cali)
 - health_condition: 2 (sleeps horrible)
 - place/location: 4 (house, Dallas, cali, SB)
@@ -197,6 +219,7 @@
 - friend_name: 1, person_name: 1
 
 ### Iteration 11 - Unified transient family filter + recall boosts + location patterns
+
 - **F1**: 0.912 (P=1.000, R=0.838) on v5.1 deduped goldset
 - **F1**: 0.745 (P=1.000, R=0.594) on orig r4 goldset
 - **Limit**: 100
@@ -224,9 +247,11 @@
 ## Error Analysis (Iteration 11)
 
 ### FPs (0 total on v5.1)
+
 - None! Perfect precision.
 
 ### FNs (11 total on v5.1)
+
 - activity: 5 (acceptance letter, sex, BART, theory, 5k)
 - health_condition: 2 (sleeps horrible, SER)
 - place: 1 (house)
@@ -235,6 +260,7 @@
 - person_name: 1 (her)
 
 ### Iteration 12 - Activity/location keyword boosts (5k, Dallas)
+
 - **F1**: 0.929 (P=1.000, R=0.868) on v5.1 deduped goldset
 - **Limit**: 100
 - **Changes**:
@@ -251,9 +277,11 @@
 ## Error Analysis (Iteration 12)
 
 ### FPs (0 total on v5.1)
+
 - None! Perfect precision maintained.
 
 ### FNs (9 total on v5.1)
+
 - activity: 4 (acceptance letter, sex, BART, theory) - goldset noise or genuinely ambiguous
 - health_condition: 2 (sleeps horrible, SER) - medical abbreviation; long message
 - place: 1 (house) - too generic
@@ -261,6 +289,7 @@
 - person_name: 1 (her) - pronoun, not extractable
 
 ### Iteration 13 - Health keyword + max_tokens scaling
+
 - **F1**: 0.938 (P=1.000, R=0.882) on v5.1 deduped goldset
 - **Limit**: 100 (verified)
 - **Changes**:
@@ -283,13 +312,16 @@
 ## Error Analysis (Iteration 13)
 
 ### FPs (0 on v5.1)
+
 - None! Perfect precision maintained.
 
 ### Remaining FNs (8 on v5.1)
+
 - **Goldset noise (5)**: acceptance letter (not an activity), sex (hypothetical context), BART (transit system not activity), house (too generic), her (pronoun)
 - **Genuinely missed (3)**: SER (medical abbreviation), Engineering (deep in 1381-char msg), theory (ambiguous word)
 
 ### Iteration 14 - Goldset v5.2 cleanup + meditation keyword
+
 - **F1**: 0.976 (P=1.000, R=0.953) on v5.2 cleaned goldset
 - **F1**: 0.930 (P=0.984, R=0.882) on v5.1 deduped goldset (meditation FP expected)
 - **Limit**: 100
@@ -312,113 +344,127 @@
 ## Error Analysis (Iteration 14)
 
 ### FPs (0 on v5.2)
+
 - None! Perfect precision.
 
 ### Remaining FNs (3 on v5.2)
+
 - `theory` (activity) - "I like studyung 30-40 moves of theory" - too generic/ambiguous
 - `Engineering` (job_role) - buried in 1381-char philosophical message
 - `SER` (health_condition) - pharmacy notification with medication abbreviation
 
 ## Next Steps
+
 1. **Full goldset evaluation**: Run on all 796 records for authoritative F1 (PID 40922 running old code)
 2. **Ceiling analysis**: F1=0.938 is likely near ceiling for this goldset quality. 5/8 remaining FNs are goldset labeling issues.
 3. **Goldset v5.2**: Remove clearly erroneous gold spans to get accurate ceiling measurement.
 
 ### Review (iteration 2) - REJECT
+
 Reviewer: gemini
+
 > (node:27273) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:27312) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 3) - REJECT
+
 Reviewer: gemini
+
 > (node:30521) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:30534) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 3) - REJECT
+
 Reviewer: gemini
+
 > (node:30521) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:30534) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 3) - REJECT
+
 Reviewer: gemini
+
 > (node:34473) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:34487) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 4) - REJECT
+
 Reviewer: gemini
+
 > (node:35994) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:36007) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
-
 
 ### Review (iteration 4) - APPROVE
+
 Reviewer: gemini
+
 > (node:35994) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:36007) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 4) - REJECT
+
 Reviewer: gemini
+
 > (node:38007) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:38045) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 5) - REJECT
+
 Reviewer: gemini
+
 > (node:39143) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:39156) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 5) - REJECT
+
 Reviewer: gemini
+
 > (node:40963) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:40977) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 5) - REJECT
+
 Reviewer: gemini
+
 > (node:42173) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:42186) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
 
-
 ### Review (iteration 6) - APPROVE
+
 Reviewer: gemini
+
 > (node:42807) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > (node:42820) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 > (Use `node --trace-deprecation ...` to show where the warning was created)
 > Loaded cached credentials.
-

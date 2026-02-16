@@ -7,11 +7,13 @@ A native macOS desktop application built with Tauri + Svelte, providing a menu b
 Before you can build the desktop app, install these dependencies:
 
 1. **Rust** (for Tauri backend):
+
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
 
 2. **Node.js 18+** (for Svelte frontend):
+
    ```bash
    brew install node
    ```
@@ -26,6 +28,7 @@ Before you can build the desktop app, install these dependencies:
 ### 1. Start the Python API
 
 In one terminal:
+
 ```bash
 # From the project root
 make api-dev
@@ -36,6 +39,7 @@ This starts the FastAPI server on `http://localhost:8742`.
 ### 2. Start the Desktop App (Development)
 
 In another terminal:
+
 ```bash
 # Install npm dependencies (first time only)
 make desktop-setup
@@ -82,31 +86,34 @@ The desktop application bypasses the HTTP API for core operations, providing a s
 ## Features
 
 ### Core Features
+
 - **Direct SQLite Access**: Loads conversations and messages in 1-5ms, 50x faster than HTTP.
 - **Real-time Notifications**: Instant UI updates when new messages arrive via Unix socket push.
 - **Menu Bar Icon**: Left-click toggles window, right-click shows menu.
 - **Health Monitor**: System status, memory usage, model info, and permission status.
 
 ### AI Features (via Socket)
+
 - **AI Draft Replies**: Real-time token streaming for contextual reply suggestions.
 - **Conversation Summary**: Instant summarization with key points extraction.
 - **Semantic Search**: Fast message search using the unified `sqlite-vec` backend.
 
 ### Settings
+
 - **Model Selection**: Choose between Qwen 0.5B, 1.5B, or 3B models
 - **Generation Controls**: Adjust temperature, max tokens, and suggestion count
 - **Behavior Settings**: Configure auto-suggestions and context window sizes
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Cmd+D` (Mac) / `Ctrl+D` (Win/Linux) | Open AI Draft panel for reply suggestions |
+| Shortcut                             | Action                                      |
+| ------------------------------------ | ------------------------------------------- |
+| `Cmd+D` (Mac) / `Ctrl+D` (Win/Linux) | Open AI Draft panel for reply suggestions   |
 | `Cmd+S` (Mac) / `Ctrl+S` (Win/Linux) | Open Summary modal for conversation summary |
-| `Cmd+F` (Mac) / `Ctrl+F` (Win/Linux) | Focus search input |
-| `Escape` | Close any open modal/panel |
-| `Enter` (in search) | Execute search |
-| `Up/Down` | Navigate conversation list |
+| `Cmd+F` (Mac) / `Ctrl+F` (Win/Linux) | Focus search input                          |
+| `Escape`                             | Close any open modal/panel                  |
+| `Enter` (in search)                  | Execute search                              |
+| `Up/Down`                            | Navigate conversation list                  |
 
 ## AI Features
 
@@ -121,6 +128,7 @@ Generate AI-powered reply suggestions based on conversation context:
 - **Context display** - Shows participants and message count used for context
 
 **How to use:**
+
 1. Select a conversation from the list
 2. Press `Cmd+D` or click the Draft button
 3. Optionally enter an instruction (e.g., "be brief")
@@ -138,6 +146,7 @@ Get an AI-generated summary of any conversation:
 - **Copy to clipboard** - One-click copy of the entire summary
 
 **How to use:**
+
 1. Select a conversation from the list
 2. Press `Cmd+S` or click the Summary button
 3. Wait for the AI to analyze the conversation
@@ -148,6 +157,7 @@ Get an AI-generated summary of any conversation:
 ### "Permission denied" for iMessages
 
 Grant Full Disk Access:
+
 1. Open System Settings → Privacy & Security → Full Disk Access
 2. Add your terminal application (Terminal.app, iTerm, etc.)
 3. Restart the API server
@@ -155,6 +165,7 @@ Grant Full Disk Access:
 ### API connection failed
 
 Ensure the Python API is running:
+
 ```bash
 curl http://localhost:8742/health
 ```
@@ -162,6 +173,7 @@ curl http://localhost:8742/health
 ### Tauri build fails
 
 Make sure you have:
+
 - Rust installed (`rustc --version`)
 - Node.js 18+ (`node --version`)
 - Xcode CLI tools (`xcode-select -p`)
@@ -173,6 +185,7 @@ The desktop app includes comprehensive E2E tests using Playwright. Tests run aga
 ### Prerequisites
 
 Install Playwright browsers (first time only):
+
 ```bash
 npx playwright install
 ```
@@ -225,15 +238,15 @@ tests/
 
 ### Test Categories
 
-| Test File | Coverage |
-|-----------|----------|
-| `test_app_launch.spec.ts` | App opens without errors, sidebar navigation, connection status |
-| `test_conversation_list.spec.ts` | Conversations load and display, selection, group indicators |
-| `test_message_view.spec.ts` | Messages display, sent/received styling, timestamps |
-| `test_health_status.spec.ts` | Health metrics, status banner, refresh functionality |
-| `test_settings.spec.ts` | Settings load/save, model selection, sliders |
-| `test_search.spec.ts` | Search input, filtering behavior |
-| `test_ai_draft.spec.ts` | Draft panel, suggestion generation, selection |
+| Test File                        | Coverage                                                        |
+| -------------------------------- | --------------------------------------------------------------- |
+| `test_app_launch.spec.ts`        | App opens without errors, sidebar navigation, connection status |
+| `test_conversation_list.spec.ts` | Conversations load and display, selection, group indicators     |
+| `test_message_view.spec.ts`      | Messages display, sent/received styling, timestamps             |
+| `test_health_status.spec.ts`     | Health metrics, status banner, refresh functionality            |
+| `test_settings.spec.ts`          | Settings load/save, model selection, sliders                    |
+| `test_search.spec.ts`            | Search input, filtering behavior                                |
+| `test_ai_draft.spec.ts`          | Draft panel, suggestion generation, selection                   |
 
 ### API Mocking
 
@@ -248,31 +261,34 @@ Mock data is defined in `tests/mocks/api-data.ts` and matches the types from `sr
 ### Writing New Tests
 
 1. Import fixtures from `./fixtures.ts`:
+
    ```typescript
-   import { test, expect, waitForAppLoad } from "./fixtures";
+   import { test, expect, waitForAppLoad } from './fixtures';
    ```
 
 2. Use `mockedPage` fixture for standard tests:
+
    ```typescript
-   test("my test", async ({ mockedPage: page }) => {
-     await page.goto("/");
+   test('my test', async ({ mockedPage: page }) => {
+     await page.goto('/');
      await waitForAppLoad(page);
      // ... test code
    });
    ```
 
 3. Use `errorPage` fixture to test error handling:
+
    ```typescript
-   test("handles errors", async ({ errorPage: page }) => {
-     await page.goto("/");
+   test('handles errors', async ({ errorPage: page }) => {
+     await page.goto('/');
      // API calls will return errors
    });
    ```
 
 4. Use `disconnectedPage` fixture for offline scenarios:
    ```typescript
-   test("handles disconnection", async ({ disconnectedPage: page }) => {
-     await page.goto("/");
+   test('handles disconnection', async ({ disconnectedPage: page }) => {
+     await page.goto('/');
      // All API calls will fail with connection refused
    });
    ```
@@ -280,10 +296,12 @@ Mock data is defined in `tests/mocks/api-data.ts` and matches the types from `sr
 ### Test Artifacts
 
 Test results are stored in:
+
 - `test-results/html-report/` - HTML test report
 - `test-results/artifacts/` - Screenshots, videos on failure
 
 View the HTML report:
+
 ```bash
 npx playwright show-report test-results/html-report
 ```

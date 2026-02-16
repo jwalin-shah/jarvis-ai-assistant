@@ -149,6 +149,31 @@ def segment_conversation(
     current_chunk: list[Message] = [messages[0]]
     current_segment_anchors: set[str] = anchor_tracker.get_anchors(messages[0].text or "")
 
+    # Pre-compute drifts vectorized to avoid np.linalg.norm in loop
+    drifts = np.zeros(n, dtype=np.float32)
+    valid_indices = [idx for idx, emb in enumerate(embeddings) if emb is not None]
+
+    if len(valid_indices) > 1:
+        # Stack valid embeddings: (K, D)
+        valid_embs = np.stack([embeddings[idx] for idx in valid_indices])
+
+        # Normalize rows (safe division)
+        norms = np.linalg.norm(valid_embs, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        valid_embs = valid_embs / norms
+
+        # Compute cosine similarity between adjacent valid embeddings
+        # sim[k] = dot(valid_embs[k], valid_embs[k+1])
+        sims = np.sum(valid_embs[:-1] * valid_embs[1:], axis=1)
+        valid_drifts = 1.0 - sims
+
+        # Map back to original indices where i and i-1 are both valid and adjacent
+        for k in range(len(valid_indices) - 1):
+            idx1 = valid_indices[k]
+            idx2 = valid_indices[k + 1]
+            if idx2 == idx1 + 1:
+                drifts[idx2] = valid_drifts[k]
+
     for i in range(1, n):
         prev_msg = messages[i - 1]
         curr_msg = messages[i]
@@ -158,18 +183,11 @@ def segment_conversation(
         is_large_gap = time_diff_hours > dynamic_gap_threshold
 
         # Signal 1: Embedding Drift (semantic meaning change)
-        v1 = embeddings[i - 1]
-        v2 = embeddings[i]
-
-        # Skip if either embedding is missing (empty text after normalization)
-        if v1 is None or v2 is None:
-            # Treat as no drift (keep in same segment)
+        # Skip if either embedding is missing (preserve original behavior)
+        if embeddings[i - 1] is None or embeddings[i] is None:
             continue
 
-        norm1 = np.linalg.norm(v1)
-        norm2 = np.linalg.norm(v2)
-        sim = np.dot(v1, v2) / (norm1 * norm2) if norm1 > 0 and norm2 > 0 else 1.0
-        drift = 1.0 - sim
+        drift = drifts[i]
 
         # Signal 2: Entity Continuity (Jaccard) - are we still talking about same things?
         msg_text = curr_msg.text or ""
